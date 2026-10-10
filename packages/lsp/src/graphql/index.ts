@@ -2,5 +2,5 @@ export {
 	getGraphqlLanguageServer,
 	type GraphqlLanguageServerConfig,
 	type GraphqlLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export { createGraphqlWorkerService, type GraphqlWorkerOptions } from './service.js';

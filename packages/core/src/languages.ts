@@ -3,6 +3,7 @@ const canonicalLanguageIds = [
 	'C3',
 	'CPP',
 	'OBJC',
+	'OBJECTIVECXX',
 	'PYTHON3',
 	'JAVA',
 	'RUST',
@@ -15,6 +16,7 @@ const canonicalLanguageIds = [
 	'ERLANG',
 	'PROLOG',
 	'GLEAM',
+	'GRAIN',
 	'PERL',
 	'TCL',
 	'AWK',
@@ -27,10 +29,13 @@ const canonicalLanguageIds = [
 	'NIM',
 	'BASH',
 	'CLOJURESCRIPT',
+	'RESCRIPT',
+	'HY',
 	'FORTRAN',
 	'LFORTRAN',
 	'LEAN4',
 	'COBOL',
+	'V',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -38,7 +43,17 @@ const canonicalLanguageIds = [
 	'ASSEMBLYSCRIPT',
 	'WAT',
 	'WASM',
+	'WHITESPACE',
+	'MALBOLGE',
+	'AHEUI',
+	'UHMLANG',
+	'LOLCODE',
+	'APECODE',
+	'GOLFSCRIPT',
+	'BRAINFUCK',
+	'BEFUNGE93',
 	'LUA',
+	'FENNEL',
 	'ZIG',
 	'LISP',
 	'RUBY',
@@ -47,6 +62,7 @@ const canonicalLanguageIds = [
 	'OCTAVE',
 	'DUCKDB',
 	'SQLITE',
+	'POSTGRESQL',
 	'PHP'
 ] as const;
 
@@ -77,6 +93,9 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },
+	'BEFUNGE-93': { canonicalId: 'BEFUNGE93', kind: 'spelling' },
+	BF: { canonicalId: 'BRAINFUCK', kind: 'spelling' },
 	'C#': { canonicalId: 'CSHARP', kind: 'spelling' },
 	'F#': { canonicalId: 'FSHARP', kind: 'spelling' },
 	VB: { canonicalId: 'VBNET', kind: 'spelling' },
@@ -84,6 +103,10 @@ const languageAliasDefinitions = {
 	OBJECTIVEC: { canonicalId: 'OBJC', kind: 'spelling' },
 	OBJECTIVE_C: { canonicalId: 'OBJC', kind: 'spelling' },
 	'OBJECTIVE-C': { canonicalId: 'OBJC', kind: 'spelling' },
+	OBJCXX: { canonicalId: 'OBJECTIVECXX', kind: 'spelling' },
+	OBJCPP: { canonicalId: 'OBJECTIVECXX', kind: 'spelling' },
+	OBJECTIVE_CXX: { canonicalId: 'OBJECTIVECXX', kind: 'spelling' },
+	'OBJECTIVE-C++': { canonicalId: 'OBJECTIVECXX', kind: 'spelling' },
 	ERL: { canonicalId: 'ERLANG', kind: 'spelling' },
 	LEAN: { canonicalId: 'LEAN4', kind: 'spelling' },
 	SWIPL: { canonicalId: 'PROLOG', kind: 'implementation' },
@@ -98,10 +121,13 @@ const languageAliasDefinitions = {
 	SH: { canonicalId: 'BASH', kind: 'compatibility' },
 	SHELL: { canonicalId: 'BASH', kind: 'compatibility' },
 	CLJS: { canonicalId: 'CLOJURESCRIPT', kind: 'spelling' },
+	RES: { canonicalId: 'RESCRIPT', kind: 'spelling' },
+	HYLANG: { canonicalId: 'HY', kind: 'spelling' },
 	F77: { canonicalId: 'FORTRAN', kind: 'dialect' },
 	COB: { canonicalId: 'COBOL', kind: 'spelling' },
 	CBL: { canonicalId: 'COBOL', kind: 'spelling' },
 	GNUCOBOL: { canonicalId: 'COBOL', kind: 'implementation' },
+	VLANG: { canonicalId: 'V', kind: 'spelling' },
 	DLANG: { canonicalId: 'D', kind: 'spelling' },
 	JS: { canonicalId: 'JAVASCRIPT', kind: 'spelling' },
 	AS: { canonicalId: 'ASSEMBLYSCRIPT', kind: 'spelling' },
@@ -112,6 +138,7 @@ const languageAliasDefinitions = {
 		deprecated: true,
 		message: 'PYPY3 runs the Pyodide implementation; use PYTHON3 instead.'
 	},
+	FNL: { canonicalId: 'FENNEL', kind: 'spelling' },
 	HS: { canonicalId: 'HASKELL', kind: 'spelling' },
 	RB: { canonicalId: 'RUBY', kind: 'spelling' },
 	SCHEME: {
@@ -134,6 +161,13 @@ const languageAliasDefinitions = {
 		canonicalId: 'SQLITE',
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
+	},
+	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGLITE: {
+		canonicalId: 'POSTGRESQL',
+		kind: 'implementation',
+		message: 'PGLITE selects PostgreSQL running through the PGlite WebAssembly build.'
 	},
 	WASM32: { canonicalId: 'WASM', kind: 'spelling' }
 } as const satisfies Record<

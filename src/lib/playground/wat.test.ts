@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	wat: { moduleUrl: '/wasm-wat/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_WAT_MODULE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 let suppressAutoRunAck = false;
 
@@ -55,17 +55,12 @@ vi.mock('$lib/playground/worker/wat?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Wat from './wat';
 
 describe('WAT sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = '/wasm-wat/index.js';
 		suppressAutoLoadAck = false;
 		suppressAutoRunAck = false;
 	});
@@ -83,7 +78,7 @@ describe('WAT sandbox', () => {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		await expect(sandbox.run(code, false, true, undefined, ['alpha'])).resolves.toBe(true);
 
@@ -129,7 +124,7 @@ describe('WAT sandbox', () => {
 		const sandbox = new Wat();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('(module)', false, true, undefined, [], {
@@ -157,7 +152,7 @@ describe('WAT sandbox', () => {
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -166,7 +161,7 @@ describe('WAT sandbox', () => {
 		const sandbox = new Wat();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('(module)', true, true, undefined, [], {
@@ -203,7 +198,7 @@ describe('WAT sandbox', () => {
 
 	it('normalizes a valid WAT workspace before worker dispatch', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await expect(
 			sandbox.run('(module)', false, true, undefined, [], {
@@ -294,7 +289,7 @@ describe('WAT sandbox', () => {
 		'rejects a WAT workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new Wat();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -314,7 +309,7 @@ describe('WAT sandbox', () => {
 	it('rejects an overlapping run without replacing the active WAT operation', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const firstRun = sandbox.run('(module (func (export "first")))', false);
 		const firstHandler = worker.onmessage;
@@ -354,12 +349,14 @@ describe('WAT sandbox', () => {
 	it('rejects load while a WAT run owns the worker handler', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const running = sandbox.run('(module (func (export "active")))', false);
 		const runHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			phase: 'execute',
@@ -375,12 +372,14 @@ describe('WAT sandbox', () => {
 	it('rejects overlapping WAT startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wat();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			phase: 'startup',
@@ -401,7 +400,7 @@ describe('WAT sandbox', () => {
 
 	it('rejects a pre-aborted WAT startup without changing an existing worker', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockClear();
 		const progress = { set: vi.fn() };
@@ -410,7 +409,14 @@ describe('WAT sandbox', () => {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
 		).rejects.toBe(reason);
 
 		expect(sandbox.worker).toBe(worker);
@@ -427,7 +433,7 @@ describe('WAT sandbox', () => {
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('WAT startup aborted');
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -449,7 +455,7 @@ describe('WAT sandbox', () => {
 
 		suppressAutoLoadAck = false;
 		const settledController = new AbortController();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			signal: settledController.signal
 		});
 		const retryWorker = workerInstances.at(-1)!;
@@ -474,7 +480,7 @@ describe('WAT sandbox', () => {
 			})
 		};
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -495,20 +501,22 @@ describe('WAT sandbox', () => {
 		expect(progress.set).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('keeps the active WAT operation while callbacks attempt reentrant work', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		let reentrantRun: Promise<boolean | string> | undefined;
 		let reentrantLoad: Promise<void> | undefined;
 		sandbox.output = () => {
 			reentrantRun = sandbox.run('(module)', false);
-			reentrantLoad = sandbox.load('/replacement/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 		};
 
 		const running = sandbox.run('(module)', false);
@@ -535,7 +543,7 @@ describe('WAT sandbox', () => {
 	it('preserves a replacement after a WAT callback terminates and throws', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const controller = new AbortController();
 		const abortReason = new Error('WAT callback abort');
@@ -543,7 +551,7 @@ describe('WAT sandbox', () => {
 		let replacement: Promise<void> | undefined;
 		sandbox.output = () => {
 			controller.abort(abortReason);
-			replacement = sandbox.load('/replacement/');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			throw callbackError;
 		};
 		const running = sandbox.run('(module)', false, true, undefined, [], {
@@ -578,7 +586,7 @@ describe('WAT sandbox', () => {
 		async (callbackKind) => {
 			suppressAutoRunAck = true;
 			const sandbox = new Wat();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const callbackError = new Error(`WAT ${callbackKind} callback failed`);
 			const controller = new AbortController();
@@ -632,7 +640,7 @@ describe('WAT sandbox', () => {
 			suppressAutoRunAck = false;
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('(module)', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}
@@ -640,7 +648,7 @@ describe('WAT sandbox', () => {
 
 	it('rejects a pre-aborted WAT run without changing worker or run state', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('do not start WAT');
@@ -663,7 +671,7 @@ describe('WAT sandbox', () => {
 	it('cancels an active WAT run with the caller reason and permits a clean retry', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const oldWorker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('stop active WAT');
@@ -682,7 +690,7 @@ describe('WAT sandbox', () => {
 		expect(sandbox.exit).toBe(true);
 
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const retryController = new AbortController();
 		await expect(
@@ -699,7 +707,7 @@ describe('WAT sandbox', () => {
 	it('keeps a replacement worker handler when a terminated run posts a stale message', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const oldWorker = workerInstances[0];
 		const oldRun = sandbox.run('(module (func (export "old")))', false);
 		const oldHandler = oldWorker.onmessage;
@@ -708,7 +716,7 @@ describe('WAT sandbox', () => {
 		await expect(oldRun).rejects.toBe('Process terminated');
 		expect(oldWorker.terminate).toHaveBeenCalledOnce();
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const replacementRun = sandbox.run('(module (func (export "replacement")))', false);
 		const replacementHandler = replacementWorker.onmessage;
@@ -732,7 +740,6 @@ describe('WAT sandbox', () => {
 	});
 
 	it('rejects load when no WAT module url is configured', async () => {
-		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = '';
 		const sandbox = new Wat();
 
 		await expect(sandbox.load({})).rejects.toContain('WAT runtime is not configured');
@@ -741,7 +748,7 @@ describe('WAT sandbox', () => {
 	it('rejects load when the WAT worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wat();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -760,7 +767,7 @@ describe('WAT sandbox', () => {
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		const runPromise = sandbox.run(
 			'(module (import "env" "readByte" (func $readByte (result i32))))',
@@ -780,7 +787,7 @@ describe('WAT sandbox', () => {
 
 	it('preserves an exact null pre-abort reason without changing idle WAT state', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const moduleUrl = sandbox.moduleUrl;
@@ -790,7 +797,9 @@ describe('WAT sandbox', () => {
 		controller.abort(null);
 
 		await expect(
-			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBeNull();
 		await expect(
 			sandbox.run('(module)', false, true, undefined, [], {
@@ -811,19 +820,25 @@ describe('WAT sandbox', () => {
 
 	it('preserves replacement startup when the outer signal getter terminates WAT', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace WAT during startup option snapshot');
 		let replacement: Promise<void> | undefined;
 		const options = {
 			get signal() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			}
 		};
 
-		const superseded = sandbox.load('/outer', '', true, [], options);
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/outer' },
+			'',
+			true,
+			[],
+			options
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -835,7 +850,7 @@ describe('WAT sandbox', () => {
 
 	it('preserves the first cancellation and replacement across later WAT option failure', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace WAT during execution option snapshot');
 		const laterError = new Error('later WAT workspace getter failed');
@@ -843,7 +858,7 @@ describe('WAT sandbox', () => {
 		const options = {
 			get limits() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			},
 			get workspaceFiles(): never {
@@ -866,9 +881,15 @@ describe('WAT sandbox', () => {
 		vi.useFakeTimers();
 		suppressAutoLoadAck = true;
 		const sandbox = new Wat();
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -887,14 +908,16 @@ describe('WAT sandbox', () => {
 
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate WAT execution deadline and permits a clean retry', async () => {
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		suppressAutoRunAck = true;
 		vi.useFakeTimers();
@@ -917,7 +940,7 @@ describe('WAT sandbox', () => {
 
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -925,7 +948,7 @@ describe('WAT sandbox', () => {
 	it('clears settled WAT deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -944,7 +967,7 @@ describe('WAT sandbox', () => {
 	it('writes EOF when the worker requests stdin after eof is signaled', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		const runPromise = sandbox.run(
 			'(module (import "env" "readByte" (func $readByte (result i32))))',
@@ -1000,7 +1023,7 @@ describe('WAT sandbox', () => {
 	it('does not stream terminal input into an explicit WAT stdin run', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		const running = sandbox.run('(module)', false, true, undefined, [], {
@@ -1023,7 +1046,7 @@ describe('WAT sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -1048,7 +1071,7 @@ describe('WAT sandbox', () => {
 				pendingEof: sandbox.pendingEof,
 				bufferedInput: readBufferedStdin(sandbox.buffer)
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantDisposal = sandbox.dispose();
 		});
 		const firstDisposal = sandbox.dispose();
@@ -1083,7 +1106,9 @@ describe('WAT sandbox', () => {
 		expect(sandbox.output).toBeNull();
 		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
 
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1109,7 +1134,7 @@ describe('WAT sandbox', () => {
 	it('settles active WAT startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wat();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
 		const staleHandler = worker.onmessage;
@@ -1140,7 +1165,7 @@ describe('WAT sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const running = sandbox.run('(module)', false);
 		const staleHandler = worker.onmessage;

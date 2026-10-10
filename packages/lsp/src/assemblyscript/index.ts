@@ -2,7 +2,7 @@ export {
 	getAssemblyScriptLanguageServer,
 	type AssemblyScriptLanguageServerConfig,
 	type AssemblyScriptLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createAssemblyScriptWorkerService,
 	type AssemblyScriptWorkerOptions,

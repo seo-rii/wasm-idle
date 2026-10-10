@@ -11,7 +11,7 @@ export {
 	createClangdLanguageServer,
 	getCppLanguageServer,
 	type ClangdLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export type {
 	ClangdPreloadedAssets,
 	ClangdWorkerInboundMessage,

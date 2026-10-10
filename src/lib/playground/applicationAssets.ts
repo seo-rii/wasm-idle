@@ -7,6 +7,7 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
+import { WASM_RESCRIPT_ASSET_VERSION, WASM_RESCRIPT_RUNNER_RECEIPT } from './wasmReScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
@@ -24,6 +25,7 @@ import { WASM_JANET_RUNTIME_BUNDLE } from './wasmJanetVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
+import { WASM_FENNEL_ASSET_VERSION, WASM_FENNEL_COMPILER_RECEIPT } from './wasmFennelVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from './wasmNimVersion';
 import {
 	WASM_OBJECTIVEC_ASSET_RECEIPTS,
@@ -291,6 +293,16 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		},
+		rescript: {
+			baseUrl: asset('wasm-rescript/'),
+			workerUrl: asset('wasm-rescript/runner-worker.js', WASM_RESCRIPT_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset(
+				'wasm-rescript/runtime-manifest.v1.json',
+				WASM_RESCRIPT_ASSET_VERSION
+			),
+			manifestFingerprint: WASM_RESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_RESCRIPT_RUNNER_RECEIPT
+		},
 		swift: {
 			baseUrl: asset('wasm-swift/'),
 			workerUrl: asset('wasm-swift/runner-worker.js', WASM_SWIFT_ASSET_VERSION),
@@ -331,6 +343,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		lua: {
 			moduleUrl: asset('wasm-lua/index.js', WASM_LUA_ASSET_VERSION)
+		},
+		fennel: {
+			compilerUrl: asset(WASM_FENNEL_COMPILER_RECEIPT.path, WASM_FENNEL_ASSET_VERSION)
 		},
 		zig: {
 			compilerUrl: asset('wasm-zig/zig_small.wasm', WASM_ZIG_ASSET_VERSION),
@@ -378,6 +393,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		cobol: {
 			baseUrl: asset('wasm-cobol/')
 		},
+		v: {
+			baseUrl: asset('wasm-v/')
+		},
 		objectivec: {
 			baseUrl: asset('wasm-objectivec/'),
 			libobjcUrl: asset('wasm-objectivec/libobjc.a', WASM_OBJECTIVEC_ASSET_VERSION),
@@ -407,6 +425,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 				'wasm-octave/runtime/runtime-manifest.v1.json',
 				WASM_OCTAVE_ASSET_VERSION
 			)
+		},
+		postgresql: {
+			moduleUrl: asset('wasm-postgresql/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},
 		sqlite: {
 			moduleUrl: asset('wasm-sqlite/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)

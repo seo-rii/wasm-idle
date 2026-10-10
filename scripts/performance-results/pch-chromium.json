@@ -1,0 +1,2013 @@
+{
+	"measuredAt": "2026-10-07T00:01:39.937Z",
+	"browser": "Chromium",
+	"assetSource": "shipped static/clang artifacts",
+	"baseUrl": "http://127.0.0.1:5191/wasm-idle/",
+	"workload": "C++20 <bits/stdc++.h>, vector accumulation, stdout; changed source in every phase",
+	"transferMetric": "CDP encodedDataLength for /clang/ responses, including response headers; HTTP cache disabled",
+	"networkProfiles": {
+		"local": {
+			"latencyMs": 0,
+			"downloadBytesPerSecond": null
+		},
+		"constrained": {
+			"latencyMs": 50,
+			"downloadBytesPerSecond": 1250000
+		}
+	},
+	"measurements": [
+		{
+			"mode": "default",
+			"network": "local",
+			"phase": "empty-cache",
+			"readyMs": 983.2600000000093,
+			"compiledMs": 7290.304999999993,
+			"firstOutputMs": 7299.104999999981,
+			"completedMs": 7299.414999999979,
+			"result": true,
+			"output": "persistent-pch-empty-cache-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "requested",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 256.8850000000093,
+					"lastAtMs": 1288.789999999979,
+					"events": 105
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 636.4699999999721,
+					"lastAtMs": 636.4699999999721,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 653.7399999999907,
+					"lastAtMs": 653.7399999999907,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 653.9949999999953,
+					"lastAtMs": 653.9949999999953,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 822.1699999999837,
+					"lastAtMs": 822.1699999999837,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 822.2050000000163,
+					"lastAtMs": 822.2050000000163,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 987.8349999999627,
+					"lastAtMs": 987.8349999999627,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 1029.9349999999977,
+					"lastAtMs": 1143.3499999999767,
+					"events": 36
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1143.5449999999837,
+					"lastAtMs": 1143.5449999999837,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1143.594999999972,
+					"lastAtMs": 1143.594999999972,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 6780.429999999993,
+					"lastAtMs": 6780.459999999963,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 6780.690000000002,
+					"lastAtMs": 6780.690000000002,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 6780.744999999995,
+					"lastAtMs": 6780.744999999995,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 7289.804999999993,
+					"lastAtMs": 7289.804999999993,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			],
+			"persistedPchBytes": 19813536
+		},
+		{
+			"mode": "default",
+			"network": "local",
+			"phase": "persistent-reload",
+			"readyMs": 865.7649999999558,
+			"compiledMs": 3633.8799999999464,
+			"firstOutputMs": 3638.554999999993,
+			"completedMs": 3639.454999999958,
+			"result": true,
+			"output": "persistent-pch-persistent-reload-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 272.375,
+					"lastAtMs": 1039.5449999999837,
+					"events": 144
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 513.4400000000023,
+					"lastAtMs": 513.4400000000023,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 529.8899999999558,
+					"lastAtMs": 529.8899999999558,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 529.9599999999627,
+					"lastAtMs": 529.9599999999627,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 602.9400000000023,
+					"lastAtMs": 602.9400000000023,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 602.9699999999721,
+					"lastAtMs": 602.9699999999721,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 866.304999999993,
+					"lastAtMs": 866.304999999993,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 924.9899999999907,
+					"lastAtMs": 1144.7999999999884,
+					"events": 34
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1144.9499999999534,
+					"lastAtMs": 1144.9499999999534,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1144.984999999986,
+					"lastAtMs": 1144.984999999986,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 3224.7299999999814,
+					"lastAtMs": 3225.8899999999558,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 3226.024999999965,
+					"lastAtMs": 3226.024999999965,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 3226.0599999999977,
+					"lastAtMs": 3226.0599999999977,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 3633.7549999999464,
+					"lastAtMs": 3633.7549999999464,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 3633.8150000000023,
+					"lastAtMs": 3633.8150000000023,
+					"events": 1
+				}
+			],
+			"transferBytes": 24667445,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "default",
+			"network": "local",
+			"phase": "warm",
+			"readyMs": 0.009999999951105565,
+			"compiledMs": 808.7049999999581,
+			"firstOutputMs": 812.3349999999627,
+			"completedMs": 812.3999999999651,
+			"result": true,
+			"output": "persistent-pch-warm-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 0.6599999999743886,
+					"lastAtMs": 0.6599999999743886,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 808.5899999999674,
+					"lastAtMs": 808.5899999999674,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 808.6749999999884,
+					"lastAtMs": 808.6749999999884,
+					"events": 1
+				}
+			],
+			"transferBytes": 0,
+			"assetResponses": []
+		},
+		{
+			"mode": "default",
+			"network": "local",
+			"phase": "disabled",
+			"readyMs": 792.375,
+			"compiledMs": 7539.450000000012,
+			"firstOutputMs": 7545.155000000028,
+			"completedMs": 7545.400000000023,
+			"result": true,
+			"output": "persistent-pch-disabled-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "requested",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 138.70000000001164,
+					"lastAtMs": 977.6000000000349,
+					"events": 132
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 384.2150000000256,
+					"lastAtMs": 384.2150000000256,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 395.070000000007,
+					"lastAtMs": 395.070000000007,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 395.10999999998603,
+					"lastAtMs": 395.10999999998603,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 541.5400000000373,
+					"lastAtMs": 541.5400000000373,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 541.585000000021,
+					"lastAtMs": 541.585000000021,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 793.2999999999884,
+					"lastAtMs": 793.2999999999884,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 860.2200000000303,
+					"lastAtMs": 1072.75,
+					"events": 26
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1072.929999999993,
+					"lastAtMs": 1072.929999999993,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1072.9700000000303,
+					"lastAtMs": 1072.9700000000303,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 7046.755000000005,
+					"lastAtMs": 7046.98000000004,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 7047.09500000003,
+					"lastAtMs": 7047.09500000003,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 7047.140000000014,
+					"lastAtMs": 7047.140000000014,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 7539.085000000021,
+					"lastAtMs": 7539.085000000021,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "default",
+			"network": "constrained",
+			"phase": "empty-cache",
+			"readyMs": 20294.304999999993,
+			"compiledMs": 33292.61499999999,
+			"firstOutputMs": 33298.69,
+			"completedMs": 33298.880000000005,
+			"result": true,
+			"output": "persistent-pch-empty-cache-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "requested",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2572.125,
+					"lastAtMs": 28863.52999999997,
+					"events": 13180
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 7490.714999999967,
+					"lastAtMs": 7490.714999999967,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 7589.015000000014,
+					"lastAtMs": 7589.015000000014,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 7589.214999999967,
+					"lastAtMs": 7589.214999999967,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 9531.820000000007,
+					"lastAtMs": 9531.820000000007,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 9531.849999999977,
+					"lastAtMs": 9531.849999999977,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 20302.205000000016,
+					"lastAtMs": 20302.205000000016,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 20365.619999999995,
+					"lastAtMs": 26550.419999999984,
+					"events": 2566
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 26550.88500000001,
+					"lastAtMs": 26550.88500000001,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 26550.97999999998,
+					"lastAtMs": 26550.97999999998,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 32831.080000000016,
+					"lastAtMs": 32881.22499999998,
+					"events": 27
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 32881.47999999998,
+					"lastAtMs": 32881.47999999998,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 32881.53999999998,
+					"lastAtMs": 32881.53999999998,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 33292.09999999998,
+					"lastAtMs": 33292.09999999998,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			],
+			"persistedPchBytes": 19813536
+		},
+		{
+			"mode": "default",
+			"network": "constrained",
+			"phase": "persistent-reload",
+			"readyMs": 20177.88500000001,
+			"compiledMs": 29132.455000000016,
+			"firstOutputMs": 29137.420000000042,
+			"completedMs": 29137.58500000002,
+			"result": true,
+			"output": "persistent-pch-persistent-reload-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2575.850000000035,
+					"lastAtMs": 28802.34500000003,
+					"events": 13416
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 7394.860000000044,
+					"lastAtMs": 7394.860000000044,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 7490.020000000019,
+					"lastAtMs": 7490.020000000019,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 7490.054999999993,
+					"lastAtMs": 7490.054999999993,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 9439.080000000016,
+					"lastAtMs": 9439.080000000016,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 9439.125,
+					"lastAtMs": 9439.125,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 20181.179999999993,
+					"lastAtMs": 20181.179999999993,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 20248.86499999999,
+					"lastAtMs": 26448.48000000004,
+					"events": 2568
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 26448.840000000026,
+					"lastAtMs": 26448.840000000026,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 26448.92499999999,
+					"lastAtMs": 26448.92499999999,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 28546.580000000016,
+					"lastAtMs": 28619.09500000003,
+					"events": 31
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 28619.34500000003,
+					"lastAtMs": 28619.34500000003,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 28619.39500000002,
+					"lastAtMs": 28619.39500000002,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 29132.25,
+					"lastAtMs": 29132.25,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 29132.304999999993,
+					"lastAtMs": 29132.304999999993,
+					"events": 1
+				}
+			],
+			"transferBytes": 24667445,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				}
+			]
+		},
+		{
+			"mode": "default",
+			"network": "constrained",
+			"phase": "warm",
+			"readyMs": 0.010000000009313226,
+			"compiledMs": 781.6650000000373,
+			"firstOutputMs": 787.2450000000536,
+			"completedMs": 787.3450000000303,
+			"result": true,
+			"output": "persistent-pch-warm-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 1.2700000000186265,
+					"lastAtMs": 1.2700000000186265,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 781.4350000000559,
+					"lastAtMs": 781.4350000000559,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 781.5450000000419,
+					"lastAtMs": 781.5450000000419,
+					"events": 1
+				}
+			],
+			"transferBytes": 0,
+			"assetResponses": []
+		},
+		{
+			"mode": "default",
+			"network": "constrained",
+			"phase": "disabled",
+			"readyMs": 20196.35500000004,
+			"compiledMs": 32084.405000000028,
+			"firstOutputMs": 32110.73000000004,
+			"completedMs": 32111.38500000001,
+			"result": true,
+			"output": "persistent-pch-disabled-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "requested",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2577.945000000007,
+					"lastAtMs": 28726.830000000016,
+					"events": 13376
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 7452.270000000019,
+					"lastAtMs": 7452.270000000019,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 7549.455000000016,
+					"lastAtMs": 7549.455000000016,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 7549.485000000044,
+					"lastAtMs": 7549.485000000044,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 9487.880000000005,
+					"lastAtMs": 9487.880000000005,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 9487.930000000051,
+					"lastAtMs": 9487.930000000051,
+					"events": 1
+				},
+				{
+					"label": "Compiling C++ source",
+					"firstAtMs": 20199.300000000047,
+					"lastAtMs": 20199.300000000047,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 20264.46000000002,
+					"lastAtMs": 26449.175000000047,
+					"events": 2568
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 26449.745000000054,
+					"lastAtMs": 26449.745000000054,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 26449.880000000005,
+					"lastAtMs": 26449.880000000005,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 31676.655000000028,
+					"lastAtMs": 31729.375,
+					"events": 27
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 31729.60500000004,
+					"lastAtMs": 31729.60500000004,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 31729.670000000042,
+					"lastAtMs": 31729.670000000042,
+					"events": 1
+				},
+				{
+					"label": "C++ program ready",
+					"firstAtMs": 32084.110000000044,
+					"lastAtMs": 32084.110000000044,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "session",
+			"network": "local",
+			"phase": "empty-cache",
+			"readyMs": 198.09500000003027,
+			"compiledMs": 7356.735000000044,
+			"firstOutputMs": 7914.645000000019,
+			"completedMs": 7915.140000000014,
+			"result": true,
+			"output": "persistent-pch-empty-cache-42 10\n",
+			"usedPch": false,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 208.25,
+					"lastAtMs": 935.765000000014,
+					"events": 120
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 472.8400000000256,
+					"lastAtMs": 472.8400000000256,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 487.15500000002794,
+					"lastAtMs": 487.15500000002794,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 487.34500000003027,
+					"lastAtMs": 487.34500000003027,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 492.6849999999977,
+					"lastAtMs": 763.1849999999977,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 539.890000000014,
+					"lastAtMs": 539.890000000014,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 539.9200000000419,
+					"lastAtMs": 539.9200000000419,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 763.210000000021,
+					"lastAtMs": 763.210000000021,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 808.2750000000233,
+					"lastAtMs": 1049.2850000000326,
+					"events": 26
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1050.795000000042,
+					"lastAtMs": 1050.795000000042,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1050.9100000000326,
+					"lastAtMs": 1050.9100000000326,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 6984.744999999995,
+					"lastAtMs": 6984.800000000047,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 6984.960000000021,
+					"lastAtMs": 6984.960000000021,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 6985.005000000005,
+					"lastAtMs": 6985.005000000005,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			],
+			"persistedPchBytes": 19813536
+		},
+		{
+			"mode": "session",
+			"network": "local",
+			"phase": "persistent-reload",
+			"readyMs": 180.64000000001397,
+			"compiledMs": 4114.02999999997,
+			"firstOutputMs": 4420.25,
+			"completedMs": 4420.414999999979,
+			"result": true,
+			"output": "persistent-pch-persistent-reload-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 187.09499999997206,
+					"lastAtMs": 1004.640000000014,
+					"events": 143
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 406.0449999999837,
+					"lastAtMs": 406.0449999999837,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 417.6149999999907,
+					"lastAtMs": 417.6149999999907,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 417.6500000000233,
+					"lastAtMs": 417.6500000000233,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 429.98499999998603,
+					"lastAtMs": 797.7750000000233,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 474.3099999999977,
+					"lastAtMs": 474.3099999999977,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 474.3549999999814,
+					"lastAtMs": 474.3549999999814,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 797.804999999993,
+					"lastAtMs": 797.804999999993,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 894.0800000000163,
+					"lastAtMs": 1125.570000000007,
+					"events": 33
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1125.7949999999837,
+					"lastAtMs": 1125.7949999999837,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1125.844999999972,
+					"lastAtMs": 1125.844999999972,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 3630.335000000021,
+					"lastAtMs": 3630.3800000000047,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 3630.5200000000186,
+					"lastAtMs": 3630.5200000000186,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 3630.5599999999977,
+					"lastAtMs": 3630.5599999999977,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 4108.164999999979,
+					"lastAtMs": 4108.164999999979,
+					"events": 1
+				}
+			],
+			"transferBytes": 24667445,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "session",
+			"network": "local",
+			"phase": "warm",
+			"readyMs": 0.01999999996041879,
+			"compiledMs": 1372.454999999958,
+			"firstOutputMs": 1625.375,
+			"completedMs": 1625.469999999972,
+			"result": true,
+			"output": "persistent-pch-warm-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 0.4949999999953434,
+					"lastAtMs": 0.4949999999953434,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 346.7249999999767,
+					"lastAtMs": 346.7599999999511,
+					"events": 3
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 378.78999999997905,
+					"lastAtMs": 378.78999999997905,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 1367.1549999999697,
+					"lastAtMs": 1367.1549999999697,
+					"events": 1
+				}
+			],
+			"transferBytes": 0,
+			"assetResponses": []
+		},
+		{
+			"mode": "session",
+			"network": "local",
+			"phase": "disabled",
+			"readyMs": 195.63000000000466,
+			"compiledMs": 6752.920000000042,
+			"firstOutputMs": 7032.005000000005,
+			"completedMs": 7032.244999999995,
+			"result": true,
+			"output": "persistent-pch-disabled-42 10\n",
+			"usedPch": false,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 202.31500000000233,
+					"lastAtMs": 984.3450000000303,
+					"events": 123
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 445.5,
+					"lastAtMs": 445.5,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 460.6700000000419,
+					"lastAtMs": 460.6700000000419,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 460.70000000001164,
+					"lastAtMs": 460.70000000001164,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 477.91500000003725,
+					"lastAtMs": 844.6600000000326,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 581.0800000000163,
+					"lastAtMs": 581.0800000000163,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 581.125,
+					"lastAtMs": 581.125,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 844.7050000000163,
+					"lastAtMs": 844.7050000000163,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 929.9650000000256,
+					"lastAtMs": 1128.1199999999953,
+					"events": 27
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 1128.2750000000233,
+					"lastAtMs": 1128.2750000000233,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 1128.3099999999977,
+					"lastAtMs": 1128.3099999999977,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 6324.670000000042,
+					"lastAtMs": 6324.735000000044,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 6324.940000000002,
+					"lastAtMs": 6324.940000000002,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 6324.994999999995,
+					"lastAtMs": 6324.994999999995,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "session",
+			"network": "constrained",
+			"phase": "empty-cache",
+			"readyMs": 2885.3600000001024,
+			"compiledMs": 32490.32500000007,
+			"firstOutputMs": 37308.590000000084,
+			"completedMs": 37308.76000000001,
+			"result": true,
+			"output": "persistent-pch-empty-cache-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "built",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2950,
+					"lastAtMs": 29071.375,
+					"events": 13427
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 7804.730000000098,
+					"lastAtMs": 7804.730000000098,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 7903.95000000007,
+					"lastAtMs": 7903.95000000007,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 7904.145000000019,
+					"lastAtMs": 7904.145000000019,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 7906.895000000019,
+					"lastAtMs": 20510.540000000037,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 9847.390000000014,
+					"lastAtMs": 9847.390000000014,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 9847.430000000051,
+					"lastAtMs": 9847.430000000051,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 20510.57500000007,
+					"lastAtMs": 20510.57500000007,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 20580.490000000107,
+					"lastAtMs": 26766.275000000023,
+					"events": 2567
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 26766.855000000098,
+					"lastAtMs": 26766.855000000098,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 26766.95000000007,
+					"lastAtMs": 26766.95000000007,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 32077.320000000065,
+					"lastAtMs": 32107.465000000084,
+					"events": 19
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 32107.630000000005,
+					"lastAtMs": 32107.630000000005,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 32107.670000000042,
+					"lastAtMs": 32107.670000000042,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			],
+			"persistedPchBytes": 19813536
+		},
+		{
+			"mode": "session",
+			"network": "constrained",
+			"phase": "persistent-reload",
+			"readyMs": 2877.100000000093,
+			"compiledMs": 31090.58500000008,
+			"firstOutputMs": 35990.20000000007,
+			"completedMs": 35990.8600000001,
+			"result": true,
+			"output": "persistent-pch-persistent-reload-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2935.170000000042,
+					"lastAtMs": 29007.34500000009,
+					"events": 13176
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 7725.695000000065,
+					"lastAtMs": 7725.695000000065,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 7823.400000000023,
+					"lastAtMs": 7823.400000000023,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 7823.560000000056,
+					"lastAtMs": 7823.560000000056,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 7826.235000000102,
+					"lastAtMs": 20418.290000000037,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 9766.140000000014,
+					"lastAtMs": 9766.140000000014,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 9766.185000000056,
+					"lastAtMs": 9766.185000000056,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 20418.330000000075,
+					"lastAtMs": 20418.330000000075,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 20496.705000000075,
+					"lastAtMs": 26737.420000000042,
+					"events": 2549
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 26739.705000000075,
+					"lastAtMs": 26739.705000000075,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 26740.150000000023,
+					"lastAtMs": 26740.150000000023,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 30424.945000000065,
+					"lastAtMs": 30473.18000000005,
+					"events": 32
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 30476.55500000005,
+					"lastAtMs": 30476.55500000005,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 30476.780000000028,
+					"lastAtMs": 30476.780000000028,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 31082.830000000075,
+					"lastAtMs": 31082.830000000075,
+					"events": 1
+				}
+			],
+			"transferBytes": 24667445,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		},
+		{
+			"mode": "session",
+			"network": "constrained",
+			"phase": "warm",
+			"readyMs": 0.09999999997671694,
+			"compiledMs": 6381.135000000009,
+			"firstOutputMs": 11215.020000000019,
+			"completedMs": 11215.310000000056,
+			"result": true,
+			"output": "persistent-pch-warm-42 10\n",
+			"usedPch": true,
+			"pchRequests": [],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 2.7850000000325963,
+					"lastAtMs": 2.7850000000325963,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 4874.675000000047,
+					"lastAtMs": 4874.859999999986,
+					"events": 3
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 4934.435000000056,
+					"lastAtMs": 4934.435000000056,
+					"events": 1
+				},
+				{
+					"label": "Compiled with precompiled <bits/stdc++.h>",
+					"firstAtMs": 6369.6900000000605,
+					"lastAtMs": 6369.6900000000605,
+					"events": 1
+				}
+			],
+			"transferBytes": 0,
+			"assetResponses": []
+		},
+		{
+			"mode": "session",
+			"network": "constrained",
+			"phase": "disabled",
+			"readyMs": 2988.8150000000605,
+			"compiledMs": 36945.53500000003,
+			"firstOutputMs": 41781.46999999997,
+			"completedMs": 41781.625,
+			"result": true,
+			"output": "persistent-pch-disabled-42 10\n",
+			"usedPch": false,
+			"pchRequests": [
+				{
+					"kind": "built",
+					"identity": {
+						"format": "clang-pch-v2",
+						"args": [
+							"-cc1",
+							"-triple",
+							"wasm32-wasi",
+							"-emit-pch",
+							"-disable-free",
+							"-isysroot",
+							"/",
+							"-resource-dir",
+							"/lib/clang/22",
+							"-internal-isystem",
+							"/include/c++/v1",
+							"-internal-isystem",
+							"/include/wasm32-wasi/c++/v1",
+							"-internal-isystem",
+							"/lib/clang/22/include",
+							"-internal-isystem",
+							"/include/wasm32-wasi",
+							"-internal-isystem",
+							"/include",
+							"-ferror-limit",
+							"19",
+							"-fcolor-diagnostics",
+							"-O2",
+							"-o",
+							"/__wasm_idle_build/pch/stdc++.pch",
+							"-std=gnu++20",
+							"-x",
+							"c++-header",
+							"/include/bits/stdc++.h"
+						],
+						"compiler": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75",
+						"sysroot": [
+							"720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e",
+							"7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d"
+						],
+						"runtimeHeaders": "2667040e97d5cbb634ffb577a224d5026456420ee38c4ec5f4617760f9706716"
+					}
+				}
+			],
+			"stages": [
+				{
+					"label": "Downloading runtime assets",
+					"firstAtMs": 3051.7399999999907,
+					"lastAtMs": 29762.670000000042,
+					"events": 12531
+				},
+				{
+					"label": "Verifying runtime-manifest.v1.json",
+					"firstAtMs": 8033.204999999958,
+					"lastAtMs": 8033.204999999958,
+					"events": 1
+				},
+				{
+					"label": "Decompressing bin/memfs.wasm.gz",
+					"firstAtMs": 8139.920000000042,
+					"lastAtMs": 8139.920000000042,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/memfs.wasm.gz",
+					"firstAtMs": 8139.984999999986,
+					"lastAtMs": 8139.984999999986,
+					"events": 1
+				},
+				{
+					"label": "Loading compiler runtime",
+					"firstAtMs": 8144.849999999977,
+					"lastAtMs": 21107.195000000065,
+					"events": 3
+				},
+				{
+					"label": "Decompressing bin/c-sysroot.tar.gz",
+					"firstAtMs": 10093.229999999981,
+					"lastAtMs": 10093.229999999981,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/c-sysroot.tar.gz",
+					"firstAtMs": 10093.305000000051,
+					"lastAtMs": 10093.305000000051,
+					"events": 1
+				},
+				{
+					"label": "Compiling source",
+					"firstAtMs": 21107.25,
+					"lastAtMs": 21107.25,
+					"events": 1
+				},
+				{
+					"label": "Downloading bin/cpp-addon.tar.gz",
+					"firstAtMs": 21186.445000000065,
+					"lastAtMs": 27475.584999999963,
+					"events": 2529
+				},
+				{
+					"label": "Decompressing bin/cpp-addon.tar.gz",
+					"firstAtMs": 27476.344999999972,
+					"lastAtMs": 27476.344999999972,
+					"events": 1
+				},
+				{
+					"label": "Verifying bin/cpp-addon.tar.gz",
+					"firstAtMs": 27476.61499999999,
+					"lastAtMs": 27476.61499999999,
+					"events": 1
+				},
+				{
+					"label": "Downloading libc-printscan-long-double.a.gz",
+					"firstAtMs": 36395.195000000065,
+					"lastAtMs": 36395.310000000056,
+					"events": 2
+				},
+				{
+					"label": "Decompressing libc-printscan-long-double.a.gz",
+					"firstAtMs": 36395.53000000003,
+					"lastAtMs": 36395.53000000003,
+					"events": 1
+				},
+				{
+					"label": "Verifying libc-printscan-long-double.a.gz",
+					"firstAtMs": 36395.59999999998,
+					"lastAtMs": 36395.59999999998,
+					"events": 1
+				}
+			],
+			"transferBytes": 24668714,
+			"assetResponses": [
+				{
+					"asset": "/wasm-idle/clang/runtime-manifest.v1.json",
+					"encodedBytes": 1269
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/memfs.wasm.gz",
+					"encodedBytes": 16441
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/c-sysroot.tar.gz",
+					"encodedBytes": 1217115
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/clang.wasm.gz",
+					"encodedBytes": 13122253
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/cpp-addon.tar.gz",
+					"encodedBytes": 3840926
+				},
+				{
+					"asset": "/wasm-idle/clang/bin/lld.wasm.gz",
+					"encodedBytes": 6417673
+				},
+				{
+					"asset": "/wasm-idle/clang/libc-printscan-long-double.a.gz",
+					"encodedBytes": 53037
+				}
+			]
+		}
+	],
+	"browserVersion": "147.0.7727.15",
+	"validationComplete": true,
+	"measurementKind": "one validation sample per configuration; not statistical medians",
+	"networkCaveat": "CDP throttles development module requests as well as runtime assets; fresh runtime-session workers incur module preparation traffic excluded from the /clang/ byte metric.",
+	"runtimeAssetReloadReason": "This local Vite server serves .gz assets with Content-Encoding:gzip, so fetch exposes decompressed bodies. Existing persistent asset gates require the pinned stored representation: the whole-buffer bridge skips encoded responses and the streaming compiler stores a snapshot only when input is gzip. With HTTP cache disabled and fresh host memory after reload, runtime assets download again. Generated PCH bytes have their own verified persistent record and remain reusable."
+}

@@ -1,4 +1,4 @@
-import type { Lockfile, PyodideInterface } from 'pyodide';
+import type { Lockfile, PyodideConfig, PyodideInterface } from 'pyodide';
 import {
 	flushQueuedStdin,
 	readBufferedStdin,
@@ -6,7 +6,9 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
+import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
+import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import {
 	configureWorkerRuntimeAssetAllowlist,
 	configureWorkerRuntimeAssets,
@@ -43,6 +45,134 @@ let stdinBufferPyodide: Int32Array,
 
 // Only the next matching run may reuse a successful package preparation.
 let preparedPackagesKey: string | undefined;
+let maxRuntimeAssetBytes: number | undefined;
+let installedHyVersion: string | undefined;
+let installedAheuiVersion: string | undefined;
+let installedApecodeVersion: string | undefined;
+
+type PythonExtensionLanguage = 'hy' | 'aheui' | 'apecode';
+const PYTHON_EXTENSIONS = {
+	hy: {
+		label: 'Hy',
+		readyLabel: 'Compiling Hy core',
+		importSource:
+			'import importlib\nimportlib.invalidate_caches()\nimport hy\nimport hy.compiler\nhy.__version__'
+	},
+	aheui: {
+		label: 'Aheui',
+		readyLabel: 'Loading Aheui interpreter',
+		importSource:
+			'import importlib\nimportlib.invalidate_caches()\nfrom aheui.version import VERSION\nVERSION'
+	},
+	apecode: {
+		label: 'APECode',
+		readyLabel: 'Loading APECode interpreter',
+		importSource:
+			'import importlib\nimportlib.invalidate_caches()\nimport apecode\nfrom apecode.cli import run_source\napecode.__version__'
+	}
+} as const;
+
+const PYTHON_WHEEL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$/u;
+const PYTHON_EXTENSION_VERSION_PATTERN = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/u;
+const MAX_PYTHON_EXTENSION_WHEELS = 8;
+
+interface PythonWheelConfig {
+	url: string;
+	fileName: string;
+	bytes: number;
+	sha256: string;
+}
+
+function parsePythonExtension(extension: unknown, language: PythonExtensionLanguage) {
+	const { label } = PYTHON_EXTENSIONS[language];
+	const candidate = extension as { language?: unknown; version?: unknown; wheels?: unknown };
+	if (
+		!candidate ||
+		candidate.language !== language ||
+		typeof candidate.version !== 'string' ||
+		!PYTHON_EXTENSION_VERSION_PATTERN.test(candidate.version) ||
+		(language === 'apecode' && candidate.version !== WASM_APECODE_VERSION) ||
+		!Array.isArray(candidate.wheels) ||
+		candidate.wheels.length === 0 ||
+		candidate.wheels.length > MAX_PYTHON_EXTENSION_WHEELS
+	) {
+		throw new Error(`${label} runtime configuration is invalid`);
+	}
+	if (language === 'apecode' && candidate.wheels.length !== WASM_APECODE_WHEELS.length) {
+		throw new Error(`${label} runtime wheel receipt is invalid`);
+	}
+	const wheels = candidate.wheels.map((wheel: Partial<PythonWheelConfig>, index: number) => {
+		const pinnedWheel = language === 'apecode' ? WASM_APECODE_WHEELS[index] : undefined;
+		if (
+			!wheel ||
+			typeof wheel.url !== 'string' ||
+			typeof wheel.fileName !== 'string' ||
+			!PYTHON_WHEEL_NAME_PATTERN.test(wheel.fileName) ||
+			!Number.isSafeInteger(wheel.bytes) ||
+			(wheel.bytes as number) <= 0 ||
+			typeof wheel.sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(wheel.sha256) ||
+			(pinnedWheel !== undefined &&
+				(wheel.fileName !== pinnedWheel.fileName ||
+					wheel.bytes !== pinnedWheel.bytes ||
+					wheel.sha256 !== pinnedWheel.sha256))
+		) {
+			throw new Error(`${label} runtime wheel receipt is invalid`);
+		}
+		return wheel as PythonWheelConfig;
+	});
+	return { version: candidate.version, wheels };
+}
+
+/** Install receipt-verified original Python packages once per dedicated language worker. */
+async function installPythonExtension(extension: unknown, language: PythonExtensionLanguage) {
+	const { label, readyLabel, importSource } = PYTHON_EXTENSIONS[language];
+	const { version, wheels } = parsePythonExtension(extension, language);
+	const installedVersions = {
+		hy: installedHyVersion,
+		aheui: installedAheuiVersion,
+		apecode: installedApecodeVersion
+	};
+	const installedVersion = installedVersions[language];
+	if (installedVersion === version) return;
+	if (installedVersion !== undefined) throw new Error(`${label} runtime version changed`);
+	if (
+		Object.entries(installedVersions).some(
+			([installedLanguage, installed]) =>
+				installedLanguage !== language && installed !== undefined
+		)
+	) {
+		throw new Error('Python runtime extension language changed');
+	}
+	const sitePackages = String(
+		pyodide.runPython('import sysconfig\nsysconfig.get_path("purelib")')
+	);
+	for (const [index, wheel] of wheels.entries()) {
+		postProgress(60 + Math.floor((index * 30) / wheels.length), `Loading ${wheel.fileName}`);
+		const bytes = await fetchRuntimeAssetBytes({
+			url: new URL(wheel.url, globalThis.location?.href).href,
+			label: `${label} wheel ${wheel.fileName}`,
+			cache: 'force-cache',
+			expected: { bytes: wheel.bytes, sha256: wheel.sha256 },
+			maxAssetBytes: Math.min(maxRuntimeAssetBytes ?? wheel.bytes, wheel.bytes),
+			integrityContext: {
+				asset: wheel.fileName,
+				runtimeId: language.toUpperCase()
+			}
+		});
+		pyodide.unpackArchive(bytes, 'whl', { extractDir: sitePackages });
+	}
+	postProgress(92, readyLabel);
+	const loadedVersion = String(pyodide.runPython(importSource));
+	if (loadedVersion !== version) {
+		throw new Error(
+			`${label} runtime version mismatch: expected ${version}, loaded ${loadedVersion}`
+		);
+	}
+	if (language === 'hy') installedHyVersion = version;
+	else if (language === 'aheui') installedAheuiVersion = version;
+	else installedApecodeVersion = version;
+}
 
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
@@ -191,7 +321,7 @@ if not globals().get("__wasm_idle_img_inited__", False):
 const pyodideVersionPattern = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(?:[A-Za-z0-9._+-]{0,64})?$/u;
 const directPyodideRuntimeAssets = [
 	'pyodide.mjs',
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide-lock.json',
 	'pyodide.asm.wasm',
 	'python_stdlib.zip'
@@ -230,11 +360,16 @@ async function loadPyodide(path: string) {
 	// Download independent bootstrap files together, but preserve module evaluation order.
 	// The existing bounded loader (and host bridge, when configured) still owns every byte.
 	const [asmAsset, runtimeAsset, loadedLock] = await Promise.all([
-		loadWorkerRuntimeAsset('pyodide.asm.js'),
+		loadWorkerRuntimeAsset('pyodide.asm.mjs'),
 		loadWorkerRuntimeAsset('pyodide.mjs'),
 		useAssetBridge ? undefined : loadWorkerRuntimeAsset('pyodide-lock.json')
 	]);
-	await importRuntimeAssetModule(asmAsset);
+	const { default: createPyodideModule } = (await importRuntimeAssetModule(asmAsset)) as {
+		default: PyodideConfig['createPyodideModule'];
+	};
+	if (typeof createPyodideModule !== 'function') {
+		throw new Error('Pyodide module factory is unavailable');
+	}
 	const runtimeModule = (await importRuntimeAssetModule(
 		runtimeAsset
 	)) as typeof import('pyodide');
@@ -254,11 +389,14 @@ async function loadPyodide(path: string) {
 		lockFileContents = parsedLock.lock as unknown as Lockfile;
 	}
 	const { loadPyodide } = runtimeModule;
-	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () => loadPyodide({
-		indexURL: path,
-		packageBaseUrl,
-		...(lockFileContents ? { lockFileContents } : {})
-	}));
+	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () =>
+		loadPyodide({
+			indexURL: path,
+			createPyodideModule,
+			packageBaseUrl,
+			...(lockFileContents ? { lockFileContents } : {})
+		})
+	);
 }
 
 async function loadPackages(code: string) {
@@ -298,6 +436,111 @@ function writeWorkspaceFiles(files: { path: string; content: string }[] = []) {
 	}
 }
 
+/** Own file-descriptor streams and private source files for original Python interpreters. */
+async function withInterpreterFileDescriptors(
+	code: string,
+	activePath: string | undefined,
+	stdin: unknown,
+	language: 'aheui' | 'apecode',
+	execute: (filename: string) => Promise<unknown>
+) {
+	const fs = (pyodide as any).FS;
+	const defaultPath = language === 'aheui' ? 'main.aheui' : 'main.ape';
+	const filename = `/tmp/__wasm_idle_${language}__/${normalizeWorkspacePath(activePath || '') || defaultPath}`;
+	const encoder = new TextEncoder();
+	const stdoutDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
+	const stderrDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
+	const hasInitialStdin = typeof stdin === 'string';
+	let initialStdin: string | null = hasInitialStdin ? stdin : null;
+	let stdinEnded = false;
+	const emit = (output: string) => {
+		if (output) postMessage({ output });
+	};
+	pyodide.setStdin({
+		stdin: () => {
+			if (stdinEnded) return null;
+			let chunk: string | null;
+			if (hasInitialStdin) {
+				chunk = initialStdin;
+				initialStdin = null;
+			} else {
+				chunk = waitForBufferedStdin(stdinBufferPyodide, () =>
+					postMessage({ buffer: true })
+				);
+			}
+			if (chunk === null) {
+				stdinEnded = true;
+				return null;
+			}
+			return encoder.encode(chunk);
+		},
+		// Pyodide's legacy stdin otherwise inserts EOF after chunks without a newline.
+		autoEOF: false,
+		isatty: false
+	});
+	pyodide.setStdout({
+		write: (bytes) => {
+			emit(stdoutDecoder.decode(bytes, { stream: true }));
+			return bytes.length;
+		}
+	});
+	pyodide.setStderr({
+		write: (bytes) => {
+			emit(stderrDecoder.decode(bytes, { stream: true }));
+			return bytes.length;
+		}
+	});
+	try {
+		fs.mkdirTree(filename.slice(0, filename.lastIndexOf('/')));
+		fs.writeFile(filename, code, { encoding: 'utf8' });
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: `${PYTHON_EXTENSIONS[language].label} program started`
+			}
+		});
+		await execute(filename);
+	} finally {
+		emit(stdoutDecoder.decode());
+		emit(stderrDecoder.decode());
+		pyodide.setStdin({ error: true });
+		pyodide.setStdout({ write: (bytes) => bytes.length });
+		pyodide.setStderr({ write: (bytes) => bytes.length });
+		if (fs.analyzePath(filename).exists) fs.unlink(filename);
+	}
+}
+
+async function executeAheui(code: string, activePath: string | undefined, stdin: unknown) {
+	await withInterpreterFileDescriptors(code, activePath, stdin, 'aheui', (filename) =>
+		pyodide.runPythonAsync(`import importlib
+import aheui.aheui as __wasm_idle_aheui
+__wasm_idle_aheui = importlib.reload(__wasm_idle_aheui)
+__wasm_idle_aheui.entry_point(["aheui", "--no-c", "--warning-limit=0", ${JSON.stringify(filename)}])
+None
+`)
+	);
+}
+
+async function executeApecode(code: string, activePath: string | undefined, stdin: unknown) {
+	await withInterpreterFileDescriptors(code, activePath, stdin, 'apecode', (filename) =>
+		pyodide.runPythonAsync(`import sys
+from apecode.cli import run_source as __wasm_idle_apecode_run_source
+with open(${JSON.stringify(filename)}, "r", encoding="utf-8") as __wasm_idle_apecode_source:
+    try:
+        __wasm_idle_apecode_status = __wasm_idle_apecode_run_source(
+            __wasm_idle_apecode_source.read(), sys.stdin, sys.stdout, sys.stderr)
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+if __wasm_idle_apecode_status != 0:
+    raise RuntimeError(f"APECode interpreter exited with status {__wasm_idle_apecode_status}")
+None
+`)
+	);
+}
+
 self.onmessage = async (event: any) => {
 	if (handleWorkerAssetMessage(event.data)) return;
 	const {
@@ -316,17 +559,36 @@ self.onmessage = async (event: any) => {
 		pauseOnEntry = false,
 		activePath,
 		debugPath,
-		workspaceFiles
+		workspaceFiles,
+		language = 'python',
+		extension
 	} = event.data;
+	const isHy = language === 'hy';
+	const isAheui = language === 'aheui';
+	const isApecode = language === 'apecode';
+	const usesInterpreterFileDescriptors = isAheui || isApecode;
+	const isPython = !isHy && !usesInterpreterFileDescriptors;
+	const interpreterLabel = isApecode ? 'APECode' : 'Aheui';
 	if (load) {
 		preparedPackagesKey = undefined;
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
 			useAssetBridge = runtimeAssets?.useAssetBridge === true;
+			maxRuntimeAssetBytes = runtimeAssets?.maxAssetBytes;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			postProgress(2, 'Loading Pyodide module');
 			await loadPyodide(baseUrl);
+			if (extension !== undefined) {
+				await installPythonExtension(
+					extension,
+					(extension as { language?: unknown } | null)?.language === 'aheui'
+						? 'aheui'
+						: (extension as { language?: unknown } | null)?.language === 'apecode'
+							? 'apecode'
+							: 'hy'
+				);
+			}
 			postProgress(100, 'Pyodide runtime ready');
 			postMessage({ load: true });
 		} catch (e: any) {
@@ -335,19 +597,38 @@ self.onmessage = async (event: any) => {
 	} else if (prepare) {
 		preparedPackagesKey = undefined;
 		try {
-			postProgress(5, 'Preparing Python workspace');
+			if (isAheui && installedAheuiVersion === undefined) {
+				throw new Error('Aheui runtime is not installed');
+			}
+			if (isApecode && installedApecodeVersion === undefined) {
+				throw new Error('APECode runtime is not installed');
+			}
+			if (usesInterpreterFileDescriptors && debug) {
+				throw new Error(`${interpreterLabel} debugging is not supported`);
+			}
+			postProgress(
+				5,
+				usesInterpreterFileDescriptors
+					? `Preparing ${interpreterLabel} source`
+					: 'Preparing Python workspace'
+			);
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
-			writeWorkspaceFiles(workspaceFiles);
-			postProgress(15, 'Resolving Python imports');
-			await loadPackages(
-				[
-					code,
-					...(workspaceFiles || []).map((file: { content: string }) => file.content)
-				].join('\n')
-			);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			// The genuine language implementations own their source, never Python's import scanner.
+			if (isPython) {
+				postProgress(15, 'Resolving Python imports');
+				await loadPackages(
+					[
+						code,
+						...(workspaceFiles || []).map((file: { content: string }) => file.content)
+					].join('\n')
+				);
+			}
 			preparedPackagesKey = preparationKey;
-			postProgress(100, 'Python packages ready');
+			if (usesInterpreterFileDescriptors)
+				postProgress(100, `${interpreterLabel} source ready`);
+			else postProgress(100, 'Python packages ready');
 			self.postMessage({ results: true });
 		} catch (e: any) {
 			preparedPackagesKey = undefined;
@@ -360,8 +641,24 @@ self.onmessage = async (event: any) => {
 		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
-			writeWorkspaceFiles(workspaceFiles);
-			if (preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)) {
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			if (isHy && installedHyVersion === undefined) {
+				throw new Error('Hy runtime is not installed');
+			}
+			if (isAheui && installedAheuiVersion === undefined) {
+				throw new Error('Aheui runtime is not installed');
+			}
+			if (isApecode && installedApecodeVersion === undefined) {
+				throw new Error('APECode runtime is not installed');
+			}
+			if (isHy && debug) throw new Error('Hy debugging is not supported');
+			if (usesInterpreterFileDescriptors && debug) {
+				throw new Error(`${interpreterLabel} debugging is not supported`);
+			}
+			if (
+				isPython &&
+				preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)
+			) {
 				await loadPackages(
 					[
 						code,
@@ -385,6 +682,16 @@ self.onmessage = async (event: any) => {
 		}
 		if (isSharedBufferBackedView(interruptBufferPyodide)) {
 			pyodide.setInterruptBuffer(interruptBufferPyodide);
+		}
+		if (usesInterpreterFileDescriptors) {
+			try {
+				if (isAheui) await executeAheui(code, activePath, stdin);
+				else await executeApecode(code, activePath, stdin);
+				self.postMessage({ results: true });
+			} catch (e: any) {
+				self.postMessage({ error: e.message || 'Unknown error' });
+			}
+			return;
 		}
 		const toPythonStr = (obj: any) => {
 			if (obj === true) return 'True';
@@ -499,7 +806,8 @@ self.onmessage = async (event: any) => {
 			return JSON.stringify({ version, lines });
 		};
 		const executionFilename =
-			normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
+			normalizeWorkspacePath(activePath || '') ||
+			(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
 		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
 		const executionFilenameLiteral = JSON.stringify(executionFilename);
 		const debugFilenameLiteral = JSON.stringify(debugFilename);
@@ -704,6 +1012,32 @@ sys.settrace(__wasm_idle_debug_trace)
 		: ''
 }
 
+${
+	isHy
+		? `
+try:
+    import types
+    import hy
+    import hy.compiler
+    __wasm_idle_module = types.ModuleType("__main__")
+    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_source = ${JSON.stringify(code)}
+    __wasm_idle_compiled = compile(
+        hy.compiler.hy_compile(
+            hy.read_many(__wasm_idle_source, filename = ${executionFilenameLiteral}),
+            __wasm_idle_module,
+            filename = ${executionFilenameLiteral},
+            source = __wasm_idle_source,
+        ),
+        ${executionFilenameLiteral},
+        "exec",
+    )
+    __wasm_idle_execution_ready()
+    exec(__wasm_idle_compiled, __wasm_idle_module.__dict__)
+finally:
+    del __wasm_idle_execution_ready
+`
+		: `
 try:
     __wasm_idle_globals = {
         "__name__": "__main__",
@@ -738,6 +1072,8 @@ finally:
 `
 			: ''
 	}
+`
+}
 `);
 			self.postMessage({ results: true });
 		} catch (e: any) {

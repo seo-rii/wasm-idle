@@ -13,6 +13,7 @@ import {
 	PERL_MAX_ASSET_BYTES,
 	PROLOG_MAX_ASSET_BYTES,
 	RUBY_RUNTIME_PROFILE,
+	RUBY_RUNTIME_WASM_STORAGE_PATH,
 	TCL_MAX_ASSET_BYTES
 } from '@wasm-idle/core';
 import {
@@ -959,8 +960,7 @@ describe('additional language server workers', () => {
 				baseUrl: 'https://static.example.com/custom-ruby/',
 				manifestUrl: 'https://static.example.com/custom-ruby/runtime-manifest.v2.json',
 				moduleUrl: 'https://static.example.com/custom-ruby/runtime.mjs.bin',
-				wasmUrl:
-					'https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+				wasmUrl: `https://static.example.com/custom-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`
 			},
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -970,7 +970,7 @@ describe('additional language server workers', () => {
 				baseUrl: 'https://static.example.com/custom-ruby/',
 				manifestUrl: `https://static.example.com/custom-ruby/runtime-manifest.v2.json?v=${RUBY_RUNTIME_PROFILE.manifestFingerprint}`,
 				moduleUrl: `https://static.example.com/custom-ruby/runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`,
-				wasmUrl: `https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=${RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`,
+				wasmUrl: `https://static.example.com/custom-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}?v=${RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`,
 				profile: RUBY_RUNTIME_PROFILE
 			})
 		);

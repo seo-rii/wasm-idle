@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/debug",
-	"version": "1.0.8",
+	"version": "1.0.11",
 	"description": "Optional debugger UI and controller utilities for wasm-idle",
 	"license": "MIT",
 	"type": "module",
@@ -40,7 +40,7 @@
 		"tag": "latest"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "1.0.8",
+		"@wasm-idle/core": "1.0.11",
 		"monaco-editor": "^0.55.0",
 		"svelte": "^5.0.0"
 	},
@@ -53,11 +53,11 @@
 		"@wasm-idle/core": "workspace:*"
 	},
 	"devDependencies": {
-		"jsdom": "^29.0.2",
+		"jsdom": "^30.1.2",
 		"monaco-editor": "^0.55.1",
-		"svelte": "^5.55.4",
-		"typescript": "^6.0.2",
-		"vitest": "^4.1.4"
+		"svelte": "^5.57.2",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.3"
 	},
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.json",

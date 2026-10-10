@@ -5,9 +5,9 @@
     "build": "node build.mjs"
   },
   "dependencies": {
-    "@swmansion/popcorn": "0.2.2"
+    "@swmansion/popcorn": "0.3.3"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.28.2"
   }
 }

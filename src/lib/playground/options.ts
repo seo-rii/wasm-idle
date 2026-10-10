@@ -86,7 +86,7 @@ function cloneArgs(value?: string[]) {
 	return Array.isArray(value) ? [...value] : [];
 }
 
-const compileArgLanguages = new Set(['C', 'CPP', 'OBJC']);
+const compileArgLanguages = new Set(['C', 'CPP', 'OBJC', 'OBJECTIVECXX']);
 
 export function resolveSandboxExecutionArgs(
 	language: string,

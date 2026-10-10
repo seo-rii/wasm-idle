@@ -28,7 +28,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 import {
 	getCSharpLanguageServer,
 	resolveDotnetLanguageServerModuleUrl
-} from '../src/dotnet/server.js';
+} from '../src/dotnet/language-server.js';
 import { LanguageServerAssetConfigurationError } from '../src/runtime.js';
 
 describe('dotnet language server', () => {

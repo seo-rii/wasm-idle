@@ -271,9 +271,23 @@ export const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-rescript',
+		module: './sync-wasm-rescript.mjs',
+		exportName: 'syncWasmReScriptAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-cobol',
 		module: './sync-wasm-cobol.mjs',
 		exportName: 'syncWasmCobolAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-v',
+		module: './sync-wasm-v.mjs',
+		exportName: 'syncWasmVAssets',
 		sourceArg: 'sourceDir',
 		targetArg: 'targetDir'
 	},

@@ -140,9 +140,10 @@ async function readExistingCompressedAssetManifest(rootDir) {
 /**
  * @param {string} rootDir
  * @param {CompressedAsset[]} compressed
+ * @param {string[]} files
  * @returns {Promise<CompressedManifestEntry[]>}
  */
-async function collectCompressedManifestEntries(rootDir, compressed) {
+async function collectCompressedManifestEntries(rootDir, compressed, files) {
 	const existingManifest = await readExistingCompressedAssetManifest(rootDir);
 	/** @type {Set<string>} */
 	const assetPaths = new Set();
@@ -153,6 +154,17 @@ async function collectCompressedManifestEntries(rootDir, compressed) {
 	}
 	for (const entry of compressed) {
 		assetPaths.add(relativeToRoot(rootDir, entry.originalPath));
+	}
+	for (const filePath of files) {
+		if (!filePath.endsWith('.gz')) continue;
+		const originalPath = filePath.slice(0, -3);
+		// Canonical .tar.gz archives are not aliases for .tar URLs. Entries from
+		// archives compressed here are already retained above or in the manifest.
+		if (path.extname(originalPath).toLowerCase() === '.tar') continue;
+		if (!isUnderCompressibleRuntime(rootDir, originalPath)) continue;
+		if (!hasCompressibleExtension(originalPath)) continue;
+		if (path.basename(originalPath) === MANIFEST_FILE_NAME) continue;
+		assetPaths.add(relativeToRoot(rootDir, originalPath));
 	}
 	/** @type {CompressedManifestEntry[]} */
 	const entries = [];
@@ -195,9 +207,9 @@ async function compressFile(filePath) {
 	};
 }
 
-/** @param {string} rootDir @param {CompressedAsset[]} compressed */
-async function writeCompressedAssetManifest(rootDir, compressed) {
-	const entries = await collectCompressedManifestEntries(rootDir, compressed);
+/** @param {string} rootDir @param {CompressedAsset[]} compressed @param {string[]} files */
+async function writeCompressedAssetManifest(rootDir, compressed, files) {
+	const entries = await collectCompressedManifestEntries(rootDir, compressed, files);
 	const assets = entries.map((entry) => entry.assetPath);
 	const sizes = Object.fromEntries(entries.map((entry) => [entry.assetPath, entry.originalSize]));
 	const manifestPath = path.join(rootDir, MANIFEST_FILE_NAME);
@@ -220,12 +232,13 @@ export async function compressStaticRuntimeAssets({ rootDir = STATIC_DIR } = {})
 
 	/** @type {CompressedAsset[]} */
 	const compressed = [];
-	for (const filePath of await collectFiles(rootDir)) {
+	const files = await collectFiles(rootDir);
+	for (const filePath of files) {
 		const fileStats = await stat(filePath);
 		if (!isCompressibleFile(rootDir, filePath, fileStats)) continue;
 		compressed.push(await compressFile(filePath));
 	}
-	const manifestAssets = await writeCompressedAssetManifest(rootDir, compressed);
+	const manifestAssets = await writeCompressedAssetManifest(rootDir, compressed, files);
 	for (const entry of compressed) {
 		await rm(entry.originalPath);
 	}

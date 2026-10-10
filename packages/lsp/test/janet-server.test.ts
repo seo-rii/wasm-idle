@@ -28,7 +28,7 @@ import {
 	BUNDLED_JANET_RUNTIME_PROFILE,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
-import { getJanetLanguageServer } from '../src/janet/server.js';
+import { getJanetLanguageServer } from '../src/janet/language-server.js';
 import {
 	createJanetTestAssetResponse,
 	janetTestAssetBytes,

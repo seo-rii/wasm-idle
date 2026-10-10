@@ -1,0 +1,101 @@
+diff --git a/esm/external/monaco-lsp-client/out/index.js b/esm/external/monaco-lsp-client/out/index.js
+index e3ace9c821b14855e093f40e17fa7a63d330e000..88ec8a1bb3a4046334bfdd1def2cff0db2c7b969 100644
+--- a/esm/external/monaco-lsp-client/out/index.js
++++ b/esm/external/monaco-lsp-client/out/index.js
+@@ -1,3 +1,4 @@
++import { CancellationError } from '../../../vs/base/common/errors.js';
+ import '../../../vs/editor/browser/coreCommands.js';
+ import '../../../vs/editor/browser/widget/codeEditor/codeEditorWidget.js';
+ import '../../../vs/editor/browser/widget/diffEditor/diffEditor.contribution.js';
+@@ -385,7 +386,9 @@ var StreamBasedChannel = class StreamBasedChannel2 {
+   _newRequestId() {
+     return this._lastUsedRequestId++;
+   }
+-  sendRequest(request, _context, messageIdCallback) {
++  sendRequest(request, context, messageIdCallback) {
++    const token = context?.cancellationToken;
++    if (token?.isCancellationRequested) return Promise.reject(new CancellationError());
+     const message = {
+       jsonrpc: "2.0",
+       id: this._newRequestId(),
+@@ -395,17 +398,50 @@ var StreamBasedChannel = class StreamBasedChannel2 {
+     if (messageIdCallback) messageIdCallback(message.id);
+     return new Promise((resolve, reject) => {
+       const strId = "" + message.id;
+-      this._unprocessedResponses.set(strId, (response) => {
+-        if ("result" in response) resolve({ result: response.result });
+-        else {
+-          if (!response.error) reject(/* @__PURE__ */ new Error("Response had neither 'result' nor 'error' field set."));
+-          resolve({ error: response.error });
+-        }
+-      });
+-      this._stream.send(message).then(void 0, (reason) => {
++      let settled = false;
++      let cancelled = false;
++      let sent = false;
++      let cancellationSent = false;
++      let cancellationListener;
++      const settle = (action) => {
++        if (settled) return;
++        settled = true;
+         this._unprocessedResponses.delete(strId);
+-        reject(reason);
++        cancellationListener?.dispose();
++        action();
++      };
++      const sendCancellation = () => {
++        if (cancellationSent) return;
++        cancellationSent = true;
++        // Preserve write order even when the transport is still preparing.
++        this.sendNotification({ method: "$/cancelRequest", params: { id: message.id } }).catch(() => {});
++      };
++      const cancel = () => {
++        if (settled) return;
++        cancelled = true;
++        settle(() => reject(new CancellationError()));
++        if (sent) sendCancellation();
++      };
++      this._unprocessedResponses.set(strId, (response) => {
++        settle(() => {
++          if ("result" in response) resolve({ result: response.result });
++          else if (response.error) resolve({ error: response.error });
++          else reject(new Error("Response had neither 'result' nor 'error' field set."));
++        });
+       });
++      cancellationListener = token?.onCancellationRequested(cancel);
++      // Registration can invoke the callback synchronously for an already cancelled token.
++      if (settled) cancellationListener?.dispose();
++      if (token?.isCancellationRequested) cancel();
++      if (settled) return;
++      try {
++        this._stream.send(message).then(() => {
++          sent = true;
++          if (cancelled) sendCancellation();
++        }, (reason) => settle(() => reject(reason)));
++      } catch (reason) {
++        settle(() => reject(reason));
++      }
+     });
+   }
+   sendNotification(notification, context) {
+@@ -1532,7 +1568,9 @@ var LspCompletionProvider = class {
+     this._client = _client;
+     this._capabilities = _capabilities;
+     if (_capabilities.resolveProvider) this.resolveCompletionItem = async (item, token) => {
+-      applyLspCompletionItemProperties(item, await this._client.server.completionItemResolve(item._lspItem), this._client.bridge, item._translated, item._model);
++      const result = await this._client.server.completionItemResolve(item._lspItem, { cancellationToken: token });
++      if (token.isCancellationRequested) throw new CancellationError();
++      applyLspCompletionItemProperties(item, result, this._client.bridge, item._translated, item._model);
+       return item;
+     };
+   }
+@@ -1548,7 +1586,8 @@ var LspCompletionProvider = class {
+         triggerKind: toLspCompletionTriggerKind(context.triggerKind),
+         triggerCharacter: context.triggerCharacter
+       } : void 0
+-    });
++    }, { cancellationToken: token });
++    if (token.isCancellationRequested) throw new CancellationError();
+     if (!result) return { suggestions: [] };
+     return { suggestions: (Array.isArray(result) ? result : result.items).map((i) => {
+       return {

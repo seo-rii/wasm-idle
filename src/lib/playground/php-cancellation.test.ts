@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
-
 const workerInstances: MockWorker[] = [];
 let autoResolveLoad = true;
 let autoResolveRun = true;

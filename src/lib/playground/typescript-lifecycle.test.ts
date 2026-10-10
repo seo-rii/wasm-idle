@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	typescript: { moduleUrl: '/runtime/typescript/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 
 import { createWasmIdleSharedBuffer } from './sharedBuffer';
 import { flushQueuedStdin, readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '/runtime/typescript/index.js'
-	}
-}));
 let autoResolveLoad = true;
 let autoResolveRun = true;
 
@@ -42,10 +42,6 @@ vi.mock('$lib/playground/worker/typescript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import TypeScriptSandbox from './typescript';
 
 async function observeSettlement<T>(promise: Promise<T>) {
@@ -73,7 +69,6 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 			workerInstances.length = 0;
 			autoResolveLoad = true;
 			autoResolveRun = true;
-			publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '/runtime/typescript/index.js';
 			history.replaceState({}, '', '/editor');
 		});
 
@@ -83,13 +78,13 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 			const diagnostic = vi.fn();
 			sandbox.output = output;
 			sandbox.oncompilerdiagnostic = diagnostic;
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			await expect(sandbox.run('console.log(1)', false)).resolves.toBe(true);
 			const firstWorker = workerInstances[0];
 
 			await sandbox.clear();
 			expect(firstWorker?.terminate).not.toHaveBeenCalled();
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			await expect(sandbox.run('console.log(2)', false)).resolves.toBe(true);
 			const worker = workerInstances[0];
 			flushQueuedStdin(['buffered input\n'], sandbox.buffer);
@@ -114,7 +109,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 					onerror: worker.onerror,
 					onmessageerror: worker.onmessageerror
 				};
-				reentrantLoad = sandbox.load('/reentrant/');
+				reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant/' });
 				reentrantRun = sandbox.run('reentrant()', false);
 				void reentrantLoad.catch(() => undefined);
 				void reentrantRun.catch(() => undefined);
@@ -149,7 +144,9 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 					runtimeId: language
 				});
 			}
-			await expect(sandbox.load('/replacement/')).rejects.toMatchObject({
+			await expect(
+				sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' })
+			).rejects.toMatchObject({
 				name: 'RuntimeConfigurationError',
 				code: 'runtime-configuration',
 				phase: 'dispose',
@@ -182,7 +179,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 			const racingReason = new Error(`${language} startup abort raced disposal`);
 			const progress = { set: vi.fn() };
 			const loading = sandbox.load(
-				'/assets/',
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' },
 				'',
 				true,
 				[],
@@ -217,7 +214,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 			const sandbox = new TypeScriptSandbox(language);
 			const output = vi.fn();
 			sandbox.output = output;
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			const controller = new AbortController();
 			const racingReason = new Error(`${language} execution abort raced disposal`);
 			const running = sandbox.run('pending()', false, true, undefined, [], {
@@ -256,7 +253,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 
 		it('does not retain a replacement worker when retirement reenters disposal', async () => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			const retiredWorker = workerInstances[0];
 			delete sandbox.worker;
 			let reentrantDisposal: Promise<void> | undefined;
@@ -264,7 +261,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 				reentrantDisposal = sandbox.dispose();
 			});
 
-			const replacement = sandbox.load('/assets/');
+			const replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			const cancellation = await replacement.catch((error) => error);
 
 			expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
@@ -279,7 +276,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 
 		it('does not start a replacement after worker reset reenters disposal', async () => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			const retiredWorker = workerInstances[0];
 			let reentrantDisposal: Promise<void> | undefined;
 			retiredWorker?.terminate.mockImplementationOnce(() => {
@@ -303,7 +300,7 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 		it('settles a run whose worker attach reenters terminal disposal', async () => {
 			autoResolveRun = false;
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/assets/');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 			const retiredWorker = workerInstances[0];
 			const candidateWorker = new MockWorker();
 			sandbox.worker = candidateWorker as unknown as Worker;
@@ -335,15 +332,14 @@ describe('TypeScript and JavaScript sandbox ownership', () => {
 		workerInstances.length = 0;
 		autoResolveLoad = true;
 		autoResolveRun = true;
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '/runtime/typescript/index.js';
 		history.replaceState({}, '', '/editor');
 	});
 
 	it('keeps a TypeScript sandbox alive when a separate JavaScript sandbox is disposed', async () => {
 		const javascript = new TypeScriptSandbox('JAVASCRIPT');
 		const typescript = new TypeScriptSandbox('TYPESCRIPT');
-		await javascript.load('/assets/');
-		await typescript.load('/assets/');
+		await javascript.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
+		await typescript.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const javascriptWorker = workerInstances[0];
 		const typescriptWorker = workerInstances[1];
 

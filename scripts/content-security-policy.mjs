@@ -1,6 +1,6 @@
 const quotedSources = new Set(['none', 'self', 'unsafe-inline', 'wasm-unsafe-eval']);
 
-/** @typedef {NonNullable<NonNullable<import('@sveltejs/kit').Config['kit']>['csp']>} SvelteContentSecurityPolicy */
+/** @typedef {NonNullable<import('@sveltejs/kit/vite').Config['csp']>} SvelteContentSecurityPolicy */
 
 /** @param {Record<string, string | undefined>} [environment] */
 export function isStrictContentSecurityPolicyEnabled(environment = process.env) {

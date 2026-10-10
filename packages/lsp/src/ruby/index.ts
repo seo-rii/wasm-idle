@@ -2,7 +2,7 @@ export {
 	getRubyLanguageServer,
 	type RubyLanguageServerConfig,
 	type RubyLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createRubyWorkerService,
 	type LoadRubySyntaxChecker,

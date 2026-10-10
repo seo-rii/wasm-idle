@@ -72,7 +72,7 @@ import { LanguageServerAssetConfigurationError } from '../src/runtime.js';
 import {
 	getJavaScriptLanguageServer,
 	getTypeScriptLanguageServer
-} from '../src/typescript/server.js';
+} from '../src/typescript/language-server.js';
 
 describe('TypeScript language server host assets', () => {
 	beforeEach(() => {

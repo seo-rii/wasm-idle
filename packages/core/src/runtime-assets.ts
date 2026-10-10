@@ -80,6 +80,7 @@ export interface RuntimeAssetKeySource {
 	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
+	fennel?: { compilerUrl?: string };
 	haskell?: {
 		moduleUrl?: string;
 		rootfsUrl?: string;
@@ -292,6 +293,11 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	c3?: { baseUrl?: string };
+	grain?: { baseUrl?: string };
+	hy?: { baseUrl?: string };
+	aheui?: { baseUrl?: string };
+	apecode?: { baseUrl?: string };
+	golfscript?: { interpreterUrl?: string };
 	nim?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -344,8 +350,21 @@ export interface RuntimeAssetKeySource {
 		compilerReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	rescript?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		sourceRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		compilerReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	cobol?: { baseUrl?: string };
+	v?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	postgresql?: { moduleUrl?: string };
 	sqlite?: { moduleUrl?: string; wasmUrl?: string };
 	php?: { moduleUrl?: string };
 }
@@ -747,6 +766,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
+	{ runtime: 'fennel', property: 'compilerUrl', key: 'fennelCompilerUrl' },
 	{ runtime: 'haskell', property: 'moduleUrl', key: 'haskellModuleUrl' },
 	{ runtime: 'haskell', property: 'rootfsUrl', key: 'haskellRootfsUrl' },
 	{ runtime: 'haskell', property: 'bsdtarUrl', key: 'haskellBsdtarUrl' },
@@ -1276,6 +1296,11 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'c3', property: 'baseUrl', key: 'c3BaseUrl' },
+	{ runtime: 'grain', property: 'baseUrl', key: 'grainBaseUrl' },
+	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
+	{ runtime: 'aheui', property: 'baseUrl', key: 'aheuiBaseUrl' },
+	{ runtime: 'apecode', property: 'baseUrl', key: 'apecodeBaseUrl' },
+	{ runtime: 'golfscript', property: 'interpreterUrl', key: 'golfscriptInterpreterUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'nim', property: 'manifestUrl', key: 'nimManifestUrl' },
@@ -1427,10 +1452,36 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'clojurescriptWorkerReceipt',
 		serialize: serializeIntegrityEntry
 	},
+	{ runtime: 'rescript', property: 'baseUrl', key: 'rescriptBaseUrl' },
+	{ runtime: 'rescript', property: 'workerUrl', key: 'rescriptWorkerUrl' },
+	{ runtime: 'rescript', property: 'manifestUrl', key: 'rescriptManifestUrl' },
+	{ runtime: 'rescript', property: 'manifestFingerprint', key: 'rescriptManifestFingerprint' },
+	{ runtime: 'rescript', property: 'profileId', key: 'rescriptProfileId' },
+	{ runtime: 'rescript', property: 'sourceRevision', key: 'rescriptSourceRevision' },
+	{
+		runtime: 'rescript',
+		property: 'manifestReceipt',
+		key: 'rescriptManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rescript',
+		property: 'compilerReceipt',
+		key: 'rescriptCompilerReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rescript',
+		property: 'workerReceipt',
+		key: 'rescriptWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },
+	{ runtime: 'v', property: 'baseUrl', key: 'vBaseUrl' },
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
+	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }

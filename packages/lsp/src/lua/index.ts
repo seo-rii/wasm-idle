@@ -2,5 +2,5 @@ export {
 	getLuaLanguageServer,
 	type LuaLanguageServerConfig,
 	type LuaLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export { createLuaWorkerService, type LuaWorkerOptions } from './service.js';

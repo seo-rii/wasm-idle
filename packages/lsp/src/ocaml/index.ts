@@ -2,7 +2,7 @@ export {
 	getOcamlLanguageServer,
 	type OcamlLanguageServerConfig,
 	type OcamlLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createOcamlWorkerService,
 	type OcamlLanguageServerBinaryenMode,

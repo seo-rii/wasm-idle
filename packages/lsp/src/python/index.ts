@@ -2,7 +2,7 @@ export {
 	createPythonLanguageServer,
 	getPythonLanguageServer,
 	type PythonLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export type {
 	PythonLspStatus,
 	PythonLspWorkerInboundMessage,

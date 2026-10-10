@@ -1,8 +1,16 @@
 import { zipSync } from 'fflate';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { compile, decompressGzip, fetchRuntimeJson, getInstance, readBuffer } from '../src/wasm.js';
+import {
+	compile,
+	decompressGzip,
+	fetchRuntimeJson,
+	getCompiledModuleFingerprint,
+	getInstance,
+	readBuffer
+} from '../src/wasm.js';
 
 const emptyWasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 
@@ -1439,6 +1447,54 @@ describe('WebAssembly loading utilities', () => {
 		expect(first).toBe(second);
 		expect(compileSpy).toHaveBeenCalledTimes(1);
 		compileSpy.mockRestore();
+	});
+
+	it('fingerprints the compiled bytes even when a cancellable asset URL changes later', async () => {
+		const url = 'https://cdn.test/llvm/module-fingerprint-changing.wasm';
+		const changedWasm = Uint8Array.of(...emptyWasm, 0, 2, 1, 120);
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(emptyWasm))
+			.mockResolvedValueOnce(new Response(changedWasm));
+		vi.stubGlobal('fetch', fetchMock);
+		const signal = new AbortController().signal;
+		const module = await compile(url, undefined, signal);
+		await expect(readBuffer(url, undefined, undefined, signal)).resolves.toEqual(changedWasm);
+		await expect(getCompiledModuleFingerprint(module)).resolves.toBe(
+			createHash('sha256').update(emptyWasm).digest('hex')
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('retains the compiled fingerprint with a cached Module without fetching again', async () => {
+		const url = 'https://cdn.test/llvm/module-fingerprint-cached.wasm';
+		const fetchMock = vi.fn(async () => new Response(emptyWasm));
+		vi.stubGlobal('fetch', fetchMock);
+		const first = await compile(url);
+		const fingerprint = getCompiledModuleFingerprint(first);
+		const second = await compile(url);
+		expect(second).toBe(first);
+		expect(getCompiledModuleFingerprint(second)).toBe(fingerprint);
+		await expect(fingerprint).resolves.toBe(
+			createHash('sha256').update(emptyWasm).digest('hex')
+		);
+		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+
+	it.each(['unavailable', 'rejected'])('still compiles when WebCrypto is %s', async (failure) => {
+		vi.stubGlobal(
+			'crypto',
+			failure === 'unavailable'
+				? undefined
+				: { subtle: { digest: vi.fn().mockRejectedValue(new Error('digest denied')) } }
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(emptyWasm))
+		);
+		const module = await compile(`https://cdn.test/llvm/module-fingerprint-${failure}.wasm`);
+		expect(module).toBeInstanceOf(WebAssembly.Module);
+		await expect(getCompiledModuleFingerprint(module)).resolves.toBeUndefined();
 	});
 
 	it('keeps compiled modules isolated by their caller asset ceiling', async () => {

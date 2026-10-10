@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
-
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {
@@ -179,5 +175,41 @@ describe('Objective-C sandbox debugging', () => {
 				objectivecAssets: expect.objectContaining({ maxAssetBytes })
 			})
 		);
+	});
+
+	it('runs Objective-C++ sources as main.mm on the shared Objective-C worker', async () => {
+		const sandbox = new ObjectiveC('OBJECTIVECXX');
+		expect(sandbox.language).toBe('OBJECTIVECXX');
+
+		await sandbox.load('/');
+		await expect(
+			sandbox.run('int main() {}', false, false, undefined, ['-DVALUE=1'], {
+				programArgs: ['first']
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run('int main() {}', false, false, undefined, [], { activePath: 'src/app.mm' })
+		).resolves.toBe(true);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({
+				activePath: 'main.mm',
+				compileArgs: ['-DVALUE=1'],
+				programArgs: ['first']
+			})
+		);
+		expect(workerInstances[0].postMessage.mock.calls[2]?.[0]).toEqual(
+			expect.objectContaining({ activePath: 'src/app.mm' })
+		);
+	});
+
+	it('keeps Objective-C runs on main.m when no active path is supplied', async () => {
+		const sandbox = new ObjectiveC();
+
+		await sandbox.load('/');
+		await expect(sandbox.run('int main(void) { return 0; }', false)).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage.mock.calls[1]?.[0]?.activePath).toBeUndefined();
 	});
 });

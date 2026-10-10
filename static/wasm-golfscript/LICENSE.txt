@@ -1,0 +1,2 @@
+# (c) Copyright 2008 Darren Smith.
+# MIT License.

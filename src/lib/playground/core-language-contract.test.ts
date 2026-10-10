@@ -14,6 +14,20 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('tinygo')).toBe(true);
 	});
 
+	it('exposes V as a deferred browser runtime language with the VLANG alias', () => {
+		expect(supportedLanguageIds).toContain('V');
+		expect(normalizeLanguageId('v')).toBe('V');
+		expect(normalizeLanguageId('vlang')).toBe('V');
+		expect(isDeferredProgressLanguage('v')).toBe(true);
+	});
+
+	it('includes the V runtime base url in runtime asset cache keys', () => {
+		const key = JSON.parse(
+			createRuntimeAssetsKey({ rootUrl: '/repl', v: { baseUrl: '/wasm-v/test/' } }) || '{}'
+		);
+		expect(key).toMatchObject({ rootUrl: '/repl', vBaseUrl: '/wasm-v/test/' });
+	});
+
 	it('exposes Haskell as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('HASKELL');
 		expect(normalizeLanguageId('haskell')).toBe('HASKELL');

@@ -1,7 +1,14 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --max-old-space-size=65536 --wasm-lazy-validation
 //#region \0rolldown/runtime.js
 var __defProp = Object.defineProperty;
-var __esmMin = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+var __esmMin = (fn, res, err) => () => {
+	if (err) throw err[0];
+	try {
+		return fn && (res = fn(fn = 0)), res;
+	} catch (e) {
+		throw err = [e], e;
+	}
+};
 var __exportAll = (all, no_symbols) => {
 	let target = {};
 	for (var name in all) __defProp(target, name, {
@@ -21,10 +28,13 @@ var assetsURL = function(dep, importerUrl) {
 	return new URL(dep, importerUrl).href;
 };
 var seen = {};
+var isCssPreloadUrl = function isCssPreloadUrl(url) {
+	return url.pathname.endsWith(".css");
+};
 var __vitePreload = function preload(baseModule, deps, importerUrl) {
 	let promise = Promise.resolve();
 	if (deps && deps.length > 0) {
-		const links = document.getElementsByTagName("link");
+		let preloadedHrefs;
 		const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
 		const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
 		function allSettled(promises) {
@@ -36,29 +46,45 @@ var __vitePreload = function preload(baseModule, deps, importerUrl) {
 				reason
 			}))));
 		}
-		promise = allSettled(deps.map((dep) => {
-			dep = assetsURL(dep, importerUrl);
-			if (dep in seen) return;
-			seen[dep] = true;
-			const isCss = dep.endsWith(".css");
-			const cssSelector = isCss ? "[rel=\"stylesheet\"]" : "";
-			if (!!importerUrl) for (let i = links.length - 1; i >= 0; i--) {
-				const link = links[i];
-				if (link.href === dep && (!isCss || link.rel === "stylesheet")) return;
+		function importMetaResolve(specifier) {
+			if (import.meta.resolve) return new URL(import.meta.resolve(specifier));
+			return new URL(
+				specifier,
+				/** #__KEEP__ */
+				import.meta.url
+			);
+		}
+		promise = allSettled(deps.map((depString) => {
+			depString = assetsURL(depString, importerUrl);
+			const dep = importMetaResolve(depString);
+			if (dep.href in seen) return;
+			seen[dep.href] = true;
+			const isCss = isCssPreloadUrl(dep);
+			if (preloadedHrefs === void 0) {
+				preloadedHrefs = {
+					all: /* @__PURE__ */ new Set(),
+					styles: /* @__PURE__ */ new Set()
+				};
+				const links = document.getElementsByTagName("link");
+				for (let i = links.length - 1; i >= 0; i--) {
+					const link = links[i];
+					preloadedHrefs.all.add(link.href);
+					if (link.rel === "stylesheet") preloadedHrefs.styles.add(link.href);
+				}
 			}
-			else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+			if ((isCss ? preloadedHrefs.styles : preloadedHrefs.all).has(dep.href)) return;
 			const link = document.createElement("link");
 			link.rel = isCss ? "stylesheet" : scriptRel;
 			if (!isCss) link.as = "script";
 			link.crossOrigin = "";
-			link.href = dep;
+			link.href = dep.href;
 			if (cspNonce) link.setAttribute("nonce", cspNonce);
 			document.head.appendChild(link);
 			if (isCss) return new Promise((res, rej) => {
 				link.addEventListener("load", res);
 				link.addEventListener("error", () => rej(/* @__PURE__ */ new Error(`Unable to preload CSS for ${dep}`)));
 			});
-		}));
+		}).filter((p) => p !== void 0));
 	}
 	function handlePreloadError(err) {
 		const e = new Event("vite:preloadError", { cancelable: true });
@@ -1085,7 +1111,7 @@ var init_fd = __esmMin((() => {
 		fd_pread(size, offset) {
 			return {
 				ret: 58,
-				data: new Uint8Array()
+				data: /* @__PURE__ */ new Uint8Array()
 			};
 		}
 		fd_prestat_get() {
@@ -1103,7 +1129,7 @@ var init_fd = __esmMin((() => {
 		fd_read(size) {
 			return {
 				ret: 58,
-				data: new Uint8Array()
+				data: /* @__PURE__ */ new Uint8Array()
 			};
 		}
 		fd_readdir_single(cookie) {
@@ -1440,9 +1466,11 @@ var init_fs_mem = __esmMin((() => {
 			if (entry != null) {
 				const source_is_dir = inode.stat().filetype == 3;
 				const target_is_dir = entry.stat().filetype == 3;
-				if (source_is_dir && target_is_dir) if (allow_dir && entry instanceof Directory) if (entry.contents.size == 0) {} else return 55;
-				else return 20;
-				else if (source_is_dir && !target_is_dir) return 54;
+				if (source_is_dir && target_is_dir) {
+					if (allow_dir && entry instanceof Directory) {
+						if (entry.contents.size == 0) {} else return 55;
+					} else return 20;
+				} else if (source_is_dir && !target_is_dir) return 54;
 				else if (!source_is_dir && target_is_dir) return 31;
 				else if (inode.stat().filetype == 4 && entry.stat().filetype == 4) {} else return 20;
 			}
@@ -1502,13 +1530,13 @@ var init_fs_mem = __esmMin((() => {
 		fd_read(size) {
 			return {
 				ret: 8,
-				data: new Uint8Array()
+				data: /* @__PURE__ */ new Uint8Array()
 			};
 		}
 		fd_pread(size, offset) {
 			return {
 				ret: 8,
-				data: new Uint8Array()
+				data: /* @__PURE__ */ new Uint8Array()
 			};
 		}
 		fd_write(data) {
@@ -1674,18 +1702,20 @@ var init_fs_mem = __esmMin((() => {
 				entry: null
 			};
 			const entry = parent_entry.contents.get(filename);
-			if (entry === void 0) if (!allow_undefined) return {
-				ret: 44,
-				parent_entry: null,
-				filename: null,
-				entry: null
-			};
-			else return {
-				ret: 0,
-				parent_entry,
-				filename,
-				entry: null
-			};
+			if (entry === void 0) {
+				if (!allow_undefined) return {
+					ret: 44,
+					parent_entry: null,
+					filename: null,
+					entry: null
+				};
+				else return {
+					ret: 0,
+					parent_entry,
+					filename,
+					entry: null
+				};
+			}
 			if (path.is_dir) {
 				if (entry.stat().filetype != 3) return {
 					ret: 54,
@@ -1945,7 +1975,7 @@ function makeBufferConsumer(buf) {
 	};
 }
 function makeStreamConsumer(reader) {
-	let buf = new Uint8Array();
+	let buf = /* @__PURE__ */ new Uint8Array();
 	return async (len) => {
 		while (buf.length < len) {
 			const { done, value } = await reader.read();
@@ -2069,7 +2099,13 @@ function originFromServerAddress({ address, family, port }) {
 	return `http://${family === "IPv6" ? `[${address}]` : address}:${port}`;
 }
 var isNode = Boolean(globalThis?.process?.versions?.node && !globalThis.Deno);
-var fs, http, path, require$1, stream, wasi, ws;
+var fs;
+var http;
+var path;
+var require$1;
+var stream;
+var wasi;
+var ws;
 if (isNode) {
 	require$1 = (await __vitePreload(async () => {
 		const { createRequire } = await import("node:module");
@@ -2132,7 +2168,7 @@ var DyLDBrowserHost = class {
 	}
 	constructor({ rootfs, stdout, stderr, stdin }) {
 		this.stdin = stdin;
-		this.rootfs = rootfs ? rootfs : new wasi.PreopenDirectory("/", new Map([["tmp", new wasi.Directory(/* @__PURE__ */ new Map())]]));
+		this.rootfs = rootfs ? rootfs : new wasi.PreopenDirectory("/", /* @__PURE__ */ new Map([["tmp", new wasi.Directory(/* @__PURE__ */ new Map())]]));
 		this.stdout = stdout ? stdout : (msg) => console.info(msg);
 		this.stderr = stderr ? stderr : (msg) => console.warn(msg);
 	}
@@ -2154,7 +2190,7 @@ var DyLDBrowserHost = class {
 	async fetchWasm(p) {
 		const entry = this.#readFile(p);
 		const r = new Response(entry.data, { headers: { "Content-Type": "application/wasm" } });
-		entry.data = new Uint8Array();
+		entry.data = /* @__PURE__ */ new Uint8Array();
 		return r;
 	}
 };
@@ -2319,7 +2355,7 @@ args.rpc.opened.then(() => main(args));
 				return;
 			}
 			if (ws.protocol === "sig") {
-				this.#dyldHost.installSignalHandlers(() => ws.send(new Uint8Array(0)));
+				this.#dyldHost.installSignalHandlers(() => ws.send(/* @__PURE__ */ new Uint8Array(0)));
 				return;
 			}
 			if (ws.protocol === "stdout") {
@@ -2341,7 +2377,7 @@ args.rpc.opened.then(() => main(args));
 var DyLD = class DyLD {
 	static #pageSize = 65536;
 	static #poison = 4294967295 - DyLD.#pageSize | 0;
-	static #ldGeneratedExportNames = new Set([
+	static #ldGeneratedExportNames = /* @__PURE__ */ new Set([
 		"_initialize",
 		"__wasm_apply_data_relocs",
 		"__wasm_apply_global_relocs",
@@ -2494,10 +2530,10 @@ var DyLD = class DyLD {
 			preopens: { "/": "/" }
 		});
 		else this.#wasi = new wasi.WASI(args, [], [
-			this.#rpc instanceof DyLDBrowserHost && this.#rpc.stdin ? this.#rpc.stdin : new wasi.OpenFile(new wasi.File(new Uint8Array(), { readonly: true })),
+			this.#rpc instanceof DyLDBrowserHost && this.#rpc.stdin ? this.#rpc.stdin : new wasi.OpenFile(new wasi.File(/* @__PURE__ */ new Uint8Array(), { readonly: true })),
 			wasi.ConsoleStdout.lineBuffered((msg) => this.#rpc.stdout(msg)),
 			wasi.ConsoleStdout.lineBuffered((msg) => this.#rpc.stderr(msg)),
-			this.#rpc instanceof DyLDBrowserHost ? this.#rpc.rootfs : new wasi.PreopenDirectory("/", new Map([["tmp", new wasi.Directory(/* @__PURE__ */ new Map())]]))
+			this.#rpc instanceof DyLDBrowserHost ? this.#rpc.rootfs : new wasi.PreopenDirectory("/", /* @__PURE__ */ new Map([["tmp", new wasi.Directory(/* @__PURE__ */ new Map())]]))
 		], { debug: false });
 		this.#wasi.initialize({ exports: { memory: this.#memory } });
 		for (let i = 1; i <= 10; ++i) this.#regs[`__R${i}`] = new WebAssembly.Global({
@@ -2741,9 +2777,7 @@ async function nodeMain({ searchDirs, mainSoPath, outFd, inFd, args }) {
 			case "assert":
 				console.error(msg.text());
 				break;
-			default:
-				console.log(msg.text());
-				break;
+			default: console.log(msg.text());
 		}
 	};
 	if ({}.GHCI_BROWSER_PUPPETEER_LAUNCH_OPTS) {

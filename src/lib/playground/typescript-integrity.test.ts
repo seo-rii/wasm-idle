@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	typescript: { moduleUrl: '/wasm-typescript/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 
 import {
 	WASM_TYPESCRIPT_MODULE_RECEIPT,
@@ -6,12 +11,6 @@ import {
 } from './wasmTypeScriptVersion';
 
 const workerInstances: IntegrityWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '/wasm-typescript/index.js'
-	}
-}));
-
 class IntegrityWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
@@ -31,23 +30,18 @@ vi.mock('$lib/playground/worker/typescript?worker', () => ({
 	default: IntegrityWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import TypeScriptSandbox from './typescript';
 
 describe('TypeScript runtime integrity handoff', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '/wasm-typescript/index.js';
 	});
 
 	it('sends a detached pinned receipt and the resolved asset limit to the worker', async () => {
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
 		const maxAssetBytes = WASM_TYPESCRIPT_MODULE_RECEIPT.bytes + 1024;
 
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { maxAssetBytes }
 		});
 
@@ -66,12 +60,12 @@ describe('TypeScript runtime integrity handoff', () => {
 
 	it('rejects a tighter limit before reusing an already loaded worker', async () => {
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { maxAssetBytes: WASM_TYPESCRIPT_MODULE_RECEIPT.bytes }
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], {
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 				limits: { maxAssetBytes: WASM_TYPESCRIPT_MODULE_RECEIPT.bytes - 1 }
 			})
 		).rejects.toMatchObject({

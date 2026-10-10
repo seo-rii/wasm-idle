@@ -487,7 +487,7 @@ class Dotnet implements Sandbox {
 				return Promise.reject(
 					this.releaseBeforeSession(
 						operation,
-						`${this.languageLabel} runtime is not configured. Set runtimeAssets.dotnet.moduleUrl or PUBLIC_WASM_DOTNET_MODULE_URL.`
+						`${this.languageLabel} runtime is not configured. Set runtimeAssets.dotnet.moduleUrl.`
 					)
 				);
 			}

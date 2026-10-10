@@ -50,7 +50,10 @@ export interface EditorLanguageServerRuntimeOptions {
 	assetTimeoutMs?: number;
 	maxAssetBytes?: number;
 	startupTimeoutMs?: number;
-	cpp?: LanguageToolAssetConfig;
+	cpp?: LanguageToolAssetConfig & {
+		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
+		headers?: string | false;
+	};
 	python?: {
 		baseUrl?: string;
 	};

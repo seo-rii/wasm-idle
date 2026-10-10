@@ -149,7 +149,7 @@ class Go implements Sandbox {
 				const nextCompilerUrl = resolveGoCompilerUrl(runtimeAssets, currentUrl);
 				if (!nextCompilerUrl) {
 					return rejectLoad(
-						'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
+						'Go runtime is not configured. Set runtimeAssets.go.compilerUrl.'
 					);
 				}
 				const nextManifestUrl = resolveGoManifestUrl(

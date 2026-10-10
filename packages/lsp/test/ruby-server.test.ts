@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RUBY_RUNTIME_WASM_STORAGE_PATH } from '@wasm-idle/core';
 
 const coreMocks = vi.hoisted(() => {
 	const profile = {
@@ -57,7 +58,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageWriter: transportMocks.MockWriter
 }));
 
-import { getRubyLanguageServer } from '../src/ruby/server.js';
+import { getRubyLanguageServer } from '../src/ruby/language-server.js';
 
 const currentUrl = 'https://app.example.com/wasm-idle/editor';
 const rootUrl = '/wasm-idle/';
@@ -143,7 +144,7 @@ describe('getRubyLanguageServer host preflight', () => {
 				baseUrl: 'https://app.example.com/wasm-idle/wasm-ruby/',
 				manifestUrl: `https://app.example.com/wasm-idle/wasm-ruby/runtime-manifest.v2.json?v=${coreMocks.profile.manifestFingerprint}`,
 				moduleUrl: `https://app.example.com/wasm-idle/wasm-ruby/runtime.mjs.bin?v=${coreMocks.profile.moduleJavaScriptReceipt.sha256}`,
-				wasmUrl: `https://app.example.com/wasm-idle/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=${coreMocks.profile.wasmReceipt.sha256}`,
+				wasmUrl: `https://app.example.com/wasm-idle/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}?v=${coreMocks.profile.wasmReceipt.sha256}`,
 				profile: coreMocks.profile,
 				signal: expect.any(AbortSignal),
 				maxAssetBytes: 40 * 1024 * 1024,
@@ -252,7 +253,7 @@ describe('getRubyLanguageServer host preflight', () => {
 			baseUrl: 'https://assets.example.com/ruby/',
 			manifestUrl: 'https://assets.example.com/ruby/runtime-manifest.v2.json',
 			moduleUrl: 'https://assets.example.com/ruby/runtime.mjs.bin',
-			wasmUrl: 'https://assets.example.com/ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+			wasmUrl: `https://assets.example.com/ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`
 		};
 
 		const handle = await getRubyLanguageServer({ currentUrl, ruby: customRuby, createWorker });

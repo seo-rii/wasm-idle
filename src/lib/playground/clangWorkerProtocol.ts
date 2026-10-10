@@ -2,6 +2,7 @@ import type {
 	BrowserClangArtifact,
 	BrowserClangCompileProgress,
 	BrowserClangCompileRequest,
+	BrowserClangPrecompiledHeader,
 	BrowserClangWorkspaceFile
 } from '@wasm-idle/llvm-core/clang';
 import type { WorkerRuntimeAssetConfig } from './worker/assets';
@@ -13,12 +14,32 @@ export type ClangCompileWorkerRequest = {
 	languageSysroots?: boolean;
 	log?: boolean;
 	assets: WorkerRuntimeAssetConfig;
+	/** The last precompiled <bits/stdc++.h>; the worker ignores it when its key differs. */
+	precompiledHeader?: BrowserClangPrecompiledHeader;
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 };
 
+/**
+ * `precompiledHeader: 'building'` means the worker stays alive after the result and later posts
+ * one `precompiled-header` message, with no header when Clang could not build it.
+ */
 export type ClangCompileWorkerResponse =
 	| { type: 'progress'; progress: BrowserClangCompileProgress }
-	| { type: 'compiled'; artifact: BrowserClangArtifact; stdout: string; stderr: string }
-	| { type: 'error'; error: string; stdout: string; stderr: string };
+	| {
+			type: 'compiled';
+			artifact: BrowserClangArtifact;
+			stdout: string;
+			stderr: string;
+			precompiledHeader?: 'building';
+	  }
+	| {
+			type: 'error';
+			error: string;
+			stdout: string;
+			stderr: string;
+			precompiledHeader?: 'building';
+	  }
+	| { type: 'precompiled-header'; header?: BrowserClangPrecompiledHeader };
 
 export type ClangExecuteWorkerRequest = {
 	artifact: BrowserClangArtifact;

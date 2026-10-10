@@ -15,7 +15,10 @@ import {
 	type RuntimeAssetIntegrityEntry
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
-import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
+import {
+	normalizeDwarfWorkspacePath,
+	type BrowserClangPrecompiledHeader
+} from '@wasm-idle/llvm-core/clang';
 import { resolveExecutionLimits } from '@wasm-idle/core';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
@@ -80,6 +83,17 @@ class Clang implements Sandbox {
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
 	private debugEvaluationQueue: Promise<void> = Promise.resolve();
+	// A helper worker builds the precompiled <bits/stdc++.h> so the warm worker stays free for
+	// runs. The header is sent once to each warm worker, which keeps it for later compiles.
+	private precompiledHeader?: BrowserClangPrecompiledHeader;
+	private precompiledHeaderSent?: { worker: Worker; header: BrowserClangPrecompiledHeader };
+	private headerBuilder?: { key: string; dispose(): void };
+	private loadedRuntime?: {
+		assetConfig: ReturnType<typeof resolveRuntimeAssetConfig>;
+		maxAssetBytes: number;
+		languageSysrootProfiles: boolean;
+		verifiedStreaming: boolean;
+	};
 	private readonly workerSession = new WorkerSession({
 		label: 'Clang',
 		onDispose: (worker) => {
@@ -148,6 +162,12 @@ class Clang implements Sandbox {
 				bundledAssets &&
 				typeof runtimeAssets !== 'string' &&
 				runtimeAssets.clang?.bundledLanguageSysroots === true;
+			this.loadedRuntime = {
+				assetConfig,
+				maxAssetBytes: limits.maxAssetBytes,
+				languageSysrootProfiles,
+				verifiedStreaming: bundledAssets
+			};
 			const needsWorkerReset =
 				!this.worker ||
 				!this.assetBridge ||
@@ -184,6 +204,7 @@ class Clang implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					persistentCache: assetConfig.persistentCache,
 					verifiedStreaming: bundledAssets,
 					languageSysrootProfiles,
 					log,
@@ -362,6 +383,17 @@ class Clang implements Sandbox {
 					);
 					return;
 				}
+				if (event.data.precompiledHeaderKey)
+					void this.buildPrecompiledHeader(event.data.precompiledHeaderKey, {
+						code,
+						language: this.language,
+						compileArgs,
+						activePath: options.activePath,
+						cppVersion: options.cppVersion,
+						cVersion: options.cVersion,
+						debugMode,
+						persistentCache: persistentCache ?? this.persistentCache
+					});
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
@@ -386,7 +418,17 @@ class Clang implements Sandbox {
 			interrupt[0] = 0;
 			this.worker.onmessage = handler;
 			this.begin = Date.now();
+			const precompiledHeader =
+				this.language === 'CPP' &&
+				(this.precompiledHeaderSent?.worker !== this.worker ||
+					this.precompiledHeaderSent.header !== this.precompiledHeader)
+					? this.precompiledHeader
+					: undefined;
+			if (precompiledHeader)
+				this.precompiledHeaderSent = { worker: this.worker, header: precompiledHeader };
 			this.worker?.postMessage({
+				persistentCache: persistentCache ?? this.persistentCache,
+				...(precompiledHeader ? { precompiledHeader } : {}),
 				code,
 				prepare,
 				buffer: this.buffer,
@@ -524,6 +566,75 @@ class Clang implements Sandbox {
 		return this.terminate();
 	}
 
+	private async buildPrecompiledHeader(key: string, request: Record<string, unknown>) {
+		const runtime = this.loadedRuntime;
+		if (
+			!runtime ||
+			this.disposed ||
+			this.precompiledHeader?.key === key ||
+			this.headerBuilder?.key === key
+		)
+			return;
+		this.headerBuilder?.dispose();
+		let cancelled = false;
+		const pending = {
+			key,
+			dispose: () => {
+				cancelled = true;
+				if (this.headerBuilder === pending) this.headerBuilder = undefined;
+			}
+		};
+		this.headerBuilder = pending;
+		const { default: ClangWorker } = await import('$lib/playground/worker/clang?worker');
+		if (cancelled) return;
+		const worker = new ClangWorker();
+		const bridge = new WorkerAssetBridge(
+			worker,
+			'clang',
+			runtime.assetConfig,
+			undefined,
+			runtime.maxAssetBytes,
+			runtime.languageSysrootProfiles,
+			this.runtimeAssetCache
+		);
+		const builder = {
+			key,
+			dispose: () => {
+				if (this.headerBuilder === builder) this.headerBuilder = undefined;
+				bridge.dispose();
+				worker.onmessage = null;
+				worker.onerror = null;
+				worker.terminate();
+			}
+		};
+		this.headerBuilder = builder;
+		worker.onerror = builder.dispose;
+		worker.onmessage = (event: MessageEvent<any>) => {
+			if (bridge.handleMessage(event)) return;
+			const { data } = event;
+			if (data?.load) worker.postMessage({ precompileHeader: true, ...request });
+			else if (data?.error) builder.dispose();
+			else if (data && 'precompiledHeader' in data) {
+				if (data.precompiledHeader) this.precompiledHeader = data.precompiledHeader;
+				builder.dispose();
+			}
+		};
+		worker.postMessage({
+			load: true,
+			persistentCache: runtime.assetConfig.persistentCache,
+			verifiedStreaming: runtime.verifiedStreaming,
+			languageSysrootProfiles: runtime.languageSysrootProfiles,
+			log: false,
+			assets: {
+				baseUrl: runtime.assetConfig.baseUrl,
+				maxAssetBytes: runtime.maxAssetBytes,
+				useAssetBridge: runtime.assetConfig.useAssetBridge,
+				useModuleBridge: true
+			},
+			maxAssetBytes: runtime.maxAssetBytes
+		});
+	}
+
 	async terminate() {
 		const lldbSession = this.lldbSession;
 		this.lldbSession = undefined;
@@ -569,6 +680,8 @@ class Clang implements Sandbox {
 		this.disposal = Promise.resolve()
 			.then(() => this.clear())
 			.finally(() => {
+				this.headerBuilder?.dispose();
+				this.precompiledHeader = undefined;
 				if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
 				this.output = null;
 				this.ondebug = undefined;

@@ -1,8 +1,8 @@
-import jsonrpc from 'vscode-jsonrpc';
+import * as jsonrpc from 'vscode-jsonrpc/browser';
 import type {
 	BrowserMessageReader as BrowserMessageReaderInstance,
 	BrowserMessageWriter as BrowserMessageWriterInstance
-} from 'vscode-jsonrpc/lib/browser/main.js';
+} from 'vscode-jsonrpc/browser';
 
 const browserJsonrpc = jsonrpc as unknown as {
 	BrowserMessageReader: new (

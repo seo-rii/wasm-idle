@@ -1,12 +1,10 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { build as esbuild } from 'esbuild';
 
-const execFileAsync = promisify(execFile);
 const THIS_FILE = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(THIS_FILE), '..');
 const distRoot = path.join(projectRoot, 'dist');
@@ -21,9 +19,12 @@ const preview2ShimRoot = path.join(
 const jcoRoot = path.join(projectRoot, 'node_modules', '@bytecodealliance', 'jco');
 const typescriptRoot = path.join(projectRoot, 'node_modules', 'typescript');
 const esbuildRoot = path.join(projectRoot, 'node_modules', 'esbuild');
-const jcoCliPath = path.join(jcoRoot, 'src', 'jco.js');
+const jcoTranspileBindingPath = createRequire(
+	await fs.realpath(path.join(jcoRoot, 'package.json'))
+).resolve('@bytecodealliance/jco-transpile/component');
+const jcoTranspileRoot = path.resolve(path.dirname(jcoTranspileBindingPath), '..');
 
-const PROFILE_ID = 'puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9';
+const PROFILE_ID = 'puppy-scheme-0.0.7-jco-1.37.0-preview2-shim-0.28.0';
 const LICENSE_EXPRESSION = 'BSD-3-Clause AND Apache-2.0 WITH LLVM-exception';
 const PUPPY_RELEASE = Object.freeze({
 	repository: 'https://github.com/matthewp/puppy-scheme',
@@ -45,36 +46,45 @@ const BYTECODE_LICENSE_RECEIPT = Object.freeze({
 const COMPONENTS = Object.freeze({
 	jco: Object.freeze({
 		name: '@bytecodealliance/jco',
-		version: '1.19.0',
+		version: '1.37.0',
 		packageManagerIntegrity:
-			'sha512-I57cVbL24/u/zCBwHq7D9PyIMP81hFFYF4hL/pW5biRGVLQAZuwEAUaEmghOouyt77bU2ExqscP2wkLvr3nfDw=='
+			'sha512-z/crtP4L3wumdFA74K1cEsLfdZ8Ki0dE/7m1fJ9SVq5Z9VsAf0yQXWQzMb6ZrJmXvRN+4wHC2MNkFwSFdaoBzQ=='
+	}),
+	jcoTranspile: Object.freeze({
+		name: '@bytecodealliance/jco-transpile',
+		version: '0.18.0',
+		packageManagerIntegrity:
+			'sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg=='
 	}),
 	preview2Shim: Object.freeze({
 		name: '@bytecodealliance/preview2-shim',
-		version: '0.17.9',
+		version: '0.28.0',
 		packageManagerIntegrity:
-			'sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA=='
+			'sha512-55y59uAzYMTA1bTepmgC7LmK8DUyhOU+y7cfKQRV7wRVABMYna4t7KYpBUkO8VhI+FbDn5cq0ghPLelaP24OpQ=='
 	}),
 	typescript: Object.freeze({
 		name: 'typescript',
-		version: '5.9.3',
+		version: '6.0.3',
 		packageManagerIntegrity:
-			'sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=='
+			'sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=='
 	}),
 	esbuild: Object.freeze({
 		name: 'esbuild',
-		version: '0.28.0',
+		version: '0.28.2',
 		packageManagerIntegrity:
-			'sha512-sNR9MHpXSUV/XB4zmsFKN+QgVG82Cc7+/aaxJ8Adi8hyOac+EXptIp45QBPaVyX3N70664wRbTcLTOemCAnyqw=='
+			'sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA=='
 	})
 });
 const PREVIEW2_BROWSER_FILES = Object.freeze([
 	'cli.js',
 	'clocks.js',
+	'common.js',
 	'config.js',
 	'environment.js',
 	'filesystem.js',
+	'in-memory-filesystem.js',
 	'io.js',
+	'opfs-filesystem.js',
 	'random.js'
 ]);
 const EXPECTED_DIST_FILES = Object.freeze(
@@ -146,9 +156,7 @@ function replaceExactlyOnce(source, needle, replacement, label) {
 }
 
 async function bundleBrowserRuntime() {
-	const bindingPath = await fs.realpath(
-		path.join(jcoRoot, 'obj', 'js-component-bindgen-component.js')
-	);
+	const bindingPath = await fs.realpath(jcoTranspileBindingPath);
 	const fetchBlock = `const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
 let _fs;
 async function fetchCompile (url) {
@@ -218,12 +226,12 @@ async function fetchCompile (url) {
 	const expectedInputs = await Promise.all(
 		[
 			path.join(projectRoot, 'src', 'index.ts'),
-			path.join(jcoRoot, 'src', 'browser.js'),
+			path.join(jcoRoot, 'dist', 'browser.js'),
 			bindingPath,
-			path.join(jcoRoot, 'obj', 'js-component-bindgen-component.core.wasm'),
-			path.join(jcoRoot, 'obj', 'js-component-bindgen-component.core2.wasm'),
+			path.join(jcoTranspileRoot, 'vendor', 'js-component-bindgen-component.core.wasm'),
+			path.join(jcoTranspileRoot, 'vendor', 'js-component-bindgen-component.core2.wasm'),
 			...PREVIEW2_BROWSER_FILES.map((file) =>
-				path.join(preview2ShimRoot, 'lib', 'browser', file)
+				path.join(preview2ShimRoot, 'dist', 'browser', file)
 			)
 		].map((filePath) => fs.realpath(filePath))
 	);
@@ -254,8 +262,9 @@ async function writeThirdPartyNotices(puppyLicenseBytes, bytecodeLicenseBytes) {
 	const notices = `# wasm-idle Puppy Scheme Runtime Third-Party Notices
 
 This browser runtime contains the exact Puppy Scheme v0.0.7 release compiler
-asset and selected browser modules from @bytecodealliance/jco 1.19.0 and
-@bytecodealliance/preview2-shim 0.17.9.
+asset and selected browser modules from @bytecodealliance/jco 1.37.0,
+@bytecodealliance/jco-transpile 0.18.0, and
+@bytecodealliance/preview2-shim 0.28.0.
 
 ## wasm-idle modification notice
 
@@ -301,6 +310,13 @@ async function writeBuildMetadata() {
 				evidence:
 					'package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested'
 			},
+			jcoTranspile: {
+				...COMPONENTS.jcoTranspile,
+				repository: 'https://github.com/bytecodealliance/jco',
+				verifiedBuildInput: false,
+				evidence:
+					'package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested'
+			},
 			preview2Shim: {
 				...COMPONENTS.preview2Shim,
 				repository: 'https://github.com/bytecodealliance/jco',
@@ -325,14 +341,15 @@ async function writeBuildMetadata() {
 		},
 		transformations: [
 			{
-				id: 'jco-transpile-async-browser',
+				id: 'jco-generate-async-browser',
 				tool: '@bytecodealliance/jco',
 				version: COMPONENTS.jco.version,
 				arguments: [
-					'--name=puppyc',
-					'--instantiation=async',
-					'--no-typescript',
-					'--no-nodejs-compat'
+					'generate',
+					'name=puppyc',
+					'instantiation=async',
+					'noTypescript=true',
+					'noNodejsCompat=true'
 				]
 			},
 			{
@@ -378,11 +395,12 @@ async function assertExactDist() {
 
 await Promise.all([
 	requirePackage(jcoRoot, COMPONENTS.jco),
+	requirePackage(jcoTranspileRoot, COMPONENTS.jcoTranspile),
 	requirePackage(preview2ShimRoot, COMPONENTS.preview2Shim),
 	requirePackage(typescriptRoot, COMPONENTS.typescript),
 	requirePackage(esbuildRoot, COMPONENTS.esbuild)
 ]);
-const [, puppyLicenseBytes, bytecodeLicenseBytes] = await Promise.all([
+const [compilerBytes, puppyLicenseBytes, bytecodeLicenseBytes] = await Promise.all([
 	readVerifiedFile(compilerComponentPath, PUPPY_RELEASE, 'Puppy Scheme release compiler'),
 	readVerifiedFile(puppyLicensePath, PUPPY_LICENSE_RECEIPT, 'Puppy Scheme license'),
 	readVerifiedFile(
@@ -392,20 +410,20 @@ const [, puppyLicenseBytes, bytecodeLicenseBytes] = await Promise.all([
 	)
 ]);
 
-await requireRegularFile(jcoCliPath, 'pinned JCO CLI');
-await execFileAsync(process.execPath, [
-	jcoCliPath,
-	'transpile',
-	compilerComponentPath,
-	'--name',
-	'puppyc',
-	'--instantiation',
-	'async',
-	'--no-typescript',
-	'--no-nodejs-compat',
-	'--out-dir',
-	distRoot
-]);
+const { generate } = await import('@bytecodealliance/jco/component');
+const generated = await generate(compilerBytes, {
+	name: 'puppyc',
+	instantiation: { tag: 'async' },
+	noTypescript: true,
+	noNodejsCompat: true,
+	map: []
+});
+for (const [name, bytes] of generated.files) {
+	if (!['puppyc.js', 'puppyc.core.wasm', 'puppyc.core2.wasm'].includes(name)) {
+		throw new Error(`JCO generated an unexpected Puppy runtime file: ${name}`);
+	}
+	await fs.writeFile(path.join(distRoot, name), bytes);
+}
 
 await fs.writeFile(path.join(distRoot, 'LICENSE'), puppyLicenseBytes);
 await bundleBrowserRuntime();

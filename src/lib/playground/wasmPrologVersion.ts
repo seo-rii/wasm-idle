@@ -1,31 +1,31 @@
 export const WASM_PROLOG_RUNTIME_PROFILE = {
-	profileId: 'swipl-wasm-8.0.1-swipl-10.1.9',
-	packageRevision: '18fa003833dd4fb2531195063291687255038372',
-	swiplRevision: '6be143dbd030cc9ea621cde719a37f8385575453',
-	manifestFingerprint: '9d2744c41c9a2fb947cb56f9212c0165dd3635ac80f19473281169d1d2eb3a77',
+	profileId: 'swipl-wasm-8.2.1-swipl-10.1.15',
+	packageRevision: '85167290994ede92eab1aa5e399007c031e6cb82',
+	swiplRevision: '5db27168f89b15186745ea401fbb99a017413788',
+	manifestFingerprint: 'c97f050d36f55558811d27021580338dd01e37016c70e1ef2daaaad0a29618b3',
 	manifestReceipt: {
-		bytes: 2571,
-		sha256: '2ea6029f2e04ad28d4b17f09854ee4f73ddbf61fac02bfc0a9c6ac33bf47d580'
+		bytes: 2576,
+		sha256: 'b67d6f6ff9115bd886d2992b0ad97e7d726aa66cc2a3e288ce7f99a3249d6d47'
 	},
 	javascriptReceipt: {
-		bytes: 192038,
-		sha256: '2ac05e255ec3e2c76958398d9a2bfcb293fe4af81cca3f6e6316af89cb936cbd'
+		bytes: 193421,
+		sha256: '635da02ac0eb18e51303e4a0398b220d17cabfc0e4b7a2acbc7af9e949e4a9c7'
 	},
 	wasmReceipt: {
-		bytes: 796593,
-		sha256: 'e624f58bccb1e273ef307dd006fc85c3933ac2a5cdf16490c07c6078fc95351e',
-		uncompressedBytes: 2195026,
-		uncompressedSha256: 'e95f4514adf76f3bfd92e3733bd6797bb63fcd65de5e64d248e0b379c419f556'
+		bytes: 820495,
+		sha256: 'da8461e22b4513c5020d7eef7f8e62b2086003125381d18fed08f3656eecd793',
+		uncompressedBytes: 2275324,
+		uncompressedSha256: 'c8831c0ac6a021b6bc67fa1b86e8826d1ea92a1a81b932cfb88fea235361c355'
 	},
 	dataReceipt: {
-		bytes: 1178763,
-		sha256: 'c7b391a19e67a70d232b4b7a3b2a1aca110a3527f8fea01d255b2619bfa905cf',
-		uncompressedBytes: 1642608,
-		uncompressedSha256: '55286bfd3ada8779cb843c60b05c97c8d8cb96087bf1ba2cebc4f90b95f7a1e3'
+		bytes: 1192600,
+		sha256: 'ea735ff89940eaed405a4a9b2be8606141d821016f3fc7671983b2203e88e86f',
+		uncompressedBytes: 1659074,
+		uncompressedSha256: '91e9d9c1d184f1a291c870e96bf6a1bc502ce8787946c966526a663a725ba932'
 	}
 } as const;
 export const WASM_PROLOG_ASSET_VERSION = WASM_PROLOG_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_PROLOG_RUNNER_RECEIPT = {
-	bytes: 25068,
-	sha256: '96c7efd29a360a44edfc1acc02497d12e1c477eced79b5ec086950c2ae6e70ef'
+	bytes: 25342,
+	sha256: 'b72014e85132b6ee6bfe3ec0e59ae6ba791f4c137caa1cb744d0a37bab9c60c4'
 } as const;

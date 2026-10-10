@@ -1123,7 +1123,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 					if (specifier === 'node:crypto') {
 						return {
 							randomFillSync: (view: Uint8Array) => {
-								globalThis.crypto.getRandomValues(view);
+								view.set(globalThis.crypto.getRandomValues(new Uint8Array(view.byteLength)));
 								return view;
 							}
 						};

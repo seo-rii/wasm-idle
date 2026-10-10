@@ -64,7 +64,7 @@ describe('Ruby split stdlib', () => {
 		const payload = await promise;
 		expect(payload.protocol).toBe(RUBY_SPLIT_PROTOCOL);
 		expect(Object.isFrozen(payload)).toBe(true);
-		expect(payload.wasmBytes.length).toBe(16_626_499);
+		expect(payload.wasmBytes.length).toBe(16_655_034);
 		expect(progress.mock.lastCall?.[0]).toMatchObject({ runtimeId: 'RUBY' });
 		expect(progress.mock.lastCall?.[0].loadedBytes).toBe(
 			progress.mock.lastCall?.[0].totalBytes

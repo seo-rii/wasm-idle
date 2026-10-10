@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimeAssetsKey } from '@wasm-idle/core';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {

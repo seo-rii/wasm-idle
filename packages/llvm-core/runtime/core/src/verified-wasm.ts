@@ -18,6 +18,10 @@ export interface VerifiedWasmOptions {
 	maxAssetBytes: number;
 	signal?: AbortSignal;
 	onProgress?: (loaded: number, total: number) => void;
+	/** A host with its own URL policy may validate redirects before consuming the body. */
+	validateResponse?: (response: Response, requestedUrl: URL) => void;
+	/** Separates persisted bytes admitted by different host validation policies. */
+	validationKey?: string;
 }
 
 function reason(signal: AbortSignal) {
@@ -165,7 +169,9 @@ export async function compileVerifiedWasmAsset(
 			url: assetUrl.href,
 			sha256: receipt.sha256,
 			bytes: receipt.bytes,
-			validationKey: 'verified-wasm-v1'
+			validationKey: options.validationKey
+				? JSON.stringify(['verified-wasm-v1', options.validationKey])
+				: 'verified-wasm-v1'
 		};
 		const cached = await readPersistentRuntimeAsset({
 			identity,
@@ -191,7 +197,8 @@ export async function compileVerifiedWasmAsset(
 		response = await abortable(fetching, signal);
 		if (!response.ok || !response.body)
 			throw new Error(`Runtime Wasm fetch failed: ${response.status}`);
-		if (response.url && new URL(response.url).href !== assetUrl.href)
+		if (!cached && options.validateResponse) options.validateResponse(response, assetUrl);
+		else if (response.url && new URL(response.url).href !== assetUrl.href)
 			throw new Error('Runtime Wasm response URL mismatch');
 		reader = response.body.getReader();
 		const prefix: Uint8Array[] = [];

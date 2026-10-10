@@ -1,4 +1,4 @@
-export { getLispLanguageServer, type LispLanguageServerOptions } from './server.js';
+export { getLispLanguageServer, type LispLanguageServerOptions } from './language-server.js';
 export {
 	createLispWorkerService,
 	type LispWorkerOptions,

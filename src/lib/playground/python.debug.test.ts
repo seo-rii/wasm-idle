@@ -21,7 +21,7 @@ describe('Python debug tracer source', () => {
 		expect(source).toContain('activePath,');
 		expect(source).toContain('debugPath,');
 		expect(source).toMatch(
-			/const executionFilename =\s*normalizeWorkspacePath\(activePath \|\| ''\) \|\| '__wasm_idle_user__\.py';/
+			/const executionFilename =\s*normalizeWorkspacePath\(activePath \|\| ''\) \|\|\s*\(isHy \? '__wasm_idle_user__\.hy' : '__wasm_idle_user__\.py'\);/
 		);
 		expect(source).toMatch(
 			/const debugFilename = normalizeWorkspacePath\(debugPath \|\| ''\) \|\| executionFilename;/

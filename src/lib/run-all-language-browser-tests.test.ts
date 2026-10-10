@@ -40,7 +40,8 @@ describe('all-language browser test runner', () => {
 				'WASM_IDLE_DEBUG_BROWSER_CASES',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH',
-				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY'
+				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY',
+				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON'
 			].sort()
 		);
 		for (const row of supportMatrixRows) {
@@ -54,6 +55,22 @@ describe('all-language browser test runner', () => {
 		expect(plan.testFiles).toContain('src/lib/playground/long-double.playwright.test.ts');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE).toBe('1');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE).toBe('1');
+	});
+
+	it('runs the declared Brainfuck suite as required PR-family browser coverage', () => {
+		const plan = createAllLanguageBrowserTestPlan({ family: 'esolangs' });
+		const interpreterRows = supportMatrixRows.filter(
+			(row) => row.browserTest?.file === 'src/lib/playground/esolangs.playwright.test.ts'
+		);
+		expect(interpreterRows.map((row) => row.ids)).toContainEqual(['BRAINFUCK']);
+		expect(plan.testFiles).toEqual(['src/lib/playground/esolangs.playwright.test.ts']);
+		expect(plan.env).toEqual(
+			Object.fromEntries(interpreterRows.map((row) => [row.browserTest!.env, '1']))
+		);
+		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK).toBe('1');
+		const invocation = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
+		expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
+		expect(invocation.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK).toBe('1');
 	});
 
 	it('runs C++ standard and long-double regressions with the Clang family', () => {
@@ -137,6 +154,10 @@ describe('all-language browser test runner', () => {
 			if (shard === 'workers') {
 				expectedFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY');
+			}
+			if (shard === 'specialized') {
+				expectedFiles.add('src/lib/playground/python.playwright.test.ts');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON');
 			}
 			expect(new Set(plan.testFiles)).toEqual(expectedFiles);
 			expect(new Set(Object.keys(plan.env))).toEqual(expectedEnvironments);
@@ -251,6 +272,15 @@ describe('all-language browser test runner', () => {
 	});
 
 	it('parses explicit optional suites and shards and rejects invalid options', () => {
+		expect(parseAllLanguageBrowserTestArgs(['--family=esolangs'])).toEqual({
+			includeCompressedAssets: false,
+			includeLspFull: false,
+			shard: undefined,
+			family: 'esolangs'
+		});
+		expect(() =>
+			parseAllLanguageBrowserTestArgs(['--family=esolangs', '--shard=workers'])
+		).toThrow('--family cannot be combined with shard or full-matrix options');
 		expect(
 			parseAllLanguageBrowserTestArgs([
 				'--include-compressed-assets',

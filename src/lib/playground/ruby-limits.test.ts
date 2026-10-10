@@ -11,8 +11,6 @@ vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
 	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {
@@ -179,7 +177,7 @@ describe('Ruby execution message limits', () => {
 				baseUrl: 'http://localhost:3000/replacement/',
 				moduleUrl: expect.stringMatching(/\/replacement\/runtime\.mjs\.bin\?v=/),
 				wasmUrl: expect.stringMatching(
-					/\/replacement\/assets\/ruby_stdlib-C40Yu-vu\.wasm\.gz\.bin\?v=/
+					/\/replacement\/assets\/ruby_stdlib-D8-A_OuU\.wasm\.gz\.bin\?v=/
 				)
 			}),
 			expect.any(Object)

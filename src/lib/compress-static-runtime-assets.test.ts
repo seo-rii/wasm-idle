@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -132,7 +134,7 @@ describe('compressStaticRuntimeAssets', () => {
 				Buffer.from(bytes)
 			);
 		}
-	});
+	}, 30_000);
 
 	it('leaves inert Rust executable graph storage untouched and unregistered', async () => {
 		const rootDir = await makeTempDir();
@@ -274,6 +276,72 @@ describe('compressStaticRuntimeAssets', () => {
 				'wasm-octave/doc-cache': extensionlessBytes.byteLength
 			}
 		});
+	});
+
+	it.each([
+		['empty', []],
+		['previous producer filename', ['wasm-ruby/assets/ruby_stdlib-old.wasm']]
+	])('discovers a new producer-only gzip filename from an %s manifest', async (_, assets) => {
+		const rootDir = await makeTempDir();
+		const logicalPath = 'wasm-ruby/assets/ruby_stdlib-new.wasm';
+		const original = repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 257, 3);
+		const stored = gzipSync(original);
+		await writeAsset(rootDir, `${logicalPath}.gz`, stored);
+		await writeAsset(rootDir, `${logicalPath}.gz.bin`, stored);
+		await writeAsset(
+			rootDir,
+			'compressed-runtime-assets.v1.json',
+			new TextEncoder().encode(JSON.stringify({ assets, sizes: {} }))
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.compressed).toEqual([]);
+		expect(result.manifestAssets).toEqual([logicalPath]);
+		const manifestPath = path.join(rootDir, 'compressed-runtime-assets.v1.json');
+		const firstManifest = await readFile(manifestPath, 'utf8');
+		expect(JSON.parse(firstManifest)).toEqual({
+			assets: [logicalPath],
+			sizes: { [logicalPath]: original.byteLength }
+		});
+		await expect(stat(path.join(rootDir, logicalPath))).rejects.toThrow();
+		await expect(readFile(path.join(rootDir, `${logicalPath}.gz`))).resolves.toEqual(stored);
+		await expect(readFile(path.join(rootDir, `${logicalPath}.gz.bin`))).resolves.toEqual(
+			stored
+		);
+
+		const repeated = await compressStaticRuntimeAssets({ rootDir });
+		expect(repeated.compressed).toEqual([]);
+		expect(repeated.manifestAssets).toEqual([logicalPath]);
+		await expect(readFile(manifestPath, 'utf8')).resolves.toBe(firstManifest);
+	});
+
+	it('discovers gzip aliases without classifying canonical archives or excluded storage as aliases', async () => {
+		const rootDir = await makeTempDir();
+		const stored = gzipSync(repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 1, 4));
+		const excludedPaths = [
+			'not-a-runtime/runtime.wasm.gz',
+			'wasm-swift/sdk.tar.gz',
+			'wasm-swift/sdk.tgz',
+			'wasm-swift/runtime.wasm.br',
+			'wasm-rust/compiler-worker.js.bin.gz',
+			'wasm-rust/vendor/jco/obj/wasm-tools.js.gz.bin',
+			'wasm-tinygo/upstream.js.gz',
+			'wasm-tinygo/assets/upstream-compile-worker-newHash.js.gz',
+			'_app/immutable/chunks/application.js.gz'
+		];
+		for (const excludedPath of excludedPaths) await writeAsset(rootDir, excludedPath, stored);
+		const logicalPath = 'wasm-ruby/assets/ruby_stdlib-new.wasm';
+		await writeAsset(rootDir, `${logicalPath}.gz`, stored);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.compressed).toEqual([]);
+		expect(result.manifestAssets).toEqual([logicalPath]);
+		for (const excludedPath of excludedPaths) {
+			await expect(readFile(path.join(rootDir, excludedPath))).resolves.toEqual(stored);
+			await expect(stat(path.join(rootDir, `${excludedPath}.gz`))).rejects.toThrow();
+		}
 	});
 
 	it('keeps original assets when the manifest cannot be committed', async () => {

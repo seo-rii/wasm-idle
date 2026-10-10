@@ -2,7 +2,7 @@ export {
 	getJanetLanguageServer,
 	type JanetLanguageServerConfig,
 	type JanetLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createJanetWorkerService,
 	type JanetDiagnosticRunnerRequest,

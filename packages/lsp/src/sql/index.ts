@@ -3,7 +3,7 @@ export {
 	getSqlLanguageServer,
 	type SqlLanguageServerConfig,
 	type SqlLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createSqlWorkerService,
 	type LoadSqlEngine,

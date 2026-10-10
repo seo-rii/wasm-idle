@@ -1,4 +1,5 @@
 import {
+	AssetTooLargeError,
 	BusyError,
 	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -20,6 +21,7 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import type { WasiInterpreterProfile } from '$lib/playground/wasiInterpreters';
 
 type WasmOperation = {
 	token: symbol;
@@ -42,6 +44,8 @@ const abortReason = (signal: AbortSignal, phase: WasmOperation['phase']) =>
 			);
 
 class Wasm implements Sandbox {
+	constructor(private readonly interpreter?: WasiInterpreterProfile) {}
+
 	output: any = null;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(4096);
@@ -260,6 +264,16 @@ class Wasm implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (this.interpreter && this.interpreter.bytes > limits.maxAssetBytes) {
+				throw new AssetTooLargeError(
+					`${this.interpreter.id} interpreter exceeds the ${limits.maxAssetBytes} byte limit`,
+					{
+						actual: this.interpreter.bytes,
+						limit: limits.maxAssetBytes,
+						runtimeId: this.interpreter.id
+					}
+				);
+			}
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'WASM runtime startup cancelled')
@@ -329,7 +343,21 @@ class Wasm implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						log: _log
+						log: _log,
+						...(this.interpreter
+							? {
+									interpreter: this.interpreter,
+									maxAssetBytes: limits.maxAssetBytes,
+									interpreterUrl: new URL(
+										`${(typeof _runtimeAssets === 'string' ? _runtimeAssets : (_runtimeAssets.rootUrl ?? '')).replace(/\/$/u, '')}/${this.interpreter.folder}/${this.interpreter.fileName}`,
+										globalThis.location.href
+									).href,
+									persistentCache:
+										typeof _runtimeAssets === 'object'
+											? _runtimeAssets.persistentCache
+											: undefined
+								}
+							: {})
 					});
 				} else {
 					const worker = this.worker;
@@ -408,10 +436,18 @@ class Wasm implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (this.interpreter && _args.length) {
+				throw new RuntimeConfigurationError(
+					'This interpreter does not accept program arguments',
+					{
+						runtimeId: this.interpreter.id
+					}
+				);
+			}
 			workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.wasm',
+				options.activePath ?? this.interpreter?.sourcePath ?? 'main.wasm',
 				{
 					...options.workspaceLimits,
 					maxFileBytes: Math.min(
@@ -426,6 +462,35 @@ class Wasm implements Sandbox {
 					)
 				}
 			);
+			if (
+				this.interpreter?.minSourceCharacters !== undefined &&
+				OUTPUT_ENCODER.encode(code.replace(/[\t\n\v\f\r ]/gu, '')).byteLength <
+					this.interpreter.minSourceCharacters
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source requires at least ${this.interpreter.minSourceCharacters} non-whitespace characters`,
+					{ runtimeId: this.interpreter.id }
+				);
+			}
+			if (
+				this.interpreter?.maxSourceBytes !== undefined &&
+				OUTPUT_ENCODER.encode(code).byteLength > this.interpreter.maxSourceBytes
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source exceeds ${this.interpreter.maxSourceBytes} UTF-8 bytes`,
+					{ runtimeId: this.interpreter.id }
+				);
+			}
+			if (
+				this.interpreter?.maxSourcePathBytes !== undefined &&
+				OUTPUT_ENCODER.encode(workspace.activePath!).byteLength >
+					this.interpreter.maxSourcePathBytes
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source path exceeds the ${this.interpreter.maxSourcePathBytes}-byte interpreter limit`,
+					{ runtimeId: this.interpreter.id, phase: 'configuration' }
+				);
+			}
 			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
@@ -571,6 +636,7 @@ class Wasm implements Sandbox {
 					args: _args,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
+					...(this.interpreter ? { workspaceLimits: options.workspaceLimits } : {}),
 					log: _log
 				});
 			} catch (error) {

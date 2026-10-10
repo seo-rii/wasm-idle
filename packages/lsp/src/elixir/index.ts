@@ -13,7 +13,7 @@ export {
 	getElixirLanguageServer,
 	type ElixirLanguageServerConfig,
 	type ElixirLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createBeamWorkerService,
 	type BeamDiagnosticRunnerRequest,

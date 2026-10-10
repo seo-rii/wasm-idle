@@ -122,10 +122,10 @@ const EXPECTED_BASH_PROVENANCE = Object.freeze({
 });
 const EXPECTED_SDK = Object.freeze({
 	package: '@wasmer/sdk',
-	version: '0.9.0',
+	version: '0.10.0',
 	integrity:
-		'sha512-k/CY19NfeLCjA9ZpX69JAoZKiuMT3hKjDFJYWdRGkCdfig9NtC9Op7Gpg2LeezuuQKd4WaSSq8bpSMdHw1BMgg==',
-	tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz',
+		'sha512-YQ+s5tGag6P/I8kp9BTH+XhjoS9UFvWiZJvnWEEovClHffhYToKhprWr4UJG7wLP7c/2HQpGkF7ZrjoUvKjdmA==',
+	tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz',
 	repository: 'https://github.com/wasmerio/wasmer-js',
 	packageRepository: 'git+https://github.com/wasmerio/wasmer-js.git'
 });
@@ -137,7 +137,7 @@ const EXPECTED_BASH_LICENSE = Object.freeze({
 });
 const EXPECTED_SDK_LICENSE = Object.freeze({
 	path: 'LICENSE',
-	sourceUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz#package/LICENSE',
+	sourceUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz#package/LICENSE',
 	spdx: 'MIT'
 });
 
@@ -297,7 +297,7 @@ async function validatePnpmIntegrity(pnpmLockPath, packageIntegrity) {
 	const source = await readFile(pnpmLockPath, 'utf8');
 	const escapedIntegrity = packageIntegrity.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 	const packageEntry = new RegExp(
-		`(?:^|\\n)\\s*'@wasmer/sdk@0\\.9\\.0':\\s*\\n\\s*resolution:\\s*\\{integrity:\\s*${escapedIntegrity}\\}`,
+		`(?:^|\\n)\\s*'@wasmer/sdk@0\\.10\\.0':\\s*\\n\\s*resolution:\\s*\\{integrity:\\s*${escapedIntegrity}\\}`,
 		'u'
 	);
 	if (!packageEntry.test(source)) {

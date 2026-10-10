@@ -44,23 +44,23 @@ function createFixture(options: FixtureOptions = {}) {
 	const manifest = {
 		format: 'wasm-prolog-runtime-manifest-v2',
 		runtime: 'swipl-wasm',
-		profileId: 'swipl-wasm-8.0.1-swipl-10.1.9',
+		profileId: 'swipl-wasm-8.2.1-swipl-10.1.15',
 		package: {
 			name: 'swipl-wasm',
-			version: '8.0.1',
+			version: '8.2.1',
 			repository: 'https://github.com/SWI-Prolog/npm-swipl-wasm.git',
-			revision: '18fa003833dd4fb2531195063291687255038372',
-			tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.0.1.tgz',
+			revision: '85167290994ede92eab1aa5e399007c031e6cb82',
+			tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz',
 			integrity: 'sha512-fixture'
 		},
 		toolchain: {
-			swiplVersion: '10.1.9',
-			swiplRevision: '6be143dbd030cc9ea621cde719a37f8385575453',
-			emsdkVersion: '6.0.0',
-			emsdkRevision: 'd223ae73c6998296e3ab27cf81dc2c2c9fd383de',
+			swiplVersion: '10.1.15',
+			swiplRevision: '5db27168f89b15186745ea401fbb99a017413788',
+			emsdkVersion: '6.0.11',
+			emsdkRevision: 'dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72',
 			zlibVersion: '1.3.2',
-			pcre2Version: '10.47',
-			pcre2Revision: 'f454e231fe5006dd7ff8f4693fd2b8eb94333429'
+			pcre2Version: '10.49.0',
+			pcre2Revision: '6f9d7c1373262c541324a16a358785b33ef116cf'
 		},
 		license: {
 			path: 'LICENSE.txt',

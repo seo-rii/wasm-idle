@@ -11,10 +11,6 @@ vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
 	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
-
 const workerInstances: MockWorker[] = [];
 let autoResolveRun = true;
 let runDispatchError: unknown;

@@ -159,6 +159,104 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'GolfScript',
+		ids: ['GOLFSCRIPT'],
+		runtime: 'Original GolfScript interpreter on Ruby/WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT',
+			language: 'GOLFSCRIPT'
+		}
+	},
+
+	{
+		language: 'APECode',
+		ids: ['APECODE'],
+		runtime: 'Original APECode interpreter on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_APECODE',
+			language: 'APECODE'
+		}
+	},
+
+	{
+		language: 'LOLCODE 1.3',
+		ids: ['LOLCODE'],
+		runtime: 'Original lci 1.3 interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LOLCODE',
+			language: 'LOLCODE'
+		}
+	},
+
+	{
+		language: 'UHMLANG (엄준식)',
+		ids: ['UHMLANG'],
+		runtime: 'Original Umjunsik Go interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_UHMLANG',
+			language: 'UHMLANG'
+		}
+	},
+
+	{
+		language: 'Aheui',
+		ids: ['AHEUI'],
+		runtime: 'rpaheui 1.2.5 on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_AHEUI',
+			language: 'AHEUI'
+		}
+	},
+
+	{
+		language: 'Malbolge',
+		ids: ['MALBOLGE'],
+		runtime: 'Ben Olmstead Malbolge on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE',
+			language: 'MALBOLGE'
+		}
+	},
+
+	{
+		language: 'Whitespace',
+		ids: ['WHITESPACE'],
+		runtime: 'koturn/Whitespace 0.3 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WHITESPACE',
+			language: 'WHITESPACE'
+		}
+	},
+
+	{
 		language: 'C3',
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
@@ -211,6 +309,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Objective-C++',
+		ids: ['OBJECTIVECXX'],
+		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
+		stdin: 'Yes',
+		editorSupport: 'clangd',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/objectivecxx.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
+			language: 'OBJECTIVECXX'
+		}
+	},
+	{
 		language: 'Python',
 		ids: ['PYTHON3'],
 		runtime: 'Pyodide',
@@ -221,6 +332,45 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'PYTHON'
+		}
+	},
+	{
+		language: 'Befunge-93',
+		ids: ['BEFUNGE93'],
+		runtime: 'Chris Pressey Befunge-93 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93',
+			language: 'BEFUNGE93'
+		}
+	},
+	{
+		language: 'Brainfuck',
+		ids: ['BRAINFUCK'],
+		runtime: 'susam/bfc on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK',
+			language: 'BRAINFUCK'
+		}
+	},
+	{
+		language: 'Hy',
+		ids: ['HY'],
+		runtime: 'Hy 1.3.1 on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/hy.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_HY',
+			language: 'HY'
 		}
 	},
 	{
@@ -364,6 +514,19 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_GLEAM',
 			language: 'GLEAM'
+		}
+	},
+	{
+		language: 'Grain',
+		ids: ['GRAIN'],
+		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/grain.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAIN',
+			marker: 'real Grain compiler in Chromium'
 		}
 	},
 	{
@@ -523,6 +686,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'ReScript',
+		ids: ['RESCRIPT'],
+		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/rescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_RESCRIPT',
+			language: 'RESCRIPT'
+		}
+	},
+	{
 		language: 'TinyGo',
 		ids: ['TINYGO'],
 		runtime: 'wasm-tinygo',
@@ -624,6 +800,19 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'LUA'
+		}
+	},
+	{
+		language: 'Fennel',
+		ids: ['FENNEL'],
+		runtime: 'fennel.lua on Wasmoon',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'FENNEL'
 		}
 	},
 	{
@@ -731,6 +920,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'V',
+		ids: ['V'],
+		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_V',
+			language: 'V'
+		}
+	},
+	{
 		language: 'R',
 		ids: ['R'],
 		runtime: 'WebR',
@@ -780,6 +982,19 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'SQLITE'
+		}
+	},
+	{
+		language: 'PostgreSQL',
+		ids: ['POSTGRESQL'],
+		runtime: 'PostgreSQL 18 / PGlite',
+		stdin: 'Files',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL',
+			language: 'POSTGRESQL'
 		}
 	},
 	{
@@ -866,6 +1081,98 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
 	[
+		'GolfScript',
+		{
+			packageBase:
+				'darrenks/golfscript cded5425 (upstream MIT notice), original Ruby source on the bundled Ruby/WASI VM',
+			execution:
+				'Loads the unchanged GolfScript CLI in a fresh Ruby VM; supports stack operations, arrays, blocks, arbitrary integers, Ruby string interpolation and original -q/-n/-r options; reads stdin to EOF, or accepts argument-array input after --, with original implicit final output',
+			customization: `${code('runtimeAssets.golfscript.interpreterUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.ruby')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned original script, readonly source files, execution limits and cancellation; prepare initializes Ruby without running GolfScript source`
+		}
+	],
+
+	[
+		'APECode',
+		{
+			packageBase:
+				'seo-rii/apecode 0.1.0 (c7ae98d3), original pure Python wheel on Pyodide; upstream has no declared standalone license',
+			execution:
+				'Runs the original parser and state-machine interpreter through run_source; reads numeric test cases to EOF, models rock weights, grippers and built-in states, and writes original result/trace bytes through Python file descriptors; each run creates fresh interpreter state',
+			customization: `${code('runtimeAssets.apecode.baseUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned local wheel; execution timeout, output and workspace limits plus cancellation; prepare loads the interpreter without parsing or running user source`
+		}
+	],
+
+	[
+		'LOLCODE 1.3',
+		{
+			packageBase: 'justinmeza/lci v1.3 (GPL-3.0-or-later), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged lci lexer, parser and interpreter for LOLCODE 1.3, including functions, loops, arrays, type casts and Unicode string escapes; GIMMEH reads a line and VISIBLE normally adds a newline; each run starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'UHMLANG (엄준식)',
+		{
+			packageBase: 'rycont/umjunsik-lang e973f9d2 (MIT), Go 1.25.3 WASI build',
+			execution:
+				'Runs the original Go lexer, parser and evaluator with signed 64-bit arithmetic, variables, jumps and conditional statements; numeric stdin is line based and character output writes Unicode code points; each execution starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Aheui',
+		{
+			packageBase:
+				'aheui/rpaheui 1.2.5 (BSD-2-Clause) on Pyodide 314.0.7; one receipt-verified pure Python wheel',
+			execution:
+				'Runs the original rpaheui compiler and interpreter with --no-c --warning-limit=0, 26 stacks, a queue and a port, with Unicode character/integer stdin; normal halt returns its stack value; no handwritten parser or subset executor',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.aheui.baseUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare loads the interpreter without executing source`
+		}
+	],
+
+	[
+		'Malbolge',
+		{
+			packageBase:
+				'Original Ben Olmstead interpreter, TryItOnline/malbolge b0869870 (public domain), compiled with WASI SDK 33',
+			execution:
+				'Runs the original 59049-cell ternary and self-modifying interpreter; source-file input is separate from byte stdin/stdout; EOF stores 59048; requires at least two non-whitespace source bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Whitespace',
+		{
+			packageBase: 'koturn/Whitespace 22a57aab (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the upstream Whitespace 0.3 interpreter with a documented divisor-guard correction, copy/slide, heap, labels, calls and signed 32-bit integers; character/numeric stdin and exact stdout; character EOF is -1; source limit 65535 UTF-8 bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Befunge-93',
+		{
+			packageBase: 'catseye/Befunge-93 8fe4065c (BSD-3-Clause), compiled with WASI SDK 33',
+			execution:
+				'Runs the original interpreter with an 80 by 25 wrapping playfield, signed 32-bit stack, string mode and self-modifying p/g instructions; character and integer stdin share the WASI terminal; character EOF is -1',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed quiet argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+	[
+		'Brainfuck',
+		{
+			packageBase: 'susam/bfc b1b92fc (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the pinned upstream interpreter in a browser Worker with a fresh read-only source filesystem; 30000 wrapping 8-bit cells, UTF-8 byte stdin/stdout, EOF sets the cell to zero',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+	[
 		'C',
 		{
 			packageBase:
@@ -925,11 +1232,29 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'Objective-C++',
+		{
+			packageBase:
+				`Same GNUstep libobjc2 v2.3 + libc++ assets as Objective-C from the ${code('wasm-llvm')} ` +
+				`producer + ${workspacePackage('packages/llvm-core')}; no extra compiler assets`,
+			execution:
+				`${code('clang -x objective-c++ -std=gnu++20 -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
+				`${code('wasm32-wasi')} with libc++ headers; active file defaults to ${code('main.mm')}; ` +
+				`links ${code('libobjc.a')} (plus GNUstep Base and ${code('libffi.a')} when Foundation is ` +
+				`imported); auto-compiles ${code('.mm')}/${code('.m')}/${code('.c')} workspace files; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}; trace debugging is not supported`,
+			customization:
+				`Shares ${code('runtimeAssets.objectivec')} and ${code('runtimeAssets.clang')} with ` +
+				`Objective-C; ${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}, ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
 		'Python',
 		{
 			packageBase: `static ESM ${code('static/pyodide/pyodide.mjs')} / ${npmPackage('pyodide')}`,
 			execution:
-				`loads ${code('pyodide.mjs')}, ${code('pyodide.asm.js')}, ${code('pyodide.asm.wasm')}, and ` +
+				`loads ${code('pyodide.mjs')}, ${code('pyodide.asm.mjs')}, ${code('pyodide.asm.wasm')}, and ` +
 				`${code('python_stdlib.zip')} from the configured static asset tree on demand; supports ` +
 				`${code('stdin')}, workspace files, and trace debugging`,
 			customization:
@@ -1088,6 +1413,15 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'Grain',
+		{
+			packageBase:
+				'grain-lang/grain v0.7.2 release: upstream js_of_ocaml grainc.bc.js + @grain/stdlib 0.7.2 (precompiled .gro)',
+			execution: `Verified upstream grainc compiles ${code('.gr')} workspace files to WASI in a fresh browser Worker; stdio-only WASI host with streaming ${code('stdin')}`,
+			customization: `${code('runtimeAssets.grain.baseUrl')} or ${code('PUBLIC_WASM_GRAIN_BASE_URL')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; Wasm memory bounded by ${code('limits.maxWasmMemoryBytes')}`
+		}
+	],
+	[
 		'Perl',
 		{
 			packageBase:
@@ -1197,6 +1531,16 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'Hy',
+		{
+			packageBase: `Hy 1.3.1 + funcparserlib 1.0.1 pure-Python wheels on ${npmPackage('pyodide')}`,
+			execution:
+				`receipt-verifies the bundled wheels, unpacks them into Pyodide site-packages, and compiles Hy with ${code('hy.compiler.hy_compile')}; ` +
+				`${code('(input)')}/${code('(print)')} share the Python stdin/stdout bridge; no debugger or automatic package loading`,
+			customization: `${code('runtimeAssets.hy.baseUrl')} or ${code('PUBLIC_WASM_HY_BASE_URL')} plus the Python runtime assets; ${code('stdin')}, ${code('activePath')}`
+		}
+	],
+	[
 		'C3',
 		{
 			packageBase: 'wasm-llvm/c3-browser: C3 0.8.3 / LLVM 22.1.8',
@@ -1250,6 +1594,20 @@ const runtimeDetailsByLanguage = new Map([
 				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
 				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
+		}
+	],
+	[
+		'ReScript',
+		{
+			packageBase:
+				`upstream ReScript ` +
+				manifestValue('static/wasm-rescript/runtime-build.json', ['rescriptVersion']) +
+				` playground ${code('compiler.js')} + ${code('compiler-builtins/cmij.js')} + ${code('@rescript/runtime@12.3.1')}`,
+			execution:
+				`static worker compiles ${code('Main.res')} to CommonJS with the official js_of_ocaml ReScript compiler, ` +
+				`then runs it against the upstream stdlib runtime; stdin via ${code('fs.readLineSync(0)')}/${code('fs.readFileSync(0)')}; ` +
+				`compiler errors/warnings become editor diagnostics; supports ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('rescript', 'RESCRIPT')
 		}
 	],
 	[
@@ -1351,6 +1709,16 @@ const runtimeDetailsByLanguage = new Map([
 			execution: `Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.lua.moduleUrl')} or ${code('PUBLIC_WASM_LUA_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Fennel',
+		{
+			packageBase: `static wasm-fennel ${code('fennel-1.6.1.lua.gz')} (official Fennel 1.6.1) on ${workspacePackage('runtimes/wasm-lua')}`,
+			execution: `receipt-verified ${code('fennel.lua')} compiler evaluated by the Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.fennel.compilerUrl')} or ${code('PUBLIC_WASM_FENNEL_COMPILER_URL')} plus the Lua module URL; ` +
 				`${code('programArgs')}`
 		}
 	],
@@ -1457,6 +1825,23 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'V',
+		{
+			packageBase:
+				`V 0.5.2 compiler, vlib and WASI C sysroot assets from the ${code('wasm-llvm')} producer + ` +
+				`${workspacePackage('packages/llvm-core')}`,
+			execution:
+				`native gzip delivery for the compiler Wasm and filesystem tar assets; translates V to C ` +
+				`with the real V compiler (built from the upstream ${code('vc')} bootstrap for WASI), compiles ` +
+				`the generated C with the llvm-core Clang host, and executes the resulting WASI module ` +
+				`with ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.v.baseUrl')} or ${code('PUBLIC_WASM_V_BASE_URL')}; ` +
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
+		}
+	],
+	[
 		'R',
 		{
 			packageBase: `versioned static ${code('static/webr/<hash>/webr.js')} / ${npmPackage('webr')}`,
@@ -1506,6 +1891,23 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.sqlite.moduleUrl')}/${code('wasmUrl')} or ` +
 				`${code('PUBLIC_WASM_SQLITE_MODULE_URL')}/${code('PUBLIC_WASM_SQLITE_WASM_URL')} or ` +
 				`${code('rootUrl')}; ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'PostgreSQL',
+		{
+			packageBase:
+				`static ESM ${code('static/wasm-postgresql/runtime.mjs')} produced from ` +
+				`${npmPackage('@electric-sql/pglite')}`,
+			execution:
+				`upstream PostgreSQL compiled to WebAssembly by PGlite; initdb runs once per worker ` +
+				`and every run restores a fresh in-memory cluster, sends the script as one simple ` +
+				`query, and prints result sets, notices, and ${code('COPY ... TO STDOUT')}; preloaded ` +
+				`${code('stdin')} is exposed as the server file ${code('/dev/blob')}`,
+			customization:
+				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
+				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
+				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1772,8 +2174,9 @@ or the browser-side package/workspace runtime that backs each row. Static ESM en
 assets loaded over HTTP on demand, not files embedded in the published npm packages.
 \`Execution defaults / flags\` lists the default
 targets and flags wasm-idle applies, plus the public per-run options that change execution.
-\`Customization\` lists the \`runtimeAssets\` fields and matching \`PUBLIC_WASM_*\` env overrides
-when they exist.
+\`Customization\` lists the SDK's explicit \`runtimeAssets\` fields and the matching \`PUBLIC_WASM_*\`
+variables understood by this repository's example page. Published packages do not read environment
+variables or import SvelteKit modules.
 
 ${renderRuntimeDetailsTable(rows)}
 

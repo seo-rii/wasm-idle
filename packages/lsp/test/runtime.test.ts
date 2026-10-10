@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AWK_RUNTIME_WORKER_PATH, RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
+import {
+	AWK_RUNTIME_WORKER_PATH,
+	RUBY_RUNTIME_PROFILE,
+	RUBY_RUNTIME_WASM_STORAGE_PATH
+} from '@wasm-idle/core';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
 import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
@@ -172,8 +176,7 @@ describe('lsp runtime asset resolution', () => {
 			baseUrl: 'https://static.example.com/custom-ruby/',
 			manifestUrl: 'https://static.example.com/custom-ruby/runtime-manifest.v2.json',
 			moduleUrl: 'https://static.example.com/custom-ruby/runtime.mjs.bin',
-			wasmUrl:
-				'https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+			wasmUrl: `https://static.example.com/custom-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`
 		};
 		const propertyReads = new Map<PropertyKey, number>();
 		const ruby = new Proxy(source, {

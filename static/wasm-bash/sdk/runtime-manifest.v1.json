@@ -2,13 +2,13 @@
   "formatVersion": 1,
   "runtimeModule": "index.mjs",
   "packages": {
-    "@wasmer/sdk": "0.9.0"
+    "@wasmer/sdk": "0.10.0"
   },
   "files": [
     {
       "path": "index.mjs",
-      "bytes": 49233,
-      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+      "bytes": 48694,
+      "sha256": "d5e0424d9de8173c0c7bc6a6b704aecde620d3f424050e0e6a079d863a44d58b"
     },
     {
       "path": "LICENSE.txt",
@@ -17,13 +17,13 @@
     },
     {
       "path": "wasmer_js_bg.wasm",
-      "bytes": 5701868,
-      "sha256": "10b42451b1be2cd25543ee14e1f87adf6019f64aa3e6cb74c296aecd15787509"
+      "bytes": 6598804,
+      "sha256": "49a6646209f5ab5e7c737eac33407d87d9a9959ac83e5ecaaab9261b2323589e"
     },
     {
       "path": "worker.mjs",
-      "bytes": 700,
-      "sha256": "5c1f104cde1205569a34985e6984fa05826fc95a5fc3feb731c013a222de7451"
+      "bytes": 709,
+      "sha256": "4c8a2c405f689e6aac28b6cc31a10407215680517b04efbaa036ee58c261fd1d"
     }
   ]
 }

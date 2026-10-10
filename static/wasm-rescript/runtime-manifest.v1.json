@@ -1,0 +1,45 @@
+{
+  "format": "wasm-rescript-runtime-manifest-v1",
+  "runtime": "rescript-playground",
+  "profileId": "rescript-12.3.1-playground-commonjs",
+  "fingerprint": "c5cfee09555006071de09a4793ff080f9c49ef901fdb66d76ca16470dab7efc5",
+  "source": {
+    "repository": "https://github.com/rescript-lang/rescript",
+    "revision": "v12.3.1",
+    "commit": "679406560d169f1124653ab50795d5077570f078"
+  },
+  "build": {
+    "rescriptVersion": "12.3.1",
+    "compilerBuild": "js_of_ocaml 6.0.1 playground bundle built and uploaded by upstream CI (make playground)",
+    "moduleSystem": "commonjs"
+  },
+  "license": {
+    "path": "LICENSE.txt",
+    "spdx": "LGPL-3.0-or-later AND MIT",
+    "size": 44773,
+    "sha256": "dbd581a57da0ad4628278fe6b46454a86b391c2e23a493dc177ee2d316927ca5"
+  },
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 1418,
+    "sha256": "2712153acbc9202f546ea60dd14c248127ceebb6bcb41336b760ea358f8a6ee0"
+  },
+  "assets": [
+    {
+      "path": "compiler.js",
+      "mediaType": "text/javascript",
+      "size": 6496768,
+      "sha256": "17b16598b473bcd56367f29fb76d300ffe0073c814af68710d3b46964b200202"
+    }
+  ],
+  "storage": [
+    {
+      "path": "compiler.js.gz.bin",
+      "logicalPath": "compiler.js",
+      "encoding": "gzip",
+      "size": 1245489,
+      "sha256": "9d6988eff528fb577c10aa76f720e59c8737dc91c5a4a2f17496930b848ff51d"
+    }
+  ]
+}

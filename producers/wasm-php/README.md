@@ -7,8 +7,11 @@ deployed runtime, not the producer-only bundler toolchain.
 
 ## Build
 
+Use Node.js 24.18.0 or newer, matching the pinned PHP packages' engine requirement.
+
 ```sh
 pnpm install --frozen-lockfile
+pnpm test
 pnpm run build
 pnpm run verify
 ```

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +10,10 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const require = createRequire(import.meta.url);
 export const DEFAULT_BROWSER_BASE_PATH = (() => {
 	try {
-		const source = readFileSync(path.join(REPO_ROOT, 'svelte.config.js'), 'utf8');
+		const source = readFileSync(path.join(REPO_ROOT, 'sveltekit.config.mjs'), 'utf8');
 		const configuredBasePath = source.match(/base:\s*['"]([^'"]+)['"]/)?.[1];
 		if (!configuredBasePath) {
 			return '/absproxy/5173/';
@@ -223,7 +225,7 @@ async function probeHttp(url) {
 async function waitForHttp(url, timeoutMs, child, logs) {
 	const startedAt = Date.now();
 	while (Date.now() - startedAt < timeoutMs) {
-		if (child && child.exitCode !== null) {
+		if (child && (child.exitCode !== null || child.signalCode)) {
 			throw new Error(
 				`preview server exited before becoming ready (exit=${child.exitCode})\n${logs.join('\n')}`
 			);
@@ -300,11 +302,14 @@ export async function startBrowserPreviewServer({
 
 	/** @type {string[]} */
 	const logs = [];
+	const viteCliPath = path.join(
+		path.dirname(require.resolve('vite/package.json')),
+		'bin/vite.js'
+	);
 	const child = spawn(
-		'pnpm',
+		process.execPath,
 		[
-			'exec',
-			'vite',
+			viteCliPath,
 			serverMode,
 			...(serverMode === 'preview'
 				? ['--config', path.join(THIS_DIR, 'release-preview.config.mjs')]
@@ -327,22 +332,47 @@ export async function startBrowserPreviewServer({
 	child.stderr?.on('data', (chunk) => {
 		logs.push(String(chunk).trimEnd());
 	});
+	child.once('error', (error) => {
+		logs.push(error.message);
+	});
+	let closed = false;
+	const childClosed = new Promise((resolve) => {
+		child.once('close', () => {
+			closed = true;
+			resolve(undefined);
+		});
+	});
+	/** @type {Promise<void> | undefined} */
+	let closePromise;
+	const close = () => {
+		closePromise ??= (async () => {
+			if (closed) return;
+			const timeout = setTimeout(() => {
+				if (child.exitCode === null && !child.signalCode) child.kill('SIGKILL');
+				// An exited process can still have descendants holding its output pipes.
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+			}, 5_000);
+			try {
+				if (child.exitCode === null && !child.signalCode) child.kill('SIGTERM');
+				await childClosed;
+			} finally {
+				clearTimeout(timeout);
+			}
+		})();
+		return closePromise;
+	};
 
-	await waitForHttp(browserUrl, timeoutMs, child, logs);
+	try {
+		await waitForHttp(browserUrl, timeoutMs, child, logs);
+	} catch (error) {
+		await close();
+		throw error;
+	}
 
 	return {
 		origin: previewOrigin,
 		browserUrl,
-		close: async () => {
-			if (child.exitCode !== null) return;
-			child.kill('SIGTERM');
-			await new Promise((resolve) => {
-				child.once('exit', () => resolve(undefined));
-				setTimeout(() => {
-					if (child.exitCode === null) child.kill('SIGKILL');
-					resolve(undefined);
-				}, 5_000);
-			});
-		}
+		close
 	};
 }

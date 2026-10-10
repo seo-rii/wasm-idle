@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	lisp: { moduleUrl: '/wasm-lisp/index.js', manifestFingerprint: 'a'.repeat(64) }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_LISP_MODULE_URL: '',
-		PUBLIC_WASM_LISP_MANIFEST_URL: '',
-		PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -55,19 +53,12 @@ vi.mock('$lib/playground/worker/lisp?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Lisp from './lisp';
 
 describe('Lisp sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '/wasm-lisp/index.js';
-		publicEnv.PUBLIC_WASM_LISP_MANIFEST_URL = '';
-		publicEnv.PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT = 'a'.repeat(64);
 		suppressAutoLoadAck = false;
 	});
 
@@ -84,7 +75,7 @@ describe('Lisp sandbox', () => {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		await expect(sandbox.run(code, false, true, undefined, ['alpha'])).resolves.toBe(true);
 
@@ -169,7 +160,7 @@ describe('Lisp sandbox', () => {
 		const sandbox = new Lisp();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('(display "bounded")', false, true, undefined, [], {
@@ -197,7 +188,7 @@ describe('Lisp sandbox', () => {
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -206,7 +197,7 @@ describe('Lisp sandbox', () => {
 		const sandbox = new Lisp();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('(display "bounded")', true, true, undefined, [], {
@@ -243,7 +234,7 @@ describe('Lisp sandbox', () => {
 
 	it('normalizes a valid Lisp workspace before worker dispatch', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await expect(
 			sandbox.run('(display "main")', false, true, undefined, [], {
@@ -334,7 +325,7 @@ describe('Lisp sandbox', () => {
 		'rejects a Lisp workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new Lisp();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -441,7 +432,7 @@ describe('Lisp sandbox', () => {
 		expect(outputs).toEqual([]);
 		expect(progress.set).not.toHaveBeenCalled();
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retryWorker = workerInstances.at(-1)!;
 		const settledController = new AbortController();
 		await expect(
@@ -458,12 +449,14 @@ describe('Lisp sandbox', () => {
 	it('rejects overlapping Lisp startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Lisp();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'LISP'
@@ -484,7 +477,7 @@ describe('Lisp sandbox', () => {
 
 	it('rejects a pre-aborted Lisp startup without changing an existing worker', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockClear();
 		const progress = { set: vi.fn() };
@@ -493,7 +486,14 @@ describe('Lisp sandbox', () => {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
 		).rejects.toBe(reason);
 
 		expect(sandbox.worker).toBe(worker);
@@ -510,7 +510,7 @@ describe('Lisp sandbox', () => {
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('Lisp startup aborted');
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -532,7 +532,7 @@ describe('Lisp sandbox', () => {
 
 		suppressAutoLoadAck = false;
 		const settledController = new AbortController();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			signal: settledController.signal
 		});
 		const retryWorker = workerInstances.at(-1)!;
@@ -554,7 +554,7 @@ describe('Lisp sandbox', () => {
 			})
 		};
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -575,7 +575,9 @@ describe('Lisp sandbox', () => {
 		expect(progress.set).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
@@ -585,7 +587,7 @@ describe('Lisp sandbox', () => {
 		const callbackError = new Error('Lisp startup callback throw after termination');
 		let replacement: Promise<void> | undefined;
 		const loading = sandbox.load(
-			'/cancelled/',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/cancelled/' },
 			'',
 			true,
 			[],
@@ -593,7 +595,10 @@ describe('Lisp sandbox', () => {
 			{
 				set() {
 					sandbox.terminate(terminationReason);
-					replacement = sandbox.load('/replacement/');
+					replacement = sandbox.load({
+						...TEST_RUNTIME_ASSETS,
+						rootUrl: '/replacement/'
+					});
 					throw callbackError;
 				}
 			}
@@ -616,7 +621,7 @@ describe('Lisp sandbox', () => {
 		let reentrantLoad: Promise<void> | undefined;
 		sandbox.output = () => {
 			reentrantRun = sandbox.run('(display "nested")', false);
-			reentrantLoad = sandbox.load('/replacement/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 		};
 
 		const running = sandbox.run('(display "active")', false);
@@ -649,7 +654,7 @@ describe('Lisp sandbox', () => {
 		let replacement: Promise<void> | undefined;
 		sandbox.output = () => {
 			controller.abort(abortReason);
-			replacement = sandbox.load('/replacement/');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			throw callbackError;
 		};
 		const running = sandbox.run('(display "active")', false, true, undefined, [], {
@@ -736,7 +741,7 @@ describe('Lisp sandbox', () => {
 			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}
@@ -773,7 +778,9 @@ describe('Lisp sandbox', () => {
 
 		const running = sandbox.run('(display "active")', false);
 		const runHandler = worker.onmessage;
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'LISP'
@@ -799,7 +806,7 @@ describe('Lisp sandbox', () => {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
 	});
 
@@ -810,14 +817,14 @@ describe('Lisp sandbox', () => {
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(display "ready")', false)).resolves.toBe(true);
 	});
 
 	it('releases Lisp startup activity after termination', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Lisp();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -826,12 +833,11 @@ describe('Lisp sandbox', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
 	});
 
 	it('rejects load when no Lisp module url is configured', async () => {
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
 		const sandbox = new Lisp();
 
 		await expect(sandbox.load({})).rejects.toContain('Lisp runtime is not configured');
@@ -840,7 +846,7 @@ describe('Lisp sandbox', () => {
 	it('rejects load when the Lisp worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Lisp();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -937,7 +943,7 @@ describe('Lisp sandbox', () => {
 
 	it('preserves an exact null pre-abort reason without changing idle Lisp state', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const moduleUrl = sandbox.moduleUrl;
@@ -947,7 +953,9 @@ describe('Lisp sandbox', () => {
 		controller.abort(null);
 
 		await expect(
-			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBeNull();
 		await expect(
 			sandbox.run('(display "blocked")', false, true, undefined, [], {
@@ -968,19 +976,25 @@ describe('Lisp sandbox', () => {
 
 	it('preserves replacement startup when the outer signal getter terminates Lisp', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Lisp during startup option snapshot');
 		let replacement: Promise<void> | undefined;
 		const options = {
 			get signal() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			}
 		};
 
-		const superseded = sandbox.load('/outer', '', true, [], options);
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/outer' },
+			'',
+			true,
+			[],
+			options
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -992,7 +1006,7 @@ describe('Lisp sandbox', () => {
 
 	it('preserves the first cancellation and replacement across later Lisp option failure', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Lisp during execution option snapshot');
 		const laterError = new Error('later Lisp workspace getter failed');
@@ -1000,7 +1014,7 @@ describe('Lisp sandbox', () => {
 		const options = {
 			get limits() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			},
 			get workspaceFiles(): never {
@@ -1021,7 +1035,7 @@ describe('Lisp sandbox', () => {
 
 	it('preserves a Lisp replacement when a later option getter aborts the snapshot', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('abort Lisp during execution option snapshot');
@@ -1053,7 +1067,7 @@ describe('Lisp sandbox', () => {
 
 	it('preserves replacement startup across a reentrant Lisp asset resolver failure', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Lisp during module resolution');
 		const resolverError = new Error('later Lisp module resolver failure');
@@ -1062,7 +1076,7 @@ describe('Lisp sandbox', () => {
 			lisp: {
 				get moduleUrl(): never {
 					sandbox.terminate(reason);
-					replacement = sandbox.load('/replacement');
+					replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 					throw resolverError;
 				}
 			}
@@ -1080,7 +1094,7 @@ describe('Lisp sandbox', () => {
 
 	it('ignores a resolved Lisp asset URL after the resolver starts a replacement', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Lisp while resolving a module URL');
 		let replacement: Promise<void> | undefined;
@@ -1112,7 +1126,7 @@ describe('Lisp sandbox', () => {
 
 	it('reads explicit Lisp stdin once before worker dispatch', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let reads = 0;
 		const options = {
 			get stdin() {
@@ -1136,9 +1150,15 @@ describe('Lisp sandbox', () => {
 		vi.useFakeTimers();
 		suppressAutoLoadAck = true;
 		const sandbox = new Lisp();
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -1157,14 +1177,16 @@ describe('Lisp sandbox', () => {
 
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate Lisp execution deadline and permits a clean retry', async () => {
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
 		vi.useFakeTimers();
@@ -1186,7 +1208,7 @@ describe('Lisp sandbox', () => {
 		expect(sandbox.worker).toBeUndefined();
 
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1194,7 +1216,7 @@ describe('Lisp sandbox', () => {
 	it('clears settled Lisp deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Lisp();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1216,7 +1238,7 @@ describe('Lisp sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -1242,7 +1264,7 @@ describe('Lisp sandbox', () => {
 				pendingEof: sandbox.pendingEof,
 				bufferedInput: readBufferedStdin(sandbox.buffer)
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantDisposal = sandbox.dispose();
 		});
 		const firstDisposal = sandbox.dispose();
@@ -1279,7 +1301,9 @@ describe('Lisp sandbox', () => {
 		expect(sandbox.output).toBeNull();
 		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
 
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1305,7 +1329,7 @@ describe('Lisp sandbox', () => {
 	it('settles active Lisp startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Lisp();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
 		const staleHandler = worker.onmessage;
@@ -1337,7 +1361,7 @@ describe('Lisp sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('(display "active")', false);

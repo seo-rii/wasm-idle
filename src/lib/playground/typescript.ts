@@ -456,7 +456,7 @@ class TypeScriptSandbox implements Sandbox {
 				this.pendingEof = false;
 				if (!nextModuleUrl) {
 					return rejectLoad(
-						'TypeScript runtime is not configured. Set PUBLIC_WASM_TYPESCRIPT_MODULE_URL or runtimeAssets.typescript.moduleUrl.'
+						'TypeScript runtime is not configured. Set runtimeAssets.typescript.moduleUrl.'
 					);
 				}
 				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;

@@ -218,8 +218,8 @@ class Elixir implements Sandbox {
 					return rejectLoad(
 						`${runtimeLabel} runtime is not configured. Set ${
 							this.language === 'ERLANG'
-								? 'PUBLIC_WASM_ERLANG_BUNDLE_URL or runtimeAssets.erlang.bundleUrl'
-								: 'PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl'
+								? 'runtimeAssets.erlang.bundleUrl'
+								: 'runtimeAssets.elixir.bundleUrl'
 						}.`
 					);
 				}

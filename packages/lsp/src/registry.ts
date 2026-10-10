@@ -1,6 +1,6 @@
-import { getAssemblyScriptLanguageServer } from './assemblyscript/server.js';
-import { getCppLanguageServer } from './clangd/server.js';
-import { getDLanguageServer } from './d/server.js';
+import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
+import { getCppLanguageServer } from './clangd/language-server.js';
+import { getDLanguageServer } from './d/language-server.js';
 import {
 	getCssLanguageServer,
 	getHtmlLanguageServer,
@@ -8,39 +8,42 @@ import {
 	getMarkdownLanguageServer,
 	getTomlLanguageServer,
 	getYamlLanguageServer
-} from './document/server.js';
+} from './document/language-server.js';
 import {
 	getCSharpLanguageServer,
 	getFSharpLanguageServer,
 	getVisualBasicLanguageServer
-} from './dotnet/server.js';
-import { getElixirLanguageServer } from './elixir/server.js';
-import { getErlangLanguageServer } from './erlang/server.js';
-import { getFortranLanguageServer } from './fortran/server.js';
-import { getGleamLanguageServer } from './gleam/server.js';
-import { getGoLanguageServer } from './go/server.js';
-import { getGraphqlLanguageServer } from './graphql/server.js';
-import { getHaskellLanguageServer } from './haskell/server.js';
-import { getJanetLanguageServer } from './janet/server.js';
-import { getLispLanguageServer } from './lisp/server.js';
-import { getLuaLanguageServer } from './lua/server.js';
-import { getOcamlLanguageServer } from './ocaml/server.js';
-import { getOctaveLanguageServer } from './octave/server.js';
-import { getPascalLanguageServer } from './pascal/server.js';
-import { getPerlLanguageServer } from './perl/server.js';
-import { getPrologLanguageServer } from './prolog/server.js';
-import { getPythonLanguageServer } from './python/server.js';
-import { getRLanguageServer } from './r/server.js';
-import { getRubyLanguageServer } from './ruby/server.js';
-import { getRustLanguageServer } from './rust/server.js';
-import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/server.js';
-import { getTclLanguageServer } from './tcl/server.js';
+} from './dotnet/language-server.js';
+import { getElixirLanguageServer } from './elixir/language-server.js';
+import { getErlangLanguageServer } from './erlang/language-server.js';
+import { getFortranLanguageServer } from './fortran/language-server.js';
+import { getGleamLanguageServer } from './gleam/language-server.js';
+import { getGoLanguageServer } from './go/language-server.js';
+import { getGraphqlLanguageServer } from './graphql/language-server.js';
+import { getHaskellLanguageServer } from './haskell/language-server.js';
+import { getJanetLanguageServer } from './janet/language-server.js';
+import { getLispLanguageServer } from './lisp/language-server.js';
+import { getLuaLanguageServer } from './lua/language-server.js';
+import { getOcamlLanguageServer } from './ocaml/language-server.js';
+import { getOctaveLanguageServer } from './octave/language-server.js';
+import { getPascalLanguageServer } from './pascal/language-server.js';
+import { getPerlLanguageServer } from './perl/language-server.js';
+import { getPrologLanguageServer } from './prolog/language-server.js';
+import { getPythonLanguageServer } from './python/language-server.js';
+import { getRLanguageServer } from './r/language-server.js';
+import { getRubyLanguageServer } from './ruby/language-server.js';
+import { getRustLanguageServer } from './rust/language-server.js';
+import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/language-server.js';
+import { getTclLanguageServer } from './tcl/language-server.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './types.js';
-import { getJavaScriptLanguageServer, getTypeScriptLanguageServer } from './typescript/server.js';
-import { getWasmLanguageServer } from './wasm/server.js';
-import { getWatLanguageServer } from './wat/server.js';
-import { getZigLanguageServer } from './zig/server.js';
-import { getAwkLanguageServer } from './awk/server.js';
+import {
+	getJavaScriptLanguageServer,
+	getTypeScriptLanguageServer
+} from './typescript/language-server.js';
+import { getWasmLanguageServer } from './wasm/language-server.js';
+import { getWatLanguageServer } from './wat/language-server.js';
+import { getZigLanguageServer } from './zig/language-server.js';
+import { getAwkLanguageServer } from './awk/language-server.js';
 
 export type EditorLanguageServerProviderFactory = (
 	options?: EditorLanguageServerOptions

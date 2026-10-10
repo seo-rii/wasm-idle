@@ -37,13 +37,39 @@ type LuaOperation = {
 
 const OUTPUT_ENCODER = new TextEncoder();
 
-const abortReason = (signal: AbortSignal, phase: LuaOperation['phase']) =>
+const abortReason = (signal: AbortSignal, phase: LuaOperation['phase'], label: string) =>
 	signal.reason !== undefined
 		? signal.reason
 		: new DOMException(
-				phase === 'startup' ? 'Lua runtime startup aborted' : 'Lua execution aborted',
+				phase === 'startup'
+					? `${label} runtime startup aborted`
+					: `${label} execution aborted`,
 				'AbortError'
 			);
+
+/**
+ * Describes a language that runs on the wasm-lua (wasmoon) VM. Lua itself uses the
+ * default dialect; Fennel reuses this sandbox and worker with the pinned fennel.lua compiler.
+ */
+export interface LuaSandboxDialect {
+	label: string;
+	runtimeId: string;
+	defaultActivePath: string;
+	/**
+	 * Extra worker load fields. The value is also part of the worker identity, so a change
+	 * replaces the loaded worker.
+	 */
+	resolveWorkerLoadExtras?: (
+		runtimeAssets: string | PlaygroundRuntimeAssets,
+		currentUrl: string
+	) => Record<string, unknown>;
+}
+
+const LUA_DIALECT: LuaSandboxDialect = {
+	label: 'Lua',
+	runtimeId: 'LUA',
+	defaultActivePath: 'main.lua'
+};
 
 class Lua implements Sandbox {
 	output: any = null;
@@ -61,34 +87,46 @@ class Lua implements Sandbox {
 	private activeOperation: LuaOperation | null = null;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
-	private readonly disposeCancellation = new CancelledError('Lua sandbox disposed', {
-		phase: 'dispose',
-		runtimeId: 'LUA',
-		recoverable: false
-	});
-	private readonly workerSession = new WorkerSession({
-		label: 'Lua',
-		onDispose: (worker) => {
-			if (this.worker === worker) delete this.worker;
-			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
-		}
-	});
+	private readonly dialect: LuaSandboxDialect;
+	private readonly label: string;
+	private readonly runtimeId: string;
+	private workerIdentity = '';
+	private readonly disposeCancellation: CancelledError;
+	private readonly workerSession: WorkerSession;
+
+	constructor(dialect: LuaSandboxDialect = LUA_DIALECT) {
+		this.dialect = dialect;
+		this.label = dialect.label;
+		this.runtimeId = dialect.runtimeId;
+		this.disposeCancellation = new CancelledError(`${this.label} sandbox disposed`, {
+			phase: 'dispose',
+			runtimeId: this.runtimeId,
+			recoverable: false
+		});
+		this.workerSession = new WorkerSession({
+			label: this.label,
+			onDispose: (worker) => {
+				if (this.worker === worker) delete this.worker;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+			}
+		});
+	}
 
 	private requireOperationIdle() {
 		if (!this.activeOperation) return;
-		throw new BusyError('Lua runtime already has an active operation', {
-			runtimeId: 'LUA',
+		throw new BusyError(`${this.label} runtime already has an active operation`, {
+			runtimeId: this.runtimeId,
 			phase: this.activeOperation.phase
 		});
 	}
 
 	private beginOperation(phase: LuaOperation['phase']) {
 		if (this.disposed) {
-			throw new RuntimeConfigurationError('Lua sandbox is disposed', {
+			throw new RuntimeConfigurationError(`${this.label} sandbox is disposed`, {
 				phase: 'dispose',
-				runtimeId: 'LUA'
+				runtimeId: this.runtimeId
 			});
 		}
 		this.requireOperationIdle();
@@ -147,7 +185,7 @@ class Lua implements Sandbox {
 			if (!this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
-				reason = abortReason(signal, operation.phase);
+				reason = abortReason(signal, operation.phase, this.label);
 			} catch (error) {
 				reason = error;
 			}
@@ -179,7 +217,7 @@ class Lua implements Sandbox {
 			if (!this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
-				reason = abortReason(signal, operation.phase);
+				reason = abortReason(signal, operation.phase, this.label);
 			} catch (error) {
 				reason = error;
 			}
@@ -214,9 +252,9 @@ class Lua implements Sandbox {
 				const label = operation.phase === 'startup' ? 'startup' : 'execution';
 				this.cancelOperation(
 					operation,
-					new TimeoutError(`Lua ${label} timed out after ${timeoutMs} ms`, {
+					new TimeoutError(`${this.label} ${label} timed out after ${timeoutMs} ms`, {
 						phase: operation.phase,
-						runtimeId: 'LUA',
+						runtimeId: this.runtimeId,
 						timeoutMs
 					})
 				);
@@ -266,13 +304,19 @@ class Lua implements Sandbox {
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Lua runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.label} runtime startup cancelled`
+					)
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Lua runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.label} runtime startup cancelled`
+					)
 				);
 			}
 			unbindPreSessionAbort();
@@ -281,7 +325,10 @@ class Lua implements Sandbox {
 		}
 		if (!this.isOperationActive(activeOperation)) {
 			return Promise.reject(
-				this.releaseBeforeSession(activeOperation, 'Lua runtime startup cancelled')
+				this.releaseBeforeSession(
+					activeOperation,
+					`${this.label} runtime startup cancelled`
+				)
 			);
 		}
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
@@ -305,11 +352,16 @@ class Lua implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextModuleUrl) {
 					return rejectLoad(
-						'Lua runtime is not configured. Set PUBLIC_WASM_LUA_MODULE_URL or runtimeAssets.lua.moduleUrl.'
+						'Lua runtime is not configured. Set runtimeAssets.lua.moduleUrl.'
 					);
 				}
-				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
+				const loadExtras =
+					this.dialect.resolveWorkerLoadExtras?.(runtimeAssets, currentUrl) ?? {};
+				if (!this.isOperationActive(activeOperation)) return;
+				const nextWorkerIdentity = JSON.stringify([nextModuleUrl, loadExtras]);
+				const needsWorkerReset = !this.worker || this.workerIdentity !== nextWorkerIdentity;
 				this.moduleUrl = nextModuleUrl;
+				this.workerIdentity = nextWorkerIdentity;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -349,6 +401,7 @@ class Lua implements Sandbox {
 					};
 					worker.onmessage = handler;
 					worker.postMessage({
+						...loadExtras,
 						load: true,
 						moduleUrl: this.moduleUrl
 					});
@@ -426,13 +479,13 @@ class Lua implements Sandbox {
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+					this.releaseBeforeSession(activeOperation, `${this.label} execution cancelled`)
 				);
 			}
-			executionArgs = resolveSandboxExecutionArgs('LUA', args, options);
+			executionArgs = resolveSandboxExecutionArgs(this.runtimeId, args, options);
 			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
-			const activePath = options.activePath ?? 'main.lua';
+			const activePath = options.activePath ?? this.dialect.defaultActivePath;
 			const workspaceLimits = options.workspaceLimits;
 			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
 				...workspaceLimits,
@@ -448,7 +501,7 @@ class Lua implements Sandbox {
 			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+					this.releaseBeforeSession(activeOperation, `${this.label} execution cancelled`)
 				);
 			}
 			unbindPreSessionAbort();
@@ -457,7 +510,7 @@ class Lua implements Sandbox {
 		}
 		if (!this.isOperationActive(activeOperation)) {
 			return Promise.reject(
-				this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+				this.releaseBeforeSession(activeOperation, `${this.label} execution cancelled`)
 			);
 		}
 		const hasExplicitStdin = stdin !== undefined;
@@ -517,7 +570,7 @@ class Lua implements Sandbox {
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
-							reportWorkerInputReady(_prog, 'Lua runtime ready for input');
+							reportWorkerInputReady(_prog, `${this.label} runtime ready for input`);
 							if (!ownsRun()) return;
 						}
 						this.flushPendingInput();
@@ -531,12 +584,12 @@ class Lua implements Sandbox {
 						if (actual > limits.maxOutputBytes) {
 							failRun(
 								new OutputLimitError(
-									`Lua output exceeded ${limits.maxOutputBytes} bytes`,
+									`${this.label} output exceeded ${limits.maxOutputBytes} bytes`,
 									{
 										actual,
 										limit: limits.maxOutputBytes,
 										phase: 'execute',
-										runtimeId: 'LUA'
+										runtimeId: this.runtimeId
 									}
 								),
 								true
@@ -552,12 +605,12 @@ class Lua implements Sandbox {
 						if (actual > limits.maxDiagnostics) {
 							failRun(
 								new DiagnosticLimitError(
-									`Lua diagnostics exceeded ${limits.maxDiagnostics} messages`,
+									`${this.label} diagnostics exceeded ${limits.maxDiagnostics} messages`,
 									{
 										actual,
 										limit: limits.maxDiagnostics,
 										phase: 'execute',
-										runtimeId: 'LUA'
+										runtimeId: this.runtimeId
 									}
 								),
 								true
@@ -658,6 +711,7 @@ class Lua implements Sandbox {
 		const activeOperation = this.activeOperation;
 		delete this.worker;
 		this.moduleUrl = '';
+		this.workerIdentity = '';
 		this.output = null;
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();

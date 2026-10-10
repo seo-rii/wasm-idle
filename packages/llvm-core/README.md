@@ -20,7 +20,8 @@ package.
 
 The wasm-idle sync step deterministically repackages the producer's single-entry archives as native
 gzip delivery assets. Clang uses `memfs.wasm.gz`, `clang.wasm.gz`, `lld.wasm.gz`, and
-`sysroot.tar.gz`; COBOL uses `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The browser
+`sysroot.tar.gz`; COBOL uses `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`; V
+(`@wasm-idle/llvm-core/v`) uses `v.wasm.gz`, `vroot.tar.gz`, and `c-sysroot.tar.gz`. The browser
 loader pipes gzip response bodies through `DecompressionStream('gzip')`. Runtime manifests from
 older external deployments may still reference ZIP files; those load `fflate` only on the legacy
 compatibility path.
@@ -141,6 +142,16 @@ the resolved source path; the cache remains keyed by the source whose breakpoint
 even when LLDB reports the executable location in another file. IDs retired by a subsequent source
 replacement remain ignored, so delayed events cannot attach themselves to a new ID-less breakpoint
 on the same line.
+
+C++ sources whose first directive is `#include <bits/stdc++.h>` (after comments only) can reuse a
+precompiled copy of that header. After such a compile, `precompiledHeaderPlan` is set and
+`buildPrecompiledHeader()` returns `{ key, bytes }`; `buildPrecompiledHeaderFor(code, options)`
+builds the same header in another runtime instance without compiling the source. Pass the result
+as `precompiledHeader` to later `compileArtifact()`/`compileLinkRun()` calls. Clang uses it only
+when its key matches the current arguments and runtime assets, and only when `compileArgs` are
+definitions, warnings, `-f`, `-O`, `-std=` or `-pedantic` flags that cannot change header lookup;
+otherwise the source compiles normally. Trace mode never uses it. If Clang rejects the header, the
+compile is retried without it and `usedPrecompiledHeader` stays false.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.

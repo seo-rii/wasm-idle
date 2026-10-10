@@ -75,9 +75,7 @@ class WatStdin {
 
 async function loadRuntime(url: string) {
 	if (!url) {
-		throw new Error(
-			'WAT runtime is not configured. Set PUBLIC_WASM_WAT_MODULE_URL or runtimeAssets.wat.moduleUrl.'
-		);
+		throw new Error('WAT runtime is not configured. Set runtimeAssets.wat.moduleUrl.');
 	}
 	if (loadedModuleUrl === url && runtimePromise) {
 		return await runtimePromise;

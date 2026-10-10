@@ -280,9 +280,7 @@ async function loadCompiler(
 	graphFingerprint = executableGraphFingerprint
 ) {
 	if (!url) {
-		throw new Error(
-			'Rust runtime is not configured. Set PUBLIC_WASM_RUST_COMPILER_URL or runtimeAssets.rust.compilerUrl.'
-		);
+		throw new Error('Rust runtime is not configured. Set runtimeAssets.rust.compilerUrl.');
 	}
 	const bootstrap = snapshotCompilerBootstrap(url, profile, moduleUrls, graphFingerprint);
 	if (

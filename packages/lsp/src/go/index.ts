@@ -2,7 +2,7 @@ export {
 	getGoLanguageServer,
 	type GoLanguageServerConfig,
 	type GoLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createGoWorkerService,
 	type GoLanguageServerTarget,

@@ -63,9 +63,7 @@ interface GoDebugState {
 
 async function loadCompiler(url: string, runtimeManifestUrl: string, limits?: GoRuntimeLimits) {
 	if (!url) {
-		throw new Error(
-			'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
-		);
+		throw new Error('Go runtime is not configured. Set runtimeAssets.go.compilerUrl.');
 	}
 	const compilerKey = [
 		url,

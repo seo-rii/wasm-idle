@@ -453,11 +453,20 @@ async function patchBinaryenBrowserTool(toolName, outPath) {
 			/var result=await instantiateAsync\(wasmBinary,wasmBinaryFile,info\);/,
 			'var result=instantiateAsync(wasmBinary,wasmBinaryFile,info);'
 		);
-	const runtimeBootstrapPattern = /createWasm\(\);run\(\);(?=\s*$)/;
-	if (!runtimeBootstrapPattern.test(withSyncInstantiate)) {
+	// The OCaml system-command bridge calls Binaryen synchronously and catches CLI exits.
+	// Emscripten's newer async run() would turn these exits into unhandled rejections.
+	const withSyncRun = withSyncInstantiate
+		.replace(/async function run\(([^)]*)\)\{/, 'function run($1){')
+		.replace(
+			'if(runDependencies){await resolveRunDependencies()}',
+			'if(runDependencies){throw new Error("Binaryen browser CLI has pending runtime dependencies")}'
+		)
+		.replace('await new Promise(resolve=>setTimeout(resolve,1));', '');
+	const runtimeBootstrapPattern = /createWasm\(\)(?:;run\(\)|\.then\(\(\)=>run\(\)\));(?=\s*$)/;
+	if (!runtimeBootstrapPattern.test(withSyncRun)) {
 		throw new Error(`failed to locate Binaryen runtime bootstrap in ${sourcePath}`);
 	}
-	const patched = withSyncInstantiate.replace(
+	const patched = withSyncRun.replace(
 		runtimeBootstrapPattern,
 		'globalThis.__binaryen_cli_runtime={FS,Module,run,callMain};createWasm();'
 	);

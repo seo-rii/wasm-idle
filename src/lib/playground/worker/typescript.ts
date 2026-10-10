@@ -63,7 +63,7 @@ function requireMaxAssetBytes(value: unknown) {
 function requireModuleUrl(value: unknown) {
 	if (typeof value !== 'string' || !value.trim()) {
 		throw new Error(
-			'TypeScript runtime is not configured. Set PUBLIC_WASM_TYPESCRIPT_MODULE_URL or runtimeAssets.typescript.moduleUrl.'
+			'TypeScript runtime is not configured. Set runtimeAssets.typescript.moduleUrl.'
 		);
 	}
 	let url: URL;

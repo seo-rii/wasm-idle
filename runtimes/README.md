@@ -4,10 +4,6 @@ This directory contains the runtime/compiler projects maintained by the monorepo
 build scripts, package manifests, lockfiles, and CI configuration live under `runtimes/<name>/`;
 build and verification commands do not inspect repositories outside this checkout.
 
-Additional runtime-adjacent projects that should not participate in normal `pnpm build:runtimes`
-live under `tools/`. In particular, `tools/dool` contains the Docker-based judge/toolchain project
-for the non-browser language backend, including Elixir and the other server-side language modules.
-
 Generated outputs are not part of the migration:
 
 - `dist/`

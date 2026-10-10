@@ -2,7 +2,7 @@ export {
 	getFortranLanguageServer,
 	type FortranLanguageServerConfig,
 	type FortranLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createFortranWorkerService,
 	type FortranAnalyzer,

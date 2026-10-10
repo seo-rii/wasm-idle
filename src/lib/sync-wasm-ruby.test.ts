@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { syncWasmRubyAssets } from '../../scripts/sync-wasm-ruby.mjs';
 
 const tempDirs: string[] = [];
-const wasmPath = 'assets/ruby_stdlib-C40Yu-vu.wasm';
+const wasmPath = 'assets/ruby_stdlib-D8-A_OuU.wasm';
 const wasmHeader = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 const revision = '1'.repeat(40);
 const provenanceLevel = 'npm-attested-source-and-receipted-derived-output';

@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "version": "v-0.5.2-wasi-preview1-v1",
+  "frontend": {
+    "asset": "v.wasm.gz",
+    "argv0": "v"
+  },
+  "rootfs": {
+    "asset": "vroot.tar.gz"
+  },
+  "cSysroot": {
+    "asset": "c-sysroot.tar.gz"
+  },
+  "profile": {
+    "name": "v-wasi-clang",
+    "version": 1,
+    "vVersion": "0.5.2",
+    "vCommit": "7647ce1c6fad63b5578bc07883139906de74b2f8",
+    "frontendTarget": "wasm32-wasi",
+    "backend": "wasm-llvm-clang",
+    "unsupported": [
+      "os.execute",
+      "processes",
+      "threads",
+      "network",
+      "C interop beyond wasi-libc"
+    ]
+  }
+}
