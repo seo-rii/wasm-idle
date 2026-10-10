@@ -70,16 +70,22 @@ test('partial helper initialization cleans up acquired proxies', () => {
 	for (const name of ['factory', 'helpers', 'run', 'imports']) assert.ok(f.destroyed.includes(name));
 });
 
-const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; }');
+const stdioExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonStdio.ts', import.meta.url), 'utf8')), { exports: stdioExports, TextEncoder, TextDecoder, performance, setTimeout, clearTimeout });
+const previewExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonDebugPreview.ts', import.meta.url), 'utf8')), { exports: previewExports });
+const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 function workerFixture() {
 	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [];
 	let initialized = 0;
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
 	vm.runInNewContext(workerCode, {
-		exports, self, postMessage: self.postMessage, TextEncoder, TextDecoder, URL, Blob,
+		exports, self, postMessage: self.postMessage, TextEncoder, TextDecoder, URL, Blob, performance, setTimeout, clearTimeout,
 		ArrayBuffer, SharedArrayBuffer, Int32Array, Uint8Array, Atomics,
 		require(id) {
+			if (id === './pythonStdio') return stdioExports;
+			if (id === './pythonDebugPreview') return previewExports;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers() {
 				initialized++;
 				return { importSource(source) { scanned.push(source); return source.includes('numpy') ? 'import numpy' : ''; },
@@ -91,6 +97,7 @@ function workerFixture() {
 		}
 	});
 	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); } },
+		setStdin() {}, setStdout() {}, setStderr() {},
 		async loadPackagesFromImports(source) { packageLoads.push(source); }, setInterruptBuffer() {},
 		async runPythonAsync(source) {
 			legacyRuns.push(source);

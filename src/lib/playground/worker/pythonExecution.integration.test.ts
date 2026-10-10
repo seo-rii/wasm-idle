@@ -2,6 +2,7 @@
 import { expect, it } from 'vitest';
 import { loadPyodide } from 'pyodide';
 import { createPythonExecutionHelpers } from './pythonExecution';
+import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 
 it('runs cached helpers on the pinned real Pyodide with fresh scopes and recovery', async () => {
 	const runtime = await loadPyodide();
@@ -29,4 +30,25 @@ it('runs cached helpers on the pinned real Pyodide with fresh scopes and recover
 	} finally { helpers.dispose(); }
 	helpers.dispose();
 	expect(() => helpers.importSource('import math')).toThrow('disposed');
+}, 120_000);
+
+it('keeps native streams and flush ordering when executing cached user code', async () => {
+	const runtime = await loadPyodide();
+	const helpers = createPythonExecutionHelpers(runtime, '');
+	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+	const originalPrint = runtime.runPython('id(__import__("builtins").print)');
+	const output: string[] = [];
+	try {
+		for (const input of ['one\n', 'two🙂\n']) {
+			const io = createPythonStdio(runtime, { initialInput: input, readInput: () => null, emit: (text) => output.push(text) });
+			const restore = install(io.flush);
+			try {
+				await helpers.run('print("prompt:", end="", flush=True)\nprint(input())\nprint("tail", end="")', 'cached.py', () => {});
+				io.flush();
+				expect(output.join('')).toContain(`prompt:${input}`);
+				expect(runtime.runPython('id(__import__("builtins").print)')).toBe(originalPrint);
+			} finally { try { restore(); } finally { restore.destroy(); io.close(); } }
+		}
+		expect(output.join('')).toBe('prompt:one\ntailprompt:two🙂\ntail');
+	} finally { helpers.dispose(); install.destroy(); }
 }, 120_000);

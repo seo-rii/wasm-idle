@@ -61,7 +61,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
         import_cache.put(source, stub, sys.getsizeof(source) + sys.getsizeof(stub))
         return stub
 
-    async def run(source, filename, ready, input_bridge, output_bridge):
+    async def run(source, filename, ready, input_bridge=None, output_bridge=None):
         previous_input, previous_print = builtins.input, builtins.print
         def input_wrapper(prompt=""):
             value = input_bridge(prompt)
@@ -72,7 +72,12 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
             if value.endswith("\n") or value.endswith("\r"):
                 return value[:-1]
             return value
-        builtins.input, builtins.print = input_wrapper, output_bridge
+        # Native streams remain installed by the worker. Explicit bridges are
+        # retained for callers that supply them, without overriding native I/O.
+        if input_bridge is not None:
+            builtins.input = input_wrapper
+        if output_bridge is not None:
+            builtins.print = output_bridge
         try:
             # Execute the original guard in the same namespace as the legacy debug/Hy path.
             # The fixed image hook is compiled only once, not parsed with every user run.
@@ -122,7 +127,7 @@ export function createPythonExecutionHelpers(runtime: PyodideInterface, imageHoo
 	const assertOpen = () => { if (disposed) throw new Error('Python execution helpers are disposed'); };
 	return {
 		importSource(source: string): string { assertOpen(); return String(imports(source)); },
-		async run(source: string, filename: string, ready: () => void, input: (prompt?: string) => string | null, output: (...data: any[]) => void) {
+		async run(source: string, filename: string, ready: () => void, input?: (prompt?: string) => string | null, output?: (...data: any[]) => void) {
 			assertOpen();
 			const globals = makeNamespace();
 			try {
@@ -130,9 +135,13 @@ export function createPythonExecutionHelpers(runtime: PyodideInterface, imageHoo
 				globals.set('source', source);
 				globals.set('filename', filename);
 				globals.set('ready', ready);
-				globals.set('input_bridge', input);
-				globals.set('output_bridge', output);
-				await runtime.runPythonAsync('await runner(source, filename, ready, input_bridge, output_bridge)', { globals });
+				if (input) globals.set('input_bridge', input);
+				if (output) globals.set('output_bridge', output);
+				// JavaScript null is a JsNull proxy in Pyodide, rather than Python None.
+				const call = input || output
+					? `await runner(source, filename, ready, ${input ? 'input_bridge' : 'None'}, ${output ? 'output_bridge' : 'None'})`
+					: 'await runner(source, filename, ready)';
+				await runtime.runPythonAsync(call, { globals });
 			} finally { globals.destroy(); }
 		},
 		dispose() {
