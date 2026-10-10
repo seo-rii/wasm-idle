@@ -3,13 +3,6 @@ import { createWasmIdleSharedBuffer } from './sharedBuffer';
 import { flushQueuedStdin, readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_OCTAVE_BASE_URL: '',
-		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
-		PUBLIC_WASM_OCTAVE_MANIFEST_URL: ''
-	}
-}));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 
 class MockWorker {
@@ -36,18 +29,11 @@ class MockWorker {
 
 vi.stubGlobal('Worker', MockWorker);
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Octave from './octave';
 
 describe('Octave sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL = '';
-		publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL = '';
 		onPostMessage = null;
 	});
 

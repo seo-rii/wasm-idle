@@ -98,7 +98,12 @@ def _uri_to_path(uri: str) -> str:
     return uri
 
 
-def _path_to_uri(path: Path) -> str:
+def _path_to_uri(path: Path, document_uri: str) -> str:
+    resolved_path = path.resolve()
+    if resolved_path == Path(_uri_to_path(document_uri)).resolve():
+        return document_uri
+    if urlparse(document_uri).scheme == "file":
+        return resolved_path.as_uri()
     return path.as_posix()
 
 
@@ -226,7 +231,7 @@ class WasmIdlePythonLsp:
         module_path = getattr(name, "module_path", None)
         uri = fallback_uri
         if module_path is not None:
-            uri = _path_to_uri(Path(module_path))
+            uri = _path_to_uri(Path(module_path), fallback_uri)
 
         return {"uri": uri, "range": range_value}
 

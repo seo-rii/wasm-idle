@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	typescript: { moduleUrl: '/wasm-typescript/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 import { configureRuntimeAssetCache } from '@wasm-idle/core';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -54,16 +54,11 @@ vi.mock('$lib/playground/worker/typescript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import TypeScriptSandbox from './typescript';
 
 describe('TypeScript sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '/wasm-typescript/index.js';
 		suppressAutoLoadAck = false;
 	});
 
@@ -77,7 +72,7 @@ console.log(value);`;
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(
 			sandbox.run(code, true, true, undefined, [], {
 				activePath: 'src/main.ts',
@@ -157,7 +152,7 @@ console.log(value);`;
 
 	it('uses JavaScript mode when constructed for JavaScript', async () => {
 		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('console.log(1)', false)).resolves.toBe(true);
 
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -175,7 +170,7 @@ console.log(value);`;
 	])('$language workspace boundary', ({ language, extension }) => {
 		it('normalizes valid paths before worker dispatch', async () => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 			await expect(
 				sandbox.run('main()', false, true, undefined, [], {
@@ -266,7 +261,7 @@ console.log(value);`;
 			}
 		])('rejects $name before changing execution state', async ({ code, options, expected }) => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -376,7 +371,7 @@ console.log(value);`;
 			} as MessageEvent<any>);
 			expect(outputs).toEqual([]);
 
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const retryWorker = workerInstances.at(-1)!;
 			const settledController = new AbortController();
 			await expect(
@@ -392,7 +387,6 @@ console.log(value);`;
 	);
 
 	it('rejects load when no wasm-typescript module url is configured', async () => {
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
 
 		await expect(sandbox.load({})).rejects.toContain('TypeScript runtime is not configured');
@@ -401,7 +395,7 @@ console.log(value);`;
 	it('rejects load when the worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -421,7 +415,7 @@ console.log(value);`;
 		'rejects a pre-aborted %s startup without changing an existing worker',
 		async (language) => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			worker.postMessage.mockClear();
 			const progress = { set: vi.fn() };
@@ -431,7 +425,7 @@ console.log(value);`;
 
 			await expect(
 				sandbox.load(
-					'/absproxy/5173',
+					{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 					'',
 					true,
 					[],
@@ -457,7 +451,7 @@ console.log(value);`;
 			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 			const reason = new Error(`${language} startup aborted`);
 			const loading = sandbox.load(
-				'/absproxy/5173',
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 				'',
 				true,
 				[],
@@ -468,7 +462,9 @@ console.log(value);`;
 			const worker = workerInstances[0];
 			const staleHandler = worker.onmessage;
 
-			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			await expect(
+				sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+			).rejects.toMatchObject({
 				name: 'BusyError',
 				code: 'busy',
 				runtimeId: language
@@ -491,9 +487,15 @@ console.log(value);`;
 
 			suppressAutoLoadAck = false;
 			const settledController = new AbortController();
-			await sandbox.load('/absproxy/5173', '', true, [], {
-				signal: settledController.signal
-			});
+			await sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{
+					signal: settledController.signal
+				}
+			);
 			const retryWorker = workerInstances.at(-1)!;
 			expect(retryWorker.terminate).not.toHaveBeenCalled();
 
@@ -512,7 +514,7 @@ console.log(value);`;
 
 			await expect(
 				sandbox.load(
-					'/absproxy/5173',
+					{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 					'',
 					true,
 					[],
@@ -530,7 +532,9 @@ console.log(value);`;
 			expect(sandbox.worker).toBeUndefined();
 			controller.abort(new Error('late failed startup abort'));
 
-			await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+			await expect(
+				sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+			).resolves.toBeUndefined();
 			expect(workerInstances).toHaveLength(2);
 		}
 	);
@@ -546,7 +550,7 @@ console.log(value);`;
 			let reentrantLoad: Promise<void> | undefined;
 			sandbox.output = () => {
 				reentrantRun = sandbox.run('reentrant()', false);
-				reentrantLoad = sandbox.load('/replacement/');
+				reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			};
 
 			const running = sandbox.run('first()', false);
@@ -573,7 +577,7 @@ console.log(value);`;
 		'preserves a replacement after a %s callback terminates and throws',
 		async (language) => {
 			const sandbox = new TypeScriptSandbox(language);
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			worker.postMessage.mockImplementation(() => undefined);
 			const controller = new AbortController();
@@ -582,7 +586,7 @@ console.log(value);`;
 			let replacement: Promise<void> | undefined;
 			sandbox.output = () => {
 				controller.abort(abortReason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				throw callbackError;
 			};
 			const running = sandbox.run('first()', false, true, undefined, [], {
@@ -677,7 +681,7 @@ console.log(value);`;
 			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('retry()', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}

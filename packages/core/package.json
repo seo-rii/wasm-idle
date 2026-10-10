@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/core",
-	"version": "1.0.8",
+	"version": "1.0.11",
 	"description": "Framework-neutral contracts and helpers for wasm-idle hosts",
 	"license": "MIT",
 	"type": "module",
@@ -24,6 +24,6 @@
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"devDependencies": {
-		"typescript": "^6.0.2"
+		"typescript": "^6.0.3"
 	}
 }

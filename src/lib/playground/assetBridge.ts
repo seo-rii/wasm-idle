@@ -32,6 +32,18 @@ interface AssetRequestMessage {
 
 type CachedRuntimeAsset = { bytes: Uint8Array; mimeType?: string; transferOwnership?: boolean };
 
+type AssetPreparationProgress =
+	| { kind: 'download'; asset: string; loaded: number; total?: number }
+	| { kind: 'activity'; asset: string; phase: 'decompressing' | 'verifying' };
+
+type AssetLoadContext = {
+	config: ResolvedRuntimeAssetConfig;
+	maxAssetBytes: number;
+	expectedAssets: ReadonlySet<string>;
+	pythonPackageAssets: ReadonlySet<string>;
+	progress: Pick<RuntimeLoadProgress, 'update' | 'activity'>;
+};
+
 interface AssetProgressMessage {
 	asset: string;
 	loaded: number;
@@ -301,9 +313,13 @@ class RuntimeLoadProgress {
 	private lockedTotal: number | undefined;
 	private measurementInvalid = false;
 
-	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false) {
+	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false, clangdHeaders = false) {
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
 		this.optionalAssets = new Set<string>();
+		if (runtime === 'clangd' && !clangdHeaders) {
+			this.expectedAssets.delete('clangd.headers.json.gz');
+			this.optionalAssets.add('clangd.headers.json.gz');
+		}
 		if (runtime === 'clang') {
 			this.expectedAssets.delete(printscanLongDoubleAsset);
 			this.optionalAssets.add(printscanLongDoubleAsset);
@@ -465,10 +481,6 @@ export class WorkerAssetBridge {
 	private readonly runtime: RuntimeAssetRuntime;
 	private config: ResolvedRuntimeAssetConfig;
 	private persistentCacheBaseline: ResolvedRuntimeAssetCacheOptions;
-	private readonly persistentCacheBySignal = new WeakMap<
-		AbortSignal,
-		ResolvedRuntimeAssetCacheOptions
-	>();
 	private progress: RuntimeLoadProgress;
 	private expectedAssets: Set<string>;
 	private languageSysroots: boolean;
@@ -493,7 +505,11 @@ export class WorkerAssetBridge {
 		this.config = { ...config, persistentCache: this.persistentCacheBaseline };
 		this.maxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
 		this.languageSysroots = canUseClangLanguageSysroots(runtime, config, languageSysroots);
-		this.progress = new RuntimeLoadProgress(runtime, this.languageSysroots);
+		this.progress = new RuntimeLoadProgress(
+			runtime,
+			this.languageSysroots,
+			config.assetPrefix === 'clangd' || !!config.integrity?.['clangd.headers.json.gz']
+		);
 		this.expectedAssets = expectedAssetsForRuntime(runtime, this.languageSysroots);
 		this.progress.reset(progress);
 	}
@@ -566,7 +582,11 @@ export class WorkerAssetBridge {
 			this.maxAssetBytes = nextMaxAssetBytes;
 			this.languageSysroots = nextLanguageSysroots;
 			this.expectedAssets = expectedAssetsForRuntime(this.runtime, nextLanguageSysroots);
-			this.progress = new RuntimeLoadProgress(this.runtime, nextLanguageSysroots);
+			this.progress = new RuntimeLoadProgress(
+				this.runtime,
+				nextLanguageSysroots,
+				config.assetPrefix === 'clangd' || !!config.integrity?.['clangd.headers.json.gz']
+			);
 			this.progress.reset(progress);
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');
@@ -592,7 +612,7 @@ export class WorkerAssetBridge {
 		this.progress.reset(progress);
 	}
 
-	private configuredReceiptByteLimit(asset: string, value: unknown) {
+	private configuredReceiptByteLimit(context: AssetLoadContext, asset: string, value: unknown) {
 		if (value === undefined) return undefined;
 		if (!Number.isSafeInteger(value) || (value as number) < 0) {
 			throw new ProtocolError(`Runtime asset ${asset} has an invalid integrity byte count`, {
@@ -601,45 +621,51 @@ export class WorkerAssetBridge {
 			});
 		}
 		const byteLimit = value as number;
-		if (byteLimit > this.maxAssetBytes) {
-			throw runtimeAssetSizeError(asset, this.maxAssetBytes);
+		if (byteLimit > context.maxAssetBytes) {
+			throw runtimeAssetSizeError(asset, context.maxAssetBytes);
 		}
 		return byteLimit;
 	}
 
-	private runtimeAssetByteLimit(asset: string) {
-		const configured = this.config.integrity?.[asset];
-		if (!configured || typeof configured === 'string') return this.maxAssetBytes;
+	private runtimeAssetByteLimit(context: AssetLoadContext, asset: string) {
+		const configured = context.config.integrity?.[asset];
+		if (!configured || typeof configured === 'string') return context.maxAssetBytes;
 		return (
 			this.configuredReceiptByteLimit(
+				context,
 				asset,
 				configured.uncompressedBytes ?? configured.bytes
-			) ?? this.maxAssetBytes
+			) ?? context.maxAssetBytes
 		);
 	}
 
-	private sourceAssetByteLimit(asset: string) {
-		const configured = this.config.integrity?.[asset];
-		if (!configured || typeof configured === 'string') return this.maxAssetBytes;
+	private sourceAssetByteLimit(context: AssetLoadContext, asset: string) {
+		const configured = context.config.integrity?.[asset];
+		if (!configured || typeof configured === 'string') return context.maxAssetBytes;
 		const paired =
 			configured.uncompressedBytes !== undefined ||
 			configured.uncompressedSha256 !== undefined;
 		if (asset.endsWith('.gz')) {
-			if (!paired) return this.maxAssetBytes;
-			const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);
+			if (!paired) return context.maxAssetBytes;
+			const deliveryLimit = this.configuredReceiptByteLimit(context, asset, configured.bytes);
 			const runtimeLimit = this.configuredReceiptByteLimit(
+				context,
 				asset,
 				configured.uncompressedBytes
 			);
 			return deliveryLimit !== undefined || runtimeLimit !== undefined
 				? Math.max(deliveryLimit ?? 0, runtimeLimit ?? 0)
-				: this.maxAssetBytes;
+				: context.maxAssetBytes;
 		}
-		const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);
-		const runtimeLimit = this.configuredReceiptByteLimit(asset, configured.uncompressedBytes);
+		const deliveryLimit = this.configuredReceiptByteLimit(context, asset, configured.bytes);
+		const runtimeLimit = this.configuredReceiptByteLimit(
+			context,
+			asset,
+			configured.uncompressedBytes
+		);
 		return deliveryLimit !== undefined || runtimeLimit !== undefined
 			? Math.max(deliveryLimit ?? 0, runtimeLimit ?? 0)
-			: this.maxAssetBytes;
+			: context.maxAssetBytes;
 	}
 
 	handleMessage(event: MessageEvent<any>) {
@@ -667,82 +693,141 @@ export class WorkerAssetBridge {
 		const worker = this.worker;
 		const generation = this.generation;
 		const controller = new AbortController();
-		this.persistentCacheBySignal.set(
-			controller.signal,
-			resolveRuntimeAssetCacheOptions(this.config.persistentCache)
-		);
+		const progress = this.progress;
+		const context = this.captureLoadContext();
+		const receiveProgress = (event: AssetPreparationProgress) => {
+			if (controller.signal.aborted || generation !== this.generation) return;
+			if (event.kind === 'download') {
+				progress.update(event.asset, event.loaded, event.total);
+			} else {
+				progress.activity(event.phase, event.asset);
+			}
+		};
+		const loadContext = (report: (event: AssetPreparationProgress, key?: string) => void) => ({
+			...context,
+			progress: {
+				update: (asset: string, loaded: number, total?: number) =>
+					report({ kind: 'download', asset, loaded, total }, `download:${asset}`),
+				activity: (phase: 'decompressing' | 'verifying', asset: string) =>
+					report({ kind: 'activity', asset, phase }, `activity:${asset}`)
+			}
+		});
 		this.activeLoads.add(controller);
 		try {
-			this.validateAssetRequest(request.asset);
-			const key = JSON.stringify([
+			this.validateAssetRequest(loadContext(receiveProgress), request.asset);
+			const identity = [
 				this.runtime,
-				this.config.baseUrl,
-				this.cache?.identity(this.config.loader),
-				integrityKey(this.config),
-				allowedBaseUrlsKey(this.config),
-				this.config.useAssetBridge,
-				this.maxAssetBytes,
+				context.config.baseUrl,
+				this.cache?.identity(context.config.loader),
+				integrityKey(context.config),
+				allowedBaseUrlsKey(context.config),
+				context.config.useAssetBridge,
+				context.maxAssetBytes,
 				this.languageSysroots,
-				request.asset,
-				request.module === true ? 'module' : 'bytes'
-			]);
+				request.asset
+			];
+			const bytesKey = JSON.stringify([...identity, 'bytes']);
+			const moduleKey = JSON.stringify([...identity, 'module']);
+			const share = <T>(
+				key: string,
+				signal: AbortSignal,
+				start: (
+					signal: AbortSignal,
+					report: (event: AssetPreparationProgress, key?: string) => void
+				) => Promise<T>,
+				report = receiveProgress
+			) => {
+				// Completed verified values can cross storage policies. In-flight work cannot:
+				// a request disabling persistence must not join a load that reads or writes it.
+				const operationKey = JSON.stringify([key, context.config.persistentCache]);
+				return this.cache
+					? this.cache.share(operationKey, signal, start, report)
+					: start(signal, report);
+			};
+			const loadBytes = async (
+				signal: AbortSignal,
+				report = receiveProgress,
+				retain = false
+			): Promise<CachedRuntimeAsset> => {
+				let loaded = this.cache?.get<CachedRuntimeAsset>(bytesKey);
+				if (loaded) return loaded;
+				loaded = await share(
+					bytesKey,
+					signal,
+					async (operationSignal, publish) => {
+						const loaded = await this.loadVerifiedAsset(
+							loadContext(publish),
+							request.asset,
+							operationSignal
+						);
+						// Keep shared backing buffers private, even when the result exceeds retention limits.
+						return this.cache
+							? { bytes: Uint8Array.from(loaded.bytes), mimeType: loaded.mimeType }
+							: loaded;
+					},
+					report
+				);
+				if (signal.aborted) throw runtimeAssetAbortReason(signal);
+				if (retain) this.cache?.set(bytesKey, loaded, loaded.bytes.byteLength);
+				return loaded;
+			};
 			if (request.module === true) {
 				if (!/\.wasm(?:\.gz)?$/u.test(request.asset)) {
 					throw new Error('Only runtime Wasm assets can be compiled');
 				}
-				let module = this.cache?.get<WebAssembly.Module>(key);
+				let module = this.cache?.get<WebAssembly.Module>(moduleKey);
 				if (!module) {
-					const streaming =
-						this.runtime === 'clang' &&
-						shouldStreamBundledClang(this.config) &&
-						(request.asset === 'bin/clang.wasm.gz' ||
-							request.asset === 'bin/lld.wasm.gz');
-					let bytes: number;
-					if (streaming) {
-						const receipt =
-							BUNDLED_CLANG_ASSET_INTEGRITY[
-								request.asset as 'bin/clang.wasm.gz' | 'bin/lld.wasm.gz'
-							];
-						module = await compileVerifiedWasmAsset(
-							new URL(request.asset, this.config.baseUrl).href,
-							receipt,
-							{
-								fetch: globalThis.fetch.bind(globalThis),
-								persistentCache: this.persistentCacheBySignal.get(
-									controller.signal
-								),
-								maxAssetBytes: this.maxAssetBytes,
-								signal: controller.signal,
-								onProgress: (loaded, total) =>
-									this.progress.update(request.asset, loaded, total)
-							}
-						);
-						bytes = receipt.uncompressedBytes;
-					} else {
-						const loaded = await this.loadVerifiedAsset(
-							request.asset,
-							controller.signal
-						);
-						bytes = loaded.bytes.byteLength;
-						module = await WebAssembly.compile(Uint8Array.from(loaded.bytes));
-					}
-					if (controller.signal.aborted || generation !== this.generation) return;
-					this.cache?.set(key, module, bytes);
+					module = await share(moduleKey, controller.signal, async (signal, report) => {
+						const streaming =
+							this.runtime === 'clang' &&
+							shouldStreamBundledClang(context.config) &&
+							(request.asset === 'bin/clang.wasm.gz' ||
+								request.asset === 'bin/lld.wasm.gz');
+						let bytes: number;
+						let module: WebAssembly.Module;
+						if (streaming) {
+							const receipt =
+								BUNDLED_CLANG_ASSET_INTEGRITY[
+									request.asset as 'bin/clang.wasm.gz' | 'bin/lld.wasm.gz'
+								];
+							module = await compileVerifiedWasmAsset(
+								new URL(request.asset, context.config.baseUrl).href,
+								receipt,
+								{
+									fetch: globalThis.fetch.bind(globalThis),
+									persistentCache: context.config.persistentCache,
+									maxAssetBytes: context.maxAssetBytes,
+									signal,
+									onProgress: (loaded, total) =>
+										report(
+											{
+												kind: 'download',
+												asset: request.asset,
+												loaded,
+												total
+											},
+											`download:${request.asset}`
+										)
+								}
+							);
+							bytes = receipt.uncompressedBytes;
+						} else {
+							const loaded = await loadBytes(signal, (event) =>
+								report(event, `${event.kind}:${event.asset}`)
+							);
+							bytes = loaded.bytes.byteLength;
+							module = await WebAssembly.compile(Uint8Array.from(loaded.bytes));
+						}
+						if (signal.aborted) throw runtimeAssetAbortReason(signal);
+						this.cache?.set(moduleKey, module, bytes);
+						return module;
+					});
 				}
 				if (controller.signal.aborted || generation !== this.generation) return;
 				worker.postMessage({ assetResponse: { id: request.id, ok: true, module } });
 				return;
 			}
-			let loaded = this.cache?.get<CachedRuntimeAsset>(key);
-			if (!loaded) {
-				loaded = await this.loadVerifiedAsset(request.asset, controller.signal);
-				if (controller.signal.aborted || generation !== this.generation) return;
-				// Keep private copies: never transfer or lend the owner cache's backing buffer.
-				if (this.cache) {
-					loaded = { bytes: Uint8Array.from(loaded.bytes), mimeType: loaded.mimeType };
-					this.cache.set(key, loaded, loaded.bytes.byteLength);
-				}
-			}
+			const loaded = await loadBytes(controller.signal, receiveProgress, true);
 			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
 				this.pythonPackageAssets = readPythonPackageAssets(loaded.bytes);
 			}
@@ -780,18 +865,29 @@ export class WorkerAssetBridge {
 		}
 	}
 
+	private captureLoadContext(): AssetLoadContext {
+		return {
+			config: { ...this.config },
+			maxAssetBytes: this.maxAssetBytes,
+			expectedAssets: new Set(this.expectedAssets),
+			pythonPackageAssets: new Set(this.pythonPackageAssets),
+			progress: this.progress
+		};
+	}
+
 	private async loadVerifiedAsset(
+		context: AssetLoadContext,
 		asset: string,
 		signal: AbortSignal
 	): Promise<CachedRuntimeAsset> {
-		const loaded = await this.loadAsset(asset, signal);
+		const loaded = await this.loadAsset(asset, signal, context);
 		const deliveryBytes = canonicalUint8Array(loaded.bytes);
-		const sourceAssetByteLimit = this.sourceAssetByteLimit(asset);
-		const runtimeAssetByteLimit = this.runtimeAssetByteLimit(asset);
+		const sourceAssetByteLimit = this.sourceAssetByteLimit(context, asset);
+		const runtimeAssetByteLimit = this.runtimeAssetByteLimit(context, asset);
 		requireRuntimeAssetSize(asset, deliveryBytes.byteLength, sourceAssetByteLimit);
 		let normalizedRuntimeBytes: Uint8Array;
 		if (asset.endsWith('.gz')) {
-			this.progress.activity('decompressing', asset);
+			context.progress.activity('decompressing', asset);
 			normalizedRuntimeBytes = await decompressGzip(
 				deliveryBytes,
 				asset,
@@ -815,10 +911,11 @@ export class WorkerAssetBridge {
 			signal.addEventListener('abort', cancelOnAbort, { once: true });
 		});
 		try {
-			if (this.config.integrity?.[asset]) {
-				this.progress.activity('verifying', asset);
+			if (context.config.integrity?.[asset]) {
+				context.progress.activity('verifying', asset);
 			}
 			const verification = this.verifyIntegrity(
+				context,
 				asset,
 				deliveryBytes,
 				runtimeBytes,
@@ -842,28 +939,32 @@ export class WorkerAssetBridge {
 		};
 	}
 
-	private validateAssetRequest(asset: string) {
-		if (!this.expectedAssets.has(asset) && !this.pythonPackageAssets.has(asset)) {
+	private validateAssetRequest(context: AssetLoadContext, asset: string) {
+		if (!context.expectedAssets.has(asset) && !context.pythonPackageAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
-		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {
+		if (context.config.integrity && !Object.hasOwn(context.config.integrity, asset)) {
 			throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 		}
 	}
 
-	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
-		this.validateAssetRequest(asset);
+	private async loadAsset(
+		asset: string,
+		signal: AbortSignal,
+		context = this.captureLoadContext()
+	): Promise<LoadedAsset> {
+		this.validateAssetRequest(context, asset);
 		if (signal.aborted) {
 			throw runtimeAssetAbortReason(signal);
 		}
-		const sourceAssetByteLimit = this.sourceAssetByteLimit(asset);
-		this.runtimeAssetByteLimit(asset);
+		const sourceAssetByteLimit = this.sourceAssetByteLimit(context, asset);
+		this.runtimeAssetByteLimit(context, asset);
 		const reportProgress = (loaded: number, total?: number) => {
-			if (!signal.aborted) this.progress.update(asset, loaded, total);
+			if (!signal.aborted) context.progress.update(asset, loaded, total);
 		};
-		if (this.config.loader) {
+		if (context.config.loader) {
 			const pendingResult = Promise.resolve(
-				this.config.loader({
+				context.config.loader({
 					runtime: this.runtime,
 					asset,
 					reportProgress,
@@ -899,6 +1000,7 @@ export class WorkerAssetBridge {
 				throw runtimeAssetAbortReason(signal);
 			}
 			const loaded = await this.normalizeLoaderResult(
+				context,
 				result,
 				asset,
 				signal,
@@ -909,17 +1011,18 @@ export class WorkerAssetBridge {
 			}
 			if (loaded) return loaded;
 		}
-		return await this.fetchAsset(asset, asset, signal, sourceAssetByteLimit);
+		return await this.fetchAsset(context, asset, asset, signal, sourceAssetByteLimit);
 	}
 
 	private async verifyIntegrity(
+		context: AssetLoadContext,
 		asset: string,
 		deliveryBytes: Uint8Array,
 		runtimeBytes: Uint8Array,
 		mimeType?: string,
 		hasDeliveryBytes = true
 	) {
-		const configured = this.config.integrity?.[asset];
+		const configured = context.config.integrity?.[asset];
 		if (!configured) return;
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
 		if (expected.uncompressedSha256 !== undefined || expected.uncompressedBytes !== undefined) {
@@ -956,6 +1059,7 @@ export class WorkerAssetBridge {
 	}
 
 	private async normalizeLoaderResult(
+		context: AssetLoadContext,
 		result: RuntimeAssetLoaderResult,
 		asset: string,
 		signal: AbortSignal,
@@ -963,11 +1067,11 @@ export class WorkerAssetBridge {
 	): Promise<LoadedAsset | null> {
 		if (!result) return null;
 		if (typeof result === 'string' || result instanceof URL) {
-			return await this.fetchAsset(String(result), asset, signal, maxAssetBytes);
+			return await this.fetchAsset(context, String(result), asset, signal, maxAssetBytes);
 		}
 		const directBytes = snapshotLoaderBytes(result, asset, maxAssetBytes);
 		if (directBytes) {
-			this.progress.update(asset, directBytes.byteLength, directBytes.byteLength);
+			context.progress.update(asset, directBytes.byteLength, directBytes.byteLength);
 			return { bytes: directBytes, transferOwnership: true };
 		}
 		const directBlob = tryCanonicalBlob(result);
@@ -991,11 +1095,11 @@ export class WorkerAssetBridge {
 			requireRuntimeAssetSize(asset, size, maxAssetBytes);
 			const source = await readAbortableArrayBuffer(blob, signal);
 			const bytes = snapshotMaterializedArrayBuffer(source, asset, maxAssetBytes);
-			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+			context.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType, transferOwnership: true };
 		}
 		if ('url' in result && result.url) {
-			return await this.fetchAsset(String(result.url), asset, signal, maxAssetBytes);
+			return await this.fetchAsset(context, String(result.url), asset, signal, maxAssetBytes);
 		}
 		if ('data' in result) {
 			if (typeof result.data === 'string') {
@@ -1006,12 +1110,12 @@ export class WorkerAssetBridge {
 				);
 				const bytes = canonicalUint8Array(encoder.encode(result.data));
 				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
-				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+				context.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return { bytes, mimeType: result.mimeType, transferOwnership: true };
 			}
 			const bytes = snapshotLoaderBytes(result.data, asset, maxAssetBytes);
 			if (bytes) {
-				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+				context.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return {
 					bytes,
 					mimeType: result.mimeType,
@@ -1023,20 +1127,20 @@ export class WorkerAssetBridge {
 	}
 
 	private async fetchAsset(
+		context: AssetLoadContext,
 		url: string,
 		asset: string,
 		signal: AbortSignal,
-		maxAssetBytes = this.sourceAssetByteLimit(asset)
+		maxAssetBytes = this.sourceAssetByteLimit(context, asset)
 	): Promise<LoadedAsset> {
-		const requestUrl = this.requireAllowedAssetUrl(asset, url);
-		const persistentCache =
-			this.persistentCacheBySignal.get(signal) ?? this.config.persistentCache;
-		const configured = this.config.integrity?.[asset];
+		const requestUrl = this.requireAllowedAssetUrl(context, asset, url);
+		const persistentCache = context.config.persistentCache;
+		const configured = context.config.integrity?.[asset];
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
-		const lock = this.config.assetPrefix
+		const lock = context.config.assetPrefix
 			? resolveRuntimeAssetLockEntry(requestUrl, {
-					assetRoot: this.config.baseUrl,
-					assetPrefix: this.config.assetPrefix
+					assetRoot: context.config.baseUrl,
+					assetPrefix: context.config.assetPrefix
 				})
 			: undefined;
 		// Existing .gz receipts without a pair describe logical bytes, not stored gzip bytes.
@@ -1049,8 +1153,8 @@ export class WorkerAssetBridge {
 					bytes: receipt.bytes,
 					validationKey: JSON.stringify([
 						'bridge-v1',
-						this.config.baseUrl,
-						allowedBaseUrlsKey(this.config),
+						context.config.baseUrl,
+						allowedBaseUrlsKey(context.config),
 						maxAssetBytes
 					])
 				}
@@ -1063,11 +1167,11 @@ export class WorkerAssetBridge {
 			});
 			if (bytes) {
 				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
-				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+				context.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return { bytes, mimeType: receipt?.mediaType, transferOwnership: true };
 			}
 		}
-		const loaded = await this.fetchAssetFromNetwork(url, asset, signal, maxAssetBytes);
+		const loaded = await this.fetchAssetFromNetwork(context, url, asset, signal, maxAssetBytes);
 		if (identity && !loaded.contentEncoding) {
 			// Only checksum-matching bytes are published. Existing runtime validation still runs.
 			await writePersistentRuntimeAsset({
@@ -1081,12 +1185,13 @@ export class WorkerAssetBridge {
 	}
 
 	private async fetchAssetFromNetwork(
+		context: AssetLoadContext,
 		url: string,
 		asset: string,
 		signal: AbortSignal,
-		maxAssetBytes = this.sourceAssetByteLimit(asset)
+		maxAssetBytes = this.sourceAssetByteLimit(context, asset)
 	): Promise<LoadedAsset> {
-		const requestUrl = this.requireAllowedAssetUrl(asset, url);
+		const requestUrl = this.requireAllowedAssetUrl(context, asset, url);
 		if (signal.aborted) throw runtimeAssetAbortReason(signal);
 		const pendingResponse = Promise.resolve(
 			fetch(requestUrl.href, {
@@ -1190,7 +1295,7 @@ export class WorkerAssetBridge {
 				asset,
 				maxAssetBytes
 			);
-			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
+			context.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
 			return { bytes, contentEncoding, mimeType, transferOwnership: true };
 		}
 
@@ -1256,10 +1361,10 @@ export class WorkerAssetBridge {
 				}
 				bytes.set(chunk, receivedLength);
 				receivedLength = nextLength;
-				this.progress.update(asset, receivedLength, contentLength);
+				context.progress.update(asset, receivedLength, contentLength);
 			}
 			if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
-			this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
+			context.progress.update(asset, receivedLength, contentLength ?? receivedLength);
 			loadedAsset = { bytes, contentEncoding, mimeType, transferOwnership: true };
 		} catch (error) {
 			if (signal.aborted) {
@@ -1291,10 +1396,10 @@ export class WorkerAssetBridge {
 		return loadedAsset;
 	}
 
-	private requireAllowedAssetUrl(asset: string, value: string) {
+	private requireAllowedAssetUrl(context: AssetLoadContext, asset: string, value: string) {
 		let url: URL;
 		try {
-			url = new URL(value, this.config.baseUrl);
+			url = new URL(value, context.config.baseUrl);
 		} catch {
 			throw new Error(`Runtime asset ${asset} has an invalid URL`);
 		}
@@ -1309,7 +1414,7 @@ export class WorkerAssetBridge {
 		if (url.hash) {
 			throw new Error(`Runtime asset ${asset} URL must not include a fragment`);
 		}
-		const allowed = [this.config.baseUrl, ...(this.config.allowedBaseUrls || [])].some(
+		const allowed = [context.config.baseUrl, ...(context.config.allowedBaseUrls || [])].some(
 			(baseUrl) => {
 				let base: URL;
 				try {

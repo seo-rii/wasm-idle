@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
-	import { base } from '$app/paths';
+	import { browser } from '$app/env';
+	import { asset, resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -8,10 +8,10 @@
 	if (browser)
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
-				const workerPath = `${base}/worker.js?build=${encodeURIComponent(__WASM_IDLE_BUILD__.builtAt)}`;
+				const workerPath = `${asset('worker.js')}?build=${encodeURIComponent(__WASM_IDLE_BUILD__.builtAt)}`;
 				try {
 					const registration = await navigator.serviceWorker.register(workerPath, {
-						scope: base ? `${base}/` : '/'
+						scope: resolve('')
 					});
 					console.log('COOP/COEP Service Worker registered', registration.scope);
 					await navigator.serviceWorker.ready;

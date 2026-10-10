@@ -51,10 +51,6 @@ vi.mock('$lib/playground/worker/python?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
-
 import Python from './python';
 
 describe('Python sandbox', () => {
@@ -685,7 +681,7 @@ print((left + right) // (left - left))`,
 			data: {
 				assetRequest: {
 					id: 7,
-					asset: 'pyodide.asm.js'
+					asset: 'pyodide.asm.mjs'
 				}
 			}
 		} as MessageEvent<any>);
@@ -706,7 +702,7 @@ print((left + right) // (left - left))`,
 		expect(loader).toHaveBeenCalledWith(
 			expect.objectContaining({
 				runtime: 'python',
-				asset: 'pyodide.asm.js',
+				asset: 'pyodide.asm.mjs',
 				reportProgress: expect.any(Function)
 			})
 		);

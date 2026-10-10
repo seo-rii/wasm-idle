@@ -21,52 +21,6 @@ const workerInstances: MockWorker[] = [];
 const preflightWorkerInstances: MockStaticRuntimePreflightWorker[] = [];
 const workerBootstrapBlobs = new Map<string, Blob>();
 const runtimeLifecycleEvents: string[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_PROLOG_BASE_URL: '',
-		PUBLIC_WASM_PROLOG_WORKER_URL: '',
-		PUBLIC_WASM_GLEAM_BASE_URL: '',
-		PUBLIC_WASM_GLEAM_WORKER_URL: '',
-		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
-		PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_GLEAM_WORKER_SHA256: '',
-		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
-		PUBLIC_WASM_PERL_BASE_URL: '',
-		PUBLIC_WASM_PERL_WORKER_URL: '',
-		PUBLIC_WASM_PERL_MANIFEST_URL: '',
-		PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_PERL_WORKER_SHA256: '',
-		PUBLIC_WASM_PERL_WORKER_BYTES: '',
-		PUBLIC_WASM_TCL_BASE_URL: '',
-		PUBLIC_WASM_TCL_WORKER_URL: '',
-		PUBLIC_WASM_AWK_BASE_URL: '',
-		PUBLIC_WASM_AWK_WORKER_URL: '',
-		PUBLIC_WASM_PASCAL_BASE_URL: '',
-		PUBLIC_WASM_PASCAL_WORKER_URL: '',
-		PUBLIC_WASM_CLOJURESCRIPT_BASE_URL: '',
-		PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL: '',
-		PUBLIC_WASM_FORTH_BASE_URL: '',
-		PUBLIC_WASM_FORTH_WORKER_URL: '',
-		PUBLIC_WASM_J_BASE_URL: '',
-		PUBLIC_WASM_J_WORKER_URL: '',
-		PUBLIC_WASM_BQN_BASE_URL: '',
-		PUBLIC_WASM_BQN_WORKER_URL: '',
-		PUBLIC_WASM_JANET_BASE_URL: '',
-		PUBLIC_WASM_JANET_WORKER_URL: '',
-		PUBLIC_WASM_JANET_MANIFEST_URL: '',
-		PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_JANET_WORKER_SHA256: '',
-		PUBLIC_WASM_JANET_WORKER_BYTES: '',
-		PUBLIC_WASM_JULIA_BASE_URL: '',
-		PUBLIC_WASM_JULIA_WORKER_URL: '',
-		PUBLIC_WASM_JULIA_MANIFEST_URL: '',
-		PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_JULIA_WORKER_SHA256: '',
-		PUBLIC_WASM_JULIA_WORKER_BYTES: '',
-		PUBLIC_WASM_NIM_BASE_URL: '',
-		PUBLIC_WASM_NIM_WORKER_URL: ''
-	}
-}));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 let autoStartWorkers = true;
 let workerBootstrapId = 0;
@@ -190,10 +144,6 @@ class MockStaticRuntimePreflightWorker {
 
 vi.mock('$lib/playground/worker/staticRuntimePreflight?worker', () => ({
 	default: MockStaticRuntimePreflightWorker
-}));
-
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
 }));
 
 import Gleam from './gleam';
@@ -1645,9 +1595,6 @@ describe('static worker backed language sandboxes', () => {
 			return url;
 		});
 		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-		for (const key of Object.keys(publicEnv)) {
-			publicEnv[key as keyof typeof publicEnv] = '';
-		}
 	});
 
 	afterEach(() => {

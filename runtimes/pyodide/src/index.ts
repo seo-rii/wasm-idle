@@ -1,7 +1,7 @@
 import type { PyodideConfig, PyodideInterface } from 'pyodide';
 
 export const PYODIDE_LOAD_ASSETS = [
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide-lock.json',
 	'pyodide.asm.wasm',
 	'python_stdlib.zip'
@@ -11,7 +11,7 @@ export const PYODIDE_PACKAGE_ASSETS = [
 	'ffi.d.ts',
 	'package.json',
 	'pyodide-lock.json',
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide.asm.wasm',
 	'pyodide.d.ts',
 	'pyodide.js',

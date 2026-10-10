@@ -82,6 +82,8 @@ export interface LanguageToolAssetConfig extends LanguageToolPersistentOptions {
 
 export interface ResolvedLanguageToolAssetConfig extends LanguageToolPersistentOptions {
 	baseUrl: string;
+	/** The one additional header asset explicitly selected by a clangd host. */
+	headerAsset?: string | false;
 	loader?: LanguageToolAssetLoader;
 	allowedBaseUrls?: string[];
 	integrity?: LanguageToolAssetIntegrityMap;
@@ -147,7 +149,7 @@ const verifyAssetIntegrity = async (
 	return loaded;
 };
 
-const requireAllowedAssetUrl = (
+export const requireAllowedAssetUrl = (
 	asset: string,
 	value: string,
 	config: ResolvedLanguageToolAssetConfig
@@ -555,7 +557,12 @@ export async function loadLanguageToolAsset(
 	if (runtime === 'objectivec' && !['headers.json', 'foundation-headers.json'].includes(asset)) {
 		throw new Error(`Unexpected Objective-C language tool asset: ${asset}`);
 	}
-	if (runtime === 'clangd' && !(CLANGD_ASSETS as readonly string[]).includes(asset)) {
+	if (
+		runtime === 'clangd' &&
+		!(CLANGD_ASSETS as readonly string[]).includes(asset) &&
+		asset !== 'clangd.headers.json.gz' &&
+		asset !== config.headerAsset
+	) {
 		throw new Error(`Unexpected clangd runtime asset: ${asset}`);
 	}
 	if (runtime === 'd' && !(D_OUTER_ASSETS as readonly string[]).includes(asset)) {

@@ -3,14 +3,6 @@ import { readBufferedStdin } from './stdinBuffer';
 import { TEAVM_RUNTIME_ASSET_NAMES, TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_RUST_COMPILER_URL: '',
-		PUBLIC_WASM_GO_COMPILER_URL: '',
-		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 let onWorkerConstruct: (() => void) | null = null;
@@ -70,10 +62,6 @@ class MockWorker {
 
 vi.mock('$lib/playground/worker/java?worker', () => ({
 	default: MockWorker
-}));
-
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
 }));
 
 import Java from './java';

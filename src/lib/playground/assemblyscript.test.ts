@@ -50,8 +50,6 @@ vi.mock('$lib/playground/worker/assemblyscript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 import AssemblyScript from './assemblyscript';
 
 describe('AssemblyScript sandbox', () => {

@@ -2591,6 +2591,7 @@
 				| 'graphql'
 				| 'duckdb'
 				| 'sqlite'
+				| 'postgresql'
 				| 'php'
 				| 'json'
 				| 'yaml'

@@ -406,9 +406,7 @@ async function loadRuntime(
 	log: boolean
 ) {
 	if (typeof nextBundleUrl !== 'string' || !nextBundleUrl.trim()) {
-		throw new Error(
-			'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
-		);
+		throw new Error('Elixir runtime is not configured. Set runtimeAssets.elixir.bundleUrl.');
 	}
 	let requestUrl: URL;
 	try {

@@ -463,7 +463,7 @@ async function loadAssets(
 ) {
 	if (!nextCompilerUrl || !nextStdlibUrl) {
 		throw new Error(
-			'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
+			'Zig runtime is not configured. Set runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
 		);
 	}
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {

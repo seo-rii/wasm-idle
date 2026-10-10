@@ -140,6 +140,11 @@ vi.mock('$lib/playground/gleam', () => {
 	};
 });
 
+vi.mock('$lib/playground/grain', () => {
+	moduleLoads.add('GRAIN');
+	return { default: createMockSandboxClass('GRAIN') };
+});
+
 vi.mock('$lib/playground/perl', () => {
 	moduleLoads.add('PERL');
 	return {
@@ -217,10 +222,22 @@ vi.mock('$lib/playground/bash', () => {
 	};
 });
 
+vi.mock('$lib/playground/hy', () => {
+	moduleLoads.add('HY');
+	return { default: createMockSandboxClass('HY') };
+});
+
 vi.mock('$lib/playground/clojurescript', () => {
 	moduleLoads.add('CLOJURESCRIPT');
 	return {
 		default: createMockSandboxClass('CLOJURESCRIPT')
+	};
+});
+
+vi.mock('$lib/playground/rescript', () => {
+	moduleLoads.add('RESCRIPT');
+	return {
+		default: createMockSandboxClass('RESCRIPT')
 	};
 });
 
@@ -255,10 +272,24 @@ vi.mock('$lib/playground/cobol', () => {
 	};
 });
 
+vi.mock('$lib/playground/v', () => {
+	moduleLoads.add('V');
+	return {
+		default: createMockSandboxClass('V')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
 		default: createMockSandboxClass('SQLITE')
+	};
+});
+
+vi.mock('$lib/playground/postgresql', () => {
+	moduleLoads.add('POSTGRESQL');
+	return {
+		default: createMockSandboxClass('POSTGRESQL')
 	};
 });
 
@@ -351,6 +382,13 @@ vi.mock('$lib/playground/lua', () => {
 	};
 });
 
+vi.mock('$lib/playground/fennel', () => {
+	moduleLoads.add('FENNEL');
+	return {
+		default: createMockSandboxClass('FENNEL')
+	};
+});
+
 vi.mock('$lib/playground/zig', () => {
 	moduleLoads.add('ZIG');
 	return {
@@ -415,10 +453,12 @@ describe('playground runtime binding', () => {
 				'NIM',
 				'BASH',
 				'CLOJURESCRIPT',
+				'RESCRIPT',
 				'LFORTRAN',
 				'COMMONLISP',
 				'FORTRAN',
 				'COBOL',
+				'V',
 				'DUCKDB',
 				'WASM'
 			])
@@ -445,10 +485,31 @@ describe('playground runtime binding', () => {
 		expect(moduleLoads).not.toContain('LISP');
 	});
 
+	it('routes the HYLANG alias through the Hy sandbox', async () => {
+		await playground('HYLANG');
+		expect(sandboxInstances.get('HY')).toHaveLength(1);
+		expect(moduleLoads).toContain('HY');
+	});
+
 	it('routes the CLJS alias through the ClojureScript sandbox', async () => {
 		const sandbox = await playground('CLJS');
 		expect(sandboxInstances.get('CLOJURESCRIPT')).toHaveLength(1);
 		expect(moduleLoads).toContain('CLOJURESCRIPT');
+	});
+
+	it('routes the VLANG alias through the V sandbox', async () => {
+		const canonical = await playground('V');
+		const alias = await playground('VLANG');
+
+		expect(canonical).not.toBe(alias);
+		expect(sandboxInstances.get('V')).toHaveLength(2);
+		expect(moduleLoads).toContain('V');
+	});
+
+	it('routes the RES alias through the ReScript sandbox', async () => {
+		await playground('RES');
+		expect(sandboxInstances.get('RESCRIPT')).toHaveLength(1);
+		expect(moduleLoads).toContain('RESCRIPT');
 	});
 
 	it('routes GnuCOBOL aliases through the COBOL sandbox', async () => {
@@ -1190,6 +1251,29 @@ End Module`;
 		expect(sandboxInstances.get('LUA')).toHaveLength(1);
 		expect(sandboxInstances.get('LUA')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'print("hello")', true, ['demo'], expectedBoundOptions(), progress]
+		]);
+	});
+
+	it('routes Fennel and FNL requests through the Fennel sandbox on wasm-lua', async () => {
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			lua: {
+				moduleUrl: '/absproxy/5173/wasm-lua/index.js?v=test'
+			},
+			fennel: {
+				compilerUrl: '/absproxy/5173/wasm-fennel/fennel-1.6.1.lua.gz?v=test'
+			}
+		};
+		const binding = createPlaygroundBinding(runtimeAssets);
+		const progress = { set() {} };
+		const sandbox = await binding.load('FNL');
+
+		await sandbox.load('(print "hello")', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('FENNEL')).toHaveLength(1);
+		expect(sandboxInstances.get('FENNEL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '(print "hello")', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 	});
 

@@ -1,5 +1,13 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import {
+	buildFennelCompileChunk,
+	buildFennelRunChunk,
+	loadFennelCompilerSource,
+	parseFennelDiagnostic,
+	stripHostLuaTraceback,
+	type FennelCompilerAsset
+} from '$lib/playground/fennelBootstrap';
 
 declare var self: any;
 
@@ -25,12 +33,13 @@ let runtimePromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+// Set when this worker hosts Fennel: the verified official fennel.lua compiler source.
+let fennelSource: string | null = null;
+let runtimeLabel = 'Lua';
 
 async function loadRuntime(url: string) {
 	if (!url) {
-		throw new Error(
-			'Lua runtime is not configured. Set PUBLIC_WASM_LUA_MODULE_URL or runtimeAssets.lua.moduleUrl.'
-		);
+		throw new Error('Lua runtime is not configured. Set runtimeAssets.lua.moduleUrl.');
 	}
 	if (loadedModuleUrl === url && runtimePromise) {
 		return await runtimePromise;
@@ -80,10 +89,41 @@ function normalizeDiagnostic(diagnostic: any) {
 	};
 }
 
+async function compileFennel(
+	runtime: Awaited<ReturnType<typeof loadRuntime>>,
+	fennel: string,
+	code: string,
+	fileName: string
+) {
+	// Run the official Fennel compiler once without stdin so syntax and compile errors are
+	// reported before execution starts.
+	const check = await runtime.executeBrowserLuaArtifact(
+		{ source: buildFennelCompileChunk(fennel, code, fileName), fileName },
+		{ stdin: () => null }
+	);
+	if (check.exitCode !== 0) {
+		const message = stripHostLuaTraceback(check.stderr);
+		return {
+			success: false,
+			diagnostics: [parseFennelDiagnostic(message, fileName)],
+			stdout: '',
+			stderr: message
+		};
+	}
+	return {
+		success: true,
+		artifact: { source: buildFennelRunChunk(fennel, code, fileName), fileName },
+		diagnostics: [],
+		stdout: '',
+		stderr: ''
+	};
+}
+
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		moduleUrl: nextModuleUrl,
+		fennelCompiler,
 		buffer,
 		code,
 		prepare,
@@ -100,6 +140,14 @@ self.onmessage = async (event: { data: any }) => {
 				console.log(`[wasm-idle:lua-worker] load moduleUrl=${moduleUrl}`);
 			}
 			await loadRuntime(moduleUrl);
+			if (fennelCompiler) {
+				fennelSource = await loadFennelCompilerSource(
+					fennelCompiler as FennelCompilerAsset
+				);
+				runtimeLabel = 'Fennel';
+				compiledArtifact = null;
+				compiledCacheKey = '';
+			}
 			postMessage({ load: true });
 			return;
 		}
@@ -117,11 +165,13 @@ self.onmessage = async (event: { data: any }) => {
 					`[wasm-idle:lua-worker] compile start prepare=${String(prepare)} bytes=${code.length}`
 				);
 			}
-			const result = await runtime.compiler.compile({
-				code,
-				fileName: activePath,
-				log
-			});
+			const result = fennelSource
+				? await compileFennel(runtime, fennelSource, code, activePath)
+				: await runtime.compiler.compile({
+						code,
+						fileName: activePath,
+						log
+					});
 			if (log) {
 				console.log(
 					`[wasm-idle:lua-worker] compile settled success=${String(result.success)} stdout=${String(Boolean(result.stdout))} stderr=${String(Boolean(result.stderr))}`
@@ -137,7 +187,7 @@ self.onmessage = async (event: { data: any }) => {
 						result.diagnostics
 							?.map((diagnostic: any) => diagnostic.message)
 							.join('\n') ||
-						'Lua compilation failed'
+						`${runtimeLabel} compilation failed`
 				);
 			}
 			if (result.stderr) postMessage({ output: result.stderr });
@@ -196,14 +246,18 @@ self.onmessage = async (event: { data: any }) => {
 				if (output) postMessage({ output });
 			},
 			stderr: (output) => {
-				if (output) postMessage({ output });
+				// Fennel errors are reported once, without the host Lua traceback, below.
+				if (output && !fennelSource) postMessage({ output });
 			}
 		});
 		if (execution.exitCode !== 0) {
+			const stderr = fennelSource
+				? stripHostLuaTraceback(execution.stderr)
+				: execution.stderr;
 			throw new Error(
-				execution.stderr
-					? `Lua program exited with code ${execution.exitCode}\n${execution.stderr}`
-					: `Lua program exited with code ${execution.exitCode}`
+				stderr
+					? `${runtimeLabel} program exited with code ${execution.exitCode}\n${stderr}`
+					: `${runtimeLabel} program exited with code ${execution.exitCode}`
 			);
 		}
 		postMessage({ results: true });

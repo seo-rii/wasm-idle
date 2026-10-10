@@ -45,7 +45,9 @@ function expectExactRubyPreflightRequests(requests: readonly string[]) {
 	for (const request of rubyRequests) {
 		const pathname = new URL(request).pathname;
 		expect(pathname).not.toMatch(/\/wasm-ruby\/runtime\.mjs$/u);
-		expect(pathname).not.toMatch(/\/wasm-ruby\/assets\/ruby_stdlib-C40Yu-vu\.wasm(?:\.gz)?$/u);
+		expect(pathname).not.toMatch(
+			/\/wasm-ruby\/assets\/ruby_stdlib-[A-Za-z0-9_-]+\.wasm(?:\.gz)?$/u
+		);
 	}
 }
 

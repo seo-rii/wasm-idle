@@ -9,8 +9,6 @@ import {
 } from '@wasm-idle/core';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from './playground/assets';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 function bindingFor(
 	assets: PlaygroundRuntimeAssets,
 	cache?: RuntimeAssetCacheOptions,

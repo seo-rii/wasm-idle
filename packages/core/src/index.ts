@@ -8,6 +8,7 @@ export {
 export {
 	configureRuntimeAssetCache,
 	createRuntimeAssetCacheBackend,
+	createRuntimeGeneratedAssetCacheBackend,
 	getRuntimeAssetCacheOptions,
 	resolveRuntimeAssetCacheOptions,
 	readPersistentRuntimeAsset,
@@ -19,6 +20,7 @@ export {
 	requestRuntimeAssetCachePersistence,
 	type RuntimeAssetCacheOptions,
 	type RuntimeAssetCacheBackend,
+	type RuntimeGeneratedAssetCacheBackend,
 	type RuntimeAssetCacheBackendIdentity,
 	type ResolvedRuntimeAssetCacheOptions,
 	type RuntimePersistentAssetIdentity,

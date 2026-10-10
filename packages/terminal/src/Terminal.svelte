@@ -89,6 +89,7 @@
 		'C',
 		'CPP',
 		'OBJC',
+		'OBJECTIVECXX',
 		'RUST',
 		'GO',
 		'D',
@@ -97,6 +98,7 @@
 		'VBNET',
 		'FORTRAN',
 		'COBOL',
+		'V',
 		'OCAML',
 		'HASKELL'
 	]);

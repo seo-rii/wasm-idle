@@ -2,7 +2,7 @@ export {
 	getTclLanguageServer,
 	type TclLanguageServerConfig,
 	type TclLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createTclWorkerService,
 	type RunTclDiagnostics,

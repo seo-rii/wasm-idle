@@ -97,8 +97,15 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	);
 	const integrity = resolveCppAssetIntegrity(runtimeConfig);
 	const allowedBaseUrls = resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl);
+	const assetPolicy = {
+		cache: runtimeConfig?.cache,
+		redirect: runtimeConfig?.redirect,
+		requireExactResponseUrl: runtimeConfig?.requireExactResponseUrl,
+		headerAsset: runtimeConfig?.headers
+	};
 	if (runtimeConfig?.baseUrl) {
 		return {
+			...assetPolicy,
 			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
 			persistentCache,
 			loader: runtimeConfig.loader,
@@ -109,6 +116,7 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 
 	if (options?.rootUrl) {
 		return {
+			...assetPolicy,
 			baseUrl: resolveRootToolBaseUrl(options.rootUrl, '/clangd/', currentUrl),
 			assetRoot: normalizeBaseUrl(options.rootUrl, currentUrl),
 			persistentCache,
@@ -120,6 +128,7 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 
 	if (runtimeConfig?.loader) {
 		return {
+			...assetPolicy,
 			baseUrl: CLANGD_VIRTUAL_BASE_URL,
 			persistentCache,
 			loader: runtimeConfig.loader,

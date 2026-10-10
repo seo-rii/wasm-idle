@@ -1,115 +1,12 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './wasmTinyGoVersion';
 
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_DEBUG_RUNTIME_URL: '',
-		PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256: '',
-		PUBLIC_WASM_RUST_COMPILER_URL: '',
-		PUBLIC_WASM_GO_COMPILER_URL: '',
-		PUBLIC_WASM_D_MODULE_URL: '',
-		PUBLIC_WASM_D_MANIFEST_URL: '',
-		PUBLIC_WASM_DOTNET_MODULE_URL: '',
-		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
-		PUBLIC_WASM_ERLANG_BUNDLE_URL: '',
-		PUBLIC_WASM_OCAML_MODULE_URL: '',
-		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
-		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: '',
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '',
-		PUBLIC_WASM_WAT_MODULE_URL: '',
-		PUBLIC_WASM_LUA_MODULE_URL: '',
-		PUBLIC_WASM_ZIG_COMPILER_URL: '',
-		PUBLIC_WASM_ZIG_STDLIB_URL: '',
-		PUBLIC_WASM_LISP_MODULE_URL: '',
-		PUBLIC_WASM_LISP_MANIFEST_URL: '',
-		PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_HASKELL_MODULE_URL: '',
-		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
-		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
-		PUBLIC_WASM_FORTRAN_BASE_URL: '',
-		PUBLIC_WASM_FORTRAN_F2C_WASM_URL: '',
-		PUBLIC_WASM_FORTRAN_LIBF2C_URL: '',
-		PUBLIC_WASM_FORTRAN_F2C_HEADER_URL: '',
-		PUBLIC_WASM_FORTRAN_ANALYZER_URL: '',
-		PUBLIC_WASM_COBOL_BASE_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_BASE_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_HEADERS_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL: '',
-		PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL: '',
-		PUBLIC_WASM_RUBY_WASM_URL: '',
-		PUBLIC_WASM_RUBY_MODULE_URL: '',
-		PUBLIC_WASM_R_BASE_URL: '',
-		PUBLIC_WASM_OCTAVE_BASE_URL: '',
-		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
-		PUBLIC_WASM_OCTAVE_MANIFEST_URL: '',
-		PUBLIC_WASM_PROLOG_BASE_URL: '',
-		PUBLIC_WASM_PROLOG_WORKER_URL: '',
-		PUBLIC_WASM_GLEAM_BASE_URL: '',
-		PUBLIC_WASM_GLEAM_WORKER_URL: '',
-		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
-		PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_GLEAM_WORKER_SHA256: '',
-		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
-		PUBLIC_WASM_PERL_BASE_URL: '',
-		PUBLIC_WASM_PERL_WORKER_URL: '',
-		PUBLIC_WASM_PERL_MANIFEST_URL: '',
-		PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_PERL_WORKER_SHA256: '',
-		PUBLIC_WASM_PERL_WORKER_BYTES: '',
-		PUBLIC_WASM_TCL_BASE_URL: '',
-		PUBLIC_WASM_TCL_WORKER_URL: '',
-		PUBLIC_WASM_AWK_BASE_URL: '',
-		PUBLIC_WASM_AWK_WORKER_URL: '',
-		PUBLIC_WASM_PASCAL_BASE_URL: '',
-		PUBLIC_WASM_PASCAL_WORKER_URL: '',
-		PUBLIC_WASM_FORTH_BASE_URL: '',
-		PUBLIC_WASM_FORTH_WORKER_URL: '',
-		PUBLIC_WASM_J_BASE_URL: '',
-		PUBLIC_WASM_J_WORKER_URL: '',
-		PUBLIC_WASM_BQN_BASE_URL: '',
-		PUBLIC_WASM_BQN_WORKER_URL: '',
-		PUBLIC_WASM_JANET_BASE_URL: '',
-		PUBLIC_WASM_JANET_WORKER_URL: '',
-		PUBLIC_WASM_JANET_MANIFEST_URL: '',
-		PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_JANET_WORKER_SHA256: '',
-		PUBLIC_WASM_JANET_WORKER_BYTES: '',
-		PUBLIC_WASM_JULIA_BASE_URL: '',
-		PUBLIC_WASM_JULIA_WORKER_URL: '',
-		PUBLIC_WASM_JULIA_MANIFEST_URL: '',
-		PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_JULIA_WORKER_SHA256: '',
-		PUBLIC_WASM_JULIA_WORKER_BYTES: '',
-		PUBLIC_WASM_NIM_BASE_URL: '',
-		PUBLIC_WASM_NIM_WORKER_URL: '',
-		PUBLIC_WASM_NIM_MANIFEST_URL: '',
-		PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT: '',
-		PUBLIC_WASM_NIM_WORKER_SHA256: '',
-		PUBLIC_WASM_NIM_WORKER_BYTES: '',
-		PUBLIC_WASM_CLOJURESCRIPT_BASE_URL: '',
-		PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL: '',
-		PUBLIC_WASM_SWIFT_BASE_URL: '',
-		PUBLIC_WASM_SWIFT_WORKER_URL: '',
-		PUBLIC_WASM_SWIFT_MANIFEST_URL: '',
-		PUBLIC_WASM_SQLITE_WASM_URL: '',
-		PUBLIC_WASM_SQLITE_MODULE_URL: '',
-		PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL: '',
-		PUBLIC_WASM_DUCKDB_MODULE_URL: '',
-		PUBLIC_WASM_PHP_MODULE_URL: ''
-	}
-}));
-
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import {
 	RUNTIME_LOAD_ASSETS,
 	resolveCobolBaseUrl,
+	resolveApecodeBaseUrl,
+	resolveGolfscriptRuntimeAssetConfig,
+	resolveVBaseUrl,
 	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
 	resolveObjectiveCRuntimeAssetConfig,
@@ -119,6 +16,7 @@ import {
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import {
 	configureRuntimeAssetCache,
+	createRuntimeAssetsKey,
 	getRuntimeAssetCacheOptions,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	type RuntimeAssetKeySource
@@ -189,6 +87,90 @@ import {
 } from './wasmAwkVersion';
 
 describe('runtime asset config resolution', () => {
+	it('pins the GolfScript interpreter URL to the app root and keeps mirror identities separate', () => {
+		const currentUrl = 'https://idle.example.test/editor/';
+		const bundled = resolveGolfscriptRuntimeAssetConfig('/wasm-idle/', currentUrl);
+		expect(new URL(bundled.interpreterUrl).pathname).toBe(
+			'/wasm-idle/wasm-golfscript/golfscript.rb'
+		);
+		expect(new URL(bundled.interpreterUrl).search).toMatch(/^\?v=[a-f0-9]+$/u);
+		const options = {
+			golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+		};
+		const resolved = resolveGolfscriptRuntimeAssetConfig(options, currentUrl);
+		expect(resolved.interpreterUrl).toBe(options.golfscript.interpreterUrl);
+		options.golfscript.interpreterUrl = 'https://mirror.example.test/golfscript.rb';
+		expect(resolved.interpreterUrl).toBe('https://assets.example.test/golfscript.rb');
+		expect(resolveGolfscriptRuntimeAssetConfig(options, currentUrl).assetKey).not.toBe(
+			resolved.assetKey
+		);
+		expect(createRuntimeAssetsKey(options)).not.toBe(
+			createRuntimeAssetsKey({
+				golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+			})
+		);
+	});
+
+	it('resolves the original APECode wheel under the app root or an explicit base URL', () => {
+		const currentUrl = 'https://idle.example.test/editor/';
+		expect(resolveApecodeBaseUrl('/wasm-idle/', currentUrl)).toBe(
+			'https://idle.example.test/wasm-idle/wasm-apecode/'
+		);
+		expect(resolveApecodeBaseUrl({ rootUrl: '/playground' }, currentUrl)).toBe(
+			'https://idle.example.test/playground/wasm-apecode/'
+		);
+		expect(
+			resolveApecodeBaseUrl(
+				{
+					rootUrl: '/ignored',
+					apecode: { baseUrl: 'https://assets.example.test/apecode' }
+				},
+				currentUrl
+			)
+		).toBe('https://assets.example.test/apecode/');
+		expect(
+			createRuntimeAssetsKey({ apecode: { baseUrl: 'https://assets.example.test/apecode/' } })
+		).not.toBe(
+			createRuntimeAssetsKey({ apecode: { baseUrl: 'https://mirror.example.test/apecode/' } })
+		);
+	});
+
+	it('keeps asset options isolated between sessions without ambient environment settings', async () => {
+		const { resolveGoCompilerUrl, resolveTypeScriptModuleUrl } = await import('./assets');
+		const first = {
+			rootUrl: '/first',
+			go: { compilerUrl: '/first/compiler.js' },
+			typescript: { moduleUrl: '/first/typescript.js' },
+			python: { baseUrl: '/first/python/' }
+		} satisfies PlaygroundRuntimeAssets;
+		const second = {
+			rootUrl: '/second',
+			go: { compilerUrl: '/second/compiler.js' },
+			typescript: { moduleUrl: '/second/typescript.js' },
+			python: { baseUrl: '/second/python/' }
+		} satisfies PlaygroundRuntimeAssets;
+		const currentUrl = 'https://example.com/app';
+
+		for (const assets of [first, second, first]) {
+			expect(resolveGoCompilerUrl(assets, currentUrl)).toBe(
+				`https://example.com${assets.go.compilerUrl}`
+			);
+			expect(resolveTypeScriptModuleUrl(assets, currentUrl)).toBe(
+				`https://example.com${assets.typescript.moduleUrl}`
+			);
+			expect(resolveRuntimeAssetConfig('python', assets, currentUrl).baseUrl).toBe(
+				`https://example.com${assets.python.baseUrl}`
+			);
+		}
+		expect(resolveGoCompilerUrl(undefined, currentUrl)).toBe('');
+		expect(resolveTypeScriptModuleUrl('/bundled', currentUrl)).toBe(
+			'https://example.com/bundled/wasm-typescript/index.js'
+		);
+		expect(resolveRuntimeAssetConfig('python', '/bundled', currentUrl).baseUrl).toBe(
+			'https://example.com/bundled/pyodide/'
+		);
+	});
+
 	it('keeps application runtime asset keys aligned with the Core contract', () => {
 		expectTypeOf<PlaygroundRuntimeAssets>().toMatchTypeOf<RuntimeAssetKeySource>();
 		expectTypeOf<Exclude<keyof PlaygroundRuntimeAssets, 'debug'>>().toEqualTypeOf<
@@ -223,6 +205,7 @@ describe('runtime asset config resolution', () => {
 		expect(RUNTIME_LOAD_ASSETS.clang).toContain('runtime-manifest.v1.json');
 		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.wasm.gz');
 		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.wasm.gz');
+		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.headers.json.gz');
 		expect(RUNTIME_LOAD_ASSETS.python).toContain('pyodide.mjs');
 	});
 
@@ -310,22 +293,20 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('pairs a public custom LLDB/WAMR base URL with its public manifest receipt', () => {
-		publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL = 'https://cdn.example/debug/';
-		publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256 =
-			'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-		try {
-			expect(resolveDebugRuntimeUrls(undefined, 'https://example.com/app')).toEqual({
+	it('pairs a custom LLDB/WAMR base URL with its explicit manifest receipt', () => {
+		const configuredAssets = {
+			debug: {
 				baseUrl: 'https://cdn.example/debug/',
-				manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
-				manifestReceipt: {
-					sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-				}
-			});
-		} finally {
-			publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL = '';
-			publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256 = '';
-		}
+				manifestSha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+			}
+		} satisfies PlaygroundRuntimeAssets;
+		expect(resolveDebugRuntimeUrls(configuredAssets, 'https://example.com/app')).toEqual({
+			baseUrl: 'https://cdn.example/debug/',
+			manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+			manifestReceipt: {
+				sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+			}
+		});
 	});
 
 	it('derives the default TeaVM asset base url from the shared root path', () => {
@@ -600,14 +581,14 @@ describe('runtime asset config resolution', () => {
 		expect(config.useAssetBridge).toBe(false);
 	});
 
-	it('prefers an explicit rust compiler url over the public env override', async () => {
+	it('prefers an explicit rust compiler url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = 'https://env.example.com/compiler.js';
 		const { resolveRustCompilerUrl } = await import('./assets');
 
 		expect(
 			resolveRustCompilerUrl(
 				{
+					rootUrl: '/ignored',
 					rust: {
 						compilerUrl: '/runtime/rust/index.js'
 					}
@@ -617,14 +598,21 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/runtime/rust/index.js');
 	});
 
-	it('falls back to PUBLIC_WASM_RUST_COMPILER_URL when no rust runtime config is provided', async () => {
+	it('resolves the per-session Rust compiler URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '/wasm-rust/index.js';
+		const configuredAssets = {
+			rust: {
+				compilerUrl: '/wasm-rust/index.js'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveRustCompilerUrl } = await import('./assets');
 
-		expect(resolveRustCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/wasm-rust/index.js'
-		);
+		expect(
+			resolveRustCompilerUrl(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/wasm-rust/index.js');
 	});
 
 	it('derives the Rust debug instrumenter beside the compiler and preserves its version', async () => {
@@ -660,14 +648,14 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/debug-assets/rust.js');
 	});
 
-	it('prefers an explicit go compiler url over the public env override', async () => {
+	it('prefers an explicit go compiler url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = 'https://env.example.com/wasm-go/index.js';
 		const { resolveGoCompilerUrl } = await import('./assets');
 
 		expect(
 			resolveGoCompilerUrl(
 				{
+					rootUrl: '/ignored',
 					go: {
 						compilerUrl: '/runtime/go/index.js'
 					}
@@ -677,24 +665,31 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/runtime/go/index.js');
 	});
 
-	it('falls back to PUBLIC_WASM_GO_COMPILER_URL when no go runtime config is provided', async () => {
+	it('resolves the per-session Go compiler URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = '/wasm-go/index.js';
+		const configuredAssets = {
+			go: {
+				compilerUrl: '/wasm-go/index.js'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveGoCompilerUrl } = await import('./assets');
 
-		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/wasm-go/index.js'
-		);
+		expect(
+			resolveGoCompilerUrl(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/wasm-go/index.js');
 	});
 
-	it('prefers an explicit D module url over the public env override', async () => {
+	it('prefers an explicit D module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_D_MODULE_URL = 'https://env.example.com/wasm-d/index.js';
 		const { resolveDModuleUrl } = await import('./assets');
 
 		expect(
 			resolveDModuleUrl(
 				{
+					rootUrl: '/ignored',
 					d: {
 						moduleUrl: '/runtime/d/index.js'
 					}
@@ -706,7 +701,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default D module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
 		const { resolveDModuleUrl } = await import('./assets');
 
 		expect(resolveDModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -716,8 +710,6 @@ describe('runtime asset config resolution', () => {
 
 	it('resolves one pinned D module and manifest snapshot with version propagation', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_D_MANIFEST_URL = '';
 		const { resolveDRuntimeAssetConfig } = await import('./assets');
 		const { WASM_D_OUTER_ASSET_RECEIPTS } = await import('./wasmDIntegrity');
 
@@ -763,9 +755,8 @@ describe('runtime asset config resolution', () => {
 		).toThrow('D outer runtime receipt must describe exactly two assets');
 	});
 
-	it('prefers an explicit Dotnet module url over the public env override', async () => {
+	it('prefers an explicit Dotnet module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = 'https://env.example.com/wasm-dotnet/index.js';
 		const { resolveDotnetModuleUrl } = await import('./assets');
 
 		const config = {
@@ -780,7 +771,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default Dotnet module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '';
 		const { resolveDotnetModuleUrl } = await import('./assets');
 
 		expect(resolveDotnetModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -788,14 +778,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit Elixir bundle url over the public env override', async () => {
+	it('prefers an explicit Elixir bundle url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = 'https://env.example.com/wasm-elixir/bundle.avm';
 		const { resolveElixirBundleUrl } = await import('./assets');
 
 		expect(
 			resolveElixirBundleUrl(
 				{
+					rootUrl: '/ignored',
 					elixir: {
 						bundleUrl: '/runtime/elixir/bundle.avm'
 					}
@@ -807,7 +797,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default Elixir bundle url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
 		const { resolveElixirBundleUrl } = await import('./assets');
 
 		expect(resolveElixirBundleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -815,14 +804,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit Erlang bundle url over the public env override', async () => {
+	it('prefers an explicit Erlang bundle url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = 'https://env.example.com/wasm-elixir/bundle.avm';
 		const { resolveErlangBundleUrl } = await import('./assets');
 
 		expect(
 			resolveErlangBundleUrl(
 				{
+					rootUrl: '/ignored',
 					erlang: {
 						bundleUrl: '/runtime/erlang/bundle.avm'
 					}
@@ -834,8 +823,6 @@ describe('runtime asset config resolution', () => {
 
 	it('falls back to the Elixir bundle config for Erlang', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = '';
-		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
 		const { resolveErlangBundleUrl } = await import('./assets');
 
 		expect(
@@ -853,14 +840,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit OCaml browser module url over the public env override', async () => {
+	it('prefers an explicit OCaml browser module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = 'https://env.example.com/ocaml/index.js';
 		const { resolveOcamlModuleUrl } = await import('./assets');
 
 		expect(
 			resolveOcamlModuleUrl(
 				{
+					rootUrl: '/ignored',
 					ocaml: {
 						moduleUrl: '/runtime/ocaml/browser-native/src/index.js'
 					}
@@ -872,7 +859,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default OCaml browser module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '';
 		const { resolveOcamlModuleUrl } = await import('./assets');
 
 		expect(resolveOcamlModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -880,15 +866,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit OCaml manifest url over the public env override', async () => {
+	it('prefers an explicit OCaml manifest url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
-			'https://env.example.com/ocaml/browser-native-manifest.v1.json';
 		const { resolveOcamlManifestUrl } = await import('./assets');
 
 		expect(
 			resolveOcamlManifestUrl(
 				{
+					rootUrl: '/ignored',
 					ocaml: {
 						manifestUrl: '/runtime/ocaml/browser-native-manifest.v1.json'
 					}
@@ -900,7 +885,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default OCaml manifest url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
 		const { resolveOcamlManifestUrl } = await import('./assets');
 
 		expect(resolveOcamlManifestUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -908,15 +892,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit TinyGo runtime module url over the public env override', async () => {
+	it('prefers an explicit TinyGo runtime module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = 'https://env.example.com/wasm-tinygo/runtime.js';
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(
 			resolveTinyGoModuleUrl(
 				{
+					rootUrl: '/ignored',
 					tinygo: {
 						moduleUrl: '/runtime/tinygo/runtime.js'
 					}
@@ -930,8 +913,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default TinyGo runtime module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -941,40 +922,44 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the TinyGo runtime module url from the legacy app url override', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL =
-			'https://env.example.com/wasm-tinygo/index.html?v=42';
+		const configuredAssets = {
+			tinygo: {
+				appUrl: 'https://env.example.com/wasm-tinygo/index.html?v=42'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
-		expect(() => resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toThrow(
+		expect(() => resolveTinyGoModuleUrl(configuredAssets, 'https://example.com/app')).toThrow(
 			'TinyGo executable module URL must use its exact receipt query pin'
 		);
 	});
 
 	it('accepts the exact TinyGo entry receipt pin from a legacy app url', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		const receipt =
 			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
 				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
 			].sha256;
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = `https://env.example.com/wasm-tinygo/index.html?v=${receipt}`;
+		const configuredAssets = {
+			tinygo: {
+				appUrl: `https://env.example.com/wasm-tinygo/index.html?v=${receipt}`
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
-		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
+		expect(resolveTinyGoModuleUrl(configuredAssets, 'https://example.com/app')).toBe(
 			`https://env.example.com/wasm-tinygo/upstream.js?v=${receipt}`
 		);
 	});
 
-	it('prefers an explicit TypeScript module url over the public env override', async () => {
+	it('prefers an explicit TypeScript module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL =
-			'https://env.example.com/wasm-typescript/index.js';
 		const { resolveTypeScriptModuleUrl } = await import('./assets');
 
 		expect(
 			resolveTypeScriptModuleUrl(
 				{
+					rootUrl: '/ignored',
 					typescript: {
 						moduleUrl: '/runtime/wasm-typescript/index.js'
 					}
@@ -986,7 +971,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default TypeScript module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
 		const { resolveTypeScriptModuleUrl } = await import('./assets');
 
 		expect(resolveTypeScriptModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -994,14 +978,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit WAT module url over the public env override', async () => {
+	it('prefers an explicit WAT module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = 'https://env.example.com/wasm-wat/index.js';
 		const { resolveWatModuleUrl } = await import('./assets');
 
 		expect(
 			resolveWatModuleUrl(
 				{
+					rootUrl: '/ignored',
 					wat: {
 						moduleUrl: '/runtime/wasm-wat/index.js'
 					}
@@ -1013,7 +997,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default WAT module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = '';
 		const { resolveWatModuleUrl } = await import('./assets');
 
 		expect(resolveWatModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -1021,14 +1004,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit Lua module url over the public env override', async () => {
+	it('prefers an explicit Lua module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = 'https://env.example.com/wasm-lua/index.js';
 		const { resolveLuaModuleUrl } = await import('./assets');
 
 		expect(
 			resolveLuaModuleUrl(
 				{
+					rootUrl: '/ignored',
 					lua: {
 						moduleUrl: '/runtime/wasm-lua/index.js'
 					}
@@ -1040,7 +1023,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default Lua module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = '';
 		const { resolveLuaModuleUrl } = await import('./assets');
 
 		expect(resolveLuaModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -1050,8 +1032,6 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.tar.gz';
 		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
 
 		const config = {
@@ -1070,8 +1050,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives default Zig asset urls from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
 		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
 
 		expect(resolveZigCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -1084,8 +1062,6 @@ describe('runtime asset config resolution', () => {
 
 	it('snapshots Zig receipt overrides with the resolved asset URLs', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
 		const { resolveZigRuntimeAssetConfig } = await import('./assets');
 		const integrity = {
 			'zig_small.wasm': { bytes: 4, sha256: 'a'.repeat(64) },
@@ -1112,14 +1088,14 @@ describe('runtime asset config resolution', () => {
 		expect(Object.isFrozen(resolved.integrity)).toBe(true);
 	});
 
-	it('prefers an explicit Lisp module url over the public env override', async () => {
+	it('prefers an explicit Lisp module url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = 'https://env.example.com/wasm-lisp/index.js';
 		const { resolveLispModuleUrl } = await import('./assets');
 
 		expect(
 			resolveLispModuleUrl(
 				{
+					rootUrl: '/ignored',
 					lisp: {
 						moduleUrl: '/runtime/wasm-lisp/index.js'
 					}
@@ -1131,7 +1107,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives the default Lisp module url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
 		const { resolveLispModuleUrl } = await import('./assets');
 
 		expect(resolveLispModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -1141,7 +1116,6 @@ describe('runtime asset config resolution', () => {
 
 	it('pins bundled Lisp module and manifest URLs to one fingerprint', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
 		const [{ resolveLispRuntimeAssetConfig }, { WASM_LISP_ASSET_VERSION }] = await Promise.all([
 			import('./assets'),
 			import('./wasmLispVersion')
@@ -1183,7 +1157,6 @@ describe('runtime asset config resolution', () => {
 
 	it('does not trust a custom Lisp module without an explicit fingerprint', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
 		const { resolveLispRuntimeAssetConfig } = await import('./assets');
 
 		expect(
@@ -1215,7 +1188,6 @@ describe('runtime asset config resolution', () => {
 
 	it('fails closed when any explicit Ruby URL omits the complete trust profile', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		const { resolveRubyRuntimeAssetConfig } = await import('./assets');
 
 		expect(() =>
@@ -1230,21 +1202,25 @@ describe('runtime asset config resolution', () => {
 		).toThrow('complete profile and receipt bundle');
 	});
 
-	it('fails closed on legacy public Ruby URL overrides without a trust profile', async () => {
+	it('fails closed on custom Ruby URL overrides without a trust profile', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '/ruby/ruby_stdlib.wasm.gz.bin';
+		const configuredAssets = {
+			ruby: {
+				wasmUrl: '/ruby/ruby_stdlib.wasm.gz.bin'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveRubyRuntimeAssetConfig } = await import('./assets');
 
 		expect(() =>
-			resolveRubyRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+			resolveRubyRuntimeAssetConfig(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
 		).toThrow('complete profile and receipt bundle');
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 	});
 
 	it('uses the bundled canonical Ruby profile and query-pinned storage paths', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
 		const [{ resolveRubyRuntimeAssetConfig }, core] = await Promise.all([
 			import('./assets'),
 			import('@wasm-idle/core')
@@ -1263,8 +1239,6 @@ describe('runtime asset config resolution', () => {
 
 	it('accepts one complete custom Ruby mirror profile and pins every URL independently', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
 			import('./assets'),
 			import('@wasm-idle/core')
@@ -1296,8 +1270,6 @@ describe('runtime asset config resolution', () => {
 
 	it('snapshots explicit Ruby configuration once before choosing its trust boundary', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
 			import('./assets'),
 			import('@wasm-idle/core')
@@ -1342,8 +1314,6 @@ describe('runtime asset config resolution', () => {
 		}
 	])('rejects a complete Ruby profile with $name before preflight', async ({ override }) => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
 			import('./assets'),
 			import('@wasm-idle/core')
@@ -1363,14 +1333,14 @@ describe('runtime asset config resolution', () => {
 		).toThrow('must use its canonical query-pinned path');
 	});
 
-	it('prefers an explicit R base url over the public env override', async () => {
+	it('prefers an explicit R base url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_R_BASE_URL = 'https://env.example.com/webr/';
 		const { resolveRBaseUrl } = await import('./assets');
 
 		expect(
 			resolveRBaseUrl(
 				{
+					rootUrl: '/ignored',
 					r: {
 						baseUrl: '/runtime/webr/test'
 					}
@@ -1380,19 +1350,25 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/runtime/webr/test/');
 	});
 
-	it('falls back to PUBLIC_WASM_R_BASE_URL when no R runtime config is provided', async () => {
+	it('resolves the per-session R base URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_R_BASE_URL = '/webr/test';
+		const configuredAssets = {
+			r: {
+				baseUrl: '/webr/test'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveRBaseUrl } = await import('./assets');
 
-		expect(resolveRBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/webr/test/'
-		);
+		expect(
+			resolveRBaseUrl(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/webr/test/');
 	});
 
 	it('derives the default R base url from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_R_BASE_URL = '';
 		const { resolveRBaseUrl } = await import('./assets');
 
 		expect(resolveRBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
@@ -1402,9 +1378,6 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers explicit Octave runtime urls over public env overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL = 'https://env.example.com/octave/runtime/';
-		publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL = 'https://env.example.com/octave/worker.js';
-		publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL = 'https://env.example.com/octave/manifest.json';
 		const { resolveOctaveRuntimeAssetConfig } = await import('./assets');
 
 		expect(
@@ -1427,9 +1400,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives default Octave runtime urls from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL = '';
-		publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL = '';
 		const { resolveOctaveRuntimeAssetConfig } = await import('./assets');
 
 		expect(
@@ -1649,8 +1619,6 @@ describe('runtime asset config resolution', () => {
 
 	it('resolves one complete query-pinned Pascal bundle and rejects partial overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PASCAL_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL = '';
 		const { resolvePascalRuntimeAssetConfig } = await import('./assets');
 		const baseUrl = 'https://example.com/absproxy/5173/wasm-pascal/';
 		const workerUrl = `${baseUrl}runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`;
@@ -1705,8 +1673,6 @@ describe('runtime asset config resolution', () => {
 
 	it('preserves relative default Prolog urls and pins when no current url is available', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_PROLOG_WORKER_URL = '';
 		const { resolvePrologRuntimeAssetConfig } = await import('./assets');
 
 		expect(resolvePrologRuntimeAssetConfig(undefined)).toEqual({
@@ -1736,8 +1702,6 @@ describe('runtime asset config resolution', () => {
 
 	it('preserves relative default Tcl urls and pins when no current url is available', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TCL_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_TCL_WORKER_URL = '';
 		const { resolveTclRuntimeAssetConfig } = await import('./assets');
 
 		expect(resolveTclRuntimeAssetConfig(undefined)).toEqual({
@@ -1776,8 +1740,6 @@ describe('runtime asset config resolution', () => {
 
 	it('preserves relative default Forth urls when no current url is available', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_FORTH_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_FORTH_WORKER_URL = '';
 		const { resolveForthRuntimeAssetConfig } = await import('./assets');
 
 		expect(resolveForthRuntimeAssetConfig(undefined)).toEqual({
@@ -1793,8 +1755,6 @@ describe('runtime asset config resolution', () => {
 
 	it('preserves relative default J urls and pins when no current url is available', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_J_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_J_WORKER_URL = '';
 		const { resolveJRuntimeAssetConfig } = await import('./assets');
 
 		expect(resolveJRuntimeAssetConfig(undefined)).toEqual({
@@ -1810,8 +1770,6 @@ describe('runtime asset config resolution', () => {
 
 	it('preserves relative default ClojureScript urls and pins when no current url is available', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL = '';
 		const { resolveClojureScriptRuntimeAssetConfig } = await import('./assets');
 
 		expect(resolveClojureScriptRuntimeAssetConfig(undefined)).toEqual({
@@ -1883,20 +1841,6 @@ describe('runtime asset config resolution', () => {
 			manifestFingerprint: customFingerprint
 		};
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
-		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
-		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://env.example.com/perl/';
-		publicEnv.PUBLIC_WASM_TCL_BASE_URL = 'https://env.example.com/tcl/';
-		publicEnv.PUBLIC_WASM_AWK_BASE_URL = 'https://env.example.com/awk/';
-		publicEnv.PUBLIC_WASM_PASCAL_BASE_URL = 'https://env.example.com/pascal/';
-		publicEnv.PUBLIC_WASM_FORTH_BASE_URL = 'https://env.example.com/forth/';
-		publicEnv.PUBLIC_WASM_J_BASE_URL = 'https://env.example.com/j/';
-		publicEnv.PUBLIC_WASM_BQN_BASE_URL = 'https://env.example.com/bqn/';
-		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://env.example.com/janet/';
-		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://env.example.com/julia/';
-		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://env.example.com/nim/';
-		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL = 'https://env.example.com/clojurescript/';
-		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://env.example.com/swift/';
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
@@ -2324,134 +2268,103 @@ describe('runtime asset config resolution', () => {
 		).toThrow('URL mirrors only');
 	});
 
-	it('accepts custom Gleam URL environment overrides only with complete integrity pins', async () => {
+	it('accepts custom Gleam URL options only with complete integrity pins', async () => {
 		const manifestFingerprint = 'c'.repeat(64);
 		const workerSha256 = 'd'.repeat(64);
-		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://runtime.example.com/gleam/';
-		publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL = 'https://runtime.example.com/gleam/runner.js';
-		publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL =
-			'https://runtime.example.com/gleam/manifest.json';
-		publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT = manifestFingerprint;
-		publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 = workerSha256;
-		publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES = '4321';
+		const configuredAssets = {
+			gleam: {
+				baseUrl: 'https://runtime.example.com/gleam/',
+				workerUrl: 'https://runtime.example.com/gleam/runner.js',
+				manifestUrl: 'https://runtime.example.com/gleam/manifest.json',
+				manifestFingerprint: manifestFingerprint,
+				workerReceipt: { bytes: 4321, sha256: workerSha256 }
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		vi.resetModules();
-		try {
-			const { resolveGleamRuntimeAssetConfig } = await import('./assets');
-			expect(resolveGleamRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+		const { resolveGleamRuntimeAssetConfig } = await import('./assets');
+		expect(resolveGleamRuntimeAssetConfig(configuredAssets, 'https://example.com/app')).toEqual(
+			{
 				baseUrl: 'https://runtime.example.com/gleam/',
 				workerUrl: 'https://runtime.example.com/gleam/runner.js',
 				manifestUrl: 'https://runtime.example.com/gleam/manifest.json',
 				manifestFingerprint,
 				workerReceipt: { bytes: 4321, sha256: workerSha256 }
-			});
-		} finally {
-			publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = '';
-			publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL = '';
-			publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL = '';
-			publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT = '';
-			publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 = '';
-			publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES = '';
-		}
+			}
+		);
 	});
 
-	it('rejects custom Perl URL environment overrides without a complete profile bundle', async () => {
+	it('rejects custom Perl URL options without a complete profile bundle', async () => {
 		const manifestFingerprint = 'e'.repeat(64);
 		const workerSha256 = 'f'.repeat(64);
-		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://runtime.example.com/perl/';
-		publicEnv.PUBLIC_WASM_PERL_WORKER_URL = 'https://runtime.example.com/perl/runner.js';
-		publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL = 'https://runtime.example.com/perl/manifest.json';
-		publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT = manifestFingerprint;
-		publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 = workerSha256;
-		publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES = '5432';
+		const configuredAssets = {
+			perl: {
+				baseUrl: 'https://runtime.example.com/perl/',
+				workerUrl: 'https://runtime.example.com/perl/runner.js',
+				manifestUrl: 'https://runtime.example.com/perl/manifest.json',
+				manifestFingerprint: manifestFingerprint,
+				workerReceipt: { bytes: 5432, sha256: workerSha256 }
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		vi.resetModules();
-		try {
-			const { resolvePerlRuntimeAssetConfig } = await import('./assets');
-			expect(() =>
-				resolvePerlRuntimeAssetConfig(undefined, 'https://example.com/app')
-			).toThrow('WebPerl runtime preflight identity is invalid');
-		} finally {
-			publicEnv.PUBLIC_WASM_PERL_BASE_URL = '';
-			publicEnv.PUBLIC_WASM_PERL_WORKER_URL = '';
-			publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL = '';
-			publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT = '';
-			publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 = '';
-			publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES = '';
-		}
+		const { resolvePerlRuntimeAssetConfig } = await import('./assets');
+		expect(() =>
+			resolvePerlRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toThrow('WebPerl runtime preflight identity is invalid');
 	});
 
-	it('rejects custom Janet URL environment overrides without a complete profile bundle', async () => {
-		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://runtime.example.com/janet/';
-		publicEnv.PUBLIC_WASM_JANET_WORKER_URL = 'https://runtime.example.com/janet/runner.js';
-		publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL =
-			'https://runtime.example.com/janet/manifest.json';
-		publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT = 'e'.repeat(64);
-		publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 = 'f'.repeat(64);
-		publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES = '5432';
+	it('rejects custom Janet URL options without a complete profile bundle', async () => {
+		const configuredAssets = {
+			janet: {
+				baseUrl: 'https://runtime.example.com/janet/',
+				workerUrl: 'https://runtime.example.com/janet/runner.js',
+				manifestUrl: 'https://runtime.example.com/janet/manifest.json',
+				manifestFingerprint: 'e'.repeat(64),
+				workerReceipt: { bytes: 5432, sha256: 'f'.repeat(64) }
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		vi.resetModules();
-		try {
-			const { resolveJanetRuntimeAssetConfig } = await import('./assets');
-			expect(() =>
-				resolveJanetRuntimeAssetConfig(undefined, 'https://example.com/app')
-			).toThrow('Janet runtime preflight identity is invalid');
-		} finally {
-			publicEnv.PUBLIC_WASM_JANET_BASE_URL = '';
-			publicEnv.PUBLIC_WASM_JANET_WORKER_URL = '';
-			publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL = '';
-			publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT = '';
-			publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 = '';
-			publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES = '';
-		}
+		const { resolveJanetRuntimeAssetConfig } = await import('./assets');
+		expect(() =>
+			resolveJanetRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toThrow('Janet runtime preflight identity is invalid');
 	});
 
-	it('rejects custom Julia URL environment overrides without a complete profile bundle', async () => {
+	it('rejects custom Julia URL options without a complete profile bundle', async () => {
 		const manifestFingerprint = '7'.repeat(64);
 		const workerSha256 = '8'.repeat(64);
-		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://runtime.example.com/julia/';
-		publicEnv.PUBLIC_WASM_JULIA_WORKER_URL = 'https://runtime.example.com/julia/runner.js';
-		publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL =
-			'https://runtime.example.com/julia/manifest.json';
-		publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT = manifestFingerprint;
-		publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 = workerSha256;
-		publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES = '6543';
+		const configuredAssets = {
+			julia: {
+				baseUrl: 'https://runtime.example.com/julia/',
+				workerUrl: 'https://runtime.example.com/julia/runner.js',
+				manifestUrl: 'https://runtime.example.com/julia/manifest.json',
+				manifestFingerprint: manifestFingerprint,
+				workerReceipt: { bytes: 6543, sha256: workerSha256 }
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		vi.resetModules();
-		try {
-			const { resolveJuliaRuntimeAssetConfig } = await import('./assets');
-			expect(() =>
-				resolveJuliaRuntimeAssetConfig(undefined, 'https://example.com/app')
-			).toThrow('Julia runtime preflight identity is invalid');
-		} finally {
-			publicEnv.PUBLIC_WASM_JULIA_BASE_URL = '';
-			publicEnv.PUBLIC_WASM_JULIA_WORKER_URL = '';
-			publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL = '';
-			publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT = '';
-			publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 = '';
-			publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES = '';
-		}
+		const { resolveJuliaRuntimeAssetConfig } = await import('./assets');
+		expect(() =>
+			resolveJuliaRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toThrow('Julia runtime preflight identity is invalid');
 	});
 
-	it('rejects custom Nim URL environment overrides without a complete profile bundle', async () => {
+	it('rejects custom Nim URL options without a complete profile bundle', async () => {
 		const manifestFingerprint = '9'.repeat(64);
 		const workerSha256 = 'a'.repeat(64);
-		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://runtime.example.com/nim/';
-		publicEnv.PUBLIC_WASM_NIM_WORKER_URL = 'https://runtime.example.com/nim/runner.js';
-		publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL = 'https://runtime.example.com/nim/manifest.json';
-		publicEnv.PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT = manifestFingerprint;
-		publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 = workerSha256;
-		publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES = '7654';
+		const configuredAssets = {
+			nim: {
+				baseUrl: 'https://runtime.example.com/nim/',
+				workerUrl: 'https://runtime.example.com/nim/runner.js',
+				manifestUrl: 'https://runtime.example.com/nim/manifest.json',
+				manifestFingerprint: manifestFingerprint,
+				workerReceipt: { bytes: 7654, sha256: workerSha256 }
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		vi.resetModules();
-		try {
-			const { resolveNimRuntimeAssetConfig } = await import('./assets');
-			expect(() =>
-				resolveNimRuntimeAssetConfig(undefined, 'https://example.com/app')
-			).toThrow('Nim runtime profile ID');
-		} finally {
-			publicEnv.PUBLIC_WASM_NIM_BASE_URL = '';
-			publicEnv.PUBLIC_WASM_NIM_WORKER_URL = '';
-			publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL = '';
-			publicEnv.PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT = '';
-			publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 = '';
-			publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES = '';
-		}
+		const { resolveNimRuntimeAssetConfig } = await import('./assets');
+		expect(() =>
+			resolveNimRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toThrow('Nim runtime profile ID');
 	});
 
 	it('rejects a complete custom Nim profile paired with a noncanonical manifest URL', async () => {
@@ -2495,46 +2408,52 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('falls back to PUBLIC_WASM_SWIFT urls when no Swift runtime config is provided', async () => {
+	it('resolves per-session Swift asset URLs', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://cdn.example.com/swift-runtime';
-		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = 'https://cdn.example.com/swift-worker.js?v=abc';
-		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL =
-			'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc';
-		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
-
-		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
-			{
-				baseUrl: 'https://cdn.example.com/swift-runtime/',
+		const configuredAssets = {
+			swift: {
+				baseUrl: 'https://cdn.example.com/swift-runtime',
 				workerUrl: 'https://cdn.example.com/swift-worker.js?v=abc',
 				manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc'
 			}
-		);
-	});
-
-	it('derives Swift worker and manifest urls from PUBLIC_WASM_SWIFT_BASE_URL', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://cdn.example.com/swift-runtime';
-		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = '';
-		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL = '';
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
-			{
-				baseUrl: 'https://cdn.example.com/swift-runtime/',
-				workerUrl: 'https://cdn.example.com/swift-runtime/runner-worker.js',
-				manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json'
+		expect(
+			resolveSwiftRuntimeAssetConfig(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/swift-runtime/',
+			workerUrl: 'https://cdn.example.com/swift-worker.js?v=abc',
+			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc'
+		});
+	});
+
+	it('derives Swift worker and manifest urls from an explicit base URL', async () => {
+		vi.resetModules();
+		const configuredAssets = {
+			swift: {
+				baseUrl: 'https://cdn.example.com/swift-runtime'
 			}
-		);
+		} satisfies PlaygroundRuntimeAssets;
+		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveSwiftRuntimeAssetConfig(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/swift-runtime/',
+			workerUrl: 'https://cdn.example.com/swift-runtime/runner-worker.js',
+			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json'
+		});
 	});
 
 	it('derives static runtime module urls from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_DUCKDB_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_PHP_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL = '';
 		const {
 			resolveAssemblyScriptRuntimeModuleUrl,
 			resolveDuckDbRuntimeModuleUrl,
@@ -2560,14 +2479,14 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('prefers an explicit SQLite wasm url over the public env override', async () => {
+	it('prefers an explicit SQLite wasm url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = 'https://env.example.com/sql-wasm.wasm';
 		const { resolveSqliteWasmUrl } = await import('./assets');
 
 		expect(
 			resolveSqliteWasmUrl(
 				{
+					rootUrl: '/ignored',
 					sqlite: {
 						wasmUrl: '/runtime/sql-wasm.wasm'
 					}
@@ -2577,19 +2496,25 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/runtime/sql-wasm.wasm');
 	});
 
-	it('falls back to PUBLIC_WASM_SQLITE_WASM_URL when no SQLite runtime config is provided', async () => {
+	it('resolves the per-session SQLite Wasm URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = '/sqlite/sql-wasm.wasm';
+		const configuredAssets = {
+			sqlite: {
+				wasmUrl: '/sqlite/sql-wasm.wasm'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveSqliteWasmUrl } = await import('./assets');
 
-		expect(resolveSqliteWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/sqlite/sql-wasm.wasm'
-		);
+		expect(
+			resolveSqliteWasmUrl(
+				{ ...configuredAssets, rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/sqlite/sql-wasm.wasm');
 	});
 
 	it('uses the bundled SQLite wasm asset when no SQLite asset url is configured', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = '';
 		const { resolveSqliteWasmUrl } = await import('./assets');
 
 		expect(resolveSqliteWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
@@ -2597,9 +2522,6 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers explicit Haskell asset urls over public env overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = 'https://env.example.com/dyld.mjs';
-		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = 'https://env.example.com/rootfs.tar.zst';
-		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = 'https://env.example.com/bsdtar.wasm';
 		const { resolveHaskellModuleUrl, resolveHaskellRootfsUrl, resolveHaskellBsdtarUrl } =
 			await import('./assets');
 
@@ -2623,9 +2545,6 @@ describe('runtime asset config resolution', () => {
 
 	it('derives default Haskell asset urls from the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
 		const { resolveHaskellModuleUrl, resolveHaskellRootfsUrl, resolveHaskellBsdtarUrl } =
 			await import('./assets');
 
@@ -2653,15 +2572,23 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('derives the V runtime base url from the shared root path or an explicit override', () => {
+		expect(resolveVBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-v/'
+		);
+		expect(
+			resolveVBaseUrl({ v: { baseUrl: 'https://cdn.example.com/v' } }, 'https://example.com/')
+		).toBe('https://cdn.example.com/v/');
+	});
+
 	it('derives the COBOL runtime base url from the shared root path', () => {
 		expect(resolveCobolBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-cobol/'
 		);
 	});
 
-	it('prefers an explicit COBOL runtime base url over the public env override', async () => {
+	it('prefers an explicit COBOL runtime base url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_COBOL_BASE_URL = 'https://env.example.com/cobol/';
 		const { resolveCobolBaseUrl } = await import('./assets');
 
 		expect(
@@ -2674,11 +2601,6 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers explicit Fortran asset urls over public env overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL = 'https://env.example.com/fortran/';
-		publicEnv.PUBLIC_WASM_FORTRAN_F2C_WASM_URL = 'https://env.example.com/f2c.wasm';
-		publicEnv.PUBLIC_WASM_FORTRAN_LIBF2C_URL = 'https://env.example.com/libf2c.a';
-		publicEnv.PUBLIC_WASM_FORTRAN_F2C_HEADER_URL = 'https://env.example.com/f2c.h';
-		publicEnv.PUBLIC_WASM_FORTRAN_ANALYZER_URL = 'https://env.example.com/analyzer.js';
 		const { resolveFortranRuntimeAssetConfig } = await import('./assets');
 
 		expect(
@@ -2729,16 +2651,18 @@ describe('runtime asset config resolution', () => {
 		).toThrow('exactly three asset receipts');
 	});
 
-	it('falls back to PUBLIC_WASM_FORTRAN_BASE_URL for unconfigured Fortran asset urls', async () => {
+	it('derives unconfigured Fortran asset urls from the explicit base URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL = 'https://env.example.com/fortran';
-		publicEnv.PUBLIC_WASM_FORTRAN_F2C_WASM_URL = '';
-		publicEnv.PUBLIC_WASM_FORTRAN_LIBF2C_URL = '';
-		publicEnv.PUBLIC_WASM_FORTRAN_F2C_HEADER_URL = '';
-		publicEnv.PUBLIC_WASM_FORTRAN_ANALYZER_URL = '';
+		const configuredAssets = {
+			fortran: {
+				baseUrl: 'https://env.example.com/fortran'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveFortranRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveFortranRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+		expect(
+			resolveFortranRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toEqual({
 			baseUrl: 'https://env.example.com/fortran/',
 			f2cWasmUrl: 'https://env.example.com/fortran/f2c.wasm',
 			libf2cUrl: 'https://env.example.com/fortran/libf2c.a',
@@ -2768,16 +2692,6 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers explicit Objective-C asset urls over public env overrides', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL = 'https://env.example.com/objectivec/';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL = 'https://env.example.com/libobjc.a';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_HEADERS_URL = 'https://env.example.com/headers.json';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL =
-			'https://env.example.com/libgnustep-base.a';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL =
-			'https://env.example.com/libgnustep-base.o';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL =
-			'https://env.example.com/foundation-headers.json';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL = 'https://env.example.com/libffi.a';
 		const { resolveObjectiveCRuntimeAssetConfig } = await import('./assets');
 		const customIntegrity = {
 			...WASM_OBJECTIVEC_ASSET_RECEIPTS,
@@ -2824,18 +2738,18 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('falls back to PUBLIC_WASM_OBJECTIVEC_BASE_URL for unconfigured Objective-C asset urls', async () => {
+	it('derives unconfigured Objective-C asset urls from the explicit base URL', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL = 'https://env.example.com/objectivec';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL = '';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_HEADERS_URL = '';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL = '';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL = '';
-		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL = '';
+		const configuredAssets = {
+			objectivec: {
+				baseUrl: 'https://env.example.com/objectivec'
+			}
+		} satisfies PlaygroundRuntimeAssets;
 		const { resolveObjectiveCRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveObjectiveCRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+		expect(
+			resolveObjectiveCRuntimeAssetConfig(configuredAssets, 'https://example.com/app')
+		).toEqual({
 			baseUrl: 'https://env.example.com/objectivec/',
 			libobjcUrl: 'https://env.example.com/objectivec/libobjc.a',
 			headersUrl: 'https://env.example.com/objectivec/headers.json',

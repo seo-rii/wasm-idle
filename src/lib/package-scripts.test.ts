@@ -119,7 +119,7 @@ describe('LLVM runtime package scripts', () => {
 
 		expect(root.dependencies?.['@lezer/rust']).toBeUndefined();
 		expect(rustRuntime.dependencies?.['@lezer/rust']).toBeUndefined();
-		expect(rustRuntime.devDependencies?.['@lezer/rust']).toBe('^1.0.2');
+		expect(rustRuntime.devDependencies?.['@lezer/rust']).toBe('^1.0.3');
 		expect(rustRuntime.scripts?.['postbuild:js']).toContain('build-debug-instrumenter.mjs');
 	});
 

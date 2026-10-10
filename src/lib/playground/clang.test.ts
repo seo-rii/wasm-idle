@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 import { RuntimeAssetCache } from './runtimeAssetCache';
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
-
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {
+	/** Lets a test answer a message itself; returning false keeps the default responses. */
+	static respond?: (worker: MockWorker, message: any) => boolean;
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	onerror: ((event: unknown) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
+		if (MockWorker.respond?.(this, message)) return;
 		if (message.load) {
 			queueMicrotask(() => {
 				this.onmessage?.({
@@ -45,11 +45,21 @@ describe('Clang sandbox', () => {
 		const sandbox = new Clang('C');
 		sandbox.output = vi.fn();
 		await sandbox.load({ rootUrl: '/', persistentCache: { enabled: true, maxBytes: 4096 } });
+		expect(workerInstances[0].postMessage.mock.calls[0][0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
 		const select = vi.spyOn(sandbox.assetBridge!, 'setExecutionPersistentCache');
 		await sandbox.run('int main() {}', true, false, undefined, [], { persistentCache: false });
 		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: false, maxBytes: 4096 });
+		expect(workerInstances[0].postMessage.mock.calls.at(-1)?.[0].persistentCache).toMatchObject(
+			{ enabled: false, maxBytes: 4096 }
+		);
 		await sandbox.run('int main() {}', true);
 		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: true, maxBytes: 4096 });
+		expect(workerInstances[0].postMessage.mock.calls.at(-1)?.[0].persistentCache).toMatchObject(
+			{ enabled: true, maxBytes: 4096 }
+		);
 		await sandbox.dispose();
 	});
 	beforeEach(() => {
@@ -597,5 +607,145 @@ int main() {
 		await sandbox.load('/', '', true, [], {}, progress);
 
 		expect(progress.set).toHaveBeenCalledWith(0.4, 'Loading Clang modules');
+	});
+});
+
+describe('Clang sandbox precompiled <bits/stdc++.h>', () => {
+	beforeEach(() => {
+		workerInstances.length = 0;
+		vi.stubGlobal('Worker', MockWorker);
+	});
+
+	it('builds the header in a helper worker and sends it once to the warm worker', async () => {
+		const header = { key: 'stdc++', bytes: new Uint8Array([1, 2]) };
+		MockWorker.respond = (worker, message) => {
+			if (message.precompileHeader) {
+				queueMicrotask(() =>
+					worker.onmessage?.({ data: { precompiledHeader: header } } as MessageEvent<any>)
+				);
+				return true;
+			}
+			if (message.load || !message.code) return false;
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: {
+						results: true,
+						...(message.precompiledHeader ? {} : { precompiledHeaderKey: header.key })
+					}
+				} as MessageEvent<any>)
+			);
+			return true;
+		};
+		try {
+			const sandbox = new Clang('CPP');
+			sandbox.output = vi.fn();
+			await sandbox.load('/');
+			const source = '#include <bits/stdc++.h>\nint main() {}';
+			await sandbox.run(source, true, false, undefined, [], { cppVersion: 'CPP20' });
+			await vi.waitFor(() => expect(workerInstances[1]?.terminate).toHaveBeenCalledOnce());
+			const [warm, helper] = workerInstances;
+			expect(helper.postMessage.mock.calls.map(([message]) => message)).toEqual([
+				expect.objectContaining({ load: true }),
+				expect.objectContaining({
+					precompileHeader: true,
+					code: source,
+					language: 'CPP',
+					cppVersion: 'CPP20',
+					debugMode: 'none'
+				})
+			]);
+
+			await sandbox.run(`${source}\n`, true);
+			await sandbox.run(`${source}\n\n`, true);
+			const runs = warm.postMessage.mock.calls
+				.map(([message]) => message)
+				.filter((message) => message.code && !message.load);
+			expect(runs.map((message) => message.precompiledHeader)).toEqual([
+				undefined,
+				header,
+				undefined
+			]);
+			expect(workerInstances).toHaveLength(2);
+			await sandbox.dispose();
+		} finally {
+			MockWorker.respond = undefined;
+		}
+	});
+
+	it('sends a newer header to a worker that already received an older one', async () => {
+		let next = 0;
+		const headers = [
+			{ key: 'gnu++17', bytes: new Uint8Array([1]) },
+			{ key: 'gnu++20', bytes: new Uint8Array([2]) }
+		];
+		MockWorker.respond = (worker, message) => {
+			if (message.precompileHeader) {
+				const header = headers[next++];
+				queueMicrotask(() =>
+					worker.onmessage?.({ data: { precompiledHeader: header } } as MessageEvent<any>)
+				);
+				return true;
+			}
+			if (message.load || !message.code) return false;
+			const key = message.cppVersion === 'CPP20' ? 'gnu++20' : 'gnu++17';
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: {
+						results: true,
+						...(message.precompiledHeader?.key === key
+							? {}
+							: { precompiledHeaderKey: key })
+					}
+				} as MessageEvent<any>)
+			);
+			return true;
+		};
+		try {
+			const sandbox = new Clang('CPP');
+			sandbox.output = vi.fn();
+			await sandbox.load('/');
+			const source = '#include <bits/stdc++.h>\nint main() {}';
+			await sandbox.run(source, true);
+			await vi.waitFor(() => expect(workerInstances[1]?.terminate).toHaveBeenCalledOnce());
+			await sandbox.run(source, true, false, undefined, [], { cppVersion: 'CPP20' });
+			await vi.waitFor(() => expect(workerInstances[2]?.terminate).toHaveBeenCalledOnce());
+			await sandbox.run(source, true, false, undefined, [], { cppVersion: 'CPP20' });
+			const sent = workerInstances[0].postMessage.mock.calls
+				.map(([message]) => message)
+				.filter((message) => message.code && !message.load)
+				.map((message) => message.precompiledHeader?.key);
+			expect(sent).toEqual([undefined, 'gnu++17', 'gnu++20']);
+			await sandbox.dispose();
+		} finally {
+			MockWorker.respond = undefined;
+		}
+	});
+
+	it('stops a pending helper when the sandbox is disposed', async () => {
+		MockWorker.respond = (worker, message) => {
+			if (message.precompileHeader) return true;
+			if (message.load || !message.code) return false;
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: { results: true, precompiledHeaderKey: 'stdc++' }
+				} as MessageEvent<any>)
+			);
+			return true;
+		};
+		try {
+			const sandbox = new Clang('CPP');
+			sandbox.output = vi.fn();
+			await sandbox.load('/');
+			await sandbox.run('#include <bits/stdc++.h>\nint main() {}', true);
+			await vi.waitFor(() =>
+				expect(workerInstances[1]?.postMessage).toHaveBeenCalledWith(
+					expect.objectContaining({ precompileHeader: true })
+				)
+			);
+			await sandbox.dispose();
+			expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
+		} finally {
+			MockWorker.respond = undefined;
+		}
 	});
 });

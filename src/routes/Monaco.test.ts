@@ -518,7 +518,7 @@ describe('Monaco route debug sync', () => {
 			/import \{\s+createApplicationAssetResolver,\s+createApplicationRuntimeAssets\s+\} from '\$lib\/playground\/applicationAssets';/s
 		);
 		expect(pageSource).toMatch(
-			/let runtimeAssets = \$derived\.by\(\(\) => \(\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
+			/let runtimeAssets = \$derived\.by\(\(\) =>\s+applyExampleRuntimeEnvironment\(\s+\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
 		);
 		expect(pageSource).toMatch(
 			/import elixirRuntimeWorkerUrl from '\$lib\/playground\/worker\/elixir\?worker&url';/
@@ -645,7 +645,7 @@ describe('Monaco route debug sync', () => {
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
-		expect(packageJson.devDependencies?.['@seorii/monaco']).toBe('0.1.1');
+		expect(packageJson.devDependencies?.['@seorii/monaco']).toBe('0.2.0');
 		expect(packageJson.dependencies).not.toHaveProperty('@seorii/monaco');
 		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');

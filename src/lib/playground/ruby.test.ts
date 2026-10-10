@@ -13,12 +13,6 @@ vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
 }));
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_RUBY_MODULE_URL: '',
-		PUBLIC_WASM_RUBY_WASM_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -65,10 +59,6 @@ vi.mock('$lib/playground/worker/ruby?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Ruby from './ruby';
 
 describe('Ruby sandbox', () => {
@@ -77,8 +67,6 @@ describe('Ruby sandbox', () => {
 			.mockReset()
 			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
 		suppressAutoLoadAck = false;
 	});
 
@@ -168,7 +156,7 @@ describe('Ruby sandbox', () => {
 				baseUrl: 'http://localhost:3000/runtime/',
 				moduleUrl: expect.stringMatching(/\/runtime\/runtime\.mjs\.bin\?v=/),
 				wasmUrl: expect.stringMatching(
-					/\/runtime\/assets\/ruby_stdlib-C40Yu-vu\.wasm\.gz\.bin\?v=/
+					/\/runtime\/assets\/ruby_stdlib-D8-A_OuU\.wasm\.gz\.bin\?v=/
 				)
 			}),
 			expect.any(Object)

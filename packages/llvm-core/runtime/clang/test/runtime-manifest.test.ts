@@ -55,6 +55,48 @@ describe('runtime manifest', () => {
 		expect(parseRuntimeManifest(legacyValue).compiler.provenance).toBeUndefined();
 	});
 
+	it('preserves verified separate clangd headers without changing legacy two-asset manifests', () => {
+		const headers = {
+			asset: 'clangd/clangd.headers.json.gz',
+			format: 'clangd-headers-v1',
+			version: 'b'.repeat(64),
+			targetTriple: 'wasm32-wasi',
+			resourceDir: '/lib/clang/22.1.8',
+			bytes: 1024,
+			sha256: 'a'.repeat(64),
+			uncompressedBytes: 2048,
+			uncompressedSha256: 'b'.repeat(64)
+		};
+		const extended = { ...manifestValue, clangd: { ...manifestValue.clangd, headers } };
+		expect(parseRuntimeManifest(extended).clangd.headers).toEqual(headers);
+		expect(parseRuntimeManifest(manifestValue).clangd).toEqual(manifestValue.clangd);
+		for (const invalid of [
+			null,
+			{},
+			{ ...headers, asset: '../headers.gz' },
+			{ ...headers, format: 'unknown' },
+			{ ...headers, version: 'c'.repeat(64) },
+			{ ...headers, sha256: 'x'.repeat(64) },
+			{ ...headers, uncompressedSha256: '' },
+			{ ...headers, bytes: 0 },
+			{ ...headers, bytes: 1.5 },
+			{ ...headers, uncompressedBytes: Infinity },
+			{ ...headers, uncompressedBytes: 128 * 1024 * 1024 + 1 },
+			{ ...headers, targetTriple: 'wasm32-unknown-unknown' },
+			{ ...headers, resourceDir: '/lib/clang/../22' },
+			{ ...headers, resourceDir: '/lib/clang/..' },
+			{ ...headers, resourceDir: '/lib/clang/.' },
+			{ ...headers, resourceDir: '/lib/clang/22' }
+		]) {
+			expect(() =>
+				parseRuntimeManifest({
+					...extended,
+					clangd: { ...extended.clangd, headers: invalid }
+				})
+			).toThrow('root.clangd.headers');
+		}
+	});
+
 	it('accepts an optional long double archive and rejects invalid references', () => {
 		const extended = structuredClone(manifestValue) as typeof manifestValue & {
 			compiler: { sysroot: { printscanLongDouble?: unknown } };

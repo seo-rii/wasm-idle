@@ -13,9 +13,10 @@
 		type DebugLanguageAdapter
 	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
+	import * as publicEnvironment from '$app/env/public';
 	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import {
 		createApplicationAssetResolver,
@@ -49,6 +50,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
@@ -160,6 +162,8 @@
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	// Runtimes that consume stdin once at start, even when terminal streaming is available.
+	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
@@ -180,18 +184,23 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
-	const applicationRootUrl = base;
+	const applicationRootUrl = resolve('');
 	const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);
 	let clangdBaseUrl = $derived(resolveApplicationAsset('clangd/'));
-	let runtimeAssets = $derived.by(() => ({
-		...createApplicationRuntimeAssets(applicationRootUrl),
-		debug: {
-			baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
-			manifestUrl: path
-				? `${path}/wasm-debug/runtime-manifest.v2.json`
-				: '/wasm-debug/runtime-manifest.v2.json'
-		}
-	}));
+	let runtimeAssets = $derived.by(() =>
+		applyExampleRuntimeEnvironment(
+			{
+				...createApplicationRuntimeAssets(applicationRootUrl),
+				debug: {
+					baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
+					manifestUrl: path
+						? `${path}/wasm-debug/runtime-manifest.v2.json`
+						: '/wasm-debug/runtime-manifest.v2.json'
+				}
+			},
+			publicEnvironment
+		)
+	);
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets, { prewarm: true }));
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
@@ -612,12 +621,25 @@
 		const ext = extension(filePath);
 		if ((ext === '.m' || ext === '.h') && language === 'OBJC') return 'OBJC';
 		if ((ext === '.lisp' || ext === '.lsp') && language === 'COMMONLISP') return 'COMMONLISP';
+		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
+		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
+			'.ws': 'WHITESPACE',
+			'.mal': 'MALBOLGE',
+			'.aheui': 'AHEUI',
+			'.um': 'UHMLANG',
+			'.umm': 'UHMLANG',
+			'.lol': 'LOLCODE',
+			'.ape': 'APECODE',
+			'.gs': 'GOLFSCRIPT',
+			'.bf': 'BRAINFUCK',
+			'.b93': 'BEFUNGE93',
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
 			'.cxx': 'CPP',
 			'.objc': 'OBJC',
+			'.mm': 'OBJECTIVECXX',
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
@@ -637,6 +659,7 @@
 			'.prolog': 'PROLOG',
 			'.pro': 'PROLOG',
 			'.gleam': 'GLEAM',
+			'.gr': 'GRAIN',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
 			'.tcl': 'TCL',
@@ -659,7 +682,9 @@
 			'.sh': 'BASH',
 			'.bash': 'BASH',
 			'.cljs': 'CLOJURESCRIPT',
+			'.hy': 'HY',
 			'.cljc': 'CLOJURESCRIPT',
+			'.res': 'RESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -672,6 +697,7 @@
 			'.wast': 'WAT',
 			'.wasm': 'WASM',
 			'.lua': 'LUA',
+			'.fnl': 'FENNEL',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
 			'.ss': 'LISP',
@@ -691,11 +717,14 @@
 			'.cob': 'COBOL',
 			'.cbl': 'COBOL',
 			'.cpy': 'COBOL',
+			'.v': 'V',
 			'.graphql': 'GRAPHQL',
 			'.gql': 'GRAPHQL',
 			'.duckdb': 'DUCKDB',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
+			'.pgsql': 'POSTGRESQL',
+			'.psql': 'POSTGRESQL',
 			'.php': 'PHP',
 			'.json': 'JSON',
 			'.jsonc': 'JSON',
@@ -716,6 +745,7 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			OBJC: 'main.m',
+			OBJECTIVECXX: 'main.mm',
 			JAVA: 'Main.java',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
@@ -728,6 +758,7 @@
 			ERLANG: 'main.erl',
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
+			GRAIN: 'main.gr',
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
@@ -741,6 +772,8 @@
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
+			RESCRIPT: 'Main.res',
+			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
 			JAVASCRIPT: 'main.js',
@@ -748,7 +781,17 @@
 			ASSEMBLYSCRIPT: 'main.as.ts',
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
+			WHITESPACE: 'main.ws',
+			MALBOLGE: 'main.mal',
+			AHEUI: 'main.aheui',
+			UHMLANG: 'main.um',
+			LOLCODE: 'main.lol',
+			APECODE: 'main.ape',
+			GOLFSCRIPT: 'main.gs',
+			BRAINFUCK: 'main.bf',
+			BEFUNGE93: 'main.b93',
 			LUA: 'main.lua',
+			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			COMMONLISP: 'main.lisp',
@@ -759,9 +802,11 @@
 			LFORTRAN: 'main.f90',
 			FORTRAN: 'main.f',
 			COBOL: 'main.cob',
+			V: 'main.v',
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
+			POSTGRESQL: 'main.sql',
 			PHP: 'main.php',
 			JSON: 'main.json',
 			YAML: 'main.yaml',
@@ -778,6 +823,7 @@
 			C: 'c',
 			CPP: 'cpp',
 			OBJC: 'objectivec',
+			OBJECTIVECXX: 'objectivecxx',
 			PYTHON: 'python',
 			JAVA: 'java',
 			RUST: 'rust',
@@ -790,6 +836,7 @@
 			ERLANG: 'erlang',
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
+			GRAIN: 'grain',
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
@@ -803,6 +850,8 @@
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
+			RESCRIPT: 'rescript',
+			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
 			JAVASCRIPT: 'javascript',
@@ -810,7 +859,17 @@
 			ASSEMBLYSCRIPT: 'assemblyscript',
 			WAT: 'wat',
 			WASM: 'wasm',
+			WHITESPACE: 'whitespace',
+			MALBOLGE: 'malbolge',
+			AHEUI: 'aheui',
+			UHMLANG: 'uhmlang',
+			LOLCODE: 'lolcode',
+			APECODE: 'apecode',
+			GOLFSCRIPT: 'golfscript',
+			BRAINFUCK: 'brainfuck',
+			BEFUNGE93: 'befunge93',
 			LUA: 'lua',
+			FENNEL: 'fennel',
 			ZIG: 'zig',
 			LISP: 'lisp',
 			COMMONLISP: 'commonlisp',
@@ -821,9 +880,11 @@
 			LFORTRAN: 'lfortran',
 			FORTRAN: 'fortran',
 			COBOL: 'cobol',
+			V: 'v',
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
+			POSTGRESQL: 'postgresql',
 			PHP: 'php',
 			JSON: 'json',
 			YAML: 'yaml',
@@ -1183,12 +1244,8 @@
 		saveWorkspace();
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
 		const url = new SvelteURL(location.href);
-		const routePath =
-			base && url.pathname.startsWith(base)
-				? url.pathname.slice(base.length) || '/'
-				: url.pathname;
 		url.hash = shareHash;
-		replaceState(`${routePath}${url.search}#${shareHash}`, page.state);
+		await replaceState(url, page.state);
 		await navigator.clipboard?.writeText(url.toString());
 		saveStatus =
 			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
@@ -1442,6 +1499,24 @@
 		if (!value) return null;
 		const normalized = value.trim().toLowerCase();
 		const aliases: Record<string, PlaygroundLanguage> = {
+			"whitespace": 'WHITESPACE',
+			malbolge: 'MALBOLGE',
+			aheui: 'AHEUI',
+			'아희': 'AHEUI',
+			uhmlang: 'UHMLANG',
+			umjunsik: 'UHMLANG',
+			'엄준식': 'UHMLANG',
+			lolcode: 'LOLCODE',
+			lol: 'LOLCODE',
+			apecode: 'APECODE',
+			ape: 'APECODE',
+			golfscript: 'GOLFSCRIPT',
+			'golf-script': 'GOLFSCRIPT',
+			brainfuck: 'BRAINFUCK',
+			bf: 'BRAINFUCK',
+			befunge93: 'BEFUNGE93',
+			befunge: 'BEFUNGE93',
+			'befunge-93': 'BEFUNGE93',
 			python: 'PYTHON',
 			python3: 'PYTHON',
 			pypy3: 'PYTHON',
@@ -1452,6 +1527,11 @@
 			objectivec: 'OBJC',
 			'objective-c': 'OBJC',
 			objective_c: 'OBJC',
+			objcxx: 'OBJECTIVECXX',
+			objcpp: 'OBJECTIVECXX',
+			objectivecxx: 'OBJECTIVECXX',
+			'objective-c++': 'OBJECTIVECXX',
+			objective_cxx: 'OBJECTIVECXX',
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
@@ -1473,6 +1553,7 @@
 			swipl: 'PROLOG',
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
+			grain: 'GRAIN',
 			perl: 'PERL',
 			tcl: 'TCL',
 			tclsh: 'TCL',
@@ -1496,6 +1577,10 @@
 			shell: 'BASH',
 			clojurescript: 'CLOJURESCRIPT',
 			cljs: 'CLOJURESCRIPT',
+			rescript: 'RESCRIPT',
+			res: 'RESCRIPT',
+			hy: 'HY',
+			hylang: 'HY',
 			ocaml: 'OCAML',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
@@ -1508,6 +1593,8 @@
 			wasm: 'WASM',
 			wasm32: 'WASM',
 			lua: 'LUA',
+			fennel: 'FENNEL',
+			fnl: 'FENNEL',
 			zig: 'ZIG',
 			lisp: 'LISP',
 			scheme: 'LISP',
@@ -1531,12 +1618,18 @@
 			cob: 'COBOL',
 			cbl: 'COBOL',
 			gnucobol: 'COBOL',
+			v: 'V',
+			vlang: 'V',
 			tinygo: 'TINYGO',
 			graphql: 'GRAPHQL',
 			gql: 'GRAPHQL',
 			duckdb: 'DUCKDB',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
+			postgresql: 'POSTGRESQL',
+			postgres: 'POSTGRESQL',
+			pgsql: 'POSTGRESQL',
+			pglite: 'POSTGRESQL',
 			php: 'PHP',
 			json: 'JSON',
 			jsonc: 'JSON',
@@ -2002,7 +2095,9 @@
 					return;
 				}
 				const preloadedStdin =
-					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
+					sharedBufferAvailable && !preloadedStdinLanguages.has(language)
+						? undefined
+						: stdinInput;
 				const result = await executeTerminalRun({
 					terminal,
 					language,
@@ -2649,14 +2744,16 @@
 					</button>
 				</div>
 			</div>
-			{#if !sharedBufferAvailable || language === 'BASH'}
+			{#if !sharedBufferAvailable || preloadedStdinLanguages.has(language)}
 				<div class="stdin-panel">
 					<div>
 						<strong>Preloaded stdin</strong>
 						<span>
 							{language === 'BASH'
 								? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-								: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+								: language === 'POSTGRESQL'
+									? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+									: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 						</span>
 					</div>
 					<textarea
@@ -2923,6 +3020,13 @@
 				the JavaScript target output locally. Import `wasm_idle/stdin` for line input.
 			</p>
 		{/if}
+		{#if language === 'GRAIN'}
+			<p class="hint">
+				Grain 0.7.2 compiles in the browser with the upstream js_of_ocaml compiler and runs
+				the emitted WASI module locally. Read input with `File.fdRead(File.stdin, n)` from
+				`wasi/file`; send Ctrl+D or use the EOF button to finish input.
+			</p>
+		{/if}
 		{#if language === 'PERL'}
 			<p class="hint">
 				Perl runs through bundled WebPerl WebAssembly assets. Use `&lt;STDIN&gt;` for line
@@ -2949,6 +3053,13 @@
 				are not bundled yet.
 			</p>
 		{/if}
+		{#if language === 'HY'}
+			<p class="hint">
+				Hy 1.3.1 compiles to Python bytecode inside the bundled Pyodide runtime. Use
+				`(input)` for stdin and `(print)` for stdout; send Ctrl+D or use the EOF button to
+				finish input.
+			</p>
+		{/if}
 		{#if language === 'CLOJURESCRIPT'}
 			<p class="hint">
 				ClojureScript is compiled and evaluated locally with the official self-hosted
@@ -2956,11 +3067,26 @@
 				`stdin`, and `args` helpers.
 			</p>
 		{/if}
+		{#if language === 'RESCRIPT'}
+			<p class="hint">
+				ReScript 12.3.1 compiles locally with the official js_of_ocaml playground compiler,
+				then runs the generated CommonJS with the upstream stdlib runtime. Bind stdin like
+				the JavaScript runtime: `@module("fs") external readLineSync: int =&gt; string =
+				"readLineSync"`, or read everything with `readFileSync(0, "utf8")`.
+			</p>
+		{/if}
 		{#if language === 'COBOL'}
 			<p class="hint">
 				COBOL compiles locally with GnuCOBOL 3.2, then the llvm-core Clang runtime compiles
 				and links the generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for
 				stdout.
+			</p>
+		{/if}
+		{#if language === 'V'}
+			<p class="hint">
+				V compiles locally with the real V 0.5.2 compiler to C, then the llvm-core Clang
+				runtime compiles and links that C to WebAssembly. Use `os.get_line()` for stdin and
+				`println` for stdout.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}
@@ -3064,6 +3190,13 @@
 				if the program reads stdin until EOF.
 			</p>
 		{/if}
+		{#if language === 'FENNEL'}
+			<p class="hint">
+				Fennel runs the official `fennel.lua` compiler on the bundled `wasmoon` Lua VM. Use
+				`(io.read)` to read a line from the terminal below and Ctrl+D or the EOF button for
+				programs that read stdin until EOF.
+			</p>
+		{/if}
 		{#if language === 'RUBY'}
 			<p class="hint">
 				Ruby runs through a receipt-verified split CRuby WebAssembly profile. Its manifest,
@@ -3088,6 +3221,15 @@
 			<p class="hint">
 				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
 				database on every run. SELECT results are printed as tab-separated tables.
+			</p>
+		{/if}
+		{#if language === 'POSTGRESQL'}
+			<p class="hint">
+				PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly by PGlite,
+				against a fresh in-memory cluster on every run. The script is sent as one simple
+				query, so SELECT results are printed as tab-separated tables, notices and `COPY ...
+				TO STDOUT` are printed in order, and other workspace `.sql` files run first.
+				Preloaded stdin is readable as `/dev/blob`.
 			</p>
 		{/if}
 		{#if language === 'DUCKDB'}

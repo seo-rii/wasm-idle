@@ -12,7 +12,7 @@ const temporaryDirectories: string[] = [];
 const repositoryRoot = process.cwd();
 const sourceRevision = 'fc8096485478055f4fcf31402004fdd8ff6b72b7';
 const sdkPackageIntegrity =
-	'sha512-k/CY19NfeLCjA9ZpX69JAoZKiuMT3hKjDFJYWdRGkCdfig9NtC9Op7Gpg2LeezuuQKd4WaSSq8bpSMdHw1BMgg==';
+	'sha512-YQ+s5tGag6P/I8kp9BTH+XhjoS9UFvWiZJvnWEEovClHffhYToKhprWr4UJG7wLP7c/2HQpGkF7ZrjoUvKjdmA==';
 
 const expectedPublishedFiles = [
 	'LICENSE.txt',
@@ -163,7 +163,7 @@ async function createFixture() {
 		`${JSON.stringify(
 			{
 				name: '@wasmer/sdk',
-				version: '0.9.0',
+				version: '0.10.0',
 				license: 'MIT',
 				repository: {
 					type: 'git',
@@ -190,12 +190,13 @@ async function createFixture() {
 		},
 		wasmerSdk: {
 			npmPackage: '@wasmer/sdk',
-			npmVersion: '0.9.0',
+			npmVersion: '0.10.0',
 			packageIntegrity: sdkPackageIntegrity,
-			tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz',
+			tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz',
 			license: {
 				path: 'LICENSE',
-				sourceUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz#package/LICENSE',
+				sourceUrl:
+					'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz#package/LICENSE',
 				spdx: 'MIT'
 			},
 			files: {
@@ -218,7 +219,7 @@ async function createFixture() {
 	await writeFile(lockFilePath, `${JSON.stringify(lock, null, 2)}\n`);
 	await writeFile(
 		pnpmLockPath,
-		`'@wasmer/sdk@0.9.0':\n  resolution: {integrity: ${sdkPackageIntegrity}}\n`
+		`'@wasmer/sdk@0.10.0':\n  resolution: {integrity: ${sdkPackageIntegrity}}\n`
 	);
 	return {
 		sourceDir,
@@ -262,11 +263,11 @@ describe('syncWasmBashAssets', () => {
 		expect(manifest).toMatchObject({
 			format: 'wasm-bash-runtime-manifest-v2',
 			runtime: 'wasmer-bash-wasix',
-			profileId: `bash-1.0.25-wasmer-sdk-0.9.0-${sourceRevision.slice(0, 8)}`,
+			profileId: `bash-1.0.25-wasmer-sdk-0.10.0-${sourceRevision.slice(0, 8)}`,
 			licenseExpression: 'GPL-3.0-or-later AND MIT',
 			components: {
 				wasmerSdk: {
-					version: '0.9.0',
+					version: '0.10.0',
 					package: '@wasmer/sdk',
 					packageIntegrity: sdkPackageIntegrity
 				}
@@ -301,7 +302,7 @@ describe('syncWasmBashAssets', () => {
 			profileId: manifest.profileId,
 			bashPackageVersion: '1.0.25',
 			bashSourceRevision: sourceRevision,
-			wasmerSdkVersion: '0.9.0',
+			wasmerSdkVersion: '0.10.0',
 			wasmerSdkPackageIntegrity: sdkPackageIntegrity,
 			manifestFingerprint: manifest.fingerprint,
 			manifestReceipt: {
@@ -370,7 +371,7 @@ describe('syncWasmBashAssets', () => {
 		const wrongIntegrity = await createFixture();
 		await writeFile(
 			wrongIntegrity.pnpmLockPath,
-			`'@wasmer/sdk@0.9.0':\n  resolution: {integrity: sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==}\n`
+			`'@wasmer/sdk@0.10.0':\n  resolution: {integrity: sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==}\n`
 		);
 		await expect(syncWasmBashAssets(wrongIntegrity)).rejects.toThrow(
 			'pnpm lock does not contain the pinned @wasmer/sdk package integrity'
@@ -430,9 +431,9 @@ describe('syncWasmBashAssets', () => {
 		expect(Object.keys(lock).sort()).toEqual(['bash', 'schemaVersion', 'wasmerSdk']);
 		expect(lock.wasmerSdk).toMatchObject({
 			npmPackage: '@wasmer/sdk',
-			npmVersion: '0.9.0',
+			npmVersion: '0.10.0',
 			packageIntegrity: sdkPackageIntegrity,
-			tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz'
+			tarballUrl: 'https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz'
 		});
 		expect(Object.keys(lock.wasmerSdk.files).sort()).toEqual([
 			'LICENSE',

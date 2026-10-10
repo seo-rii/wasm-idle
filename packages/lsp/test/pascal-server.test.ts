@@ -28,7 +28,7 @@ import {
 	BUNDLED_PASCAL_RUNTIME_PROFILE,
 	BUNDLED_PASCAL_RUNNER_RECEIPT
 } from '../src/bundledPascalRuntime.js';
-import { getPascalLanguageServer } from '../src/pascal/server.js';
+import { getPascalLanguageServer } from '../src/pascal/language-server.js';
 import {
 	createPascalTestAssetResponse,
 	pascalTestAssetBytes,

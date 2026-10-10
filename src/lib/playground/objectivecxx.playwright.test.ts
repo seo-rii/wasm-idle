@@ -9,6 +9,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { editorDefaults } from '../../routes/editor-defaults';
 
 const objectiveCxxStdinSource = `#include <stdio.h>
 #include <objc/runtime.h>
@@ -44,83 +45,122 @@ const objectiveCxxGreeterImplementation = `#include <string>
 }
 @end`;
 
+const objectiveCxxBrowserEnabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX === '1';
+
+async function withObjectiveCxxPreviewServer(run: (browserUrl: string) => Promise<void>) {
+	await runWithBrowserProbeSessionLock(async () => {
+		const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
+		const serverMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+		const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+		if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
+			await runBrowserPreparationScripts(['build:preview'], {
+				timeoutMs: Number(process.env.WASM_IDLE_OBJECTIVECXX_PREP_TIMEOUT_MS || '900000')
+			});
+		}
+		const previewServer = reuseProvidedBrowserUrl
+			? {
+					origin: new URL(configuredBrowserUrl).origin,
+					browserUrl: configuredBrowserUrl,
+					close: async () => {}
+				}
+			: await startBrowserPreviewServer(
+					configuredBrowserUrl
+						? {
+								origin: new URL(configuredBrowserUrl).origin,
+								basePath: new URL(configuredBrowserUrl).pathname,
+								serverMode
+							}
+						: { origin: 'http://127.0.0.1:4676', serverMode }
+				);
+		try {
+			await run(previewServer.browserUrl);
+		} finally {
+			await previewServer.close();
+		}
+	});
+}
+
+const objectiveCxxRunTimeoutMs = () =>
+	Number(process.env.WASM_IDLE_OBJECTIVECXX_RUN_TIMEOUT_MS || '420000');
+
 describe('wasm-idle Objective-C++ browser playwright integration', () => {
 	it(
-		'compiles .mm active and workspace sources and connects stdin in Chromium',
+		'runs the dedicated Objective-C++ language default program with stdin in Chromium',
 		{
-			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX !== '1',
+			skip: !objectiveCxxBrowserEnabled,
 			meta: {
 				browser: true,
-				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX !== '1')
+				requiredBrowser: objectiveCxxBrowserEnabled
 			},
 			timeout: 960_000
 		},
 		async () => {
 			expect.hasAssertions();
 
-			await runWithBrowserProbeSessionLock(async () => {
-				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
-				const serverMode =
-					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
-				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
-				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
-					await runBrowserPreparationScripts(['build:preview'], {
-						timeoutMs: Number(
-							process.env.WASM_IDLE_OBJECTIVECXX_PREP_TIMEOUT_MS || '900000'
-						)
-					});
-				}
-				const previewServer = reuseProvidedBrowserUrl
-					? {
-							origin: new URL(configuredBrowserUrl).origin,
-							browserUrl: configuredBrowserUrl,
-							close: async () => {}
-						}
-					: await startBrowserPreviewServer(
-							configuredBrowserUrl
-								? {
-										origin: new URL(configuredBrowserUrl).origin,
-										basePath: new URL(configuredBrowserUrl).pathname,
-										serverMode
-									}
-								: { origin: 'http://127.0.0.1:4676', serverMode }
-						);
+			await withObjectiveCxxPreviewServer(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'fibonacci=92',
+					language: 'OBJECTIVECXX',
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: objectiveCxxRunTimeoutMs(),
+					source: editorDefaults.objectivecxx,
+					stdinText: '10\n'
+				});
 
-				try {
-					const summary = await runStdinBrowserProbe({
-						activePath: 'main.mm',
-						browserUrl: previewServer.browserUrl,
-						expectedOutput: 'main=73',
-						language: 'OBJC',
-						requireSharedArrayBuffer: false,
-						runTimeoutMs: Number(
-							process.env.WASM_IDLE_OBJECTIVECXX_RUN_TIMEOUT_MS || '420000'
-						),
-						source: objectiveCxxStdinSource,
-						stdinText: '68\n',
-						workspaceFiles: [
-							{ path: 'Greeter.h', content: objectiveCxxGreeterHeader },
-							{ path: 'Greeter.mm', content: objectiveCxxGreeterImplementation }
-						]
-					});
+				expect(summary.language).toBe('OBJECTIVECXX');
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('fibonacci=92');
+				expect(summary.transcript).toContain('Process finished after');
+				expect(
+					summary.consoleTail.some((entry: string) => entry.includes('compiling main.mm'))
+				).toBe(true);
+			});
+		}
+	);
 
-					expect(summary.activeState.serviceWorkerControlled).toBe(true);
-					expect(summary.pageErrors).toEqual([]);
-					expect(summary.transcript).toContain('main=73');
-					expect(summary.transcript).toContain('Process finished after');
-					expect(
-						summary.consoleTail.some((entry: string) =>
-							entry.includes('compiling main.mm')
-						)
-					).toBe(true);
-					expect(
-						summary.consoleTail.some((entry: string) =>
-							entry.includes('compiling Greeter.mm')
-						)
-					).toBe(true);
-				} finally {
-					await previewServer.close();
-				}
+	it(
+		'compiles .mm active and workspace sources and connects stdin in Chromium',
+		{
+			skip: !objectiveCxxBrowserEnabled,
+			meta: {
+				browser: true,
+				requiredBrowser: objectiveCxxBrowserEnabled
+			},
+			timeout: 960_000
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withObjectiveCxxPreviewServer(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.mm',
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'OBJC',
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: objectiveCxxRunTimeoutMs(),
+					source: objectiveCxxStdinSource,
+					stdinText: '68\n',
+					workspaceFiles: [
+						{ path: 'Greeter.h', content: objectiveCxxGreeterHeader },
+						{ path: 'Greeter.mm', content: objectiveCxxGreeterImplementation }
+					]
+				});
+
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+				expect(
+					summary.consoleTail.some((entry: string) => entry.includes('compiling main.mm'))
+				).toBe(true);
+				expect(
+					summary.consoleTail.some((entry: string) =>
+						entry.includes('compiling Greeter.mm')
+					)
+				).toBe(true);
 			});
 		}
 	);

@@ -17,8 +17,6 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@wasm-idle/core')>()),
 	preflightBashRuntimeAssets
 }));
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 const workerInstances: MockWorker[] = [];
 let throwOnMessageType = '';
 

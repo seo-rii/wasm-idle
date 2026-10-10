@@ -45,13 +45,6 @@ const runtimeFixtureState =
 		}
 	).__wasmIdleTinyGoRuntimeFixtureState = createRuntimeFixtureState());
 
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
-	}
-}));
-
 const { executableGraphFixture } = vi.hoisted(() => ({
 	executableGraphFixture: {
 		disposeCalls: 0,
@@ -231,10 +224,6 @@ vi.mock('$lib/playground/tinygoExecutableGraph', () => ({
 	loadVerifiedTinyGoExecutableGraph: executableGraphFixture.load
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import TinyGo from './tinygo';
 
 describe('TinyGo sandbox', () => {
@@ -243,8 +232,6 @@ describe('TinyGo sandbox', () => {
 		vi.stubGlobal('fetch', vi.fn());
 		workerInstances.length = 0;
 		window.history.replaceState({}, '', 'http://localhost:3000/');
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
 		Object.assign(upstreamFixtureState, createUpstreamFixtureState());
 		installExecutableGraphFixture();
@@ -715,7 +702,7 @@ describe('TinyGo sandbox', () => {
 					tinygo: {}
 				})
 			).rejects.toThrow(
-				'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+				'TinyGo runtime is not configured. Set runtimeAssets.tinygo.moduleUrl.'
 			);
 		} finally {
 			vi.stubGlobal('window', originalWindow);

@@ -304,9 +304,7 @@ class R implements Sandbox {
 				const nextBaseUrl = resolveRBaseUrl(runtimeAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextBaseUrl) {
-					return rejectLoad(
-						'R runtime is not configured. Set PUBLIC_WASM_R_BASE_URL or runtimeAssets.r.baseUrl.'
-					);
+					return rejectLoad('R runtime is not configured. Set runtimeAssets.r.baseUrl.');
 				}
 				const needsWorkerReset = !this.worker || this.baseUrl !== nextBaseUrl;
 				this.baseUrl = nextBaseUrl;

@@ -37,8 +37,6 @@ vi.mock('$lib/playground/worker/php?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 import Php from './php';
 
 describe('PHP sandbox', () => {

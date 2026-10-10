@@ -1,6 +1,11 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import { createReadonlyGolfscriptMount } from './golfscriptMount';
+import {
+	GOLFSCRIPT_RUNTIME_DIRECTORY,
+	WASM_GOLFSCRIPT_INTERPRETER_RECEIPT
+} from '$lib/playground/wasmGolfscriptVersion';
 import {
 	RUBY_RUNTIME_VERIFIED_WASM_URL,
 	normalizeWorkspacePath,
@@ -11,7 +16,9 @@ import {
 	createRubyStdlibPreopens,
 	type RubyStdlibEntry,
 	rewriteVerifiedRubyRuntimeModule,
-	verifyRubyRuntimePreflightPayload
+	verifyRubyRuntimePreflightPayload,
+	verifyRuntimeAssetIntegrity,
+	AssetTooLargeError
 } from '@wasm-idle/core';
 
 declare var self: any;
@@ -34,12 +41,14 @@ interface LoadedRubyRuntime {
 	stdlib?: ReadonlyArray<RubyStdlibEntry>;
 	module: WebAssembly.Module;
 	runtime: RubyRuntimeModule;
+	golfscriptBytes?: Uint8Array;
 }
 
 async function loadRubyModule(
 	runtimePreflight: unknown,
 	maxAssetBytes: number,
-	context: RubyExecutionContext
+	context: RubyExecutionContext,
+	golfscriptBytes?: Uint8Array
 ) {
 	if (runtimeState !== 'uninitialized') {
 		throw new Error('Ruby runtime is already loaded.');
@@ -60,7 +69,8 @@ async function loadRubyModule(
 			payload.manifestBytes,
 			payload.moduleJavaScriptBytes,
 			payload.wasmBytes,
-			...('stdlibBytes' in payload ? [payload.stdlibBytes] : [])
+			...('stdlibBytes' in payload ? [payload.stdlibBytes] : []),
+			...(golfscriptBytes ? [golfscriptBytes] : [])
 		];
 		if (
 			buffers.some(
@@ -119,6 +129,7 @@ async function loadRubyModule(
 		loadedRuntime = {
 			module,
 			runtime,
+			...(golfscriptBytes ? { golfscriptBytes } : {}),
 			...('stdlibBytes' in payload
 				? { stdlib: parseRubyStdlibPack(payload.stdlibBytes) }
 				: {})
@@ -260,15 +271,17 @@ interface PreparedRubyExecution {
 	stdin: ReturnType<typeof createRubyStdin>;
 	activate(initial: string | null, provider: () => string | null): void;
 	hasOutput(): { stdout: boolean; stderr: boolean };
+	mountActiveSource?(source: string): void;
+	flushOutput?(): void;
 }
-const defaultContext = (): RubyExecutionContext => ({
+const defaultContext = (golfscript = false): RubyExecutionContext => ({
 	args: [],
 	workspaceFiles: [],
-	activePath: 'main.rb'
+	activePath: golfscript ? 'main.gs' : 'main.rb'
 });
 // This private bootstrap envelope contains data only, never source to evaluate or URLs.
-function decodeStartupContext(value: unknown): RubyExecutionContext {
-	if (value === undefined) return defaultContext();
+function decodeStartupContext(value: unknown, golfscript = false): RubyExecutionContext {
+	if (value === undefined) return defaultContext(golfscript);
 	if (!value || typeof value !== 'object' || Array.isArray(value))
 		throw new TypeError('Invalid Ruby startup context.');
 	const input = value as RubyExecutionContext;
@@ -348,13 +361,52 @@ async function initializeRubyExecution(
 		stdout: (output: string) => emit(output, false),
 		stderr: (output: string) => emit(output, true)
 	});
+	// Ruby's default printer decodes each write separately and removes leading BOMs.
+	// GolfScript preserves the original CLI's bytes across writes and across iovecs.
+	const golfscriptDecoders = loaded.golfscriptBytes
+		? {
+				stdout: new TextDecoder('utf-8', { ignoreBOM: true }),
+				stderr: new TextDecoder('utf-8', { ignoreBOM: true })
+			}
+		: undefined;
+	let printerMemory: WebAssembly.Memory | undefined;
 	const rubyStdin = createRubyStdin(runtime, initial, provider, deferred);
 	const { File, OpenFile, PreopenDirectory, WASI } = runtime.wasiShim;
 	const root = workspaceContents(runtime, snapshot.workspaceFiles);
+	if (loaded.golfscriptBytes) {
+		const privatePath = (path: string) => {
+			const normalized = normalizeWorkspacePath(path);
+			return (
+				normalized === GOLFSCRIPT_RUNTIME_DIRECTORY ||
+				normalized.startsWith(`${GOLFSCRIPT_RUNTIME_DIRECTORY}/`)
+			);
+		};
+		if (
+			privatePath(snapshot.activePath) ||
+			snapshot.workspaceFiles.some((file) => privatePath(file.path))
+		) {
+			throw new Error('GolfScript workspace conflicts with its private runtime mount.');
+		}
+		if (loaded.stdlib && /^(?:usr|bundle)(?:\/|$)/u.test(snapshot.activePath)) {
+			throw new Error(
+				'GolfScript source conflicts with a verified Ruby standard library mount.'
+			);
+		}
+		root.set(
+			GOLFSCRIPT_RUNTIME_DIRECTORY,
+			new runtime.wasiShim.Directory(
+				new Map([['golfscript.rb', new File(loaded.golfscriptBytes, { readonly: true })]])
+			)
+		);
+	}
 	// Preserve the complete split standard library and ancestor directories for realpath.
 	const preopens = loaded.stdlib
 		? createRubyStdlibPreopens(loaded.stdlib, runtime.wasiShim, root)
 		: [new PreopenDirectory('/', root)];
+	const golfscriptMount = loaded.golfscriptBytes
+		? createReadonlyGolfscriptMount(runtime.wasiShim, root)
+		: undefined;
+	if (golfscriptMount) preopens[0] = golfscriptMount.preopen;
 	// @ruby/wasm-wasi automatically requires /bundle/setup.rb while initializing.
 	// The split profile owns and verifies that mount. For the embedded profile, hide a
 	// same-named user directory until initialization completes so prewarm cannot run
@@ -375,9 +427,39 @@ async function initializeRubyExecution(
 			args: ['ruby.wasm', '-EUTF-8', '-e_=0', '--', ...snapshot.args],
 			addToImports(imports: WebAssembly.Imports) {
 				printer.addToImports(imports);
+				if (!golfscriptDecoders) return;
+				const wasiImports = imports.wasi_snapshot_preview1 as Record<string, any>;
+				const defaultFdWrite = wasiImports.fd_write;
+				wasiImports.fd_write = (
+					fd: number,
+					iovs: number,
+					iovsLength: number,
+					nwritten: number
+				) => {
+					if (fd !== 1 && fd !== 2) return defaultFdWrite(fd, iovs, iovsLength, nwritten);
+					if (!printerMemory) throw new Error('Ruby output memory is not set.');
+					// Recreate the view after memory growth, which detaches the previous buffer.
+					const memory = new DataView(printerMemory.buffer);
+					const decoder =
+						fd === 1 ? golfscriptDecoders.stdout : golfscriptDecoders.stderr;
+					let written = 0;
+					let output = '';
+					for (let index = 0; index < iovsLength; index += 1) {
+						const entry = iovs + index * 8;
+						const offset = memory.getUint32(entry, true);
+						const length = memory.getUint32(entry + 4, true);
+						const bytes = new Uint8Array(printerMemory.buffer, offset, length);
+						output += decoder.decode(bytes, { stream: true });
+						written += length;
+					}
+					memory.setUint32(nwritten, written, true);
+					emit(output, fd === 2);
+					return runtime.wasiShim.wasi.ERRNO_SUCCESS;
+				};
 			},
 			setMemory(memory: WebAssembly.Memory) {
 				printer.setMemory(memory);
+				if (golfscriptDecoders) printerMemory = memory;
 			}
 		}));
 	} finally {
@@ -396,7 +478,34 @@ async function initializeRubyExecution(
 			for (const output of pending.splice(0)) postMessage({ output });
 			pendingBytes = 0;
 		},
-		hasOutput: () => ({ stdout: hasStdout, stderr: hasStderr })
+		hasOutput: () => ({ stdout: hasStdout, stderr: hasStderr }),
+		...(loaded.golfscriptBytes
+			? {
+					flushOutput() {
+						emit(golfscriptDecoders!.stdout.decode(), false);
+						emit(golfscriptDecoders!.stderr.decode(), true);
+					},
+					mountActiveSource(source: string) {
+						const parts = normalizeWorkspacePath(snapshot.activePath).split('/');
+						const name = parts.pop()!;
+						let contents = root;
+						for (const part of parts) {
+							let directory = contents.get(part);
+							if (!directory) {
+								directory = golfscriptMount!.createDirectory(new Map());
+								contents.set(part, directory);
+							}
+							if (!(directory.contents instanceof Map)) {
+								throw new Error(
+									'GolfScript source path conflicts with a workspace file.'
+								);
+							}
+							contents = directory.contents;
+						}
+						contents.set(name, new File(encoder.encode(source), { readonly: true }));
+					}
+				}
+			: {})
 	};
 }
 
@@ -411,7 +520,7 @@ self.onmessage = async (event: { data: any }) => {
 		prepare,
 		args = [],
 		stdin,
-		activePath = 'main.rb',
+		activePath = loadedRuntime?.golfscriptBytes ? 'main.gs' : 'main.rb',
 		workspaceFiles = [],
 		log
 	} = message;
@@ -419,9 +528,16 @@ self.onmessage = async (event: { data: any }) => {
 	try {
 		if (Object.prototype.hasOwnProperty.call(message, 'load')) {
 			const actualKeys = Object.keys(message).sort();
-			const expectedKeys = Object.prototype.hasOwnProperty.call(message, 'startupContext')
-				? ['load', 'maxAssetBytes', 'runtimePreflight', 'startupContext']
-				: ['load', 'maxAssetBytes', 'runtimePreflight'];
+			const golfscript = Object.prototype.hasOwnProperty.call(message, 'language');
+			const expectedKeys = [
+				'load',
+				'maxAssetBytes',
+				'runtimePreflight',
+				...(Object.prototype.hasOwnProperty.call(message, 'startupContext')
+					? ['startupContext']
+					: []),
+				...(golfscript ? ['language', 'interpreterBytes'] : [])
+			].sort();
 			if (
 				load !== true ||
 				actualKeys.length !== expectedKeys.length ||
@@ -431,9 +547,32 @@ self.onmessage = async (event: { data: any }) => {
 			) {
 				throw new Error('Ruby runtime load message has an invalid shape.');
 			}
-			const context = decodeStartupContext(message.startupContext);
+			let interpreterBytes: Uint8Array | undefined;
+			if (golfscript) {
+				if (message.language !== 'golfscript')
+					throw new Error('Unknown Ruby worker language.');
+				interpreterBytes = message.interpreterBytes;
+				if (WASM_GOLFSCRIPT_INTERPRETER_RECEIPT.bytes > maxAssetBytes) {
+					throw new AssetTooLargeError(
+						'GolfScript interpreter exceeds its asset byte limit',
+						{
+							runtimeId: 'GOLFSCRIPT',
+							actual: WASM_GOLFSCRIPT_INTERPRETER_RECEIPT.bytes,
+							limit: maxAssetBytes
+						}
+					);
+				}
+				await verifyRuntimeAssetIntegrity({
+					asset: WASM_GOLFSCRIPT_INTERPRETER_RECEIPT.fileName,
+					bytes: interpreterBytes!,
+					expected: WASM_GOLFSCRIPT_INTERPRETER_RECEIPT,
+					runtimeId: 'GOLFSCRIPT'
+				});
+				new TextDecoder('utf-8', { fatal: true }).decode(interpreterBytes);
+			}
+			const context = decodeStartupContext(message.startupContext, golfscript);
 			postMessage({ progress: { percent: 5, stage: 'Loading Ruby runtime' } });
-			await loadRubyModule(runtimePreflight, maxAssetBytes, context);
+			await loadRubyModule(runtimePreflight, maxAssetBytes, context, interpreterBytes);
 			postMessage({ progress: { percent: 100, stage: 'Ruby runtime ready' } });
 			postMessage({ load: true });
 			return;
@@ -496,7 +635,28 @@ self.onmessage = async (event: { data: any }) => {
 				label: 'Ruby program started'
 			}
 		});
-		vm.eval(code);
+		if (loadedRuntime.golfscriptBytes) {
+			execution.mountActiveSource!(code);
+			// Single-quoted Ruby literals keep interpolation markers in filenames/args as data.
+			const argv = [`/${normalizeWorkspacePath(activePath)}`, ...args]
+				.map((value: string) => `'${value.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`)
+				.join(', ');
+			try {
+				vm.eval(`ARGV.replace([${argv}])
+STDIN.define_singleton_method(:isatty) { false }
+$0 = 'golfscript.rb'
+begin
+  load '/${GOLFSCRIPT_RUNTIME_DIRECTORY}/golfscript.rb'
+ensure
+  STDOUT.flush
+  STDERR.flush
+end`);
+			} finally {
+				execution.flushOutput!();
+			}
+		} else {
+			vm.eval(code);
+		}
 		if (log) {
 			console.log(
 				`[wasm-idle:ruby-worker] eval settled stdout=${String(execution.hasOutput().stdout)} stderr=${String(execution.hasOutput().stderr)}`

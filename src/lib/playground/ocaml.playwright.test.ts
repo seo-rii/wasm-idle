@@ -1,6 +1,8 @@
 // @vitest-environment node
 
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -11,10 +13,26 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runOcamlBrowserProbe } from '../../../scripts/ocaml-browser-probe-lib.mjs';
+import { verifyWasmOfJsOfOcamlWrapper } from '../../../scripts/sync-wasm-of-js-of-ocaml.mjs';
 
 const ocamlBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_OCAML_TEST_TIMEOUT_MS || '900000');
 
 describe('wasm-idle OCaml browser playwright integration', () => {
+	async function verifyPreparedOcamlBrowserAssets() {
+		// Read the active consumer profile after preparation; verification must not
+		// regenerate expected receipts or depend on an import-time cached profile.
+		const { manifestReceipt } = await verifyWasmOfJsOfOcamlWrapper({
+			sourceBrowserDistDir: path.resolve('static/wasm-of-js-of-ocaml/browser-native')
+		});
+		const manifestBytes = await readFile(
+			'static/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+		);
+		expect(manifestBytes.byteLength).toBe(manifestReceipt.bytes);
+		expect(createHash('sha256').update(manifestBytes).digest('hex')).toBe(
+			manifestReceipt.sha256
+		);
+	}
+
 	function expectedStaticBinaryenPathPrefix(browserUrl: string) {
 		const pathname = new URL(browserUrl).pathname.replace(/\/$/, '');
 		return `${pathname === '' ? '' : pathname}/wasm-of-js-of-ocaml/browser-native-bundle/tools/`;
@@ -69,6 +87,7 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 						})();
 
 				try {
+					await verifyPreparedOcamlBrowserAssets();
 					for (const backend of ['js', 'wasm'] as const) {
 						const summary = await runOcamlBrowserProbe({
 							browserUrl: previewServer.browserUrl,
@@ -178,6 +197,7 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 						})();
 
 				try {
+					await verifyPreparedOcamlBrowserAssets();
 					for (const backend of ['js', 'wasm'] as const) {
 						const summary = await runOcamlBrowserProbe({
 							browserUrl: previewServer.browserUrl,

@@ -1,9 +1,10 @@
 // @vitest-environment node
 
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,7 @@ import { WASM_OCAML_RUNTIME_PROFILE } from './playground/wasmOcamlVersion';
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	await Promise.all(
 		temporaryDirectories
 			.splice(0)
@@ -25,7 +27,74 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('prepares all current clangd assets from local producer receipts without replacing remote pins', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-local-clangd-bootstrap-'));
+		temporaryDirectories.push(root);
+		const sourceDir = path.join(root, 'producer');
+		const staticDir = path.join(root, 'static');
+		const receiptPath = path.join(root, 'runtime-build.json');
+		const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const raw = Buffer.from(
+			JSON.stringify({
+				schemaVersion: 1,
+				version: 'test',
+				targetTriple: 'wasm32-wasi',
+				resourceDir: '/lib/clang/22',
+				files: {
+					'/usr/include/wasm32-wasi/stdio.h': 'C headers',
+					'/usr/include/c++/v1/vector': 'C++ headers',
+					'/lib/clang/22/include/stddef.h': 'resource headers'
+				}
+			})
+		);
+		const compressed = gzipSync(raw);
+		const headers = {
+			asset: 'clangd/clangd.headers.json.gz',
+			format: 'clangd-headers-v1',
+			version: hash(raw),
+			targetTriple: 'wasm32-wasi',
+			resourceDir: '/lib/clang/22',
+			bytes: compressed.length,
+			sha256: hash(compressed),
+			uncompressedBytes: raw.length,
+			uncompressedSha256: hash(raw)
+		};
+		const contents = new Map([
+			['clangd/clangd.js', Buffer.from('local producer JS')],
+			['clangd/clangd.wasm.gz', Buffer.from('local producer Wasm')],
+			[headers.asset, compressed]
+		]);
+		await mkdir(path.join(sourceDir, 'clangd'), { recursive: true });
+		for (const [asset, bytes] of contents) await writeFile(path.join(sourceDir, asset), bytes);
+		await writeFile(
+			receiptPath,
+			JSON.stringify({
+				toolchain: { clangd: { headers } },
+				assets: [...contents].map(([asset, bytes]) => ({
+					asset,
+					size: bytes.length,
+					sha256: hash(bytes)
+				}))
+			})
+		);
+		const remoteManifestBefore = await readFile('scripts/browser-test-assets.v1.json');
+		const fetchImpl = vi.fn<typeof fetch>();
+		await expect(
+			prepareBrowserTestAssets({
+				groups: ['clangd'],
+				staticDir,
+				clangdReceiptPath: receiptPath,
+				clangdSourceDir: sourceDir,
+				fetchImpl
+			})
+		).resolves.toMatchObject({ downloaded: 0, copied: 3, reused: 0 });
+		for (const [asset, bytes] of contents)
+			expect(await readFile(path.join(staticDir, asset))).toEqual(bytes);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(await readFile('scripts/browser-test-assets.v1.json')).toEqual(remoteManifestBefore);
+	});
 	it('downloads receipt-verified direct assets once and reuses them', async () => {
+		vi.stubEnv('WASM_IDLE_TEST_CLANGD_SOURCE_DIR', '/unavailable-local-producer');
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-test-assets-'));
 		temporaryDirectories.push(root);
 		const payload = Buffer.from('clangd fixture');
@@ -270,28 +339,8 @@ describe('browser test asset preparation', () => {
 		);
 	});
 
-	it('keeps OCaml outer receipts aligned with the consumer integrity profile', async () => {
-		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
-		for (const [target, receipt] of [
-			[
-				'wasm-of-js-of-ocaml/browser-native/src/index.js',
-				WASM_OCAML_RUNTIME_PROFILE.moduleReceipt
-			],
-			[
-				'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json',
-				WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
-			]
-		] as const) {
-			expect(
-				manifest.assets.find((asset: { target: string }) => asset.target === target)
-			).toMatchObject({
-				size: receipt.bytes,
-				sha256: receipt.sha256
-			});
-		}
-	});
-
-	it('emits the relative module dependencies of the rebuilt OCaml wrapper', () => {
+	// The real TypeScript graph can take longer than the default 5 seconds in parallel runs.
+	it('rebuilds the OCaml wrapper with its consumer receipt and relative module dependencies', () => {
 		// Preparation rebuilds the wrapper from source; the download receipts describe
 		// immutable compiler inputs, not the current wrapper's generated module graph.
 		const configPath = path.resolve(
@@ -312,6 +361,13 @@ describe('browser test asset preparation', () => {
 		});
 		expect(result.emitSkipped).toBe(false);
 		expect(result.diagnostics).toEqual([]);
+		const modulePath = path.resolve(config.options.outDir!, 'src/index.js');
+		expect(outputs.has(modulePath)).toBe(true);
+		const moduleBytes = Buffer.from(outputs.get(modulePath)!, 'utf8');
+		expect(moduleBytes.byteLength).toBe(WASM_OCAML_RUNTIME_PROFILE.moduleReceipt.bytes);
+		expect(createHash('sha256').update(moduleBytes).digest('hex')).toBe(
+			WASM_OCAML_RUNTIME_PROFILE.moduleReceipt.sha256
+		);
 		for (const relativePath of [
 			'src/index.js',
 			'src/compiler-worker.js',
@@ -333,5 +389,5 @@ describe('browser test asset preparation', () => {
 				expect(outputs.has(dependency), `${target} requires ${dependency}`).toBe(true);
 			}
 		}
-	});
+	}, 30_000);
 });

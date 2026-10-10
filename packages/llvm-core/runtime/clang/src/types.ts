@@ -211,6 +211,8 @@ export interface BrowserClangRuntimeOptions {
 	runtimeBaseUrl: string | URL;
 	manifest?: RuntimeManifestV1;
 	maxAssetBytes?: number;
+	/** Persistent generated headers obey the same policy as downloaded runtime assets. */
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 }
 
 export interface BrowserClangRuntimeRunOptions {
@@ -233,6 +235,12 @@ export interface BrowserClangRuntimeRunOptions {
 	interruptBuffer?: Uint8Array;
 	watchBuffer?: Int32Array;
 	watchResultBuffer?: Int32Array;
+	/**
+	 * A header from BrowserClangRuntime.buildPrecompiledHeader(). It is used only when its key
+	 * matches the current compile; otherwise the source is compiled normally.
+	 */
+	precompiledHeader?: import('./precompiled-header.js').BrowserClangPrecompiledHeader;
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 }
 
 export interface RuntimeToolAssetConfig {
@@ -265,6 +273,18 @@ export interface RuntimeCompilerConfig {
 export interface RuntimeClangdConfig {
 	js: string;
 	wasm: string;
+	/** Independently versioned complete selected-target and matching resource headers. */
+	headers?: {
+		asset: 'clangd/clangd.headers.json.gz';
+		format: 'clangd-headers-v1';
+		version: string;
+		targetTriple: SupportedClangTarget;
+		resourceDir: string;
+		bytes: number;
+		sha256: string;
+		uncompressedBytes: number;
+		uncompressedSha256: string;
+	};
 }
 
 export interface RuntimeManifestTarget {

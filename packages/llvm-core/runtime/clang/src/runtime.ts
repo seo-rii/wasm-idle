@@ -1,4 +1,10 @@
 import {
+	createRuntimeGeneratedAssetCacheBackend,
+	resolveRuntimeAssetCacheOptions,
+	type RuntimeAssetCacheOptions,
+	type RuntimeGeneratedAssetCacheBackend
+} from '@wasm-idle/core';
+import {
 	resolveDebugMode,
 	type BrowserClangArtifact,
 	type BrowserClangDebugMode,
@@ -30,13 +36,28 @@ import untar from '../../core/src/tar.js';
 import { green, yellow, normal } from '../../core/src/color.js';
 import { createCombinedProgress, type CombinedProgressSlots } from './progress.js';
 import { resolveRuntimeAssetUrls, type RuntimeAssetUrls } from './runtime-assets.js';
-import { DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES, compile, readBuffer } from '../../core/src/wasm.js';
+import {
+	DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	compile,
+	getCompiledModuleFingerprint,
+	readBuffer
+} from '../../core/src/wasm.js';
 import {
 	normalizeDwarfWorkspacePath,
 	normalizeWorkspacePath,
 	resolveBuildArtifactNames
 } from './workspace.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
+import {
+	PRECOMPILED_HEADER_PATH,
+	STDCPP_HEADER_PATH,
+	precompiledHeaderArgsEligible,
+	precompiledHeaderErrorPattern,
+	fingerprintPrecompiledHeaderBytes,
+	fingerprintRuntimeHeaders,
+	startsWithStdcppInclude,
+	type BrowserClangPrecompiledHeader
+} from './precompiled-header.js';
 
 export {
 	normalizeDwarfWorkspacePath,
@@ -185,6 +206,14 @@ class Clang {
 	debugGlobalMetadata: DebugVariableMetadata[] = [];
 	debugFunctionMetadata: Record<number, string> = {};
 	lastBuildKey = '';
+	/** Set by compile() when a translation unit can use a precompiled <bits/stdc++.h>. */
+	precompiledHeaderPlan?: {
+		key: string;
+		args: string[];
+		cache?: RuntimeGeneratedAssetCacheBackend;
+	};
+	usedPrecompiledHeader = false;
+	private mountedPrecompiledHeaderKey = '';
 	path: string;
 	assetUrls: RuntimeAssetUrls;
 	compilerConfig?: RuntimeCompilerConfig;
@@ -196,6 +225,13 @@ class Clang {
 	private readonly signal?: AbortSignal;
 	private cppSysrootReady?: Promise<void>;
 	private printscanLongDoubleReady?: Promise<void>;
+	private readonly persistentCache?: RuntimeAssetCacheOptions;
+	private readonly sysrootFingerprints: Promise<string | undefined>[] = [];
+	private readonly runtimeHeaders = new Map<string, Uint8Array>();
+	private pchFingerprint?: Promise<
+		{ compiler: string; sysroot: string[]; runtimeHeaders: string } | undefined
+	>;
+	private workspaceOverridesSystemHeaders = false;
 
 	constructor(options: BrowserClangRuntimeOptions) {
 		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
@@ -204,6 +240,7 @@ class Clang {
 		}
 		this.maxAssetBytes = maxAssetBytes;
 		this.signal = options.signal;
+		this.persistentCache = options.persistentCache;
 		this.moduleCache = {};
 		this.moduleLoads = {};
 		this.stdout = options.stdout || (() => {});
@@ -238,6 +275,7 @@ class Clang {
 			: readBuffer(initialSysrootUrl, undefined, maxAssetBytes);
 		const fileSystemInputsReady = Promise.all([this.memfs.ready, sysrootReady]);
 		const fileSystemReady = fileSystemInputsReady.then(async ([, buffer]) => {
+			this.sysrootFingerprints.push(fingerprintPrecompiledHeaderBytes(buffer));
 			await this.hostLogAsync(
 				`Untarring ${initialSysrootUrl}`,
 				Promise.resolve().then(() => {
@@ -253,8 +291,7 @@ class Clang {
 							? this.memfs.getFileContents(path.replace(/^\/+/, ''))
 							: null,
 					mkdirTree: (path) => this.memfs.addDirectory(path.replace(/^\/+/, '')),
-					writeFile: (path, contents) =>
-						this.memfs.addFile(path.replace(/^\/+/, ''), contents)
+					writeFile: (path, contents) => this.installRuntimeHeader(path, contents)
 				},
 				this.compilerConfig?.provenance,
 				this.compilerConfig?.resourceDir
@@ -274,6 +311,7 @@ class Clang {
 			? readBuffer(addonUrl, undefined, this.maxAssetBytes, this.signal)
 			: readBuffer(addonUrl, undefined, this.maxAssetBytes);
 		const pending = Promise.all([this.ready, download]).then(async ([, buffer]) => {
+			this.sysrootFingerprints.push(fingerprintPrecompiledHeaderBytes(buffer));
 			await this.hostLogAsync(
 				`Untarring ${addonUrl}`,
 				Promise.resolve().then(() => {
@@ -294,7 +332,11 @@ class Clang {
 	}
 
 	private async installCppHeaders(): Promise<void> {
-		installGccCompatibilityHeaders(this.memfs);
+		installGccCompatibilityHeaders({
+			addDirectory: (path) => this.memfs.addDirectory(path),
+			addFile: (path, contents) =>
+				this.installRuntimeHeader(path, new TextEncoder().encode(contents))
+		});
 		await installClangCppHeaders(
 			{
 				readFile: (path) =>
@@ -302,11 +344,41 @@ class Clang {
 						? this.memfs.getFileContents(path.replace(/^\/+/, ''))
 						: null,
 				mkdirTree: (path) => this.memfs.addDirectory(path.replace(/^\/+/, '')),
-				writeFile: (path, contents) =>
-					this.memfs.addFile(path.replace(/^\/+/, ''), contents)
+				writeFile: (path, contents) => this.installRuntimeHeader(path, contents)
 			},
 			this.compilerConfig?.provenance
 		);
+	}
+
+	private installRuntimeHeader(path: string, contents: Uint8Array): void {
+		const normalized = path.replace(/^\/+/, '');
+		this.memfs.addFile(normalized, contents);
+		this.runtimeHeaders.set(normalized, Uint8Array.from(contents));
+	}
+
+	/** Module adapters may return a trusted content digest only after their integrity gate. */
+	async getCompilerFingerprint(): Promise<string | undefined> {
+		return getCompiledModuleFingerprint(await this.getModule(this.assetUrls.clang));
+	}
+
+	async getPrecompiledHeaderFingerprint() {
+		if (!this.pchFingerprint) {
+			this.pchFingerprint = Promise.all([
+				this.getCompilerFingerprint(),
+				Promise.all(this.sysrootFingerprints),
+				fingerprintRuntimeHeaders(this.runtimeHeaders)
+			])
+				.then(([compiler, sysroot, runtimeHeaders]) =>
+					compiler &&
+					runtimeHeaders &&
+					sysroot.length &&
+					sysroot.every((hash): hash is string => !!hash)
+						? { compiler, sysroot, runtimeHeaders }
+						: undefined
+				)
+				.catch(() => undefined);
+		}
+		return this.pchFingerprint;
 	}
 
 	/** Prepare libc's optional long double replacement before a direct wasm-ld invocation. */
@@ -407,6 +479,8 @@ class Clang {
 		for (const file of files) {
 			const safePath = normalizeWorkspacePath(file.path);
 			if (!safePath || safePath === normalizedActivePath) continue;
+			if (safePath.startsWith('include/') || safePath.startsWith('lib/clang/'))
+				this.workspaceOverridesSystemHeaders = true;
 			this.addWorkspaceDirectories(safePath, addedDirectories);
 			this.memfs.addFile(safePath, toUtf8(file.content));
 		}
@@ -1390,6 +1464,8 @@ class Clang {
 
 		const needsCppSysroot = language !== 'C' || hasUnknownLanguageOverride(compileArgs);
 		await (needsCppSysroot ? this.ensureCppSysroot() : this.ready);
+		if (input.startsWith('include/') || input.startsWith('lib/clang/'))
+			this.workspaceOverridesSystemHeaders = true;
 		if (!options.sourceAlreadyMounted) {
 			this.addWorkspaceFiles(options.workspaceFiles, input);
 			this.addWorkspaceDirectories(input);
@@ -1401,11 +1477,17 @@ class Clang {
 		const includeArgs = clangSystemIncludePaths(language, '', clangResourceDir).flatMap(
 			(path) => ['-internal-isystem', path]
 		);
-		const compilerArgs = [
+		const cc1Args = (
+			action: string,
+			output: string,
+			languageType: string,
+			source: string,
+			includePch: string[] = []
+		) => [
 			'-cc1',
 			'-triple',
 			CLANG_WASI_TARGET,
-			'-emit-obj',
+			action,
 			'-disable-free',
 			'-isysroot',
 			'/',
@@ -1418,12 +1500,13 @@ class Clang {
 			'-fcolor-diagnostics',
 			...(lldbDebug ? [] : ['-O' + opt]),
 			'-o',
-			obj,
+			output,
 			standardArg,
 			'-x',
-			languageArg,
+			languageType,
 			...(language === 'OBJC' ? OBJECTIVE_C_RUNTIME_FLAGS : []),
-			input,
+			...includePch,
+			source,
 			...compileArgs,
 			...(lldbDebug
 				? [
@@ -1435,6 +1518,92 @@ class Clang {
 					]
 				: [])
 		];
+		const precompiledHeaderPlan =
+			language === 'CPP' &&
+			!traceDebug &&
+			typeof options.transformSource !== 'function' &&
+			startsWithStdcppInclude(source) &&
+			precompiledHeaderArgsEligible(compileArgs) &&
+			!this.workspaceOverridesSystemHeaders
+				? await (async () => {
+						const args = cc1Args(
+							'-emit-pch',
+							`/${PRECOMPILED_HEADER_PATH}`,
+							'c++-header',
+							STDCPP_HEADER_PATH
+						);
+						const fingerprint = await this.getPrecompiledHeaderFingerprint();
+						if (!fingerprint) return undefined;
+						const key = JSON.stringify({
+							format: 'clang-pch-v2',
+							args,
+							...fingerprint
+						});
+						const cache = createRuntimeGeneratedAssetCacheBackend(
+							resolveRuntimeAssetCacheOptions(
+								this.persistentCache,
+								options.persistentCache
+							)
+						);
+						return { key, args, cache };
+					})()
+				: undefined;
+		if (precompiledHeaderPlan) this.precompiledHeaderPlan = precompiledHeaderPlan;
+		if (options.planPrecompiledHeaderOnly) return null;
+		let precompiledHeader: BrowserClangPrecompiledHeader | undefined =
+			options.precompiledHeader;
+		if (precompiledHeaderPlan && precompiledHeader?.key !== precompiledHeaderPlan.key) {
+			const bytes = await precompiledHeaderPlan.cache
+				.read(precompiledHeaderPlan.key, this.signal)
+				.catch(() => undefined);
+			this.signal?.throwIfAborted();
+			if (bytes?.byteLength) precompiledHeader = { key: precompiledHeaderPlan.key, bytes };
+		}
+		if (precompiledHeaderPlan && precompiledHeader?.key === precompiledHeaderPlan.key) {
+			if (this.mountedPrecompiledHeaderKey !== precompiledHeader.key) {
+				this.addWorkspaceDirectories(PRECOMPILED_HEADER_PATH);
+				this.memfs.addFile(PRECOMPILED_HEADER_PATH, precompiledHeader.bytes);
+				this.mountedPrecompiledHeaderKey = precompiledHeader.key;
+			}
+			this.trace(`compile ${input} -> ${obj} with ${PRECOMPILED_HEADER_PATH}`);
+			const output: string[] = [];
+			const stdout = this.memfs.stdout;
+			this.memfs.stdout = (chunk) => output.push(chunk);
+			let rejected = false;
+			try {
+				const result = await this.run(
+					clang,
+					true,
+					'clang',
+					...cc1Args('-emit-obj', obj, languageArg, input, [
+						'-include-pch',
+						`/${PRECOMPILED_HEADER_PATH}`
+					])
+				);
+				this.usedPrecompiledHeader = true;
+				return result;
+			} catch (error) {
+				rejected = precompiledHeaderErrorPattern.test(output.join(''));
+				if (!rejected) {
+					if (Uint8Array.from(this.memfs.getFileContents(obj)).length > 0) {
+						// Same close-time stream recovery as the textual compile below.
+						this.usedPrecompiledHeader = true;
+						return null;
+					}
+					throw error;
+				}
+				// Fall back to the textual header below and let the caller rebuild the header.
+				await precompiledHeaderPlan.cache
+					.remove(precompiledHeaderPlan.key, this.signal)
+					.catch(() => undefined);
+				this.trace(`precompiled header rejected; compiling ${input} without it`);
+				this.memfs.addFile(obj, new Uint8Array(0));
+			} finally {
+				this.memfs.stdout = stdout;
+				if (!rejected) for (const chunk of output) stdout(chunk);
+			}
+		}
+		const compilerArgs = cc1Args('-emit-obj', obj, languageArg, input);
 		this.trace(`compile ${input} -> ${obj}`);
 		try {
 			return await this.run(clang, true, 'clang', ...compilerArgs);
@@ -1578,7 +1747,8 @@ class Clang {
 			debugBuffer,
 			interruptBuffer,
 			watchBuffer,
-			watchResultBuffer
+			watchResultBuffer,
+			precompiledHeader
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
 		const normalizeRequestedPath =
@@ -1650,6 +1820,9 @@ class Clang {
 			return this.wasm;
 		}
 
+		this.precompiledHeaderPlan = undefined;
+		this.usedPrecompiledHeader = false;
+
 		// Linking cannot start before source compilation completes. Start the linker download and
 		// Wasm compilation now so that its cold-start cost overlaps Clang's source compilation.
 		// getModule() keeps the in-flight promise, so link() later reuses this exact load.
@@ -1665,7 +1838,9 @@ class Clang {
 				workspaceFiles: normalizedWorkspaceFiles,
 				cppVersion,
 				cVersion,
-				debugMode
+				debugMode,
+				precompiledHeader,
+				persistentCache: options.persistentCache
 			});
 			await this.link(obj, wasm, debugMode, ...linkProfile);
 		} else {
@@ -1688,6 +1863,8 @@ class Clang {
 					cppVersion,
 					cVersion,
 					debugMode,
+					precompiledHeader,
+					persistentCache: options.persistentCache,
 					sourceAlreadyMounted: true
 				});
 			}
@@ -1700,6 +1877,65 @@ class Clang {
 			`Compiling ${wasm}`,
 			WebAssembly.compile(wasmBytes)
 		));
+	}
+
+	/**
+	 * Build the precompiled <bits/stdc++.h> planned by the last compile. Returns undefined when
+	 * that compile could not use one or Clang could not build it.
+	 */
+	async buildPrecompiledHeader(): Promise<BrowserClangPrecompiledHeader | undefined> {
+		const plan = this.precompiledHeaderPlan;
+		if (!plan) return undefined;
+		await this.ensureCppSysroot();
+		this.addWorkspaceDirectories(PRECOMPILED_HEADER_PATH);
+		this.memfs.addFile(PRECOMPILED_HEADER_PATH, new Uint8Array(0));
+		this.mountedPrecompiledHeaderKey = '';
+		const clang = await this.getModule(this.assetUrls.clang);
+		this.trace(`precompile ${STDCPP_HEADER_PATH} -> ${PRECOMPILED_HEADER_PATH}`);
+		try {
+			await this.run(clang, false, 'clang', ...plan.args);
+		} catch {
+			// The WASI LLVM stream can fail at close after a complete write; keep nonempty output.
+		}
+		const bytes = Uint8Array.from(this.memfs.getFileContents(PRECOMPILED_HEADER_PATH));
+		if (bytes.length === 0) return undefined;
+		this.mountedPrecompiledHeaderKey = plan.key;
+		await plan.cache?.write(plan.key, bytes, this.signal).catch(() => false);
+		this.signal?.throwIfAborted();
+		return { key: plan.key, bytes };
+	}
+
+	/**
+	 * Build the precompiled <bits/stdc++.h> that compileLink() would use for this source without
+	 * compiling it, for hosts that prepare the header in another runtime instance.
+	 */
+	async buildPrecompiledHeaderFor(
+		code: string,
+		options: BrowserClangRuntimeRunOptions = {}
+	): Promise<BrowserClangPrecompiledHeader | undefined> {
+		const { language = 'CPP', fileName, activePath, args = [], compileArgs = args } = options;
+		const debugMode = resolveDebugMode(options);
+		const normalizeRequestedPath =
+			debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
+		const requestedInput =
+			normalizeRequestedPath(activePath || '') ||
+			normalizeRequestedPath(fileName || '') ||
+			undefined;
+		const { input, obj } = resolveBuildArtifactNames(language, requestedInput);
+		this.precompiledHeaderPlan = undefined;
+		await this.compile({
+			input,
+			code,
+			obj,
+			language,
+			compileArgs,
+			cppVersion: options.cppVersion,
+			cVersion: options.cVersion,
+			debugMode,
+			planPrecompiledHeaderOnly: true,
+			persistentCache: options.persistentCache
+		});
+		return this.buildPrecompiledHeader();
 	}
 
 	async compileArtifact(
@@ -1767,7 +2003,8 @@ class Clang {
 			debugBuffer,
 			interruptBuffer,
 			watchBuffer,
-			watchResultBuffer
+			watchResultBuffer,
+			precompiledHeader
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
 		if (debugMode === 'lldb') {
@@ -1797,7 +2034,9 @@ class Clang {
 				debugBuffer,
 				interruptBuffer,
 				watchBuffer,
-				watchResultBuffer
+				watchResultBuffer,
+				...(precompiledHeader ? { precompiledHeader } : {}),
+				persistentCache: options.persistentCache
 			}),
 			true,
 			wasm,

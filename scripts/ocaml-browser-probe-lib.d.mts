@@ -1,3 +1,10 @@
+export function setOcamlEditorSourceWhenReady(code: string): Promise<boolean>;
+export function waitForOcamlEditorSource(
+    page: import('playwright-core').Page,
+    code: string,
+    timeoutMs: number
+): Promise<void>;
+
 /**
  * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; backend?: 'js' | 'wasm'; code?: string; stdinText?: string; sendEof?: boolean; stdinMethod?: 'debug-hook' | 'keyboard' }} options
  */

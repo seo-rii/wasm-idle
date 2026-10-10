@@ -2,7 +2,7 @@ export {
 	getZigLanguageServer,
 	type ZigLanguageServerConfig,
 	type ZigLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createZigWorkerService,
 	type ZigLanguageServerTargetTriple,

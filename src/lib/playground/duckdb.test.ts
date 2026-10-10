@@ -36,8 +36,6 @@ vi.mock('$lib/playground/worker/duckdb?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 import DuckDB from './duckdb';
 
 describe('DuckDB sandbox', () => {

@@ -3,13 +3,13 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const storage = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
 vi.mock('@wasm-idle/core', async (original) => ({
 	...(await original<typeof import('@wasm-idle/core')>()),
 	readPersistentRuntimeAsset: storage.read,
 	writePersistentRuntimeAsset: storage.write
 }));
 import { WorkerAssetBridge } from './assetBridge';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -92,5 +92,62 @@ describe('worker bridge per-execution persistent policy', () => {
 		expect(bridge.matches(config)).toBe(true);
 		expect(bridge.setExecutionPersistentCache().enabled).toBe(false);
 		bridge.dispose();
+	});
+
+	it('keeps differently configured storage policies independent while downloads are pending', async () => {
+		const bytes = new TextEncoder().encode('export default 1;');
+		const asset = 'clangd.js';
+		const config = {
+			baseUrl: 'https://assets.example/clang/',
+			useAssetBridge: true,
+			integrity: {
+				[asset]: {
+					bytes: bytes.length,
+					sha256: createHash('sha256').update(bytes).digest('hex')
+				}
+			}
+		};
+		const cache = new RuntimeAssetCache();
+		const messages = [vi.fn(), vi.fn()];
+		const bridges = messages.map(
+			(postMessage, index) =>
+				new WorkerAssetBridge(
+					{ postMessage } as unknown as Worker,
+					'clangd',
+					{ ...config, persistentCache: index === 0 ? false : { enabled: true } },
+					undefined,
+					128,
+					false,
+					cache
+				)
+		);
+		const finishes: Array<(value: Response) => void> = [];
+		storage.read.mockResolvedValue(undefined);
+		storage.write.mockResolvedValue(true);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				() =>
+					new Promise<Response>((resolve) => {
+						finishes.push(resolve);
+					})
+			)
+		);
+		for (const bridge of bridges)
+			bridge.handleMessage({ data: { assetRequest: { id: 1, asset } } } as MessageEvent);
+		await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+		expect(storage.read.mock.calls.map(([options]) => options.cache.enabled)).toEqual([
+			false,
+			true
+		]);
+		for (const finish of finishes) finish(new Response(bytes));
+		await vi.waitFor(() => {
+			for (const postMessage of messages) expect(postMessage).toHaveBeenCalledOnce();
+		});
+		expect(storage.write.mock.calls.map(([options]) => options.cache.enabled)).toEqual([
+			false,
+			true
+		]);
+		for (const bridge of bridges) bridge.dispose();
 	});
 });

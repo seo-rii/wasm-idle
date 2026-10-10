@@ -37,10 +37,57 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	GOLFSCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'golfscript',
+		producerPath: 'src/lib/playground/worker/ruby.ts'
+	},
+	APECODE: {
+		strategy: 'entry-signal',
+		hostModule: 'apecode',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
+	LOLCODE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	UHMLANG: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	AHEUI: {
+		strategy: 'entry-signal',
+		hostModule: 'aheui',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
+	MALBOLGE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	WHITESPACE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	BEFUNGE93: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	BRAINFUCK: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
+	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
+	OBJECTIVECXX: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
 	PYTHON3: {
 		strategy: 'entry-signal',
 		hostModule: 'python',
@@ -84,14 +131,21 @@ const runtimeReadinessAudit = {
 		hostModule: 'bash',
 		producerPath: 'src/lib/playground/worker/bashRuntime.ts'
 	},
+	HY: {
+		strategy: 'entry-signal',
+		hostModule: 'hy',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
 	CLOJURESCRIPT: {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
 	},
+	RESCRIPT: { strategy: 'static-worker-fallback', hostModule: 'rescript' },
 	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	COMMONLISP: { strategy: 'static-worker-fallback', hostModule: 'commonlisp' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
+	V: { strategy: 'terminal-fallback', hostModule: 'v' },
 	TINYGO: {
 		strategy: 'entry-signal',
 		hostModule: 'tinygo',
@@ -124,6 +178,12 @@ const runtimeReadinessAudit = {
 		producerPath: 'src/lib/playground/worker/wasm.ts'
 	},
 	LUA: {
+		strategy: 'entry-signal',
+		hostModule: 'lua',
+		producerPath: 'src/lib/playground/worker/lua.ts'
+	},
+	// Fennel's host extends the Lua host and runs on the same wasm-lua worker.
+	FENNEL: {
 		strategy: 'entry-signal',
 		hostModule: 'lua',
 		producerPath: 'src/lib/playground/worker/lua.ts'
@@ -163,6 +223,11 @@ const runtimeReadinessAudit = {
 		strategy: 'entry-signal',
 		hostModule: 'sqlite',
 		producerPath: 'src/lib/playground/worker/sqlite.ts'
+	},
+	POSTGRESQL: {
+		strategy: 'entry-signal',
+		hostModule: 'postgresql',
+		producerPath: 'src/lib/playground/worker/postgresql.ts'
 	},
 	PHP: {
 		strategy: 'entry-signal',
@@ -215,7 +280,13 @@ describe('runtime progress readiness audit', () => {
 		for (const [languageId, row] of Object.entries(runtimeReadinessAudit)) {
 			if (row.strategy !== 'entry-signal') continue;
 			const producerSource = readProjectSource(row.producerPath);
-			const hostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			const ownHostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			// Interpreter wrappers inherit worker progress forwarding from their runtime host.
+			const hostSource = ownHostSource.includes('extends Python')
+				? readProjectSource('src/lib/playground/python.ts')
+				: ownHostSource.includes('extends Ruby')
+					? readProjectSource('src/lib/playground/ruby.ts')
+					: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

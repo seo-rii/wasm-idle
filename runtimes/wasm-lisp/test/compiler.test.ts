@@ -725,6 +725,27 @@ export async function instantiate() {
 		expect(execution.stdout).toBe('alpha\n');
 	});
 
+	it('reads stdin through the bundled browser Preview 2 shim', async () => {
+		const { runtime, compiler } = await createCompiler();
+		const compiled = await compiler.compile({
+			code: '(display "main=") (display (read-char (current-input-port))) (newline)',
+			fileName: 'stdin.scm'
+		});
+		expect(compiled.success).toBe(true);
+		const chunks = ['K', '\n'];
+		const stdin = vi.fn(() => chunks.shift() ?? null);
+		const stdout = vi.fn();
+
+		const execution = await runtime.executeBrowserLispArtifact(compiled.artifact, {
+			stdin,
+			stdout
+		});
+
+		expect(stdin).toHaveBeenCalled();
+		expect(stdout.mock.calls.map(([chunk]) => chunk).join('')).toBe('main=K\n');
+		expect(execution).toEqual({ exitCode: 0, stdout: 'main=K\n', stderr: '' });
+	});
+
 	it('supports include files through the browser-side WASI filesystem shim', async () => {
 		const { runtime, compiler } = await createCompiler();
 		const compiled = await compiler.compile({

@@ -2,7 +2,7 @@ export {
 	getPrologLanguageServer,
 	type PrologLanguageServerConfig,
 	type PrologLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createPrologWorkerService,
 	type PrologDiagnosticRunnerRequest,

@@ -1,22 +1,22 @@
 {
   "format": "wasm-typescript-runtime-build-v2",
-  "fingerprint": "39caba34204ca2bc",
+  "fingerprint": "2d968f66f878ce33",
   "producer": {
     "format": "wasm-typescript-producer-build-v1",
     "additionalArtifacts": {
       "javascript.js": {
-        "bytes": 35829,
-        "sha256": "3afa49e47296ad7d97f43a80500d95e55321d197b3ce95ddb823f10e91188c83"
+        "bytes": 35866,
+        "sha256": "21b176cfe1ce4d39519979422bd1b3b598f183e9b3fe042ecc8cc37a535c3608"
       }
     },
     "source": {
       "format": "wasm-typescript-source-inputs-v1",
-      "sha256": "d3677bc23ba181ecb86454ec5b7ae0585216e73d21fb625ab4b27b6071142431",
+      "sha256": "b2823fa8a5fbd18798d85008d16244e644c96105dcb43e5afd0970134eac958d",
       "files": [
         {
           "path": "package.json",
           "bytes": 725,
-          "sha256": "d562e4ed0dd5f0e3d1413e233c896f2752a172038f50c95414557f5ef386dbb1"
+          "sha256": "9f0d44de5f48935360854d1d0c149898757f2eef3093c02af116dfca4e54961d"
         },
         {
           "path": "scripts/build.mjs",
@@ -35,31 +35,31 @@
         },
         {
           "path": "tsconfig.json",
-          "bytes": 357,
-          "sha256": "fd77c7fdc8e7c51a056efa8f05d37376e11336229c6c2ab128314b3059f6d6f0"
+          "bytes": 403,
+          "sha256": "f183ec1a23d38b68602a3d97eccfc4695f3ff5546f4f0e43b3f526f870dc85de"
         }
       ]
     },
     "toolchain": {
-      "@swc/wasm-typescript": "1.15.33",
+      "@swc/wasm-typescript": "1.16.13",
       "buffer": "6.0.3",
-      "esbuild": "0.27.3",
-      "typescript": "5.9.3"
+      "esbuild": "0.28.2",
+      "typescript": "6.0.3"
     },
     "artifact": {
       "path": "index.js",
-      "bytes": 3766190,
-      "sha256": "483aedcb29a0aee52f4167d4bbbb6070d5d187986952a17c849ad65a29374dde"
+      "bytes": 3759064,
+      "sha256": "2c8942b6383d25d4582e9db0ee38d85b61eb8016f16e57c840f3c20af9ac848b"
     }
   },
   "assets": {
     "index.js": {
-      "bytes": 3766190,
-      "sha256": "483aedcb29a0aee52f4167d4bbbb6070d5d187986952a17c849ad65a29374dde"
+      "bytes": 3759064,
+      "sha256": "2c8942b6383d25d4582e9db0ee38d85b61eb8016f16e57c840f3c20af9ac848b"
     },
     "javascript.js": {
-      "bytes": 35829,
-      "sha256": "3afa49e47296ad7d97f43a80500d95e55321d197b3ce95ddb823f10e91188c83"
+      "bytes": 35866,
+      "sha256": "21b176cfe1ce4d39519979422bd1b3b598f183e9b3fe042ecc8cc37a535c3608"
     }
   }
 }

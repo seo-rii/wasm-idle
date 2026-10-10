@@ -20,6 +20,87 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'GOLFSCRIPT',
+		load: async () => {
+			const { default: Golfscript } = await import('$lib/playground/golfscript');
+			return new Golfscript();
+		}
+	},
+	{
+		languageId: 'APECODE',
+		load: async () => {
+			const { default: Apecode } = await import('$lib/playground/apecode');
+			return new Apecode();
+		}
+	},
+	{
+		languageId: 'LOLCODE',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.LOLCODE);
+		}
+	},
+	{
+		languageId: 'UHMLANG',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.UHMLANG);
+		}
+	},
+	{
+		languageId: 'AHEUI',
+		load: async () => {
+			const { default: Aheui } = await import('$lib/playground/aheui');
+			return new Aheui();
+		}
+	},
+	{
+		languageId: 'MALBOLGE',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.MALBOLGE);
+		}
+	},
+	{
+		languageId: 'WHITESPACE',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.WHITESPACE);
+		}
+	},
+	{
+		languageId: 'BEFUNGE93',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.BEFUNGE93);
+		}
+	},
+	{
+		languageId: 'BRAINFUCK',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		}
+	},
+	{
 		languageId: 'C3',
 		load: async () => {
 			const { default: C3 } = await import('$lib/playground/c3');
@@ -31,6 +112,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Python } = await import('$lib/playground/python');
 			return new Python();
+		}
+	},
+	{
+		languageId: 'HY',
+		load: async () => {
+			const { default: Hy } = await import('$lib/playground/hy');
+			return new Hy();
 		}
 	},
 	{
@@ -52,6 +140,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
 			return new ObjectiveC();
+		}
+	},
+	{
+		languageId: 'OBJECTIVECXX',
+		load: async () => {
+			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
+			return new ObjectiveC('OBJECTIVECXX');
 		}
 	},
 	{
@@ -132,6 +227,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'GRAIN',
+		load: async () => {
+			const { default: Grain } = await import('$lib/playground/grain');
+			return new Grain();
+		}
+	},
+	{
 		languageId: 'PERL',
 		load: async () => {
 			const { default: Perl } = await import('$lib/playground/perl');
@@ -164,6 +266,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: ClojureScript } = await import('$lib/playground/clojurescript');
 			return new ClojureScript();
+		}
+	},
+	{
+		languageId: 'RESCRIPT',
+		load: async () => {
+			const { default: ReScript } = await import('$lib/playground/rescript');
+			return new ReScript();
 		}
 	},
 	{
@@ -237,6 +346,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'V',
+		load: async () => {
+			const { default: VLang } = await import('$lib/playground/v');
+			return new VLang();
+		}
+	},
+	{
 		languageId: 'TINYGO',
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -290,6 +406,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Lua } = await import('$lib/playground/lua');
 			return new Lua();
+		}
+	},
+	{
+		languageId: 'FENNEL',
+		load: async () => {
+			const { default: Fennel } = await import('$lib/playground/fennel');
+			return new Fennel();
 		}
 	},
 	{
@@ -353,6 +476,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Sqlite } = await import('$lib/playground/sqlite');
 			return new Sqlite();
+		}
+	},
+	{
+		languageId: 'POSTGRESQL',
+		load: async () => {
+			const { default: Postgresql } = await import('$lib/playground/postgresql');
+			return new Postgresql();
 		}
 	},
 	{

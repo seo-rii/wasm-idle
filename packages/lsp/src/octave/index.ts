@@ -2,7 +2,7 @@ export {
 	getOctaveLanguageServer,
 	type OctaveLanguageServerConfig,
 	type OctaveLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createOctaveWorkerService,
 	type OctaveDiagnosticRunnerRequest,

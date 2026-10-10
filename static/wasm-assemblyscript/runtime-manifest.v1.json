@@ -2,29 +2,29 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "assemblyscript": "0.28.17",
-    "@assemblyscript/loader": "0.28.17"
+    "assemblyscript": "0.28.20",
+    "@assemblyscript/loader": "0.28.20"
   },
   "files": [
     {
-      "path": "chunks/__vite-browser-external-CBM_S3fv.mjs",
-      "bytes": 102,
-      "sha256": "31208864f100e9c5862fb1d66835ebbad2bba189e3a28bcc2a34eb75934ded9c"
+      "path": "chunks/__vite-browser-external-Bl4KRA5l.mjs",
+      "bytes": 113,
+      "sha256": "5354aac59231bbfa4999138ebdedcb8010be5fa66ef2dc8a8883337488b2d9d4"
     },
     {
-      "path": "chunks/asc-B7u7ie6k.mjs",
-      "bytes": 13489859,
-      "sha256": "9bc0c5dd3d670cbb0c125209955e21f72827310cc6650361463e4bd46010e56e"
+      "path": "chunks/asc-BRewbG4u.mjs",
+      "bytes": 13567562,
+      "sha256": "3afaa09defaf791f327a732c8ed69b3ed3b1a663ccb6795c7a15b606b593246c"
     },
     {
-      "path": "chunks/chunk-DSPWxLtR.mjs",
-      "bytes": 686,
-      "sha256": "8694d3eadcf4f97da353b6ed255414f5f2f9d478b0b1a251188e489666349223"
+      "path": "chunks/preload-helper-CGPSMADP.mjs",
+      "bytes": 1573,
+      "sha256": "619e20fe75396cf1771978ff186d0753bca8f42ec931be5128516c33046a0a09"
     },
     {
-      "path": "chunks/preload-helper-Di021t7d.mjs",
-      "bytes": 1374,
-      "sha256": "8654151aa32cfd92affe83a8b91c715f2c5127cc9ca97c61a37d0c39edcb81c1"
+      "path": "chunks/rolldown-runtime-CXHxssQy.mjs",
+      "bytes": 717,
+      "sha256": "5cc960457405f4677d7f7e3eee166ceabd1608df13bc972f15a76135eccb1e28"
     },
     {
       "path": "LICENSE.txt",
@@ -33,8 +33,8 @@
     },
     {
       "path": "runtime.mjs",
-      "bytes": 6004,
-      "sha256": "2e062d456711d215bce7c860a13e01535e8fbce49632f2c71ed33e8ab112ead8"
+      "bytes": 6000,
+      "sha256": "199cb826876abbf8ed6a5ba46bb0810a25a0e6febb290cf31328c77da77fd47e"
     }
   ]
 }

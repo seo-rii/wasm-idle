@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readPhpWasmAsset } from './startup-assets.mjs';
 import {
 	collectRuntimeFiles,
 	MANIFEST_FILE,
@@ -51,9 +52,18 @@ assert.ok(
 	'PHP runtime assets are missing'
 );
 const filePaths = new Set(actualFiles.map((file) => file.path));
+const webPackageDir = path.dirname(require.resolve('@php-wasm/web-8-4/package.json'));
+const expectedWasmAssets = await Promise.all(
+	['jspi', 'asyncify'].map((mode) => readPhpWasmAsset(webPackageDir, mode))
+);
 assert.deepEqual(
-	actualFiles.map((file) => file.path).filter((filePath) => filePath.endsWith('.wasm')),
-	['assets/php_8_4-BR2RjfzA.wasm', 'assets/php_8_4-By-NgDvF.wasm'],
+	actualFiles
+		.filter((file) => file.path.endsWith('.wasm'))
+		.map(({ bytes, sha256 }) => ({ bytes, sha256 }))
+		.sort((a, b) => a.sha256.localeCompare(b.sha256)),
+	expectedWasmAssets
+		.map(({ bytes, sha256 }) => ({ bytes, sha256 }))
+		.sort((a, b) => a.sha256.localeCompare(b.sha256)),
 	'unexpected JSPI or Asyncify PHP WASM assets'
 );
 assert.equal(
@@ -68,7 +78,7 @@ assert.equal(
 );
 assert.equal(
 	actualFiles.filter((file) => file.path.startsWith('chunks/')).length,
-	7,
+	6,
 	'unexpected PHP runtime chunk count'
 );
 assert.ok(filePaths.has('LICENSE.txt'), 'PHP runtime license is missing');

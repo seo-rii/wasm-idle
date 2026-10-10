@@ -1,10 +1,20 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'whitespace'
+	| 'malbolge'
+	| 'aheui'
+	| 'uhmlang'
+	| 'lolcode'
+	| 'apecode'
+	| 'golfscript'
+	| 'brainfuck'
+	| 'befunge93'
 	| 'c'
 	| 'c3'
 	| 'cpp'
 	| 'objectivec'
+	| 'objectivecxx'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -16,6 +26,7 @@ export type EditorDefaultLanguage =
 	| 'erlang'
 	| 'prolog'
 	| 'gleam'
+	| 'grain'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -28,6 +39,8 @@ export type EditorDefaultLanguage =
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'rescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -35,6 +48,7 @@ export type EditorDefaultLanguage =
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
@@ -45,9 +59,11 @@ export type EditorDefaultLanguage =
 	| 'fortran'
 	| 'lfortran'
 	| 'cobol'
+	| 'v'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -58,10 +74,20 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
+	| 'befunge93'
+	| 'whitespace'
+	| 'malbolge'
+	| 'aheui'
+	| 'uhmlang'
+	| 'lolcode'
+	| 'apecode'
+	| 'golfscript'
+	| 'brainfuck'
 	| 'c'
 	| 'c3'
 	| 'cpp'
 	| 'objectivec'
+	| 'objectivecxx'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -73,6 +99,7 @@ export const editorDefaults: Record<
 	| 'erlang'
 	| 'prolog'
 	| 'gleam'
+	| 'grain'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -85,6 +112,8 @@ export const editorDefaults: Record<
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'rescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -92,6 +121,7 @@ export const editorDefaults: Record<
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
@@ -102,9 +132,11 @@ export const editorDefaults: Record<
 	| 'fortran'
 	| 'lfortran'
 	| 'cobol'
+	| 'v'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -114,6 +146,20 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
+	apecode:
+		'// Input: case count, rock count, then rock weights. Send EOF to finish.\n// Example input: 1\n//                3\n//                3 1 2\nstate main {\n  return true;\n}\n',
+	golfscript: '# Input: 20 22 (send EOF).\n~+\n',
+	aheui: '밯맣희\n',
+	malbolge: 'ubO\n',
+	whitespace: '\n   \n    \n\t\n\t     \n\t\t\t \n \n\t\t\t\n\t\n  \n \n \n\n  \t\n \n\n\n\n\n',
+	brainfuck: `Echo UTF8 input until EOF (use the EOF button to finish)
+,[.,]
+`,
+	befunge93: `~:1+!#@_,
+Echo UTF8 input until EOF using the EOF button
+`,
 	c3: `module main;
 
 // UTF-8 bytes; read_byte returns -1 after EOF (Ctrl+D or the EOF button).
@@ -209,6 +255,45 @@ int main(void) {
     }
     id runner = class_createInstance(objc_getClass("FibonacciRunner"), 0);
     printf("fibonacci=%d\\n", [runner fibonacci:n] + 3);
+    return 0;
+}`,
+	objectivecxx: `#include <iostream>
+#include <string>
+#include <vector>
+#include <objc/runtime.h>
+
+static std::vector<int> memo(64, 0);
+
+__attribute__((objc_root_class))
+@interface FibonacciRunner {
+    Class isa;
+}
+- (int)fibonacci:(int)n;
+@end
+
+@implementation FibonacciRunner
+- (int)fibonacci:(int)n {
+    if (n <= 1) {
+        return 1;
+    }
+    if (memo[n] != 0) {
+        return memo[n];
+    }
+    memo[n] = [self fibonacci:n - 1] + [self fibonacci:n - 2];
+    return memo[n];
+}
+@end
+
+int main() {
+    int n = 4;
+    if (!(std::cin >> n) || n < 0 || n >= 64) {
+        n = 4;
+    }
+    FibonacciRunner *runner =
+        (FibonacciRunner *)class_createInstance(objc_getClass("FibonacciRunner"), 0);
+    const std::string label = "fibonacci=";
+    std::cout << label << [runner fibonacci:n] + 3 << "\\n";
+    object_dispose(runner);
     return 0;
 }`,
 	python: `from functools import lru_cache
@@ -519,6 +604,40 @@ pub fn main() {
   }
   io.println("fibonacci=" <> int.to_string(fibonacci(n) + bonus))
 }`,
+	grain: `module Main
+
+from "buffer" include Buffer
+from "bytes" include Bytes
+from "string" include String
+from "wasi/file" include File
+
+// Reads one line from stdin. Returns None at EOF (Ctrl+D or the EOF button).
+let readLine = () => {
+  let line = Buffer.make(64)
+  let mut reading = true
+  let mut sawInput = false
+  while (reading) {
+    match (File.fdRead(File.stdin, 1)) {
+      Ok((bytes, 1)) => {
+        sawInput = true
+        if (Bytes.getUint8(0, bytes) == 10us) {
+          reading = false
+        } else {
+          Buffer.addBytes(bytes, line)
+        }
+      },
+      _ => reading = false,
+    }
+  }
+  if (sawInput) Some(Buffer.toString(line)) else None
+}
+
+print("What is your name?")
+match (readLine()) {
+  Some(name) => print("Hello, " ++ String.trim(name) ++ "!"),
+  None => print("Hello, stranger!"),
+}
+`,
 	perl: `use strict;
 use warnings;
 
@@ -745,6 +864,16 @@ fibonacci() {
 IFS= read -r input || input=''
 n="\${input:-\${1:-4}}"
 printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
+	hy: `(setv bonus 3)
+
+(defn fibonacci [n [memo {0 1  1 1}]]
+  (when (not-in n memo)
+    (setv (get memo n) (+ (fibonacci (- n 1) memo) (fibonacci (- n 2) memo))))
+  (get memo n))
+
+(setv line (.strip (input)))
+(setv n (if (.isdigit line) (int line) 4))
+(print (+ "fibonacci=" (str (+ (fibonacci n) bonus))))`,
 	clojurescript: `(ns wasm-idle.main
   (:require [wasm-idle.runtime :as runtime]))
 
@@ -765,6 +894,24 @@ printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
       parsed (js/parseInt (or line arg "4") 10)
       n (if (js/isNaN parsed) 4 parsed)]
   (println (str "fibonacci=" (+ (fibonacci n) bonus))))`,
+	rescript: `// stdin uses the same Node-style fs binding as the JavaScript runtime.
+@module("fs") external readLineSync: int => string = "readLineSync"
+
+let bonus = 3
+let memo = Map.make()
+
+let rec fibonacci = n =>
+  switch memo->Map.get(n) {
+  | Some(value) => value
+  | None =>
+    let value = n <= 1 ? 1 : fibonacci(n - 1) + fibonacci(n - 2)
+    memo->Map.set(n, value)
+    value
+  }
+
+let n = readLineSync(0)->String.trim->Int.fromString->Option.getOr(4)
+Console.log(\`fibonacci=\${Int.toString(fibonacci(n) + bonus)}\`)
+`,
 	ocaml: `let bonus = 3
 
 let memo = Hashtbl.create 16
@@ -894,6 +1041,16 @@ end
 local input = io.read("*l")
 local n = tonumber(input or "") or tonumber(arg[1] or "") or 4
 print("fibonacci=" .. tostring(fibonacci(n) + bonus))`,
+	fennel: `(local bonus 3)
+
+(fn fibonacci [n]
+  (if (<= n 1)
+      1
+      (+ (fibonacci (- n 1)) (fibonacci (- n 2)))))
+
+(let [line (io.read)
+      n (or (tonumber (or line "")) (tonumber (or (. arg 1) "")) 4)]
+  (print (.. "fibonacci=" (+ (fibonacci n) bonus))))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -1107,6 +1264,26 @@ end-if.
 compute result-value = cached-result + 3.
 display "fibonacci=" result-value.
 stop run.`,
+	v: `import os
+
+fn fibonacci(n int, mut memo map[int]i64) i64 {
+	if n <= 1 {
+		return 1
+	}
+	if n in memo {
+		return memo[n]
+	}
+	value := fibonacci(n - 1, mut memo) + fibonacci(n - 2, mut memo)
+	memo[n] = value
+	return value
+}
+
+fn main() {
+	line := os.get_line().trim_space()
+	n := if line == '' { 4 } else { line.int() }
+	mut memo := map[int]i64{}
+	println('fibonacci=\${fibonacci(n, mut memo)}')
+}`,
 	graphql: `# memo cache: 0 => 1, 1 => 1
 query Fibonacci($n: Int = 4) {
   fibonacci(n: $n)
@@ -1133,6 +1310,18 @@ SELECT 'fibonacci=' || CAST(curr + 3 AS TEXT) AS result
 FROM memo
 WHERE n = 4
 LIMIT 1;`,
+	postgresql: `-- Program stdin is the server-side file '/dev/blob':
+--   COPY my_table FROM '/dev/blob';  or  SELECT pg_read_file('/dev/blob');
+WITH RECURSIVE memo(n, prev, curr) AS (
+    SELECT 0, 1, 1
+    UNION ALL
+    SELECT n + 1, curr, prev + curr
+    FROM memo
+    WHERE n < 4
+)
+SELECT 'fibonacci=' || (curr + 3)::text AS result
+FROM memo
+WHERE n = 4;`,
 	php: `<?php
 const BONUS = 3;
 $memo = [
@@ -1372,6 +1561,15 @@ printfn "fibonacci=%d" (fibonacci n + bonus)`;
 
 export function isEditorDefaultSource(source: string) {
 	return (
+		source === editorDefaults.whitespace ||
+		source === editorDefaults.malbolge ||
+		source === editorDefaults.aheui ||
+		source === editorDefaults.uhmlang ||
+		source === editorDefaults.lolcode ||
+		source === editorDefaults.apecode ||
+		source === editorDefaults.golfscript ||
+		source === editorDefaults.brainfuck ||
+		source === editorDefaults.befunge93 ||
 		source === editorDefaults.c ||
 		source === editorDefaults.c3 ||
 		source === editorDefaults.cpp ||
@@ -1386,6 +1584,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.erlang ||
 		source === editorDefaults.prolog ||
 		source === editorDefaults.gleam ||
+		source === editorDefaults.grain ||
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||
@@ -1398,6 +1597,8 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.nim ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
+		source === editorDefaults.rescript ||
+		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
@@ -1405,6 +1606,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.wat ||
 		source === editorDefaults.wasm ||
 		source === editorDefaults.lua ||
+		source === editorDefaults.fennel ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
 		source === editorDefaults.commonlisp ||
@@ -1414,9 +1616,11 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.octave ||
 		source === editorDefaults.fortran ||
 		source === editorDefaults.cobol ||
+		source === editorDefaults.v ||
 		source === editorDefaults.graphql ||
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||
+		source === editorDefaults.postgresql ||
 		source === editorDefaults.php ||
 		source === editorDefaults.json ||
 		source === editorDefaults.yaml ||

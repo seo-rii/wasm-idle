@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/llvm-core",
-	"version": "1.0.8",
+	"version": "1.0.11",
 	"description": "Browser LLVM runtime hosts for wasm-idle",
 	"license": "MIT AND (Apache-2.0 WITH LLVM-exception)",
 	"type": "module",
@@ -36,6 +36,11 @@
 			"import": "./dist/cobol/src/index.js",
 			"default": "./dist/cobol/src/index.js"
 		},
+		"./v": {
+			"types": "./dist/v/src/index.d.ts",
+			"import": "./dist/v/src/index.js",
+			"default": "./dist/v/src/index.js"
+		},
 		"./objective-c": {
 			"types": "./dist/objective-c/src/index.d.ts",
 			"import": "./dist/objective-c/src/index.js",
@@ -67,8 +72,8 @@
 		"fflate": "0.8.3"
 	},
 	"devDependencies": {
-		"@types/node": "^25.6.0",
-		"typescript": "^6.0.2",
-		"vitest": "^4.1.4"
+		"@types/node": "^24.19.1",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.3"
 	}
 }

@@ -74,16 +74,16 @@
 		},
 		{
 			"name": "vite",
-			"version": "8.0.8",
-			"requestedRange": "^8.0.8",
-			"tarballUrl": "https://registry.npmjs.org/vite/-/vite-8.0.8.tgz",
-			"integrity": "sha512-dbU7/iLVa8KZALJyLOBOQ88nOXtNG8vxKuOT4I2mD+Ya70KPceF4IAmDsmU0h1Qsn5bPrvsY9HJstCRh3hG6Uw==",
+			"version": "8.3.3",
+			"requestedRange": "^8.3.3",
+			"tarballUrl": "https://registry.npmjs.org/vite/-/vite-8.3.3.tgz",
+			"integrity": "sha512-cTAldKPImjg6c+gk48U19POPn3GCBzZwpdsN8ZMEEcbpes+6/wvfqUd0C2y3qYY4wsj8PwgFwrZ/1jBPVttMSg==",
 			"license": "MIT",
 			"repository": "https://github.com/vitejs/vite",
-			"revision": "v8.0.8",
-			"files": 42,
-			"bytes": 2185148,
-			"treeSha256": "63becb5aef9c86b925810f4298df7c05905aa0ff74e6b8ee3b98991ca6a25a25"
+			"revision": "v8.3.3",
+			"files": 37,
+			"bytes": 2374102,
+			"treeSha256": "a050948cad1f02d83465c98f4954ab3fbcbe4c67d0eafae60e70e7f79ff4eb09"
 		}
 	],
 	"producer": {
@@ -122,7 +122,7 @@
 			"mediaType": "text/markdown",
 			"spdx": "LicenseRef-Provenance-Notice",
 			"bytes": 1849,
-			"sha256": "5f953326b3237b12ff5e572372b18e26a7e4402bd56c55eb38ea3cc2a8eae1e1"
+			"sha256": "0e03fcede021fbace33eb4b356efc963c3867877e3ba1fbf16339bbe5475450a"
 		},
 		{
 			"sourcePath": "scripts/wasm-haskell-bsdtar-license.txt",
@@ -153,8 +153,8 @@
 		{
 			"path": "dyld.mjs",
 			"mediaType": "text/javascript",
-			"bytes": 82322,
-			"sha256": "cc1835b8530f71e29727a71648b635a5cf28f46ed84451f2de17b194d60033d4"
+			"bytes": 83177,
+			"sha256": "d2260e7669868741fde2f1ba8cd38a9d63bff532c8ccb53d18b210b60af915d9"
 		},
 		{
 			"path": "rootfs.tar.zst",

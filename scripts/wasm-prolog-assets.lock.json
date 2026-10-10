@@ -1,22 +1,22 @@
 {
 	"schemaVersion": 1,
-	"profileId": "swipl-wasm-8.0.1-swipl-10.1.9",
+	"profileId": "swipl-wasm-8.2.1-swipl-10.1.15",
 	"package": {
 		"name": "swipl-wasm",
-		"version": "8.0.1",
+		"version": "8.2.1",
 		"repository": "https://github.com/SWI-Prolog/npm-swipl-wasm.git",
-		"revision": "18fa003833dd4fb2531195063291687255038372",
-		"tarball": "https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.0.1.tgz",
-		"integrity": "sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g=="
+		"revision": "85167290994ede92eab1aa5e399007c031e6cb82",
+		"tarball": "https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz",
+		"integrity": "sha512-zRdeD+3aFuXFwQqRkBWOENDP3fCSnwErqNDt8yD42OApkui2dRcomqRtxt0tZYfB+uH2Elc4K6cZrUBla6ljRQ=="
 	},
 	"toolchain": {
-		"swiplVersion": "10.1.9",
-		"swiplRevision": "6be143dbd030cc9ea621cde719a37f8385575453",
-		"emsdkVersion": "6.0.0",
-		"emsdkRevision": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de",
+		"swiplVersion": "10.1.15",
+		"swiplRevision": "5db27168f89b15186745ea401fbb99a017413788",
+		"emsdkVersion": "6.0.11",
+		"emsdkRevision": "dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72",
 		"zlibVersion": "1.3.2",
-		"pcre2Version": "10.47",
-		"pcre2Revision": "f454e231fe5006dd7ff8f4693fd2b8eb94333429"
+		"pcre2Version": "10.49.0",
+		"pcre2Revision": "6f9d7c1373262c541324a16a358785b33ef116cf"
 	},
 	"license": {
 		"path": "LICENSE.txt",
@@ -27,18 +27,18 @@
 	"assets": [
 		{
 			"path": "swipl-web.js",
-			"bytes": 192038,
-			"sha256": "2ac05e255ec3e2c76958398d9a2bfcb293fe4af81cca3f6e6316af89cb936cbd"
+			"bytes": 193421,
+			"sha256": "635da02ac0eb18e51303e4a0398b220d17cabfc0e4b7a2acbc7af9e949e4a9c7"
 		},
 		{
 			"path": "swipl-web.wasm",
-			"bytes": 2195026,
-			"sha256": "e95f4514adf76f3bfd92e3733bd6797bb63fcd65de5e64d248e0b379c419f556"
+			"bytes": 2275324,
+			"sha256": "c8831c0ac6a021b6bc67fa1b86e8826d1ea92a1a81b932cfb88fea235361c355"
 		},
 		{
 			"path": "swipl-web.data",
-			"bytes": 1642608,
-			"sha256": "55286bfd3ada8779cb843c60b05c97c8d8cb96087bf1ba2cebc4f90b95f7a1e3"
+			"bytes": 1659074,
+			"sha256": "91e9d9c1d184f1a291c870e96bf6a1bc502ce8787946c966526a663a725ba932"
 		}
 	]
 }

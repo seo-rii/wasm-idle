@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/lsp",
-	"version": "1.0.8",
+	"version": "1.0.11",
 	"description": "Framework-neutral browser LSP hosts for wasm-idle language tools",
 	"license": "MIT",
 	"type": "module",
@@ -46,9 +46,9 @@
 			"default": "./dist/pascal/index.js"
 		},
 		"./typescript/client": {
-			"types": "./dist/typescript/server.d.ts",
-			"import": "./dist/typescript/server.js",
-			"default": "./dist/typescript/server.js"
+			"types": "./dist/typescript/language-server.d.ts",
+			"import": "./dist/typescript/language-server.js",
+			"default": "./dist/typescript/language-server.js"
 		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
@@ -56,9 +56,9 @@
 			"default": "./dist/typescript/index.js"
 		},
 		"./javascript/client": {
-			"types": "./dist/typescript/server.d.ts",
-			"import": "./dist/typescript/server.js",
-			"default": "./dist/typescript/server.js"
+			"types": "./dist/typescript/language-server.d.ts",
+			"import": "./dist/typescript/language-server.js",
+			"default": "./dist/typescript/language-server.js"
 		},
 		"./javascript": {
 			"types": "./dist/typescript/index.d.ts",
@@ -66,9 +66,9 @@
 			"default": "./dist/typescript/index.js"
 		},
 		"./wat/client": {
-			"types": "./dist/wat/server.d.ts",
-			"import": "./dist/wat/server.js",
-			"default": "./dist/wat/server.js"
+			"types": "./dist/wat/language-server.d.ts",
+			"import": "./dist/wat/language-server.js",
+			"default": "./dist/wat/language-server.js"
 		},
 		"./wat": {
 			"types": "./dist/wat/index.d.ts",
@@ -181,9 +181,9 @@
 			"default": "./dist/perl/index.js"
 		},
 		"./document/client": {
-			"types": "./dist/document/server.d.ts",
-			"import": "./dist/document/server.js",
-			"default": "./dist/document/server.js"
+			"types": "./dist/document/language-server.d.ts",
+			"import": "./dist/document/language-server.js",
+			"default": "./dist/document/language-server.js"
 		},
 		"./document": {
 			"types": "./dist/document/index.d.ts",
@@ -222,7 +222,8 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"!dist/**/*.map"
 	],
 	"publishConfig": {
 		"access": "public",
@@ -238,29 +239,30 @@
 		"@wasm-idle/core": "workspace:*",
 		"@wasm-idle/llvm-core": "workspace:*",
 		"fflate": "0.8.3",
-		"vscode-jsonrpc": "^8.2.1"
+		"vscode-jsonrpc": "^9.0.3"
 	},
 	"devDependencies": {
-		"@types/markdown-it": "^14.1.2",
-		"@types/node": "^25.6.0",
-		"graphql": "^17.0.1",
-		"markdown-it": "^14.2.0",
-		"pyodide": "0.29.3",
-		"smol-toml": "^1.7.0",
-		"typescript": "^6.0.2",
+		"@types/markdown-it": "^14.2.0",
+		"@types/node": "^24.19.1",
+		"graphql": "^17.0.2",
+		"markdown-it": "^15.0.2",
+		"pyodide": "314.0.7",
+		"smol-toml": "^1.9.0",
+		"typescript": "^6.0.3",
 		"vscode-css-languageservice": "^6.3.10",
 		"vscode-html-languageservice": "^5.6.2",
 		"vscode-json-languageservice": "^5.7.2",
-		"vscode-languageserver-textdocument": "^1.0.12",
-		"vscode-languageserver-types": "^3.18.0",
-		"vitest": "^4.1.4",
+		"vscode-languageserver-textdocument": "^1.0.15",
+		"vscode-languageserver-types": "^3.18.4",
+		"vitest": "^5.0.3",
 		"webr": "0.6.0",
 		"wabt": "^1.0.39",
-		"yaml": "^2.9.0"
+		"yaml": "^2.9.1",
+		"esbuild": "^0.28.2"
 	},
 	"peerDependencies": {
 		"graphql": "^17.0.1",
-		"markdown-it": "^14.2.0",
+		"markdown-it": "^14.2.0 || ^15.0.2",
 		"smol-toml": "^1.7.0",
 		"typescript": "^6.0.2",
 		"vscode-css-languageservice": "^6.3.10",

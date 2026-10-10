@@ -28,7 +28,7 @@ import {
 	BUNDLED_PROLOG_RUNTIME_PROFILE,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
-import { getPrologLanguageServer } from '../src/prolog/server.js';
+import { getPrologLanguageServer } from '../src/prolog/language-server.js';
 import {
 	createPrologTestAssetResponse,
 	prologTestAssetBytes,

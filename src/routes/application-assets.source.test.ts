@@ -6,7 +6,7 @@ describe('page application asset root', () => {
 		expect(source).toMatch(
 			/import \{\s+createApplicationAssetResolver,\s+createApplicationRuntimeAssets\s+\} from '\$lib\/playground\/applicationAssets';/s
 		);
-		expect(source).toMatch(/const applicationRootUrl = base;/);
+		expect(source).toContain("const applicationRootUrl = resolve('');");
 		expect(source).toMatch(
 			/const resolveApplicationAsset = createApplicationAssetResolver\(applicationRootUrl\);/
 		);
@@ -24,5 +24,15 @@ describe('page application asset root', () => {
 			/const manifestUrl = runtimeAssets\.go\?\.manifestUrl;\s+if \(!manifestUrl\) return;/s
 		);
 		expect(source).not.toMatch(/import \{ WASM_[A-Z_]+_ASSET_VERSION \}/u);
+	});
+
+	it('reads public environment values only while deriving explicit example runtime options', () => {
+		expect(source).toContain("import * as publicEnvironment from '$app/env/public';");
+		expect(source).toContain(
+			"import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';"
+		);
+		expect(source).toMatch(
+			/let runtimeAssets = \$derived\.by\(\(\) =>\s+applyExampleRuntimeEnvironment\(\s+\{[\s\S]*?\},\s+publicEnvironment\s+\)\s+\);/s
+		);
 	});
 });

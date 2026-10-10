@@ -28,7 +28,7 @@ import {
 	BUNDLED_PERL_RUNTIME_PROFILE,
 	BUNDLED_PERL_RUNNER_RECEIPT
 } from '../src/bundledPerlRuntime.js';
-import { getPerlLanguageServer } from '../src/perl/server.js';
+import { getPerlLanguageServer } from '../src/perl/language-server.js';
 import {
 	createPerlTestAssetResponse,
 	perlTestAssetBytes,

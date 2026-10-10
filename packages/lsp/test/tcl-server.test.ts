@@ -28,7 +28,7 @@ import {
 	BUNDLED_TCL_RUNTIME_PROFILE,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
-import { getTclLanguageServer } from '../src/tcl/server.js';
+import { getTclLanguageServer } from '../src/tcl/language-server.js';
 import {
 	createTclTestAssetResponse,
 	tclTestAssetBytes,

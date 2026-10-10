@@ -190,7 +190,7 @@ class Rust implements Sandbox {
 								: '');
 				if (!nextCompilerUrl) {
 					throw new Error(
-						'Rust runtime is not configured. Set PUBLIC_WASM_RUST_COMPILER_URL or runtimeAssets.rust.compilerUrl.'
+						'Rust runtime is not configured. Set runtimeAssets.rust.compilerUrl.'
 					);
 				}
 				const configuredGraphFingerprint =

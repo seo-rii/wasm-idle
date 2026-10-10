@@ -1,7 +1,12 @@
 import {
 	resolveRubyRuntimeAssetConfig,
+	resolveGolfscriptRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import {
+	GOLFSCRIPT_RUNTIME_DIRECTORY,
+	WASM_GOLFSCRIPT_INTERPRETER_RECEIPT
+} from '$lib/playground/wasmGolfscriptVersion';
 import {
 	createRubyRuntimeOwnedPreflightDelivery,
 	preflightVerifiedRubyRuntimeAssets
@@ -32,6 +37,7 @@ import {
 	RUBY_MAX_MODULE_BYTES,
 	RuntimeConfigurationError,
 	TimeoutError,
+	fetchPinnedRuntimeAsset,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -49,11 +55,13 @@ type RubyOperation = {
 
 const OUTPUT_ENCODER = new TextEncoder();
 
-const abortReason = (signal: AbortSignal, phase: RubyOperation['phase']) =>
+const abortReason = (signal: AbortSignal, phase: RubyOperation['phase'], label: string) =>
 	signal.reason !== undefined
 		? signal.reason
 		: new DOMException(
-				phase === 'startup' ? 'Ruby runtime startup aborted' : 'Ruby execution aborted',
+				phase === 'startup'
+					? `${label} runtime startup aborted`
+					: `${label} execution aborted`,
 				'AbortError'
 			);
 
@@ -75,32 +83,71 @@ class Ruby implements Sandbox {
 	private activeOperation: RubyOperation | null = null;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
-	private readonly disposeCancellation = new CancelledError('Ruby sandbox disposed', {
-		phase: 'dispose',
-		runtimeId: 'RUBY',
-		recoverable: false
-	});
-	private readonly workerSession = new WorkerSession({
-		label: 'Ruby',
-		onDispose: (worker) => {
-			if (this.worker !== worker) return;
-			delete this.worker;
-			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
+	private readonly disposeCancellation: CancelledError;
+	private readonly workerSession: WorkerSession;
+
+	constructor(private readonly workerLanguage: 'ruby' | 'golfscript' = 'ruby') {
+		this.disposeCancellation = new CancelledError(`${this.runtimeLabel} sandbox disposed`, {
+			phase: 'dispose',
+			runtimeId: this.runtimeId,
+			recoverable: false
+		});
+		this.workerSession = new WorkerSession({
+			label: this.runtimeLabel,
+			onDispose: (worker) => {
+				if (this.worker !== worker) return;
+				delete this.worker;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+			}
+		});
+	}
+
+	private get runtimeId() {
+		return this.workerLanguage === 'golfscript' ? 'GOLFSCRIPT' : 'RUBY';
+	}
+
+	private get runtimeLabel() {
+		return this.workerLanguage === 'golfscript' ? 'GolfScript' : 'Ruby';
+	}
+
+	private get defaultSourcePath() {
+		return this.workerLanguage === 'golfscript' ? 'main.gs' : 'main.rb';
+	}
+
+	private validateRuntimeNamespace(
+		activePath: string | undefined,
+		files: NonNullable<SandboxExecutionOptions['workspaceFiles']>
+	) {
+		if (this.workerLanguage !== 'golfscript') return;
+		if (
+			[activePath ?? this.defaultSourcePath, ...files.map((file) => file.path)].some(
+				(path) =>
+					path === GOLFSCRIPT_RUNTIME_DIRECTORY ||
+					path.startsWith(`${GOLFSCRIPT_RUNTIME_DIRECTORY}/`)
+			)
+		) {
+			throw new RuntimeConfigurationError(
+				'GolfScript workspace conflicts with its private runtime mount',
+				{
+					phase: 'configuration',
+					runtimeId: this.runtimeId
+				}
+			);
 		}
-	});
+	}
 
 	private beginOperation(phase: RubyOperation['phase']) {
 		if (this.disposed) {
-			throw new RuntimeConfigurationError('Ruby sandbox is disposed', {
+			throw new RuntimeConfigurationError(`${this.runtimeLabel} sandbox is disposed`, {
 				phase: 'dispose',
-				runtimeId: 'RUBY'
+				runtimeId: this.runtimeId
 			});
 		}
 		if (this.activeOperation) {
-			throw new BusyError('Ruby runtime already has an active operation', {
-				runtimeId: 'RUBY',
+			throw new BusyError(`${this.runtimeLabel} runtime already has an active operation`, {
+				runtimeId: this.runtimeId,
 				phase: this.activeOperation.phase
 			});
 		}
@@ -160,7 +207,7 @@ class Ruby implements Sandbox {
 			if (!this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
-				reason = abortReason(signal, operation.phase);
+				reason = abortReason(signal, operation.phase, this.runtimeLabel);
 			} catch (error) {
 				reason = error;
 			}
@@ -192,7 +239,7 @@ class Ruby implements Sandbox {
 			if (!this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
-				reason = abortReason(signal, operation.phase);
+				reason = abortReason(signal, operation.phase, this.runtimeLabel);
 			} catch (error) {
 				reason = error;
 			}
@@ -222,11 +269,14 @@ class Ruby implements Sandbox {
 				const label = operation.phase === 'startup' ? 'startup' : 'execution';
 				this.cancelOperation(
 					operation,
-					new TimeoutError(`Ruby ${label} timed out after ${timeoutMs} ms`, {
-						phase: operation.phase,
-						runtimeId: 'RUBY',
-						timeoutMs
-					})
+					new TimeoutError(
+						`${this.runtimeLabel} ${label} timed out after ${timeoutMs} ms`,
+						{
+							phase: operation.phase,
+							runtimeId: this.runtimeId,
+							timeoutMs
+						}
+					)
 				);
 			}, timeoutMs);
 			if (operation.cleanedUp) clearTimeout(timeout);
@@ -295,6 +345,7 @@ class Ruby implements Sandbox {
 		}
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let nextConfig: ReturnType<typeof resolveRubyRuntimeAssetConfig>;
+		let golfscriptConfig: ReturnType<typeof resolveGolfscriptRuntimeAssetConfig> | undefined;
 		let startupContext: {
 			args: string[];
 			activePath: string;
@@ -308,19 +359,25 @@ class Ruby implements Sandbox {
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} runtime startup cancelled`
+					)
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} runtime startup cancelled`
+					)
 				);
 			}
 			const workspace = validateExecutionWorkspace(
 				_code,
 				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.rb',
+				options.activePath ?? this.defaultSourcePath,
 				{
 					...options.workspaceLimits,
 					maxFileBytes: Math.min(
@@ -335,9 +392,10 @@ class Ruby implements Sandbox {
 					)
 				}
 			);
+			this.validateRuntimeNamespace(workspace.activePath, workspace.workspaceFiles);
 			startupContext = {
-				args: [...resolveSandboxExecutionArgs('RUBY', _args, options).programArgs],
-				activePath: workspace.activePath ?? 'main.rb',
+				args: [...resolveSandboxExecutionArgs(this.runtimeId, _args, options).programArgs],
+				activePath: workspace.activePath ?? this.defaultSourcePath,
 				workspaceFiles: workspace.workspaceFiles.map((file) => ({
 					path: file.path,
 					content: file.content
@@ -345,11 +403,18 @@ class Ruby implements Sandbox {
 			};
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} runtime startup cancelled`
+					)
 				);
 			}
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			nextConfig = resolveRubyRuntimeAssetConfig(runtimeAssets, currentUrl);
+			golfscriptConfig =
+				this.workerLanguage === 'golfscript'
+					? resolveGolfscriptRuntimeAssetConfig(runtimeAssets, currentUrl)
+					: undefined;
 			const effectiveMaxAssetBytes = Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES);
 			if (!nextConfig.splitStdlib) {
 				for (const [label, bytes, limit] of [
@@ -376,22 +441,29 @@ class Ruby implements Sandbox {
 				] as const) {
 					if ((bytes ?? 0) > limit) {
 						throw new AssetTooLargeError(
-							`Ruby runtime ${label} exceeds the ${limit} byte limit`,
+							`${this.runtimeLabel} runtime ${label} exceeds the ${limit} byte limit`,
 							{
 								actual: bytes,
 								limit,
 								phase: 'asset',
 								profileId: nextConfig.preflightProfile.profileId,
-								runtimeId: 'RUBY'
+								runtimeId: this.runtimeId
 							}
 						);
 					}
 				}
 			}
-			nextAssetKey = JSON.stringify([nextConfig.preflightKey, effectiveMaxAssetBytes]);
+			nextAssetKey = JSON.stringify([
+				nextConfig.preflightKey,
+				effectiveMaxAssetBytes,
+				...(golfscriptConfig ? [golfscriptConfig.assetKey] : [])
+			]);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} runtime startup cancelled`
+					)
 				);
 			}
 		} catch (error) {
@@ -399,7 +471,10 @@ class Ruby implements Sandbox {
 		}
 		if (!this.isOperationActive(activeOperation)) {
 			return Promise.reject(
-				this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				this.releaseBeforeSession(
+					activeOperation,
+					`${this.runtimeLabel} runtime startup cancelled`
+				)
 			);
 		}
 		unbindPreSessionAbort();
@@ -430,7 +505,10 @@ class Ruby implements Sandbox {
 					preflightController.abort(
 						activeOperation.cancellationReason ??
 							signal?.reason ??
-							new DOMException('Ruby runtime preflight retired', 'AbortError')
+							new DOMException(
+								`${this.runtimeLabel} runtime preflight retired`,
+								'AbortError'
+							)
 					);
 				});
 				const payload = await preflightVerifiedRubyRuntimeAssets(nextConfig, {
@@ -442,6 +520,17 @@ class Ruby implements Sandbox {
 						);
 					}
 				});
+				const interpreterBytes = golfscriptConfig
+					? Uint8Array.from(
+							await fetchPinnedRuntimeAsset({
+								url: golfscriptConfig.interpreterUrl,
+								receipt: WASM_GOLFSCRIPT_INTERPRETER_RECEIPT,
+								maxAssetBytes: limits.maxAssetBytes,
+								persistentCache: options.persistentCache,
+								signal: preflightController.signal
+							})
+						)
+					: undefined;
 				if (!this.isOperationActive(activeOperation) || signal?.aborted) return;
 				const delivery = createRubyRuntimeOwnedPreflightDelivery(payload);
 				let candidateAdopted = false;
@@ -495,11 +584,11 @@ class Ruby implements Sandbox {
 							? ` (${event.filename}:${event.lineno}:${event.colno})`
 							: '';
 					rejectOperation(
-						`Ruby worker script error: ${event.message || 'unknown error'}${location}`
+						`${this.runtimeLabel} worker script error: ${event.message || 'unknown error'}${location}`
 					);
 				};
 				worker.onmessageerror = () =>
-					rejectOperation('Ruby worker message deserialization failed');
+					rejectOperation(`${this.runtimeLabel} worker message deserialization failed`);
 				const transferables = delivery.consume();
 				try {
 					worker.postMessage(
@@ -507,9 +596,12 @@ class Ruby implements Sandbox {
 							load: true,
 							runtimePreflight: delivery.payload,
 							startupContext,
-							maxAssetBytes: Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES)
+							maxAssetBytes: Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES),
+							...(interpreterBytes
+								? { language: 'golfscript', interpreterBytes }
+								: {})
 						},
-						[...transferables]
+						[...transferables, ...(interpreterBytes ? [interpreterBytes.buffer] : [])]
 					);
 				} finally {
 					delivery.retire();
@@ -581,14 +673,17 @@ class Ruby implements Sandbox {
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} execution cancelled`
+					)
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
 			const workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.rb',
+				options.activePath ?? this.defaultSourcePath,
 				{
 					...options.workspaceLimits,
 					maxFileBytes: Math.min(
@@ -603,23 +698,31 @@ class Ruby implements Sandbox {
 					)
 				}
 			);
-			const programArgs = resolveSandboxExecutionArgs('RUBY', args, options).programArgs;
+			this.validateRuntimeNamespace(workspace.activePath, workspace.workspaceFiles);
+			const programArgs = resolveSandboxExecutionArgs(
+				this.runtimeId,
+				args,
+				options
+			).programArgs;
 			const stdin = options.stdin;
 			if (stdin !== undefined && typeof stdin !== 'string') {
-				throw new RuntimeConfigurationError('Ruby stdin must be a string', {
+				throw new RuntimeConfigurationError(`${this.runtimeLabel} stdin must be a string`, {
 					phase: 'execute',
-					runtimeId: 'RUBY'
+					runtimeId: this.runtimeId
 				});
 			}
 			request = {
 				programArgs,
 				stdin,
-				activePath: workspace.activePath ?? 'main.rb',
+				activePath: workspace.activePath ?? this.defaultSourcePath,
 				workspaceFiles: workspace.workspaceFiles
 			};
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+					this.releaseBeforeSession(
+						activeOperation,
+						`${this.runtimeLabel} execution cancelled`
+					)
 				);
 			}
 			unbindPreSessionAbort();
@@ -628,7 +731,10 @@ class Ruby implements Sandbox {
 		}
 		if (!this.isOperationActive(activeOperation)) {
 			return Promise.reject(
-				this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+				this.releaseBeforeSession(
+					activeOperation,
+					`${this.runtimeLabel} execution cancelled`
+				)
 			);
 		}
 		const worker = this.worker;
@@ -698,7 +804,10 @@ class Ruby implements Sandbox {
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
-							reportWorkerInputReady(_prog, 'Ruby runtime ready for input');
+							reportWorkerInputReady(
+								_prog,
+								`${this.runtimeLabel} runtime ready for input`
+							);
 							if (!ownsRun()) return;
 						}
 						this.flushPendingInput();
@@ -711,12 +820,12 @@ class Ruby implements Sandbox {
 						if (actual > limits.maxOutputBytes) {
 							failRun(
 								new OutputLimitError(
-									`Ruby output exceeded ${limits.maxOutputBytes} bytes`,
+									`${this.runtimeLabel} output exceeded ${limits.maxOutputBytes} bytes`,
 									{
 										actual,
 										limit: limits.maxOutputBytes,
 										phase: 'execute',
-										runtimeId: 'RUBY'
+										runtimeId: this.runtimeId
 									}
 								),
 								true
@@ -732,12 +841,12 @@ class Ruby implements Sandbox {
 						if (actual > limits.maxDiagnostics) {
 							failRun(
 								new DiagnosticLimitError(
-									`Ruby diagnostics exceeded ${limits.maxDiagnostics} messages`,
+									`${this.runtimeLabel} diagnostics exceeded ${limits.maxDiagnostics} messages`,
 									{
 										actual,
 										limit: limits.maxDiagnostics,
 										phase: 'execute',
-										runtimeId: 'RUBY'
+										runtimeId: this.runtimeId
 									}
 								),
 								true

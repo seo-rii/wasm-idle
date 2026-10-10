@@ -12,8 +12,6 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	preflightRubyRuntimeAssets: mocks.preflightRubyRuntimeAssets
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 import { resolveRubyRuntimeAssetConfig } from './assets';
 import {
 	createRubyRuntimeOwnedPreflightDelivery,

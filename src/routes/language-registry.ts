@@ -67,6 +67,20 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
+	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
+	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
+	GOLFSCRIPT: {
+		label: 'GolfScript',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Interpreter options / -- values'
+	},
+	AHEUI: { label: 'Aheui', editorLanguage: 'plaintext' },
+	MALBOLGE: { label: 'Malbolge', editorLanguage: 'plaintext' },
+	WHITESPACE: { label: 'Whitespace', editorLanguage: 'plaintext' },
+	BRAINFUCK: { label: 'Brainfuck', editorLanguage: 'plaintext' },
+	BEFUNGE93: { label: 'Befunge-93', editorLanguage: 'plaintext' },
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',
@@ -87,6 +101,14 @@ export const playgroundLanguageDescriptors: Readonly<
 	},
 	OBJC: {
 		label: 'Objective-C',
+		editorLanguage: 'objective-c',
+		lspProvider: 'clangd',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	OBJECTIVECXX: {
+		label: 'Objective-C++',
 		editorLanguage: 'objective-c',
 		lspProvider: 'clangd',
 		supportsArgs: true,
@@ -177,6 +199,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	GRAIN: {
+		label: 'Grain',
+		editorLanguage: 'rust',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	PERL: {
 		label: 'Perl',
 		editorLanguage: 'perl',
@@ -222,6 +251,14 @@ export const playgroundLanguageDescriptors: Readonly<
 	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
 	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
+	RESCRIPT: {
+		label: 'ReScript',
+		editorLanguage: 'rust',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	HY: { label: 'Hy — Pyodide', editorLanguage: 'clojure' },
 	OCAML: {
 		label: 'OCaml',
 		editorLanguage: 'ocaml',
@@ -268,6 +305,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'Lua',
 		editorLanguage: 'lua',
 		runtimeLspCapability: 'lua',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	FENNEL: {
+		label: 'Fennel',
+		editorLanguage: 'clojure',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
@@ -340,6 +384,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
+	V: {
+		label: 'V',
+		editorLanguage: 'go',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
 	TINYGO: {
 		label: 'TinyGo',
 		editorLanguage: 'go',
@@ -353,6 +403,11 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'SQL — SQLite dialect',
 		editorLanguage: 'sql',
 		runtimeLspCapability: 'sql',
+		compilerDiagnostics: true
+	},
+	POSTGRESQL: {
+		label: 'SQL — PostgreSQL (PGlite)',
+		editorLanguage: 'pgsql',
 		compilerDiagnostics: true
 	},
 	PHP: {
@@ -435,7 +490,8 @@ export const defaultLanguageAliases: Record<string, string> = {
 	'objective-c': 'objective-c',
 	objective_c: 'objective-c',
 	vb: 'vbnet',
-	sql: 'sqlite'
+	sql: 'sqlite',
+	pgsql: 'postgresql'
 };
 export const debugViewLanguages = new Set(['cpp']);
 export const diagnosticMarkerLanguages = new Set(
@@ -466,6 +522,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js'),
 	perl: () => import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
 	tcl: () => import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js'),
+	pgsql: () => import('monaco-editor/esm/vs/basic-languages/pgsql/pgsql.contribution.js'),
 	php: () => import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
 	python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
 	r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),

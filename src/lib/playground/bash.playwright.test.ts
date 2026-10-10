@@ -304,6 +304,8 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 				crossOriginIsolated &&
 				typeof SharedArrayBuffer !== 'undefined' &&
 				!!navigator.serviceWorker?.controller &&
+				typeof (globalThis as any).__wasmIdleDebug?.getEditorValue === 'function' &&
+				(globalThis as any).__wasmIdleDebug.getEditorValue().length > 0 &&
 				typeof (globalThis as any).__wasmIdleDebug?.setEditorValue === 'function',
 			undefined,
 			{ timeout: runTimeoutMs }
@@ -312,10 +314,10 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 			(await readDedicatedWorkerTargets(cdp)).map(({ targetId }) => targetId)
 		);
 
-		await page.locator('select').first().selectOption('BASH');
+		await page.locator('#language-select').selectOption('BASH');
 		await page.waitForFunction(
 			() =>
-				document.querySelector('select')?.value === 'BASH' &&
+				document.querySelector<HTMLSelectElement>('#language-select')?.value === 'BASH' &&
 				typeof (globalThis as any).__wasmIdleDebug?.setEditorValue === 'function',
 			undefined,
 			{ timeout: runTimeoutMs }
@@ -352,6 +354,8 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 							? transcript.slice(initial.length)
 							: transcript;
 						return (
+							(globalThis as any).__wasmIdleDebug?.getExecutionState?.().language ===
+								'BASH' &&
 							delta.includes(expectedMarker) &&
 							document
 								.querySelector('button.action-button--stop')
@@ -427,7 +431,12 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 				const delta = transcript.startsWith(initial)
 					? transcript.slice(initial.length)
 					: transcript;
-				return delta.includes(expectedMarker) && delta.includes('Process finished after');
+				return (
+					(globalThis as any).__wasmIdleDebug?.getExecutionState?.().language ===
+						'BASH' &&
+					delta.includes(expectedMarker) &&
+					delta.includes('Process finished after')
+				);
 			},
 			{ initial: retryInitialTranscript, expectedMarker: retryMarker },
 			{ polling: 50, timeout: runTimeoutMs }
@@ -448,7 +457,12 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 				const delta = transcript.startsWith(initial)
 					? transcript.slice(initial.length)
 					: transcript;
-				return delta.includes(expectedMarker) && delta.includes('Process finished after');
+				return (
+					(globalThis as any).__wasmIdleDebug?.getExecutionState?.().language ===
+						'BASH' &&
+					delta.includes(expectedMarker) &&
+					delta.includes('Process finished after')
+				);
 			},
 			{ initial: warmInitialTranscript, expectedMarker: warmMarker },
 			{ polling: 50, timeout: runTimeoutMs }

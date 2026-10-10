@@ -65,17 +65,17 @@
 		"probe:rustc:patched-target": "node scripts/probe-rustc-wasm.mjs --patch-target-metadata"
 	},
 	"devDependencies": {
-		"@lezer/rust": "^1.0.2",
-		"@types/node": "^24.6.1",
-		"esbuild": "0.27.3",
-		"playwright-core": "^1.58.2",
-		"typescript": "^5.9.3",
-		"vitest": "^4.0.18",
+		"@lezer/rust": "^1.0.3",
+		"@types/node": "^24.19.1",
+		"esbuild": "0.28.2",
+		"playwright-core": "^1.63.0",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.3",
 		"wabt": "^1.0.39"
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@bytecodealliance/jco": "^1.17.3",
-		"@bytecodealliance/preview2-shim": "^0.17.8"
+		"@bytecodealliance/jco": "^1.37.0",
+		"@bytecodealliance/preview2-shim": "^0.28.0"
 	}
 }

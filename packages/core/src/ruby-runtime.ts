@@ -216,40 +216,38 @@ const EXPECTED_PACKAGES = Object.freeze([
 	}),
 	Object.freeze({
 		name: '@ruby/3.4-wasm-wasi',
-		version: '2.9.3-2.9.4',
-		requestedRange: '2.9.3-2.9.4',
-		tarballUrl:
-			'https://registry.npmjs.org/@ruby/3.4-wasm-wasi/-/3.4-wasm-wasi-2.9.3-2.9.4.tgz',
-		tarballBytes: 29998123,
-		tarballSha256: '92c1821dd2f03e20d23a3ca86e1d844571722eab88bc168dd659fff1bc987ad4',
+		version: '2.10.1',
+		requestedRange: '2.10.1',
+		tarballUrl: 'https://registry.npmjs.org/@ruby/3.4-wasm-wasi/-/3.4-wasm-wasi-2.10.1.tgz',
+		tarballBytes: 29979485,
+		tarballSha256: '2e709bd9eddefe1c5d63e9fc0391a35cce4754e936d8a2f24b8582f6d5c2ea88',
 		integrity:
-			'sha512-Ze2grGTnyT6meSI1j5NHKIpeadecOsMuKAjPFeyU5K85MSeHJWZdNXS7QLF0a0E1kIwQcYHafU10Gz5fPqECsw==',
+			'sha512-qrzIJ/7TGSpsZpFyLJb9OXO6TYAq18XoLd11We17Sr78hWpb5IGGFgMQ9A2Y8Ww5n0k8uKA/I8/P8MJdzlJX0Q==',
 		attestationUrl:
-			'https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2f3.4-wasm-wasi@2.9.3-2.9.4',
+			'https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2f3.4-wasm-wasi@2.10.1',
 		repository: 'https://github.com/ruby/ruby.wasm',
-		revision: '3318796e2c9f0f75c98c669cabdc422cf8218ec2',
+		revision: 'c7151435f55e1f078ca823231593f56e6a855873',
 		license: 'MIT',
 		files: 20,
-		bytes: 97451582,
-		treeSha256: 'b3e9c5a8939d5fe7b7af968ada4f04020846915536f331a4c87f953778ce3778'
+		bytes: 97240399,
+		treeSha256: '3f1fe2083438ed312b2ea2890036b4fd2ab603568f4ff8ccb94b20dfd4c53a80'
 	}),
 	Object.freeze({
 		name: '@ruby/wasm-wasi',
-		version: '2.9.3-2.9.4',
-		requestedRange: '2.9.3-2.9.4',
-		tarballUrl: 'https://registry.npmjs.org/@ruby/wasm-wasi/-/wasm-wasi-2.9.3-2.9.4.tgz',
-		tarballBytes: 84917,
-		tarballSha256: '47487299c5be0e32cd6d761b6a11afd63d01b60da8362849fda5e0e007242997',
+		version: '2.10.1',
+		requestedRange: '2.10.1',
+		tarballUrl: 'https://registry.npmjs.org/@ruby/wasm-wasi/-/wasm-wasi-2.10.1.tgz',
+		tarballBytes: 86655,
+		tarballSha256: '1a4f58a452688b3d53d291539d35ea780cf10a40657694501b7169959512b265',
 		integrity:
-			'sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==',
-		attestationUrl:
-			'https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2fwasm-wasi@2.9.3-2.9.4',
+			'sha512-OGSxxDraRq8alWQsWqDJQsaAavQwhwIVRkDozpPucjD1tUofMF6n99Y8Ia1bpDhOAXCwiNIHqhumfqFw0H0DZw==',
+		attestationUrl: 'https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2fwasm-wasi@2.10.1',
 		repository: 'https://github.com/ruby/ruby.wasm',
-		revision: '3318796e2c9f0f75c98c669cabdc422cf8218ec2',
+		revision: 'c7151435f55e1f078ca823231593f56e6a855873',
 		license: 'MIT',
 		files: 50,
-		bytes: 472758,
-		treeSha256: '9971e5cbb59e695715351d31c4c7079de5a678de63de87b814e4ee76b0adddf3'
+		bytes: 481676,
+		treeSha256: 'a179307cb70dd75fd83fb017c9b05d66ad28e6281909d1f124de30e8371eb01d'
 	})
 ]);
 const EXPECTED_PRODUCER = Object.freeze({
@@ -261,19 +259,19 @@ const EXPECTED_PRODUCER = Object.freeze({
 	script: Object.freeze({
 		path: 'scripts/sync-wasm-ruby.mjs',
 		bytes: 46815,
-		sha256: '2805cc5794231142c9ef6f0843b31c64e8169064a106a807f08742e521de6b54'
+		sha256: 'd2c7defde8ad5c9c813edcba9f37fe4f3fd2ebb4c5b7ecf1bf81a41936036bc9'
 	}),
 	tool: Object.freeze({
 		name: 'vite',
-		version: '8.0.8',
-		requestedRange: '^8.0.8',
-		tarballUrl: 'https://registry.npmjs.org/vite/-/vite-8.0.8.tgz',
+		version: '8.3.3',
+		requestedRange: '^8.3.3',
+		tarballUrl: 'https://registry.npmjs.org/vite/-/vite-8.3.3.tgz',
 		integrity:
-			'sha512-dbU7/iLVa8KZALJyLOBOQ88nOXtNG8vxKuOT4I2mD+Ya70KPceF4IAmDsmU0h1Qsn5bPrvsY9HJstCRh3hG6Uw==',
+			'sha512-cTAldKPImjg6c+gk48U19POPn3GCBzZwpdsN8ZMEEcbpes+6/wvfqUd0C2y3qYY4wsj8PwgFwrZ/1jBPVttMSg==',
 		license: 'MIT',
-		files: 42,
-		bytes: 2185148,
-		treeSha256: '63becb5aef9c86b925810f4298df7c05905aa0ff74e6b8ee3b98991ca6a25a25'
+		files: 37,
+		bytes: 2374102,
+		treeSha256: 'a050948cad1f02d83465c98f4954ab3fbcbe4c67d0eafae60e70e7f79ff4eb09'
 	}),
 	packageTreeReceiptFormat: 'sha256-json-sorted-path-bytes-sha256-v2-excludes-package-manager-bin'
 });
@@ -308,8 +306,8 @@ const EXPECTED_LEGAL_FILES = Object.freeze([
 		targetPath: 'THIRD_PARTY_NOTICES.md',
 		mediaType: 'text/markdown',
 		spdx: 'LicenseRef-Provenance-Notice',
-		size: 1248,
-		sha256: 'e3550c79802a5bf13dc140df11843182131a4b3aac069f0e5824e3cc0378fc68'
+		size: 1238,
+		sha256: 'bffe7fd8ce26c3bb2fa604b451d88770d6887891abfaf0d06e29f1742a166fb5'
 	}),
 	Object.freeze({
 		targetPath: 'licenses/browser-wasi-shim/LICENSE-MIT',

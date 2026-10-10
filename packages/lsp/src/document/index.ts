@@ -8,7 +8,7 @@ export {
 	getYamlLanguageServer,
 	type DocumentLanguageServerConfig,
 	type DocumentLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createDocumentWorkerService,
 	type DocumentLanguageId,

@@ -15,8 +15,8 @@ const DEFAULT_SOURCE_DIR = process.env.WASM_IDLE_WASM_PHP_DIST
 const DEFAULT_TARGET_DIR = path.join(REPO_ROOT, 'static', 'wasm-php');
 
 export const PHP_RUNTIME_PACKAGES = Object.freeze({
-	'@php-wasm/web-8-4': '3.1.34',
-	'@php-wasm/universal': '3.1.34'
+	'@php-wasm/web-8-4': '3.1.57',
+	'@php-wasm/universal': '3.1.57'
 });
 
 /**

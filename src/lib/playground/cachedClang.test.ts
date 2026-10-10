@@ -3,8 +3,6 @@ import type { Sandbox, SandboxExecutionOptions, SandboxRuntimeAssets } from '@wa
 import type { BrowserClangArtifact } from '@wasm-idle/llvm-core/clang';
 
 import type { RuntimeAssetCache } from './runtimeAssetCache';
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
-
 const bridges = vi.hoisted(() => ({
 	instances: [] as {
 		worker: Worker;
@@ -132,11 +130,19 @@ describe('cached C/C++ sandbox', () => {
 		const h = makeHarness();
 		await h.sandbox.load({ ...assets, persistentCache: { enabled: true, maxBytes: 4096 } });
 		await run(h.sandbox, source, { persistentCache: false }, true);
+		expect(h.compileWorkers[0].messages[0].persistentCache).toMatchObject({
+			enabled: false,
+			maxBytes: 4096
+		});
 		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
 			enabled: false,
 			maxBytes: 4096
 		});
 		await run(h.sandbox, `${source}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
 		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
 			enabled: true,
 			maxBytes: 4096
@@ -452,5 +458,82 @@ describe('cached C/C++ sandbox', () => {
 		expect(h.legacy.load).toHaveBeenCalledOnce();
 		expect(h.legacy.run).toHaveBeenCalledOnce();
 		expect(h.compileWorkers).toHaveLength(0);
+	});
+});
+
+describe('precompiled <bits/stdc++.h> in the cached C++ sandbox', () => {
+	const stdcpp = '#include <bits/stdc++.h>\nint main() { return 0; }';
+
+	it('keeps the compile worker until its header arrives and sends it with later compiles', async () => {
+		const h = makeHarness(undefined, 'CPP');
+		const header = { key: 'stdc++', bytes: new Uint8Array([1, 2, 3]) };
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const [builder] = h.compileWorkers;
+		expect(builder.terminate).not.toHaveBeenCalled();
+		expect(builder.messages[0]).not.toHaveProperty('precompiledHeader');
+
+		builder.respond({ type: 'precompiled-header', header });
+		expect(builder.terminate).toHaveBeenCalledTimes(1);
+
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0].precompiledHeader).toEqual(header);
+		expect(h.compileWorkers[1].terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('builds after compile errors and keeps the last header when a build fails', async () => {
+		const h = makeHarness(undefined, 'CPP');
+		const header = { key: 'stdc++', bytes: new Uint8Array([4]) };
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		h.compileWorkers[0].respond({ type: 'precompiled-header', header });
+
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'error',
+				error: 'compile failed',
+				stdout: '',
+				stderr: '',
+				precompiledHeader: 'building'
+			});
+		await expect(run(h.sandbox, `${stdcpp}\nx`, {}, true)).rejects.toThrow('compile failed');
+		const failed = h.compileWorkers[1];
+		expect(failed.terminate).not.toHaveBeenCalled();
+		failed.respond({ type: 'precompiled-header' });
+		expect(failed.terminate).toHaveBeenCalledTimes(1);
+
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\ny`, {}, true);
+		expect(h.compileWorkers[2].messages[0].precompiledHeader).toEqual(header);
+	});
+
+	it('replaces an older pending build and stops a pending build on dispose', async () => {
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledTimes(1);
+		expect(h.compileWorkers[1].terminate).not.toHaveBeenCalled();
+		await h.sandbox.dispose?.();
+		expect(h.compileWorkers[1].terminate).toHaveBeenCalledTimes(1);
 	});
 });

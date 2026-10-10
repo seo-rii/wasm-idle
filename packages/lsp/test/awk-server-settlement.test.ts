@@ -15,7 +15,7 @@ vi.mock('../src/assets.js', async (importOriginal) => ({
 	loadLanguageToolAsset: mocks.loadLanguageToolAsset
 }));
 
-import { getAwkLanguageServer } from '../src/awk/server.js';
+import { getAwkLanguageServer } from '../src/awk/language-server.js';
 
 afterEach(() => {
 	mocks.loadLanguageToolAsset.mockReset();

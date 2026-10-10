@@ -2,7 +2,7 @@ export {
 	getRustLanguageServer,
 	type RustLanguageServerConfig,
 	type RustLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createRustWorkerService,
 	type RustLanguageServerTargetTriple,

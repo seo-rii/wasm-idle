@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	dotnet: { moduleUrl: '/wasm-dotnet/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_DOTNET_MODULE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 let suppressAutoRunAck = false;
 let runDispatchError: unknown;
@@ -56,17 +56,12 @@ vi.mock('$lib/playground/worker/dotnet?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Dotnet from './dotnet';
 
 describe('Dotnet sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '/wasm-dotnet/index.js';
 		suppressAutoLoadAck = false;
 		suppressAutoRunAck = false;
 		runDispatchError = undefined;
@@ -81,14 +76,17 @@ describe('Dotnet sandbox', () => {
 		['CSHARP', 'csharp'],
 		['FSHARP', 'fsharp'],
 		['VBNET', 'vbnet']
-	] as const)('passes %s to worker bootstrap rather than warming the default language', async (language, expected) => {
-		const sandbox = new Dotnet(language);
-		await sandbox.load();
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({ load: true, language: expected })
-		);
-		await sandbox.dispose();
-	});
+	] as const)(
+		'passes %s to worker bootstrap rather than warming the default language',
+		async (language, expected) => {
+			const sandbox = new Dotnet(language);
+			await sandbox.load();
+			expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ load: true, language: expected })
+			);
+			await sandbox.dispose();
+		}
+	);
 
 	it('terminates a fatally aborted worker immediately and loads a fresh worker for retry', async () => {
 		const sandbox = new Dotnet('CSHARP');
@@ -119,7 +117,7 @@ describe('Dotnet sandbox', () => {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		sandbox.write('5\n');
 		await expect(sandbox.run(code, false, true, undefined, ['4'])).resolves.toBe(true);
@@ -169,7 +167,7 @@ describe('Dotnet sandbox', () => {
 		const sandbox = new Dotnet();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		suppressAutoRunAck = true;
 		const running = sandbox.run('printfn "bounded"', false, true, undefined, [], {
@@ -199,7 +197,7 @@ describe('Dotnet sandbox', () => {
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('printfn "retry"', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -208,7 +206,7 @@ describe('Dotnet sandbox', () => {
 		const sandbox = new Dotnet('CSHARP');
 		const onDiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = onDiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		suppressAutoRunAck = true;
 		const running = sandbox.run('Console.WriteLine("bounded");', false, true, undefined, [], {
@@ -241,7 +239,7 @@ describe('Dotnet sandbox', () => {
 		expect(onDiagnostic).not.toHaveBeenCalledWith({ message: 'stale diagnostic' });
 
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -276,7 +274,7 @@ describe('Dotnet sandbox', () => {
 		'enforces dotnet worker $name limits without a registered callback',
 		async ({ limits, messages, expected }) => {
 			const sandbox = new Dotnet();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			suppressAutoRunAck = true;
 			const running = sandbox.run('printfn "bounded"', false, true, undefined, [], {
@@ -301,7 +299,7 @@ describe('Dotnet sandbox', () => {
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'Console.WriteLine("hello");';
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		sandbox.write('7\n');
 		await expect(sandbox.run(code, false, true, undefined, ['7'])).resolves.toBe(true);
 
@@ -325,7 +323,7 @@ describe('Dotnet sandbox', () => {
 		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
 		const sandbox = new Dotnet('CSHARP');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('Console.WriteLine("hello");', false)).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
@@ -346,7 +344,7 @@ Module Program
     End Sub
 End Module`;
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		sandbox.write('7\n');
 		await expect(sandbox.run(code, false, true, undefined, ['7'])).resolves.toBe(true);
 
@@ -489,7 +487,7 @@ End Module`;
 		'rejects a .NET workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new Dotnet('CSHARP');
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 
 			await expect(
@@ -510,7 +508,7 @@ End Module`;
 
 	it('rejects a non-array .NET workspace before changing execution state', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await expect(
@@ -526,7 +524,7 @@ End Module`;
 
 	it('enforces .NET maxFiles before reading any workspace array element', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const workspaceFiles = new Array<{ path: string; content: string }>(2);
 		let indexReads = 0;
@@ -558,7 +556,7 @@ End Module`;
 
 	it('rejects a non-object .NET workspace limit set before changing execution state', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await expect(
@@ -576,7 +574,7 @@ End Module`;
 		'rejects unsupported auxiliary .NET files instead of silently ignoring them (prepare=%s)',
 		async (prepare) => {
 			const sandbox = new Dotnet('CSHARP');
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			sandbox.write('queued before workspace rejection\n');
 
@@ -613,7 +611,7 @@ End Module`;
 		'uses %s default active path %s as the authoritative source',
 		async (language, path, code) => {
 			const sandbox = new Dotnet(language);
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 
 			await expect(
@@ -631,7 +629,7 @@ End Module`;
 
 	it('accepts one canonical active .NET source without treating its stale copy as auxiliary', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const code = 'Console.WriteLine("canonical");';
 
@@ -650,7 +648,7 @@ End Module`;
 
 	it('stops reading a .NET workspace file after its path getter replaces the owner', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet workspace path snapshot');
 		const laterFailure = new Error('late dotnet workspace content getter failure');
@@ -661,7 +659,7 @@ End Module`;
 			configurable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return 'src/Helper.cs';
 			}
 		});
@@ -688,7 +686,7 @@ End Module`;
 
 	it('stops reading .NET workspace limits after the first getter replaces the owner', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet workspace limit snapshot');
 		const laterFailure = new Error('late dotnet workspace limit getter failure');
@@ -702,7 +700,7 @@ End Module`;
 			configurable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return 1;
 			}
 		});
@@ -734,14 +732,16 @@ End Module`;
 		sandbox.write('queued before abort\n');
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: startupController.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: startupController.signal
+			})
 		).rejects.toBeNull();
 		expect(workerInstances).toHaveLength(0);
 		expect(sandbox.moduleUrl).toBe('');
 		expect(sandbox.pendingInput).toEqual(['queued before abort\n']);
 		expect(sandbox.uid).toBe(0);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const fallbackSignal = {
 			aborted: true,
@@ -778,7 +778,9 @@ End Module`;
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(false);
 		expect(reasonReads).toBe(1);
 		expect(workerInstances).toHaveLength(0);
@@ -795,13 +797,15 @@ End Module`;
 			configurable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				throw laterFailure;
 			}
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
@@ -819,7 +823,9 @@ End Module`;
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 		expect(workerInstances).toHaveLength(0);
 	});
@@ -832,7 +838,7 @@ End Module`;
 		let abortedReads = 0;
 		vi.spyOn(controller.signal, 'addEventListener').mockImplementation(() => {
 			sandbox.terminate(reason);
-			replacement = sandbox.load('/absproxy/5173');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		});
 		Object.defineProperty(controller.signal, 'aborted', {
 			configurable: true,
@@ -843,7 +849,9 @@ End Module`;
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
 		expect(abortedReads).toBe(0);
@@ -865,7 +873,9 @@ End Module`;
 		});
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 		expect(workerInstances).toHaveLength(0);
 	});
@@ -882,7 +892,13 @@ End Module`;
 		let loading: Promise<void> | undefined;
 
 		expect(() => {
-			loading = sandbox.load('/absproxy/5173', '', true, [], options);
+			loading = sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				options
+			);
 		}).not.toThrow();
 		await expect(loading).rejects.toBe(reason);
 		expect(workerInstances).toHaveLength(0);
@@ -892,9 +908,15 @@ End Module`;
 		const sandbox = new Dotnet('CSHARP');
 		const controller = new AbortController();
 		const reason = new Error('cancel dotnet before worker import');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		const outcome = loading.catch((error) => error);
 
 		controller.abort(reason);
@@ -902,7 +924,9 @@ End Module`;
 		await vi.dynamicImportSettled();
 		expect(workerInstances).toHaveLength(0);
 		expect(sandbox.moduleUrl).toBe('');
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
 	});
 
@@ -913,9 +937,15 @@ End Module`;
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('cancel stalled dotnet startup');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		const outcome = loading.catch((error) => error);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
@@ -929,7 +959,7 @@ End Module`;
 		expect(sandbox.worker).toBeUndefined();
 
 		suppressAutoLoadAck = false;
-		const retry = sandbox.load('/absproxy/5173');
+		const retry = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(retry).resolves.toBeUndefined();
 		const replacement = workerInstances[1];
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
@@ -939,7 +969,7 @@ End Module`;
 
 	it('keeps the abort reason and replacement stdin when an output callback throws', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const controller = new AbortController();
@@ -969,7 +999,7 @@ End Module`;
 		expect(sandbox.pendingEof).toBe(true);
 
 		sandbox.output = vi.fn();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacement = workerInstances[1];
 		const retry = sandbox.run('var input = Console.ReadLine();', false);
 		await vi.waitFor(() => expect(replacement?.postMessage).toHaveBeenCalledTimes(2));
@@ -988,7 +1018,9 @@ End Module`;
 		const loadController = new AbortController();
 		const loadAddEventListener = vi.spyOn(loadController.signal, 'addEventListener');
 		const loadRemoveEventListener = vi.spyOn(loadController.signal, 'removeEventListener');
-		await sandbox.load('/absproxy/5173', '', true, [], { signal: loadController.signal });
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+			signal: loadController.signal
+		});
 		const worker = workerInstances[0];
 		expect(loadAddEventListener).toHaveBeenCalledTimes(1);
 		expect(loadRemoveEventListener).toHaveBeenCalledTimes(1);
@@ -1021,12 +1053,18 @@ End Module`;
 		let replacement: Promise<void> | undefined;
 		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
 			controller.abort(abortAtCleanup);
-			replacement = sandbox.load('/absproxy/5173');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			throw cleanupFailure;
 		});
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -1039,14 +1077,14 @@ End Module`;
 
 	it('does not let termination cleanup retire a replacement worker', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const originalWorker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('terminate dotnet before listener cleanup');
 		let replacement: Promise<void> | undefined;
 		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
-			replacement = sandbox.load('/absproxy/5173');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			throw new Error('dotnet termination listener cleanup failed');
 		});
 		const running = sandbox.run('Console.WriteLine("pending");', false, true, undefined, [], {
@@ -1068,7 +1106,7 @@ End Module`;
 		const sandbox = new Dotnet('CSHARP');
 		const progress = { set: vi.fn() };
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -1094,7 +1132,9 @@ End Module`;
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		expect(progress.set).not.toHaveBeenCalled();
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
@@ -1156,7 +1196,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('enforces the aggregate dotnet execution deadline and permits a clean retry', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		suppressAutoRunAck = true;
 		const output = vi.fn();
@@ -1187,7 +1227,7 @@ export async function executeBrowserDotnetArtifact() {
 		expect(output).not.toHaveBeenCalled();
 		expect(progress.set).not.toHaveBeenCalled();
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
@@ -1195,7 +1235,7 @@ export async function executeBrowserDotnetArtifact() {
 	it('clears settled dotnet deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1214,7 +1254,7 @@ export async function executeBrowserDotnetArtifact() {
 	it('rejects run and load calls while worker startup remains active', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Dotnet('CSHARP');
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
@@ -1237,7 +1277,13 @@ export async function executeBrowserDotnetArtifact() {
 			recoverable: true
 		});
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], hostileOptions)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				hostileOptions
+			)
 		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
@@ -1267,7 +1313,7 @@ export async function executeBrowserDotnetArtifact() {
 		Object.defineProperty(runtimeAssets, 'dotnet', {
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return {
 					get moduleUrl() {
 						throw laterFailure;
@@ -1301,12 +1347,20 @@ export async function executeBrowserDotnetArtifact() {
 		Object.defineProperty(options, 'limits', {
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return limits;
 			}
 		});
 
-		await expect(sandbox.load('/absproxy/5173', '', true, [], options)).rejects.toBe(reason);
+		await expect(
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				options
+			)
+		).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
 		expect(lateLimitReads).toBe(0);
 		expect(workerInstances).toHaveLength(1);
@@ -1315,7 +1369,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('keeps a replacement load when a program argument getter terminates a run snapshot', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet argument snapshot');
 		const laterFailure = new Error('late dotnet argument getter failure');
@@ -1324,7 +1378,7 @@ export async function executeBrowserDotnetArtifact() {
 		Object.defineProperty(programArgs, '0', {
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				throw laterFailure;
 			}
 		});
@@ -1343,7 +1397,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('keeps a replacement load when the stdin getter terminates a run snapshot', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet stdin snapshot');
 		const laterFailure = new Error('late dotnet stdin getter failure');
@@ -1352,7 +1406,7 @@ export async function executeBrowserDotnetArtifact() {
 		Object.defineProperty(options, 'stdin', {
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				throw laterFailure;
 			}
 		});
@@ -1368,7 +1422,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('keeps a replacement load when the limits getter terminates a run snapshot', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet limits snapshot');
 		const laterFailure = new Error('late dotnet limit property failure');
@@ -1379,7 +1433,7 @@ export async function executeBrowserDotnetArtifact() {
 			enumerable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return 5;
 			}
 		});
@@ -1405,7 +1459,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('does not read a later callback slot after the output owner is replaced', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const originalWorker = workerInstances[0];
 		const reason = new Error('terminate dotnet output callback snapshot');
 		const laterFailure = new Error('late dotnet diagnostic callback getter failure');
@@ -1415,7 +1469,7 @@ export async function executeBrowserDotnetArtifact() {
 			configurable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return vi.fn();
 			}
 		});
@@ -1438,7 +1492,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('keeps worker callbacks bound to the run that captured them', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const firstOutput = vi.fn();
@@ -1470,7 +1524,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('treats false results and empty errors as terminal worker payloads', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 
@@ -1496,7 +1550,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('does not read irrelevant compile arguments for a dotnet execution', async () => {
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let compileArgReads = 0;
 		const options = { stdin: '' };
 		Object.defineProperty(options, 'compileArgs', {
@@ -1524,18 +1578,27 @@ export async function executeBrowserDotnetArtifact() {
 			})
 		};
 
-		await expect(sandbox.load('/absproxy/5173', '', true, [], {}, progress)).rejects.toBe(
-			progressError
-		);
+		await expect(
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{},
+				progress
+			)
+		).rejects.toBe(progressError);
 		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('rejects overlapping and reentrant worker runs without replacing the handler', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		let reentrantRun: Promise<boolean | string> | undefined;
 		sandbox.output = () => {
@@ -1578,7 +1641,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const outputError = new Error('dotnet output callback failed');
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		sandbox.output = () => {
 			throw outputError;
@@ -1593,7 +1656,9 @@ export async function executeBrowserDotnetArtifact() {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 
 		sandbox.output = vi.fn();
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		const retry = sandbox.run('Console.WriteLine("retry");', false);
 		const retryWorker = workerInstances[1];
 		await vi.waitFor(() => expect(retryWorker?.postMessage).toHaveBeenCalledTimes(2));
@@ -1611,7 +1676,7 @@ export async function executeBrowserDotnetArtifact() {
 		const sandbox = new Dotnet();
 		const code = 'let input = System.Console.ReadLine()';
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const runPromise = sandbox.run(code, false);
 		await vi.dynamicImportSettled();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
@@ -1633,7 +1698,7 @@ export async function executeBrowserDotnetArtifact() {
 		const sandbox = new Dotnet();
 		const code = 'printfn "hello"';
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run(code, false)).resolves.toBe(true);
 
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -1651,7 +1716,7 @@ export async function executeBrowserDotnetArtifact() {
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const runPromise = sandbox.run(code, false);
 		await vi.dynamicImportSettled();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
@@ -1673,7 +1738,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		sandbox.write('stale\n');
 		sandbox.eof();
@@ -1706,7 +1771,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const workerError = new Error('dotnet worker execution failed');
 		const failedRun = sandbox.run(code, false, true, undefined, [], {
@@ -1742,7 +1807,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const running = sandbox.run(code, false, true, undefined, [], { stdin: '' });
 		await vi.waitFor(() => expect(workerInstances[0]?.postMessage).toHaveBeenCalledTimes(2));
 		sandbox.write('discard on terminate\n');
@@ -1755,7 +1820,7 @@ export async function executeBrowserDotnetArtifact() {
 		expect(sandbox.pendingInput).toEqual(['fresh after terminate\n']);
 		expect(sandbox.pendingEof).toBe(false);
 		suppressAutoLoadAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const retry = sandbox.run(code, false);
 		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
@@ -1770,7 +1835,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const staleRun = sandbox.run(code, false);
 		await vi.dynamicImportSettled();
 		expect(workerInstances[0]?.postMessage).toHaveBeenCalledOnce();
@@ -1780,7 +1845,7 @@ export async function executeBrowserDotnetArtifact() {
 
 		await expect(staleRun).rejects.toBe('Process terminated');
 		expect(sandbox.pendingInput).toEqual(['fresh after waiter termination\n']);
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const retry = sandbox.run(code, false);
 		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
@@ -1795,7 +1860,7 @@ export async function executeBrowserDotnetArtifact() {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const activeRun = sandbox.run(code, false);
 		await vi.dynamicImportSettled();
@@ -1803,7 +1868,7 @@ export async function executeBrowserDotnetArtifact() {
 		const runHandler = worker?.onmessage;
 		const runUid = sandbox.uid;
 
-		const reload = sandbox.load('/absproxy/5173');
+		const reload = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(reload).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
@@ -1823,7 +1888,9 @@ export async function executeBrowserDotnetArtifact() {
 		);
 		worker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(activeRun).resolves.toBe(true);
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
 	});
 
@@ -1966,7 +2033,7 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 		sandbox.runtimeModule = runtimeModule;
 		sandbox.compiler = { compile };
 		sandbox.output = () => {
-			reentrantLoad = sandbox.load('/absproxy/5173');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		};
 
 		await expect(sandbox.run('Console.WriteLine("first");', false)).rejects.toBe(compileError);
@@ -2603,7 +2670,7 @@ export async function executeBrowserDotnetArtifact() {
 			configurable: true,
 			get() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/absproxy/5173');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 				return vi.fn();
 			}
 		});
@@ -3049,7 +3116,7 @@ export async function executeBrowserDotnetArtifact() {
 
 	it('rejects invalid explicit stdin before changing worker state', async () => {
 		const sandbox = new Dotnet();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		sandbox.write('queued\n');
 
@@ -3064,7 +3131,6 @@ export async function executeBrowserDotnetArtifact() {
 	});
 
 	it('rejects load when no dotnet runtime urls are configured', async () => {
-		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '';
 		const sandbox = new Dotnet();
 
 		await expect(sandbox.load({})).rejects.toContain('F# runtime is not configured');
@@ -3099,7 +3165,7 @@ export async function executeBrowserDotnetArtifact() {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -3136,7 +3202,7 @@ export async function executeBrowserDotnetArtifact() {
 				onerror: worker.onerror,
 				onmessageerror: worker.onmessageerror
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantRun = sandbox.run('Console.WriteLine("reentrant");', false);
 			reentrantDisposal = sandbox.dispose();
 		});
@@ -3177,7 +3243,9 @@ export async function executeBrowserDotnetArtifact() {
 			phase: 'dispose',
 			runtimeId: 'CSHARP'
 		});
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -3204,7 +3272,7 @@ export async function executeBrowserDotnetArtifact() {
 	it('settles active dotnet startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Dotnet('VBNET');
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const outcome = loading.catch((error) => error);
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
@@ -3240,7 +3308,7 @@ export async function executeBrowserDotnetArtifact() {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const running = sandbox.run('printfn "active"', false, true, undefined, [], {
 			stdin: ''
@@ -3295,8 +3363,7 @@ export async function executeBrowserDotnetArtifact() {
 			releaseCompile = resolve;
 		});
 		let compileRequest:
-			| { onProgress?: (progress: { percent?: number; stage?: string }) => void }
-			| undefined;
+			{ onProgress?: (progress: { percent?: number; stage?: string }) => void } | undefined;
 		const compile = vi.fn(async (request: typeof compileRequest) => {
 			compileRequest = request;
 			markCompileStarted();

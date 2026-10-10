@@ -15,7 +15,7 @@ describe('README support matrix', () => {
 		await expect(validateSupportMatrix()).resolves.toBeUndefined();
 		expect(renderSupportMatrixSection()).toContain('| Pascal');
 		expect(renderSupportMatrixSection()).toContain('| Scheme');
-		expect(renderSupportMatrixSection()).toContain('@php-wasm/web-8-4@3.1.34');
+		expect(renderSupportMatrixSection()).toContain('@php-wasm/web-8-4@3.1.57');
 		expect(renderSupportMatrixSection()).not.toContain('@php-wasm/web-8-4@unknown');
 		const section = renderSupportMatrixSection();
 		expect(section).toContain('## Browser LLDB debug runtime');

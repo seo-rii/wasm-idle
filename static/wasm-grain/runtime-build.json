@@ -1,0 +1,54 @@
+{
+	"format": "wasm-idle-grain-runtime-build-v1",
+	"profile": {
+		"profileId": "grain-0.7.2-jsoo-wasi-v1",
+		"grainVersion": "0.7.2",
+		"compilerJavaScript": {
+			"bytes": 20872240,
+			"sha256": "0a85cf0120aafd873e41eb901a18090453010f8f819074b77c14e1c359cafd1e"
+		},
+		"compilerStorage": {
+			"bytes": 3417153,
+			"sha256": "38cf8c42ed83447287e0bc54c768661a110b7becf1b93bdfdd6da30537c4e289"
+		},
+		"stdlibPack": {
+			"bytes": 5066092,
+			"sha256": "c56e83cbea649be5dd94ce98ae648b8f98e40203761ef7b1ad0a799048ee08eb"
+		},
+		"stdlibStorage": {
+			"bytes": 1653344,
+			"sha256": "7180475667a3129821be12aa787f449e58de62b0bb5c0e5472077b73b9e5cafa"
+		}
+	},
+	"source": {
+		"repository": "https://github.com/grain-lang/grain",
+		"tag": "grain-v0.7.2",
+		"commit": "49829d7966b38b177291f7e91f5eb81c65ec07aa",
+		"releaseAsset": {
+			"url": "https://github.com/grain-lang/grain/releases/download/grain-v0.7.2/grain-linux-x64",
+			"bytes": 79185888,
+			"sha256": "82658891d33f5431e7bd260f0c00b8e86c43eb9182c5327f41db25d60b54dadd"
+		},
+		"compiler": {
+			"snapshotPath": "/snapshot/grain/cli/bin/grainc.bc.js",
+			"builtBy": "js_of_ocaml 6.0.1 (upstream `dune build @js`)"
+		},
+		"stdlib": {
+			"snapshotRoot": "/snapshot/grain/stdlib/",
+			"modules": 77
+		}
+	},
+	"licenses": {
+		"LICENSE-grain-compiler.txt": {
+			"spdx": "LGPL-3.0",
+			"url": "https://raw.githubusercontent.com/grain-lang/grain/49829d7966b38b177291f7e91f5eb81c65ec07aa/LICENSE",
+			"sha256": "8224a89fea46649b1ec4338c71a736d4a358e799ef239dfbe592a10bfb4df7ec"
+		},
+		"LICENSE-grain-stdlib.txt": {
+			"spdx": "MIT",
+			"url": "https://raw.githubusercontent.com/grain-lang/grain/49829d7966b38b177291f7e91f5eb81c65ec07aa/stdlib/LICENSE",
+			"sha256": "7a7e23ff2b9f4a275793b20ef057195e11f4637d4e5cedaa0c64387eeb7ab30c"
+		}
+	},
+	"notes": "grainc.bc.js embeds Binaryen (Apache-2.0) compiled to JavaScript; stdlib .gro objects are produced by this exact compiler."
+}

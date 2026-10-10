@@ -20,6 +20,7 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
+import { WASM_RESCRIPT_ASSET_VERSION, WASM_RESCRIPT_RUNNER_RECEIPT } from './wasmReScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import {
@@ -156,6 +157,7 @@ describe('application runtime asset root', () => {
 			'duckdb',
 			'elixir',
 			'erlang',
+			'fennel',
 			'forth',
 			'fortran',
 			'gleam',
@@ -174,8 +176,10 @@ describe('application runtime asset root', () => {
 			'pascal',
 			'perl',
 			'php',
+			'postgresql',
 			'prolog',
 			'r',
+			'rescript',
 			'rootUrl',
 			'ruby',
 			'rust',
@@ -184,6 +188,7 @@ describe('application runtime asset root', () => {
 			'tcl',
 			'tinygo',
 			'typescript',
+			'v',
 			'wat',
 			'zig'
 		]);
@@ -298,6 +303,13 @@ describe('application runtime asset root', () => {
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		});
+		expect(assets.rescript).toEqual({
+			baseUrl: '/foo/bar/wasm-rescript/',
+			workerUrl: `/foo/bar/wasm-rescript/runner-worker.js?v=${WASM_RESCRIPT_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-rescript/runtime-manifest.v1.json?v=${WASM_RESCRIPT_ASSET_VERSION}`,
+			manifestFingerprint: WASM_RESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_RESCRIPT_RUNNER_RECEIPT
+		});
 		expect(assets.bash).toEqual({
 			baseUrl: '/foo/bar/wasm-bash/',
 			manifestUrl: `/foo/bar/wasm-bash/runtime-manifest.v2.json?v=${WASM_BASH_RUNTIME_PROFILE.manifestFingerprint}`,
@@ -334,6 +346,9 @@ describe('application runtime asset root', () => {
 		expect(assets.r?.baseUrl).toBe(`/foo/bar/webr/${WASM_R_ASSET_VERSION}/`);
 		expect(assets.sqlite?.moduleUrl).toBe(
 			`/foo/bar/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		);
+		expect(assets.postgresql?.moduleUrl).toBe(
+			`/foo/bar/wasm-postgresql/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		);
 		expect(assets.ruby).toEqual({
 			splitStdlib: true,
@@ -718,6 +733,9 @@ describe('application runtime asset root', () => {
 			clojurescriptManifestUrl: assets.clojurescript?.manifestUrl,
 			clojurescriptManifestFingerprint: assets.clojurescript?.manifestFingerprint,
 			clojurescriptWorkerReceipt: expect.any(String),
+			rescriptManifestUrl: assets.rescript?.manifestUrl,
+			rescriptManifestFingerprint: assets.rescript?.manifestFingerprint,
+			rescriptWorkerReceipt: expect.any(String),
 			janetManifestUrl: assets.janet?.manifestUrl,
 			janetManifestFingerprint: assets.janet?.manifestFingerprint,
 			janetProfileId: assets.janet?.profileId,

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	go: { compilerUrl: '/wasm-go/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_GO_COMPILER_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -69,16 +69,11 @@ vi.mock('$lib/playground/worker/go?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Go from './go';
 
 describe('Go sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = '/wasm-go/index.js';
 		suppressAutoLoadAck = false;
 	});
 
@@ -98,7 +93,7 @@ func main() {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(
 			sandbox.run(code, true, true, {
 				set(value: number) {
@@ -242,12 +237,12 @@ func main() {
 	it('recreates the compiler worker when compiler asset limits change', async () => {
 		const sandbox = new Go();
 
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { maxAssetBytes: 8_192 }
 		});
 		const firstWorker = workerInstances[0]!;
 
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { maxAssetBytes: 4_096 }
 		});
 
@@ -276,7 +271,6 @@ func main() {
 	});
 
 	it('rejects load when no go compiler url is configured', async () => {
-		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = '';
 		const sandbox = new Go();
 
 		await expect(sandbox.load('/absproxy/5173')).rejects.toContain(
@@ -287,7 +281,7 @@ func main() {
 	it('rejects load when the go worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Go();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -311,7 +305,9 @@ func main() {
 		sandbox.pendingInput = ['queued input\n'];
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 
 		expect(workerInstances).toHaveLength(0);
@@ -327,7 +323,7 @@ func main() {
 		const controller = new AbortController();
 		const progress = { set: vi.fn() };
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -349,7 +345,9 @@ func main() {
 		expect(progress.set).not.toHaveBeenCalled();
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -359,7 +357,9 @@ func main() {
 		const controller = new AbortController();
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 
-		await sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal });
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+			signal: controller.signal
+		});
 		const worker = workerInstances[0];
 		controller.abort(new Error('late Go startup cancellation'));
 
@@ -489,9 +489,15 @@ func main() {
 		const sandbox = new Go();
 		const loadController = new AbortController();
 		const staleLoadReason = new Error('stale Go startup cancellation');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: loadController.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: loadController.signal
+			}
+		);
 		const loadOutcome = loading.catch((reason) => reason);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
@@ -686,7 +692,7 @@ func main() {}`,
 		let runMessage: any;
 
 		sandbox.ondebug = (event) => events.push(event);
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce((message) => {
 			runMessage = message;

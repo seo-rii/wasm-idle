@@ -1,11 +1,11 @@
-export const WASM_TYPESCRIPT_ASSET_VERSION = '39caba34204ca2bc';
+export const WASM_TYPESCRIPT_ASSET_VERSION = '2d968f66f878ce33';
 
 export const WASM_TYPESCRIPT_MODULE_RECEIPT = Object.freeze({
-	bytes: 3766190,
-	sha256: '483aedcb29a0aee52f4167d4bbbb6070d5d187986952a17c849ad65a29374dde'
+	bytes: 3759064,
+	sha256: '2c8942b6383d25d4582e9db0ee38d85b61eb8016f16e57c840f3c20af9ac848b'
 });
 
 export const WASM_JAVASCRIPT_MODULE_RECEIPT = Object.freeze({
-	bytes: 35829,
-	sha256: '3afa49e47296ad7d97f43a80500d95e55321d197b3ce95ddb823f10e91188c83'
+	bytes: 35866,
+	sha256: '21b176cfe1ce4d39519979422bd1b3b598f183e9b3fe042ecc8cc37a535c3608'
 });

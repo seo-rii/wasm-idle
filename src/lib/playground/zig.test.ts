@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	zig: { compilerUrl: '/wasm-zig/zig_small.wasm', stdlibUrl: '/wasm-zig/std.tar.gz' }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_ZIG_COMPILER_URL: '',
-		PUBLIC_WASM_ZIG_STDLIB_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -56,10 +55,6 @@ vi.mock('$lib/playground/worker/zig?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Zig from './zig';
 import { WASM_ZIG_ASSET_RECEIPTS } from './wasmZigVersion';
 import type { ZigExecutionAssetReceipts } from './zigAssets';
@@ -68,8 +63,6 @@ describe('Zig sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '/wasm-zig/zig_small.wasm';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '/wasm-zig/std.tar.gz';
 		suppressAutoLoadAck = false;
 	});
 
@@ -88,7 +81,7 @@ describe('Zig sandbox', () => {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 
 		await sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -214,7 +207,7 @@ describe('Zig sandbox', () => {
 		const sandbox = new Zig();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('pub fn main() void {}', false, true, undefined, [], {
@@ -242,7 +235,7 @@ describe('Zig sandbox', () => {
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -251,7 +244,7 @@ describe('Zig sandbox', () => {
 		const sandbox = new Zig();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('pub fn main() void {}', true, true, undefined, [], {
@@ -288,7 +281,7 @@ describe('Zig sandbox', () => {
 
 	it('normalizes a valid Zig workspace before worker dispatch', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await expect(
 			sandbox.run('pub fn main() void {}', false, true, undefined, [], {
@@ -379,7 +372,7 @@ describe('Zig sandbox', () => {
 		'rejects a Zig workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new Zig();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -486,7 +479,7 @@ describe('Zig sandbox', () => {
 		expect(outputs).toEqual([]);
 		expect(progress.set).not.toHaveBeenCalled();
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retryWorker = workerInstances.at(-1)!;
 		const settledController = new AbortController();
 		await expect(
@@ -503,12 +496,14 @@ describe('Zig sandbox', () => {
 	it('rejects overlapping Zig startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Zig();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'ZIG'
@@ -529,7 +524,7 @@ describe('Zig sandbox', () => {
 
 	it('rejects a pre-aborted Zig startup without changing an existing worker', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockClear();
 		const progress = { set: vi.fn() };
@@ -538,7 +533,14 @@ describe('Zig sandbox', () => {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
 		).rejects.toBe(reason);
 
 		expect(sandbox.worker).toBe(worker);
@@ -555,7 +557,7 @@ describe('Zig sandbox', () => {
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('Zig startup aborted');
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -577,7 +579,7 @@ describe('Zig sandbox', () => {
 
 		suppressAutoLoadAck = false;
 		const settledController = new AbortController();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			signal: settledController.signal
 		});
 		const retryWorker = workerInstances.at(-1)!;
@@ -602,7 +604,7 @@ describe('Zig sandbox', () => {
 			})
 		};
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -623,7 +625,9 @@ describe('Zig sandbox', () => {
 		expect(progress.set).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
@@ -634,7 +638,7 @@ describe('Zig sandbox', () => {
 		const callbackError = new Error('Zig startup callback throw after termination');
 		let replacement: Promise<void> | undefined;
 		const loading = sandbox.load(
-			'/cancelled/',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/cancelled/' },
 			'',
 			true,
 			[],
@@ -643,7 +647,10 @@ describe('Zig sandbox', () => {
 				set() {
 					sandbox.terminate(terminationReason);
 					suppressAutoLoadAck = false;
-					replacement = sandbox.load('/replacement/');
+					replacement = sandbox.load({
+						...TEST_RUNTIME_ASSETS,
+						rootUrl: '/replacement/'
+					});
 					throw callbackError;
 				}
 			}
@@ -670,7 +677,7 @@ describe('Zig sandbox', () => {
 		let reentrantLoad: Promise<void> | undefined;
 		sandbox.output = () => {
 			reentrantRun = sandbox.run('pub fn main() void {}', false);
-			reentrantLoad = sandbox.load('/replacement/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 		};
 
 		const running = sandbox.run('pub fn main() void {}', false);
@@ -703,7 +710,7 @@ describe('Zig sandbox', () => {
 		let replacement: Promise<void> | undefined;
 		sandbox.output = () => {
 			controller.abort(abortReason);
-			replacement = sandbox.load('/replacement/');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			throw callbackError;
 		};
 		const running = sandbox.run('pub fn main() void {}', false, true, undefined, [], {
@@ -788,7 +795,7 @@ describe('Zig sandbox', () => {
 			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}
@@ -825,7 +832,9 @@ describe('Zig sandbox', () => {
 
 		const running = sandbox.run('pub fn main() void {}', false);
 		const runHandler = worker.onmessage;
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'ZIG'
@@ -851,7 +860,7 @@ describe('Zig sandbox', () => {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
 
@@ -862,14 +871,14 @@ describe('Zig sandbox', () => {
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
 
 	it('releases Zig startup activity after termination', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Zig();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -878,13 +887,11 @@ describe('Zig sandbox', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
 
 	it('rejects load when Zig compiler or stdlib assets are not configured', async () => {
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
 		const sandbox = new Zig();
 
 		await expect(sandbox.load({})).rejects.toContain('Zig runtime is not configured');
@@ -893,7 +900,7 @@ describe('Zig sandbox', () => {
 	it('rejects load when the worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Zig();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -990,7 +997,7 @@ describe('Zig sandbox', () => {
 
 	it('preserves an exact null pre-abort reason without changing idle Zig state', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const compilerUrl = sandbox.compilerUrl;
@@ -1001,7 +1008,9 @@ describe('Zig sandbox', () => {
 		controller.abort(null);
 
 		await expect(
-			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBeNull();
 		await expect(
 			sandbox.run('pub fn main() void {}', false, true, undefined, [], {
@@ -1023,19 +1032,25 @@ describe('Zig sandbox', () => {
 
 	it('preserves replacement startup when the outer signal getter terminates Zig', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Zig during startup option snapshot');
 		let replacement: Promise<void> | undefined;
 		const options = {
 			get signal() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			}
 		};
 
-		const superseded = sandbox.load('/outer', '', true, [], options);
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/outer' },
+			'',
+			true,
+			[],
+			options
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -1047,7 +1062,7 @@ describe('Zig sandbox', () => {
 
 	it('preserves the first cancellation and replacement across later Zig option failure', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Zig during execution option snapshot');
 		const laterError = new Error('later Zig workspace getter failed');
@@ -1055,7 +1070,7 @@ describe('Zig sandbox', () => {
 		const options = {
 			get limits() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			},
 			get workspaceFiles(): never {
@@ -1083,7 +1098,7 @@ describe('Zig sandbox', () => {
 
 	it('preserves a Zig replacement when a later option getter aborts the snapshot', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('abort Zig during execution option snapshot');
@@ -1158,8 +1173,6 @@ describe('Zig sandbox', () => {
 	});
 
 	it('reads the Zig root URL once when both runtime assets use fallback resolution', async () => {
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
 		const sandbox = new Zig();
 		let rootUrlReads = 0;
 		const runtimeAssets = {
@@ -1182,7 +1195,7 @@ describe('Zig sandbox', () => {
 
 	it('ignores a Zig config after its top-level getter starts a replacement', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Zig while reading the runtime config');
 		let replacement: Promise<void> | undefined;
@@ -1221,7 +1234,7 @@ describe('Zig sandbox', () => {
 
 	it('ignores resolved Zig assets after the compiler resolver starts a replacement', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Zig while resolving assets');
 		let replacement: Promise<void> | undefined;
@@ -1260,7 +1273,7 @@ describe('Zig sandbox', () => {
 
 	it('reads explicit Zig stdin and target triple once before worker dispatch', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let stdinReads = 0;
 		let targetReads = 0;
 		const options = {
@@ -1295,7 +1308,7 @@ describe('Zig sandbox', () => {
 		const sandbox = new Zig();
 		const progress = { set: vi.fn() };
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -1321,14 +1334,16 @@ describe('Zig sandbox', () => {
 		staleHandler?.({ data: { progress: 0.5, load: true } } as MessageEvent<any>);
 		expect(progress.set).not.toHaveBeenCalled();
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate Zig execution deadline and permits a clean retry', async () => {
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
 		const output = vi.fn();
@@ -1357,7 +1372,7 @@ describe('Zig sandbox', () => {
 		} as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalled();
 		expect(progress.set).not.toHaveBeenCalled();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1365,7 +1380,7 @@ describe('Zig sandbox', () => {
 	it('clears settled Zig deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Zig();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1387,7 +1402,7 @@ describe('Zig sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -1414,7 +1429,7 @@ describe('Zig sandbox', () => {
 				pendingEof: sandbox.pendingEof,
 				bufferedInput: readBufferedStdin(sandbox.buffer)
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantDisposal = sandbox.dispose();
 		});
 		const firstDisposal = sandbox.dispose();
@@ -1453,7 +1468,9 @@ describe('Zig sandbox', () => {
 		expect(sandbox.output).toBeNull();
 		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
 
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1479,7 +1496,7 @@ describe('Zig sandbox', () => {
 	it('settles active Zig startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Zig();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
 		const staleHandler = worker.onmessage;
@@ -1512,7 +1529,7 @@ describe('Zig sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('pub fn main() void {}', false);

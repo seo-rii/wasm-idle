@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	sqlite: { wasmUrl: '/sqlite/sql-wasm.wasm' }
+} satisfies PlaygroundRuntimeAssets;
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_SQLITE_MODULE_URL: '',
-		PUBLIC_WASM_SQLITE_WASM_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -42,17 +41,11 @@ vi.mock('$lib/playground/worker/sqlite?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import Sqlite from './sqlite';
 
 describe('SQLite sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = '/sqlite/sql-wasm.wasm';
-		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL = '';
 		suppressAutoLoadAck = false;
 	});
 
@@ -63,7 +56,7 @@ describe('SQLite sandbox', () => {
 
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		await expect(
 			sandbox.run(code, false, true, undefined, [], {
@@ -104,7 +97,7 @@ describe('SQLite sandbox', () => {
 	it('rejects load when the SQLite worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Sqlite();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	typescript: { moduleUrl: '/runtime/typescript/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '/runtime/typescript/index.js'
-	}
-}));
 let autoResolveLoad = true;
 let autoResolveRun = true;
 
@@ -45,10 +45,6 @@ vi.mock('$lib/playground/worker/typescript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
-
 import TypeScriptSandbox from './typescript';
 import { readBufferedStdin } from './stdinBuffer';
 
@@ -58,7 +54,6 @@ describe('TypeScript and JavaScript execution limits', () => {
 		workerInstances.length = 0;
 		autoResolveLoad = true;
 		autoResolveRun = true;
-		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '/runtime/typescript/index.js';
 		history.replaceState({}, '', '/editor');
 	});
 
@@ -81,13 +76,19 @@ describe('TypeScript and JavaScript execution limits', () => {
 				abortRemovalCount += 1;
 				if (abortRemovalCount < 2 || replacement) return;
 				autoResolveLoad = true;
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			}
 		);
-		const loading = sandbox.load('/assets/', '', true, [], {
-			signal: controller.signal,
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal,
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -112,7 +113,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const retiredWorker = workerInstances[0];
 		autoResolveRun = false;
 		vi.useFakeTimers();
@@ -142,7 +143,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 
 		autoResolveLoad = true;
 		autoResolveRun = true;
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const replacementWorker = workerInstances[1];
 		await expect(
 			sandbox.run('console.log("ok")', false, true, undefined, [], {
@@ -156,7 +157,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 	it('enforces the TypeScript UTF-8 output ceiling without an output callback', async () => {
 		autoResolveRun = false;
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const worker = workerInstances[0];
 		const running = sandbox.run('console.log("many bytes")', false, true, undefined, [], {
 			limits: { maxOutputBytes: 5 }
@@ -180,7 +181,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 	it('counts JavaScript diagnostics without a callback and suppresses a same-message result', async () => {
 		autoResolveRun = false;
 		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const worker = workerInstances[0];
 		const running = sandbox.run('broken(', true, true, undefined, [], {
 			limits: { maxDiagnostics: 1 }
@@ -206,7 +207,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 		const terminationReason = new Error('replace TypeScript while reading limits');
 		let replacement: Promise<void> | undefined;
 		let staleLimitReads = 0;
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		const retiredWorker = workerInstances[0];
 		const limits = Object.defineProperties(
 			{},
@@ -215,7 +216,10 @@ describe('TypeScript and JavaScript execution limits', () => {
 					enumerable: true,
 					get: () => {
 						sandbox.terminate(terminationReason);
-						replacement = sandbox.load('/replacement/');
+						replacement = sandbox.load({
+							...TEST_RUNTIME_ASSETS,
+							rootUrl: '/replacement/'
+						});
 						void replacement.catch(() => undefined);
 						return 5;
 					}
@@ -254,7 +258,10 @@ describe('TypeScript and JavaScript execution limits', () => {
 					enumerable: true,
 					get: () => {
 						sandbox.terminate(terminationReason);
-						replacement = sandbox.load('/replacement/');
+						replacement = sandbox.load({
+							...TEST_RUNTIME_ASSETS,
+							rootUrl: '/replacement/'
+						});
 						void replacement.catch(() => undefined);
 						return Object.defineProperty({}, 'moduleUrl', {
 							get: () => {
@@ -291,7 +298,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 		const terminationReason = new Error('replace JavaScript while reading abort reason');
 		let replacement: Promise<void> | undefined;
 		let reasonReads = 0;
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		autoResolveRun = false;
 		Object.defineProperty(controller.signal, 'reason', {
 			configurable: true,
@@ -299,7 +306,10 @@ describe('TypeScript and JavaScript execution limits', () => {
 				reasonReads += 1;
 				if (reasonReads === 1) {
 					sandbox.terminate(terminationReason);
-					replacement = sandbox.load('/replacement/');
+					replacement = sandbox.load({
+						...TEST_RUNTIME_ASSETS,
+						rootUrl: '/replacement/'
+					});
 					void replacement.catch(() => undefined);
 					return new Error('stale abort reason');
 				}
@@ -327,7 +337,14 @@ describe('TypeScript and JavaScript execution limits', () => {
 		const progress = { set: vi.fn() };
 		const terminationReason = new Error('replace TypeScript from load message');
 		let replacement: Promise<void> | undefined;
-		const loading = sandbox.load('/assets/', '', true, [], {}, progress);
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' },
+			'',
+			true,
+			[],
+			{},
+			progress
+		);
 		void loading.catch(() => undefined);
 		await vi.dynamicImportSettled();
 		const retiredWorker = workerInstances[0];
@@ -335,7 +352,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 			get: () => {
 				sandbox.terminate(terminationReason);
 				autoResolveLoad = true;
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				void replacement.catch(() => undefined);
 				return true;
 			}
@@ -356,7 +373,7 @@ describe('TypeScript and JavaScript execution limits', () => {
 		const terminationReason = new Error('replace JavaScript from run message');
 		let replacement: Promise<void> | undefined;
 		let staleMessageReads = 0;
-		await sandbox.load('/assets/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/assets/' });
 		autoResolveRun = false;
 		const retiredWorker = workerInstances[0];
 		const running = sandbox.run('while (true) {}', false, true);
@@ -368,7 +385,10 @@ describe('TypeScript and JavaScript execution limits', () => {
 					enumerable: true,
 					get: () => {
 						sandbox.terminate(terminationReason);
-						replacement = sandbox.load('/replacement/');
+						replacement = sandbox.load({
+							...TEST_RUNTIME_ASSETS,
+							rootUrl: '/replacement/'
+						});
 						void replacement.catch(() => undefined);
 						return true;
 					}

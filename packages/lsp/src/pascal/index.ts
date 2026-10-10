@@ -2,7 +2,7 @@ export {
 	getPascalLanguageServer,
 	type PascalLanguageServerConfig,
 	type PascalLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createPascalWorkerService,
 	type PascalDiagnosticRunnerRequest,

@@ -246,9 +246,7 @@ async function unpackRootfs(bsdtarBytes: Uint8Array, rootfsBytes: Uint8Array) {
 
 async function createRuntime() {
 	if (!moduleUrl || !rootfsUrl || !bsdtarUrl || !integrity) {
-		throw new Error(
-			'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
-		);
+		throw new Error('Haskell runtime is not configured. Set runtimeAssets.haskell.');
 	}
 	const assetKey = JSON.stringify({
 		moduleUrl,

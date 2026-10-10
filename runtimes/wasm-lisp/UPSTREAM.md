@@ -18,8 +18,10 @@ instead of claiming source-to-binary verification.
 The runtime does not implement a small replacement compiler. It runs the
 upstream self-hosting Scheme compiler in WebAssembly.
 
-The browser distribution bundles the pinned JCO and Preview 2 shim code into a
-self-contained `index.js`. The sync step accepts only that entry, the generated
+The browser distribution bundles JCO 1.37.0, its jco-transpile 0.18.0 component,
+and Preview 2 shim 0.28.0 into a self-contained `index.js`. The build calls JCO's
+`generate` API with explicit browser-only options and checks the complete
+bundler input graph. The sync step accepts only that entry, the generated
 Puppy binding, and its two core modules; it verifies every source receipt and
 publishes a fingerprinted manifest consumed by both execution and LSP workers.
 

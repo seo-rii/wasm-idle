@@ -59,9 +59,7 @@ async function writeWorkspaceFile(webR: WebR, path: string, content: string) {
 
 async function loadWebR(url: string, log = true) {
 	if (!url) {
-		throw new Error(
-			'R runtime is not configured. Set PUBLIC_WASM_R_BASE_URL or runtimeAssets.r.baseUrl.'
-		);
+		throw new Error('R runtime is not configured. Set runtimeAssets.r.baseUrl.');
 	}
 	if (loadedBaseUrl === url && webRPromise) {
 		return await webRPromise;
