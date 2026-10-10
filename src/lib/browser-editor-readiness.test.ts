@@ -89,7 +89,8 @@ describe('browser editor workspace readiness', () => {
 	});
 
 	it('binds the product selector and handler to the actual restoration state', () => {
-		const page = readFileSync(new URL('../routes/+page.svelte', import.meta.url), 'utf8');
+		// Root Vitest runs from the repository; avoid Vite rewriting an asset URL to HTTP.
+		const page = readFileSync('src/routes/+page.svelte', 'utf8');
 		const selector = page.match(/<select\s+id="language-select"[\s\S]*?>/)?.[0];
 		expect(selector).toContain('disabled={!workspaceInitialized}');
 		expect(selector).toContain('data-workspace-ready={workspaceInitialized}');
