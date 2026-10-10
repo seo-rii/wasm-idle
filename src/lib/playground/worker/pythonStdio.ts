@@ -1,5 +1,5 @@
 interface StdioRuntime {
-	setStdin(options: { stdin: () => Uint8Array | null; autoEOF: boolean; isatty: boolean } | { error: true }): void;
+	setStdin(options: { read: (buffer: Uint8Array) => number; isatty: boolean } | { error: true }): void;
 	setStdout(options: { write: (bytes: Uint8Array) => number }): void;
 	setStderr(options: { write: (bytes: Uint8Array) => number }): void;
 }
@@ -33,6 +33,8 @@ export function createPythonStdio(runtime: StdioRuntime, options: StdioOptions) 
 	let initialInput = options.initialInput;
 	const hasInitialInput = typeof initialInput === 'string';
 	let inputEnded = false;
+	let inputBytes = new Uint8Array(0);
+	let inputOffset = 0;
 
 	function flush() {
 		if (timer !== undefined) clearTimeout(timer);
@@ -88,11 +90,22 @@ export function createPythonStdio(runtime: StdioRuntime, options: StdioOptions) 
 	}
 
 	runtime.setStdin({
-		stdin: () => {
-			const value = readInput();
-			return value === null ? null : encoder.encode(value);
+		read: (buffer) => {
+			if (!buffer.length) return 0;
+			while (inputOffset === inputBytes.length) {
+				const value = readInput();
+				if (value === null) return 0;
+				inputBytes = encoder.encode(value);
+				inputOffset = 0;
+			}
+			// Return the available chunk as a short read. Pyodide's character-based
+			// stdin adapter otherwise requests another line to fill the whole read,
+			// blocking native input() even after an interactive newline arrives.
+			const length = Math.min(buffer.length, inputBytes.length - inputOffset);
+			buffer.set(inputBytes.subarray(inputOffset, inputOffset + length));
+			inputOffset += length;
+			return length;
 		},
-		autoEOF: false,
 		isatty: false
 	});
 	runtime.setStdout({ write: (bytes) => write(0, bytes) });

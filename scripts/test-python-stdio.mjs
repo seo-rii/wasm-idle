@@ -16,7 +16,10 @@ function fixture(options = {}) {
 	const messages = [];
 	const runtime = { setStdin(v) { input = v; }, setStdout(v) { output = v; }, setStderr(v) { error = v; } };
 	const io = createPythonStdio(runtime, { readInput: () => null, emit: (s) => messages.push(s), maxDelayMs: 10000, ...options });
-	return { io, messages, read: () => input.stdin(), write: (s) => output.write(typeof s === 'string' ? encoder.encode(s) : s), stderr: (s) => error.write(encoder.encode(s)) };
+	return { io, messages, read: (size = 65536) => {
+		const buffer = new Uint8Array(size);
+		return buffer.subarray(0, input.read(buffer));
+	}, write: (s) => output.write(typeof s === 'string' ? encoder.encode(s) : s), stderr: (s) => error.write(encoder.encode(s)) };
 }
 
 test('many small writes are delivered as bounded batches without losing order', () => {
@@ -67,15 +70,37 @@ test('input requests flush preceding prompts and initial input ends without bloc
 	f.write('prompt>');
 	assert.equal(new TextDecoder().decode(f.read()), 'a\nb');
 	assert.equal(f.messages.join(''), 'prompt>');
-	assert.equal(f.read(), null);
-	assert.equal(f.read(), null);
+	assert.equal(f.read().length, 0);
+	assert.equal(f.read().length, 0);
 	assert.equal(calls, 0);
 	f.io.close();
 });
 test('explicit empty input is not interactive input', () => {
 	const f = fixture({ initialInput: '', readInput: () => { throw new Error('must not block'); } });
 	assert.equal(f.read().length, 0);
-	assert.equal(f.read(), null);
+	assert.equal(f.read().length, 0);
+	f.io.close();
+});
+test('short reads retain unread UTF-8 bytes without requesting the next interactive line', () => {
+	let calls = 0;
+	const bytes = encoder.encode('한글🙂\n');
+	const f = fixture({ readInput: () => {
+		calls++;
+		if (calls === 1) return '한글🙂\n';
+		throw new Error('requested another line');
+	} });
+	assert.equal(f.read(0).length, 0);
+	assert.equal(calls, 0);
+	const chunks = [f.read(1), f.read(2), f.read(65536)];
+	assert.deepEqual(Buffer.concat(chunks), Buffer.from(bytes));
+	assert.equal(calls, 1);
+	f.io.close();
+});
+test('empty interactive chunks do not insert EOF before later input', () => {
+	const inputs = ['', 'line\n', null];
+	const f = fixture({ readInput: () => inputs.shift() });
+	assert.equal(new TextDecoder().decode(f.read()), 'line\n');
+	assert.equal(f.read().length, 0);
 	f.io.close();
 });
 test('elapsed-time flush works without an event-loop turn', () => {

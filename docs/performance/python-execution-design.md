@@ -20,6 +20,8 @@ Normal worker execution passes only source, filename and the readiness callback 
 
 The first nonempty decoded output in each run reaches the host immediately. A warm cached program can print once and enter a synchronous CPU loop before the batch timer runs; holding that first output hides execution progress until the loop ends or is interrupted. Later output retains bounded batching, with explicit flush, input and completion boundaries unchanged.
 
+Native stdin uses Pyodide's byte `read` callback and returns the available chunk as a short read. Its character-based adapter with automatic EOF disabled fills the requested buffer by asking for more chunks, which can block `input()` after an interactive newline. A per-run byte cursor retains unread UTF-8 bytes, an empty interactive chunk requests more input, and zero bytes returned to the interpreter means actual EOF.
+
 ## CI repair and genuine interpreter coverage
 
 The worker dispatch fixture retains all 27 cases in python.runtime.cases.ts, including asset trust, startup ordering, diagnostics and prepare-to-run assertions. Its native byte writers and flush-hook boundary compose with the collected entrypoint's narrow execution-helper mock. Actual interpreter behavior remains covered separately from dispatch mocks.
