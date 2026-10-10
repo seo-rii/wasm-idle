@@ -620,6 +620,7 @@
 		if (filePath.toLowerCase().endsWith('.as.ts')) return 'ASSEMBLYSCRIPT';
 		const ext = extension(filePath);
 		if ((ext === '.m' || ext === '.h') && language === 'OBJC') return 'OBJC';
+		if ((ext === '.lisp' || ext === '.lsp') && language === 'COMMONLISP') return 'COMMONLISP';
 		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
 		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
@@ -703,6 +704,7 @@
 			'.sls': 'LISP',
 			'.lisp': 'LISP',
 			'.lsp': 'LISP',
+			'.cl': 'COMMONLISP',
 			'.rb': 'RUBY',
 			'.hs': 'HASKELL',
 			'.lhs': 'HASKELL',
@@ -792,6 +794,7 @@
 			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
+			COMMONLISP: 'main.lisp',
 			RUBY: 'main.rb',
 			HASKELL: 'main.hs',
 			R: 'main.R',
@@ -869,6 +872,7 @@
 			FENNEL: 'fennel',
 			ZIG: 'zig',
 			LISP: 'lisp',
+			COMMONLISP: 'commonlisp',
 			RUBY: 'ruby',
 			HASKELL: 'haskell',
 			R: 'r',
@@ -1597,6 +1601,10 @@
 			lisp: 'LISP',
 			scheme: 'LISP',
 			scm: 'LISP',
+			commonlisp: 'COMMONLISP',
+			'common-lisp': 'COMMONLISP',
+			cl: 'COMMONLISP',
+			ecl: 'COMMONLISP',
 			ruby: 'RUBY',
 			rb: 'RUBY',
 			haskell: 'HASKELL',
@@ -3124,6 +3132,14 @@
 				`@chriskoch/julia-wasm@1.0.4`. Use `readline()` for line input; the worker connects
 				terminal stdin through a streaming channel when cross-origin isolation is available,
 				and otherwise provides buffered input through a Julia `IOBuffer`.
+			</p>
+		{/if}
+		{#if language === 'COMMONLISP'}
+			<p class="hint">
+				Common Lisp runs upstream ECL 26.5.5 compiled to WebAssembly. The active file is
+				loaded with <code>LOAD</code> using ECL's bytecode compiler; read input with
+				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run, and
+				very deep recursion (about 1000 levels) fails with a stack-overflow error.
 			</p>
 		{/if}
 		{#if language === 'C3'}
