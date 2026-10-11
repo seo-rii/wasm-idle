@@ -247,6 +247,37 @@
 	let activePath = $state(initialWorkspace.activePath);
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
+	const themeStorageKey = 'wasm-idle:theme';
+	let themePreference = $state<'light' | 'dark' | null>(null);
+	let systemDark = $state(false);
+	const darkMode = $derived(themePreference ? themePreference === 'dark' : systemDark);
+
+	$effect(() => {
+		const media = window.matchMedia('(prefers-color-scheme: dark)');
+		systemDark = media.matches;
+		try {
+			const stored = localStorage.getItem(themeStorageKey);
+			if (stored === 'light' || stored === 'dark') themePreference = stored;
+		} catch {
+			// Storage can be unavailable in private or sandboxed contexts.
+		}
+		const handleChange = (event: MediaQueryListEvent) => (systemDark = event.matches);
+		media.addEventListener('change', handleChange);
+		return () => media.removeEventListener('change', handleChange);
+	});
+
+	$effect(() => {
+		document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+	});
+
+	function toggleTheme() {
+		themePreference = darkMode ? 'light' : 'dark';
+		try {
+			localStorage.setItem(themeStorageKey, themePreference);
+		} catch {
+			// The theme still applies for this session.
+		}
+	}
 	let saveStatus = $state('Ready');
 	let workspaceSaveState = $state<WorkspaceSaveState>({
 		phase: 'dirty',
@@ -2582,6 +2613,7 @@
 	bind:clientWidth={examplePaneWidth}
 	class="ide"
 	class:drag-active={dragActive}
+	data-theme={darkMode ? 'dark' : 'light'}
 >
 	<input
 		bind:this={fileInput}
@@ -3084,6 +3116,7 @@
 				bind:terminal
 				{playground}
 				font={terminalFont}
+				dark={darkMode}
 				ondebug={onDebugEvent}
 				oncompilediagnostic={onCompileDiagnostic}
 			/>
@@ -3199,6 +3232,16 @@
 			</div>
 		</div>
 		<div class="topbar__actions">
+			<button
+				class="icon-button"
+				onclick={toggleTheme}
+				title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+				aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+			>
+				<span class="material-symbols-outlined" aria-hidden="true"
+					>{darkMode ? 'light_mode' : 'dark_mode'}</span
+				>
+			</button>
 			<button class="tool-button" onclick={() => saveWorkspace(true)} title="Save workspace">
 				<span class="material-symbols-outlined">save</span>
 				<span>Save</span>
@@ -3388,6 +3431,7 @@
 							value={activeFile?.content ?? ''}
 							onChange={updateActiveContent}
 							{compact}
+							dark={darkMode}
 							{lspEnabled}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
@@ -3784,6 +3828,10 @@
 		background: #f2f4f6;
 	}
 
+	:global(html[data-theme='dark'] body) {
+		background: #101012;
+	}
+
 	.ide {
 		--bg: #f2f4f6;
 		--surface: #ffffff;
@@ -3806,6 +3854,13 @@
 		--warning-soft: #fff6e5;
 		--debug-tone: #7b61ff;
 		--debug-tone-soft: #f1edff;
+		--primary-soft-strong: #d6e8ff;
+		--success-soft: #e5f8f0;
+		--warning-text: #6b4500;
+		--danger-text: #b0202d;
+		--topbar-bg: rgba(255, 255, 255, 0.86);
+		--overlay: rgba(232, 243, 255, 0.86);
+		color-scheme: light;
 		--radius-lg: 16px;
 		--radius-md: 12px;
 		--radius-sm: 8px;
@@ -3826,6 +3881,38 @@
 		font-size: 13px;
 		letter-spacing: -0.01em;
 		-webkit-font-smoothing: antialiased;
+	}
+
+	.ide[data-theme='dark'] {
+		--bg: #101012;
+		--surface: #1b1b1e;
+		--surface-muted: #222226;
+		--fill: #2a2a2f;
+		--fill-strong: #35353b;
+		--line: #2a2a2f;
+		--line-soft: #25252a;
+		--text: #f2f3f5;
+		--text-2: #c3c7ce;
+		--text-3: #8b9099;
+		--text-4: #5c6169;
+		--primary: #4593fc;
+		--primary-strong: #2f80f0;
+		--primary-soft: rgba(69, 147, 252, 0.16);
+		--primary-soft-strong: rgba(69, 147, 252, 0.26);
+		--danger: #f5525f;
+		--danger-soft: rgba(245, 82, 95, 0.15);
+		--danger-text: #ff8a94;
+		--success: #2ac985;
+		--success-soft: rgba(42, 201, 133, 0.15);
+		--warning: #ffb331;
+		--warning-soft: rgba(255, 179, 49, 0.12);
+		--warning-text: #ffd48a;
+		--debug-tone: #9d8bff;
+		--debug-tone-soft: rgba(157, 139, 255, 0.16);
+		--topbar-bg: rgba(27, 27, 30, 0.82);
+		--overlay: rgba(16, 16, 18, 0.8);
+		--shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 2px 12px rgba(0, 0, 0, 0.3);
+		color-scheme: dark;
 	}
 
 	.ide,
@@ -3873,7 +3960,7 @@
 		gap: 12px;
 		min-height: 60px;
 		padding: 10px 16px;
-		background: rgba(255, 255, 255, 0.86);
+		background: var(--topbar-bg);
 		backdrop-filter: saturate(180%) blur(20px);
 		-webkit-backdrop-filter: saturate(180%) blur(20px);
 		border-bottom: 1px solid var(--line);
@@ -4144,7 +4231,7 @@
 
 	.action-button--debug:enabled:hover,
 	.action-button--debug-restart:enabled:hover {
-		background: #d6e8ff;
+		background: var(--primary-soft-strong);
 	}
 
 	.action-button--stop {
@@ -4558,7 +4645,7 @@
 		height: 22px;
 		padding: 0 8px;
 		border-radius: 999px;
-		background: #e5f8f0;
+		background: var(--success-soft);
 		color: var(--success);
 		font-size: 11px;
 		font-weight: 700;
@@ -4650,7 +4737,7 @@
 		padding: 14px;
 		border-radius: var(--radius-md);
 		background: var(--warning-soft);
-		color: #6b4500;
+		color: var(--warning-text);
 	}
 
 	.stdin-panel > div {
@@ -4692,7 +4779,7 @@
 		padding: 12px 14px;
 		border-radius: var(--radius-md);
 		background: var(--danger-soft);
-		color: #b0202d;
+		color: var(--danger-text);
 		font-size: 12px;
 		font-weight: 600;
 	}
@@ -5060,7 +5147,7 @@
 		justify-content: center;
 		border: 2px dashed var(--primary);
 		border-radius: 20px;
-		background: rgba(232, 243, 255, 0.86);
+		background: var(--overlay);
 		backdrop-filter: blur(6px);
 		color: var(--primary-strong);
 		font-size: 17px;
@@ -5084,7 +5171,7 @@
 
 	.debug-shell--active {
 		--debug-accent: var(--success);
-		--debug-accent-soft: #e5f8f0;
+		--debug-accent-soft: var(--success-soft);
 	}
 
 	.debug-shell--paused {
@@ -5176,7 +5263,7 @@
 	}
 
 	.debug-status-pill--active {
-		background: #e5f8f0;
+		background: var(--success-soft);
 		color: var(--success);
 	}
 
@@ -5760,8 +5847,22 @@
 			display: none;
 		}
 
+		.topbar__actions {
+			gap: 2px;
+		}
+
 		.action-group {
 			margin-left: auto;
+			gap: 6px;
+		}
+
+		.action-button {
+			padding: 0 12px;
+		}
+
+		.action-button--run,
+		.action-button--stop {
+			min-width: 0;
 		}
 
 		.workbench {
