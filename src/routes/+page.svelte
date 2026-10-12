@@ -61,6 +61,7 @@
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
+	import { parseWorkspaceBackupBytes, serializeWorkspaceBackup } from './workspaceBackup';
 	import {
 		captureWorkspaceImportDestination,
 		WorkspaceImportCancelled
@@ -1259,7 +1260,7 @@
 
 	function downloadWorkspaceBackup() {
 		downloadBlob(
-			new Blob([workspaceSaveKey], { type: 'application/json' }),
+			new Blob([serializeWorkspaceBackup(snapshot())], { type: 'application/json' }),
 			'wasm-idle-workspace.json'
 		);
 		saveStatus = 'Workspace backup downloaded';
@@ -1368,11 +1369,10 @@
 	}
 
 	async function importZip(
-		file: File,
+		archive: Uint8Array,
 		assertDestination: () => void,
 		advanceDestination: () => void
 	) {
-		const archive = new Uint8Array(await file.arrayBuffer());
 		assertDestination();
 		const archiveBuffer = archive.slice().buffer;
 		const response = await runWorkspaceArchive({ type: 'extract', archive: archiveBuffer }, [
@@ -1408,27 +1408,25 @@
 		const imported: string[] = [];
 		try {
 			for (const file of fileList) {
-				if (file.name === 'wasm-idle-workspace.json') {
-					const backup = JSON.parse(await file.text());
-					destination.assertCurrent();
-					if (!backup.workspaces || typeof backup.version !== 'number')
-						throw new Error('Invalid workspace backup');
+				const bytes = new Uint8Array(await file.arrayBuffer());
+				destination.assertCurrent();
+				const backup = parseWorkspaceBackupBytes(bytes);
+				if (backup) {
 					applySnapshot(backup, 'Workspace backup restored');
 					destination.advance();
 					continue;
 				}
 				if (file.name.toLowerCase().endsWith('.zip')) {
 					imported.push(
-						...(await importZip(file, destination.assertCurrent, destination.advance))
+						...(await importZip(bytes, destination.assertCurrent, destination.advance))
 					);
 					destination.advance();
 				} else {
 					const decoded = workspaceFileFromBytes(
 						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
 							file.name,
-						new Uint8Array(await file.arrayBuffer())
+						bytes
 					);
-					destination.assertCurrent();
 					imported.push(
 						addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
 					);
@@ -2258,7 +2256,9 @@
 			const sharedWorkspace = readHashSnapshot();
 			if (sharedWorkspace) {
 				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
-				const consumedUrl = consumeWorkspaceQueryInput(createSharedWorkspaceUrl(currentUrl));
+				const consumedUrl = consumeWorkspaceQueryInput(
+					createSharedWorkspaceUrl(currentUrl)
+				);
 				currentWorkspaceStorageKey = workspaceStorageKey(consumedUrl);
 				replaceState(consumedUrl, page.state);
 				workspaceInitialized = true;
@@ -2883,7 +2883,8 @@
 						Stored workspace could not be restored. The original snapshot is kept;
 						automatic saving is paused.
 					</span>
-					<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
+					<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button
+					>
 					<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
 				</div>
 			{/if}
@@ -2909,7 +2910,9 @@
 							onclick={(event) => event.currentTarget.select()}
 						/>
 					</label>
-					<button class="tool-button" onclick={() => (manualShareUrl = '')}>Close share URL</button>
+					<button class="tool-button" onclick={() => (manualShareUrl = '')}
+						>Close share URL</button
+					>
 				{/if}
 				<button class="tool-button" onclick={() => (sidebarOpen = !sidebarOpen)}>
 					<span class="material-symbols-outlined">folder_open</span>
