@@ -1367,7 +1367,11 @@
 		saveStatus = 'ZIP downloaded';
 	}
 
-	async function importZip(file: File, assertDestination: () => void) {
+	async function importZip(
+		file: File,
+		assertDestination: () => void,
+		advanceDestination: () => void
+	) {
 		const archive = new Uint8Array(await file.arrayBuffer());
 		assertDestination();
 		const archiveBuffer = archive.slice().buffer;
@@ -1378,18 +1382,25 @@
 		if (response.type !== 'extracted') {
 			throw new Error('ZIP worker returned an invalid response');
 		}
-		const imported: string[] = [];
-		for (const importedFile of response.files) {
-			imported.push(
-				addWorkspaceFile(
-					importedFile.path,
-					importedFile.content,
-					false,
-					importedFile.encoding
-				)
-			);
-		}
-		return imported;
+		const importedFiles = cloneFiles(response.files);
+		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
+		const nextActivePath = importedFiles.some((file) => file.path === activePath)
+			? activePath
+			: importedFiles[0].path;
+		if (!saveWorkspace()) throw new Error('Save the current workspace before opening a ZIP');
+		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
+		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
+		const importedWorkspace = {
+			files: importedFiles,
+			activePath: nextActivePath,
+			openTabs: [nextActivePath]
+		};
+		languageWorkspaces = { ...languageWorkspaces, [language]: importedWorkspace };
+		activateWorkspace(importedWorkspace);
+		advanceDestination();
+		await replaceState(importedUrl, page.state);
+		assertDestination();
+		return importedFiles.map((file) => file.path);
 	}
 
 	async function importFiles(fileList: File[]) {
@@ -1407,7 +1418,9 @@
 					continue;
 				}
 				if (file.name.toLowerCase().endsWith('.zip')) {
-					imported.push(...(await importZip(file, destination.assertCurrent)));
+					imported.push(
+						...(await importZip(file, destination.assertCurrent, destination.advance))
+					);
 					destination.advance();
 				} else {
 					const decoded = workspaceFileFromBytes(
