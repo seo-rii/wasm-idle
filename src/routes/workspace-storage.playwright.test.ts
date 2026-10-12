@@ -65,6 +65,144 @@ async function withWorkspacePage(
 
 describe('workspace storage browser integration', () => {
 	it(
+		'recovers failed isolated snapshots under their own storage key',
+		browserOptions,
+		async () => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const primary = JSON.stringify({
+					version: 6,
+					language: 'CPP',
+					files: [{ path: 'main.cpp', content: 'int original_local = 73;' }]
+				});
+				const raw = JSON.stringify({
+					version: 6,
+					files: [{ path: 'main.cpp', content: 'int recoverable_shared = 1;' }],
+					openTabs: 'broken'
+				});
+				const id = '11111111-2222-3333-4444-555555555555';
+				const key = `wasm-idle:example-workspace:v3:${id}`;
+				await context.addInitScript(
+					({ primary, raw, key }) => {
+						localStorage.setItem('wasm-idle:example-workspace:v3', primary);
+						localStorage.setItem(key, raw);
+					},
+					{ primary, raw, key }
+				);
+				const url = new URL(browserUrl);
+				url.searchParams.set('workspace', id);
+				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.locator('[data-workspace-recovery]').waitFor();
+				expect(
+					await page.evaluate(
+						(key) =>
+							Object.keys(localStorage)
+								.filter((item) => item.startsWith(`${key}:recovery:`))
+								.map((item) => localStorage.getItem(item)),
+						key
+					)
+				).toEqual([raw]);
+				await page
+					.getByRole('button', { name: 'Start new workspace', exact: true })
+					.click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				expect(
+					await page.evaluate(() =>
+						localStorage.getItem('wasm-idle:example-workspace:v3')
+					)
+				).toBe(primary);
+				expect(await page.evaluate((key) => localStorage.getItem(key), key)).not.toBe(raw);
+			});
+		}
+	);
+
+	it.each([false, true])(
+		'preserves failed restore input until recovery is chosen (backup write fails: %s)',
+		browserOptions,
+		async (failRecoveryWrite) => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const original = JSON.stringify({
+					version: 6,
+					language: 'CPP',
+					activePath: 'main.cpp',
+					files: [{ path: 'main.cpp', content: 'int recoverable_original = 73;' }],
+					openTabs: 'main.cpp'
+				});
+				await context.addInitScript(
+					({ original, failRecoveryWrite }) => {
+						localStorage.setItem('wasm-idle:example-workspace:v3', original);
+						if (failRecoveryWrite) {
+							const originalSetItem = Storage.prototype.setItem;
+							Storage.prototype.setItem = function (key, value) {
+								if (key.includes(':recovery:'))
+									throw new DOMException('Quota full', 'QuotaExceededError');
+								originalSetItem.call(this, key, value);
+							};
+						}
+					},
+					{ original, failRecoveryWrite }
+				);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('[data-workspace-recovery]').waitFor();
+				await page.evaluate(() =>
+					(window as any).__wasmIdleDebug.setEditorValue('int recovered_new_work = 42;')
+				);
+				await page.waitForTimeout(700);
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				expect(
+					await page.evaluate(() =>
+						localStorage.getItem('wasm-idle:example-workspace:v3')
+					)
+				).toBe(original);
+				if (failRecoveryWrite) {
+					await page
+						.getByRole('button', { name: 'Start new workspace', exact: true })
+						.click();
+					expect(
+						await page.evaluate(() =>
+							localStorage.getItem('wasm-idle:example-workspace:v3')
+						)
+					).toBe(original);
+					await page.locator('[data-workspace-recovery]').waitFor();
+				}
+				const [download] = await Promise.all([
+					page.waitForEvent('download'),
+					page
+						.getByRole('button', { name: 'Download original snapshot', exact: true })
+						.click()
+				]);
+				const downloadedPath = await download.path();
+				if (!downloadedPath) throw new Error('Missing original snapshot download');
+				expect(await readFile(downloadedPath, 'utf8')).toBe(original);
+				await page
+					.getByRole('button', { name: 'Start new workspace', exact: true })
+					.click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
+				expect(
+					await page.evaluate(
+						() =>
+							JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
+								.files[0].content
+					)
+				).toBe('int recovered_new_work = 42;');
+				if (!failRecoveryWrite) {
+					expect(
+						await page.evaluate(() =>
+							Object.keys(localStorage)
+								.filter((key) =>
+									key.startsWith('wasm-idle:example-workspace:v3:recovery:')
+								)
+								.map((key) => localStorage.getItem(key))
+						)
+					).toEqual([original]);
+				}
+			});
+		}
+	);
+
+	it(
 		'rejects malformed shares and repairs duplicate or incomplete tab lists',
 		browserOptions,
 		async () => {

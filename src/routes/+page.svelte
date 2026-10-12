@@ -57,6 +57,7 @@
 	} from './workspaceContext';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
+	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -249,6 +250,9 @@
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
 	let saveStatus = $state('Ready');
+	let unrestoredWorkspace = $state<string | null>(null);
+	let workspaceRecoveryKey = $state<string | null>(null);
+	let recoveryBackupDownloaded = $state(false);
 	let workspaceSaveState = $state<WorkspaceSaveState>({
 		phase: 'dirty',
 		revision: 0,
@@ -1216,7 +1220,7 @@
 	}
 
 	function saveWorkspace(showStatus = false) {
-		if (!browser || !workspaceInitialized) return false;
+		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return false;
 		const saved = workspaceStorage.save(workspaceSaveKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
@@ -1236,6 +1240,32 @@
 			'wasm-idle-workspace.json'
 		);
 		saveStatus = 'Workspace backup downloaded';
+	}
+
+	function downloadUnrestoredWorkspace() {
+		if (unrestoredWorkspace === null) return;
+		downloadBlob(
+			new Blob([unrestoredWorkspace], { type: 'application/json' }),
+			'wasm-idle-recovery.json'
+		);
+		recoveryBackupDownloaded = true;
+	}
+
+	function startNewWorkspaceAfterRecovery() {
+		if (unrestoredWorkspace === null) return;
+		if (!workspaceRecoveryKey && !recoveryBackupDownloaded) {
+			workspaceRecoveryKey = preserveUnrestoredWorkspace(
+				(key, value) => localStorage.setItem(key, value),
+				currentWorkspaceStorageKey,
+				unrestoredWorkspace
+			);
+			if (!workspaceRecoveryKey) {
+				saveStatus = 'Download the original snapshot before starting a new workspace';
+				return;
+			}
+		}
+		unrestoredWorkspace = null;
+		saveWorkspace(true);
 	}
 
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
@@ -2186,6 +2216,12 @@
 					init = true;
 					return;
 				} catch {
+					unrestoredWorkspace = storedWorkspace;
+					workspaceRecoveryKey = preserveUnrestoredWorkspace(
+						(key, value) => localStorage.setItem(key, value),
+						currentWorkspaceStorageKey,
+						storedWorkspace
+					);
 					saveStatus = 'Stored workspace could not be restored';
 				}
 			}
@@ -2262,7 +2298,7 @@
 	});
 
 	$effect(() => {
-		if (!browser || !workspaceInitialized) return;
+		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return;
 		const key = workspaceSaveKey;
 		if (!key) return;
 		workspaceStorage.observe(key);
@@ -2775,6 +2811,16 @@
 						placeholder="Input to pass before running"
 						spellcheck={false}
 					></textarea>
+				</div>
+			{/if}
+			{#if unrestoredWorkspace !== null}
+				<div class="workspace-save-error" role="alert" data-workspace-recovery>
+					<span>
+						Stored workspace could not be restored. The original snapshot is kept;
+						automatic saving is paused.
+					</span>
+					<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
+					<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
 				</div>
 			{/if}
 			{#if workspaceSaveState.phase === 'error'}
