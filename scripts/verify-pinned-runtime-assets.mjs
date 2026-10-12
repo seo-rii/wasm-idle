@@ -4,7 +4,10 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import ts from 'typescript';
 
-/** Load the repository-owned generated profile used by the browser consumer. */
+/**
+ * Load the repository-owned generated profile used by the browser consumer.
+ * @param {import('node:fs').PathLike} moduleUrl
+ */
 export async function loadBundledProfile(moduleUrl) {
 	const source = await readFile(moduleUrl, 'utf8');
 	const { outputText } = ts.transpileModule(source, {
@@ -13,15 +16,20 @@ export async function loadBundledProfile(moduleUrl) {
 	return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 
+/** @param {import('node:fs').PathLike} file */
 async function metadata(file) {
 	try {
 		return await lstat(file);
 	} catch (error) {
-		if (error.code === 'ENOENT') return null;
+		if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return null;
 		throw error;
 	}
 }
 
+/**
+ * @param {import('node:fs').PathLike} file
+ * @param {number} maxBytes
+ */
 async function readRegularFile(file, maxBytes) {
 	const stat = await metadata(file);
 	if (!stat?.isFile() || stat.size > maxBytes) {
@@ -32,7 +40,10 @@ async function readRegularFile(file, maxBytes) {
 	return bytes;
 }
 
-/** Verify the logical bytes served by the existing raw/gzip runtime delivery path. */
+/**
+ * Verify the logical bytes served by the existing raw/gzip runtime delivery path.
+ * @param {{ rootDir: string; directory: string; assets: Record<string, { bytes: number; sha256: string }> }} options
+ */
 export async function verifyPinnedRuntimeAssets({ rootDir, directory, assets }) {
 	if (!/^wasm-[a-z0-9-]+$/.test(directory)) throw new Error('Invalid runtime directory');
 	const runtimeDir = path.join(rootDir, directory);
@@ -42,9 +53,12 @@ export async function verifyPinnedRuntimeAssets({ rootDir, directory, assets }) 
 		}
 	}
 	const manifestPath = path.join(rootDir, 'compressed-runtime-assets.v1.json');
+	/** @type {{ assets: string[]; sizes: Record<string, number> }} */
 	let compressed = { assets: [], sizes: {} };
 	if (await metadata(manifestPath)) {
-		compressed = JSON.parse(await readRegularFile(manifestPath, 4 * 1024 * 1024));
+		compressed = JSON.parse(
+			(await readRegularFile(manifestPath, 4 * 1024 * 1024)).toString('utf8')
+		);
 		if (
 			!Array.isArray(compressed.assets) ||
 			!compressed.sizes ||

@@ -211,6 +211,85 @@
 			"target": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
 			"size": 11,
 			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+		},
+		{
+			"group": "c3",
+			"source": "wasm-c3/c3c.wasm.gz",
+			"target": "wasm-c3/c3c.wasm",
+			"size": 13195546,
+			"sha256": "ec1e5babdf7d20a180d3dfd262c0374d3dd72737e50a27c551c582d41c8e9da4",
+			"decoded": {
+				"size": 39058650,
+				"sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+			}
+		},
+		{
+			"group": "lfortran",
+			"source": "wasm-lfortran/lfortran.js.gz",
+			"target": "wasm-lfortran/lfortran.js",
+			"size": 205454,
+			"sha256": "dce3c058984ff07a9ff5edb867d07afc830dd195f2e279cb7031d0f8f02a5aae",
+			"decoded": {
+				"size": 968283,
+				"sha256": "348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3"
+			}
+		},
+		{
+			"group": "lfortran",
+			"source": "wasm-lfortran/lfortran.wasm.gz",
+			"target": "wasm-lfortran/lfortran.wasm",
+			"size": 20044335,
+			"sha256": "8689eff2f78bbe3116032a5978208ee1d142e3ed5a562dfc8633a336929e7451",
+			"decoded": {
+				"size": 80662569,
+				"sha256": "b7c8ef4e942e9965a511b8700955c47c1f48d4ef18c61953a4847a6dcd680181"
+			}
+		},
+		{
+			"group": "c3",
+			"source": "wasm-c3/c3c.mjs",
+			"target": "wasm-c3/c3c.mjs",
+			"size": 101743,
+			"sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
+		},
+		{
+			"group": "c3",
+			"source": "wasm-c3/producer-receipt.json",
+			"target": "wasm-c3/producer-receipt.json",
+			"size": 13996,
+			"sha256": "3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8"
+		},
+		{
+			"group": "c3",
+			"source": "wasm-c3/runner-worker.js",
+			"target": "wasm-c3/runner-worker.js",
+			"size": 14151,
+			"sha256": "358ee8aabac7e05c9eff87fcf3335410cc189e50b7fe9fc70bd318d9a90b1d56"
+		},
+		{
+			"group": "lfortran",
+			"source": "wasm-lfortran/lfortran.data.bin",
+			"target": "wasm-lfortran/lfortran.data.bin",
+			"size": 179758,
+			"sha256": "6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f"
+		},
+		{
+			"group": "lfortran",
+			"source": "wasm-lfortran/producer-receipt.json",
+			"target": "wasm-lfortran/producer-receipt.json",
+			"size": 6932,
+			"sha256": "11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"
+		},
+		{
+			"group": "lfortran",
+			"source": "wasm-lfortran/runner-worker.js",
+			"target": "wasm-lfortran/runner-worker.js",
+			"size": 11569,
+			"sha256": "e801cbf4dca7be9fc6fd1205dc4e6ab17af4530f42527dcc8e544eb8373a1469"
 		}
-	]
+	],
+	"groupBaseUrls": {
+		"c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
+		"lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/"
+	}
 }
