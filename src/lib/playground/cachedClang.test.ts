@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Sandbox, SandboxExecutionOptions, SandboxRuntimeAssets } from '@wasm-idle/core';
+import { createPlaygroundBinding } from '@wasm-idle/core';
 import type { BrowserClangArtifact } from '@wasm-idle/llvm-core/clang';
 
 import type { RuntimeAssetCache } from './runtimeAssetCache';
@@ -71,7 +72,8 @@ function makeLegacy() {
 		dispose: vi.fn(async () => {}),
 		write: vi.fn(),
 		eof: vi.fn(),
-		output: vi.fn()
+		output: vi.fn(),
+		oncompilerdiagnostic: vi.fn<(diagnostic: any) => void>()
 	} satisfies Sandbox;
 }
 
@@ -117,7 +119,7 @@ function makeHarness(cache = new CompiledArtifactCache(), language: 'C' | 'CPP' 
 }
 
 async function run(
-	sandbox: Sandbox,
+	sandbox: Pick<Sandbox, 'run'>,
 	code = source,
 	options: SandboxExecutionOptions = {},
 	prepare = false
@@ -126,6 +128,70 @@ async function run(
 }
 
 describe('cached C/C++ sandbox', () => {
+	it('forwards compile warnings on misses and replays immutable diagnostics on hits', async () => {
+		const h = makeHarness();
+		const warning = {
+			fileName: 'main.c',
+			lineNumber: 2,
+			severity: 'warning',
+			message: 'unused value'
+		};
+		h.behavior.compile = (worker) =>
+			worker.respond({ type: 'compiled', artifact: h.artifact, diagnostics: [warning] });
+		await h.sandbox.load(assets);
+		await run(h.sandbox);
+		expect(h.legacy.oncompilerdiagnostic).toHaveBeenCalledWith(warning);
+		h.legacy.oncompilerdiagnostic.mock.calls[0][0].message = 'caller changed the warning';
+		await run(h.sandbox);
+		expect(h.compileWorkers).toHaveLength(1);
+		expect(h.legacy.oncompilerdiagnostic).toHaveBeenLastCalledWith(warning);
+		expect(h.legacy.oncompilerdiagnostic).toHaveBeenCalledTimes(2);
+	});
+
+	it('delivers structured errors when compilation fails and does not cache the failure', async () => {
+		const h = makeHarness();
+		const diagnostic = {
+			fileName: 'main.c',
+			lineNumber: 1,
+			severity: 'error',
+			message: 'expected expression'
+		};
+		h.behavior.compile = (worker) =>
+			worker.respond({ type: 'error', error: 'compile failed', diagnostics: [diagnostic] });
+		await h.sandbox.load(assets);
+		await expect(run(h.sandbox)).rejects.toThrow('compile failed');
+		expect(h.legacy.oncompilerdiagnostic).toHaveBeenCalledWith(diagnostic);
+		expect(h.cache.stats().entries).toBe(0);
+		expect(h.executionWorkers).toHaveLength(0);
+	});
+
+	it('enforces the core diagnostic ceiling on both misses and cached warning replays', async () => {
+		const h = makeHarness();
+		const diagnostics = [1, 2].map((lineNumber) => ({
+			lineNumber,
+			severity: 'warning',
+			message: 'warning'
+		}));
+		h.behavior.compile = (worker) =>
+			worker.respond({ type: 'compiled', artifact: h.artifact, diagnostics });
+		const binding = createPlaygroundBinding(assets, async () => h.sandbox);
+		const bound = await binding.load('C');
+		await bound.load();
+		await expect(run(bound, source, { limits: { maxDiagnostics: 1 } })).rejects.toMatchObject({
+			code: 'diagnostic-limit'
+		});
+		expect(h.executionWorkers).toHaveLength(0);
+		await run(bound, source, { limits: { maxDiagnostics: 2 } });
+		expect(h.compileWorkers).toHaveLength(2);
+		expect(h.executionWorkers).toHaveLength(1);
+		await expect(run(bound, source, { limits: { maxDiagnostics: 1 } })).rejects.toMatchObject({
+			code: 'diagnostic-limit'
+		});
+		expect(h.compileWorkers).toHaveLength(2);
+		expect(h.executionWorkers).toHaveLength(1);
+		await binding.dispose();
+	});
+
 	it('forwards memory ceilings on cache misses and hits and recompiles when the ceiling changes', async () => {
 		const h = makeHarness();
 		await h.sandbox.load(assets, '', false, [], { limits: { maxWasmMemoryBytes: 4 * 65536 } });

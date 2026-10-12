@@ -19,6 +19,7 @@ import type {
 	BrowserClangCompileRequest,
 	BrowserClangPrecompiledHeader
 } from '@wasm-idle/llvm-core/clang';
+import type { CompilerDiagnostic } from '@wasm-idle/llvm-core/clang';
 import { CompiledArtifactCache, clangCompileKey } from './compiledArtifactCache';
 
 type WorkerFactories = { compile(): Worker | Promise<Worker>; execute(): Worker | Promise<Worker> };
@@ -202,12 +203,23 @@ export function createCachedClangSandbox(
 						});
 						flushInput();
 					} else if (data.type === 'compiled' || data.type === 'error') {
+						for (const diagnostic of data.diagnostics ?? []) {
+							legacy.oncompilerdiagnostic?.({ ...diagnostic });
+						}
 						if (data.stdout) legacy.output?.(data.stdout);
 						if (data.stderr) legacy.output?.(data.stderr);
 						const keepForHeader = data.precompiledHeader === 'building';
 						if (data.type === 'error')
 							finish(new Error(data.error), undefined, keepForHeader);
-						else finish(undefined, data.artifact, keepForHeader);
+						else
+							finish(
+								undefined,
+								{
+									artifact: data.artifact,
+									diagnostics: data.diagnostics ?? []
+								} as T,
+								keepForHeader
+							);
 					} else if (data.type === 'done') {
 						if (data.exitCode !== 0 && data.exitCode !== null)
 							finish(new Error(`Program exited with code ${data.exitCode}`));
@@ -335,8 +347,15 @@ export function createCachedClangSandbox(
 			let artifact = cache.get(key);
 			running = true;
 			try {
-				if (!artifact) {
-					artifact = await workerOperation<BrowserClangArtifact>(
+				if (artifact) {
+					for (const diagnostic of cache.getDiagnostics(key))
+						legacy.oncompilerdiagnostic?.(diagnostic);
+					if (token !== generation) throw new Error('Process terminated');
+				} else {
+					const compiled = await workerOperation<{
+						artifact: BrowserClangArtifact;
+						diagnostics: CompilerDiagnostic[];
+					}>(
 						() => factories.compile(),
 						{
 							request,
@@ -362,7 +381,8 @@ export function createCachedClangSandbox(
 						executionAssetConfig
 					);
 					if (token !== generation) throw new Error('Process terminated');
-					cache.set(key, artifact);
+					artifact = compiled.artifact;
+					cache.set(key, artifact, compiled.diagnostics);
 				}
 				progress?.set?.(1);
 				if (prepare) return true;

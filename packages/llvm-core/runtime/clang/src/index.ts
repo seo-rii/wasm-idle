@@ -3,6 +3,7 @@ import { resolveDebugMode } from './types.js';
 import {
 	compileClang,
 	createClangCompiler,
+	extractCompilerDiagnostics,
 	preloadBrowserClangRuntime,
 	type CreateClangCompilerOptions,
 	type PreloadBrowserClangRuntimeOptions
@@ -97,6 +98,7 @@ export {
 	createClangCompiler,
 	executeBrowserClangArtifact,
 	getInstance,
+	extractCompilerDiagnostics,
 	loadRuntimeManifest,
 	normalizeDwarfWorkspacePath,
 	parseRuntimeManifest,
