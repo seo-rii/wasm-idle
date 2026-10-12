@@ -9,6 +9,7 @@ import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
 import { createPythonExecutionHelpers } from './pythonExecution';
+import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
@@ -53,6 +54,7 @@ let installedHyVersion: string | undefined;
 let installedAheuiVersion: string | undefined;
 let installedApecodeVersion: string | undefined;
 let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
+let invalidateWorkspaceImports: ReturnType<typeof createPythonWorkspaceImports> | undefined;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
@@ -440,8 +442,12 @@ function normalizeWorkspacePath(path: string) {
 		.join('/');
 }
 
-function writeWorkspaceFiles(files: { path: string; content: string }[] = []) {
+function writeWorkspaceFiles(files: { path: string; content: string }[] = [], invalidateImports = false) {
 	const fs = (pyodide as any).FS;
+	if (invalidateImports) {
+		invalidateWorkspaceImports ??= createPythonWorkspaceImports(pyodide);
+		invalidateWorkspaceImports(files.map((file) => normalizeWorkspacePath(file.path)).filter(Boolean));
+	}
 	for (const file of files) {
 		const safePath = normalizeWorkspacePath(file.path);
 		if (!safePath) continue;
@@ -629,7 +635,7 @@ self.onmessage = async (event: any) => {
 			);
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
 			// The genuine language implementations own their source, never Python's import scanner.
 			if (isPython) {
 				postProgress(15, 'Resolving Python imports');
@@ -651,7 +657,7 @@ self.onmessage = async (event: any) => {
 		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
 			if (isHy && installedHyVersion === undefined) {
 				throw new Error('Hy runtime is not installed');
 			}

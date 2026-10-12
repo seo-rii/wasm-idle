@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const importsExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 function transpile(source) {
 	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
 	assert.equal(result.diagnostics.length, 0);
@@ -76,7 +78,7 @@ const previewExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonDebugPreview.ts', import.meta.url), 'utf8')), { exports: previewExports });
 const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 function workerFixture() {
-	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [];
+	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [], invalidated = [];
 	let initialized = 0;
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
@@ -91,6 +93,7 @@ function workerFixture() {
 				return { importSource(source) { scanned.push(source); return source.includes('numpy') ? 'import numpy' : ''; },
 					async run(code, filename, ready) { cachedRuns.push({ code, filename }); ready(); } };
 			} };
+			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			return {};
@@ -98,6 +101,10 @@ function workerFixture() {
 	});
 	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); } },
 		setStdin() {}, setStdout() {}, setStderr() {},
+		runPython(source) {
+			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
+			return Object.assign(() => (paths) => invalidated.push(JSON.parse(paths)), { destroy() {} });
+		},
 		async loadPackagesFromImports(source) { packageLoads.push(source); }, setInterruptBuffer() {},
 		async runPythonAsync(source) {
 			legacyRuns.push(source);
@@ -105,7 +112,7 @@ function workerFixture() {
 		} });
 	const send = (data) => self.onmessage({ data: { buffer: new SharedArrayBuffer(64), debugBuffer: new SharedArrayBuffer(64),
 		watchBuffer: new SharedArrayBuffer(64), watchResultBuffer: new SharedArrayBuffer(64), interrupt: new SharedArrayBuffer(4), ...data } });
-	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, initialized: () => initialized };
+	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, invalidated, initialized: () => initialized };
 }
 test('files are analyzed separately and package state is checked again after an execution', async () => {
 	const f = workerFixture();
@@ -119,6 +126,7 @@ test('files are analyzed separately and package state is checked again after an 
 	assert.equal(f.cachedRuns.length, 2);
 	assert.equal(f.legacyRuns.length, 0);
 	assert.equal(f.writes.length, 6); // no unsafe cross-run file-state caching
+	assert.deepEqual(f.invalidated, [['bad.py', 'data.csv'], ['bad.py', 'data.csv'], ['bad.py', 'data.csv']]);
 	assert.equal(f.self.prompt, undefined);
 	assert.ok(!Object.keys(f.self).some((name) => name.startsWith('__pyodide__')));
 });

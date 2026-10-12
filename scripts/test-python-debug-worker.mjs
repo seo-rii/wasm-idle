@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const importsExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 function transpile(source) {
 	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
 	assert.equal(result.diagnostics.length, 0);
@@ -29,6 +31,7 @@ async function run(check) {
 			if (id === './pythonDebugPreview') return preview;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
 			if (id === './pythonStdio') return stdio;
+			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			return {};
@@ -37,6 +40,10 @@ async function run(check) {
 	let calls = 0;
 	exports.__inject({
 		setStdin() {}, setStdout() {}, setStderr() {},
+		runPython(source) {
+			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
+			return Object.assign(() => () => {}, { destroy() {} });
+		},
 		FS: { mkdirTree() {}, writeFile() {} }, async loadPackagesFromImports() {}, setInterruptBuffer() {},
 		async runPythonAsync(python) {
 			calls++;
