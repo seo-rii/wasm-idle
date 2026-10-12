@@ -1,4 +1,4 @@
-import { Unzip, UnzipInflate, zipSync } from 'fflate';
+import { Unzip, UnzipInflate, Zip, ZipDeflate } from 'fflate';
 
 const MAX_FILES = 1000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -27,7 +27,7 @@ export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
 	if (files.length > MAX_FILES)
 		throw new Error(`ZIP cannot contain more than ${MAX_FILES} files`);
 	let totalBytes = 0;
-	const entries: Record<string, Uint8Array> = {};
+	const entries = new Map<string, Uint8Array>();
 	const paths = new Set<string>();
 	for (const file of files) {
 		const path = normalizeArchivePath(file.path);
@@ -41,9 +41,30 @@ export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
 		if (totalBytes > MAX_TOTAL_BYTES) {
 			throw new Error(`ZIP contents exceed the ${MAX_TOTAL_BYTES} byte limit`);
 		}
-		entries[path] = contents;
+		entries.set(path, contents);
 	}
-	return zipSync(entries, { level: 6 });
+	// zipSync also flattens its input through ordinary objects internally. The
+	// streaming API keeps entry names as strings and supports names like __proto__.
+	const chunks: Uint8Array[] = [];
+	let archiveBytes = 0;
+	const zip = new Zip((error, data) => {
+		if (error) throw error;
+		chunks.push(data);
+		archiveBytes += data.byteLength;
+	});
+	for (const [path, contents] of entries) {
+		const entry = new ZipDeflate(path, { level: 6 });
+		zip.add(entry);
+		entry.push(contents, true);
+	}
+	zip.end();
+	const archive = new Uint8Array(archiveBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		archive.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return archive;
 }
 
 export function extractWorkspaceArchive(source: Uint8Array) {
