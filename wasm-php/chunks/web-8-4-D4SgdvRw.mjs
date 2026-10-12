@@ -1,1 +1,0 @@
-import{t}from"./preload-helper-CdmIzBZm.mjs";var a=()=>(async()=>"Suspending"in WebAssembly)();async function e(){return await a()?await t(()=>import("./php_8_4-Dgu0r8Rc.mjs"),[],import.meta.url):await t(()=>import("./php_8_4-DBwi5vQ0.mjs"),[],import.meta.url)}export{a as n,e as t};

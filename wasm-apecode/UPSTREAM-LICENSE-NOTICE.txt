@@ -1,0 +1,10 @@
+APECode upstream license status
+
+Source: https://github.com/seo-rii/apecode
+Commit: c7ae98d3dfc1713ecc800422a4c815628776e1e2
+Package version: 0.1.0
+
+The pinned upstream archive contains no LICENSE file or project license declaration.
+Its unchanged source and wheel are integrated here as the repository owner's
+requested APECode runtime. This notice records the upstream status; it does not
+assign a license to that source. Generated build receipts retain this status.

@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`csharp`,extensions:[`.cs`,`.csx`,`.cake`],aliases:[`C#`,`csharp`],loader:()=>e(()=>import(`./DTXG3uZo2.js`),[],import.meta.url)});

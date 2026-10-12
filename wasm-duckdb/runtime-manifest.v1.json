@@ -2,33 +2,33 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "@duckdb/duckdb-wasm": "1.33.1-dev45.0"
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
   },
   "files": [
     {
-      "path": "assets/duckdb-browser-eh.worker--3HUwN9R.js",
-      "bytes": 772845,
-      "sha256": "56573a489c417ac2c6931340b1f04bd76573189068309d0b946eebec66280740"
+      "path": "assets/duckdb-browser-eh.worker-CwdVMcbT.js",
+      "bytes": 773223,
+      "sha256": "fa889e6068c40426dea67c08cf16ce0cad7404eae94f6a2522adcabb5898eb93"
     },
     {
-      "path": "assets/duckdb-browser-mvp.worker-AS4FIczp.js",
-      "bytes": 839466,
-      "sha256": "f9f28e9284269247c85b63a17929d28d0335a6014b8f6726fafb812e9c68e585"
+      "path": "assets/duckdb-browser-mvp.worker-BEKIasyR.js",
+      "bytes": 839642,
+      "sha256": "964f678d3bfa5a23deb154e0a7950634a4d1415e571040ab2d47815dc3f13582"
     },
     {
-      "path": "assets/duckdb-eh-D-nnNw7L.wasm",
-      "bytes": 35738125,
-      "sha256": "2d33317a5b5055fc4d2f7757cef8bac12d36d986cf7cbd55f8198e45c6806ee1"
+      "path": "assets/duckdb-eh-CfdE9-rk.wasm",
+      "bytes": 35913747,
+      "sha256": "3abdec74989dcc54d2f2ea5621f611f3c45db1e7dff2f408476014d82beb2029"
     },
     {
-      "path": "assets/duckdb-mvp-CNulJfH-.wasm",
-      "bytes": 41086840,
-      "sha256": "96304565986972201e2863ad9a523e9c3b20a9cf871f2aa6ffb3c955412164db"
+      "path": "assets/duckdb-mvp-DQDXaYzB.wasm",
+      "bytes": 41325187,
+      "sha256": "ee5560145a3d3e0ffa6dce697be802c08842f139a594698eecc7c754f7ad5f05"
     },
     {
       "path": "runtime.mjs",
-      "bytes": 205547,
-      "sha256": "8603f03a14ec4d03fbc591449833dfdc56f62c4706c8eaa1b3334b214c777553"
+      "bytes": 205704,
+      "sha256": "3e0a04fbc5f29ee62882881cbae124b24a555863584613c79ca4165d80df13b7"
     }
   ]
 }

@@ -1,0 +1,1 @@
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`elixir`,extensions:[`.ex`,`.exs`],aliases:[`Elixir`,`elixir`,`ex`],loader:()=>t(()=>import(`./6RTg0lbw.js`),[],import.meta.url)});export{r as t};

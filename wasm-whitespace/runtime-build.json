@@ -1,0 +1,72 @@
+{
+  "formatVersion": 1,
+  "language": "WHITESPACE",
+  "upstream": {
+    "repository": "https://github.com/koturn/Whitespace",
+    "commit": "22a57aab21ff4a0307642383b0eb3660e1bb412d",
+    "source": {
+      "path": "runtimes/esolangs/whitespace/vendor/whitespace.c",
+      "bytes": 42425,
+      "sha256": "22335d868995c910d6a0bed727e4f8bde3a8a23976a2fb7846bb7e90ec5f4556",
+      "url": "https://raw.githubusercontent.com/koturn/Whitespace/22a57aab21ff4a0307642383b0eb3660e1bb412d/whitespace.c"
+    },
+    "license": {
+      "path": "runtimes/esolangs/whitespace/LICENSE",
+      "bytes": 1073,
+      "sha256": "90e9ef883686ffb3e388e26a52c0c4a612db85491cddefc774034ee3aefabcd4",
+      "url": "https://raw.githubusercontent.com/koturn/Whitespace/22a57aab21ff4a0307642383b0eb3660e1bb412d/LICENSE",
+      "spdx": "MIT"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/whitespace/vendor/whitespace.c",
+      "bytes": 42425,
+      "sha256": "22335d868995c910d6a0bed727e4f8bde3a8a23976a2fb7846bb7e90ec5f4556"
+    },
+    {
+      "path": "runtimes/esolangs/whitespace/fix-zero-dividend.patch",
+      "bytes": 422,
+      "sha256": "4b98a9f9c66926a62bd9994f6585ecc691f665322d8cf220c33ff10894c7fa81"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 1073,
+    "sha256": "90e9ef883686ffb3e388e26a52c0c4a612db85491cddefc774034ee3aefabcd4",
+    "spdx": "MIT"
+  },
+  "build": {
+    "toolchain": {
+      "name": "wasi-sdk",
+      "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+      "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "command": "WASI_SDK_PATH/bin/clang",
+    "args": [
+      "--target=wasm32-wasip1",
+      "-std=c99",
+      "-O2",
+      "-fno-ident",
+      "-Wl,--strip-all",
+      "-Wl,-z,stack-size=131072",
+      "-Wl,--initial-memory=3145728",
+      "-Wl,--max-memory=67108864",
+      "-x",
+      "c",
+      "-",
+      "-o",
+      "static/wasm-whitespace/whitespace.wasm"
+    ],
+    "source": {
+      "path": "<stdin>",
+      "bytes": 42425,
+      "sha256": "d08594aa3c9884b1fdbf146133ca05d53ecefde26dd7305636f520615ba930c8"
+    }
+  },
+  "wasm": {
+    "path": "whitespace.wasm",
+    "bytes": 59270,
+    "sha256": "de0846c43446d8dcb01e43324313bed565764b852b82b9885cd7d25e4f36b537"
+  }
+}

@@ -1,3 +1,4 @@
+import { readBrowserNativeAssetCache, writeBrowserNativeAssetCache } from "./browser-native-asset-cache.js";
 export const DEFAULT_MAX_BROWSER_TOOL_ASSET_BYTES = 32 * 1024 * 1024;
 export const DEFAULT_MAX_BROWSER_TOOL_INPUT_BYTES = 128 * 1024 * 1024;
 const DEFAULT_BROWSER_TOOL_ASSET_BUFFER_BYTES = 64 * 1024;
@@ -48,7 +49,7 @@ function throwIfAborted(signal) {
     if (signal?.aborted)
         throw abortReason(signal);
 }
-function resolveBrowserToolAssetUrl(value, baseUrl) {
+export function resolveBrowserToolAssetUrl(value, baseUrl) {
     const configuredBase = baseUrl instanceof URL ? baseUrl.href : baseUrl;
     let resolved;
     try {
@@ -249,6 +250,24 @@ export async function fetchBrowserToolAsset(value, label, budget, options = {}) 
         ? validateBrowserToolAssetReceipt(options.receipt, label, budget.maxAssetBytes)
         : undefined;
     const requestUrl = resolveBrowserToolAssetUrl(value, options.baseUrl);
+    const identity = receipt
+        ? {
+            url: requestUrl.href,
+            ...receipt,
+            validationKey: JSON.stringify(['ocaml-tool-exact-v1', budget.maxAssetBytes])
+        }
+        : undefined;
+    const cached = identity
+        ? await readBrowserNativeAssetCache(options.persistentCache, identity, options.signal)
+        : undefined;
+    if (cached) {
+        if (cached.byteLength !== receipt.bytes)
+            throw new Error(`${label} cached size does not match its receipt`);
+        accountBrowserToolInputBytes(budget, label, cached.byteLength);
+        const bytes = Uint8Array.from(cached);
+        await verifyBrowserToolAssetSha256(bytes, receipt.sha256, label, options.signal);
+        return bytes;
+    }
     const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
     if (!fetchImpl)
         throw new Error(`fetch is required to load ${label}`);
@@ -354,6 +373,8 @@ export async function fetchBrowserToolAsset(value, label, budget, options = {}) 
     if (receipt) {
         await verifyBrowserToolAssetSha256(bytes, receipt.sha256, label, options.signal);
     }
+    if (identity)
+        await writeBrowserNativeAssetCache(options.persistentCache, identity, bytes, options.signal);
     return bytes;
 }
 export function decodeBrowserToolSource(bytes, label) {

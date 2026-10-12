@@ -1,7 +1,7 @@
 {
   "format": "wasm-lisp-runtime-manifest-v2",
   "runtime": "puppy-scheme",
-  "profileId": "puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9",
+  "profileId": "puppy-scheme-0.0.7-jco-1.37.0-preview2-shim-0.28.0",
   "provenanceLevel": "pinned-release-artifact-and-receipted-derived-output",
   "licenseExpression": "BSD-3-Clause AND Apache-2.0 WITH LLVM-exception",
   "artifact": {
@@ -19,32 +19,40 @@
   "components": {
     "jco": {
       "name": "@bytecodealliance/jco",
-      "version": "1.19.0",
-      "packageManagerIntegrity": "sha512-I57cVbL24/u/zCBwHq7D9PyIMP81hFFYF4hL/pW5biRGVLQAZuwEAUaEmghOouyt77bU2ExqscP2wkLvr3nfDw==",
+      "version": "1.37.0",
+      "packageManagerIntegrity": "sha512-z/crtP4L3wumdFA74K1cEsLfdZ8Ki0dE/7m1fJ9SVq5Z9VsAf0yQXWQzMb6ZrJmXvRN+4wHC2MNkFwSFdaoBzQ==",
+      "repository": "https://github.com/bytecodealliance/jco",
+      "verifiedBuildInput": false,
+      "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+    },
+    "jcoTranspile": {
+      "name": "@bytecodealliance/jco-transpile",
+      "version": "0.18.0",
+      "packageManagerIntegrity": "sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==",
       "repository": "https://github.com/bytecodealliance/jco",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "preview2Shim": {
       "name": "@bytecodealliance/preview2-shim",
-      "version": "0.17.9",
-      "packageManagerIntegrity": "sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==",
+      "version": "0.28.0",
+      "packageManagerIntegrity": "sha512-55y59uAzYMTA1bTepmgC7LmK8DUyhOU+y7cfKQRV7wRVABMYna4t7KYpBUkO8VhI+FbDn5cq0ghPLelaP24OpQ==",
       "repository": "https://github.com/bytecodealliance/jco",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "typescript": {
       "name": "typescript",
-      "version": "5.9.3",
-      "packageManagerIntegrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "version": "6.0.3",
+      "packageManagerIntegrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
       "repository": "https://github.com/microsoft/TypeScript",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "esbuild": {
       "name": "esbuild",
-      "version": "0.28.0",
-      "packageManagerIntegrity": "sha512-sNR9MHpXSUV/XB4zmsFKN+QgVG82Cc7+/aaxJ8Adi8hyOac+EXptIp45QBPaVyX3N70664wRbTcLTOemCAnyqw==",
+      "version": "0.28.2",
+      "packageManagerIntegrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
       "repository": "https://github.com/evanw/esbuild",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
@@ -52,20 +60,21 @@
   },
   "transformations": [
     {
-      "id": "jco-transpile-async-browser",
+      "id": "jco-generate-async-browser",
       "tool": "@bytecodealliance/jco",
-      "version": "1.19.0",
+      "version": "1.37.0",
       "arguments": [
-        "--name=puppyc",
-        "--instantiation=async",
-        "--no-typescript",
-        "--no-nodejs-compat"
+        "generate",
+        "name=puppyc",
+        "instantiation=async",
+        "noTypescript=true",
+        "noNodejsCompat=true"
       ]
     },
     {
       "id": "bundle-browser-runtime-and-inline-jco-core-modules",
       "tool": "esbuild",
-      "version": "0.28.0",
+      "version": "0.28.2",
       "arguments": [
         "bundle",
         "platform=browser",
@@ -84,22 +93,22 @@
   "notices": {
     "path": "THIRD_PARTY_NOTICES.md",
     "mediaType": "text/markdown",
-    "size": 14600,
-    "sha256": "9befeefcb4b194ec60e22d947dc5a61398e6399c73ba483a1fef51634bf0402c"
+    "size": 14641,
+    "sha256": "9dc84fe0806379a7a13e8b55b79b80e86085d05ebd3dd31a93c8d5497a0894b3"
   },
   "metadata": {
     "path": "runtime-build.json",
     "mediaType": "application/json",
-    "size": 3735,
-    "sha256": "1169d672e013ad27fdcbd0bd135363d68daa8b7a937a81f69366bc00286a37d3"
+    "size": 4227,
+    "sha256": "621968e935587fe7d5d0f1361dabc89c08b7c1ad6b994d0f34e752f9920fbae9"
   },
   "assets": [
     {
       "path": "index.js",
       "mediaType": "text/javascript",
       "role": "runtime",
-      "size": 10549130,
-      "sha256": "9210ae726c227033f8df7d89f2e100d56aec63ed50c5e64d7dc8469788a7d973"
+      "size": 4949687,
+      "sha256": "b348035226520634ef9b6a988250d74838d482567ac3cdc9c7dc35cff8549813"
     },
     {
       "path": "puppyc.core.wasm",
@@ -119,8 +128,8 @@
       "path": "puppyc.js",
       "mediaType": "text/javascript",
       "role": "runtime",
-      "size": 189271,
-      "sha256": "6740934e72f7d98d2accab5559a792f1a861ca0702895fc02d939c166da9b8a6"
+      "size": 237726,
+      "sha256": "ab9977a08a53895e285c597701dbe8a5ac2fb73dd85cee928d4849e0acf493e0"
     }
   ],
   "storage": [
@@ -128,8 +137,8 @@
       "path": "index.js.gz",
       "logicalPath": "index.js",
       "encoding": "gzip",
-      "size": 3406480,
-      "sha256": "08dd4b1e3ca4af0e59ceba617a58d9bdee06045cf5fe32e5c4fb91fdd0479144"
+      "size": 1618458,
+      "sha256": "ebe19362d5ab44955ee01dbd801d66c277b973f8b35e789654c37be02f8c7eac"
     },
     {
       "path": "puppyc.core.wasm",
@@ -149,9 +158,9 @@
       "path": "puppyc.js",
       "logicalPath": "puppyc.js",
       "encoding": "identity",
-      "size": 189271,
-      "sha256": "6740934e72f7d98d2accab5559a792f1a861ca0702895fc02d939c166da9b8a6"
+      "size": 237726,
+      "sha256": "ab9977a08a53895e285c597701dbe8a5ac2fb73dd85cee928d4849e0acf493e0"
     }
   ],
-  "fingerprint": "ed597352c039a002b900c402ac9c63efb6e375ce90438c202fde6838f1c4b0b4"
+  "fingerprint": "588e867fce63b2d638f15ab09edef831fb701d26664a4644144d0e91c0ab7ef7"
 }

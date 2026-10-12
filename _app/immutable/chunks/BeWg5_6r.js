@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./Bo9oBCl8.js","./CATSJW5G.js","./B0Z9INg1.js","../assets/editor.BuC0XPbM.css"])))=>i.map(i=>d[i]);
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`yaml`,extensions:[`.yaml`,`.yml`],aliases:[`YAML`,`yaml`,`YML`,`yml`],mimetypes:[`application/x-yaml`,`text/x-yaml`],loader:()=>t(()=>import(`./Bo9oBCl8.js`),__vite__mapDeps([0,1,2,3]),import.meta.url)});export{r as t};

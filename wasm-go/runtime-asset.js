@@ -288,13 +288,26 @@ export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = f
 export async function fetchRuntimeAssetJson(assetUrl, assetLabel, fetchImpl = fetch, reportProgress, options = {}) {
     return JSON.parse(new TextDecoder().decode(await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, true, reportProgress, options)));
 }
+async function verifyPackIntegrity(bytes, expected, label) {
+    if (!expected)
+        return;
+    if (!globalThis.crypto?.subtle)
+        throw new Error(`${label} integrity requires Web Crypto`);
+    const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
+    const actual = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
+    if (actual !== expected)
+        throw new Error(`${label} SHA-256 mismatch`);
+}
 async function loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress, options = {}) {
     const assetUrl = resolveVersionedAssetUrl(baseUrl, pack.asset).toString();
-    const cacheKey = `${assetUrl}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
+    const cacheKey = `${assetUrl}\n${pack.sha256 ?? ''}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
     let cached = runtimePackBytesCache.get(cacheKey);
     const reusedCachedBytes = Boolean(cached);
     if (!cached) {
-        cached = fetchRuntimeAssetBytes(assetUrl, `wasm-go runtime pack ${pack.asset}`, fetchImpl, true, reportProgress, options);
+        cached = fetchRuntimeAssetBytes(assetUrl, `wasm-go runtime pack ${pack.asset}`, fetchImpl, true, reportProgress, options).then(async (bytes) => {
+            await verifyPackIntegrity(bytes, pack.sha256, `runtime pack ${pack.asset}`);
+            return bytes;
+        });
         if (!options.signal)
             runtimePackBytesCache.set(cacheKey, cached);
         cached.catch(() => {
@@ -314,11 +327,14 @@ async function loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress, op
 }
 export async function loadRuntimePackIndex(baseUrl, pack, fetchImpl = fetch, reportProgress, options = {}) {
     const indexUrl = resolveVersionedAssetUrl(baseUrl, pack.index).toString();
-    const cacheKey = `${indexUrl}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
+    const cacheKey = `${indexUrl}\n${pack.indexSha256 ?? ''}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
     let cached = runtimePackIndexCache.get(cacheKey);
     const reusedCachedIndex = Boolean(cached);
     if (!cached) {
-        cached = fetchRuntimeAssetJson(indexUrl, `wasm-go runtime pack index ${pack.index}`, fetchImpl, reportProgress, options).then((value) => parseRuntimePackIndex(value));
+        cached = fetchRuntimeAssetBytes(indexUrl, `wasm-go runtime pack index ${pack.index}`, fetchImpl, true, reportProgress, options).then(async (bytes) => {
+            await verifyPackIntegrity(bytes, pack.indexSha256, `runtime pack index ${pack.index}`);
+            return parseRuntimePackIndex(JSON.parse(new TextDecoder().decode(bytes)));
+        });
         if (!options.signal)
             runtimePackIndexCache.set(cacheKey, cached);
         cached.catch(() => {
@@ -511,5 +527,60 @@ export async function loadRuntimePackEntries(baseUrl, pack, fetchImpl = fetch, r
         };
     };
     return loadRuntimePackEntriesRecursive(baseUrl, pack, fetchImpl, new Set(), reportProgressForPack, options);
+}
+/** Load selected chunks with bounded concurrency; the legacy pack decoder also handles JS deltas. */
+export async function loadRuntimeSysrootChunks(baseUrl, chunks, fetchImpl = fetch, reportProgress, options = {}) {
+    const maxAssetBytes = resolveMaxAssetBytes(options);
+    const totalBytes = chunks.reduce((total, chunk) => {
+        if (chunk.delta && chunk.decodedTotalBytes === undefined) {
+            throw new Error('wasm-go delta sysroot chunk requires decodedTotalBytes');
+        }
+        return total + (chunk.decodedTotalBytes ?? chunk.totalBytes);
+    }, 0);
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > maxAssetBytes) {
+        throw new Error('wasm-go selected sysroot chunks exceed the hard asset limit');
+    }
+    const loaded = new Array(chunks.length);
+    let loadedBytes = 0;
+    let cursor = 0;
+    const controller = new AbortController();
+    const abort = () => controller.abort(options.signal?.reason);
+    options.signal?.addEventListener('abort', abort, { once: true });
+    if (options.signal?.aborted)
+        abort();
+    try {
+        throwIfAborted(controller.signal);
+        await Promise.all(Array.from({ length: Math.min(4, chunks.length) }, async () => {
+            while (cursor < chunks.length) {
+                throwIfAborted(controller.signal);
+                const index = cursor++;
+                const chunk = chunks[index];
+                const entries = await loadRuntimePackEntries(baseUrl, chunk, fetchImpl, {
+                    index: (received, total) => reportProgress?.(chunk.index, received, total),
+                    asset: (received, total) => reportProgress?.(chunk.asset, received, total)
+                }, { ...options, signal: controller.signal });
+                const expectedPaths = new Set(chunk.runtimePaths);
+                if (entries.length !== expectedPaths.size ||
+                    entries.some((entry) => !expectedPaths.has(entry.runtimePath))) {
+                    throw new Error(`runtime chunk ${chunk.asset} paths differ from its manifest`);
+                }
+                for (const entry of entries) {
+                    if (entry.bytes.byteLength > maxAssetBytes - loadedBytes) {
+                        throw new Error('wasm-go selected sysroot chunks exceed the hard asset limit');
+                    }
+                    loadedBytes += entry.bytes.byteLength;
+                }
+                loaded[index] = entries;
+            }
+        }));
+        return loaded.flat();
+    }
+    catch (error) {
+        controller.abort(error);
+        throw error;
+    }
+    finally {
+        options.signal?.removeEventListener('abort', abort);
+    }
 }
 //# sourceMappingURL=runtime-asset.js.map

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "fingerprint": "34e9ca0a219a3f50",
+  "fingerprint": "5e4dd4e58e641844",
   "assets": {
     "bundle.avm": {
       "bytes": 3463541,
@@ -9,16 +9,16 @@
       "uncompressedSha256": "e848c7b1e0d73af284641afeb1dd5f235ace83a44a9d0a3d35a29c536042b21a"
     },
     "AtomVM.mjs": {
-      "bytes": 73473,
-      "sha256": "143e5b736102618e0f30c9e7f371d5b3b969023285be876143b4945636629d47",
-      "uncompressedBytes": 299117,
-      "uncompressedSha256": "f8fb021af0af14cbf72069ee943242c9bf2a1973080530d02ff1b9e4491680f4"
+      "bytes": 74151,
+      "sha256": "c68474b30b58043be0b70b729bb2dbbe56ff5594b58357f72dac669e11f49c60",
+      "uncompressedBytes": 304708,
+      "uncompressedSha256": "5562f7bca73575cc965d2e8f36bec19ba75b56fb85ff7277713af3ecfb08e409"
     },
     "AtomVM.wasm": {
-      "bytes": 1332671,
-      "sha256": "95fab3fb1cb454ca12069e9da74c722a77c016fb9e777c2e661356af5654a385",
-      "uncompressedBytes": 4122798,
-      "uncompressedSha256": "56a71cb2281151b5cf5255cc28fc32f6a29aa392b1a4201263ae2b6b024e17b4"
+      "bytes": 1434358,
+      "sha256": "c2bf951ccae72d562f920b24f1ba944c773a4395e311909dfeae6e127b9fd518",
+      "uncompressedBytes": 4234209,
+      "uncompressedSha256": "55658601a27822079eaa8280e1082a7fda1f85436966e56636bb54fb3bcaf03c"
     }
   }
 }

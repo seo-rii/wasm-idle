@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../workers/staticRuntimePreflight-Cgc8_HSy.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

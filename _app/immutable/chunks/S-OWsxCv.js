@@ -1,0 +1,1 @@
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`sql`,extensions:[`.sql`],aliases:[`SQL`],loader:()=>t(()=>import(`./NEE52Syq.js`),[],import.meta.url)});export{r as t};

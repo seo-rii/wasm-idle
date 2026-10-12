@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../workers/objectivec-C4yPyc3L.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

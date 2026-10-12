@@ -1,6 +1,6 @@
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from './vendor/browser_wasi_shim/index.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
+import { fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimeSysrootChunks } from './runtime-asset.js';
 import { CaptureFd, ensureGuestDirectory, normalizeGuestPath, readGuestFile, writeGuestFile } from './wasi-guest.js';
 import { assertGoInstanceMemoryLimit } from './wasm-memory.js';
 import { compileGoToolModule } from './tool-module.js';
@@ -11,6 +11,9 @@ function throwIfAborted(signal) {
     }
 }
 async function loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, options = {}) {
+    if (plan.sysrootChunks) {
+        return loadRuntimeSysrootChunks(runtimeBaseUrl, plan.sysrootChunks, fetchImpl, reportAssetProgress, options);
+    }
     if (plan.sysrootPack) {
         return await loadRuntimePackEntries(runtimeBaseUrl, plan.sysrootPack, fetchImpl, {
             index: (loaded, total) => reportAssetProgress?.(plan.sysrootPack.index, loaded, total),

@@ -1,0 +1,179 @@
+{
+  "formatVersion": 1,
+  "language": "UHMLANG",
+  "upstream": {
+    "repository": "https://github.com/rycont/umjunsik-lang",
+    "commit": "e973f9d22b9803ee86b53d8e60f1b65ab08c7547",
+    "source": {
+      "path": "runtimes/esolangs/uhmlang/vendor/main.go",
+      "bytes": 739,
+      "sha256": "a28612201b0002b0437a228e1145490459de62fbaa490c74f5f88de1c72bdf94",
+      "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/main.go"
+    },
+    "additionalSources": [
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/ast/ast.go",
+        "bytes": 5207,
+        "sha256": "0349b09911d80c3a0eb878d7b3beae87c6edd29617f4a12b3c1b132183709ae4",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/ast/ast.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/eval/eval.go",
+        "bytes": 2048,
+        "sha256": "33992d30b12727576c51d3b9ab6ef469d46676b38279b23c4a29b7219190b839",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/eval/eval.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/eval/util.go",
+        "bytes": 313,
+        "sha256": "25227fe69086f99a11b72be4d1b163a757146a73495cb3c9692aa41ba405c15a",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/eval/util.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/go.mod",
+        "bytes": 47,
+        "sha256": "9928e259f7d60c700eb942e933096b7ccaa5d8b5bc4ce719505ab4ba2796b06b",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/go.mod"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/lexer/lexer.go",
+        "bytes": 2451,
+        "sha256": "96b088ba20249046c6f5308cfc17fbedab3e155adce91209c874b34e8fe22643",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/lexer/lexer.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/object/object.go",
+        "bytes": 1078,
+        "sha256": "2cb7cb75f3de06aa432da5e04db6418259a797e7ed4dc339ee7523dee0ae5111",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/object/object.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/parser/parser.go",
+        "bytes": 6338,
+        "sha256": "a1b4c53ad1f5e50de0270134beb61dcf99d8f4522f5959c3e7c0bb0a59a95bdd",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/parser/parser.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/parser/util.go",
+        "bytes": 968,
+        "sha256": "1578d9209003d774b5c7a0319764ee1cca4d6b06e319a8c881a1bb1bf02fc599",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/parser/util.go"
+      },
+      {
+        "path": "runtimes/esolangs/uhmlang/vendor/token/token.go",
+        "bytes": 378,
+        "sha256": "f251d827653cb0dd3f0e9714e9a956415dcdfb35584f7ec65357a8494e91d094",
+        "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/token/token.go"
+      }
+    ],
+    "license": {
+      "path": "runtimes/esolangs/uhmlang/LICENSE",
+      "bytes": 1062,
+      "sha256": "ca6ca5d8e587b5c8a3f8308214ecb7257c7d29c4d90b958cfeaaa4ac7b9e5321",
+      "url": "https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/LICENSE",
+      "spdx": "MIT"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/main.go",
+      "bytes": 739,
+      "sha256": "a28612201b0002b0437a228e1145490459de62fbaa490c74f5f88de1c72bdf94"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/ast/ast.go",
+      "bytes": 5207,
+      "sha256": "0349b09911d80c3a0eb878d7b3beae87c6edd29617f4a12b3c1b132183709ae4"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/eval/eval.go",
+      "bytes": 2048,
+      "sha256": "33992d30b12727576c51d3b9ab6ef469d46676b38279b23c4a29b7219190b839"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/eval/util.go",
+      "bytes": 313,
+      "sha256": "25227fe69086f99a11b72be4d1b163a757146a73495cb3c9692aa41ba405c15a"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/go.mod",
+      "bytes": 47,
+      "sha256": "9928e259f7d60c700eb942e933096b7ccaa5d8b5bc4ce719505ab4ba2796b06b"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/lexer/lexer.go",
+      "bytes": 2451,
+      "sha256": "96b088ba20249046c6f5308cfc17fbedab3e155adce91209c874b34e8fe22643"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/object/object.go",
+      "bytes": 1078,
+      "sha256": "2cb7cb75f3de06aa432da5e04db6418259a797e7ed4dc339ee7523dee0ae5111"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/parser/parser.go",
+      "bytes": 6338,
+      "sha256": "a1b4c53ad1f5e50de0270134beb61dcf99d8f4522f5959c3e7c0bb0a59a95bdd"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/parser/util.go",
+      "bytes": 968,
+      "sha256": "1578d9209003d774b5c7a0319764ee1cca4d6b06e319a8c881a1bb1bf02fc599"
+    },
+    {
+      "path": "runtimes/esolangs/uhmlang/vendor/token/token.go",
+      "bytes": 378,
+      "sha256": "f251d827653cb0dd3f0e9714e9a956415dcdfb35584f7ec65357a8494e91d094"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 2562,
+    "sha256": "ec9d1f4c08b469d287c379a5729f69c0c006d0a2a754ea1ffda90f83429f9d60",
+    "spdx": "MIT AND BSD-3-Clause"
+  },
+  "additionalLicenses": [
+    {
+      "path": "runtimes/esolangs/uhmlang/GO-LICENSE",
+      "bytes": 1453,
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "url": "https://raw.githubusercontent.com/golang/go/go1.25.3/LICENSE",
+      "spdx": "BSD-3-Clause"
+    }
+  ],
+  "build": {
+    "toolchain": {
+      "name": "Go",
+      "version": "1.25.3",
+      "compiler": "go version go1.25.3"
+    },
+    "command": "GO_BINARY",
+    "cwd": "runtimes/esolangs/uhmlang/vendor",
+    "env": {
+      "GOOS": "wasip1",
+      "GOARCH": "wasm",
+      "CGO_ENABLED": "0",
+      "GOTOOLCHAIN": "local",
+      "GOENV": "off",
+      "GOFLAGS": "",
+      "GOEXPERIMENT": "",
+      "GOWORK": "off",
+      "GOPROXY": "off",
+      "GOSUMDB": "off"
+    },
+    "args": [
+      "build",
+      "-trimpath",
+      "-buildvcs=false",
+      "-ldflags=-s -w -buildid=",
+      "-o",
+      "../../../../static/wasm-uhmlang/uhmlang.wasm",
+      "."
+    ]
+  },
+  "wasm": {
+    "path": "uhmlang.wasm",
+    "bytes": 3017206,
+    "sha256": "f55e8a41f59654818af1d119d32d604165da369ce3aa269282b90fc319ed96dd"
+  }
+}

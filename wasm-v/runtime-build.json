@@ -1,0 +1,95 @@
+{
+  "toolchain": {
+    "version": "v-0.5.2-wasi-preview1-v1",
+    "producer": {
+      "id": "wasm-llvm/v-browser",
+      "manifest": "producer/v-browser/manifest.json",
+      "manifestSha256": "a267ad0222ed8730ef4bb82f3e6919ad55e44ac7cd1bacb06647d07ee52d88a1"
+    },
+    "vVersion": "0.5.2",
+    "vCommit": "7647ce1c6fad63b5578bc07883139906de74b2f8",
+    "vcCommit": "7eb8c54a3843e5107d5af06d7a8c3e928f322475",
+    "wasiSdkVersion": "33.0",
+    "frontendLlvmVersion": "22.1.0-wasi-sdk",
+    "frontendTarget": "wasm32-wasi",
+    "backend": "wasm-llvm-clang",
+    "compat": {
+      "compat/v-wasi-compat.c": "960eea3758d234fe21fa67518f2ff84118588228673979a322134d0b5d7ffcdb",
+      "compat/include/v_wasi_compat.h": "1cea6b72e64828a1d07b5f4a3e90d8659c7228b9ce0026e745119ee717c9db7c",
+      "compat/include/termios.h": "f76cd837c716cbdc85d4d7458400e6d611bed7391754643378b9a3a361d2b518",
+      "compat/include/sys/ptrace.h": "4a37672880319cf6946fef0b39a8df98fa9374ad95ff14ce3e67d1a8b77febcb",
+      "compat/include/sys/wait.h": "beac02c88b3bc1c37953e1b417c707130b833180777eb2a464efccf2959d92b5"
+    },
+    "assets": {
+      "v.wasm.gz": "fc9784e1142632f8c89cc723df9eb8b27ce877fc5ef68441d193658a71b50a3f",
+      "vroot.tar.gz": "d98fc2f553c02c60f1e0426137019efb44252c80da8d1e40c4090c99e5c500c3",
+      "c-sysroot.tar.gz": "1bef0e55b104b039182659effe266234a87a977acb5b634643b4ee29b4b42bf2"
+    },
+    "acceptance": {
+      "engine": "node v24.1.0",
+      "compiler": {
+        "bytes": 5490280,
+        "sha256": "0eda26591eb6bafba7a2a7be4edf2433348849c1b8c2d47461335dbe22fd7077"
+      },
+      "fixtures": {
+        "fixtures/program.v": "9f3a93d3348b5ee71cbbf5063583ae45fcf65c8a18816cfd172cb14aa8cd5108",
+        "fixtures/invalid.v": "c4121092bac14674c3bbf72afc369183a915b49997586bc8eea7cd0575fbbecd"
+      },
+      "scripts": {
+        "scripts/smoke.mjs": "f4714308593580abc5df43461fe1a8a877b359b90e7cca4407eb996aca2037cd",
+        "scripts/verify-artifacts.mjs": "c2836b9d5409380f48e1bedd6424509ae79889fb3177fb5a90e600b884ad81b4",
+        "scripts/build.sh": "0e6afb67dc242e3bb0e1f5b986b678027732db05b5f5506d8f720e71da15001a"
+      },
+      "results": {
+        "rejectedInvalidSource": true,
+        "translatedSource": true,
+        "generatedC": {
+          "bytes": 355949,
+          "sha256": "4aa1345d37ddcf55708dfe9e51a8b74b86baf3aa08e7acaabc67a77986055229"
+        },
+        "program": {
+          "bytes": 376904,
+          "sha256": "2501450e0ed9193244f89da6eb699888dfe83d84067936f91b26812514a95c77"
+        },
+        "stdinStdout": true
+      }
+    }
+  },
+  "assets": [
+    {
+      "asset": "v.wasm.gz",
+      "size": 2064564,
+      "sha256": "fc9784e1142632f8c89cc723df9eb8b27ce877fc5ef68441d193658a71b50a3f"
+    },
+    {
+      "asset": "vroot.tar.gz",
+      "size": 858507,
+      "sha256": "d98fc2f553c02c60f1e0426137019efb44252c80da8d1e40c4090c99e5c500c3"
+    },
+    {
+      "asset": "c-sysroot.tar.gz",
+      "size": 1291548,
+      "sha256": "1bef0e55b104b039182659effe266234a87a977acb5b634643b4ee29b4b42bf2"
+    }
+  ],
+  "delivery": {
+    "format": "wasm-idle-v-native-gzip-v1",
+    "sourceAssets": [
+      {
+        "asset": "v.zip",
+        "size": 2051817,
+        "sha256": "447c09a07642ca370f913b7b06a236065b7116ebddbcbc6bee61b81666a53fb2"
+      },
+      {
+        "asset": "vroot.tar.zip",
+        "size": 856842,
+        "sha256": "84b8c5d82da96039fc9a8e0442111a14b5a957f57401a12c3e940669ec46edcc"
+      },
+      {
+        "asset": "c-sysroot.tar.zip",
+        "size": 1286071,
+        "sha256": "322e36091b50f85920eb6778061451bf40463492fc3833902eb1a58807f23087"
+      }
+    ]
+  }
+}

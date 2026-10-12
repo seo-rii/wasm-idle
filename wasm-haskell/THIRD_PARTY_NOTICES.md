@@ -23,6 +23,6 @@ components still require a complete upstream bill of materials.
 `licenses/browser-wasi-shim/LICENSE-APACHE`.
 
 wasm-idle applies five browser-host/stdin compatibility patches to `dyld.mjs`, then uses pinned
-Vite 8.0.8 to bundle the eleven JavaScript inputs into one self-contained browser module. It
+Vite 8.3.3 to bundle the eleven JavaScript inputs into one self-contained browser module. It
 copies the rootfs unchanged and stores `bsdtar.wasm` as deterministic gzip while browser consumers
 verify the logical Wasm bytes after delivery decompression.

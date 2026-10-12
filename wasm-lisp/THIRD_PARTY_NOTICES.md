@@ -1,8 +1,9 @@
 # wasm-idle Puppy Scheme Runtime Third-Party Notices
 
 This browser runtime contains the exact Puppy Scheme v0.0.7 release compiler
-asset and selected browser modules from @bytecodealliance/jco 1.19.0 and
-@bytecodealliance/preview2-shim 0.17.9.
+asset and selected browser modules from @bytecodealliance/jco 1.37.0,
+@bytecodealliance/jco-transpile 0.18.0, and
+@bytecodealliance/preview2-shim 0.28.0.
 
 ## wasm-idle modification notice
 

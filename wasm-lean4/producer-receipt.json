@@ -1,0 +1,136 @@
+{
+	"schemaVersion": 1,
+	"producerId": "wasm-llvm/lean-browser",
+	"manifestSha256": "a0d26aec077ebef3a1841dbcbc80fb153d59fa19b8cebc26af423327ae3baea0",
+	"sources": {
+		"lean4": {
+			"repository": "https://github.com/leanprover/lean4.git",
+			"version": "4.34.1",
+			"tag": "v4.34.1",
+			"commit": "5045d0056413266e57c625dcd7c365b10e377c52",
+			"license": "Apache-2.0"
+		},
+		"libuv": {
+			"repository": "https://github.com/libuv/libuv",
+			"version": "1.48.0",
+			"tag": "v1.48.0",
+			"commit": "e9f29cb984231524e3931aa0ae2c5dae1a32884e",
+			"license": "MIT",
+			"note": "fetched by the upstream Lean CMake ExternalProject for Emscripten builds"
+		},
+		"emsdk": {
+			"repository": "https://github.com/emscripten-core/emsdk.git",
+			"version": "6.0.0",
+			"commit": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de"
+		}
+	},
+	"bootstrap": {
+		"description": "official native Lean release used to emit C for Init, Std, and Lean and to compute Init module dependencies",
+		"url": "https://github.com/leanprover/lean4/releases/download/v4.34.1/lean-4.34.1-linux.tar.zst",
+		"bytes": 580432872,
+		"sha256": "47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4"
+	},
+	"patches": [
+		{
+			"path": "patches/0001-lean-browser-emscripten.patch",
+			"sha256": "4b005fb22fd796280b2cb2f283e3f237715f15f374b3944093e6f3fbbe630cd3"
+		}
+	],
+	"recipe": {
+		"scripts/build.sh": "fec0ed8350b1eb394b5ba687bc5443aad22b439fe704a3119c5bd78fa2aa89ac",
+		"scripts/build-oleans.mjs": "fb25633b99fa5ffec89ebc129b3004901d25aa518eb1f1607976c63ff2035ba7",
+		"scripts/run-lean.mjs": "0397ccdd4be79a19f3234cde33dd784ad51fc1ab6f96808bd06b54696c8bf168",
+		"scripts/gen-symtab.py": "b2d8d79af9cf543b4f157374f5c007050093be32d4dbebca530f873f808f489e",
+		"scripts/package.mjs": "238bb63fc9558404f79617b4169b820cea6e13bb80b85afd6535388aeb0f912a",
+		"scripts/smoke.mjs": "dd3cf573911d6a3891b16edf9e17c2ab6013211ccb8c705cb26dc84b545e2e10"
+	},
+	"runtime": {
+		"moduleFactory": "createLean",
+		"toolchainPrefix": "/lean",
+		"libraryRoot": "/lean/lib/lean",
+		"library": "Init",
+		"pthreadPoolSize": 4,
+		"initialMemoryBytes": 268435456,
+		"maximumMemoryBytes": 4294967296,
+		"requiredBrowserFeatures": [
+			"wasm-exceptions",
+			"shared-array-buffer",
+			"cross-origin-isolation"
+		],
+		"invocation": [
+			"-j1",
+			"--run",
+			"/work/Main.lean"
+		]
+	},
+	"library": 649,
+	"assets": {
+		"LICENSE": {
+			"bytes": 9160,
+			"sha256": "8b28515ffffc5c0fe2807d8ae3735b00b324d9b7ce807dd63ff6ac8922fbce7e"
+		},
+		"LICENSE.libuv": {
+			"bytes": 1079,
+			"sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+		},
+		"lean-init-00.pack.gz": {
+			"bytes": 22626621,
+			"sha256": "c2cea0798b8b3e910188eb79d3d0101452c874f693294d2cf8c360fde125c08e"
+		},
+		"lean-init-01.pack.gz": {
+			"bytes": 22633878,
+			"sha256": "6e65383d8de425a0c0f5b48430aa5be7c9f2066138080bf213a0435b0fd1d874"
+		},
+		"lean-init-02.pack.gz": {
+			"bytes": 23039094,
+			"sha256": "57cc57d61067fc77d8b72008299e25956a121cd3fdf628941420966de1f762e5"
+		},
+		"lean-init-03.pack.gz": {
+			"bytes": 22382973,
+			"sha256": "e310ddf310d6d89dc7cc583f01213a1eab2684c1ada9e77368ca16637009d72a"
+		},
+		"lean-init-04.pack.gz": {
+			"bytes": 21886461,
+			"sha256": "f1345c223483bbb8e3c25e73042c5526efbd24301df95c74d30b4799493e6697"
+		},
+		"lean-init-05.pack.gz": {
+			"bytes": 9812693,
+			"sha256": "9f8deb32469cbe66669381c8f0fb5d379d506f7935beb29393b19d2c52ac8a52"
+		},
+		"lean-init.index.json": {
+			"bytes": 321866,
+			"sha256": "030b375cee435f12f7163c58c16d128340f9e20fa27a77ab646198be61906555"
+		},
+		"lean.mjs": {
+			"bytes": 108528,
+			"sha256": "16d6d6cb07c844bedf745f856a364ec61e86c13c4fe13a2e57c0c698a5c5f727"
+		},
+		"lean.wasm.gz": {
+			"bytes": 20239874,
+			"sha256": "89dc3cb841d487f9e29c1dc3069e7aeb1a63e5ec0267b8250552e3fe90f855bf",
+			"uncompressed": {
+				"bytes": 113033667,
+				"sha256": "d81dbde2ba4aaf0546affca2756477b6d1365a5633080d7119f737e5906ed919"
+			}
+		}
+	},
+	"acceptance": {
+		"node": {
+			"engine": "node v24.1.0",
+			"fixtures": {
+				"Main.lean": "fd90d5c607cb0f6debbd5ab3e0a804c211c2456364a1b8cf8fdbfa73f87f5d4f",
+				"Invalid.lean": "7905935ce2dcb09da5ca35d96bfeca67a23ebdc307a0f5375d202f132e6d5945"
+			},
+			"smokeScriptSha256": "dd3cf573911d6a3891b16edf9e17c2ab6013211ccb8c705cb26dc84b545e2e10",
+			"program": {
+				"stdinSha256": "eee39c38e697e0502cc7e772ea5b783a374b221adeb09bdecab2dc329dd35eda",
+				"stdout": "Hello, 안녕!\nsum = 40\n",
+				"exitCode": 0
+			},
+			"diagnostic": {
+				"exitCode": 1,
+				"firstLine": "/work/Main.lean:2:14: error(lean.synthInstanceFailed): failed to synthesize instance of type class"
+			}
+		}
+	}
+}

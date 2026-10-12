@@ -1,0 +1,201 @@
+{
+  "formatVersion": 1,
+  "language": "LOLCODE",
+  "upstream": {
+    "repository": "https://github.com/justinmeza/lci",
+    "commit": "0b32ed1cc52abd1971d199db9bd77c387316cae1",
+    "source": {
+      "path": "runtimes/esolangs/lolcode/vendor/main.c",
+      "bytes": 8078,
+      "sha256": "53ead16414b357836db79249f5fdf19b8668d3b2b7553f1c553eade9282ab328",
+      "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/main.c"
+    },
+    "additionalSources": [
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/error.c",
+        "bytes": 8619,
+        "sha256": "2c7d96893974e5708cb8c6443e3053a94e71d550154a5e1e07f68fe8bc754fb9",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/error.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/error.h",
+        "bytes": 2731,
+        "sha256": "04664eaaba5ccfc0861845805036263150474315466d51f4ce93f03671201f74",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/error.h"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/interpreter.c",
+        "bytes": 100745,
+        "sha256": "9fe938ca9f76bac4e2410612e1cb05e4427ffb839b00c33b1a74c5417f0be320",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/interpreter.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/interpreter.h",
+        "bytes": 12016,
+        "sha256": "efb7fc569a48ca7aeac92743f53e3022b6a936280f165a7afb4f85fbb97e0c10",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/interpreter.h"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/lexer.c",
+        "bytes": 9029,
+        "sha256": "219431cb1ba1d002010301734941431b9d26996758f45d3ec729fab2c9f6b41b",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/lexer.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/lexer.h",
+        "bytes": 1632,
+        "sha256": "bb664abce96c38ebf16633899b64a6f5ae007d3fccfa314d51b817538dfac9d5",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/lexer.h"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/parser.c",
+        "bytes": 102151,
+        "sha256": "f0b82a617c5428136c0e148eb1fc07003bf97f9a8098c990ac59b1c19e8e267b",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/parser.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/parser.h",
+        "bytes": 22719,
+        "sha256": "37704221ea38ecaba67749faad21ef0eced89d90b8d255f133fd625868be8d43",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/parser.h"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/tokenizer.c",
+        "bytes": 10322,
+        "sha256": "5794b13060deac5d00a1f2e5a94d26cd0f70c1b1c97e986d875a6cd908f545ed",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/tokenizer.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/tokenizer.h",
+        "bytes": 7916,
+        "sha256": "335ec209b52236e6894c154ef88195e3655dd0e48bd9aa1f016fd2956033a3c2",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/tokenizer.h"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/unicode.c",
+        "bytes": 872253,
+        "sha256": "dfbeabe77f8419300359a3d965f9286ff6a1e7118a32f149e3bba4272a2570c1",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/unicode.c"
+      },
+      {
+        "path": "runtimes/esolangs/lolcode/vendor/unicode.h",
+        "bytes": 454,
+        "sha256": "64f19e2a4f0b49783cae30af637b75352590f9c495daad4d6a3cc46bbe0bc1a5",
+        "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/unicode.h"
+      }
+    ],
+    "license": {
+      "path": "runtimes/esolangs/lolcode/COPYING",
+      "bytes": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "url": "https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/COPYING",
+      "spdx": "GPL-3.0-or-later"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/main.c",
+      "bytes": 8078,
+      "sha256": "53ead16414b357836db79249f5fdf19b8668d3b2b7553f1c553eade9282ab328"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/error.c",
+      "bytes": 8619,
+      "sha256": "2c7d96893974e5708cb8c6443e3053a94e71d550154a5e1e07f68fe8bc754fb9"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/error.h",
+      "bytes": 2731,
+      "sha256": "04664eaaba5ccfc0861845805036263150474315466d51f4ce93f03671201f74"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/interpreter.c",
+      "bytes": 100745,
+      "sha256": "9fe938ca9f76bac4e2410612e1cb05e4427ffb839b00c33b1a74c5417f0be320"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/interpreter.h",
+      "bytes": 12016,
+      "sha256": "efb7fc569a48ca7aeac92743f53e3022b6a936280f165a7afb4f85fbb97e0c10"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/lexer.c",
+      "bytes": 9029,
+      "sha256": "219431cb1ba1d002010301734941431b9d26996758f45d3ec729fab2c9f6b41b"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/lexer.h",
+      "bytes": 1632,
+      "sha256": "bb664abce96c38ebf16633899b64a6f5ae007d3fccfa314d51b817538dfac9d5"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/parser.c",
+      "bytes": 102151,
+      "sha256": "f0b82a617c5428136c0e148eb1fc07003bf97f9a8098c990ac59b1c19e8e267b"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/parser.h",
+      "bytes": 22719,
+      "sha256": "37704221ea38ecaba67749faad21ef0eced89d90b8d255f133fd625868be8d43"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/tokenizer.c",
+      "bytes": 10322,
+      "sha256": "5794b13060deac5d00a1f2e5a94d26cd0f70c1b1c97e986d875a6cd908f545ed"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/tokenizer.h",
+      "bytes": 7916,
+      "sha256": "335ec209b52236e6894c154ef88195e3655dd0e48bd9aa1f016fd2956033a3c2"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/unicode.c",
+      "bytes": 872253,
+      "sha256": "dfbeabe77f8419300359a3d965f9286ff6a1e7118a32f149e3bba4272a2570c1"
+    },
+    {
+      "path": "runtimes/esolangs/lolcode/vendor/unicode.h",
+      "bytes": 454,
+      "sha256": "64f19e2a4f0b49783cae30af637b75352590f9c495daad4d6a3cc46bbe0bc1a5"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 35147,
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "spdx": "GPL-3.0-or-later"
+  },
+  "build": {
+    "toolchain": {
+      "name": "wasi-sdk",
+      "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+      "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "command": "WASI_SDK_PATH/bin/clang",
+    "args": [
+      "--target=wasm32-wasip1",
+      "-std=c99",
+      "-O2",
+      "-fno-ident",
+      "-Wl,--strip-all",
+      "-Wl,-z,stack-size=131072",
+      "-Wl,--initial-memory=2097152",
+      "-Wl,--max-memory=67108864",
+      "runtimes/esolangs/lolcode/vendor/main.c",
+      "runtimes/esolangs/lolcode/vendor/error.c",
+      "runtimes/esolangs/lolcode/vendor/interpreter.c",
+      "runtimes/esolangs/lolcode/vendor/lexer.c",
+      "runtimes/esolangs/lolcode/vendor/parser.c",
+      "runtimes/esolangs/lolcode/vendor/tokenizer.c",
+      "runtimes/esolangs/lolcode/vendor/unicode.c",
+      "-lm",
+      "-o",
+      "static/wasm-lolcode/lolcode.wasm"
+    ]
+  },
+  "wasm": {
+    "path": "lolcode.wasm",
+    "bytes": 837757,
+    "sha256": "39cd197d5b8681ee37817f87ac86a07ca692407e0226e78e8470d37b57e0ce64"
+  }
+}

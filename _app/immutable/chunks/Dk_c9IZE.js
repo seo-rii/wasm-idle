@@ -1,0 +1,1 @@
+var e=class{enable(e){this.log=t(e===void 0||e,this.prefix)}get enabled(){return this.isEnabled}constructor(e){this.isEnabled=e,this.prefix=`wasi:`,this.enable(e)}};function t(e,t){return e?console.log.bind(console,`%c%s`,`color: #265BA0`,t):()=>{}}new e(!1);

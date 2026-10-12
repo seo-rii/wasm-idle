@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "language": "AHEUI",
+  "runtime": "rpaheui on Pyodide",
+  "upstream": {
+    "project": "aheui/rpaheui",
+    "commit": "d11187ebcc40ff3f17ebf93c03275f2d85da5b79",
+    "version": "1.2.5",
+    "url": "https://files.pythonhosted.org/packages/22/2b/590f8e8e9eeb2776fa6c0266f5ba7cc036cba9f73044f2bf99fa7cc80519/aheui-1.2.5.tar.gz",
+    "fileName": "aheui-1.2.5.tar.gz",
+    "bytes": 25115,
+    "sha256": "641ecefacd92ca3304291f3c0abde24ca7189d1376f68bd55f1271cfe22a7256"
+  },
+  "license": {
+    "id": "BSD-2-Clause",
+    "source": "aheui-1.2.5/LICENSE",
+    "fileName": "LICENSE.txt",
+    "bytes": 1327,
+    "sha256": "f4e9082dee3473831e61076e7791220adf17375c59f7ea13835679b44a0cc493"
+  },
+  "build": {
+    "backend": "setuptools==84.0.0",
+    "sourceDateEpoch": "315532800",
+    "command": [
+      "uv",
+      "build",
+      "--wheel",
+      "--no-config",
+      "--build-constraint",
+      "build-constraints.txt",
+      "--out-dir",
+      "dist",
+      "aheui-1.2.5.tar.gz"
+    ],
+    "modifications": []
+  },
+  "wheels": [
+    {
+      "fileName": "aheui-1.2.5-py3-none-any.whl",
+      "bytes": 24259,
+      "sha256": "118d21234ba7e8252542286c825d01ea078b3b9468b56afdd1fae28238f869a3"
+    }
+  ]
+}

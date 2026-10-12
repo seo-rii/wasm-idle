@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "language": "GOLFSCRIPT",
+  "runtime": "Original GolfScript interpreter on the bundled Ruby/WASI VM",
+  "upstream": {
+    "project": "darrenks/golfscript",
+    "commit": "cded542533c2c8f72ab2d5935714f739b0357690",
+    "url": "https://raw.githubusercontent.com/darrenks/golfscript/cded542533c2c8f72ab2d5935714f739b0357690/golfscript.rb",
+    "fileName": "golfscript.rb",
+    "bytes": 19231,
+    "sha256": "84f932a624b19afe6ef2a3ebe09a9b832f765a87460a79cde22323615c468f38"
+  },
+  "license": {
+    "spdx": "MIT",
+    "notice": {
+      "fileName": "LICENSE.txt",
+      "bytes": 50,
+      "sha256": "9c3a7b19bfaba2e3d2a16857d7ab43b5448694ed6c11a565d4fb30df02671372"
+    },
+    "source": "Unchanged copyright and license declaration from golfscript.rb lines 3–4"
+  },
+  "build": {
+    "operation": "copy-unchanged-upstream",
+    "modifications": []
+  },
+  "artifacts": [
+    {
+      "project": "darrenks/golfscript",
+      "commit": "cded542533c2c8f72ab2d5935714f739b0357690",
+      "url": "https://raw.githubusercontent.com/darrenks/golfscript/cded542533c2c8f72ab2d5935714f739b0357690/golfscript.rb",
+      "fileName": "golfscript.rb",
+      "bytes": 19231,
+      "sha256": "84f932a624b19afe6ef2a3ebe09a9b832f765a87460a79cde22323615c468f38"
+    }
+  ]
+}

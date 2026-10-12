@@ -17,7 +17,7 @@ export async function loadBundledRuntimeContext(manifestLoader = loadRuntimeMani
         : ['runtime-manifest.v3.json', 'runtime-manifest.v2.json', 'runtime-manifest.json'];
     for (const manifestFileName of manifestFileNames) {
         try {
-            loadedManifest = await effectiveManifestLoader(resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName), fetch, {
+            loadedManifest = await effectiveManifestLoader(resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName), options.fetchImpl ?? fetch, {
                 ...(runtimeProfile ? { receipt: runtimeProfile.manifestReceipt } : {}),
                 ...(options.deliveryBudget ? { deliveryBudget: options.deliveryBudget } : {}),
                 ...(options.onManifestProgress

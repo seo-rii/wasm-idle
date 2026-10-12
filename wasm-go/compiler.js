@@ -1,6 +1,6 @@
 import { createBrowserGoBuildPlan } from './build-planner.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetJson, fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimePackIndex } from './runtime-asset.js';
+import { fetchRuntimeAssetJson, fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimeSysrootChunks, loadRuntimePackIndex } from './runtime-asset.js';
 import { executeGoToolInvocation } from './tool-runtime.js';
 import { collectGoFileImports, collectCompilerDiagnosticText, createSysrootDependency, normalizeCompileRequestSource, normalizePackageImportPath, normalizeRequestedTarget, parseCompilerDiagnostics, resolveStdlibDependencies, validateCompileRequest } from './compiler-support.js';
 import { loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
@@ -247,6 +247,12 @@ export async function preloadBrowserGoRuntime(options = {}) {
         const preloadSysroot = async () => {
             if (options.includeSysroot === false)
                 return [];
+            if (target.sysrootChunks) {
+                await loadRuntimeSysrootChunks(runtimeBaseUrl, target.sysrootChunks, fetchImpl, undefined, boundary);
+                return target.sysrootChunks
+                    .flatMap((chunk) => [chunk.index, chunk.asset])
+                    .map((asset) => resolveVersionedAssetUrl(runtimeBaseUrl, asset).toString());
+            }
             if (target.sysrootPack) {
                 await waitForSignal(loadRuntimePackEntries(runtimeBaseUrl, target.sysrootPack, fetchImpl, undefined, {
                     assetTimeoutMs: options.assetTimeoutMs,
@@ -319,6 +325,12 @@ async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchI
             Array.isArray(stdlibIndex.packages)) {
             return resolveStdlibDependencies(stdlibIndex, collectGoFileImports(sourceFiles), request.packageKind);
         }
+    }
+    if (target.sysrootChunks) {
+        return target.sysrootChunks
+            .flatMap((chunk) => chunk.runtimePaths)
+            .map(createSysrootDependency)
+            .filter((entry) => entry !== null);
     }
     if (target.sysrootFiles && target.sysrootFiles.length > 0) {
         return target.sysrootFiles
@@ -393,7 +405,16 @@ export async function compileGo(request, options = {}) {
     let compileStageExecutionFraction = 0;
     const compileStageFractions = new Map();
     const compileStageWeights = new Map();
-    if (plan.sysrootPack) {
+    if (plan.sysrootChunks?.length) {
+        const total = plan.sysrootChunks.reduce((sum, chunk) => sum + chunk.totalBytes, 0);
+        for (const chunk of plan.sysrootChunks) {
+            compileStageFractions.set(chunk.index, 0);
+            compileStageWeights.set(chunk.index, 0.04 / plan.sysrootChunks.length);
+            compileStageFractions.set(chunk.asset, 0);
+            compileStageWeights.set(chunk.asset, (0.56 * chunk.totalBytes) / Math.max(total, 1));
+        }
+    }
+    else if (plan.sysrootPack) {
         compileStageFractions.set(plan.sysrootPack.index, 0);
         compileStageWeights.set(plan.sysrootPack.index, 0.04);
         compileStageFractions.set(plan.sysrootPack.asset, 0);
@@ -407,8 +428,8 @@ export async function compileGo(request, options = {}) {
         }
     }
     compileStageFractions.set(plan.compile.toolAsset, 0);
-    compileStageWeights.set(plan.compile.toolAsset, plan.sysrootPack || plan.sysrootFiles?.length ? 0.18 : 0.45);
-    const compileStageExecutionWeight = plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
+    compileStageWeights.set(plan.compile.toolAsset, plan.sysrootChunks?.length || plan.sysrootPack || plan.sysrootFiles?.length ? 0.18 : 0.45);
+    const compileStageExecutionWeight = plan.sysrootChunks?.length || plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
     const emitCompileStage = (message) => {
         let completed = compileStageExecutionFraction * compileStageExecutionWeight;
         for (const [asset, fraction] of compileStageFractions) {

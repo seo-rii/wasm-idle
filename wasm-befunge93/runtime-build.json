@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "language": "BEFUNGE93",
+  "upstream": {
+    "repository": "https://github.com/catseye/Befunge-93",
+    "commit": "8fe4065c0415b6f6fa6f699798fa9b64737aadc1",
+    "source": {
+      "path": "runtimes/esolangs/befunge93/vendor/bef.c",
+      "bytes": 26843,
+      "sha256": "2351c988739bfb15b6bed5b27b1a982f2d0ddbc7350ef639ecdab4e7a3f9380c",
+      "url": "https://raw.githubusercontent.com/catseye/Befunge-93/8fe4065c0415b6f6fa6f699798fa9b64737aadc1/src/bef.c"
+    },
+    "license": {
+      "path": "runtimes/esolangs/befunge93/LICENSE",
+      "bytes": 5402,
+      "sha256": "e358fdee1a027014a0d103efd34ec4c9d7f60545204410beec3107a91c37a2d1",
+      "url": "https://raw.githubusercontent.com/catseye/Befunge-93/8fe4065c0415b6f6fa6f699798fa9b64737aadc1/LICENSE",
+      "spdx": "BSD-3-Clause"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/befunge93/vendor/bef.c",
+      "bytes": 26843,
+      "sha256": "2351c988739bfb15b6bed5b27b1a982f2d0ddbc7350ef639ecdab4e7a3f9380c"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 5402,
+    "sha256": "e358fdee1a027014a0d103efd34ec4c9d7f60545204410beec3107a91c37a2d1",
+    "spdx": "BSD-3-Clause"
+  },
+  "build": {
+    "toolchain": {
+      "name": "wasi-sdk",
+      "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+      "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "command": "WASI_SDK_PATH/bin/clang",
+    "args": [
+      "--target=wasm32-wasip1",
+      "-std=c99",
+      "-O2",
+      "-fno-ident",
+      "-Wl,--strip-all",
+      "-Wl,-z,stack-size=131072",
+      "-Wl,--initial-memory=262144",
+      "-Wl,--max-memory=67108864",
+      "-D_POSIX_C_SOURCE=200809L",
+      "runtimes/esolangs/befunge93/vendor/bef.c",
+      "-o",
+      "static/wasm-befunge93/befunge93.wasm"
+    ]
+  },
+  "wasm": {
+    "path": "befunge93.wasm",
+    "bytes": 47871,
+    "sha256": "0b28bdff5085e98bcec4d30a4a3475f693f0ad6c0194ea083c7d1832d994df81"
+  }
+}

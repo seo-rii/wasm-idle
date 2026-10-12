@@ -3,19 +3,19 @@
   "runtimeModule": "runtime.mjs",
   "packages": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
-    "@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
-    "@ruby/wasm-wasi": "2.9.3-2.9.4"
+    "@ruby/3.4-wasm-wasi": "2.10.1",
+    "@ruby/wasm-wasi": "2.10.1"
   },
   "files": [
     {
-      "path": "assets/ruby_stdlib-C40Yu-vu.wasm",
-      "bytes": 30608059,
-      "sha256": "81bc8bbb2130ea34f30826e03d850661bb6cb1c7fe72be598584f12b2810c9de"
+      "path": "assets/ruby_stdlib-D8-A_OuU.wasm",
+      "bytes": 30635497,
+      "sha256": "4b814fc9d13505ea5b4c1f3bd3a7cc7ccca137f551196b9b21f0a7caf9cc5878"
     },
     {
       "path": "runtime.mjs",
-      "bytes": 54623,
-      "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
+      "bytes": 54866,
+      "sha256": "d1d33ccf090d3e99d8e3fd54a4e18c258d468e101711d0aee360e51dc2e26fd9"
     }
   ]
 }
