@@ -61,7 +61,8 @@
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
-	import { parseWorkspaceBackupBytes, serializeWorkspaceBackup } from './workspaceBackup';
+	import { serializeWorkspaceBackup } from './workspaceBackup';
+	import { stageWorkspaceImport } from './workspaceImport';
 	import {
 		captureWorkspaceImportDestination,
 		WorkspaceImportCancelled
@@ -1368,21 +1369,20 @@
 		saveStatus = 'ZIP downloaded';
 	}
 
-	async function importZip(
-		archive: Uint8Array,
-		assertDestination: () => void,
-		advanceDestination: () => void
-	) {
-		assertDestination();
+	async function extractImportedZip(archive: Uint8Array) {
 		const archiveBuffer = archive.slice().buffer;
 		const response = await runWorkspaceArchive({ type: 'extract', archive: archiveBuffer }, [
 			archiveBuffer
 		]);
-		assertDestination();
-		if (response.type !== 'extracted') {
+		if (response.type !== 'extracted')
 			throw new Error('ZIP worker returned an invalid response');
-		}
-		const importedFiles = cloneFiles(response.files);
+		return response.files;
+	}
+
+	async function openImportedZipWorkspace(
+		importedFiles: WorkspaceFile[],
+		destination: ReturnType<typeof captureWorkspaceImportDestination>
+	) {
 		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
 		const nextActivePath = importedFiles.some((file) => file.path === activePath)
 			? activePath
@@ -1391,47 +1391,35 @@
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
 		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
 		const importedWorkspace = {
-			files: importedFiles,
+			files: cloneFiles(importedFiles),
 			activePath: nextActivePath,
 			openTabs: [nextActivePath]
 		};
 		languageWorkspaces = { ...languageWorkspaces, [language]: importedWorkspace };
 		activateWorkspace(importedWorkspace);
-		advanceDestination();
+		destination.advance();
 		await replaceState(importedUrl, page.state);
-		assertDestination();
+		destination.assertCurrent();
 		return importedFiles.map((file) => file.path);
 	}
 
 	async function importFiles(fileList: File[]) {
 		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
-		const imported: string[] = [];
 		try {
-			for (const file of fileList) {
-				const bytes = new Uint8Array(await file.arrayBuffer());
-				destination.assertCurrent();
-				const backup = parseWorkspaceBackupBytes(bytes);
-				if (backup) {
-					applySnapshot(backup, 'Workspace backup restored');
-					destination.advance();
-					continue;
-				}
-				if (file.name.toLowerCase().endsWith('.zip')) {
-					imported.push(
-						...(await importZip(bytes, destination.assertCurrent, destination.advance))
-					);
-					destination.advance();
-				} else {
-					const decoded = workspaceFileFromBytes(
-						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-							file.name,
-						bytes
-					);
-					imported.push(
-						addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
-					);
-					destination.advance();
-				}
+			const plan = await stageWorkspaceImport(fileList, {
+				extractZip: extractImportedZip,
+				assertDestination: destination.assertCurrent
+			});
+			destination.assertCurrent();
+			let imported: string[] = [];
+			if (plan.kind === 'backup') {
+				applySnapshot(plan.backup, 'Workspace backup restored');
+			} else if (plan.fromZip) {
+				imported = await openImportedZipWorkspace(plan.files, destination);
+			} else {
+				imported = plan.files.map((file) =>
+					addWorkspaceFile(file.path, file.content, false, file.encoding)
+				);
 			}
 			if (imported[0]) selectFile(imported[0]);
 			saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
@@ -1444,8 +1432,13 @@
 	async function handleUpload(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		if (!input.files?.length) return;
-		await importFiles([...input.files]);
-		input.value = '';
+		try {
+			await importFiles([...input.files]);
+		} catch (error) {
+			saveStatus = `Import failed: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			input.value = '';
+		}
 	}
 
 	function handleDragOver(event: DragEvent) {
@@ -1458,7 +1451,11 @@
 		if (!event.dataTransfer?.files.length) return;
 		event.preventDefault();
 		dragActive = false;
-		await importFiles([...event.dataTransfer.files]);
+		try {
+			await importFiles([...event.dataTransfer.files]);
+		} catch (error) {
+			saveStatus = `Import failed: ${error instanceof Error ? error.message : String(error)}`;
+		}
 	}
 
 	function resetWorkspace() {
