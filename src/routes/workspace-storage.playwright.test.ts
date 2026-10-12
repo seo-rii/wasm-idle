@@ -65,6 +65,57 @@ async function withWorkspacePage(
 
 describe('workspace storage browser integration', () => {
 	it(
+		'rejects malformed shares and repairs duplicate or incomplete tab lists',
+		browserOptions,
+		async () => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const stored = {
+					version: 6,
+					language: 'CPP',
+					activePath: 'main.cpp',
+					files: [
+						{ path: 'main.cpp', content: 'int saved_local = 73;' },
+						{ path: 'helper.h', content: '#pragma once' }
+					],
+					openTabs: ['helper.h', 'helper.h', 'missing.cpp']
+				};
+				await context.addInitScript((snapshot) => {
+					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
+				}, JSON.stringify(stored));
+				const url = new URL(browserUrl);
+				url.hash = `workspace=${Buffer.from(
+					JSON.stringify({
+						...stored,
+						openTabs: 'main.cpp'
+					})
+				).toString('base64url')}`;
+				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.waitForFunction(
+					() =>
+						(window as any).__wasmIdleDebug.getEditorValue() === 'int saved_local = 73;'
+				);
+				expect(
+					await page
+						.getByRole('navigation', { name: 'Open files' })
+						.locator('.file-tab')
+						.count()
+				).toBe(2);
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				expect(
+					await page.evaluate(
+						() =>
+							JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
+								.openTabs
+					)
+				).toEqual(['helper.h', 'main.cpp']);
+			});
+		}
+	);
+
+	it(
 		'preserves helper source across restore, save, language changes, and reload',
 		browserOptions,
 		async () => {
