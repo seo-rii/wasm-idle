@@ -635,22 +635,42 @@ function bindRuntimeAssets(
 			if (prop === 'execute' && execute) {
 				return async (request: ExecutionRequest) => {
 					assertNotDisposed();
+					// Copy caller-owned values before validation and the asynchronous dispatch.
+					const snapshot: ExecutionRequest = { ...request };
+					snapshot.args = snapshot.args?.slice();
+					snapshot.compileArgs = snapshot.compileArgs?.slice();
+					if (
+						snapshot.env &&
+						typeof snapshot.env === 'object' &&
+						!Array.isArray(snapshot.env)
+					) {
+						snapshot.env = { ...snapshot.env };
+					}
+					if (snapshot.debug) {
+						snapshot.debug = {
+							...snapshot.debug,
+							sourceBreakpoints: snapshot.debug.sourceBreakpoints?.map((source) => ({
+								...source,
+								lines: source.lines.slice()
+							}))
+						};
+					}
 					const validated = validateSandboxExecutionOptions(
-						request.code,
+						snapshot.code,
 						{
-							activePath: request.activePath,
-							persistentCache: cacheOptions(request.persistentCache),
-							workspaceFiles: request.workspaceFiles,
-							args: request.args,
-							compileArgs: request.compileArgs,
-							debug: request.debug,
-							env: request.env,
-							...(request.runtimeRequirements === undefined
+							activePath: snapshot.activePath,
+							persistentCache: cacheOptions(snapshot.persistentCache),
+							workspaceFiles: snapshot.workspaceFiles,
+							args: snapshot.args,
+							compileArgs: snapshot.compileArgs,
+							debug: snapshot.debug,
+							env: snapshot.env,
+							...(snapshot.runtimeRequirements === undefined
 								? {}
-								: { runtimeRequirements: request.runtimeRequirements }),
-							limits: request.limits ?? {},
-							signal: request.signal,
-							stdin: request.stdin
+								: { runtimeRequirements: snapshot.runtimeRequirements }),
+							limits: snapshot.limits ?? {},
+							signal: snapshot.signal,
+							stdin: snapshot.stdin
 						},
 						'execute',
 						trustProfile,
@@ -662,7 +682,8 @@ function bindRuntimeAssets(
 						operationState,
 						async () => {
 							const result = await execute.call(target, {
-								...request,
+								...snapshot,
+								env: validated.env,
 								persistentCache: validated.persistentCache,
 								activePath: validated.activePath,
 								workspaceFiles: validated.workspaceFiles,
