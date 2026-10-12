@@ -1,0 +1,443 @@
+{
+	"startedAt": "2026-10-12T15:21:26.841Z",
+	"status": "passed",
+	"contract": "Scala 3 / Scala.js candidate; buffered stdin; object Main",
+	"compileTimeoutMs": 120000,
+	"executionTimeoutMs": 10000,
+	"assets": [
+		{
+			"path": "assets/classpath/rt.jar",
+			"bytes": 13050896,
+			"sha256": "fc201cadc0932924d89ac0e7b64e5e992525d8fe05d87821047765cbd14d7f60"
+		},
+		{
+			"path": "assets/classpath/scala-lib.jar",
+			"bytes": 9215387,
+			"sha256": "f88697ae427f04ab3303bbfaa7666f66aac781b0a1eecaaa19eaf58819b357ee"
+		},
+		{
+			"path": "assets/classpath/scalajs-lib.jar",
+			"bytes": 1092821,
+			"sha256": "784d4e6ddf8d4c39b4a2ae1402f2eb97f9da96f4996e7edc3e6cb9d050e04531"
+		},
+		{
+			"path": "assets/compiler/__loader.js",
+			"bytes": 6252,
+			"sha256": "67c35961534e93df509377d133623a102ca2bf8a1d7e9c17cb7e4efd8db09228"
+		},
+		{
+			"path": "assets/compiler/main.js",
+			"bytes": 39025,
+			"sha256": "46b6466ecc0e0943a266b1252991a545981a3dbbdc001aaf63ac0ff7f621633e"
+		},
+		{
+			"path": "assets/compiler/main.wasm",
+			"bytes": 31659267,
+			"sha256": "26b004f61743f2611acbd79e227a2ea95c34f0cdd583f8127eef4e5eb815c92a"
+		},
+		{
+			"path": "assets/manifest.json",
+			"bytes": 359,
+			"sha256": "9cdcc034f5b1452bb1165dfc92fbc49fa39e033a9dac3450badad56c8948552d"
+		},
+		{
+			"path": "assets/runtime/runtime-sjsir.zip",
+			"bytes": 7116080,
+			"sha256": "d7a50f10350ba0c4629deae4d78ebea27d3a69e4b481ef92afffe79c52cbd57a"
+		},
+		{
+			"path": "assets/vendor/jszip-wrapper.js",
+			"bytes": 171,
+			"sha256": "a807b59ac97717905c27996372982c3174f441e3b3c3fef8f67e99a70742820d"
+		},
+		{
+			"path": "assets/vendor/jszip.global.js",
+			"bytes": 374191,
+			"sha256": "e2e1be5c22d3f15b0b89e676d3eede94644529996d9898a6b1587c9908a78506"
+		}
+	],
+	"adapterSources": [
+		{
+			"path": "src/candidate.js",
+			"bytes": 3498,
+			"sha256": "51eabd099413334de7bee5d1347b910d4e174ef505c3c0bd986a12ea1ea03468"
+		},
+		{
+			"path": "src/compiler.worker.js",
+			"bytes": 4871,
+			"sha256": "528e39862f5f3339feaca2dd0a62608eba42d76221003eabaab5796e992c8257"
+		},
+		{
+			"path": "src/execution.worker.js",
+			"bytes": 2081,
+			"sha256": "9ab56764810826f92f2cecc1723d72becc8c5616bfad451bca0619ba9967e149"
+		},
+		{
+			"path": "src/memory-fs.js",
+			"bytes": 7652,
+			"sha256": "8e5ff547c3b5f52b44152e86ee9edd1dda93282f9fd479748ec8a844080e20ca"
+		},
+		{
+			"path": "src/runner.js",
+			"bytes": 1388,
+			"sha256": "a2e880d9d0cc2ecf7d9cea1bd20f8b58e6ed6bf78f00305d175bd951adfef7d5"
+		}
+	],
+	"cases": [
+		{
+			"name": "hello and runtime arguments",
+			"sourceSha256": "ced738aa0e8238167ccb367543490b2b446c0359d31293aa8ca663a26d00fb2e",
+			"status": "passed",
+			"compileMs": 13276.849999999627,
+			"compilerTimings": {
+				"initializeMs": 1559.5250000003725,
+				"compileMs": 7390.045000001788,
+				"linkMs": 4270.359999999404
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 2,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "Hello, Scala!\nfirst|둘\n",
+				"stderr": "",
+				"elapsedMs": 40.46499999985099
+			}
+		},
+		{
+			"name": "collections, case classes, matching, given/using",
+			"sourceSha256": "cc6c126fc6fd0cf9c918163af791b1c624efe554b7ad8d01fce2e318c5eb6775",
+			"status": "passed",
+			"compileMs": 8980.040000000969,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 5707.604999998584,
+				"linkMs": 3268.2099999990314
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 4,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "value=12\n",
+				"stderr": "",
+				"elapsedMs": 65.38000000081956
+			}
+		},
+		{
+			"name": "exact stdout and stderr whitespace",
+			"sourceSha256": "d6d7e63bae06ced91d43359df5e6a74bc6841a027e9d819253b21d51378c18cf",
+			"status": "passed",
+			"compileMs": 8570.620000001043,
+			"compilerTimings": {
+				"initializeMs": 0.009999999776482582,
+				"compileMs": 5712.710000000894,
+				"linkMs": 2851.359999999404
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 6,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": " \t\n\nlast",
+				"stderr": "\n \t\nerror",
+				"elapsedMs": 49.84500000067055
+			}
+		},
+		{
+			"name": "initial Unicode BOM is preserved independently on stdout and stderr",
+			"sourceSha256": "256cc1dd4838ba7445884b681afdfc42a6757aa87a89a7790f3c687342d44ebf",
+			"status": "passed",
+			"compileMs": 8290.589999999851,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 4351.13000000082,
+				"linkMs": 3936.4099999982864
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 8,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "﻿한글😀",
+				"stderr": "﻿é",
+				"elapsedMs": 60.459999999031425
+			}
+		},
+		{
+			"name": "empty stdin reaches EOF",
+			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
+			"status": "passed",
+			"compileMs": 9579.535000000149,
+			"compilerTimings": {
+				"initializeMs": 0.005000000819563866,
+				"compileMs": 6919.910000000149,
+				"linkMs": 2657.2999999988824
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 10,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "EOF\n",
+				"stderr": "",
+				"elapsedMs": 55.30499999970198
+			}
+		},
+		{
+			"name": "non-newline terminated stdin",
+			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
+			"status": "passed",
+			"compileMs": 9635.865000000224,
+			"compilerTimings": {
+				"initializeMs": 0,
+				"compileMs": 5910.519999999553,
+				"linkMs": 3722.1899999994785
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 12,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "[tail]\nEOF\n",
+				"stderr": "",
+				"elapsedMs": 43.89000000059605
+			}
+		},
+		{
+			"name": "Unicode and empty input lines",
+			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
+			"status": "passed",
+			"compileMs": 14242.309999998659,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 8235.224999999627,
+				"linkMs": 6003.470000000671
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 14,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "[한글😀]\n[]\n[é]\nEOF\n",
+				"stderr": "",
+				"elapsedMs": 55.67499999888241
+			}
+		},
+		{
+			"name": "fresh mutable state on successive executions",
+			"sourceSha256": "e7323e23e3a80e54d9cac129aa761c4acbe3dc1dc0ba6c9a788aeb1667de7e71",
+			"status": "passed",
+			"compileMs": 12086.394999999553,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 7704.535000000149,
+				"linkMs": 4376.9900000002235
+			},
+			"diagnostics": [],
+			"executions": [
+				{
+					"id": 16,
+					"type": "exit",
+					"exitCode": 0,
+					"stdout": "starts=1\nHello, Ada\n",
+					"stderr": "",
+					"elapsedMs": 103.43999999947846
+				},
+				{
+					"id": 17,
+					"type": "exit",
+					"exitCode": 0,
+					"stdout": "starts=1\nHello, Grace\n",
+					"stderr": "",
+					"elapsedMs": 68.23000000044703
+				}
+			]
+		},
+		{
+			"name": "invalid type rejects without returning an old artifact",
+			"sourceSha256": "e167ae93feeeb78f318565fdcfc56916ee167eeca6ce120cbf0a39bb6a76ab7c",
+			"status": "passed",
+			"compileMs": 12456.419999999925,
+			"diagnostics": [
+				"\u001b[31m\u001b[31m-- [E007] Type Mismatch Error: /workspace/Main.scala:3:21 ----------------------\u001b[0m\u001b[0m",
+				"\u001b[31m3 |\u001b[0m    \u001b[33mval\u001b[0m \u001b[36mvalue\u001b[0m: \u001b[32mInt\u001b[0m = \u001b[32m\"invalid\"\u001b[0m",
+				"\u001b[31m\u001b[31m  |\u001b[0m                     ^^^^^^^^^\u001b[0m",
+				"\u001b[31m  |\u001b[0m                     Found:    (\u001b[32m\"invalid\"\u001b[0m : String)",
+				"\u001b[31m  |\u001b[0m                     Required: Int",
+				"\u001b[31m  |\u001b[0m",
+				"\u001b[31m  |\u001b[0m longer explanation available when compiling with `-explain`",
+				"1 error found"
+			]
+		},
+		{
+			"name": "compiler recovery after type error",
+			"sourceSha256": "f9a147ef2c5ac07d5c00396077d6bbd6a1fe1ae47ae9c0261f2f5aaacfd84b02",
+			"status": "passed",
+			"compileMs": 14153.910000000149,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 9658.52999999933,
+				"linkMs": 4492.304999999702
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 20,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "recovered\n",
+				"stderr": "",
+				"elapsedMs": 48.494999999180436
+			}
+		},
+		{
+			"name": "terminate infinite execution worker",
+			"sourceSha256": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f",
+			"status": "passed",
+			"compileMs": 12727.370000001043,
+			"compilerTimings": {
+				"initializeMs": 0,
+				"compileMs": 8572.300000000745,
+				"linkMs": 4151.644999999553
+			},
+			"diagnostics": [],
+			"execution": {
+				"type": "timeout",
+				"stdout": "started\n",
+				"stderr": "",
+				"elapsedMs": 10000.455000000075
+			}
+		},
+		{
+			"name": "recovery after stopped execution",
+			"sourceSha256": "3a2c0da449cc93f1d33f68c5ddbba45e45247859743f0d6c4befe3b6f63befe6",
+			"status": "passed",
+			"compileMs": 15074.275000000373,
+			"compilerTimings": {
+				"initializeMs": 0.004999998956918716,
+				"compileMs": 8697.485000001267,
+				"linkMs": 6373.7050000000745
+			},
+			"diagnostics": [],
+			"execution": {
+				"id": 24,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "after stop\n",
+				"stderr": "",
+				"elapsedMs": 64.92999999970198
+			}
+		},
+		{
+			"name": "multiple workspace source files",
+			"files": [
+				{
+					"path": "Main.scala",
+					"sourceSha256": "1c2eb6f89ba62f83f218ea8a55fb954f71329c4d4e9fc7f36a9f7f32d82d334e"
+				},
+				{
+					"path": "example/Helper.scala",
+					"sourceSha256": "2a5f4adc23a0908d859cfff99a07a672600d6f0a0dc468a51926884c48acb4b4"
+				}
+			],
+			"status": "passed",
+			"compileMs": 14041.535000000149,
+			"compilerTimings": {
+				"initializeMs": 0.009999999776482582,
+				"compileMs": 9188.509999999776,
+				"linkMs": 4849.445000000298
+			},
+			"execution": {
+				"id": 26,
+				"type": "exit",
+				"exitCode": 0,
+				"stdout": "multiple files\n",
+				"stderr": "",
+				"elapsedMs": 37.40499999932945
+			}
+		},
+		{
+			"name": "candidate API Stop and AbortController retain compiler and recover",
+			"sources": {
+				"hello": "1e95e8a045bf7bbb4a0e82d0441d6840df55867f0e36992ed4af23f1d3173895",
+				"loop": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f",
+				"recovery": "d20278e189dee6de70e03f91d37a42eeb08e4205d663b94141b2e8ec087a20eb"
+			},
+			"status": "passed",
+			"transcript": [
+				{
+					"name": "hello",
+					"result": {
+						"exitCode": 0,
+						"diagnostics": []
+					},
+					"stdout": "candidate hello\n",
+					"stderr": "",
+					"elapsedMs": 22766.205000000075
+				},
+				{
+					"name": "stop active program",
+					"error": "Scala request aborted.",
+					"cancelled": true,
+					"stdout": "started\n",
+					"stderr": "",
+					"elapsedMs": 14965.455000000075
+				},
+				{
+					"name": "recover after Stop",
+					"result": {
+						"exitCode": 0,
+						"diagnostics": []
+					},
+					"stdout": "candidate recovered\n",
+					"stderr": "",
+					"elapsedMs": 12298.435000000522
+				},
+				{
+					"name": "abort active program",
+					"error": "Scala request aborted.",
+					"cancelled": true,
+					"stdout": "started\n",
+					"stderr": "",
+					"elapsedMs": 9841.769999999553
+				},
+				{
+					"name": "recover after AbortController",
+					"result": {
+						"exitCode": 0,
+						"diagnostics": []
+					},
+					"stdout": "candidate recovered\n",
+					"stderr": "",
+					"elapsedMs": 10514.320000000298
+				}
+			],
+			"countsBeforeDispose": {
+				"compilerCreated": 1,
+				"compilerTerminated": 0,
+				"executionCreated": 5,
+				"executionTerminated": 5
+			},
+			"counts": {
+				"compilerCreated": 1,
+				"compilerTerminated": 1,
+				"executionCreated": 5,
+				"executionTerminated": 5
+			}
+		}
+	],
+	"harnessSha256": "a2ad8f910f529d46fc3329221834afec143bc1302b63e1b0a06dec5f12f6a2fb",
+	"pin": {
+		"repository": "pgilliar/scala3-compiler-sjs",
+		"revision": "357051c857d4ffd5d1e1bfc9a56f0cbf5943a325"
+	},
+	"assetIntegrity": "verified",
+	"totalAssetBytes": 62554449,
+	"browserVersion": "153.0.8010.12",
+	"features": {
+		"JSTag": true,
+		"Suspending": true,
+		"promising": true
+	},
+	"finishedAt": "2026-10-12T15:25:22.554Z"
+}
