@@ -50,6 +50,11 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import {
+		createSharedWorkspaceUrl,
+		WORKSPACE_STORAGE_KEY,
+		workspaceStorageKey
+	} from './workspaceContext';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -158,7 +163,6 @@
 		id?: number;
 	};
 
-	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
@@ -253,8 +257,9 @@
 		savedRevision: -1,
 		error: null
 	});
+	let currentWorkspaceStorageKey = $state(WORKSPACE_STORAGE_KEY);
 	const workspaceStorage = createWorkspaceStorage(
-		(value) => localStorage.setItem(WORKSPACE_STORAGE_KEY, value),
+		(value) => localStorage.setItem(currentWorkspaceStorageKey, value),
 		(state) => {
 			workspaceSaveState = state;
 		}
@@ -1250,6 +1255,7 @@
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
 		const url = new SvelteURL(location.href);
 		url.hash = shareHash;
+		url.searchParams.delete('workspace');
 		await navigator.clipboard?.writeText(url.toString());
 		saveStatus =
 			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
@@ -2162,18 +2168,19 @@
 
 	$effect(() => {
 		if (browser && editor && !init) {
+			currentWorkspaceStorageKey = workspaceStorageKey(new URL(location.href));
 			const sharedWorkspace = readHashSnapshot();
 			if (sharedWorkspace) {
 				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
-				const consumedUrl = new SvelteURL(location.href);
-				consumedUrl.hash = '';
+				const consumedUrl = createSharedWorkspaceUrl(new URL(location.href));
+				currentWorkspaceStorageKey = workspaceStorageKey(consumedUrl);
 				replaceState(consumedUrl, page.state);
 				workspaceInitialized = true;
 				init = true;
 				return;
 			}
 
-			const storedWorkspace = readStoredValue(WORKSPACE_STORAGE_KEY);
+			const storedWorkspace = readStoredValue(currentWorkspaceStorageKey);
 			if (storedWorkspace) {
 				try {
 					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
@@ -2804,6 +2811,16 @@
 					<span class="material-symbols-outlined">share</span>
 					<span>Share</span>
 				</button>
+				{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
+					<a
+						class="tool-button"
+						href={resolve('/')}
+						data-sveltekit-reload
+						title="Open your original local workspace"
+					>
+						Local workspace
+					</a>
+				{/if}
 				<label class="toggle-chip" for="log-toggle">
 					<input id="log-toggle" type="checkbox" bind:checked={log} />
 					<span class="material-symbols-outlined">notes</span>

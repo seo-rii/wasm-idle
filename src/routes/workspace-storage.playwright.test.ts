@@ -63,6 +63,89 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it(
+		'opens shares separately while preserving the original local workspace',
+		browserOptions,
+		async () => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, _context, browserUrl) => {
+				const previous = JSON.stringify({
+					version: 6,
+					language: 'CPP',
+					activePath: 'prior.cpp',
+					files: [{ path: 'prior.cpp', content: 'int prior_local_work = 73;' }],
+					openTabs: ['prior.cpp']
+				});
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.evaluate((snapshot) => {
+					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
+				}, previous);
+				const share = new URL(browserUrl);
+				share.hash = `workspace=${Buffer.from(
+					JSON.stringify({
+						version: 6,
+						language: 'CPP',
+						activePath: 'shared.cpp',
+						files: [{ path: 'shared.cpp', content: 'int separate_shared_work = 1;' }],
+						openTabs: ['shared.cpp']
+					})
+				).toString('base64url')}`;
+				// A new page avoids the original page's beforeunload save changing the fixture.
+				const sharedPage = await page.context().newPage();
+				try {
+					await sharedPage.goto(share.toString(), { waitUntil: 'domcontentloaded' });
+					await sharedPage
+						.locator('#language-select[data-workspace-ready="true"]')
+						.waitFor();
+					await sharedPage.getByRole('button', { name: /^save\s+Save$/ }).click();
+					await sharedPage.locator('[data-workspace-save-state="saved"]').waitFor();
+					const workspaceId = new URL(sharedPage.url()).searchParams.get('workspace');
+					expect(workspaceId).toBeTruthy();
+					expect(
+						await sharedPage.evaluate(() =>
+							localStorage.getItem('wasm-idle:example-workspace:v3')
+						)
+					).toBe(previous);
+					await sharedPage.reload({ waitUntil: 'domcontentloaded' });
+					await sharedPage
+						.locator('#language-select[data-workspace-ready="true"]')
+						.waitFor();
+					expect(new URL(sharedPage.url()).searchParams.get('workspace')).toBe(
+						workspaceId
+					);
+					await sharedPage.waitForFunction(
+						() =>
+							(window as any).__wasmIdleDebug.getEditorValue() ===
+							'int separate_shared_work = 1;'
+					);
+					expect(
+						await sharedPage.evaluate(() =>
+							(window as any).__wasmIdleDebug.getEditorValue()
+						)
+					).toBe('int separate_shared_work = 1;');
+					await sharedPage
+						.getByRole('link', { name: 'Local workspace', exact: true })
+						.click();
+					await sharedPage.locator('button[title="prior.cpp"]').waitFor();
+					await sharedPage.waitForFunction(
+						() =>
+							(window as any).__wasmIdleDebug.getEditorValue() ===
+							'int prior_local_work = 73;'
+					);
+					expect(
+						await sharedPage.evaluate(() =>
+							(window as any).__wasmIdleDebug.getEditorValue()
+						)
+					).toBe('int prior_local_work = 73;');
+				} finally {
+					await sharedPage.close();
+				}
+			});
+		}
+	);
+
 	it('keeps edited shared code after a reload and sharing again', browserOptions, async () => {
 		expect.hasAssertions();
 		await withWorkspacePage(async (page, context, browserUrl) => {
