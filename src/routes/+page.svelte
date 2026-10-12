@@ -60,6 +60,10 @@
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
+	import {
+		captureWorkspaceImportDestination,
+		WorkspaceImportCancelled
+	} from './workspaceImportDestination';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -88,8 +92,7 @@
 		type WorkspaceFile
 	} from './workspaceCodec';
 	type WorkspaceArchiveRequest =
-		| { type: 'create'; files: WorkspaceFile[] }
-		| { type: 'extract'; archive: ArrayBuffer };
+		{ type: 'create'; files: WorkspaceFile[] } | { type: 'extract'; archive: ArrayBuffer };
 	type WorkspaceArchiveResponse =
 		| { type: 'created'; archive: ArrayBuffer }
 		| { type: 'extracted'; files: WorkspaceFile[] }
@@ -1352,12 +1355,14 @@
 		saveStatus = 'ZIP downloaded';
 	}
 
-	async function importZip(file: File) {
+	async function importZip(file: File, assertDestination: () => void) {
 		const archive = new Uint8Array(await file.arrayBuffer());
+		assertDestination();
 		const archiveBuffer = archive.slice().buffer;
 		const response = await runWorkspaceArchive({ type: 'extract', archive: archiveBuffer }, [
 			archiveBuffer
 		]);
+		assertDestination();
 		if (response.type !== 'extracted') {
 			throw new Error('ZIP worker returned an invalid response');
 		}
@@ -1376,30 +1381,41 @@
 	}
 
 	async function importFiles(fileList: File[]) {
+		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
 		const imported: string[] = [];
-		for (const file of fileList) {
-			if (file.name === 'wasm-idle-workspace.json') {
-				const backup = JSON.parse(await file.text());
-				if (!backup.workspaces || typeof backup.version !== 'number')
-					throw new Error('Invalid workspace backup');
-				applySnapshot(backup, 'Workspace backup restored');
-				continue;
+		try {
+			for (const file of fileList) {
+				if (file.name === 'wasm-idle-workspace.json') {
+					const backup = JSON.parse(await file.text());
+					destination.assertCurrent();
+					if (!backup.workspaces || typeof backup.version !== 'number')
+						throw new Error('Invalid workspace backup');
+					applySnapshot(backup, 'Workspace backup restored');
+					destination.advance();
+					continue;
+				}
+				if (file.name.toLowerCase().endsWith('.zip')) {
+					imported.push(...(await importZip(file, destination.assertCurrent)));
+					destination.advance();
+				} else {
+					const decoded = workspaceFileFromBytes(
+						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+							file.name,
+						new Uint8Array(await file.arrayBuffer())
+					);
+					destination.assertCurrent();
+					imported.push(
+						addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
+					);
+					destination.advance();
+				}
 			}
-			if (file.name.toLowerCase().endsWith('.zip')) {
-				imported.push(...(await importZip(file)));
-			} else {
-				const decoded = workspaceFileFromBytes(
-					(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-						file.name,
-					new Uint8Array(await file.arrayBuffer())
-				);
-				imported.push(
-					addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
-				);
-			}
+			if (imported[0]) selectFile(imported[0]);
+			saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
+		} catch (error) {
+			if (!(error instanceof WorkspaceImportCancelled)) throw error;
+			saveStatus = error.message;
 		}
-		if (imported[0]) selectFile(imported[0]);
-		saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
 	}
 
 	async function handleUpload(event: Event) {
@@ -1550,13 +1566,13 @@
 		if (!value) return null;
 		const normalized = value.trim().toLowerCase();
 		const aliases: Record<string, PlaygroundLanguage> = {
-			"whitespace": 'WHITESPACE',
+			whitespace: 'WHITESPACE',
 			malbolge: 'MALBOLGE',
 			aheui: 'AHEUI',
-			'아희': 'AHEUI',
+			아희: 'AHEUI',
 			uhmlang: 'UHMLANG',
 			umjunsik: 'UHMLANG',
-			'엄준식': 'UHMLANG',
+			엄준식: 'UHMLANG',
 			lolcode: 'LOLCODE',
 			lol: 'LOLCODE',
 			apecode: 'APECODE',
@@ -2833,8 +2849,7 @@
 					<textarea
 						bind:value={stdinInput}
 						placeholder="Input to pass before running"
-						spellcheck={false}
-					></textarea>
+						spellcheck={false}></textarea>
 				</div>
 			{/if}
 			{#if unrestoredWorkspace !== null}
@@ -3243,8 +3258,8 @@
 			<p class="hint">
 				Common Lisp runs upstream ECL 26.5.5 compiled to WebAssembly. The active file is
 				loaded with <code>LOAD</code> using ECL's bytecode compiler; read input with
-				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run.
-				The browser call-stack limit varies (about 150 recursive calls in a Chromium Worker);
+				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run. The
+				browser call-stack limit varies (about 150 recursive calls in a Chromium Worker);
 				deeper recursion fails with a stack-overflow error.
 			</p>
 		{/if}
