@@ -10,6 +10,7 @@ import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmA
 import { withCachedPyodideModule } from './runtimeModule';
 import { createPythonExecutionHelpers } from './pythonExecution';
 import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
+import { createPythonWorkspaceFiles } from './pythonWorkspaceFiles';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
@@ -55,6 +56,7 @@ let installedAheuiVersion: string | undefined;
 let installedApecodeVersion: string | undefined;
 let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
 let invalidateWorkspaceImports: ReturnType<typeof createPythonWorkspaceImports> | undefined;
+let syncWorkspaceFiles: ReturnType<typeof createPythonWorkspaceFiles> | undefined;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
@@ -442,11 +444,15 @@ function normalizeWorkspacePath(path: string) {
 		.join('/');
 }
 
-function writeWorkspaceFiles(files: { path: string; content: string }[] = [], invalidateImports = false) {
+function writeWorkspaceFiles(files: { path: string; content: string }[] = [], syncPythonWorkspace = false) {
 	const fs = (pyodide as any).FS;
-	if (invalidateImports) {
+	if (syncPythonWorkspace) {
+		const normalized = files.map((file) => ({ ...file, path: normalizeWorkspacePath(file.path) })).filter((file) => file.path);
 		invalidateWorkspaceImports ??= createPythonWorkspaceImports(pyodide);
-		invalidateWorkspaceImports(files.map((file) => normalizeWorkspacePath(file.path)).filter(Boolean));
+		invalidateWorkspaceImports(normalized.map((file) => file.path));
+		syncWorkspaceFiles ??= createPythonWorkspaceFiles(fs);
+		syncWorkspaceFiles(normalized);
+		return;
 	}
 	for (const file of files) {
 		const safePath = normalizeWorkspacePath(file.path);

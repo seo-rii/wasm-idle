@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const workspaceExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceFiles.ts', import.meta.url), 'utf8')), { exports: workspaceExports });
 const importsExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 const workerPath = new URL('../src/lib/playground/worker/python.ts', import.meta.url);
@@ -21,7 +23,7 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 	const messages = [], sources = [], events = [];
 	let out;
 	const runtime = {
-		FS: { mkdirTree() {}, writeFile() {} },
+		FS: { mkdirTree() {}, writeFile() {}, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} },
 		runPython(source) {
 			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
 			return Object.assign(() => () => {}, { destroy() {} });
@@ -42,6 +44,7 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 		require(id) {
 			if (id === './pythonStdio') return stdioExports;
 			if (id === './pythonWorkspaceImports') return importsExports;
+			if (id === './pythonWorkspaceFiles') return workspaceExports;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({
 				importSource: () => '',
 				async run(source, _filename, ready) { ready(); await runtime.runPythonAsync(source); }
