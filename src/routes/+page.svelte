@@ -4947,6 +4947,9 @@
 		letter-spacing: normal;
 		text-transform: none;
 		display: inline-block;
+		width: 1em;
+		flex: none;
+		overflow: hidden;
 		white-space: nowrap;
 		word-wrap: normal;
 		direction: ltr;
