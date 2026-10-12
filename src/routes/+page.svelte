@@ -1250,7 +1250,6 @@
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
 		const url = new SvelteURL(location.href);
 		url.hash = shareHash;
-		await replaceState(url, page.state);
 		await navigator.clipboard?.writeText(url.toString());
 		saveStatus =
 			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
@@ -2166,6 +2165,9 @@
 			const sharedWorkspace = readHashSnapshot();
 			if (sharedWorkspace) {
 				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
+				const consumedUrl = new SvelteURL(location.href);
+				consumedUrl.hash = '';
+				replaceState(consumedUrl, page.state);
 				workspaceInitialized = true;
 				init = true;
 				return;
