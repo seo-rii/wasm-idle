@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { RuntimeConfigurationError } from '@wasm-idle/core';
 const ts = createRequire(import.meta.url)('typescript');
 function load(file, imports = {}, extra = {}) {
  const exports = {};
@@ -19,6 +20,9 @@ const normalize = (s) => s.replaceAll('\\', '/').split('/').filter((part) => par
 const workspace = { normalizeWorkspacePath: normalize, normalizeDwarfWorkspacePath: (s) => normalize(s).replace(/^workspace\//, ''),
  resolveBuildArtifactNames(language, input) { input ||= language === 'C' ? 'main.c' : 'main.cc'; const stem = input.split('/').pop().replace(/\.[^.]+$/, ''); return { input, obj: stem + '.o', wasm: stem + '.wasm' }; } };
 const { resolveDebugMode } = load(new URL('types.ts', dir));
+const memoryLimit = load(new URL('memory-limit.ts', dir), {
+ '@wasm-idle/core': { RuntimeConfigurationError }
+});
 const wasmBytes = new Uint8Array([0,97,115,109,1,0,0,0]);
 class LegacyRuntime {
  constructor() {
@@ -41,6 +45,7 @@ class LegacyRuntime {
 let moduleCompiles = 0;
 const Runtime = load(new URL('artifact-runtime.ts', dir), {
  './runtime.js': { __esModule: true, default: LegacyRuntime }, './workspace.js': workspace, './types.js': { resolveDebugMode },
+ './memory-limit.js': memoryLimit,
  './dwarf.js': { createDwarfDebugDescriptor: async (request) => ({ kind: 'dwarf', sourceRoot: '/workspace', files: [], requested: request }) }
 }, { WebAssembly: { compile: async (bytes) => { moduleCompiles++; return WebAssembly.compile(bytes); } } }).default;
 

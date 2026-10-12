@@ -42,6 +42,7 @@ export type ClangCompileWorkerResponse =
 	| { type: 'precompiled-header'; header?: BrowserClangPrecompiledHeader };
 
 export type ClangExecuteWorkerRequest = {
+	maxWasmMemoryBytes?: number;
 	artifact: BrowserClangArtifact;
 	programArgs?: string[];
 	env?: Record<string, string>;
