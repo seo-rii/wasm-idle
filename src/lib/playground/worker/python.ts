@@ -989,6 +989,7 @@ finally:
 try:
     __wasm_idle_globals = {
         "__name__": "__main__",
+        "__file__": ${executionFilenameLiteral},
         ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,
     }
     __wasm_idle_compiled = compile(

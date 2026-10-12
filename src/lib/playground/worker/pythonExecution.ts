@@ -89,7 +89,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
                 # This budget accounts source strings and serialized code, not total Wasm heap.
                 weight = sys.getsizeof(source) + sys.getsizeof(filename) + len(marshal.dumps(compiled))
                 code_cache.put(key, compiled, weight)
-            scope = {"__name__": "__main__"}
+            scope = {"__name__": "__main__", "__file__": filename}
             ready()
             result = evaluate(compiled, scope, scope)
             if inspect.isawaitable(result):
