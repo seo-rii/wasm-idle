@@ -446,6 +446,20 @@ class Python implements Sandbox {
 			activePath = options.activePath;
 			debugPath = options.debugPath;
 			workspaceFiles = options.workspaceFiles;
+			if (this.workerLanguage === 'python') {
+				if (_args.length || options.programArgs?.length) {
+					throw new RuntimeConfigurationError(
+						'Python does not support program arguments',
+						{ runtimeId: this.runtimeId }
+					);
+				}
+				if (options.env !== undefined) {
+					throw new RuntimeConfigurationError(
+						'Python does not support environment overrides',
+						{ runtimeId: this.runtimeId }
+					);
+				}
+			}
 			if (this.usesInterpreterStdio) {
 				limits = resolveExecutionLimits(options.limits);
 				if (_args.length || options.programArgs?.length) {
