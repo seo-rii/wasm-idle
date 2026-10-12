@@ -64,6 +64,59 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it.each(['unavailable', 'denied'])(
+		'offers manual sharing when the clipboard is %s',
+		browserOptions,
+		async (mode) => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await context.addInitScript((mode) => {
+					Object.defineProperty(navigator, 'clipboard', {
+						configurable: true,
+						value:
+							mode === 'unavailable'
+								? undefined
+								: {
+										writeText: async () => {
+											throw new DOMException(
+												'Permission denied',
+												'NotAllowedError'
+											);
+										}
+									}
+					});
+				}, mode);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.evaluate(() =>
+					(window as any).__wasmIdleDebug.setEditorValue('int manual_shared_work = 5;')
+				);
+				await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+				const shareInput = page.getByRole('textbox', { name: 'Share URL', exact: true });
+				await shareInput.waitFor();
+				expect(await page.getByText(/Share URL copied/).count()).toBe(0);
+				const shareUrl = new URL(await shareInput.inputValue());
+				expect(new URL(page.url()).hash).toBe('');
+				const snapshot = JSON.parse(
+					Buffer.from(shareUrl.hash.slice('#workspace='.length), 'base64url').toString()
+				);
+				expect(snapshot.files).toContainEqual({
+					path: 'main.cpp',
+					content: 'int manual_shared_work = 5;'
+				});
+				await shareInput.click();
+				expect(
+					await shareInput.evaluate(
+						(input: HTMLInputElement) =>
+							input.selectionStart === 0 && input.selectionEnd === input.value.length
+					)
+				).toBe(true);
+				await page.getByRole('button', { name: 'Close share URL', exact: true }).click();
+				expect(await shareInput.count()).toBe(0);
+			});
+		}
+	);
+
 	it.each(['plain', 'base64', 'empty base64'])(
 		'opens explicit %s URL inputs before existing saved work',
 		browserOptions,
