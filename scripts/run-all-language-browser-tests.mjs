@@ -69,7 +69,7 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
  * }} options
  * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
@@ -81,6 +81,14 @@ export function createAllLanguageBrowserTestPlan({
 } = {}) {
 	if (family) {
 		const families = {
+			go: {
+				env: { WASM_IDLE_RUN_REAL_BROWSER_GO: '1' },
+				testFiles: ['src/lib/playground/go.playwright.test.ts']
+			},
+			python: {
+				env: { WASM_IDLE_RUN_REAL_BROWSER_PYTHON: '1' },
+				testFiles: [PYTHON_TEST_FILE]
+			},
 			debug: { env: { ...DEBUG_REGRESSION_ENV }, testFiles: [DEBUG_TEST_FILE] },
 			esolangs: {
 				env: Object.fromEntries(
@@ -268,7 +276,7 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
  *   useBuild?: boolean;
  * }} options
  * @param {{
@@ -330,7 +338,7 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
-	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
+	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
 	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
@@ -356,11 +364,12 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			options.useBuild = true;
 		} else if (arg.startsWith('--family=')) {
 			const family = arg.slice('--family='.length);
-			if (!['dotnet', 'nim', 'clang', 'debug', 'esolangs'].includes(family))
+			if (!['dotnet', 'nim', 'clang', 'debug', 'esolangs', 'go', 'python'].includes(family))
 				throw new Error(`Unknown runtime browser family: ${family}`);
-			options.family = /** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs'} */ (
-				family
-			);
+			options.family =
+				/** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python'} */ (
+					family
+				);
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}

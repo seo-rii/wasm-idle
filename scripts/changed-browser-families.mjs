@@ -2,29 +2,156 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+const ALL_BROWSER_FAMILIES = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python'];
+const PLAYGROUND_MODULE_FAMILIES = new Map();
+for (const [family, modules] of Object.entries({
+	clang: [
+		'clang',
+		'cachedClang',
+		'clangAssetIntegrity',
+		'clangStreamingPolicy',
+		'clangWorkerProtocol',
+		'assetBridge',
+		'compiledArtifactCache',
+		'clang-runtime-bundle',
+		'worker/clang',
+		'worker/cachedClangCompile',
+		'worker/cachedClangExecute',
+		'worker/clangStreaming',
+		'objectivec',
+		'worker/objectivec',
+		'wasmObjectiveCVersion',
+		'objectivec-assets',
+		'objectivecxx',
+		'cpp-standards',
+		'long-double'
+	],
+	debug: ['lldbSession', 'debug'],
+	dotnet: [
+		'dotnet',
+		'worker/dotnet',
+		'worker/dotnet-prepare',
+		'dotnet-switch',
+		'wasmDotnetVersion'
+	],
+	nim: ['nim', 'worker/nim', 'wasmNimVersion', 'wasm-nim-runner-worker', 'wasm-nim-lifecycle'],
+	go: ['go', 'worker/go'],
+	python: [
+		'python',
+		'pythonPackageLock',
+		'worker/python',
+		'worker/pythonExecution',
+		'worker/pythonStdio',
+		'worker/pythonDebugPreview'
+	],
+	esolangs: [
+		'aheui',
+		'worker/aheui',
+		'apecode',
+		'worker/apecode',
+		'golfscript',
+		'worker/golfscript',
+		'worker/golfscriptMount',
+		'ruby',
+		'worker/ruby',
+		'rubyAssets',
+		'wasmAheuiVersion',
+		'wasmApecodeVersion',
+		'wasmGolfscriptVersion',
+		'wasiInterpreters',
+		'worker/wasiInterpreters',
+		'esolangs',
+		'wasm',
+		'worker/wasm',
+		'python',
+		'worker/python',
+		'worker/pythonExecution',
+		'worker/pythonStdio'
+	]
+})) {
+	for (const module of modules) {
+		const families = PLAYGROUND_MODULE_FAMILIES.get(module) || [];
+		PLAYGROUND_MODULE_FAMILIES.set(module, [...families, family]);
+	}
+}
+for (const module of [
+	'index',
+	'sandbox',
+	'runtimeSession',
+	'runtimeAssetCache',
+	'assets',
+	'worker/assets',
+	'sharedBuffer',
+	'workerSession',
+	'workerProgress',
+	'worker/stdinPipe',
+	'stdin'
+]) {
+	PLAYGROUND_MODULE_FAMILIES.set(module, ALL_BROWSER_FAMILIES);
+}
+PLAYGROUND_MODULE_FAMILIES.set('runtime-recovery', ['dotnet', 'nim']);
+
+const RUNTIME_DIRECTORIES = {
+	clang: ['packages/llvm-core/', 'static/clang/', 'static/wasm-objectivec/'],
+	debug: ['packages/debug/', 'static/wasm-debug/'],
+	dotnet: ['runtimes/wasm-dotnet/', 'static/wasm-dotnet/'],
+	nim: ['runtimes/wasm-nim/', 'static/wasm-nim/'],
+	go: ['runtimes/wasm-go/', 'static/wasm-go/'],
+	python: ['runtimes/pyodide/', 'static/pyodide/'],
+	esolangs: [
+		'runtimes/esolangs/',
+		'runtimes/ruby/',
+		...[
+			'brainfuck',
+			'befunge93',
+			'whitespace',
+			'malbolge',
+			'aheui',
+			'uhmlang',
+			'lolcode',
+			'apecode',
+			'golfscript',
+			'ruby'
+		].map((runtime) => `static/wasm-${runtime}/`)
+	]
+};
+const RUNTIME_SCRIPT_FAMILIES = {
+	clang: ['sync-wasm-clang', 'sync-wasm-objectivec', 'prepare-clangd-assets'],
+	debug: ['sync-wasm-debug', 'prepare-wasm-debug-release', 'verify-page-wasm-debug'],
+	dotnet: ['sync-wasm-dotnet', 'wasm-dotnet-runner-worker'],
+	nim: ['sync-wasm-nim', 'wasm-nim-runner-worker'],
+	go: ['sync-wasm-go', 'go-browser-probe-lib', 'probe-go-browser'],
+	python: ['sync-pyodide', 'python-package-lock'],
+	esolangs: [
+		'build-esolang-runtimes',
+		'sync-wasm-aheui',
+		'sync-wasm-apecode',
+		'sync-wasm-golfscript'
+	]
+};
+
 /** @param {string[]} files */
 export function changedBrowserFamilies(files) {
 	const families = new Set();
 	for (const file of files) {
-		if (/(?:packages\/debug\/|lldbSession|wasm-debug|debug\.playwright)/.test(file))
-			families.add('debug');
-		if (/(?:dotnet|runtime-recovery)/.test(file)) families.add('dotnet');
-		if (/(?:nim|runtime-recovery)/.test(file)) families.add('nim');
-		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file))
-			families.add('clang');
+		const playgroundModule = file.match(/^src\/lib\/playground\/(.+?)\.(?:[^/]+\.)?ts$/)?.[1];
+		for (const family of PLAYGROUND_MODULE_FAMILIES.get(playgroundModule) || [])
+			families.add(family);
+		for (const [family, directories] of Object.entries(RUNTIME_DIRECTORIES)) {
+			if (directories.some((directory) => file.startsWith(directory))) families.add(family);
+		}
+		const script = file.match(
+			/^scripts\/(?:runtime-workers\/)?([^/]+?)(?:\.test)?\.(?:mjs|js)$/
+		)?.[1];
+		for (const [family, scripts] of Object.entries(RUNTIME_SCRIPT_FAMILIES)) {
+			if (script && scripts.includes(script)) families.add(family);
+		}
 		if (
-			/^(?:runtimes\/(?:esolangs|ruby)\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge|aheui|uhmlang|lolcode|apecode|golfscript|ruby)\/|scripts\/(?:build-esolang-runtimes|sync-wasm-aheui|sync-wasm-apecode|sync-wasm-golfscript|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|aheui|worker\/aheui\.runtime\.test|apecode|worker\/apecode\.runtime\.test|golfscript|worker\/golfscript\.runtime\.test|worker\/golfscriptMount|ruby|worker\/ruby|rubyAssets|assets|python|worker\/python|wasmAheuiVersion|wasmApecodeVersion|wasmGolfscriptVersion|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
-				file
-			)
-		)
-			families.add('esolangs');
-		if (
-			/^(src\/routes\/|packages\/(core|terminal)\/|scripts\/(stdin-browser|run-all-language|changed-browser|browser-preview|required-browser)|\.github\/workflows\/|(?:package\.json|pnpm-lock\.yaml|vite\.config\.ts)$)/.test(
+			/^(src\/routes\/|packages\/(core|terminal)\/|scripts\/(stdin-browser|run-all-language|changed-browser|browser-preview|required-browser|browser-test|prepare-browser-test|support-matrix)|\.github\/workflows\/|(?:package\.json|pnpm-lock\.yaml|vite\.config\.ts|vitest\.config\.ts|sveltekit\.config\.mjs)$)/.test(
 				file
 			)
 		) {
-			for (const family of ['clang', 'debug', 'dotnet', 'esolangs', 'nim'])
-				families.add(family);
+			for (const family of ALL_BROWSER_FAMILIES) families.add(family);
 		}
 	}
 	return [...families].sort();
