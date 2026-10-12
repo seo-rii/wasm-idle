@@ -821,6 +821,7 @@ import builtins
 import inspect
 import json
 import sys
+import types
 from js import ${executionReadyName} as __wasm_idle_execution_ready
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
@@ -986,18 +987,22 @@ finally:
     del __wasm_idle_execution_ready
 `
 		: `
+__wasm_idle_missing_main = object()
+__wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main)
 try:
-    __wasm_idle_globals = {
-        "__name__": "__main__",
-        "__file__": ${executionFilenameLiteral},
+    __wasm_idle_module = types.ModuleType("__main__")
+    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_globals = __wasm_idle_module.__dict__
+    __wasm_idle_globals.update({
         ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,
-    }
+    })
     __wasm_idle_compiled = compile(
         ${JSON.stringify(code)},
         ${executionFilenameLiteral},
         "exec",
         flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
     )
+    sys.modules["__main__"] = __wasm_idle_module
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
     __wasm_idle_result = eval(
         __wasm_idle_compiled,
@@ -1007,6 +1012,10 @@ try:
     if inspect.isawaitable(__wasm_idle_result):
         await __wasm_idle_result
 finally:
+    if __wasm_idle_previous_main is __wasm_idle_missing_main:
+        sys.modules.pop("__main__", None)
+    else:
+        sys.modules["__main__"] = __wasm_idle_previous_main
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)}, None)
     del __wasm_idle_execution_ready
     sys.settrace(None)

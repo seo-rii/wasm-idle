@@ -96,6 +96,33 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         await self.execute('assert "ready" not in globals()\nassert "runner" not in globals()')
         self.assertEqual(self.ready, 1)
 
+    async def test_main_import_and_pickle_use_fresh_user_scope_and_restore_runtime(self):
+        original = sys.modules['__main__']
+        code = '''import __main__, pickle
+value = globals().get("value", 0) + 1
+class Record:
+    pass
+record = Record()
+record.value = value
+assert __main__.__dict__ is globals()
+assert type(pickle.loads(pickle.dumps(record))) is Record
+print(__main__.value)'''
+        for _ in range(2):
+            await self.execute(code)
+            self.assertIs(sys.modules['__main__'], original)
+        self.assertEqual([item[0] for item in self.output], [(1,), (1,)])
+        with self.assertRaises(RuntimeError):
+            await self.execute('raise RuntimeError("failure")')
+        self.assertIs(sys.modules['__main__'], original)
+
+    async def test_missing_main_module_is_restored_as_missing(self):
+        original = sys.modules.pop('__main__')
+        try:
+            await self.execute('import __main__\nassert __main__.__dict__ is globals()')
+            self.assertNotIn('__main__', sys.modules)
+        finally:
+            sys.modules['__main__'] = original
+
     async def test_lru_eviction_and_budget(self):
         helpers = self.factory('', max_entries=2, max_bytes=10000)
         await self.execute('x=1', helpers=helpers)
