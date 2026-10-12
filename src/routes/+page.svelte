@@ -50,6 +50,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import { normalizeWorkspacePath } from './workspacePath';
 	import {
 		createSharedWorkspaceUrl,
 		WORKSPACE_STORAGE_KEY,
@@ -611,12 +612,12 @@
 	}
 
 	function normalizePath(value: string) {
-		return value
-			.trim()
-			.replaceAll('\\', '/')
-			.split('/')
-			.filter((part) => part && part !== '.' && part !== '..')
-			.join('/');
+		try {
+			return normalizeWorkspacePath(value);
+		} catch {
+			// Debug/source lookups can refer outside the user workspace.
+			return '';
+		}
 	}
 
 	function basename(value: string) {
@@ -987,7 +988,7 @@
 	}
 
 	function uniquePath(requestedPath: string) {
-		const safePath = normalizePath(requestedPath) || 'untitled.txt';
+		const safePath = normalizeWorkspacePath(requestedPath) || 'untitled.txt';
 		if (!files.some((file) => file.path === safePath)) return safePath;
 		const slash = safePath.lastIndexOf('/');
 		const directory = slash === -1 ? '' : safePath.slice(0, slash + 1);
@@ -1011,8 +1012,9 @@
 		for (const file of value) {
 			if (!file || typeof file.path !== 'string' || typeof file.content !== 'string')
 				continue;
-			const safePath = normalizePath(file.path);
-			if (!safePath || seen.includes(safePath)) continue;
+			const safePath = normalizeWorkspacePath(file.path);
+			if (!safePath) throw new Error('Workspace file path cannot be empty');
+			if (seen.includes(safePath)) throw new Error(`Duplicate workspace path: ${safePath}`);
 			seen.push(safePath);
 			nextFiles.push({
 				path: safePath,
@@ -1061,7 +1063,11 @@
 		const requested = prompt('File name', defaultPathForLanguage());
 		if (!requested) return;
 		const nextLanguage = languageForPath(requested) || language;
-		addWorkspaceFile(requested, defaultSourceForLanguage(nextLanguage));
+		try {
+			addWorkspaceFile(requested, defaultSourceForLanguage(nextLanguage));
+		} catch (error) {
+			saveStatus = error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	function renameActiveFile() {
@@ -1069,7 +1075,13 @@
 		if (!file) return;
 		const requested = prompt('Rename file', file.path);
 		if (!requested) return;
-		const nextPath = normalizePath(requested);
+		let nextPath: string;
+		try {
+			nextPath = normalizeWorkspacePath(requested);
+		} catch (error) {
+			saveStatus = error instanceof Error ? error.message : String(error);
+			return;
+		}
 		if (!nextPath || nextPath === file.path) return;
 		if (files.some((item) => item.path === nextPath)) {
 			saveStatus = 'File already exists';
