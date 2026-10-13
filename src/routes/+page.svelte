@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
@@ -1730,9 +1731,8 @@
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
 		const countText = memoryCountInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
 		const countPattern = /^(?:[1-9][0-9]*)$/u;
-		const requestedOffset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const requestedOffset = parseDebugInteger(offsetText);
 		const count = countPattern.test(countText) ? Number(countText) : Number.NaN;
 
 		if (!requestedReference) {
@@ -1814,8 +1814,7 @@
 	async function writeDebugMemoryPage() {
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
-		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const offset = parseDebugInteger(offsetText);
 		const byteText = memoryWriteInput.trim();
 		const byteTokens = byteText ? byteText.split(/[\s,]+/u) : [];
 
@@ -1884,9 +1883,8 @@
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
 		const countText = memoryCountInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
 		const countPattern = /^(?:[1-9][0-9]*)$/u;
-		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const offset = parseDebugInteger(offsetText);
 		const bytes = countPattern.test(countText) ? Number(countText) : Number.NaN;
 		if (!requestedReference) {
 			dataBreakpointError = 'Enter a memory reference.';
