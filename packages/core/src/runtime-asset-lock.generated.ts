@@ -22,7 +22,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"clang/libc-printscan-long-double.a": {"sha256":"33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148","bytes":111062,"mediaType":"application/octet-stream","deliveryPath":"clang/libc-printscan-long-double.a.gz"},
 		"clang/libc-printscan-long-double.a.gz": {"sha256":"b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b","bytes":52723,"encoding":"gzip","mediaType":"application/octet-stream","uncompressedSha256":"33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148","uncompressedBytes":111062},
 		"clang/long-double-library.v1.json": {"sha256":"21fae445632a54b1687176afd0611442999132f29a68c3023ecc94b9ff48535d","bytes":3115,"mediaType":"application/json"},
-		"clang/runtime-build.json": {"sha256":"4c05f1da9b798f04b5c22b9671b35908636cf7c2c30b3d81d714a60e58345d66","bytes":458154,"mediaType":"application/json"},
+		"clang/runtime-build.json": {"sha256":"1e4fd34dd450048a6fb6436f60f60e72cea12a477416b2ca15fda2546ba8749e","bytes":456987,"mediaType":"application/json"},
 		"clang/runtime-manifest.v1.json": {"sha256":"0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad","bytes":967,"mediaType":"application/json"},
 		"clangd/clangd.js": {"sha256":"92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27","bytes":97002,"mediaType":"text/javascript"},
 		"clangd/clangd.wasm": {"sha256":"f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3","bytes":78993623,"mediaType":"application/wasm","deliveryPath":"clangd/clangd.wasm.gz"},

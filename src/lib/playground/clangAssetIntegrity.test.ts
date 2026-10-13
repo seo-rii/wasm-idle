@@ -48,6 +48,20 @@ vector version wchar.h wctype.h
 	.split(/\s+/u);
 
 describe('bundled clang asset integrity', () => {
+	it('keeps the unchanged MemFS source receipt self-contained after a sysroot refresh', async () => {
+		const root = resolve(process.cwd(), 'static/clang');
+		const build = JSON.parse(await readFile(resolve(root, 'runtime-build.json'), 'utf8'));
+		const receipt = build.toolchain.memfs;
+		expect(receipt.format).toBe('wasm-llvm-memfs-build-v1');
+		expect(receipt).not.toHaveProperty('buildReceipt');
+		expect(receipt).not.toHaveProperty('files');
+		const module = gunzipSync(await readFile(resolve(root, 'bin/memfs.wasm.gz')));
+		expect(receipt.outputs['memfs.wasm']).toMatchObject({
+			bytes: module.byteLength,
+			sha256: createHash('sha256').update(module).digest('hex')
+		});
+	});
+
 	it('pins the separate long double archive, its ABI receipt and bundled license', async () => {
 		const root = resolve(process.cwd(), 'static/clang');
 		const receipt = JSON.parse(
