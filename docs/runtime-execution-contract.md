@@ -50,8 +50,9 @@ Individual disposal immediately unregisters the instance from its binding, inclu
 or timed-out disposal. Disposal can be observed through that instance's cached promise; the
 binding does not retain it to retry failed cleanup. Prewarming becomes eligible again once
 the final live consumer for that language/asset key has disposed. Binding disposal attempts
-all still-owned resources, waits for all attempts, and reports an `AggregateError` with each
-failure. Worker lifetime bulk disposal and idle eviction likewise attempt every selected
+all still-owned resources and waits for all attempts. A single failure retains its original
+identity; multiple failures are reported together in an `AggregateError`. Worker lifetime
+bulk disposal and idle eviction likewise attempt every selected
 Worker and aggregate synchronous cleanup errors; removed Workers are never offered for reuse.
 
 Execution phase limits and Worker idle timeouts accept integer milliseconds from 1 through

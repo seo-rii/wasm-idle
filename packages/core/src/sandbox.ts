@@ -1010,7 +1010,8 @@ export function createPlaygroundBinding(
 					const errors = results.flatMap((result) =>
 						result.status === 'rejected' ? [result.reason] : []
 					);
-					if (errors.length)
+					if (errors.length === 1) throw errors[0];
+					if (errors.length > 1)
 						throw new AggregateError(errors, 'Playground binding cleanup failed');
 				});
 			}
