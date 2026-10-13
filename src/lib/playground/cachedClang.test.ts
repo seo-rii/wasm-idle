@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Sandbox, SandboxExecutionOptions, SandboxRuntimeAssets } from '@wasm-idle/core';
 import { createPlaygroundBinding } from '@wasm-idle/core';
 import type { BrowserClangArtifact } from '@wasm-idle/llvm-core/clang';
@@ -478,7 +478,7 @@ describe('cached C/C++ sandbox', () => {
 		expect(h.executionWorkers).toHaveLength(2);
 	});
 
-	it('forwards queued UTF-8 input and EOF only on requests and drops unused input after a run', async () => {
+	it('forwards queued UTF-8 input and EOF only on requests and resets EOF after a run', async () => {
 		const h = makeHarness();
 		await h.sandbox.load(assets);
 		await run(h.sandbox, source, {}, true);
@@ -494,7 +494,7 @@ describe('cached C/C++ sandbox', () => {
 			Atomics.store(control, 0, 0);
 			worker.respond({ type: 'stdin' });
 			expect(control[0]).toBe(2);
-			h.sandbox.write?.('leftover');
+			expect(() => h.sandbox.write?.('leftover')).toThrow('stdin is closed');
 			worker.respond({ type: 'done', exitCode: 0 });
 		};
 		await run(h.sandbox);
@@ -507,12 +507,243 @@ describe('cached C/C++ sandbox', () => {
 		await run(h.sandbox);
 	});
 
+	it('bounds repeated writes to a program that never reads stdin and drops unused bytes on completion', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets);
+		await run(h.sandbox, source, {}, true);
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox);
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		for (let chunk = 0; chunk < 4; chunk++) h.sandbox.write?.('x'.repeat(32 * 1024));
+		expect(() => h.sandbox.write?.('x')).toThrow('stdin buffered bytes exceed 131072');
+		h.executionWorkers[0].respond({ type: 'done', exitCode: 0 });
+		await pending;
+		expect(() => h.sandbox.write?.('x'.repeat(128 * 1024))).not.toThrow();
+		await h.sandbox.dispose?.();
+		expect(() => h.sandbox.write?.('x')).toThrow('sandbox was disposed');
+	});
+
+	it('counts UTF-8 bytes against the load limit and preserves accepted input after overflow', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('한🙂');
+		expect(() => h.sandbox.write?.('é')).toThrow('stdin buffered bytes exceed 8');
+		h.sandbox.write?.('a');
+		h.sandbox.eof();
+		h.behavior.execute = (worker, message) => {
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(message.inputBuffer.byteLength).toBe(8 + 8);
+			worker.respond({ type: 'stdin' });
+			expect(control[1]).toBe(7);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('한🙂');
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[1]).toBe(1);
+			expect(new Uint8Array(message.inputBuffer, 8, 1)[0]).toBe('a'.charCodeAt(0));
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[0]).toBe(2);
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('includes published bytes in backpressure until the worker requests its next chunk', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('abcd');
+		h.behavior.execute = (worker) => worker.respond({ type: 'stdin' });
+		const pending = run(h.sandbox);
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		const [worker] = h.executionWorkers;
+		const { inputBuffer } = worker.messages[0];
+		const control = new Int32Array(inputBuffer, 0, 2);
+		expect(control[1]).toBe(4);
+		h.sandbox.write?.('efgh');
+		expect(() => h.sandbox.write?.('i')).toThrow('stdin buffered bytes exceed 8');
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(new TextDecoder().decode(new Uint8Array(inputBuffer, 8, control[1]))).toBe('efgh');
+		h.sandbox.write?.('ijkl');
+		h.sandbox.eof();
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(new TextDecoder().decode(new Uint8Array(inputBuffer, 8, control[1]))).toBe('ijkl');
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(control[0]).toBe(2);
+		worker.respond({ type: 'done', exitCode: 0 });
+		await pending;
+	});
+
+	it('rechecks queued input against tighter run limits before constructing workers', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('12345678');
+		await expect(run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } })).rejects.toThrow(
+			'stdin buffered bytes exceed 4'
+		);
+		expect(h.compileWorkers).toHaveLength(0);
+		h.behavior.execute = (worker, message) => {
+			worker.respond({ type: 'stdin' });
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('12345678');
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('applies the same byte limit and closed-stream policy to explicit stdin', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 6 } });
+		await expect(run(h.sandbox, source, { stdin: '한한a' })).rejects.toThrow(
+			'stdin buffered bytes exceed 6'
+		);
+		expect(h.compileWorkers).toHaveLength(0);
+		h.sandbox.write?.('queued');
+		h.behavior.execute = (worker, message) => {
+			expect(message.stdin).toBe('한한');
+			expect(() => h.sandbox.write?.('x')).toThrow('stdin is closed');
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox, source, { stdin: '한한' });
+		expect(() => h.sandbox.write?.('fresh')).not.toThrow();
+	});
+
+	it('keeps the load input ceiling after rejected, prepared, completed, and cancelled runs', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('12345');
+		await expect(run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } })).rejects.toThrow(
+			'stdin buffered bytes exceed 4'
+		);
+		expect(() => h.sandbox.write?.('678')).not.toThrow();
+		await h.sandbox.clear();
+		await run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } }, true);
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+		await h.sandbox.clear();
+		await run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } });
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+		await h.sandbox.clear();
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } });
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(2));
+		await h.sandbox.cancel?.();
+		await rejected;
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+	});
+
+	it('preserves a multibyte character split across transport chunks', async () => {
+		const h = makeHarness();
+		const input = 'a'.repeat(65535) + '🙂';
+		await h.sandbox.load(assets);
+		h.sandbox.write?.(input);
+		h.sandbox.eof();
+		h.behavior.execute = (worker, message) => {
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			const chunks: Uint8Array[] = [];
+			for (let chunk = 0; chunk < 2; chunk++) {
+				Atomics.store(control, 0, 0);
+				worker.respond({ type: 'stdin' });
+				chunks.push(new Uint8Array(message.inputBuffer, 8, control[1]).slice());
+			}
+			expect(chunks.map((chunk) => chunk.byteLength)).toEqual([65536, 3]);
+			expect(new TextDecoder().decode(Uint8Array.from([...chunks[0], ...chunks[1]]))).toBe(
+				input
+			);
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[0]).toBe(2);
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('clears queued input and EOF on cancellation before the next execution', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets);
+		h.sandbox.write?.('old');
+		h.sandbox.eof();
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox);
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		await h.sandbox.cancel?.();
+		await rejected;
+		h.sandbox.write?.('fresh');
+		h.behavior.execute = (worker, message) => {
+			worker.respond({ type: 'stdin' });
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(control[0]).toBe(1);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('fresh');
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
 	it('reports a nonzero execution exit without discarding the compiled artifact', async () => {
 		const h = makeHarness();
 		h.behavior.execute = (worker) => worker.respond({ type: 'done', exitCode: 3 });
 		await h.sandbox.load(assets);
 		await expect(run(h.sandbox)).rejects.toThrow('Program exited with code 3');
 		expect(h.cache.stats().entries).toBe(1);
+	});
+
+	it.each(['compiled', 'error'] as const)(
+		'settles %s even when bridge and Worker cleanup both throw',
+		async (type) => {
+			const h = makeHarness();
+			h.behavior.compile = (worker) => {
+				const bridge = bridges.instances.find(
+					(entry) => entry.worker === (worker as unknown as Worker)
+				)!;
+				bridge.dispose.mockImplementationOnce(() => {
+					throw new Error('bridge cleanup failed');
+				});
+				worker.terminate.mockImplementationOnce(() => {
+					throw new Error('Worker cleanup failed');
+				});
+				worker.respond({ type, artifact: h.artifact, error: 'original compile failure' });
+			};
+			await h.sandbox.load(assets);
+			if (type === 'compiled')
+				await expect(run(h.sandbox, source, {}, true)).resolves.toBe(true);
+			else
+				await expect(run(h.sandbox, source, {}, true)).rejects.toThrow(
+					'original compile failure'
+				);
+			expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+			h.behavior.compile = (worker) =>
+				worker.respond({ type: 'compiled', artifact: h.artifact });
+			await expect(run(h.sandbox, `${source}\n`, {}, true)).resolves.toBe(true);
+		}
+	);
+
+	it('settles cancellation and permits a fresh run when bridge cleanup throws', async () => {
+		const h = makeHarness();
+		h.behavior.compile = () => {};
+		await h.sandbox.load(assets);
+		const pending = run(h.sandbox);
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.compileWorkers).toHaveLength(1));
+		const bridge = bridges.instances.find(
+			(entry) => entry.worker === (h.compileWorkers[0] as unknown as Worker)
+		)!;
+		bridge.dispose.mockImplementationOnce(() => {
+			throw new Error('bridge cleanup failed');
+		});
+		await h.sandbox.cancel?.();
+		await rejected;
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await expect(run(h.sandbox, source, {}, true)).resolves.toBe(true);
 	});
 
 	it.each([
@@ -548,6 +779,208 @@ describe('cached C/C++ sandbox', () => {
 
 describe('precompiled <bits/stdc++.h> in the cached C++ sandbox', () => {
 	const stdcpp = '#include <bits/stdc++.h>\nint main() { return 0; }';
+	afterEach(() => vi.useRealTimers());
+
+	it('expires an unresponsive header builder and ignores its captured late callback', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const [builder] = h.compileWorkers;
+		const lateMessage = builder.onmessage!;
+		const bridge = bridges.instances.find(
+			(entry) => entry.worker === (builder as unknown as Worker)
+		)!;
+		await vi.advanceTimersByTimeAsync(29_999);
+		expect(builder.terminate).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(builder.terminate).toHaveBeenCalledOnce();
+		expect(bridge.dispose).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(0);
+		lateMessage({
+			data: {
+				type: 'precompiled-header',
+				header: { key: 'late', bytes: new Uint8Array([1]) }
+			}
+		});
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0]).not.toHaveProperty('precompiledHeader');
+		expect(builder.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('retires an overflowing header builder immediately and rejects its late result', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const [builder] = h.compileWorkers;
+		const lateMessage = builder.onmessage!;
+		builder.respond({
+			type: 'error',
+			code: 'output-limit',
+			error: 'Header output exceeded its limit'
+		});
+		expect(builder.terminate).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(0);
+		lateMessage({
+			data: {
+				type: 'precompiled-header',
+				header: { key: 'overflowed', bytes: Uint8Array.of(1) }
+			}
+		});
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0]).not.toHaveProperty('precompiledHeader');
+		expect(builder.terminate).toHaveBeenCalledOnce();
+	});
+
+	it.each([
+		[10, 20],
+		[20, 10]
+	])(
+		'uses the tighter load (%s) or run (%s) compile deadline',
+		async (loadTimeout, runTimeout) => {
+			vi.useFakeTimers();
+			const h = makeHarness(undefined, 'CPP');
+			h.behavior.compile = (worker) =>
+				worker.respond({
+					type: 'compiled',
+					artifact: h.artifact,
+					precompiledHeader: 'building'
+				});
+			await h.sandbox.load(assets, '', false, [], {
+				limits: { compileTimeoutMs: loadTimeout }
+			});
+			await run(h.sandbox, stdcpp, { limits: { compileTimeoutMs: runTimeout } }, true);
+			await vi.advanceTimersByTimeAsync(9);
+			expect(h.compileWorkers[0].terminate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+			expect(vi.getTimerCount()).toBe(0);
+		}
+	);
+
+	it.each([
+		[1, 2, false],
+		[2, 1, false],
+		[2, 2, true]
+	] as const)(
+		'counts the header builder against load/run Worker budgets (%s/%s)',
+		async (loadWorkers, runWorkers, retained) => {
+			vi.useFakeTimers();
+			const h = makeHarness(undefined, 'CPP');
+			h.behavior.compile = (worker) =>
+				worker.respond({
+					type: 'compiled',
+					artifact: h.artifact,
+					precompiledHeader: 'building'
+				});
+			const createExecutor = h.factories.execute;
+			h.factories.execute = () => {
+				expect(h.compileWorkers[0].terminate.mock.calls.length).toBe(retained ? 0 : 1);
+				return createExecutor();
+			};
+			await h.sandbox.load(assets, '', false, [], { limits: { maxWorkers: loadWorkers } });
+			await run(h.sandbox, stdcpp, { limits: { maxWorkers: runWorkers } });
+			expect(vi.getTimerCount()).toBe(retained ? 1 : 0);
+			await h.sandbox.dispose?.();
+			expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+			expect(vi.getTimerCount()).toBe(0);
+		}
+	);
+
+	it('keeps a budgeted header build alive through foreground cancellation until its deadline', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		let started!: () => void;
+		const executionStarted = new Promise<void>((resolve) => {
+			started = resolve;
+		});
+		h.behavior.execute = () => started();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkers: 2 } });
+		const pending = run(h.sandbox, stdcpp, { limits: { maxWorkers: 2, compileTimeoutMs: 10 } });
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await executionStarted;
+		await h.sandbox.cancel?.();
+		await rejected;
+		expect(h.executionWorkers[0].terminate).toHaveBeenCalledOnce();
+		expect(h.compileWorkers[0].terminate).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(1);
+		await vi.advanceTimersByTimeAsync(10);
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it('retires a replaced builder before accepting any later header result', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const lateMessage = h.compileWorkers[0].onmessage!;
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(1);
+		lateMessage({
+			data: {
+				type: 'precompiled-header',
+				header: { key: 'retired', bytes: new Uint8Array([1]) }
+			}
+		});
+		expect(h.compileWorkers[1].terminate).not.toHaveBeenCalled();
+		h.compileWorkers[1].respond({ type: 'precompiled-header' });
+		expect(vi.getTimerCount()).toBe(0);
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\n\n`, {}, true);
+		expect(h.compileWorkers[2].messages[0]).not.toHaveProperty('precompiledHeader');
+	});
+
+	it('attempts Worker and sandbox cleanup even if the header bridge cleanup throws', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const bridge = bridges.instances.find(
+			(entry) => entry.worker === (h.compileWorkers[0] as unknown as Worker)
+		)!;
+		bridge.dispose.mockImplementationOnce(() => {
+			throw new Error('bridge disposal failed');
+		});
+		await expect(h.sandbox.dispose?.()).resolves.toBeUndefined();
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+		expect(h.legacy.dispose).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(0);
+	});
 
 	it('keeps the compile worker until its header arrives and sends it with later compiles', async () => {
 		const h = makeHarness(undefined, 'CPP');
