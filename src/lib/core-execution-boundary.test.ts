@@ -5,7 +5,9 @@ import {
 	type ExecutionResult,
 	type Sandbox
 } from '@wasm-idle/core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => vi.useRealTimers());
 
 function createSandbox(overrides: Partial<Sandbox> = {}): Sandbox {
 	return {
@@ -50,6 +52,261 @@ const resourceTrustProfile = {
 };
 
 describe('core execution boundary', () => {
+	it('leaves targeted run-ID cancellation to the adapter', async () => {
+		let finishRun!: (value: boolean | string) => void;
+		const cancel = vi.fn(async (_runId?: string) => undefined);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			createSandbox({
+				run: () =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					}),
+				cancel
+			})
+		);
+		const sandbox = await binding.load('C');
+		const operation = sandbox.run('', false);
+		await Promise.resolve();
+		await sandbox.cancel!('an-older-run');
+		expect(cancel).toHaveBeenCalledWith('an-older-run');
+		finishRun(true);
+		await expect(operation).resolves.toBe(true);
+		await binding.dispose();
+	});
+
+	it.each(['cancel', 'kill', 'terminate'] as const)(
+		'applies the cancellation deadline to explicit %s calls',
+		async (method) => {
+			vi.useFakeTimers();
+			const cancel = vi.fn(async () => undefined);
+			const dispose = vi.fn(async () => undefined);
+			const raw = createSandbox({
+				run: () => new Promise<boolean | string>(() => undefined),
+				dispose,
+				[method]: cancel
+			});
+			const binding = createPlaygroundBinding('/runtime', async () => raw);
+			const sandbox = await binding.load('C');
+			const run = sandbox.run('', false);
+			const rejectedRun = expect(run).rejects.toMatchObject({ code: 'cancelled' });
+			await Promise.resolve();
+			const cancellation = sandbox[method]!();
+			const rejectedCancellation = expect(cancellation).rejects.toMatchObject({
+				code: 'timeout',
+				phase: 'dispose'
+			});
+			expect(sandbox[method]!()).toBe(cancellation);
+			await rejectedRun;
+			expect(cancel).toHaveBeenCalledOnce();
+			await vi.advanceTimersByTimeAsync(1_000);
+			await rejectedCancellation;
+			await expect(sandbox.run('', false)).rejects.toMatchObject({
+				code: 'runtime-configuration',
+				phase: 'dispose'
+			});
+			expect(dispose).toHaveBeenCalledOnce();
+			await binding.dispose();
+		}
+	);
+
+	it('awaits cooperative explicit cancellation before admitting a second operation', async () => {
+		let finishRun!: (value: boolean | string) => void;
+		const cancel = vi.fn(async () => {
+			finishRun(false);
+		});
+		const raw = createSandbox({
+			run: vi
+				.fn()
+				.mockImplementationOnce(
+					() =>
+						new Promise<boolean | string>((resolve) => {
+							finishRun = resolve;
+						})
+				)
+				.mockResolvedValue(true),
+			cancel
+		});
+		const binding = createPlaygroundBinding('/runtime', async () => raw);
+		const sandbox = await binding.load('C');
+		const first = sandbox.run('', false);
+		const rejection = expect(first).rejects.toMatchObject({ code: 'cancelled' });
+		await Promise.resolve();
+		await sandbox.cancel!();
+		await rejection;
+		await expect(sandbox.run('', false)).resolves.toBe(true);
+		await binding.dispose();
+	});
+
+	it('honors an explicit cancellation before asynchronous operation dispatch', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const run = vi.fn(async () => true);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			createSandbox({ run, cancel })
+		);
+		const sandbox = await binding.load('C');
+		const first = sandbox.run('', false);
+		const rejection = expect(first).rejects.toMatchObject({ code: 'cancelled' });
+		await sandbox.cancel!();
+		await rejection;
+		expect(run).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+		await expect(sandbox.run('', false)).resolves.toBe(true);
+		await binding.dispose();
+	});
+
+	it.each(['throw', 'reject'] as const)(
+		'preserves cancellation when adapter cleanup fails by %s',
+		async (failure) => {
+			const cleanupError = new Error('cancel failed');
+			const dispose = vi.fn(async () => undefined);
+			const raw = createSandbox({
+				run: () => new Promise<boolean | string>(() => undefined),
+				dispose,
+				cancel: () => {
+					if (failure === 'throw') throw cleanupError;
+					return Promise.reject(cleanupError);
+				}
+			});
+			const binding = createPlaygroundBinding('/runtime', async () => raw);
+			const sandbox = await binding.load('C');
+			const controller = new AbortController();
+			const operation = sandbox.run('', false, false, undefined, [], {
+				signal: controller.signal
+			});
+			await Promise.resolve();
+			controller.abort('original reason');
+			await expect(operation).rejects.toMatchObject({
+				code: 'cancelled',
+				phase: 'execute',
+				cause: 'original reason'
+			});
+			await expect(sandbox.run('', false)).rejects.toMatchObject({
+				code: 'runtime-configuration',
+				phase: 'dispose'
+			});
+			expect(dispose).toHaveBeenCalledOnce();
+			await binding.dispose();
+		}
+	);
+
+	it.each(['operation', 'cancellation'] as const)(
+		'retires an adapter with a hung %s and permits a fresh binding instance',
+		async (hung) => {
+			vi.useFakeTimers();
+			let finishRun!: (result: boolean | string) => void;
+			const run = vi.fn(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			);
+			const dispose = vi.fn(async () => undefined);
+			const broken = createSandbox({
+				run,
+				dispose,
+				cancel: () =>
+					hung === 'operation' ? Promise.resolve() : new Promise<void>(() => undefined)
+			});
+			const fresh = createSandbox();
+			const loader = vi.fn().mockResolvedValueOnce(broken).mockResolvedValue(fresh);
+			const binding = createPlaygroundBinding('/runtime', loader);
+			const sandbox = await binding.load('C');
+			const output = vi.fn();
+			sandbox.output = output;
+			const controller = new AbortController();
+			const operation = sandbox.run('old', false, false, undefined, [], {
+				signal: controller.signal
+			});
+			const rejection = expect(operation).rejects.toMatchObject({ code: 'cancelled' });
+			await Promise.resolve();
+			const oldOutput = broken.output!;
+			controller.abort();
+			await rejection;
+			if (hung === 'cancellation') finishRun(true);
+			await expect(sandbox.run('too soon', false)).rejects.toMatchObject({ code: 'busy' });
+			await vi.advanceTimersByTimeAsync(1_000);
+
+			expect(dispose).toHaveBeenCalledOnce();
+			await expect(sandbox.run('retired', false)).rejects.toMatchObject({
+				code: 'runtime-configuration',
+				phase: 'dispose'
+			});
+			const replacement = await binding.load('C');
+			replacement.output = output;
+			const nextOperation = replacement.run('fresh', false);
+			oldOutput('late captured output');
+			broken.output?.('late direct output');
+			finishRun(true);
+			await expect(nextOperation).resolves.toBe(true);
+			expect(output).not.toHaveBeenCalled();
+			await binding.dispose();
+			expect(dispose).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('drops inactive and stale-generation output without interrupting current output', async () => {
+		let finishRun!: (result: boolean | string) => void;
+		const raw = createSandbox({
+			run: vi.fn(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			)
+		});
+		const binding = createPlaygroundBinding('/runtime', async () => raw);
+		const sandbox = await binding.load('C');
+		const output = vi.fn();
+		const diagnostics = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostics;
+		raw.output?.('before a run');
+		const first = sandbox.run('first', false);
+		await Promise.resolve();
+		const oldOutput = raw.output!;
+		const oldDiagnostic = raw.oncompilerdiagnostic!;
+		oldOutput('first');
+		finishRun(true);
+		await first;
+		oldOutput('after completion');
+		oldDiagnostic({ message: 'after completion' });
+		const second = sandbox.run('second', false);
+		await Promise.resolve();
+		oldOutput('old during new run');
+		oldDiagnostic({ message: 'old during new run' });
+		raw.output?.('second');
+		raw.oncompilerdiagnostic?.({ message: 'second' });
+		finishRun(true);
+		await second;
+		await sandbox.dispose?.();
+		raw.output?.('after disposal');
+		expect(output.mock.calls).toEqual([['first'], ['second']]);
+		expect(diagnostics.mock.calls).toEqual([[{ message: 'second' }]]);
+	});
+
+	it('mutes output as soon as cancellation settles, before cooperative cleanup finishes', async () => {
+		vi.useFakeTimers();
+		const raw = createSandbox({
+			run: () => new Promise<boolean | string>(() => undefined),
+			cancel: async () => undefined
+		});
+		const binding = createPlaygroundBinding('/runtime', async () => raw);
+		const sandbox = await binding.load('C');
+		const output = vi.fn();
+		sandbox.output = output;
+		const controller = new AbortController();
+		const operation = sandbox.run('code', false, false, undefined, [], {
+			signal: controller.signal
+		});
+		const rejection = expect(operation).rejects.toMatchObject({ code: 'cancelled' });
+		await Promise.resolve();
+		controller.abort();
+		await rejection;
+		raw.output?.('late');
+		expect(output).not.toHaveBeenCalled();
+		await binding.dispose();
+	});
+
 	it('resolves execution limits and applies their workspace ceiling to legacy runs', async () => {
 		const run = vi.fn(async () => true);
 		const binding = createPlaygroundBinding('/runtime', async () => createSandbox({ run }));

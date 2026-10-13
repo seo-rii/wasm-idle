@@ -2155,8 +2155,8 @@ describe('Bash sandbox', () => {
 		const sandbox = createSandbox();
 		const loading = sandbox.load('/capped-startup-timeout', '', true, [], {
 			limits: {
-				assetTimeoutMs: Number.MAX_SAFE_INTEGER,
-				startupTimeoutMs: Number.MAX_SAFE_INTEGER
+				assetTimeoutMs: 2_147_483_647,
+				startupTimeoutMs: 2_147_483_647
 			}
 		});
 		const reason = new Error('stop capped Bash startup');
@@ -2169,6 +2169,20 @@ describe('Bash sandbox', () => {
 		resolveFetch?.(new Response(new Uint8Array([0, 97, 115, 109])));
 		await vi.advanceTimersByTimeAsync(0);
 	});
+
+	it.each(['assetTimeoutMs', 'startupTimeoutMs'] as const)(
+		'rejects an overflowing %s before Bash startup',
+		async (name) => {
+			const sandbox = createSandbox();
+			await expect(
+				sandbox.load('/invalid-startup-timeout', '', true, [], {
+					limits: { [name]: 2_147_483_648 }
+				})
+			).rejects.toMatchObject({ code: 'runtime-configuration', phase: 'configuration' });
+			expect(importVerifiedSdkModule).not.toHaveBeenCalled();
+			expect(fetch).not.toHaveBeenCalled();
+		}
+	);
 
 	it('frees a Bash package that arrives after the startup deadline', async () => {
 		vi.useFakeTimers();

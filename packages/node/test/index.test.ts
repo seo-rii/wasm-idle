@@ -1,7 +1,11 @@
 import type { ExecutionResult, Sandbox } from '@wasm-idle/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeWasmIdleInNode, runWasmIdleInNode } from '../src/index.js';
+import {
+	NodeExecutionCleanupError,
+	executeWasmIdleInNode,
+	runWasmIdleInNode
+} from '../src/index.js';
 
 function createSandbox(run: Sandbox['run']): Sandbox {
 	return {
@@ -16,6 +20,60 @@ function createSandbox(run: Sandbox['run']): Sandbox {
 }
 
 describe('runWasmIdleInNode', () => {
+	it.each([true, false])(
+		'preserves the run outcome (success: %s) and attempts disposal after clear fails',
+		async (success) => {
+			const original = new Error('program failed');
+			const clearError = new Error('clear failed');
+			const disposeError = new Error('dispose failed');
+			const order: string[] = [];
+			const sandbox = createSandbox(async () => {
+				if (!success) throw original;
+				return 'completed';
+			});
+			sandbox.clear = async () => {
+				order.push('clear');
+				throw clearError;
+			};
+			sandbox.dispose = async () => {
+				order.push('dispose');
+				throw disposeError;
+			};
+			const result = await runWasmIdleInNode({
+				language: 'C',
+				code: '',
+				loadSandbox: async () => sandbox,
+				stdout: vi.fn(),
+				stderr: vi.fn(),
+				clearAfterRun: true
+			});
+			expect(order).toEqual(['clear', 'dispose']);
+			expect(result).toMatchObject({
+				ok: success,
+				result: success ? 'completed' : 'program failed',
+				cleanupErrors: [clearError, disposeError]
+			});
+			expect(result.error).toBe(success ? undefined : original);
+		}
+	);
+
+	it('still cleans up when the error reporting sink throws', async () => {
+		const original = new Error('program failed');
+		const sandbox = createSandbox(async () => {
+			throw original;
+		});
+		const result = await runWasmIdleInNode({
+			language: 'C',
+			code: '',
+			loadSandbox: async () => sandbox,
+			stderr: () => {
+				throw new Error('stderr failed');
+			}
+		});
+		expect(result.error).toBe(original);
+		expect(sandbox.terminate).toHaveBeenCalledOnce();
+	});
+
 	it('treats fulfilled string runtime results as successful', async () => {
 		const dispose = vi.fn(async () => undefined);
 		const sandbox = createSandbox(vi.fn(async () => ':ok'));
@@ -79,6 +137,71 @@ describe('runWasmIdleInNode', () => {
 });
 
 describe('executeWasmIdleInNode', () => {
+	it.each([true, false])(
+		'preserves structured result (success: %s) when disposal fails',
+		async (success) => {
+			const cleanupError = new Error('dispose failed');
+			const result: ExecutionResult = {
+				ok: success,
+				exitCode: success ? 0 : 1,
+				stdout: 'output',
+				stderr: '',
+				diagnostics: [],
+				artifacts: [],
+				timings: { assetMs: 0, startupMs: 0, compileMs: 0, executeMs: 0, totalMs: 0 },
+				terminationReason: success ? 'completed' : 'runtime-error',
+				runtime: {
+					languageId: 'C',
+					implementationId: 'test',
+					version: '1',
+					protocolVersion: 1
+				},
+				...(success
+					? {}
+					: { error: { code: 'unknown' as const, message: 'program error' } })
+			};
+			const sandbox = createSandbox(async () => true);
+			sandbox.execute = async () => result;
+			sandbox.dispose = async () => {
+				throw cleanupError;
+			};
+			const received = await executeWasmIdleInNode({
+				language: 'C',
+				request: { code: '' },
+				loadSandbox: async () => sandbox,
+				stdout: vi.fn(),
+				stderr: vi.fn()
+			});
+			expect(received).toEqual({ ...result, cleanupErrors: [cleanupError] });
+			expect(result).not.toHaveProperty('cleanupErrors');
+		}
+	);
+
+	it('keeps a thrown execution failure as cause when cleanup also fails', async () => {
+		const original = new Error('execution failed');
+		const cleanupError = new Error('dispose failed');
+		const sandbox = createSandbox(async () => true);
+		sandbox.execute = async () => {
+			throw original;
+		};
+		sandbox.dispose = async () => {
+			throw cleanupError;
+		};
+		const rejected = executeWasmIdleInNode({
+			language: 'C',
+			request: { code: '' },
+			loadSandbox: async () => sandbox,
+			stdout: vi.fn(),
+			stderr: vi.fn()
+		});
+		await expect(rejected).rejects.toBeInstanceOf(NodeExecutionCleanupError);
+		await expect(rejected).rejects.toMatchObject({
+			cause: original,
+			cleanupErrors: [cleanupError],
+			errors: [original, cleanupError]
+		});
+	});
+
 	it('returns a structured runtime result after normalizing the request', async () => {
 		const result: ExecutionResult = {
 			ok: true,
