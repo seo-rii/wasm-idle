@@ -15,7 +15,10 @@ export function createPythonWorkspaceFiles(fs: PyodideInterface['FS']) {
 		const currentPaths = new Set(files.map((file) => `${root}/${file.path}`));
 		for (const path of writtenPaths) {
 			if (currentPaths.has(path)) continue;
-			if (workspaceFs.analyzePath(path).exists) fs.unlink(path);
+			// A former input can become a generated directory owned by user code.
+			if (workspaceFs.analyzePath(path).exists && !fs.isDir(fs.lstat(path).mode)) {
+				fs.unlink(path);
+			}
 			writtenPaths.delete(path);
 		}
 		for (const file of files) {
