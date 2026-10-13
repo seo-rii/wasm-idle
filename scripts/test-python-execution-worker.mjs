@@ -153,6 +153,41 @@ asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.P
 `], { input: f.legacyRuns[0], encoding: 'utf8' });
 	assert.equal(output, 'subdir/main.py\n');
 });
+test('the actual debug wrapper connects user classes and globals to __main__ and restores it', async () => {
+	const f = workerFixture();
+	await f.send({ code: `import __main__, pickle
+value = 7
+class Record:
+    pass
+record = Record()
+assert __main__.__dict__ is globals()
+assert isinstance(pickle.loads(pickle.dumps(record)), Record)
+print(__main__.value)`, activePath: 'main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_main = sys.modules["__main__"]
+asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+assert sys.modules["__main__"] is original_main
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, '7\n');
+	await f.send({ code: 'raise ValueError("user failure")', activePath: 'failure.py', debug: true });
+	execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_main = sys.modules["__main__"]
+try:
+    asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+except ValueError as error:
+    assert str(error) == "user failure"
+else:
+    raise AssertionError("Expected user failure")
+assert sys.modules["__main__"] is original_main
+`], { input: f.legacyRuns.at(-1) });
+});
 test('Hy retains its genuine compiler wrapper and bypasses the Python source cache', async () => {
 	const f = workerFixture();
 	await f.send({ code: '(print 42)', language: 'hy' });

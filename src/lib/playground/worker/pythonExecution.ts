@@ -8,6 +8,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
     import inspect
     import marshal
     import sys
+    import types
     from collections import OrderedDict
     from pyodide.code import find_imports
 
@@ -63,6 +64,8 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
 
     async def run(source, filename, ready, input_bridge=None, output_bridge=None):
         previous_input, previous_print = builtins.input, builtins.print
+        missing_main = object()
+        previous_main = sys.modules.get("__main__", missing_main)
         def input_wrapper(prompt=""):
             value = input_bridge(prompt)
             if value is None:
@@ -89,12 +92,19 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
                 # This budget accounts source strings and serialized code, not total Wasm heap.
                 weight = sys.getsizeof(source) + sys.getsizeof(filename) + len(marshal.dumps(compiled))
                 code_cache.put(key, compiled, weight)
-            scope = {"__name__": "__main__", "__file__": filename}
+            main_module = types.ModuleType("__main__")
+            main_module.__file__ = filename
+            scope = main_module.__dict__
+            sys.modules["__main__"] = main_module
             ready()
             result = evaluate(compiled, scope, scope)
             if inspect.isawaitable(result):
                 await result
         finally:
+            if previous_main is missing_main:
+                sys.modules.pop("__main__", None)
+            else:
+                sys.modules["__main__"] = previous_main
             sys.settrace(None)
             builtins.input, builtins.print = previous_input, previous_print
 
