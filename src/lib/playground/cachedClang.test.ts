@@ -475,7 +475,7 @@ describe('cached C/C++ sandbox', () => {
 		expect(h.executionWorkers).toHaveLength(2);
 	});
 
-	it('forwards queued UTF-8 input and EOF only on requests and drops unused input after a run', async () => {
+	it('forwards queued UTF-8 input and EOF only on requests and resets EOF after a run', async () => {
 		const h = makeHarness();
 		await h.sandbox.load(assets);
 		await run(h.sandbox, source, {}, true);
@@ -491,7 +491,7 @@ describe('cached C/C++ sandbox', () => {
 			Atomics.store(control, 0, 0);
 			worker.respond({ type: 'stdin' });
 			expect(control[0]).toBe(2);
-			h.sandbox.write?.('leftover');
+			expect(() => h.sandbox.write?.('leftover')).toThrow('stdin is closed');
 			worker.respond({ type: 'done', exitCode: 0 });
 		};
 		await run(h.sandbox);
@@ -499,6 +499,187 @@ describe('cached C/C++ sandbox', () => {
 			const control = new Int32Array(message.inputBuffer, 0, 2);
 			worker.respond({ type: 'stdin' });
 			expect(control[0]).toBe(0);
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('bounds repeated writes to a program that never reads stdin and drops unused bytes on completion', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets);
+		await run(h.sandbox, source, {}, true);
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox);
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		for (let chunk = 0; chunk < 4; chunk++) h.sandbox.write?.('x'.repeat(32 * 1024));
+		expect(() => h.sandbox.write?.('x')).toThrow('stdin buffered bytes exceed 131072');
+		h.executionWorkers[0].respond({ type: 'done', exitCode: 0 });
+		await pending;
+		expect(() => h.sandbox.write?.('x'.repeat(128 * 1024))).not.toThrow();
+		await h.sandbox.dispose?.();
+		expect(() => h.sandbox.write?.('x')).toThrow('sandbox was disposed');
+	});
+
+	it('counts UTF-8 bytes against the load limit and preserves accepted input after overflow', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('한🙂');
+		expect(() => h.sandbox.write?.('é')).toThrow('stdin buffered bytes exceed 8');
+		h.sandbox.write?.('a');
+		h.sandbox.eof();
+		h.behavior.execute = (worker, message) => {
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(message.inputBuffer.byteLength).toBe(8 + 8);
+			worker.respond({ type: 'stdin' });
+			expect(control[1]).toBe(7);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('한🙂');
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[1]).toBe(1);
+			expect(new Uint8Array(message.inputBuffer, 8, 1)[0]).toBe('a'.charCodeAt(0));
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[0]).toBe(2);
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('includes published bytes in backpressure until the worker requests its next chunk', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('abcd');
+		h.behavior.execute = (worker) => worker.respond({ type: 'stdin' });
+		const pending = run(h.sandbox);
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		const [worker] = h.executionWorkers;
+		const { inputBuffer } = worker.messages[0];
+		const control = new Int32Array(inputBuffer, 0, 2);
+		expect(control[1]).toBe(4);
+		h.sandbox.write?.('efgh');
+		expect(() => h.sandbox.write?.('i')).toThrow('stdin buffered bytes exceed 8');
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(new TextDecoder().decode(new Uint8Array(inputBuffer, 8, control[1]))).toBe('efgh');
+		h.sandbox.write?.('ijkl');
+		h.sandbox.eof();
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(new TextDecoder().decode(new Uint8Array(inputBuffer, 8, control[1]))).toBe('ijkl');
+		Atomics.store(control, 0, 0);
+		worker.respond({ type: 'stdin' });
+		expect(control[0]).toBe(2);
+		worker.respond({ type: 'done', exitCode: 0 });
+		await pending;
+	});
+
+	it('rechecks queued input against tighter run limits before constructing workers', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('12345678');
+		await expect(run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } })).rejects.toThrow(
+			'stdin buffered bytes exceed 4'
+		);
+		expect(h.compileWorkers).toHaveLength(0);
+		h.behavior.execute = (worker, message) => {
+			worker.respond({ type: 'stdin' });
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('12345678');
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('applies the same byte limit and closed-stream policy to explicit stdin', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 6 } });
+		await expect(run(h.sandbox, source, { stdin: '한한a' })).rejects.toThrow(
+			'stdin buffered bytes exceed 6'
+		);
+		expect(h.compileWorkers).toHaveLength(0);
+		h.sandbox.write?.('queued');
+		h.behavior.execute = (worker, message) => {
+			expect(message.stdin).toBe('한한');
+			expect(() => h.sandbox.write?.('x')).toThrow('stdin is closed');
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox, source, { stdin: '한한' });
+		expect(() => h.sandbox.write?.('fresh')).not.toThrow();
+	});
+
+	it('keeps the load input ceiling after rejected, prepared, completed, and cancelled runs', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWorkspaceBytes: 8 } });
+		h.sandbox.write?.('12345');
+		await expect(run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } })).rejects.toThrow(
+			'stdin buffered bytes exceed 4'
+		);
+		expect(() => h.sandbox.write?.('678')).not.toThrow();
+		await h.sandbox.clear();
+		await run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } }, true);
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+		await h.sandbox.clear();
+		await run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } });
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+		await h.sandbox.clear();
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox, source, { limits: { maxWorkspaceBytes: 4 } });
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(2));
+		await h.sandbox.cancel?.();
+		await rejected;
+		expect(() => h.sandbox.write?.('12345678')).not.toThrow();
+	});
+
+	it('preserves a multibyte character split across transport chunks', async () => {
+		const h = makeHarness();
+		const input = 'a'.repeat(65535) + '🙂';
+		await h.sandbox.load(assets);
+		h.sandbox.write?.(input);
+		h.sandbox.eof();
+		h.behavior.execute = (worker, message) => {
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			const chunks: Uint8Array[] = [];
+			for (let chunk = 0; chunk < 2; chunk++) {
+				Atomics.store(control, 0, 0);
+				worker.respond({ type: 'stdin' });
+				chunks.push(new Uint8Array(message.inputBuffer, 8, control[1]).slice());
+			}
+			expect(chunks.map((chunk) => chunk.byteLength)).toEqual([65536, 3]);
+			expect(new TextDecoder().decode(Uint8Array.from([...chunks[0], ...chunks[1]]))).toBe(
+				input
+			);
+			Atomics.store(control, 0, 0);
+			worker.respond({ type: 'stdin' });
+			expect(control[0]).toBe(2);
+			worker.respond({ type: 'done', exitCode: 0 });
+		};
+		await run(h.sandbox);
+	});
+
+	it('clears queued input and EOF on cancellation before the next execution', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets);
+		h.sandbox.write?.('old');
+		h.sandbox.eof();
+		h.behavior.execute = () => {};
+		const pending = run(h.sandbox);
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.executionWorkers).toHaveLength(1));
+		await h.sandbox.cancel?.();
+		await rejected;
+		h.sandbox.write?.('fresh');
+		h.behavior.execute = (worker, message) => {
+			worker.respond({ type: 'stdin' });
+			const control = new Int32Array(message.inputBuffer, 0, 2);
+			expect(control[0]).toBe(1);
+			expect(
+				new TextDecoder().decode(new Uint8Array(message.inputBuffer, 8, control[1]))
+			).toBe('fresh');
 			worker.respond({ type: 'done', exitCode: 0 });
 		};
 		await run(h.sandbox);
