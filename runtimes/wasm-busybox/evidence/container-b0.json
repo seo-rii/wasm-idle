@@ -1,0 +1,902 @@
+{
+  "schemaVersion": 1,
+  "fixture": "BB-01",
+  "passed": true,
+  "generatedAt": "2026-10-13T16:14:09.525Z",
+  "producerRevision": "48f9b8b417324af433da8b7fa4d33e6306dc0d13",
+  "producerReceiptSha256": "9d8e0985d46e3fcbf6c2f4876558472763fddc427f2f69798f6fe436e8b03150",
+  "sourceSha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4",
+  "artifact": {
+    "sha256": "e4a21b3bb0cea1495a42b6dfba71a2e89b44b3d80a6d703e1542fd909781b133",
+    "size": 303353
+  },
+  "imports": [
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_sizes_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_close",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_fdstat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_prestat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_prestat_dir_name",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_read",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_seek",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_write",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_filestat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_open",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "proc_exit",
+      "kind": "function"
+    },
+    {
+      "module": "wasm_idle_process_v1",
+      "name": "initial_cwd",
+      "kind": "function"
+    }
+  ],
+  "applicationCommit": "d3e3be1467d4323c3924ff85daac7a92216ce788",
+  "containerDistHashes": {
+    "adapters/clang/index.js": "03fec84f443f4362e568b54067ab3c1fa5340d52f3e0d56458ff8d7720b63a66",
+    "adapters/clang/worker.js": "a2aee544b629625bf2ea95f7df77ef27fffda18d8377e4ac57109860cd2bf3bc",
+    "adapters/types.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+    "adapters/wasi/host.js": "0949d2e4c5af295709636eea9f8d3562f0c709018c0462ed608c824e73daf4fe",
+    "adapters/wasi/index.js": "46fedcca19fa0cd7e8659aefc0b00e3f52ca5c473769d9bfcdc3d77486956204",
+    "adapters/wasi/profile.js": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275",
+    "adapters/wasi/stdio.js": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467",
+    "adapters/wasi/worker.js": "6898ee355a4e27a5bd8db659f52fec140181fff7d1eec838584d9c91368e6825",
+    "adapters/worker-adapter.js": "f5c145b2de17a19adf2d57489f9a40efd5723b61c8381f24410a1f0bd71a42e8",
+    "container.js": "4b7c536b533a7def9b715e0f265994b7c213770b552337b5c9b3bee59e7826e7",
+    "errors.js": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a",
+    "fd/pipe.js": "88cad76f4c9bc8db13710094e7383937a9d345bc5116cc192010bb6436e78335",
+    "fd/table.js": "aa8bf5d0436f65f7255551548395f18b787c09e2482df15da7214bb808d777bb",
+    "fs/errors.js": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8",
+    "fs/index.js": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232",
+    "fs/memory.js": "922c4ac6c14a5f1b3fdc24a3bc94be8d7bf78f028bcf024072f4fbb29b1884f5",
+    "fs/types.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+    "index.js": "087b8ff97221c7132db92306ee1f907ddd2d5cbb3e74dbb7d2f6c664f4176c57",
+    "packages/assets.js": "95bac822311b033c2fb54d631500c32a6ef5939341ef5583a33b482c2e462714",
+    "packages/distribution.js": "89de1674b599fef83d6f28d4aff92e02c736dd546e670498040605d42ffb1d51",
+    "packages/index.js": "46a40278e915c8a26f400a4b564da8755534bb835f86d4557c4777e1b0a2d03a",
+    "packages/manager.js": "adaf4e039ec28e46221d8b4b9d4e64e495edce5324a16316a46a1e087fe47e0e",
+    "process/lifecycle.js": "cd1c13564379c76b1fe9e774a0e48da6f002f113a97ba9a0b49e06715c148490",
+    "types.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+  },
+  "coreDistHashes": {
+    "asset-delivery-budget.js": "02fb09f4ae0f8fc691fb541df167762645a60d4ff2e56535454d0aeaf06f2643",
+    "asset-integrity.js": "75b89cdda3cd1fc2175504c9fdec4e451f3ed81f4790ef99372cc5c3a449089e",
+    "awk-runtime.js": "2b4edefdd29b0f732f4bca5d5dbad308f278bb49a68aa2a91fa5606d64cb6dae",
+    "bash-runtime.js": "7863353ef0e61bcdd2d6b3e3f42a60662801973305cdab3ecb4e3460340e11cc",
+    "capabilities.js": "8e6af9254c850918dd3fe56d4b8c412ad7cf5bdc903b1388d8f08459bf8ba00f",
+    "debug.js": "57ba6941b79b6139798465a83ac0f02d5dd7e31598a567a8e7cdba67d52c504d",
+    "errors.js": "993bf37007430a1180b59efc169f2d4d262239516c160862304b6143dffa2070",
+    "execution.js": "82a9df7f7272770402bb38c3aafc609fa9ca22964ec749cda7a17c37b7d02d56",
+    "haskell-runtime.generated.js": "25809ffb2f92dd2310a11aeeb49bb47a55ca753bda293e7d14cc2976a9097aaf",
+    "haskell-runtime.js": "b1aa86f212e6a799add7e8c263a96eb787e270cadd835107f39ca6a66d7f6c65",
+    "index.js": "7ee73b0f6580e6d091b10b5d3a9385aced7cde1dc870ce98a73bed2db77a1590",
+    "janet-runtime.js": "2e277c8244beef710f6b0bf0775cccb32945ecd3471f0d9934132d8053bede6c",
+    "julia-runtime.js": "3c863ab3c6d6c6a7cf143347e0b03e3d10337c14420c210a49aade3bd292c151",
+    "languages.js": "a8d28f4e1d7799acf272b820add4bf34b3febe24343ce7257c4d4a3c3afc65b3",
+    "lisp-runtime.js": "ce1d4165ef9543936c8d491eb1349f97e0655c5a072e0a463d3d5c69f32ff312",
+    "module-asset-rewrite.js": "010c630e05800052ea694b54d754fd7404d8da89462cd2bf9d466d5e5bd1d333",
+    "nim-runtime.js": "457baa3fa2a6b9f7ef6e39e1bd8c59241a9fdb8adb57f455c6df21259b545aeb",
+    "pascal-runtime.js": "79a417a599ed5d693bb324ea874f65698af6dd8f59379da8a540190cd5502201",
+    "perl-runtime.js": "381ce16e60bfc5b3be97da1141d8f2d52d59b8ed62803712b9c534e71ad18e3e",
+    "persistent-asset-cache.js": "f1148b95312463182905afaf36774f7aa1dbc179cee3a2cbca49fe6cfc6cced9",
+    "pinned-asset-fetch.js": "0805ffaeae3810c65e853d54aeeb206b26ee8e2ceb81ad96aff63cfc023f2dba",
+    "prewarm.js": "a0548ddfd2ac8d22ac899ded907ad85032bfcc57b66cb54bae91da3eef9bf515",
+    "progress.js": "61e262024e511e9c9d93ce0e135b0b50923a1052bb12e326600755f2f74c28a0",
+    "prolog-runtime.js": "ae89fcb239c5ba9a63b25dcb44e50c916b66c4f884f5e5d45163661be567a13f",
+    "protocol.js": "68d83880c8fff0aadfbdd2436160c8e2c41f1dfb9ad4316f2d174aaf5d239fef",
+    "resource-budget.js": "ffea2e31029003587fba806dbbda79f6b0b60e0521795732545599bfe4905da7",
+    "ruby-runtime.generated.js": "6fc79fe74d587807f5c5f1770141cd57013754bf80408b0a8cda91c3d393c339",
+    "ruby-runtime.js": "82f7397796c7300320491af6d5d0e7a483e553a5d73114462e15a936deff14ca",
+    "ruby-split.generated.js": "cb2e2c4c822ceedf35dee46d46eca8d4195b302bc5accda71cb53352525e6d5d",
+    "ruby-split.js": "0e5536c34d4a4751462223d0507019a31887c45c225a27ab640aceb89395f75e",
+    "runtime-activation.js": "03d006a4fcd2df3bf08245c1da5553d97242df3b4d41d025bfc99578fc0dd8f0",
+    "runtime-asset-lock.generated.js": "ef20c4ab2a2d2901f2b7b84c7e8d433c33da293922a166caf71561169c44374b",
+    "runtime-asset-lock.js": "51e720b5241f06a4ffa739bc7de7f29bee22acdd126979ed02d43eb5da028092",
+    "runtime-assets.js": "f0d423e5b122787ede2534b35eb0d4ca3f75f373082722622c7fed8e032b03ae",
+    "runtime-manifest.js": "1d484a4bd1afb850ad7c013e4ee4250a290a1b6d80e39ce0365e014a89b45a3e",
+    "runtime-preflight-activation.js": "a9276cf1d27450090c9eb7d30ad34013560c3de950f6508abbf7b55e670baaa0",
+    "runtime-preflight.js": "7cf3b56799a60a5281e877607f6d7cc37ea70abaa1791c1281d3ac88e247ea5b",
+    "sandbox.js": "49bc4ab7644b5fea9be1fac67bf029783c3b10458665d2cf5659fcfdb8175595",
+    "tcl-runtime.js": "7449169908cba7cf4cdf15ecdb14de580ba9aef7ddc3ea0b37e02248fea6c240",
+    "teavm-runtime.generated.js": "3f590a88a173a5107d89d3771790f5445f41d16bc469a92fe43875a2ccf15319",
+    "teavm-runtime.js": "4e2d95c62496d0b854b9172faab0e47b5ceebf44e47fad7b9b85fd9390d53201",
+    "terminal.js": "28d7e64041df33f6f363b8271ac0e50d4eb5f035c7f494c22554c2c1fd0353cf",
+    "worker-lifetime.js": "06feab3c0a4b0dbf1450035914a7a03f8a2cb1826a0a2ad207b6066f7e6799d5",
+    "workspace.js": "260c88dd200399d9b079f7ccde27121f0494f12a73e7d96e467af21dff2ba7b4"
+  },
+  "fixtureSha256": "3c8b77cbd6818c131db062944442b043e353d49b2b42f76857abedfac99f090d",
+  "browser": "153.0.8010.12",
+  "host": {
+    "platform": "linux",
+    "release": "6.1.0-53-cloud-amd64",
+    "arch": "x64",
+    "node": "v24.1.0"
+  },
+  "profile": "batch-snapshot",
+  "unsupported": [
+    "live filesystem",
+    "pipes",
+    "shell",
+    "B1 applets",
+    "interactive stdin"
+  ],
+  "node": {
+    "before": 0,
+    "afterMetadata": 0,
+    "after": 1,
+    "metadata": [
+      "busybox",
+      "cat",
+      "echo",
+      "false",
+      "printf",
+      "pwd",
+      "true"
+    ],
+    "cases": [
+      {
+        "id": "printf-binary",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 5,
+        "stdoutHex": "410042ff0a",
+        "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "printf-binary",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 5,
+        "stdoutHex": "410042ff0a",
+        "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "printf-argv",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 12,
+        "stdoutHex": "3c3e3ced959c20eab8803e0a",
+        "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "printf-argv",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 12,
+        "stdoutHex": "3c3e3ced959c20eab8803e0a",
+        "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-stdin",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-stdin",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-relative",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-relative",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-absolute",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-absolute",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8193,
+        "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "cat-missing",
+        "invocation": "multicall",
+        "code": 1,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+        "passed": true
+      },
+      {
+        "id": "cat-missing",
+        "invocation": "argv0",
+        "code": 1,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+        "passed": true
+      },
+      {
+        "id": "echo-utf8",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8,
+        "stdoutHex": "ed959c20eab8800a",
+        "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "echo-utf8",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 8,
+        "stdoutHex": "ed959c20eab8800a",
+        "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "pwd",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 15,
+        "stdoutHex": "2f776f726b73706163652f6120620a",
+        "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "pwd",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 15,
+        "stdoutHex": "2f776f726b73706163652f6120620a",
+        "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "true",
+        "invocation": "multicall",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "true",
+        "invocation": "argv0",
+        "code": 0,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "false",
+        "invocation": "multicall",
+        "code": 1,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "",
+        "passed": true
+      },
+      {
+        "id": "false",
+        "invocation": "argv0",
+        "code": 1,
+        "reason": "exited",
+        "stdoutBytes": 0,
+        "stdoutHex": "",
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrHex": "",
+        "passed": true
+      }
+    ],
+    "readonlyCode": "EROFS",
+    "hostEditVisible": true,
+    "retainedFile": true,
+    "liveWorkers": 0,
+    "processCount": 0,
+    "memoryCacheEntries": 1,
+    "isolated": false,
+    "userAgent": "Node.js/24",
+    "cacheNames": []
+  },
+  "browserRuns": [
+    {
+      "before": 0,
+      "afterMetadata": 0,
+      "after": 1,
+      "metadata": [
+        "busybox",
+        "cat",
+        "echo",
+        "false",
+        "printf",
+        "pwd",
+        "true"
+      ],
+      "cases": [
+        {
+          "id": "printf-binary",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 5,
+          "stdoutHex": "410042ff0a",
+          "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-binary",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 5,
+          "stdoutHex": "410042ff0a",
+          "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-argv",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 12,
+          "stdoutHex": "3c3e3ced959c20eab8803e0a",
+          "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-argv",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 12,
+          "stdoutHex": "3c3e3ced959c20eab8803e0a",
+          "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-stdin",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-stdin",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-relative",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-relative",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "multicall",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "argv0",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8,
+          "stdoutHex": "ed959c20eab8800a",
+          "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8,
+          "stdoutHex": "ed959c20eab8800a",
+          "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 15,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 15,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "multicall",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "argv0",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        }
+      ],
+      "readonlyCode": "EROFS",
+      "hostEditVisible": true,
+      "retainedFile": true,
+      "liveWorkers": 0,
+      "processCount": 0,
+      "memoryCacheEntries": 1,
+      "isolated": false,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "cacheNames": [
+        "wasm-idle-assets-v1:busybox-container-b0"
+      ]
+    },
+    {
+      "before": 1,
+      "afterMetadata": 1,
+      "after": 1,
+      "metadata": [
+        "busybox",
+        "cat",
+        "echo",
+        "false",
+        "printf",
+        "pwd",
+        "true"
+      ],
+      "cases": [
+        {
+          "id": "printf-binary",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 5,
+          "stdoutHex": "410042ff0a",
+          "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-binary",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 5,
+          "stdoutHex": "410042ff0a",
+          "stdoutSha256": "900342749165f295e75419265a06ea37cc6ab627b2e0c02629bc56d39dd89845",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-argv",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 12,
+          "stdoutHex": "3c3e3ced959c20eab8803e0a",
+          "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-argv",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 12,
+          "stdoutHex": "3c3e3ced959c20eab8803e0a",
+          "stdoutSha256": "82f7914332098a9e6248df340574eef9f62439cd6a92d6fed07f96f534e91554",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-stdin",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-stdin",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-relative",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-relative",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8193,
+          "stdoutSha256": "db8e82fcacaeceb336ecb8be90fad31da698c72a6c10fd1ea68a2e5874b78b17",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "multicall",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "argv0",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8,
+          "stdoutHex": "ed959c20eab8800a",
+          "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 8,
+          "stdoutHex": "ed959c20eab8800a",
+          "stdoutSha256": "f75185c67a92785418543b3c32ce477d5566e499c4239cb26e79bb09425935d7",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 15,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 15,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stdoutSha256": "be402ffb79818d7b6d18f8e9acd7c45824969a12565591f4b2662ead90100b36",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "multicall",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "argv0",
+          "code": 0,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "multicall",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "argv0",
+          "code": 1,
+          "reason": "exited",
+          "stdoutBytes": 0,
+          "stdoutHex": "",
+          "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHex": "",
+          "passed": true
+        }
+      ],
+      "readonlyCode": "EROFS",
+      "hostEditVisible": true,
+      "retainedFile": true,
+      "liveWorkers": 0,
+      "processCount": 0,
+      "memoryCacheEntries": 1,
+      "isolated": false,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "cacheNames": [
+        "wasm-idle-assets-v1:busybox-container-b0"
+      ]
+    }
+  ],
+  "bodyRequests": {
+    "node": 1,
+    "browser": 1
+  },
+  "cache": {
+    "pageReloaded": true,
+    "httpCache": "no-store",
+    "namespace": "busybox-container-b0",
+    "persistent": true
+  }
+}
