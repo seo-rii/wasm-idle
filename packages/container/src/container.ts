@@ -1,10 +1,13 @@
 import { ContainerError } from './errors.js';
-import { MemoryFileSystem, type FileSystemLease, type MemoryFileSystemOptions } from './fs/index.js';
+import { MemoryFileSystem, type FileSystemLease, type MemoryFileSystemOptions, type SnapshotEntry } from './fs/index.js';
 import { ProcessLifecycle, snapshotInvocation } from './process/lifecycle.js';
 import type { CommandAdapter, CommandDefinition, PreparedRuntime, RuntimeLimits } from './adapters/types.js';
 import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult } from './types.js';
 
+import type { ContainerPackageManager } from './packages/manager.js';
+
 export interface ContainerOptions extends MemoryFileSystemOptions {
+  readonly packages?: ContainerPackageManager;
   readonly commands?: Readonly<Record<string, CommandDefinition>>;
   readonly adapters?: readonly CommandAdapter[];
   readonly maxMemoryBytes?: number;
@@ -31,6 +34,8 @@ function byteOutput(bytes: Promise<Uint8Array>) {
 /** First execution profile: one leased filesystem snapshot and prebuffered batch stdin. */
 export class Container {
   readonly fs: MemoryFileSystem;
+  readonly packages?: ContainerPackageManager;
+  #mountedPackages = new Set<string>();
   #commands = new Map<string, CommandDefinition>();
   #adapters = new Map<string, CommandAdapter>();
   #processes = new Map<number, { command: string; lifecycle: ProcessLifecycle; stop: () => Promise<void> }>();
@@ -40,6 +45,8 @@ export class Container {
   #disposed = false;
   #disposal?: Promise<void>;
   constructor(options: ContainerOptions = {}) {
+    this.packages = options.packages;
+    if (this.packages?.resolveCommand('wasm-run')) throw new ContainerError('INVALID_ARGUMENT', 'wasm-run is a reserved command');
     this.fs = new MemoryFileSystem({ maxBytes: options.maxBytes, maxInodes: options.maxInodes });
     this.#limits = Object.freeze({
       maxWorkspaceBytes: positive(options.maxBytes ?? 64 * 1024 * 1024, 'maxBytes', 2 ** 32),
@@ -54,6 +61,7 @@ export class Container {
       this.#adapters.set(adapter.id, adapter);
     }
     for (const [name, command] of Object.entries(options.commands ?? {})) {
+      if (name === 'wasm-run' || this.packages?.resolveCommand(name)) throw new ContainerError('INVALID_ARGUMENT', `Reserved command: ${name}`);
       snapshotInvocation(name, [], {});
       if (!(command.bytes instanceof Uint8Array) || !this.#adapters.has(command.adapter)) throw new ContainerError('INVALID_ARGUMENT', `Invalid command: ${name}`);
       if (command.argv0 !== undefined) snapshotInvocation(command.argv0, []);
@@ -66,10 +74,20 @@ export class Container {
     if (invocation.signal?.aborted) throw new ContainerError('ABORTED', 'Command aborted before startup');
     if (new TextEncoder().encode(JSON.stringify([command, invocation.args, invocation.env])).length > 1024 * 1024) throw new ContainerError('RESOURCE_LIMIT', 'Invocation exceeds one MiB');
     if (this.#processes.size >= this.#maxProcesses || this.#nextPid >= Number.MAX_SAFE_INTEGER) throw new ContainerError('RESOURCE_LIMIT', 'Process admission limit reached');
-    const definition = this.#commands.get(command);
-    if (!definition) throw new ContainerError('COMMAND_NOT_FOUND', `Unknown command: ${command}`);
+    let definition = this.#commands.get(command);
+    const packageCommand = this.packages?.resolveCommand(command);
+    let executionArgs = invocation.args;
+    if (command === 'wasm-run') {
+      if (!invocation.args.length) throw new ContainerError('INVALID_ARGUMENT', 'wasm-run requires a workspace path');
+      const path = invocation.args[0]!;
+      definition = { adapter: 'wasi-preview1', bytes: this.fs.readFile(path, { cwd: invocation.cwd }), argv0: path };
+      executionArgs = invocation.args.slice(1);
+    }
+    if (!definition && !packageCommand) throw new ContainerError('COMMAND_NOT_FOUND', `Unknown command: ${command}`);
+    const adapterId = definition?.adapter ?? packageCommand!.adapter;
+    if (!this.#adapters.has(adapterId)) throw new ContainerError('UNSUPPORTED_PROFILE', `Adapter is not registered: ${adapterId}`);
     if (this.fs.stat(invocation.cwd).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'cwd must name a directory');
-    const adapter = this.#adapters.get(definition.adapter)!;
+    const adapter = this.#adapters.get(adapterId)!;
     const pid = this.#nextPid++, lifecycle = new ProcessLifecycle(), controller = new AbortController();
     let runtime: PreparedRuntime | undefined, lease: FileSystemLease | undefined, finishing: Promise<void> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -107,9 +125,32 @@ export class Container {
     if (invocation.timeoutMs !== undefined) timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, invocation.timeoutMs);
     try {
       lifecycle.transition('resolving'); controller.signal.throwIfAborted();
-      lifecycle.transition('preparing'); lease = this.fs.acquireSnapshot();
+      lifecycle.transition('preparing');
+      if (packageCommand) {
+        const prepared = await this.packages!.prepareCommand(command, { signal: controller.signal });
+        controller.signal.throwIfAborted();
+        const missing = prepared.packages.filter((pkg) => !this.#mountedPackages.has(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`));
+        const mounts = missing.map((pkg) => {
+          const entries = new Map<string, Omit<SnapshotEntry, 'inode'>>();
+          for (const file of pkg.files) {
+            const parts = file.path.split('/');
+            for (let i = 1; i < parts.length; i++) {
+              const path = parts.slice(0, i).join('/');
+              entries.set(path, { path, type: 'directory', mode: 0o555 });
+            }
+            entries.set(file.path, { path: file.path, type: 'file', mode: file.executable ? 0o555 : 0o444, data: file.bytes });
+          }
+          return { path: pkg.mount, entries: [...entries.values()] };
+        });
+        if (mounts.length) this.fs.mountReadonlyPackages(mounts);
+        for (const pkg of missing) this.#mountedPackages.add(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`);
+        definition = { adapter: prepared.command.adapter, argv0: prepared.command.argv0, bytes: prepared.executable };
+        executionArgs = Object.freeze([...prepared.command.prefixArgs, ...invocation.args]);
+      }
+      controller.signal.throwIfAborted();
+      lease = this.fs.acquireSnapshot();
       lifecycle.transition('starting');
-      runtime = await adapter.start({ command: definition, invocation, snapshot: lease.snapshot, limits: this.#limits, generation: pid, signal: controller.signal });
+      runtime = await adapter.start({ command: definition!, invocation: { command, args: executionArgs, cwd: invocation.cwd, env: invocation.env }, snapshot: lease.snapshot, limits: this.#limits, generation: pid, signal: controller.signal });
       controller.signal.throwIfAborted();
       lifecycle.transition('running'); returned = true;
       const stdin = new WritableStream<Uint8Array>({
@@ -134,6 +175,7 @@ export class Container {
         try {
           const result = await runtime!.run(await input);
           if (controller.signal.aborted || finishing) return;
+          if (!result || !Number.isSafeInteger(result.code) || result.code < 0 || result.code > 0xffffffff || !(result.stdout instanceof Uint8Array) || !(result.stderr instanceof Uint8Array) || result.stdout.length + result.stderr.length > this.#limits.maxOutputBytes) throw new ContainerError('STARTUP_FAILED', 'Adapter returned an invalid completion');
           try { lease!.commit(result.snapshot); }
           catch { await cleanup({ code: null, reason: 'filesystem-conflict' }); return; }
           await cleanup({ code: result.code, reason: 'exited' }, result);
