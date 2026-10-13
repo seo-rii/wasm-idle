@@ -24,6 +24,7 @@ import { CompiledArtifactCache, clangCompileKey } from './compiledArtifactCache'
 import { CLANG_STDIN_DATA, CLANG_STDIN_EOF, CLANG_STDIN_HEADER_BYTES } from './clangWorkerProtocol';
 
 const MAX_BUFFERED_INPUT_BYTES = 128 * 1024;
+const MAX_HEADER_BUILD_TIMEOUT_MS = 30_000;
 
 type WorkerFactories = { compile(): Worker | Promise<Worker>; execute(): Worker | Promise<Worker> };
 const workers: WorkerFactories = {
@@ -64,10 +65,13 @@ export function createCachedClangSandbox(
 	let loadedMaxInputBytes = MAX_BUFFERED_INPUT_BYTES;
 	let maxBufferedInputBytes = loadedMaxInputBytes;
 	let pendingInputBytes = 0;
+	let loadedHeaderTimeoutMs = MAX_HEADER_BUILD_TIMEOUT_MS;
+	let headerTimeoutMs = loadedHeaderTimeoutMs;
+	let loadedMaxWorkers = 1;
+	let maxWorkers = loadedMaxWorkers;
 	const pendingInput: Uint8Array[] = [];
 	const encoder = new TextEncoder();
-	// Built in the background by the compile worker after a <bits/stdc++.h> source; it outlives
-	// runs and cancellations and is discarded only with the sandbox.
+	// Header builds survive ordinary cancellation, within their own deadline and Worker budget.
 	let precompiledHeader: BrowserClangPrecompiledHeader | undefined;
 	let headerWorker: { worker: Worker; dispose(): void } | undefined;
 
@@ -89,18 +93,29 @@ export function createCachedClangSandbox(
 
 	function adoptHeaderWorker(worker: Worker, bridge?: WorkerAssetBridge) {
 		headerWorker?.dispose();
+		let settled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
 		const dispose = () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
 			if (headerWorker?.worker === worker) headerWorker = undefined;
 			disposeWorker(worker, bridge);
 		};
 		headerWorker = { worker, dispose };
+		timeout = setTimeout(dispose, headerTimeoutMs);
 		worker.onerror = dispose;
 		worker.onmessageerror = dispose;
 		worker.onmessage = (event) => {
-			if (bridge?.handleMessage(event)) return;
-			if (event.data?.type !== 'precompiled-header') return;
-			if (event.data.header) precompiledHeader = event.data.header;
-			dispose();
+			if (settled || disposed || headerWorker?.worker !== worker) return;
+			try {
+				if (bridge?.handleMessage(event)) return;
+				if (event.data?.type !== 'precompiled-header') return;
+				if (event.data.header) precompiledHeader = event.data.header;
+				dispose();
+			} catch {
+				dispose();
+			}
 		};
 	}
 
@@ -164,6 +179,8 @@ export function createCachedClangSandbox(
 		signal?: AbortSignal,
 		executionAssetConfig = assetConfig
 	) {
+		// The background compiler and the next foreground Worker share one budget.
+		if (headerWorker && maxWorkers < 2) headerWorker.dispose();
 		const worker = await factory();
 		if (token !== generation || signal?.aborted) {
 			disposeWorker(worker);
@@ -305,6 +322,11 @@ export function createCachedClangSandbox(
 				resolveExecutionLimits(options.limits).maxWorkspaceBytes
 			);
 			maxBufferedInputBytes = loadedMaxInputBytes;
+			loadedHeaderTimeoutMs = Math.min(
+				MAX_HEADER_BUILD_TIMEOUT_MS,
+				resolveExecutionLimits(options.limits).compileTimeoutMs
+			);
+			loadedMaxWorkers = resolveExecutionLimits(options.limits).maxWorkers;
 			languageSysroots = config?.clang?.bundledLanguageSysroots === true;
 		},
 		async run(
@@ -345,6 +367,14 @@ export function createCachedClangSandbox(
 			};
 			options.signal?.throwIfAborted();
 			const token = ++generation;
+			headerTimeoutMs = Math.min(
+				loadedHeaderTimeoutMs,
+				resolveExecutionLimits(options.limits).compileTimeoutMs
+			);
+			maxWorkers = Math.min(
+				loadedMaxWorkers,
+				resolveExecutionLimits(options.limits).maxWorkers
+			);
 			// Reactive UI arrays/records are Proxies and cannot cross postMessage.
 			// Snapshot known fields before awaiting compilation, so the cache key,
 			// compiler and executor also observe the same input values.
