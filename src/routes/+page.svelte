@@ -56,14 +56,11 @@
 		WORKSPACE_STORAGE_KEY,
 		workspaceStorageKey
 	} from './workspaceContext';
+	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
-	import {
-		isEditorDefaultSource,
-		isLegacyEditorDefaultSource,
-		resolveEditorDefaultSource
-	} from './editor-defaults';
+	import { resolveEditorDefaultSource } from './editor-defaults';
 	import {
 		argsHelpLanguages,
 		argsLabels,
@@ -908,29 +905,21 @@
 		return resolveEditorDefaultSource(defaultLanguage[nextLanguage], rustTargetTriple);
 	}
 
-	function migrateWorkspaceFileContent(content: string, nextLanguage: PlaygroundLanguage) {
-		const nextDefaultSource = defaultSourceForLanguage(nextLanguage);
-		if (content === nextDefaultSource) {
-			return content;
-		}
-		if (isEditorDefaultSource(content) || isLegacyEditorDefaultSource(content)) {
-			return nextDefaultSource;
-		}
-		return content;
-	}
-
 	function sanitizeWorkspace(
 		value: Partial<LanguageWorkspace> | undefined,
-		nextLanguage: PlaygroundLanguage
+		nextLanguage: PlaygroundLanguage,
+		snapshotVersion?: number
 	): LanguageWorkspace {
 		const fallback = createDefaultWorkspace(nextLanguage);
 		const nextFiles = sanitizeFiles(value?.files);
-		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) => ({
-			...file,
-			content: isBinaryWorkspaceFile(file)
-				? file.content
-				: migrateWorkspaceFileContent(file.content, nextLanguage)
-		}));
+		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) =>
+			migrateLegacyWorkspaceFile(file, {
+				version: snapshotVersion,
+				language: nextLanguage,
+				entryPath: defaultPathForLanguage(nextLanguage),
+				defaultSource: defaultSourceForLanguage(nextLanguage)
+			})
+		);
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
 		const activePath = files.some((file) => file.path === requestedActivePath)
@@ -1177,7 +1166,11 @@
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
 		for (const nextLanguageKey of playgroundLanguages) {
 			const workspace = value?.workspaces?.[nextLanguageKey];
-			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(workspace, nextLanguageKey);
+			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(
+				workspace,
+				nextLanguageKey,
+				value?.version
+			);
 		}
 		if (!value?.workspaces) {
 			nextWorkspaces[nextLanguage] = sanitizeWorkspace(
@@ -1186,7 +1179,8 @@
 					files: value?.files,
 					openTabs: value?.openTabs
 				},
-				nextLanguage
+				nextLanguage,
+				value?.version
 			);
 		}
 		languageWorkspaces = nextWorkspaces;

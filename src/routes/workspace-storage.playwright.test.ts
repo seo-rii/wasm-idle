@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { editorDefaults } from './editor-defaults';
 
 import {
 	runBrowserPreparationScripts,
@@ -63,6 +64,59 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it(
+		'preserves helper source across restore, save, language changes, and reload',
+		browserOptions,
+		async () => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const main = { path: 'main.cpp', content: 'int user_entry = 1;' };
+				const helper = { path: 'helper.py', content: editorDefaults.python };
+				const stored = JSON.stringify({
+					version: 6,
+					sidebarOpen: true,
+					language: 'CPP',
+					activePath: main.path,
+					files: [main, helper],
+					openTabs: [main.path]
+				});
+				await context.addInitScript((snapshot) => {
+					if (sessionStorage.getItem('wid05-seeded')) return;
+					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
+					sessionStorage.setItem('wid05-seeded', '1');
+				}, stored);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.locator('#language-select').selectOption('PYTHON');
+				await page.locator('#language-select').selectOption('CPP');
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				const saved = await page.evaluate(
+					() => JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!).files
+				);
+				expect(saved).toContainEqual(helper);
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.evaluate(() => {
+					Storage.prototype.setItem = () => {
+						throw new DOMException('Quota full', 'QuotaExceededError');
+					};
+				});
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
+				const [backupDownload] = await Promise.all([
+					page.waitForEvent('download'),
+					page.getByRole('button', { name: 'Export workspace', exact: true }).click()
+				]);
+				const backupPath = await backupDownload.path();
+				if (!backupPath) throw new Error('Missing workspace backup');
+				expect(JSON.parse(await readFile(backupPath, 'utf8')).files).toContainEqual(helper);
+			});
+		}
+	);
+
 	it(
 		'opens shares separately while preserving the original local workspace',
 		browserOptions,
