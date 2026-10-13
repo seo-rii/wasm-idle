@@ -58,6 +58,57 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 }
 
 describe('workspace import browser integration', () => {
+	it(
+		'rolls back a mixed selection and permits retrying the same files after a ZIP failure',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.evaluate(() => {
+					const target = window as typeof window & { importReads?: number };
+					target.importReads = 0;
+					const original = File.prototype.arrayBuffer;
+					File.prototype.arrayBuffer = async function () {
+						target.importReads = (target.importReads || 0) + 1;
+						return original.call(this);
+					};
+				});
+				const beforeUrl = page.url();
+				const selection = [
+					{
+						name: 'first.txt',
+						mimeType: 'text/plain',
+						buffer: Buffer.from('first file')
+					},
+					{
+						name: 'broken.zip',
+						mimeType: 'application/zip',
+						buffer: Buffer.from([1, 2, 3])
+					}
+				];
+				await page.locator('input[type="file"]').setInputFiles(selection);
+				await page.getByText(/^Import failed:/u).waitFor();
+				expect(await page.locator('input[type="file"]').inputValue()).toBe('');
+				expect(await page.locator('button[title="first.txt"]').count()).toBe(0);
+				expect(page.url()).toBe(beforeUrl);
+				const reads = await page.evaluate(
+					() => (window as typeof window & { importReads?: number }).importReads || 0
+				);
+				await page.locator('input[type="file"]').setInputFiles(selection);
+				await page.waitForFunction(
+					(previous) =>
+						((window as typeof window & { importReads?: number }).importReads || 0) >=
+						previous + 2,
+					reads
+				);
+				await page.waitForFunction(
+					() =>
+						(document.querySelector('input[type="file"]') as HTMLInputElement).value ===
+						''
+				);
+				expect(await page.locator('button[title="first.txt"]').count()).toBe(0);
+			});
+		}
+	);
 	it.each(['renamed.txt', 'wasm-idle-workspace (1).json'] as const)(
 		'restores a backup named %s by its format',
 		browserOptions,
