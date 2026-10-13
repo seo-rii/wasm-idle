@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	ALL_LANGUAGE_BROWSER_TEST_SHARDS,
 	browserTestShardForRow,
+	browserTestAssetGroups,
 	createAllLanguageBrowserTestPlan,
 	createVitestChildInvocation,
 	parseAllLanguageBrowserTestArgs,
@@ -42,6 +43,35 @@ describe('all-language browser test runner', () => {
 			expect(invocation.args).toContain(file);
 		}
 	);
+	it('derives asset preparation from the enabled suites and keeps Objective-C++ in LLVM', () => {
+		const specialized = createAllLanguageBrowserTestPlan({ shard: 'specialized' });
+		expect(browserTestAssetGroups(specialized)).toEqual([
+			'ocaml',
+			'c3',
+			'lfortran',
+			'lean4',
+			'commonlisp'
+		]);
+		for (const env of ['C3', 'LFORTRAN', 'LEAN4', 'COMMONLISP', 'OCAML']) {
+			expect(specialized.env[`WASM_IDLE_RUN_REAL_BROWSER_${env}`]).toBe('1');
+		}
+		expect(specialized.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX');
+		const objectiveCxx = supportMatrixRows.find((row) => row.ids.includes('OBJECTIVECXX'))!;
+		expect(browserTestShardForRow(objectiveCxx)).toBe('llvm');
+		const llvm = createAllLanguageBrowserTestPlan({ shard: 'llvm' });
+		expect(llvm.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX).toBe('1');
+		expect(llvm.testFiles).toContain(objectiveCxx.browserTest!.file);
+		expect(browserTestAssetGroups(llvm)).toEqual(['clang']);
+		expect(
+			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'workers' }))
+		).toEqual([]);
+		expect(
+			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'stdin' }))
+		).toEqual([]);
+		expect(
+			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'compressed-assets' }))
+		).toEqual(['all']);
+	});
 	it('includes every browserTest environment declared by the support matrix', () => {
 		const plan = createAllLanguageBrowserTestPlan();
 		expect(supportMatrixRows.filter((row) => !row.browserTest)).toEqual([]);
@@ -259,6 +289,8 @@ describe('all-language browser test runner', () => {
 
 	it('prepares and starts once, preserves the Vitest exit code, and closes the server', async () => {
 		const prepare = vi.fn().mockResolvedValue(undefined);
+		const prepareAssets = vi.fn().mockResolvedValue({});
+		const verifyAssets = vi.fn().mockResolvedValue({});
 		const close = vi.fn().mockResolvedValue(undefined);
 		const startPreview = vi.fn().mockResolvedValue({
 			browserUrl: 'http://127.0.0.1:4573/wasm-idle/',
@@ -275,9 +307,26 @@ describe('all-language browser test runner', () => {
 		await expect(
 			runAllLanguageBrowserTests(
 				{ includeCompressedAssets: true },
-				{ prepare, spawnProcess: spawnProcess as never, startPreview }
+				{
+					prepare,
+					prepareAssets,
+					verifyAssets,
+					spawnProcess: spawnProcess as never,
+					startPreview
+				}
 			)
 		).resolves.toBe(23);
+		expect(prepareAssets).toHaveBeenCalledWith({ groups: ['all'] });
+		expect(verifyAssets).toHaveBeenCalledWith({
+			groups: ['all'],
+			staticDir: path.join(repositoryRoot, 'build')
+		});
+		expect(prepareAssets.mock.invocationCallOrder[0]).toBeLessThan(
+			prepare.mock.invocationCallOrder[0]!
+		);
+		expect(verifyAssets.mock.invocationCallOrder[0]).toBeLessThan(
+			startPreview.mock.invocationCallOrder[0]!
+		);
 		expect(prepare).toHaveBeenCalledTimes(1);
 		expect(prepare).toHaveBeenCalledWith(
 			['prepare:wasm-debug-release', 'build:preview', 'compress:build-runtimes'],
@@ -292,6 +341,28 @@ describe('all-language browser test runner', () => {
 			stdio: 'inherit'
 		});
 		expect(close).toHaveBeenCalledTimes(1);
+	});
+
+	it('checks reused builds and fails before starting a browser when assets are missing', async () => {
+		const prepare = vi.fn();
+		const prepareAssets = vi.fn();
+		const startPreview = vi.fn();
+		const verifyAssets = vi
+			.fn()
+			.mockRejectedValue(new Error('Missing required browser test asset: wasm-c3/c3c.wasm'));
+		await expect(
+			runAllLanguageBrowserTests(
+				{ shard: 'specialized', useBuild: true },
+				{ prepare, prepareAssets, verifyAssets, startPreview }
+			)
+		).rejects.toThrow('wasm-c3/c3c.wasm');
+		expect(prepare).not.toHaveBeenCalled();
+		expect(prepareAssets).not.toHaveBeenCalled();
+		expect(startPreview).not.toHaveBeenCalled();
+		expect(verifyAssets).toHaveBeenCalledWith({
+			groups: ['ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp'],
+			staticDir: path.join(repositoryRoot, 'build')
+		});
 	});
 
 	it('parses explicit optional suites and shards and rejects invalid options', () => {

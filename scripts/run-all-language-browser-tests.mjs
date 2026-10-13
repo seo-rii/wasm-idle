@@ -7,6 +7,10 @@ import {
 	startBrowserPreviewServer
 } from './browser-preview-server.mjs';
 import { supportMatrixRows } from './support-matrix.mjs';
+import {
+	prepareBrowserTestAssets,
+	verifyBrowserTestAssets
+} from './prepare-browser-test-assets.mjs';
 
 const COMPRESSED_ASSET_TEST_FILE =
 	'src/lib/playground/compressed-runtime-assets.playwright.test.ts';
@@ -29,10 +33,35 @@ const SHARED_STDIN_BROWSER_TEST_ENVIRONMENT = 'WASM_IDLE_RUN_REAL_BROWSER_STDIN_
 const LLVM_BROWSER_TEST_ENVIRONMENTS = new Set([
 	'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
 	'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
+	'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
 	'WASM_IDLE_RUN_REAL_BROWSER_FORTRAN',
 	'WASM_IDLE_RUN_REAL_BROWSER_COBOL',
 	'WASM_IDLE_RUN_REAL_BROWSER_V'
 ]);
+
+const BROWSER_TEST_ASSET_ENVIRONMENTS = {
+	clang: [
+		...LLVM_BROWSER_TEST_ENVIRONMENTS,
+		'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
+		'WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS',
+		'WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE',
+		'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE'
+	],
+	clangd: ['WASM_IDLE_RUN_REAL_BROWSER_LSP'],
+	ocaml: ['WASM_IDLE_RUN_REAL_BROWSER_OCAML', 'WASM_IDLE_RUN_REAL_BROWSER_LSP'],
+	c3: ['WASM_IDLE_RUN_REAL_BROWSER_C3'],
+	lfortran: ['WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN'],
+	lean4: ['WASM_IDLE_RUN_REAL_BROWSER_LEAN4'],
+	commonlisp: ['WASM_IDLE_RUN_REAL_BROWSER_COMMONLISP']
+};
+
+/** @param {{ env: Record<string, string> }} plan */
+export function browserTestAssetGroups(plan) {
+	if (plan.env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS === '1') return ['all'];
+	return Object.entries(BROWSER_TEST_ASSET_ENVIRONMENTS)
+		.filter(([, environments]) => environments.some((key) => plan.env[key] === '1'))
+		.map(([group]) => group);
+}
 
 /**
  * @typedef {'stdin' | 'llvm' | 'workers' | 'specialized' | 'compressed-assets'} BrowserTestShard
@@ -283,6 +312,8 @@ async function startDedicatedPreviewServer(origin) {
  *   prepare?: typeof runBrowserPreparationScripts;
  *   spawnProcess?: typeof spawn;
  *   startPreview?: typeof startDedicatedPreviewServer;
+ *   prepareAssets?: typeof prepareBrowserTestAssets;
+ *   verifyAssets?: typeof verifyBrowserTestAssets;
  * }} dependencies
  */
 export async function runAllLanguageBrowserTests(
@@ -297,7 +328,9 @@ export async function runAllLanguageBrowserTests(
 	{
 		prepare = runBrowserPreparationScripts,
 		spawnProcess = spawn,
-		startPreview = startDedicatedPreviewServer
+		startPreview = startDedicatedPreviewServer,
+		prepareAssets = prepareBrowserTestAssets,
+		verifyAssets = verifyBrowserTestAssets
 	} = {}
 ) {
 	const plan = createAllLanguageBrowserTestPlan({
@@ -306,6 +339,10 @@ export async function runAllLanguageBrowserTests(
 		shard,
 		family
 	});
+	const assetGroups = browserTestAssetGroups(plan);
+	if (!useBuild && assetGroups.length > 0) {
+		await prepareAssets({ groups: assetGroups });
+	}
 
 	if (!useBuild)
 		await prepare(
@@ -318,6 +355,9 @@ export async function runAllLanguageBrowserTests(
 			],
 			{ timeoutMs: 900_000 }
 		);
+	if (assetGroups.length > 0) {
+		await verifyAssets({ groups: assetGroups, staticDir: path.join(REPO_ROOT, 'build') });
+	}
 	const previewServer = await startPreview(origin);
 	try {
 		const invocation = createVitestChildInvocation(plan, previewServer.browserUrl);
