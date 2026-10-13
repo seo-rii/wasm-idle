@@ -1567,8 +1567,16 @@ class Clang {
 			}
 			this.trace(`compile ${input} -> ${obj} with ${PRECOMPILED_HEADER_PATH}`);
 			const output: string[] = [];
+			let bufferedOutputBytes = 0;
+			const outputEncoder = new TextEncoder();
 			const stdout = this.memfs.stdout;
-			this.memfs.stdout = (chunk) => output.push(chunk);
+			this.memfs.stdout = (chunk) => {
+				if (!chunk) return;
+				const bytes = bufferedOutputBytes + outputEncoder.encode(chunk).byteLength;
+				options.onBufferedOutput?.(bytes);
+				bufferedOutputBytes = bytes;
+				output.push(chunk);
+			};
 			let rejected = false;
 			try {
 				const result = await this.run(
