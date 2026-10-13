@@ -1,10 +1,216 @@
 // @vitest-environment node
 
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { supportedLanguageIds } from '../../packages/core/src/languages';
+import {
+	ALL_BROWSER_FAMILIES,
+	browserFamilyForLanguage,
+	runtimeBrowserRegistry
+} from '../../scripts/runtime-browser-registry.mjs';
+import { supportMatrixRows } from '../../scripts/support-matrix.mjs';
 import { changedBrowserFamilies } from '../../scripts/changed-browser-families.mjs';
 import { createAllLanguageBrowserTestPlan } from '../../scripts/run-all-language-browser-tests.mjs';
 
+const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+
 describe('runtime browser CI selection', () => {
+	it('assigns every registered language exactly once to required real browser coverage', () => {
+		expect(runtimeBrowserRegistry.flatMap(({ languages }) => languages).sort()).toEqual(
+			[...supportedLanguageIds].sort()
+		);
+		for (const row of supportMatrixRows) {
+			for (const language of row.ids) {
+				const owner = runtimeBrowserRegistry.find(({ languages }) =>
+					languages.includes(language)
+				)!;
+				const family = browserFamilyForLanguage(language);
+				const plan = createAllLanguageBrowserTestPlan({ family });
+				for (const name of owner.sourceNames) {
+					for (const file of [
+						`src/lib/playground/${name}.ts`,
+						`src/lib/playground/worker/${name}.ts`,
+						`runtimes/wasm-${name}/src/index.ts`,
+						`static/wasm-${name}/runtime.wasm`,
+						`scripts/sync-wasm-${name}.mjs`
+					])
+						expect(changedBrowserFamilies([file]), `${language}: ${file}`).toContain(
+							family
+						);
+				}
+				const required =
+					family === 'python'
+						? {
+								file: 'src/lib/playground/python.playwright.test.ts',
+								env: 'WASM_IDLE_RUN_REAL_BROWSER_PYTHON'
+							}
+						: family === 'dotnet'
+							? {
+									file: row.browserTest!.file,
+									env: 'WASM_IDLE_RUN_REAL_BROWSER_DOTNET'
+								}
+							: {
+									...row.browserTest!,
+									env:
+										row.browserTest!.env === 'WASM_IDLE_RUN_REAL_BROWSER_STDIN'
+											? 'WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY'
+											: row.browserTest!.env
+								};
+				expect(plan.testFiles, language).toContain(required.file);
+				expect(plan.env[required.env], language).toBe('1');
+				expect(
+					readFileSync(path.join(repositoryRoot, required.file), 'utf8'),
+					language
+				).toContain(required.env);
+			}
+		}
+	});
+
+	it('refuses a registered runtime with no support-matrix browser test', () => {
+		runtimeBrowserRegistry.push({
+			id: 'new-runtime',
+			languages: ['NEW_RUNTIME'],
+			sourceNames: ['new-runtime'],
+			dependencies: [],
+			family: 'workers'
+		});
+		try {
+			expect(() => createAllLanguageBrowserTestPlan({ family: 'workers' })).toThrow(
+				'Missing required browser test for NEW_RUNTIME'
+			);
+		} finally {
+			runtimeBrowserRegistry.pop();
+		}
+	});
+
+	it('never leaves a runtime directory or an unknown execution source without coverage', () => {
+		for (const entry of readdirSync(path.join(repositoryRoot, 'runtimes'), {
+			withFileTypes: true
+		})) {
+			if (!entry.isDirectory()) continue;
+			expect(
+				changedBrowserFamilies([`runtimes/${entry.name}/src/index.ts`]),
+				entry.name
+			).not.toEqual([]);
+		}
+		for (const file of [
+			'runtimes/new-runtime/src/index.ts',
+			'static/new-runtime/runtime.wasm',
+			'static/wasm-new-runtime/runtime.wasm',
+			'producers/wasm-new-runtime/src/index.ts',
+			'src/lib/playground/newRuntime.ts',
+			'src/lib/playground/worker/newRuntime.ts',
+			'scripts/new-runtime-pack.mjs',
+			'scripts/wasm-new-runtime-pack.mjs',
+			'scripts/sync-new-runtime.mjs',
+			'scripts/sync-wasm-new-runtime.mjs',
+			'scripts/probe-new-runtime-stdin.mjs',
+			'scripts/runtime-workers/new-runtime-runner-worker.js',
+			'scripts/runtime-workers/wasm-new-runtime-runner-worker.js',
+			'scripts/runtime-build/wasm-new-runtime-build.mjs',
+			'scripts/runtime-modules/new-runtime.mjs',
+			'scripts/llvm-contracts/new-runtime.mjs',
+			'scripts/llvm-contracts/new-runtime/contract.mjs'
+		])
+			expect(changedBrowserFamilies(['src/lib/playground/go.ts', file]), file).toEqual(
+				ALL_BROWSER_FAMILIES
+			);
+	});
+	it.each([
+		['awk', ['workers']],
+		['clojurescript', ['workers']],
+		['rescript', ['specialized']],
+		['j', ['workers']],
+		['java', ['stdin']],
+		['r', ['stdin']],
+		['rust', ['specialized']]
+	] as const)('selects only the owners of hyphenated %s worker modules', (runtime, families) => {
+		for (const directory of ['', 'worker/']) {
+			expect(
+				changedBrowserFamilies([
+					`src/lib/playground/${directory}wasm-${runtime}-runner-worker.test.ts`
+				])
+			).toEqual(families);
+		}
+	});
+
+	it('runs the change selector before dependencies have been installed', () => {
+		const directory = mkdtempSync(path.join(tmpdir(), 'wasm-idle-browser-selection-'));
+		try {
+			for (const name of ['changed-browser-families.mjs', 'runtime-browser-registry.mjs']) {
+				copyFileSync(
+					path.join(repositoryRoot, 'scripts', name),
+					path.join(directory, name)
+				);
+			}
+			const output = execFileSync(
+				process.execPath,
+				[path.join(directory, 'changed-browser-families.mjs')],
+				{ cwd: directory, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }
+			);
+			expect(JSON.parse(output)).toEqual(ALL_BROWSER_FAMILIES);
+		} finally {
+			rmSync(directory, { recursive: true, force: true });
+		}
+	});
+
+	it('selects Rust execution and every shared LLVM consumer, including Fortran, COBOL and V', () => {
+		expect(changedBrowserFamilies(['runtimes/wasm-rust/src/browser-stdin.ts'])).toEqual([
+			'specialized'
+		]);
+		expect(
+			createAllLanguageBrowserTestPlan({ family: 'specialized' }).env
+				.WASM_IDLE_RUN_REAL_BROWSER_RUST
+		).toBe('1');
+		for (const file of [
+			'packages/llvm-core/src/index.ts',
+			'src/lib/playground/fortran.ts',
+			'src/lib/playground/worker/cobol.ts',
+			'scripts/sync-wasm-v.mjs'
+		]) {
+			expect(changedBrowserFamilies([file]), file).toContain('clang');
+		}
+		for (const language of [
+			'CLANG_STDIN',
+			'OBJECTIVEC',
+			'OBJECTIVECXX',
+			'FORTRAN',
+			'COBOL',
+			'V'
+		]) {
+			expect(
+				createAllLanguageBrowserTestPlan({ family: 'clang' }).env[
+					`WASM_IDLE_RUN_REAL_BROWSER_${language}`
+				]
+			).toBe('1');
+		}
+	});
+
+	it('follows shared interpreter and static-worker consumers', () => {
+		expect(changedBrowserFamilies(['runtimes/pyodide/src/index.ts'])).toEqual([
+			'esolangs',
+			'python',
+			'specialized',
+			'workspace'
+		]);
+		expect(changedBrowserFamilies(['runtimes/ruby/src/index.ts'])).toEqual([
+			'esolangs',
+			'specialized'
+		]);
+		expect(changedBrowserFamilies(['runtimes/wasm-elixir/src/index.ts'])).toEqual([
+			'specialized',
+			'stdin'
+		]);
+		expect(changedBrowserFamilies(['src/lib/playground/staticWorkerRuntime.ts'])).toEqual([
+			'nim',
+			'specialized',
+			'workers'
+		]);
+	});
 	it('selects the changed family and all affected families for shared execution changes', () => {
 		expect(changedBrowserFamilies(['runtimes/wasm-dotnet/native/Program.cs'])).toEqual([
 			'dotnet'
@@ -20,6 +226,9 @@ describe('runtime browser CI selection', () => {
 			'go',
 			'nim',
 			'python',
+			'specialized',
+			'stdin',
+			'workers',
 			'workspace'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
@@ -82,10 +291,16 @@ describe('runtime browser CI selection', () => {
 		);
 	});
 	it.each([
-		['src/lib/playground/worker/pythonWorkspaceFiles.ts', ['python', 'workspace']],
-		['src/lib/playground/worker/pythonWorkspaceImports.ts', ['python', 'workspace']],
-		['src/lib/playground/staticWorkerRuntime.ts', ['nim']],
-		['src/lib/playground/staticStdinRing.ts', ['nim']]
+		[
+			'src/lib/playground/worker/pythonWorkspaceFiles.ts',
+			['esolangs', 'python', 'specialized', 'workspace']
+		],
+		[
+			'src/lib/playground/worker/pythonWorkspaceImports.ts',
+			['esolangs', 'python', 'specialized', 'workspace']
+		],
+		['src/lib/playground/staticWorkerRuntime.ts', ['nim', 'specialized', 'workers']],
+		['src/lib/playground/staticStdinRing.ts', ['nim', 'specialized', 'workers']]
 	] as const)('requires browser coverage for the execution dependency %s', (file, families) => {
 		for (const extension of ['.ts', '.test.ts', '.integration.test.ts']) {
 			expect(changedBrowserFamilies([file.replace(/\.ts$/, extension)])).toEqual(families);
@@ -106,8 +321,14 @@ describe('runtime browser CI selection', () => {
 			['src/lib/playground/cachedClang.ts', ['clang', 'workspace']],
 			['src/lib/playground/worker/cachedClangCompile.ts', ['clang', 'workspace']],
 			['src/lib/playground/worker/cachedClangExecute.ts', ['clang', 'workspace']],
-			['src/lib/playground/worker/pythonExecution.ts', ['esolangs', 'python', 'workspace']],
-			['src/lib/playground/worker/pythonStdio.ts', ['esolangs', 'python', 'workspace']],
+			[
+				'src/lib/playground/worker/pythonExecution.ts',
+				['esolangs', 'python', 'specialized', 'workspace']
+			],
+			[
+				'src/lib/playground/worker/pythonStdio.ts',
+				['esolangs', 'python', 'specialized', 'workspace']
+			],
 			['src/lib/playground/go.ts', ['go']],
 			['src/lib/playground/worker/go.ts', ['go']]
 		];
@@ -138,7 +359,7 @@ describe('runtime browser CI selection', () => {
 	});
 
 	it('covers all required families for shared execution layers and keeps docs out of the selection', () => {
-		const all = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python', 'workspace'];
+		const all = ALL_BROWSER_FAMILIES;
 		for (const file of [
 			'src/lib/playground/runtimeSession.ts',
 			'src/lib/playground/sandbox.ts',

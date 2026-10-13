@@ -114,6 +114,26 @@ describe('all-language browser test runner', () => {
 			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'compressed-assets' }))
 		).toEqual(['all']);
 	});
+	it.each([
+		['stdin', []],
+		['workers', []],
+		['specialized', ['ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp']]
+	] as const)(
+		'prepares assets and requires execution for the added %s family',
+		(family, groups) => {
+			const options = parseAllLanguageBrowserTestArgs([`--family=${family}`]);
+			const plan = createAllLanguageBrowserTestPlan(options);
+			expect(browserTestAssetGroups(plan)).toEqual(groups);
+			const invocation = createVitestChildInvocation(
+				plan,
+				'http://127.0.0.1:4573/wasm-idle/'
+			);
+			expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
+			expect(invocation.args.slice(5)).toEqual(plan.testFiles);
+			for (const [key, value] of Object.entries(plan.env))
+				expect(invocation.env[key]).toBe(value);
+		}
+	);
 	it('includes every browserTest environment declared by the support matrix', () => {
 		const plan = createAllLanguageBrowserTestPlan();
 		expect(supportMatrixRows.filter((row) => !row.browserTest)).toEqual([]);
@@ -178,13 +198,16 @@ describe('all-language browser test runner', () => {
 				WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC: '1',
-				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1'
+				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_FORTRAN: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_COBOL: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_V: '1'
 			},
 			testFiles: [
 				'src/lib/playground/stdin.playwright.test.ts',
+				'src/lib/playground/objectivecxx.playwright.test.ts',
 				'src/lib/playground/cpp-standards.playwright.test.ts',
-				'src/lib/playground/long-double.playwright.test.ts',
-				'src/lib/playground/objectivecxx.playwright.test.ts'
+				'src/lib/playground/long-double.playwright.test.ts'
 			]
 		});
 	});
