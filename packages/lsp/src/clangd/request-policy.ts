@@ -1,5 +1,6 @@
 import type { DataCallback, Message, RequestMessage, ResponseMessage } from 'vscode-jsonrpc';
 import type { EditorLanguageServerTransport } from '../types.js';
+import { validateTimeoutMs } from '../lifecycle.js';
 
 export interface ClangdRequestTrace {
 	requestId?: number | string;
@@ -26,6 +27,10 @@ export function createClangdRequestPolicy(
 		onDelay?: (method: string | null) => void;
 	} = {}
 ) {
+	const requestTimeoutMs = options.requestTimeoutMs ?? 8_000;
+	const initializeTimeoutMs = options.initializeTimeoutMs ?? 30_000;
+	validateTimeoutMs(requestTimeoutMs, 'Clangd request');
+	validateTimeoutMs(initializeTimeoutMs, 'Clangd initialize');
 	const trace: ClangdRequestTrace[] = [];
 	const pending = new Map<
 		number | string,
@@ -203,10 +208,7 @@ export function createClangdRequestPolicy(
 						cancel(id, 'cancelled');
 				}
 			}
-			const timeout =
-				data.method === 'initialize'
-					? (options.initializeTimeoutMs ?? 30_000)
-					: (options.requestTimeoutMs ?? 8_000);
+			const timeout = data.method === 'initialize' ? initializeTimeoutMs : requestTimeoutMs;
 			if (pending.size >= 128) cancel(pending.keys().next().value!, 'cancelled');
 			const id = data.id;
 			pending.set(id, {
