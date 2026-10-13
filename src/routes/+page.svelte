@@ -1415,6 +1415,7 @@
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
 				applySnapshot(plan.backup, 'Workspace backup restored');
+				return;
 			} else if (plan.fromZip) {
 				imported = await openImportedZipWorkspace(plan.files, destination);
 			} else {

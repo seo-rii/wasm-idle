@@ -59,6 +59,32 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 
 describe('workspace import browser integration', () => {
 	it(
+		'reports restored backups without replacing their status with zero imported files',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const backup = {
+					version: 6,
+					language: 'PYTHON',
+					activePath: 'restored-status.py',
+					files: [{ path: 'restored-status.py', content: 'print("status")\n' }]
+				};
+				await page
+					.locator('input[type="file"]')
+					.setInputFiles({
+						name: 'renamed.backup',
+						mimeType: 'application/json',
+						buffer: Buffer.from(serializeWorkspaceBackup(backup))
+					});
+				await page.getByText('Workspace backup restored', { exact: true }).waitFor();
+				expect(await page.getByText('0 files imported', { exact: true }).count()).toBe(0);
+				expect(
+					await page.locator('button[title="restored-status.py"]').count()
+				).toBeGreaterThan(0);
+			});
+		}
+	);
+	it(
 		'rolls back a mixed selection and permits retrying the same files after a ZIP failure',
 		browserOptions,
 		async () => {
