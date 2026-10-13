@@ -1,5 +1,5 @@
-import { MemoryFileSystem, FsError } from '../../fs/index.js';
-import { createBatchStdio, type BatchStdio } from './stdio.js';
+import { type MemoryFileSystem, FsError } from '../../fs/index.js';
+import { createBatchStdio, type WasiStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -7,14 +7,15 @@ const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 1
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
 interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; }
-interface HostOptions { fs: MemoryFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: BatchStdio; }
+export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'>;
+interface HostOptions { fs: WasiFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: WasiStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : 4;
 const RIGHTS = (1n << 30n) - 1n;
 
-/** Synchronous batch host. It never returns promises to a Wasm import. */
+/** Synchronous WASI imports. A live binding may block only its dedicated guest Worker. */
 export function createWasiHost(options: HostOptions) {
   let memory: WebAssembly.Memory;
-  const stdio = options.stdio ?? createBatchStdio(options.stdin, options.maxOutputBytes);
+  const stdio: WasiStdio = options.stdio ?? createBatchStdio(options.stdin, options.maxOutputBytes);
   const handles = new Map<number, Handle>();
   const standard = new Set([0, 1, 2]);
   let nextFd = 3;
@@ -95,7 +96,8 @@ export function createWasiHost(options: HostOptions) {
       const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
       if (!bytes.length) { if (total === 1024 * 1024) break; continue; }
       if (fd === 1 || fd === 2) {
-        total += stdio.write(fd, bytes);
+        const n = stdio.write(fd, bytes);
+        total += n; if (n < bytes.length) break;
       } else {
         const h = handle(fd, 64n);
         const n = offset === undefined ? options.fs.write(h.fd, bytes) : options.fs.pwrite(h.fd, bytes, safeOffset(offset) + total);
@@ -110,7 +112,7 @@ export function createWasiHost(options: HostOptions) {
     proc_exit: (code) => { throw new WasiExit(code >>> 0); },
     fd_read: fdRead, fd_pread: (fd, ptr, count, offset, result) => fdRead(fd, ptr, count, result, offset),
     fd_write: fdWrite, fd_pwrite: (fd, ptr, count, offset, result) => fdWrite(fd, ptr, count, result, offset),
-    fd_close: (fd) => { if (standard.delete(fd)) return 0; options.fs.close(handle(fd).fd); handles.delete(fd); return 0; },
+    fd_close: (fd) => { if (standard.delete(fd)) { stdio.close?.(fd); return 0; } options.fs.close(handle(fd).fd); handles.delete(fd); return 0; },
     fd_seek: (fd, offset, whence, ptr) => {
       span(ptr, 8); if (whence < 0 || whence > 2) throw new WasiFault(28);
       const position = options.fs.seek(handle(fd, 4n).fd, safeOffset(offset), (['set', 'cur', 'end'] as const)[whence]!);
@@ -120,14 +122,15 @@ export function createWasiHost(options: HostOptions) {
     fd_fdstat_get: (fd, ptr) => {
       span(ptr, 24); const h = standard.has(fd) ? undefined : handle(fd);
       const v = view(ptr, 24); span(ptr, 24).fill(0);
-      v.setUint8(0, h ? filetype(options.fs.fstat(h.fd).type) : 2); v.setUint16(2, h?.flags ?? 0, true);
+      // Preview1 has no FIFO type. Byte streams are not terminal character devices.
+      v.setUint8(0, h ? filetype(options.fs.fstat(h.fd).type) : 0); v.setUint16(2, h?.flags ?? 0, true);
       v.setBigUint64(8, h?.rights ?? (fd === 0 ? 2n : 64n), true); v.setBigUint64(16, h?.inherited ?? 0n, true); return 0;
     },
     fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if ((base | h.rights) !== h.rights || (inherited | h.inherited) !== h.inherited) return 76; h.rights = base; h.inherited = inherited; return 0; },
     fd_fdstat_set_flags: (fd, flags) => { const h = handle(fd, 8n); return flags === h.flags ? 0 : 58; },
     fd_filestat_get: (fd, ptr) => {
       if (!standard.has(fd)) return stat(ptr, options.fs.fstat(handle(fd, 1n << 21n).fd));
-      span(ptr, 64).fill(0); view(ptr, 64).setUint8(16, 2); return 0;
+      span(ptr, 64).fill(0); return 0;
     },
     fd_filestat_set_size: (fd, length) => { const h = handle(fd, 1n << 22n); options.fs.ftruncate(h.fd, safeOffset(length)); return 0; },
     fd_prestat_get: (fd, ptr) => { const h = handle(fd); if (h.label === undefined) return 8; span(ptr, 8).fill(0); put32(ptr + 4, encoder.encode(h.label).length); return 0; },

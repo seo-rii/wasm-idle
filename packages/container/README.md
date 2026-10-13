@@ -29,7 +29,9 @@ snapshot. `spawn()` waits for Worker/profile readiness; guest execution starts a
 closed. `run()` closes stdin automatically. Output is collected under a hard combined bound,
 then exposed as byte streams after guest exit. This profile does not support live output,
 interactive stdin or process pipelines. The standalone bounded-pipe primitives are tested but
-are not a claim of live guest I/O. A future isolated adapter has its own qualification gate.
+are separate from the optional [isolated live adapter](./LIVE.md), which starts the
+guest before stdin EOF and shares operations through the Supervisor VFS. Register
+that adapter explicitly to use live streams or `spawnPipeline` command arrays.
 
 Defaults: 64 MiB workspace, 16,384 inodes, 64 MiB native Wasm memory maximum, 8 MiB input and
 combined output, 8 MiB `run()` capture. Memory limits require one defined, unshared wasm32 memory
@@ -63,8 +65,9 @@ successful mount is immutable and reused by identity; a failed closure publishes
 The injecting host owns the package manager and may share it; container disposal cancels only
 its own consumers. Dispose the manager separately when all users have finished.
 
-`wasm-run <path> [args...]` executes a workspace artifact through the explicitly registered WASI
-adapter after profile validation. It does not require executable mode metadata. Direct
+`wasm-run <path> [args...]` executes a workspace artifact through `wasi-preview1` by default;
+set `artifactAdapter` to another registered adapter such as `wasi-preview1-live` to select
+its execution profile explicitly. Profile validation still applies. It does not require executable mode metadata. Direct
 `./artifact.wasm`, shell PATH/stat/exec nodes and shebang interpretation are not yet supported;
 no placeholder `/usr/bin` executables are created. Local host command registrations cannot
 replace pinned package commands or the reserved `wasm-run` name.

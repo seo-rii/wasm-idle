@@ -1,8 +1,9 @@
 import { ContainerError } from './errors.js';
 import { MemoryFileSystem, type FileSystemLease, type MemoryFileSystemOptions, type SnapshotEntry } from './fs/index.js';
 import { ProcessLifecycle, snapshotInvocation } from './process/lifecycle.js';
-import type { CommandAdapter, CommandDefinition, PreparedRuntime, RuntimeLimits } from './adapters/types.js';
-import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult } from './types.js';
+import type { CommandAdapter, CommandDefinition, PreparedRuntime, PreparedLiveRuntime, RuntimeLimits } from './adapters/types.js';
+import { PipeError } from './fd/pipe.js';
+import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult, PipelineCommand, ContainerPipeline } from './types.js';
 
 import type { ContainerPackageManager } from './packages/manager.js';
 import type { PersistentWorkspace } from './fs/persistence/index.js';
@@ -13,6 +14,8 @@ export interface ContainerOptions extends MemoryFileSystemOptions {
   readonly packages?: ContainerPackageManager;
   readonly commands?: Readonly<Record<string, CommandDefinition>>;
   readonly adapters?: readonly CommandAdapter[];
+  /** Registered adapter used by the explicit wasm-run command. Default: wasi-preview1. */
+  readonly artifactAdapter?: string;
   readonly maxMemoryBytes?: number;
   readonly maxInputBytes?: number;
   readonly maxOutputBytes?: number;
@@ -34,7 +37,7 @@ function byteOutput(bytes: Promise<Uint8Array>) {
   }, { highWaterMark: 0 });
 }
 
-/** First execution profile: one leased filesystem snapshot and prebuffered batch stdin. */
+/** Snapshot batch and explicitly registered live adapters share one resource owner. */
 export class Container {
   readonly fs: MemoryFileSystem;
   readonly packages?: ContainerPackageManager;
@@ -45,6 +48,8 @@ export class Container {
   #processes = new Map<number, { command: string; lifecycle: ProcessLifecycle; stop: () => Promise<void> }>();
   #limits: RuntimeLimits;
   #maxProcesses: number;
+  #reservedProcesses = 0;
+  #artifactAdapter: string;
   #nextPid = 1;
   #disposed = false;
   #disposal?: Promise<void>;
@@ -64,10 +69,12 @@ export class Container {
       maxOutputBytes: positive(options.maxOutputBytes ?? 8 * 1024 * 1024, 'maxOutputBytes', 256 * 1024 * 1024)
     });
     this.#maxProcesses = positive(options.maxProcesses ?? 4, 'maxProcesses', 256);
+    this.#artifactAdapter = options.artifactAdapter ?? 'wasi-preview1';
     for (const adapter of options.adapters ?? []) {
-      if (!adapter.id || adapter.filesystem !== 'snapshot' || this.#adapters.has(adapter.id)) throw new ContainerError('INVALID_ARGUMENT', 'Invalid or duplicate adapter');
+      if (!adapter.id || !['snapshot', 'live'].includes(adapter.filesystem) || this.#adapters.has(adapter.id)) throw new ContainerError('INVALID_ARGUMENT', 'Invalid or duplicate adapter');
       this.#adapters.set(adapter.id, adapter);
     }
+    if (options.artifactAdapter !== undefined && !this.#adapters.has(options.artifactAdapter)) throw new ContainerError('INVALID_ARGUMENT', 'Artifact adapter must be explicitly registered');
     for (const [name, command] of Object.entries(options.commands ?? {})) {
       if (name === 'wasm-run' || this.packages?.resolveCommand(name)) throw new ContainerError('INVALID_ARGUMENT', `Reserved command: ${name}`);
       snapshotInvocation(name, [], {});
@@ -76,20 +83,23 @@ export class Container {
       this.#commands.set(name, Object.freeze({ ...command, bytes: command.bytes.slice() }));
     }
   }
-  async spawn(command: string, args: readonly string[] = [], options: SpawnOptions = {}): Promise<ContainerProcess> {
+  spawn(command: string, args: readonly string[] = [], options: SpawnOptions = {}): Promise<ContainerProcess> {
+    return this.#spawn(command, args, options);
+  }
+  async #spawn(command: string, args: readonly string[], options: SpawnOptions, reservation?: { remaining: number }): Promise<ContainerProcess> {
     const invocation = snapshotInvocation(command, args, options);
     if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
     if (this.workspace?.inspect().state === 'disposed') throw new ContainerError('DISPOSED', 'Workspace owner has been disposed');
     if (invocation.signal?.aborted) throw new ContainerError('ABORTED', 'Command aborted before startup');
     if (new TextEncoder().encode(JSON.stringify([command, invocation.args, invocation.env])).length > 1024 * 1024) throw new ContainerError('RESOURCE_LIMIT', 'Invocation exceeds one MiB');
-    if (this.#processes.size >= this.#maxProcesses || this.#nextPid >= Number.MAX_SAFE_INTEGER) throw new ContainerError('RESOURCE_LIMIT', 'Process admission limit reached');
+    if ((!reservation && this.#processes.size + this.#reservedProcesses >= this.#maxProcesses) || this.#nextPid >= Number.MAX_SAFE_INTEGER) throw new ContainerError('RESOURCE_LIMIT', 'Process admission limit reached');
     let definition = this.#commands.get(command);
     const packageCommand = this.packages?.resolveCommand(command);
     let executionArgs = invocation.args;
     if (command === 'wasm-run') {
       if (!invocation.args.length) throw new ContainerError('INVALID_ARGUMENT', 'wasm-run requires a workspace path');
       const path = invocation.args[0]!;
-      definition = { adapter: 'wasi-preview1', bytes: this.fs.readFile(path, { cwd: invocation.cwd }), argv0: path };
+      definition = { adapter: this.#artifactAdapter, bytes: this.fs.readFile(path, { cwd: invocation.cwd }), argv0: path };
       executionArgs = invocation.args.slice(1);
     }
     if (!definition && !packageCommand) throw new ContainerError('COMMAND_NOT_FOUND', `Unknown command: ${command}`);
@@ -98,7 +108,8 @@ export class Container {
     if (this.fs.stat(invocation.cwd).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'cwd must name a directory');
     const adapter = this.#adapters.get(adapterId)!;
     const pid = this.#nextPid++, lifecycle = new ProcessLifecycle(), controller = new AbortController();
-    let runtime: PreparedRuntime | undefined, lease: FileSystemLease | undefined, finishing: Promise<void> | undefined;
+    let runtime: PreparedRuntime | PreparedLiveRuntime | undefined, lease: FileSystemLease | undefined, finishing: Promise<void> | undefined;
+    let liveLease: { release(): void } | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let reason: 'terminated' | 'timeout' = 'terminated';
     let returned = false, inputSize = 0, inputClosed = false;
@@ -115,10 +126,12 @@ export class Container {
       controller.signal.removeEventListener('abort', onAbort);
       inputClosed = true; inputChunks.length = 0;
       inputReject(new ContainerError('ABORTED', 'Command stopped'));
-      try { await runtime?.dispose(); }
+      try { const ending = runtime; runtime = undefined; await ending?.dispose(); }
       catch { result = { code: null, reason: 'runtime-error' }; }
       finally {
         lease?.discard();
+        liveLease?.release();
+        lease = undefined; liveLease = undefined;
         stdoutResolve(output?.stdout ?? new Uint8Array()); stderrResolve(output?.stderr ?? new Uint8Array());
         this.#processes.delete(pid);
         lifecycle.finish(result);
@@ -128,6 +141,7 @@ export class Container {
     controller.signal.addEventListener('abort', onAbort, { once: true });
     const abort = () => controller.abort(invocation.signal?.reason);
     const stop = async () => { controller.abort(); if (returned) await cleanup({ code: null, reason }); else await lifecycle.exited; };
+    if (reservation) { reservation.remaining--; this.#reservedProcesses--; }
     this.#processes.set(pid, { command, lifecycle, stop });
     invocation.signal?.addEventListener('abort', abort, { once: true });
     if (invocation.signal?.aborted) abort();
@@ -157,12 +171,19 @@ export class Container {
         executionArgs = Object.freeze([...prepared.command.prefixArgs, ...invocation.args]);
       }
       controller.signal.throwIfAborted();
-      lease = this.fs.acquireSnapshot();
       lifecycle.transition('starting');
-      runtime = await adapter.start({ command: definition!, invocation: { command, args: executionArgs, cwd: invocation.cwd, env: invocation.env }, snapshot: lease.snapshot, limits: this.#limits, generation: pid, signal: controller.signal });
+      const start = { command: definition!, invocation: { command, args: executionArgs, cwd: invocation.cwd, env: invocation.env }, limits: this.#limits, generation: pid, signal: controller.signal };
+      let liveRuntime: PreparedLiveRuntime | undefined;
+      if (adapter.filesystem === 'live') {
+        liveLease = this.fs.acquireLive();
+        runtime = liveRuntime = await adapter.start({ ...start, fs: this.fs });
+      } else {
+        lease = this.fs.acquireSnapshot();
+        runtime = await adapter.start({ ...start, snapshot: lease.snapshot });
+      }
       controller.signal.throwIfAborted();
       lifecycle.transition('running'); returned = true;
-      const stdin = new WritableStream<Uint8Array>({
+      const stdin = liveRuntime?.stdin ?? new WritableStream<Uint8Array>({
         write: (bytes) => {
           if (inputClosed) throw new ContainerError('ABORTED', 'Command stdin is closed');
           if (!(bytes instanceof Uint8Array)) throw new ContainerError('INVALID_ARGUMENT', 'stdin requires bytes');
@@ -182,7 +203,13 @@ export class Container {
       });
       void (async () => {
         try {
-          const result = await runtime!.run(await input);
+          if (liveRuntime) {
+            const result = await liveRuntime.run();
+            if (controller.signal.aborted || finishing) return;
+            if (!result || !Number.isSafeInteger(result.code) || result.code < 0 || result.code > 0xffffffff) throw new ContainerError('STARTUP_FAILED', 'Adapter returned an invalid completion');
+            await cleanup({ code: result.code, reason: 'exited' }); return;
+          }
+          const result = await (runtime as PreparedRuntime).run(await input);
           if (controller.signal.aborted || finishing) return;
           if (!result || !Number.isSafeInteger(result.code) || result.code < 0 || result.code > 0xffffffff || !(result.stdout instanceof Uint8Array) || !(result.stderr instanceof Uint8Array) || result.stdout.length + result.stderr.length > this.#limits.maxOutputBytes) throw new ContainerError('STARTUP_FAILED', 'Adapter returned an invalid completion');
           try { lease!.commit(result.snapshot); }
@@ -192,13 +219,45 @@ export class Container {
           await cleanup({ code: null, reason: controller.signal.aborted ? reason : 'runtime-error' });
         }
       })();
-      return Object.freeze({ pid, stdin, stdout, stderr, exited: lifecycle.exited, terminate: stop });
+      return Object.freeze({ pid, stdin, stdout: liveRuntime?.stdout ?? stdout, stderr: liveRuntime?.stderr ?? stderr, exited: lifecycle.exited, terminate: stop });
     } catch (error) {
       await cleanup({ code: null, reason: controller.signal.aborted ? reason : 'runtime-error' });
       if (controller.signal.aborted) throw new ContainerError('ABORTED', 'Command cancelled during startup', { cause: error });
       if (error instanceof ContainerError) throw error;
       throw new ContainerError('STARTUP_FAILED', 'Command could not start', { cause: error });
     }
+  }
+  /** Explicit byte pipeline, with capacity reserved before starting any guest. No shell parsing. */
+  async spawnPipeline(commands: readonly PipelineCommand[], options: SpawnOptions = {}): Promise<ContainerPipeline> {
+    if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
+    if (!Array.isArray(commands) || commands.length < 2) throw new ContainerError('INVALID_ARGUMENT', 'A pipeline requires at least two commands');
+    if (commands.length > this.#maxProcesses - this.#processes.size - this.#reservedProcesses) throw new ContainerError('RESOURCE_LIMIT', 'Cannot reserve all pipeline processes');
+    const invocations = commands.map(entry => {
+      if (!entry || typeof entry !== 'object') throw new ContainerError('INVALID_ARGUMENT', 'Invalid pipeline command');
+      const invocation = snapshotInvocation(entry.command, entry.args ?? [], options);
+      const id = entry.command === 'wasm-run' ? this.#artifactAdapter : this.#commands.get(entry.command)?.adapter ?? this.packages?.resolveCommand(entry.command)?.adapter;
+      if (!id || this.#adapters.get(id)?.filesystem !== 'live') throw new ContainerError('UNSUPPORTED_PROFILE', 'Pipelines require registered live adapters');
+      return { command: entry.command, invocation };
+    });
+    const reservation = { remaining: commands.length };
+    this.#reservedProcesses += commands.length;
+    const processes: ContainerProcess[] = [];
+    try {
+      // Start consumers first. A waiting read never occupies the Supervisor event loop.
+      for (const entry of [...invocations].reverse()) {
+        const { invocation } = entry;
+        processes.unshift(await this.#spawn(entry.command, invocation.args, invocation, reservation));
+      }
+      const terminate = async () => { await Promise.all(processes.map(process => process.terminate())); };
+      const links = processes.slice(0, -1).map((process, index) => process.stdout.pipeTo(processes[index + 1]!.stdin).catch(async error => {
+        if (error instanceof PipeError && error.code === 'EPIPE') return;
+        await terminate();
+      }));
+      const exited = Promise.all(processes.map(process => process.exited)).then(async results => { await Promise.all(links); return Object.freeze(results); });
+      return Object.freeze({ processes: Object.freeze(processes), stdin: processes[0]!.stdin, stdout: processes.at(-1)!.stdout, stderr: Object.freeze(processes.map(process => process.stderr)), exited, terminate });
+    } catch (error) {
+      await Promise.all(processes.map(process => process.terminate())); throw error;
+    } finally { this.#reservedProcesses -= reservation.remaining; }
   }
   async run(command: string, args: readonly string[] = [], options: RunOptions = {}): Promise<CapturedProcessResult> {
     const max = positive(options.maxCaptureBytes ?? 8 * 1024 * 1024, 'maxCaptureBytes', 256 * 1024 * 1024);
@@ -220,14 +279,20 @@ export class Container {
         return result;
       } finally { reader.releaseLock(); }
     };
-    const send = async () => { const writer = process.stdin.getWriter(); try { if (bytes?.length) await writer.write(bytes); await writer.close(); } finally { writer.releaseLock(); } };
+    const send = async () => {
+      const writer = process.stdin.getWriter();
+      try { if (bytes?.length) await writer.write(bytes); await writer.close(); }
+      // A command may deliberately finish without consuming the remaining input.
+      catch (error) { if (!(error instanceof PipeError) || error.code !== 'EPIPE') throw error; }
+      finally { writer.releaseLock(); }
+    };
     try {
       const [stdout, stderr, result] = await Promise.all([drain(process.stdout), drain(process.stderr), process.exited, send()]);
       return { ...result, stdout, stderr };
     } catch (error) { await process.terminate(); throw error; }
   }
   async inspect(): Promise<ContainerInspection> {
-    return { disposed: this.#disposed, profile: 'batch', persistence: this.workspace ? 'opfs' : 'memory',
+    return { disposed: this.#disposed, profile: [...this.#adapters.values()].some(adapter => adapter.filesystem === 'live') ? 'isolated' : 'batch', persistence: this.workspace ? 'opfs' : 'memory',
       ...(this.workspace ? { workspace: this.workspace.inspect() } : {}),
       ...(this.packages ? { packages: this.packages.inspect() } : {}), limits: this.#limits,
       processes: [...this.#processes].map(([pid, p]) => ({ pid, generation: pid, command: p.command, state: p.lifecycle.state })) };

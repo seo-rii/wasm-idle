@@ -1,9 +1,9 @@
 import { MemoryFileSystem } from '../../fs/index.js';
-import type { CommandAdapter } from '../types.js';
+import type { SnapshotCommandAdapter } from '../types.js';
 import { checkMemoryProfile } from './profile.js';
 import { createWasiHost } from './host.js';
 
-type Request = Parameters<CommandAdapter['start']>[0];
+type Request = Parameters<SnapshotCommandAdapter['start']>[0];
 let prepared: { request: Request; module: WebAssembly.Module; fs: MemoryFileSystem } | undefined;
 let preparing = false, ran = false;
 const scope = globalThis as unknown as { onmessage: (event: MessageEvent) => void; postMessage: (message: unknown) => void };

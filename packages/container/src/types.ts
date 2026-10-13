@@ -32,6 +32,19 @@ export interface CapturedProcessResult extends ProcessResult {
   readonly stdout: Uint8Array;
   readonly stderr: Uint8Array;
 }
+export interface PipelineCommand {
+  readonly command: string;
+  readonly args?: readonly string[];
+}
+export interface ContainerPipeline {
+  readonly processes: readonly ContainerProcess[];
+  readonly stdin: WritableStream<Uint8Array>;
+  readonly stdout: ReadableStream<Uint8Array>;
+  /** Stderr stays separate for each process; consumers must drain every stream. */
+  readonly stderr: readonly ReadableStream<Uint8Array>[];
+  readonly exited: Promise<readonly ProcessResult[]>;
+  terminate(): Promise<void>;
+}
 export type ProcessState = 'created' | 'resolving' | 'preparing' | 'starting' | 'running' | 'exiting' | 'exited';
 export interface ProcessInspection {
   readonly pid: number;

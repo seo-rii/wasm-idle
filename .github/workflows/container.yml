@@ -49,6 +49,9 @@ jobs:
       - run: node packages/container/scripts/test-persistence-browser.mjs
         env:
           CONTAINER_PERSISTENCE_EVIDENCE: .codex/container-persistence.json
+      - run: node packages/container/scripts/test-live-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-live.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
