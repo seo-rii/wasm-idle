@@ -1,0 +1,75 @@
+# Pinned container distributions
+
+The package index is schema version 1. `validateDistribution()` requires the raw UTF-8 JSON
+bytes and an expected SHA-256 supplied independently by the application. It verifies that
+digest before parsing or accepting command metadata. A digest written inside the manifest
+does not authenticate it. The caller also supplies an explicit adapter ID allowlist and an
+exact asset URL allowlist. Neither validation nor command lookup downloads a tool body.
+
+```ts
+const distribution = await validateDistribution({
+  bytes: applicationPinnedIndexBytes,
+  expectedSha256: applicationLock.distributionSha256,
+  adapterIds: ['wasi-preview1'],
+  allowedAssetURLs: applicationLock.assetURLs
+});
+```
+
+The JSON structure is:
+
+```json
+{
+  "schemaVersion": 1,
+  "distributionId": "example-release-1",
+  "packages": [{
+    "id": "example-tools",
+    "identity": "sha256:<64 lowercase hex characters>",
+    "producer": {
+      "repository": "https://github.com/example/producer",
+      "revision": "<exact 40 or 64 lowercase hex source revision>",
+      "receiptSha256": "<64 lowercase hex characters>"
+    },
+    "dependencies": [],
+    "mount": "/opt/toolchains/example-tools",
+    "capabilities": ["wasi-preview1"],
+    "assets": [{
+      "id": "tool",
+      "url": "https://assets.example/tool-<digest>.wasm",
+      "encoding": "identity",
+      "delivery": { "sha256": "<digest>", "bytes": 8, "mediaType": "application/wasm" },
+      "logical": { "sha256": "<same digest>", "bytes": 8, "mediaType": "application/wasm" }
+    }],
+    "files": [{ "path": "bin/tool", "asset": "tool", "executable": true }]
+  }],
+  "commands": [{
+    "name": "tool", "package": "example-tools", "adapter": "wasi-preview1",
+    "path": "bin/tool", "argv0": "tool", "prefixArgs": []
+  }]
+}
+```
+
+Placeholders above must be replaced with actual producer identities. The index wraps existing
+producer receipts; it does not replace their producer-specific validation. `identity` and
+`receiptSha256` are provenance authenticated by the host-pinned index, not a claim that a
+separate receipt body was downloaded or checked. The distribution preparer must verify that
+receipt and populate actual values before creating the application lock.
+
+Dependencies are fixed package IDs in this index. Unknown packages, cycles, duplicate command
+names, unregistered adapters, and executable references to non-executable files fail before
+downloads. Adapter IDs cannot import remote JavaScript. `argv0` and `prefixArgs` represent
+explicit multicall aliases; they are not shell strings.
+
+Files use canonical UTF-8 relative POSIX paths, without NUL or path traversal. Backslash is
+an ordinary filename character. Mounts are readonly descendants of `/opt/toolchains` or
+`/usr/share`, and cannot overlap. There are no archive or symlink entries in this initial
+format. Unsupported encodings and unknown fields are rejected. Per-file, total-file,
+asset-byte, index-count, path-depth and dependency-depth bounds are checked before fetch.
+`maxTotalAssetBytes` counts both delivery and logical sizes conservatively; file sizes also
+count each file index entry, including aliases that use the same asset.
+
+Direct file assets support `identity` and file-level `gzip`. Delivery identities describe
+the body bytes returned by fetch after any HTTP content decoding. Logical identities describe
+the resulting file. Gzip delivered transparently by HTTP must therefore use `identity` when
+fetch returns the uncompressed file; a `.gz` suffix alone never selects decompression. A gzip
+file's delivery MIME is checked against its HTTP response, while its logical MIME is pinned
+metadata and its logical bytes must match their separate digest and size.
