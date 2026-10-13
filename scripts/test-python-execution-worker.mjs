@@ -76,6 +76,8 @@ const stdioExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonStdio.ts', import.meta.url), 'utf8')), { exports: stdioExports, TextEncoder, TextDecoder, performance, setTimeout, clearTimeout });
 const previewExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonDebugPreview.ts', import.meta.url), 'utf8')), { exports: previewExports });
+const workspaceExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceFiles.ts', import.meta.url), 'utf8')), { exports: workspaceExports });
 const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 function workerFixture() {
 	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [], invalidated = [];
@@ -88,6 +90,7 @@ function workerFixture() {
 		require(id) {
 			if (id === './pythonStdio') return stdioExports;
 			if (id === './pythonDebugPreview') return previewExports;
+			if (id === './pythonWorkspaceFiles') return workspaceExports;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers() {
 				initialized++;
 				return { importSource(source) { scanned.push(source); return source.includes('numpy') ? 'import numpy' : ''; },
@@ -99,7 +102,7 @@ function workerFixture() {
 			return {};
 		}
 	});
-	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); } },
+	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); }, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} },
 		setStdin() {}, setStdout() {}, setStderr() {},
 		runPython(source) {
 			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
