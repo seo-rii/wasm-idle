@@ -123,7 +123,11 @@ export function createRuntimeGeneratedAssetCacheBackend(
 					);
 					checkAbort(signal);
 					try {
-						record.lastUsed = Date.now();
+						addReference(
+							record,
+							{ ...identity, sha256: record.sha256, bytes: record.bytes },
+							policy
+						);
 						await transact(db, 'readwrite', (store) => store.put(record));
 					} catch {
 						/* Verified bytes survive a metadata/quota failure. */

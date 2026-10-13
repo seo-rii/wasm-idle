@@ -75,6 +75,8 @@ The generated release lock records expected asset hashes and compressed/logical 
 Cache hits are checked against the expected hash before use. Versions can reference the same
 content-addressed body without making duplicate copies. URL, redirect, MIME and size-validation
 policies remain part of loader eligibility: a permissive loader does not vouch for a stricter one.
+Generated artifacts also record the reader's current version on a verified cache hit. Clearing
+the version that originally generated a body therefore preserves a newer version's reference.
 
 Storage belongs to the **application's origin**, not the asset CDN's origin. Two applications
 on different origins cannot share this cache. CacheStorage, IndexedDB and Web Locks must be

@@ -514,6 +514,33 @@ describe.skipIf(!enabled)('persistent runtime assets in real Chromium', () => {
 		expect(stats).toMatchObject({ entries: 1, versions: ['1.0.1'] });
 	});
 
+	it('records generated artifact reuse by another tab before clearing the producer version', async () => {
+		await page.evaluate(async () => {
+			const backend = window.persistentAssetCache.createRuntimeGeneratedAssetCacheBackend({
+				version: 'v1'
+			});
+			if (!(await backend.write('shared-pch', new TextEncoder().encode('generated'))))
+				throw new Error('write failed');
+		});
+		const second = await context.newPage();
+		await second.goto(origin);
+		const read = () =>
+			second.evaluate(async () => {
+				const backend = window.persistentAssetCache.createRuntimeGeneratedAssetCacheBackend(
+					{ version: 'v2' }
+				);
+				return new TextDecoder().decode(await backend.read('shared-pch'));
+			});
+		expect(await read()).toBe('generated');
+		await page.evaluate(() =>
+			window.persistentAssetCache.clearRuntimeAssetCache({ version: 'v1' })
+		);
+		expect(await read()).toBe('generated');
+		expect(
+			await second.evaluate(() => window.persistentAssetCache.getRuntimeAssetCacheStats())
+		).toMatchObject({ entries: 1, versions: ['v2'] });
+	});
+
 	it('enforces a byte/entry budget and redownloads evicted entries', async () => {
 		const cache = {
 			maxBytes: payloads.get('/asset-a')!.length,

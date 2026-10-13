@@ -138,6 +138,7 @@ describe('persistent runtime asset cache', () => {
 		vi.restoreAllMocks();
 	});
 
+
 	it('aborts an active metadata transaction and waits for its abort before reusing storage', async () => {
 		const bytes = payload('metadata');
 		const key = identity(bytes);
@@ -314,6 +315,23 @@ describe('persistent runtime asset cache', () => {
 		expect(await reloaded.read('compiler+sysroot+headers+args:a')).toEqual(
 			payload('a generated PCH')
 		);
+	});
+
+	it('retains a generated body reused by a new version when its producer version is cleared', async () => {
+		const first = createRuntimeGeneratedAssetCacheBackend({ version: 'v1' });
+		const second = createRuntimeGeneratedAssetCacheBackend({ version: 'v2' });
+		const bytes = payload('shared generated PCH');
+		expect(await first.write('same-compiler-and-headers', bytes)).toBe(true);
+		expect(await second.read('same-compiler-and-headers')).toEqual(bytes);
+		expect(await getRuntimeAssetCacheStats()).toMatchObject({
+			entries: 1,
+			versions: ['v1', 'v2']
+		});
+		await clearRuntimeAssetCache({ version: 'v1' });
+		expect(await second.read('same-compiler-and-headers')).toEqual(bytes);
+		expect(await getRuntimeAssetCacheStats()).toMatchObject({ entries: 1, versions: ['v2'] });
+		await clearRuntimeAssetCache({ version: 'v2' });
+		expect(await second.read('same-compiler-and-headers')).toBeUndefined();
 	});
 
 	it('applies shared LRU bounds and replaces or removes a rejected generated configuration', async () => {
