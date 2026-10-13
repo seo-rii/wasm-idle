@@ -18,13 +18,6 @@
 		},
 		{
 			"group": "clang",
-			"source": "clang/bin/sysroot.tar.gz",
-			"target": "clang/bin/sysroot.tar.gz",
-			"size": 5059493,
-			"sha256": "c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00"
-		},
-		{
-			"group": "clang",
 			"source": "clangd/clangd.js",
 			"target": "clangd/clangd.js",
 			"size": 97002,

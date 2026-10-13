@@ -40,25 +40,25 @@ export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 		'34d39bc410c098e7e09933b61cc8e28699447af9a28abf4544d71b6e9cad1f9d'
 	),
 	'bin/sysroot.tar.gz': integrityEntry(
-		5_059_493,
-		'c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00',
-		19_312_640,
-		'e122f1acec0642d62d8976101c542aaa5346460df6eae5a3f8efb594ff32f5ae'
+		6_741_773,
+		'8f31e0be44b45bef4b22e41b3e8381ccbd5410d4b328bad76b12cc8765d6cbb5',
+		35_328_000,
+		'91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402'
 	),
 	'bin/c-sysroot.tar.gz': integrityEntry(
-		1_216_797,
-		'fb3e1cdacac3eceddcfe2e57cbbf78e593ec2a298f01acb61c06e4b9d24fbbee',
-		3_736_064,
-		'720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e'
+		1_964_664,
+		'4a22b52adb6d4c02bfb666d89262de49475ba983b04294a4b7b91bed2d33824f',
+		11_944_960,
+		'83a1cf62bde6757ac9174ac1d3b9d0132e1c63b9d7ac96e3b45d2ea5ffac14cd'
 	),
 	'bin/cpp-addon.tar.gz': integrityEntry(
-		3_840_608,
-		'47e9946c5aaeb3b35a1d42d6a80eae8987c596f4f858b207e492c00d8680af9e',
-		15_572_992,
-		'7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d'
+		4_776_509,
+		'6e243c219561b1f5aad64db4a9ff8bbeb85a97b5e3b5df3ed71d8340d35a8cd7',
+		23_382_528,
+		'feaf2aa538623ec8c543ccb49e9a833d2a1aa6dee7a9ad502c277deba24ef642'
 	),
 	'language-sysroots.v1.json': integrityEntry(
-		175_348,
-		'd69acbdb636009dc5b2243f13f1580264f64a34362f0af67c9cd661388b565d0'
+		423_904,
+		'e6b2b196dc73ba9f5738eee8ffd628bf3767cd4959bbbb50167c10c5574dcd32'
 	)
 });
