@@ -223,3 +223,32 @@ test('overlapping operations are rejected without replacing the active request',
 	workers[0].compiled('first');
 	assert.equal((await first).code, 'first');
 });
+
+for (const action of ['stop', 'dispose']) {
+	test(`${action} between compile reply and execution prevents launch`, async () => {
+		const { candidate, workers } = setup({ timeoutMs: 20 });
+		const running = candidate.run({ files }, { timeoutMs: 20 });
+		const rejected = assert.rejects(running, /aborted|disposed/i);
+		workers[0].compiled();
+		candidate[action]();
+		await rejected;
+		assert.equal(workers.length, 1, 'No execution worker after cancellation');
+		if (action === 'stop') {
+			const recovery = candidate.run({ files }, { timeoutMs: 20 });
+			workers[0].compiled();
+			await tick();
+			workers[1].exit();
+			assert.equal((await recovery).exitCode, 0);
+		}
+		candidate.dispose();
+	});
+	test(`${action} after successful compile reply rejects pending compile`, async () => {
+		const { candidate, workers } = setup({ timeoutMs: 20 });
+		const compiling = candidate.compile(files);
+		const rejected = assert.rejects(compiling, /aborted|disposed/i);
+		workers[0].compiled();
+		candidate[action]();
+		await rejected;
+		candidate.dispose();
+	});
+}

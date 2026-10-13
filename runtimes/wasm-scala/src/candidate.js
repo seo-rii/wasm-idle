@@ -11,12 +11,15 @@ export class ScalaCandidate {
 		this.busy = false;
 		this.disposed = false;
 		this.nextId = 0;
+		this.generation = 0;
 	}
 
 	async compile(files, { signal } = {}) {
-		this.begin(signal);
+		const generation = this.begin(signal);
 		try {
-			return await this.compileRequest(files, signal);
+			const compiled = await this.compileRequest(files, signal);
+			this.checkOperation(generation, signal);
+			return compiled;
 		} finally {
 			this.busy = false;
 		}
@@ -27,6 +30,12 @@ export class ScalaCandidate {
 		if (this.busy) throw new Error('Scala candidate is busy.');
 		if (signal?.aborted) throw new Error('Scala request aborted.');
 		this.busy = true;
+		return ++this.generation;
+	}
+
+	checkOperation(generation, signal) {
+		if (this.disposed || generation !== this.generation || signal?.aborted)
+			throw new Error('Scala request aborted.');
 	}
 
 	async compileRequest(files, signal) {
@@ -38,11 +47,11 @@ export class ScalaCandidate {
 		{ files, stdin = '', args = [] },
 		{ signal, onOutput = () => {}, timeoutMs = 10000 } = {}
 	) {
-		this.begin(signal);
+		const generation = this.begin(signal);
 		let execution;
 		try {
 			const compiled = await this.compileRequest(files, signal);
-			if (signal?.aborted) throw new Error('Scala request aborted.');
+			this.checkOperation(generation, signal);
 			execution = this.workerFactory('execution');
 			const result = await this.request(
 				execution,
@@ -51,6 +60,7 @@ export class ScalaCandidate {
 				timeoutMs,
 				onOutput
 			);
+			this.checkOperation(generation, signal);
 			return { exitCode: result.exitCode, diagnostics: compiled.diagnostics };
 		} finally {
 			execution?.terminate();
@@ -113,6 +123,7 @@ export class ScalaCandidate {
 	}
 
 	stop() {
+		this.generation++;
 		this.active?.cancel();
 	}
 
