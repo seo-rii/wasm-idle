@@ -10,5 +10,7 @@ export function normalizeWorkspacePath(value: string): string {
 	if (parts.includes('..')) {
 		throw new Error(`Workspace path cannot traverse directories: ${value}`);
 	}
-	return parts.filter((part) => part && part !== '.').join('/');
+	const path = parts.filter((part) => part && part !== '.').join('/');
+	if (path && !path.trim()) throw new Error('Workspace path cannot contain only whitespace');
+	return path;
 }
