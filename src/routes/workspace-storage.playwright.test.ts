@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { editorDefaults } from './editor-defaults';
+import { WORKSPACE_BACKUP_FORMAT } from './workspaceBackup';
 
 import {
 	runBrowserPreparationScripts,
@@ -446,7 +447,9 @@ describe('workspace storage browser integration', () => {
 				]);
 				const backupPath = await backupDownload.path();
 				if (!backupPath) throw new Error('Missing workspace backup');
-				expect(JSON.parse(await readFile(backupPath, 'utf8')).files).toContainEqual(helper);
+				const backup = JSON.parse(await readFile(backupPath, 'utf8'));
+				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
+				expect(backup.snapshot.files).toContainEqual(helper);
 			});
 		}
 	);
@@ -630,7 +633,9 @@ describe('workspace storage browser integration', () => {
 				const backupPath = await (await backupDownload).path();
 				if (!backupPath) throw new Error('Missing workspace backup');
 				const backupBytes = await readFile(backupPath);
-				expect(JSON.parse(backupBytes.toString()).files).toContainEqual({
+				const backup = JSON.parse(backupBytes.toString());
+				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
+				expect(backup.snapshot.files).toContainEqual({
 					path: 'unsaved.txt',
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
@@ -645,9 +650,9 @@ describe('workspace storage browser integration', () => {
 				).toBe(0);
 				expect(
 					await page.evaluate(() =>
-						localStorage.getItem('wasm-idle:example-workspace:v3')
+						JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
 					)
-				).toBe(backupBytes.toString());
+				).toEqual(backup.snapshot);
 				await page.evaluate(() => history.replaceState(null, '', location.pathname));
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('button[title="unsaved.txt"]').waitFor();
