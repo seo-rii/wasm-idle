@@ -338,6 +338,10 @@ importers:
         version: 0.6.0
 
   packages/container:
+    dependencies:
+      '@wasm-idle/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       playwright-core:
         specifier: ^1.63.0
