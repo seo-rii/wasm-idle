@@ -7,10 +7,17 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const coreRoot = resolve(root, '../core/dist');
+const fixture = await readFile(resolve(root, 'test/fixtures/command.wasm'));
+const fixtureSha256 = createHash('sha256').update(fixture).digest('hex');
+let assetRequests = 0;
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><meta charset="utf-8"><title>Container contract</title><script type="importmap">{"imports":{"@wasm-idle/core":"/core/index.js"}}</script>'); return; }
+    if (pathname === '/asset.wasm') {
+      assetRequests++; response.setHeader('Content-Type', 'application/wasm');
+      response.setHeader('Cache-Control', 'no-store'); response.end(fixture); return;
+    }
     const base = pathname.startsWith('/core/') ? coreRoot : root;
     const path = resolve(base, '.' + decodeURIComponent(pathname.startsWith('/core/') ? pathname.slice(5) : pathname));
     if (relative(base, path).startsWith('..') || !(await stat(path)).isFile()) { response.writeHead(404).end(); return; }
@@ -71,10 +78,47 @@ try {
   assert.equal(result.stopped.reason, 'terminated'); assert.equal(result.after, 23);
   assert.equal(result.crash, 'runtime-error'); assert.equal(result.files.includes('crash'), false);
   assert.equal(result.bad, 0); assert.equal(result.liveWorkers, 0); assert.equal(result.inspect.processes.length, 0);
+  const cacheRuns = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt) await page.reload();
+    assert.equal(assetRequests, attempt);
+    const cached = await page.evaluate(async ({ sha256, bytes }) => {
+      const { createContainer, validateDistribution, createContainerPackageManager } = await import('/dist/index.js');
+      const { createWasiAdapter } = await import('/dist/adapters/wasi/index.js');
+      const identity = { sha256, bytes, mediaType: 'application/wasm' };
+      const url = `${location.origin}/asset.wasm`;
+      const index = new TextEncoder().encode(JSON.stringify({
+        schemaVersion: 1, distributionId: 'browser-contract-v1', packages: [{
+          id: 'fixture', identity: `sha256:${sha256}`,
+          producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: '0000000000000000000000000000000000000000', receiptSha256: sha256 },
+          dependencies: [], mount: '/opt/toolchains/fixture', capabilities: ['wasi-preview1'],
+          assets: [{ id: 'command', url, encoding: 'identity', delivery: identity, logical: identity }],
+          files: [{ path: 'bin/tool', asset: 'command', executable: true }]
+        }], commands: [{ name: 'tool', package: 'fixture', adapter: 'wasi-preview1', path: 'bin/tool', argv0: 'tool', prefixArgs: [] }]
+      }));
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', index)), (n) => n.toString(16).padStart(2, '0')).join('');
+      const distribution = await validateDistribution({ bytes: index, expectedSha256: digest, adapterIds: ['wasi-preview1'], allowedAssetURLs: [url] });
+      const manager = createContainerPackageManager({
+        distribution, capabilities: ['wasi-preview1'], maxCachedBytes: 0,
+        persistentCache: { enabled: true, namespace: 'container-browser-contract', version: 'fixture-v1', storageReserveBytes: 0 }
+      });
+      const container = createContainer({ packages: manager, adapters: [createWasiAdapter()] });
+      try {
+        const metadata = manager.resolveCommand('tool').name;
+        const before = performance.getEntriesByType('resource').filter((entry) => entry.name === url).length;
+        const result = await container.run('tool', ['exit']);
+        return { code: result.code, reason: result.reason, metadata, before, memoryCacheEntries: manager.inspect().assets.cachedEntries, cacheNames: await caches.keys() };
+      } finally { await container.dispose(); await manager.dispose(); }
+    }, { sha256: fixtureSha256, bytes: fixture.length });
+    assert.equal(cached.code, 23); assert.equal(cached.reason, 'exited');
+    assert.equal(cached.metadata, 'tool'); assert.equal(cached.before, 0); assert.equal(cached.memoryCacheEntries, 0);
+    assert.ok(cached.cacheNames.length > 0); assert.equal(assetRequests, 1);
+    cacheRuns.push(cached);
+  }
   assert.deepEqual(faults, []);
   const sourceHashes = {};
   for (const file of (await readdir(resolve(root, 'src'), { recursive: true })).filter((f) => f.endsWith('.ts')).sort()) { sourceHashes[file] = createHash('sha256').update(await readFile(resolve(root, 'src', file))).digest('hex'); }
-  const evidence = { schemaVersion: 1, sourceHashes, browser: browser.version(), platform: process.platform, arch: process.arch, fixtureSha256: createHash('sha256').update(await readFile(resolve(root, 'test/fixtures/command.wasm'))).digest('hex'), result };
+  const evidence = { schemaVersion: 1, sourceHashes, browser: browser.version(), platform: process.platform, arch: process.arch, fixtureSha256, result, cache: { cacheRuns, assetRequests, reloaded: true, httpCache: 'no-store', memoryCache: false } };
   const output = process.env.CONTAINER_EVIDENCE;
   if (output) { await mkdir(dirname(output), { recursive: true }); await writeFile(output, JSON.stringify(evidence, null, 2) + '\n'); }
   console.log(JSON.stringify(evidence));

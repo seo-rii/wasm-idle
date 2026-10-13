@@ -15,7 +15,8 @@ async function fixture(options = {}) {
   const data = new TextEncoder().encode(JSON.stringify({
     schemaVersion: 1, distributionId: 'actual-wasi-fixture-v1', packages: [{
       id: 'fixture', identity: `sha256:${hash(command)}`,
-      producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: '814830465'.padEnd(40, '0'), receiptSha256: hash(command) },
+      // Synthetic distribution metadata for the checked-in ABI fixture, not a release receipt.
+      producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: '0000000000000000000000000000000000000000', receiptSha256: hash(command) },
       dependencies: [], mount: '/opt/toolchains/fixture', capabilities: ['wasi-preview1'],
       assets: [{ id: 'command', url, encoding: 'identity', delivery: identity, logical: identity }],
       files: [{ path: 'bin/tool', asset: 'command', executable: true }]
