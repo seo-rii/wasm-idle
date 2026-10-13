@@ -5,6 +5,7 @@ import type {
 	BrowserClangPrecompiledHeader,
 	BrowserClangWorkspaceFile
 } from '@wasm-idle/llvm-core/clang';
+import type { CompilerDiagnostic } from '@wasm-idle/llvm-core/clang';
 import type { WorkerRuntimeAssetConfig } from './worker/assets';
 
 export type ClangCompileWorkerRequest = {
@@ -30,6 +31,7 @@ export type ClangCompileWorkerResponse =
 			artifact: BrowserClangArtifact;
 			stdout: string;
 			stderr: string;
+			diagnostics?: CompilerDiagnostic[];
 			precompiledHeader?: 'building';
 	  }
 	| {
@@ -37,6 +39,7 @@ export type ClangCompileWorkerResponse =
 			error: string;
 			stdout: string;
 			stderr: string;
+			diagnostics?: CompilerDiagnostic[];
 			precompiledHeader?: 'building';
 	  }
 	| { type: 'precompiled-header'; header?: BrowserClangPrecompiledHeader };

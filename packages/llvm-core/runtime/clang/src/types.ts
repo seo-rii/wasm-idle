@@ -1,10 +1,11 @@
 import type { ProgressSink } from '../../core/src/wasm.js';
+import type { CompilerDiagnostic } from './compiler-diagnostics.js';
 
 export type { ProgressSink };
+export type { CompilerDiagnostic, CompilerDiagnosticSeverity } from './compiler-diagnostics.js';
 
 export type DebugCommand = 'continue' | 'stepInto' | 'nextLine' | 'stepOut';
 export type DebugPauseReason = 'breakpoint' | 'entry' | 'step' | 'nextLine' | 'stepOut';
-export type CompilerDiagnosticSeverity = 'error' | 'warning' | 'other';
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 export type SupportedClangLanguage = 'C' | 'CPP';
@@ -13,15 +14,6 @@ export type BrowserClangArtifactFormat = 'wasi-core-wasm';
 export type BrowserClangCompileStage = 'bootstrap' | 'compile' | 'link' | 'done';
 export type BrowserClangDebugMode = 'none' | 'trace' | 'lldb';
 export type CompilerLogLevel = 'log' | 'warn' | 'error' | 'debug';
-
-export interface CompilerDiagnostic {
-	fileName?: string | null;
-	lineNumber: number;
-	columnNumber?: number;
-	endColumnNumber?: number;
-	severity: CompilerDiagnosticSeverity;
-	message: string;
-}
 
 export interface CompilerLogRecord {
 	level: CompilerLogLevel;

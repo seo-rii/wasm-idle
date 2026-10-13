@@ -1,8 +1,12 @@
 import type { BrowserClangArtifact, BrowserClangCompileRequest } from '@wasm-idle/llvm-core/clang';
+import type { CompilerDiagnostic } from '@wasm-idle/llvm-core/clang';
 
 /** Only immutable compiler output lives here, never a worker, instance, or filesystem. */
 export class CompiledArtifactCache {
-	private entries = new Map<string, { artifact: BrowserClangArtifact; size: number }>();
+	private entries = new Map<
+		string,
+		{ artifact: BrowserClangArtifact; diagnostics: CompilerDiagnostic[]; size: number }
+	>();
 	private bytes = 0;
 	private hits = 0;
 	private misses = 0;
@@ -26,13 +30,24 @@ export class CompiledArtifactCache {
 		return entry.artifact;
 	}
 
-	set(key: string, artifact: BrowserClangArtifact) {
-		const size = artifact.bytes.byteLength + key.length * 2;
+	getDiagnostics(key: string): CompilerDiagnostic[] {
+		return this.entries.get(key)?.diagnostics.map((diagnostic) => ({ ...diagnostic })) ?? [];
+	}
+
+	set(key: string, artifact: BrowserClangArtifact, diagnostics: CompilerDiagnostic[] = []) {
+		const size =
+			artifact.bytes.byteLength +
+			key.length * 2 +
+			(diagnostics.length ? JSON.stringify(diagnostics).length * 2 : 0);
 		if (size > this.maxBytes) return;
 		const old = this.entries.get(key);
 		if (old) this.bytes -= old.size;
 		this.entries.delete(key);
-		this.entries.set(key, { artifact, size });
+		this.entries.set(key, {
+			artifact,
+			diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
+			size
+		});
 		this.bytes += size;
 		while (this.entries.size > this.maxEntries || this.bytes > this.maxBytes) {
 			const oldest = this.entries.keys().next().value!;

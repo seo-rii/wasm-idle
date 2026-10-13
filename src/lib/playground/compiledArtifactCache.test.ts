@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { CompiledArtifactCache, clangCompileKey } from './compiledArtifactCache';
 
@@ -16,6 +16,25 @@ const request = {
 };
 
 describe('compiled artifact cache', () => {
+	it('snapshots warning metadata, isolates readers and counts its size against the byte budget', () => {
+		const cache = new CompiledArtifactCache(2, 1024);
+		const warning = {
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'original warning'
+		};
+		cache.set('a', artifact(), [warning]);
+		const expectedBytes = 8 + 2 + JSON.stringify([warning]).length * 2;
+		warning.message = 'mutated input';
+		const replay = cache.getDiagnostics('a');
+		expect(replay[0].message).toBe('original warning');
+		replay[0].message = 'mutated replay';
+		expect(cache.getDiagnostics('a')[0].message).toBe('original warning');
+		expect(cache.stats().bytes).toBe(expectedBytes);
+		const small = new CompiledArtifactCache(2, 32);
+		small.set('a', artifact(), [warning]);
+		expect(small.stats().entries).toBe(0);
+	});
 	it('reuses only successful inserted artifacts and tracks misses', () => {
 		const cache = new CompiledArtifactCache();
 		assert.equal(cache.get('failed'), undefined);

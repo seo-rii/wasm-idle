@@ -1,6 +1,7 @@
 import {
 	BrowserClangRuntime,
 	loadRuntimeManifest,
+	extractCompilerDiagnostics,
 	resolveRuntimeManifestUrl,
 	type ProgressSink
 } from '@wasm-idle/llvm-core/clang';
@@ -112,18 +113,22 @@ worker.onmessage = async ({ data }) => {
 					message: 'Compiled with precompiled <bits/stdc++.h>'
 				}
 			});
+		const stdout = output.join('');
 		worker.postMessage({
 			type: 'compiled',
 			artifact,
-			stdout: output.join(''),
+			stdout,
+			diagnostics: extractCompilerDiagnostics(stdout),
 			stderr: '',
 			...buildingPrecompiledHeader(runtime)
 		});
 	} catch (error) {
+		const stdout = output.join('');
 		worker.postMessage({
 			type: 'error',
 			error: error instanceof Error ? error.message : String(error),
-			stdout: output.join(''),
+			stdout,
+			diagnostics: extractCompilerDiagnostics(stdout),
 			stderr: '',
 			...buildingPrecompiledHeader(runtime)
 		});
