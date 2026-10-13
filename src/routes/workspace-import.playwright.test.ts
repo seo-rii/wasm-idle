@@ -58,6 +58,66 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 
 describe('workspace import browser integration', () => {
 	it(
+		'opens ZIP paths unchanged in a new workspace and preserves the original local code',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.waitForFunction(
+					() =>
+						!!(
+							window as typeof window & {
+								__wasmIdleDebug?: { getEditorValue(): string };
+							}
+						).__wasmIdleDebug?.getEditorValue()
+				);
+				const original = '// original workspace\nint main() { return 11; }\n';
+				expect(
+					await page.evaluate(
+						(code) =>
+							(
+								window as typeof window & {
+									__wasmIdleDebug?: {
+										setEditorValue(value: string): Promise<boolean>;
+									};
+								}
+							).__wasmIdleDebug?.setEditorValue(code),
+						original
+					)
+				).toBe(true);
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'referenced-project.zip',
+					mimeType: 'application/zip',
+					buffer: Buffer.from(
+						zipSync({
+							'main.cpp': strToU8(
+								'#include "util.h"\nint main() { return VALUE; }\n'
+							),
+							'util.h': strToU8('#define VALUE 7\n')
+						})
+					)
+				});
+				await page.getByText('2 files imported', { exact: true }).waitFor();
+				expect(new URL(page.url()).searchParams.get('workspace')).toMatch(
+					/^[0-9a-f-]{36}$/u
+				);
+				expect(await page.locator('button[title="util.h"]').count()).toBeGreaterThan(0);
+				expect(await page.locator('button[title="main-2.cpp"]').count()).toBe(0);
+				expect(await page.locator('button[title="util-2.h"]').count()).toBe(0);
+				await page.getByRole('link', { name: 'Local workspace', exact: true }).click();
+				await page.waitForFunction(
+					(expected) =>
+						(
+							window as typeof window & {
+								__wasmIdleDebug?: { getEditorValue(): string };
+							}
+						).__wasmIdleDebug?.getEditorValue() === expected,
+					original
+				);
+				expect(await page.locator('button[title="util.h"]').count()).toBe(0);
+			});
+		}
+	);
+	it(
 		'rejects traversal in new and renamed file paths without changing the workspace',
 		browserOptions,
 		async () => {
