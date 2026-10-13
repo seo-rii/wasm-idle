@@ -57,6 +57,7 @@
 		workspaceStorageKey
 	} from './workspaceContext';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
+	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -925,12 +926,11 @@
 		const activePath = files.some((file) => file.path === requestedActivePath)
 			? requestedActivePath
 			: files[0].path;
-		const openTabs =
-			value?.openTabs?.filter((tab) => files.some((file) => file.path === tab)) ?? [];
+		const openTabs = normalizeWorkspaceTabs(value?.openTabs, files, activePath);
 		return {
 			activePath,
 			files,
-			openTabs: openTabs.length ? openTabs : [activePath]
+			openTabs
 		};
 	}
 
@@ -1129,7 +1129,9 @@
 		try {
 			const decoded = decodeBase64Url(location.hash.slice(SHARE_PREFIX.length + 1));
 			if (!decoded) return null;
-			return JSON.parse(decoded) as Partial<WorkspaceSnapshot>;
+			const value: unknown = JSON.parse(decoded);
+			validateWorkspaceSnapshot(value);
+			return value as Partial<WorkspaceSnapshot>;
 		} catch {
 			saveStatus = 'Invalid share URL';
 			return null;
@@ -1156,7 +1158,9 @@
 		};
 	}
 
-	function applySnapshot(value?: Partial<WorkspaceSnapshot>, message = 'Workspace restored') {
+	function applySnapshot(input: unknown, message = 'Workspace restored') {
+		validateWorkspaceSnapshot(input);
+		const value = input as Partial<WorkspaceSnapshot>;
 		const nextLanguage =
 			normalizeRequestedLanguage(
 				typeof value?.language === 'string' ? value.language : null
