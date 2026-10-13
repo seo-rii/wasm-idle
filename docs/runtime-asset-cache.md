@@ -82,6 +82,26 @@ available; blocked/private-mode storage, missing APIs, corruption and quota fail
 to the normal verified download path. Integrity mismatches still fail rather than accepting
 unverified bytes. Concurrent tabs coordinate storage updates using a namespace-scoped lock.
 
+`loadPersistentRuntimeAsset`, `readPersistentRuntimeAsset`, and `writePersistentRuntimeAsset`
+snapshot and validate the receipt before asynchronous work. A malformed digest, byte count or
+identity rejects with `TypeError`, including when storage is disabled or unavailable. A valid
+receipt whose downloaded bytes do not match rejects with an integrity error. Disabling storage
+never disables verification in the load helper.
+
+Each storage attempt has a three-second deadline covering lock acquisition, database/cache
+opening, body reads, verification, metadata transactions and quota estimation. A storage timeout
+becomes a cache miss; caller cancellation rejects with the caller's reason. Body readers are
+cancelled without waiting indefinitely for their cancellation promise, and active IndexedDB
+transactions are aborted. The load callback still owns its network deadline and cancellation.
+
+CacheStorage writes/deletes cannot be cancelled. When one stalls, the caller still returns at
+the deadline, but the callback retains the namespace lock until that native mutation settles.
+No later mutation or metadata publication is allowed from that expired operation. Other tabs
+or calls time out to cache misses while the lock is held. A subsequent writer removes orphaned
+bodies after the lock becomes available. This deliberately prevents an old write from racing a
+new writer or version cleanup; it does not promise recovery of a browser storage API that never
+settles at all.
+
 The browser may evict best-effort data. Persistence is an explicit host action, never an automatic
 permission request:
 

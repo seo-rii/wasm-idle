@@ -101,7 +101,7 @@ export function createRuntimeGeneratedAssetCacheBackend(
 			checkAbort(signal);
 			const identity = await identityFor(key);
 			if (!identity) return undefined;
-			return withStorage(policy, signal, async (cache, db) => {
+			return withStorage(policy, signal, async (cache, db, signal) => {
 				const record = (await records(db)).find((record) => matches(record, identity));
 				if (
 					!record ||
@@ -112,12 +112,15 @@ export function createRuntimeGeneratedAssetCacheBackend(
 				const response = await cache.match(bodyKey(policy, record.sha256));
 				try {
 					if (!response) throw new Error('Generated artifact body is missing');
-					const bytes = await readBoundedBody(response, record.bytes);
-					await verifyRuntimeAssetIntegrity({
-						asset: identity.url,
-						bytes,
-						expected: record
-					});
+					const bytes = await readBoundedBody(response, record.bytes, signal);
+					await waitForStorage(
+						verifyRuntimeAssetIntegrity({
+							asset: identity.url,
+							bytes,
+							expected: record
+						}),
+						signal
+					);
 					checkAbort(signal);
 					try {
 						record.lastUsed = Date.now();
@@ -402,18 +405,52 @@ function canStore(options: ResolvedRuntimeAssetCacheOptions): boolean {
 	}
 }
 
-function openDatabase(name: string): Promise<IDBDatabase> {
+/** Only reads may be abandoned. Non-cancellable writes retain the namespace lock until settled. */
+type StorageCache = Pick<Cache, 'match' | 'put' | 'delete' | 'keys'>;
+interface StorageDatabase {
+	connection: IDBDatabase;
+	signal: AbortSignal;
+}
+
+function waitForStorage<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const abort = () => {
+			signal.removeEventListener('abort', abort);
+			reject(signal.reason);
+		};
+		pending.then(
+			(value) => {
+				signal.removeEventListener('abort', abort);
+				if (signal.aborted) reject(signal.reason);
+				else resolve(value);
+			},
+			(error) => {
+				signal.removeEventListener('abort', abort);
+				reject(error);
+			}
+		);
+		if (signal.aborted) abort();
+		else signal.addEventListener('abort', abort, { once: true });
+	});
+}
+
+function openDatabase(name: string, signal: AbortSignal): Promise<IDBDatabase> {
+	checkAbort(signal);
 	return new Promise((resolve, reject) => {
 		let finished = false;
 		const request = indexedDB.open(name, 1);
-		const timer = setTimeout(() => {
+		const abort = () => {
 			finished = true;
-			reject(new Error('Asset cache database open timed out'));
-		}, STORAGE_TIMEOUT_MS);
-		request.onupgradeneeded = () =>
-			request.result.createObjectStore('assets', { keyPath: 'sha256' });
+			signal.removeEventListener('abort', abort);
+			reject(signal.reason);
+		};
+		signal.addEventListener('abort', abort, { once: true });
+		request.onupgradeneeded = () => {
+			if (finished) request.transaction?.abort();
+			else request.result.createObjectStore('assets', { keyPath: 'sha256' });
+		};
 		request.onsuccess = () => {
-			clearTimeout(timer);
+			signal.removeEventListener('abort', abort);
 			if (finished) request.result.close();
 			else {
 				finished = true;
@@ -421,7 +458,7 @@ function openDatabase(name: string): Promise<IDBDatabase> {
 			}
 		};
 		request.onerror = () => {
-			clearTimeout(timer);
+			signal.removeEventListener('abort', abort);
 			finished = true;
 			reject(request.error);
 		};
@@ -429,24 +466,31 @@ function openDatabase(name: string): Promise<IDBDatabase> {
 }
 
 function transact<T>(
-	db: IDBDatabase,
+	db: StorageDatabase,
 	mode: IDBTransactionMode,
 	operation: (store: IDBObjectStore) => IDBRequest<T>
 ): Promise<T> {
+	checkAbort(db.signal);
 	return new Promise((resolve, reject) => {
-		const transaction = db.transaction('assets', mode);
-		const timer = setTimeout(() => {
+		const transaction = db.connection.transaction('assets', mode);
+		const abort = () => {
 			try {
 				transaction.abort();
 			} catch {
 				/* The transaction may have just completed. */
 			}
-		}, STORAGE_TIMEOUT_MS);
+		};
+		const timer = setTimeout(abort, STORAGE_TIMEOUT_MS);
+		db.signal.addEventListener('abort', abort, { once: true });
+		const cleanup = () => {
+			clearTimeout(timer);
+			db.signal.removeEventListener('abort', abort);
+		};
 		let request: IDBRequest<T>;
 		try {
 			request = operation(transaction.objectStore('assets'));
 		} catch (error) {
-			clearTimeout(timer);
+			cleanup();
 			try {
 				transaction.abort();
 			} catch {
@@ -456,12 +500,18 @@ function transact<T>(
 			return;
 		}
 		transaction.oncomplete = () => {
-			clearTimeout(timer);
-			resolve(request.result);
+			cleanup();
+			if (db.signal.aborted) reject(db.signal.reason);
+			else resolve(request.result);
 		};
-		transaction.onabort = transaction.onerror = () => {
-			clearTimeout(timer);
-			reject(transaction.error ?? new Error('Asset cache database transaction failed'));
+		// A request error starts the browser's abort; wait for onabort before releasing the lock.
+		transaction.onabort = () => {
+			cleanup();
+			reject(
+				db.signal.aborted
+					? db.signal.reason
+					: (transaction.error ?? new Error('Asset cache database transaction failed'))
+			);
 		};
 	});
 }
@@ -469,26 +519,52 @@ function transact<T>(
 async function withStorage<T>(
 	options: ResolvedRuntimeAssetCacheOptions,
 	signal: AbortSignal | undefined,
-	operation: (cache: Cache, db: IDBDatabase) => Promise<T>
+	operation: (cache: StorageCache, db: StorageDatabase, signal: AbortSignal) => Promise<T>
 ): Promise<T | undefined> {
 	checkAbort(signal);
 	if (!canStore(options)) return undefined;
 	const lockAbort = new AbortController();
 	const abortLock = () => lockAbort.abort(signal?.reason);
 	signal?.addEventListener('abort', abortLock, { once: true });
-	const timer = setTimeout(() => lockAbort.abort(), STORAGE_TIMEOUT_MS);
+	// This deadline includes lock acquisition, storage opening, body reads and metadata work.
+	const timer = setTimeout(
+		() => lockAbort.abort(new Error('Asset cache operation timed out')),
+		STORAGE_TIMEOUT_MS
+	);
 	try {
-		return await navigator.locks.request(
+		const pending = navigator.locks.request(
 			storageName(options),
 			{ signal: lockAbort.signal },
 			async () => {
-				clearTimeout(timer);
+				const signal = lockAbort.signal;
 				checkAbort(signal);
-				const db = await openDatabase(storageName(options));
+				const db = await openDatabase(storageName(options), signal);
 				try {
-					const cache = await caches.open(storageName(options));
 					checkAbort(signal);
-					const result = await operation(cache, db);
+					const cache = await waitForStorage(caches.open(storageName(options)), signal);
+					checkAbort(signal);
+					const guarded: StorageCache = {
+						match: (...args) => {
+							checkAbort(signal);
+							return waitForStorage(cache.match(...args), signal);
+						},
+						keys: (...args) => {
+							checkAbort(signal);
+							return waitForStorage(cache.keys(...args), signal);
+						},
+						put: async (...args) => {
+							checkAbort(signal);
+							await cache.put(...args);
+							checkAbort(signal);
+						},
+						delete: async (...args) => {
+							checkAbort(signal);
+							const result = await cache.delete(...args);
+							checkAbort(signal);
+							return result;
+						}
+					};
+					const result = await operation(guarded, { connection: db, signal }, signal);
 					checkAbort(signal);
 					return result;
 				} finally {
@@ -496,6 +572,9 @@ async function withStorage<T>(
 				}
 			}
 		);
+		// Settle the caller even if a native mutation cannot stop. Its callback still owns the lock,
+		// and all subsequent mutations are fenced off. Queued callers time out to cache misses.
+		return await waitForStorage(pending, lockAbort.signal);
 	} catch {
 		// Storage denial, quota exhaustion, unsupported APIs and lock timeouts are cache misses.
 		checkAbort(signal);
@@ -551,15 +630,15 @@ function validRecord(value: AssetRecord): boolean {
 	);
 }
 
-async function records(db: IDBDatabase): Promise<AssetRecord[]> {
+async function records(db: StorageDatabase): Promise<AssetRecord[]> {
 	const result = await transact<AssetRecord[]>(db, 'readonly', (store) => store.getAll());
 	if (!result.every(validRecord)) throw new Error('Invalid asset cache metadata');
 	return result;
 }
 
 async function removeRecord(
-	cache: Cache,
-	db: IDBDatabase,
+	cache: StorageCache,
+	db: StorageDatabase,
 	options: ResolvedRuntimeAssetCacheOptions,
 	record: AssetRecord
 ): Promise<void> {
@@ -567,29 +646,38 @@ async function removeRecord(
 	await transact(db, 'readwrite', (store) => store.delete(record.sha256));
 }
 
-async function estimateStorage(): Promise<StorageEstimate | undefined> {
+async function estimateStorage(signal: AbortSignal): Promise<StorageEstimate | undefined> {
 	try {
-		return await navigator.storage?.estimate?.();
+		checkAbort(signal);
+		return await waitForStorage(Promise.resolve(navigator.storage?.estimate?.()), signal);
 	} catch {
+		checkAbort(signal);
 		return undefined;
 	}
 }
 
-async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+async function readBoundedBody(
+	response: Response,
+	maxBytes: number,
+	signal: AbortSignal
+): Promise<Uint8Array> {
+	checkAbort(signal);
 	const reader = response.body?.getReader();
 	if (!reader) return new Uint8Array();
 	const chunks: Uint8Array[] = [];
 	let size = 0;
 	try {
 		while (true) {
-			const { done, value } = await reader.read();
+			checkAbort(signal);
+			const { done, value } = await waitForStorage(reader.read(), signal);
 			if (done) break;
 			size += value.byteLength;
 			if (size > maxBytes) throw new Error('Cached asset exceeds expected size');
 			chunks.push(value);
 		}
 	} catch (error) {
-		await reader.cancel().catch(() => {});
+		// Stream cancellation may itself never settle; it must not retain the storage lock.
+		void reader.cancel().catch(() => {});
 		throw error;
 	} finally {
 		reader.releaseLock();
@@ -605,9 +693,10 @@ async function readBoundedBody(response: Response, maxBytes: number): Promise<Ui
 
 async function effectiveBudget(
 	options: ResolvedRuntimeAssetCacheOptions,
-	existingBytes: number
+	existingBytes: number,
+	signal: AbortSignal
 ): Promise<number> {
-	const estimate = await estimateStorage();
+	const estimate = await estimateStorage(signal);
 	if (
 		typeof estimate?.quota !== 'number' ||
 		typeof estimate.usage !== 'number' ||
@@ -625,8 +714,8 @@ async function effectiveBudget(
 }
 
 async function makeRoom(
-	cache: Cache,
-	db: IDBDatabase,
+	cache: StorageCache,
+	db: StorageDatabase,
 	options: ResolvedRuntimeAssetCacheOptions,
 	all: AssetRecord[],
 	incomingBytes: number,
@@ -635,7 +724,7 @@ async function makeRoom(
 ): Promise<boolean> {
 	let bytes = all.reduce((sum, record) => sum + record.bytes, 0);
 	let count = all.length;
-	const budget = await effectiveBudget(options, bytes);
+	const budget = await effectiveBudget(options, bytes, db.signal);
 	if (incomingBytes > budget || incomingEntries > options.maxEntries) return false;
 	const fits = () =>
 		bytes + incomingBytes <= budget && count + incomingEntries <= options.maxEntries;
@@ -666,7 +755,7 @@ export async function readPersistentRuntimeAsset(
 			request.identity.bytes > Math.min(options.maxBytes, options.maxEntryBytes))
 	)
 		return undefined;
-	return withStorage(options, request.signal, async (cache, db) => {
+	return withStorage(options, request.signal, async (cache, db, signal) => {
 		const record = await transact<AssetRecord | undefined>(db, 'readonly', (store) =>
 			store.get(request.identity.sha256)
 		);
@@ -696,17 +785,22 @@ export async function readPersistentRuntimeAsset(
 		try {
 			bytes = await readBoundedBody(
 				response,
-				Math.min(record.bytes, options.maxBytes, options.maxEntryBytes)
+				Math.min(record.bytes, options.maxBytes, options.maxEntryBytes),
+				signal
 			);
-			await verifyRuntimeAssetIntegrity({
-				asset: request.identity.url,
-				bytes,
-				expected: {
-					sha256: request.identity.sha256,
-					bytes: request.identity.bytes ?? record.bytes
-				}
-			});
+			await waitForStorage(
+				verifyRuntimeAssetIntegrity({
+					asset: request.identity.url,
+					bytes,
+					expected: {
+						sha256: request.identity.sha256,
+						bytes: request.identity.bytes ?? record.bytes
+					}
+				}),
+				signal
+			);
 		} catch {
+			checkAbort(signal);
 			await removeRecord(cache, db, options, record);
 			return undefined;
 		}
@@ -826,7 +920,7 @@ export async function getRuntimeAssetCacheStats(
 	return (
 		(await withStorage(options, undefined, async (_cache, db) => {
 			const all = await records(db);
-			const estimate = await estimateStorage();
+			const estimate = await estimateStorage(db.signal);
 			return {
 				available: true,
 				entries: all.length,

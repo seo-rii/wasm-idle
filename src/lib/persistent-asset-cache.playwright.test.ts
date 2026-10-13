@@ -163,6 +163,93 @@ describe.skipIf(!enabled)('persistent runtime assets in real Chromium', () => {
 		});
 	});
 
+	it('releases a real Web Lock after cancelling a stalled cache read', async () => {
+		await load();
+		const result = await page.evaluate(async (asset) => {
+			const api = window.persistentAssetCache;
+			const match = Cache.prototype.match;
+			const started = Promise.withResolvers<void>();
+			Cache.prototype.match = () => {
+				started.resolve();
+				return new Promise(() => {});
+			};
+			const controller = new AbortController();
+			try {
+				const pending = api
+					.readPersistentRuntimeAsset({ identity: asset, signal: controller.signal })
+					.then(
+						() => false,
+						(error) => error === 'cancel-cache-read'
+					);
+				await started.promise;
+				controller.abort('cancel-cache-read');
+				const cancelled = await pending;
+				Cache.prototype.match = match;
+				const bytes = await api.readPersistentRuntimeAsset({ identity: asset });
+				return { cancelled, text: new TextDecoder().decode(bytes) };
+			} finally {
+				Cache.prototype.match = match;
+			}
+		}, identity());
+		expect(result).toEqual({ cancelled: true, text: 'compiler-a-fixture' });
+	});
+
+	it('keeps a real Web Lock until a cancelled native write settles, then recovers', async () => {
+		const result = await page.evaluate(async (asset) => {
+			const api = window.persistentAssetCache;
+			const bytes = new Uint8Array(await (await fetch(asset.url)).arrayBuffer());
+			const put = Cache.prototype.put;
+			const started = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			Cache.prototype.put = async function (...args) {
+				started.resolve();
+				await release.promise;
+				await put.apply(this, args);
+			};
+			const controller = new AbortController();
+			try {
+				const pending = api
+					.writePersistentRuntimeAsset({
+						identity: asset,
+						bytes,
+						signal: controller.signal
+					})
+					.then(
+						() => false,
+						(error) => error === 'cancel-cache-write'
+					);
+				await started.promise;
+				controller.abort('cancel-cache-write');
+				const cancelled = await pending;
+				const held = (await navigator.locks.query()).held?.some(
+					(lock) => lock.name === 'wasm-idle-assets-v1:wasm-idle'
+				);
+				Cache.prototype.put = put;
+				release.resolve();
+				const staleMetadata = await api.readPersistentRuntimeAsset({ identity: asset });
+				const recovered = await api.writePersistentRuntimeAsset({ identity: asset, bytes });
+				const restored = await api.readPersistentRuntimeAsset({ identity: asset });
+				return {
+					cancelled,
+					held,
+					staleMetadata: staleMetadata !== undefined,
+					recovered,
+					text: new TextDecoder().decode(restored)
+				};
+			} finally {
+				Cache.prototype.put = put;
+				release.resolve();
+			}
+		}, identity());
+		expect(result).toEqual({
+			cancelled: true,
+			held: true,
+			staleMetadata: false,
+			recovered: true,
+			text: 'compiler-a-fixture'
+		});
+	});
+
 	it('preflights pinned registry assets offline after reload without reusing weaker URL-policy provenance', async () => {
 		const asset = identity('/preflight/compiler.bin');
 		const manifest: RuntimeRegistryManifest = {

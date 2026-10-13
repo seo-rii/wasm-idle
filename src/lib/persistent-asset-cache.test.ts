@@ -62,11 +62,18 @@ function installStorage() {
 			createObjectStore: vi.fn(),
 			transaction: () => {
 				const transaction: Record<string, any> = {};
-				transaction.abort = () => transaction.onabort?.();
+				let finished = false;
+				transaction.abort = () => {
+					if (finished) return;
+					finished = true;
+					queueMicrotask(() => transaction.onabort?.());
+				};
 				const operation = (fn: () => unknown) => {
 					const result: Record<string, unknown> = {};
 					queueMicrotask(() => {
+						if (finished) return;
 						result.result = structuredClone(fn());
+						finished = true;
 						transaction.oncomplete?.();
 					});
 					return result;
@@ -125,9 +132,171 @@ describe('persistent runtime asset cache', () => {
 		storage = installStorage();
 	});
 	afterEach(() => {
+		vi.useRealTimers();
 		configureRuntimeAssetCache({});
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
+	});
+
+	it('aborts an active metadata transaction and waits for its abort before reusing storage', async () => {
+		const bytes = payload('metadata');
+		const key = identity(bytes);
+		await writePersistentRuntimeAsset({ identity: key, bytes });
+		const open = storage.databaseOpen.getMockImplementation()!;
+		const started = Promise.withResolvers<void>();
+		const aborted = vi.fn();
+		storage.databaseOpen.mockImplementationOnce((name) => {
+			const request = open(name);
+			request.result.transaction = () => {
+				const transaction: Record<string, any> = {
+					objectStore: () => ({
+						get: () => {
+							started.resolve();
+							return {};
+						}
+					}),
+					abort: () => {
+						aborted();
+						queueMicrotask(() => transaction.onabort());
+					}
+				};
+				return transaction;
+			};
+			return request;
+		});
+		const controller = new AbortController();
+		const reason = new Error('cancel metadata');
+		const pending = readPersistentRuntimeAsset({ identity: key, signal: controller.signal });
+		const rejected = expect(pending).rejects.toBe(reason);
+		await started.promise;
+		controller.abort(reason);
+		await rejected;
+		expect(await readPersistentRuntimeAsset({ identity: key })).toEqual(bytes);
+		expect(aborted).toHaveBeenCalledOnce();
+	});
+
+	it('bounds cache opening after acquiring the lock and releases it for a later reader', async () => {
+		vi.useFakeTimers();
+		const open = storage.cacheOpen.getMockImplementation()!;
+		const started = Promise.withResolvers<void>();
+		storage.cacheOpen.mockImplementationOnce(() => {
+			started.resolve();
+			return new Promise(() => {});
+		});
+		const pending = readPersistentRuntimeAsset({ identity: identity(payload('open')) });
+		await started.promise;
+		await vi.advanceTimersByTimeAsync(3001);
+		expect(await pending).toBeUndefined();
+		storage.cacheOpen.mockImplementation(open);
+		const bytes = payload('retry');
+		expect(await writePersistentRuntimeAsset({ identity: identity(bytes), bytes })).toBe(true);
+		expect(await readPersistentRuntimeAsset({ identity: identity(bytes) })).toEqual(bytes);
+	});
+
+	it('aborts a stalled cache lookup after lock acquisition without deleting verified content', async () => {
+		const bytes = payload('match');
+		const key = identity(bytes);
+		await writePersistentRuntimeAsset({ identity: key, bytes });
+		const open = storage.cacheOpen.getMockImplementation()!;
+		const started = Promise.withResolvers<void>();
+		storage.cacheOpen.mockImplementationOnce(async (name) => ({
+			...(await open(name)),
+			match: () => {
+				started.resolve();
+				return new Promise(() => {});
+			}
+		}));
+		const controller = new AbortController();
+		const reason = new Error('stop stalled lookup');
+		const pending = readPersistentRuntimeAsset({ identity: key, signal: controller.signal });
+		const rejected = expect(pending).rejects.toBe(reason);
+		await started.promise;
+		controller.abort(reason);
+		await rejected;
+		expect(await readPersistentRuntimeAsset({ identity: key })).toEqual(bytes);
+	});
+
+	it('cancels a stalled body reader without waiting for its cancellation promise', async () => {
+		const bytes = payload('body');
+		const key = identity(bytes);
+		await writePersistentRuntimeAsset({ identity: key, bytes });
+		const open = storage.cacheOpen.getMockImplementation()!;
+		const started = Promise.withResolvers<void>();
+		const cancel = vi.fn(() => new Promise<void>(() => {}));
+		storage.cacheOpen.mockImplementationOnce(async (name) => {
+			const response = new Response(new ReadableStream<Uint8Array>({ cancel }));
+			const getReader = response.body!.getReader.bind(response.body);
+			vi.spyOn(response.body!, 'getReader').mockImplementation(() => {
+				const reader = getReader();
+				const read = reader.read.bind(reader);
+				vi.spyOn(reader, 'read').mockImplementation(() => {
+					started.resolve();
+					return read();
+				});
+				return reader;
+			});
+			return { ...(await open(name)), match: async () => response };
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop stalled body');
+		const pending = readPersistentRuntimeAsset({ identity: key, signal: controller.signal });
+		const rejected = expect(pending).rejects.toBe(reason);
+		await started.promise;
+		controller.abort(reason);
+		await rejected;
+		expect(await readPersistentRuntimeAsset({ identity: key })).toEqual(bytes);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('retains a lock for a cancelled native write, fences its metadata, and recovers orphan bodies', async () => {
+		vi.useFakeTimers();
+		const bytes = payload('old write');
+		const open = storage.cacheOpen.getMockImplementation()!;
+		const started = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		storage.cacheOpen.mockImplementationOnce(async (name) => {
+			const cache = await open(name);
+			return {
+				...cache,
+				put: async (key, response) => {
+					started.resolve();
+					await release.promise;
+					await cache.put(key, response);
+				}
+			};
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop native write');
+		const first = writePersistentRuntimeAsset({
+			identity: identity(bytes),
+			bytes,
+			signal: controller.signal
+		});
+		const rejected = expect(first).rejects.toBe(reason);
+		await started.promise;
+		controller.abort(reason);
+		await rejected;
+		const second = readPersistentRuntimeAsset({ identity: identity(bytes) });
+		await vi.advanceTimersByTimeAsync(3001);
+		expect(await second).toBeUndefined();
+		expect(storage.cacheOpen).toHaveBeenCalledTimes(1);
+		release.resolve();
+		const replacement = payload('new write');
+		expect(
+			await writePersistentRuntimeAsset({
+				identity: identity(replacement),
+				bytes: replacement
+			})
+		).toBe(true);
+		expect(await readPersistentRuntimeAsset({ identity: identity(bytes) })).toBeUndefined();
+		expect(await readPersistentRuntimeAsset({ identity: identity(replacement) })).toEqual(
+			replacement
+		);
+		expect(await getRuntimeAssetCacheStats()).toMatchObject({
+			entries: 1,
+			bytes: replacement.byteLength
+		});
+		expect([...storage.bodies.values()][0].size).toBe(1);
 	});
 
 	it('persists generated artifacts for a new backend and isolates exact configuration keys', async () => {
