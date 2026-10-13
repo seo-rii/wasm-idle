@@ -24,13 +24,14 @@ worker.onmessage = async ({ data }) => {
 			? null
 			: new Uint8Array(data.inputBuffer, CLANG_STDIN_HEADER_BYTES);
 		if (payload && payload.byteLength === 0) throw new Error('C/C++ stdin buffer is empty.');
-		const files = (data.workspaceFiles || []).map(({ path, content }) => ({
-			path,
-			contents: content
-		}));
+		const activePath =
+			data.activePath || (data.artifact.language === 'C' ? 'main.c' : 'main.cc');
+		const files = (data.workspaceFiles || [])
+			.filter(({ path }) => data.code === undefined || path !== activePath)
+			.map(({ path, content }) => ({ path, contents: content }));
 		if (data.code !== undefined) {
 			files.push({
-				path: data.activePath || (data.artifact.language === 'C' ? 'main.c' : 'main.cc'),
+				path: activePath,
 				contents: data.code
 			});
 		}
