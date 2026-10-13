@@ -1,6 +1,16 @@
 import type { BrowserClangArtifact, BrowserClangCompileRequest } from '@wasm-idle/llvm-core/clang';
 import type { CompilerDiagnostic } from '@wasm-idle/llvm-core/clang';
 
+function snapshotArtifact(artifact: BrowserClangArtifact): BrowserClangArtifact {
+	const { bytes, wasm, ...metadata } = artifact;
+	return {
+		...structuredClone(metadata),
+		// Compiled modules are immutable. Byte views must not retain an oversized backing buffer.
+		wasm,
+		bytes: ArrayBuffer.isView(bytes) ? Uint8Array.from(bytes) : bytes.slice(0)
+	};
+}
+
 /** Only immutable compiler output lives here, never a worker, instance, or filesystem. */
 export class CompiledArtifactCache {
 	private entries = new Map<
@@ -14,6 +24,10 @@ export class CompiledArtifactCache {
 	private maxBytes: number;
 
 	constructor(maxEntries = 8, maxBytes = 32 * 1024 * 1024) {
+		if (!Number.isSafeInteger(maxEntries) || maxEntries < 0)
+			throw new TypeError('Invalid compiled artifact cache maxEntries');
+		if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
+			throw new TypeError('Invalid compiled artifact cache maxBytes');
 		this.maxEntries = maxEntries;
 		this.maxBytes = maxBytes;
 	}
@@ -27,7 +41,7 @@ export class CompiledArtifactCache {
 		this.hits++;
 		this.entries.delete(key);
 		this.entries.set(key, entry);
-		return entry.artifact;
+		return snapshotArtifact(entry.artifact);
 	}
 
 	getDiagnostics(key: string): CompilerDiagnostic[] {
@@ -35,6 +49,8 @@ export class CompiledArtifactCache {
 	}
 
 	set(key: string, artifact: BrowserClangArtifact, diagnostics: CompilerDiagnostic[] = []) {
+		// A zero budget disables retention without disabling compilation.
+		if (this.maxEntries === 0 || this.maxBytes === 0) return;
 		const size =
 			artifact.bytes.byteLength +
 			key.length * 2 +
@@ -44,7 +60,7 @@ export class CompiledArtifactCache {
 		if (old) this.bytes -= old.size;
 		this.entries.delete(key);
 		this.entries.set(key, {
-			artifact,
+			artifact: snapshotArtifact(artifact),
 			diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
 			size
 		});

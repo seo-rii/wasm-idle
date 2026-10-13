@@ -303,7 +303,10 @@ describe('cached C/C++ sandbox', () => {
 		expect(h.executionWorkers).toHaveLength(0);
 		await run(h.sandbox);
 		expect(h.compileWorkers).toHaveLength(1);
-		expect(h.executionWorkers[0].messages[0].artifact).toBe(h.artifact);
+		const executedArtifact = h.executionWorkers[0].messages[0].artifact;
+		expect(executedArtifact).toEqual(h.artifact);
+		expect(executedArtifact).not.toBe(h.artifact);
+		expect(executedArtifact.bytes).not.toBe(h.artifact.bytes);
 	});
 
 	it('snapshots reactive arrays and records for both compiler and executor workers', async () => {
