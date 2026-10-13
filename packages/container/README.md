@@ -34,7 +34,11 @@ are not a claim of live guest I/O. A future isolated adapter has its own qualifi
 Defaults: 64 MiB workspace, 16,384 inodes, 64 MiB native Wasm memory maximum, 8 MiB input and
 combined output, 8 MiB `run()` capture. Memory limits require one defined, unshared wasm32 memory
 with an explicit maximum; modules with imported/shared/unbounded memories or a start section
-are rejected before execution. Only enumerated Preview1 function imports are accepted. Polling,
+are rejected before execution. Only enumerated Preview1 function imports and the
+`wasm_idle_process_v1.initial_cwd` initialization import are accepted. A command with
+non-root cwd must implement that initialization profile; a libc-linked producer must
+call real `chdir`, because preopens and PWD alone do not initialize its cwd. Legacy
+Preview1 modules can run with explicit `cwd: '/'`. Polling,
 metadata mutation and durability syscalls return explicit unsupported errors. Network imports
 are rejected. One snapshot command owns the workspace writer lease; conflicting startup or
 editor writes fail rather than silently overwrite files. Open host fds must be closed first.
@@ -64,3 +68,6 @@ adapter after profile validation. It does not require executable mode metadata. 
 `./artifact.wasm`, shell PATH/stat/exec nodes and shebang interpretation are not yet supported;
 no placeholder `/usr/bin` executables are created. Local host command registrations cannot
 replace pinned package commands or the reserved `wasm-run` name.
+
+The separate [Clang adapter](./CLANG.md) uses the optional LLVM tool-host entrypoint.
+Root imports do not load it or compiler bytes.

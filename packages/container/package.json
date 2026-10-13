@@ -14,6 +14,10 @@
     "./adapters/wasi": {
       "types": "./dist/adapters/wasi/index.d.ts",
       "import": "./dist/adapters/wasi/index.js"
+    },
+    "./adapters/clang": {
+      "types": "./dist/adapters/clang/index.d.ts",
+      "import": "./dist/adapters/clang/index.js"
     }
   },
   "files": [
@@ -21,7 +25,8 @@
     "README.md",
     "!dist/**/*.map",
     "FS.md",
-    "DISTRIBUTIONS.md"
+    "DISTRIBUTIONS.md",
+    "CLANG.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -34,13 +39,15 @@
     "verify:package-boundary": "node scripts/verify-package-boundary.mjs",
     "prepack": "pnpm run build && pnpm run verify:package-boundary",
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
-    "test:browser": "pnpm run build && node scripts/test-browser.mjs"
+    "test:browser": "pnpm run build && node scripts/test-browser.mjs",
+    "test:clang": "pnpm run build && node scripts/test-clang.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
     "playwright-core": "^1.63.0"
   },
   "dependencies": {
-    "@wasm-idle/core": "workspace:*"
+    "@wasm-idle/core": "workspace:*",
+    "@wasm-idle/llvm-core": "workspace:*"
   }
 }

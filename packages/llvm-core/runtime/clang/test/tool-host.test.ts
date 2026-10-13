@@ -67,6 +67,14 @@ function bindings(onContext?: (context: LlvmToolBindingContext) => void, onDispo
 }
 
 describe('LLVM low-level tool host', () => {
+	it('admits exact trusted package linker paths and rejects a failed host module profile', async () => {
+		const pins = fixtures(moduleBytes({ packet: packet({ program: '/opt/toolchains/pinned/bin/wasm-ld' }) }));
+		const validated: string[] = [];
+		const host = await createLlvmToolHost({ tools: pins, createBindings: bindings(), linkerPaths: ['/opt/toolchains/pinned/bin/wasm-ld'], validateModule(executable) { validated.push(executable); } });
+		expect(host.run(invocation()).code).toBe(37); expect(validated).toEqual(['clang', 'wasm-ld']); host.dispose();
+		await expect(createLlvmToolHost({ tools: pins, createBindings: bindings(), validateModule() { throw new Error('unsupported module profile'); } })).rejects.toMatchObject({ code: 'COMPILE_FAILED' });
+		await expect(createLlvmToolHost({ tools: pins, createBindings: bindings(), linkerPaths: ['/opt/../evil'] })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+	});
 	it('verifies and snapshots both tools before async preparation, then executes pinned Wasm without URL loading', async () => {
 		const tools = fixtures(); const pending = createLlvmToolHost({ tools, createBindings: bindings() });
 		tools.clang.bytes.fill(255); tools['wasm-ld'].bytes.fill(255);

@@ -46,14 +46,19 @@
 			"import": "./dist/objective-c/src/index.js",
 			"default": "./dist/objective-c/src/index.js"
 		},
-		"./package.json": "./package.json"
+		"./package.json": "./package.json",
+		"./tool-host": {
+			"types": "./dist/clang/src/tool-host.d.ts",
+			"import": "./dist/clang/src/tool-host.js"
+		}
 	},
 	"files": [
 		"dist",
 		"LICENSE.llvm.txt",
 		"!dist/**/*.map",
 		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
-		"README.md"
+		"README.md",
+		"TOOL_HOST.md"
 	],
 	"publishConfig": {
 		"access": "public",

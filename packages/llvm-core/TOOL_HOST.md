@@ -44,8 +44,9 @@ or environment table entry is `{ ptr: u32, len: u32 }`, little-endian, stride 8.
 values containing `=` are preserved. Duplicate/empty names are rejected because
 the structural environment contract is a record.
 
-Only `wasm-ld`, `ld.lld`, `/usr/bin/wasm-ld` and `/usr/bin/ld.lld` resolve, always to
-the pinned `wasm-ld` module. Other paths, dot traversal, URLs and names fail. Flags
+By default `wasm-ld`, `ld.lld`, `/usr/bin/wasm-ld` and `/usr/bin/ld.lld` resolve, always to
+the pinned `wasm-ld` module. Trusted host code may add up to sixteen exact canonical
+absolute filesystem names with `linkerPaths`. Other paths, dot traversal, URLs and names fail. Flags
 1 inherit the caller's environment and require `envPtr = envc = 0`. Flags 0 provide
 an explicit environment, including an empty one. Other bits are rejected. Cwd,
 filesystem and fd ownership remain the parent's binding closure; no shell parser
@@ -73,6 +74,19 @@ owner. This API alone does not enforce a Wasm memory ceiling; the adapter must
 validate the selected modules' memory/import profile before invoking it. No JS heap
 or process RSS hard limit is claimed. Public `run()` is non-reentrant, while the
 specific synchronous linker bridge creates bounded nested instances.
+
+`validateModule(executable, module)` optionally performs synchronous import/export
+admission after byte verification and compilation, before a prepared host is returned.
+It must throw on rejection; returning a Promise is an error. This does not replace
+memory-section validation of the original bytes.
+
+WASI Preview1 preopens do not initialize wasi-libc's current directory. A matching
+producer can call `wasm_idle_process_v1.initial_cwd(ptr, capacity) -> i32` from a
+startup constructor and then call real libc `chdir` before main. The host writes the
+UTF-8 absolute cwd plus NUL and returns its byte length including NUL, or -1 for
+an invalid buffer. This namespace belongs to the binding, separately from `exec_v1`.
+Changing the PWD environment variable is not a cwd implementation. The container
+adapter rejects a non-root cwd for LLVM modules lacking this initialization profile.
 
 Protocol tests use real tiny core Wasm modules for parent/child dispatch, UTF-8,
 empty arguments, explicit/inherited environments, memory growth, bounds, recursive

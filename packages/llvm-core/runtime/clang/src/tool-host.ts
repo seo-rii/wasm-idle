@@ -38,6 +38,10 @@ export interface CreateLlvmToolHostOptions {
 	readonly tools: Readonly<Record<LlvmToolExecutable, { readonly bytes: Uint8Array; readonly sha256: string }>>;
 	/** The closure owns common filesystem/fd bindings. No dependency on container is needed. */
 	readonly createBindings: (context: LlvmToolBindingContext) => LlvmToolBindings;
+	/** Additional exact filesystem names for the same pinned linker, chosen by trusted host code. */
+	readonly linkerPaths?: readonly string[];
+	/** Optional host profile admission before any instance can execute. */
+	readonly validateModule?: (executable: LlvmToolExecutable, module: WebAssembly.Module) => void;
 }
 export interface LlvmToolInvocationProvenance {
 	readonly identity: LlvmToolIdentity;
@@ -105,6 +109,14 @@ const isPromise = (value: unknown): boolean => Boolean(value && (typeof value ==
 export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Promise<LlvmToolHost> {
 	if (!options || typeof options.createBindings !== 'function') invalid('A synchronous bindings factory is required');
 	const createBindings = options.createBindings;
+	const validateModule = options.validateModule;
+	if (validateModule !== undefined && typeof validateModule !== 'function') invalid('validateModule must be a synchronous function');
+	if (options.linkerPaths !== undefined && (!Array.isArray(options.linkerPaths) || options.linkerPaths.length > 16)) invalid('Too many linker paths');
+	const allowedLinkers = new Set(linkers);
+	for (const path of options.linkerPaths ?? []) {
+		if (typeof path !== 'string' || !path.startsWith('/') || path.includes('\0') || path.includes('\\') || path.slice(1).split('/').some((part) => !part || part === '.' || part === '..') || encoder.encode(path).length > 4096) invalid('Linker paths must be canonical absolute filesystem paths');
+		allowedLinkers.add(path);
+	}
 	// Copy every input before the first digest await, so caller mutation cannot replace a pin.
 	const pinned = tools.map((executable) => {
 		const tool = options.tools?.[executable];
@@ -117,7 +129,11 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 	}
 	const modules = new Map<LlvmToolExecutable, WebAssembly.Module>();
 	for (const tool of pinned) {
-		try { modules.set(tool.executable, await WebAssembly.compile(tool.bytes)); }
+		try {
+			const module = await WebAssembly.compile(tool.bytes);
+			if (isPromise(validateModule?.(tool.executable, module))) invalid('Module validation must be synchronous');
+			modules.set(tool.executable, module);
+		}
 		catch (cause) { throw new LlvmToolHostError('COMPILE_FAILED', `Pinned ${tool.executable} is not a supported Wasm module`, { cause }); }
 	}
 	const identities = Object.freeze(Object.fromEntries(pinned.map((tool) => [tool.executable,
@@ -171,7 +187,7 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 					};
 					if (flags !== 0 && flags !== 1) return -1;
 					const program = text(programPtr, programLen);
-					if (!linkers.has(program)) return -1;
+					if (!allowedLinkers.has(program)) return -1;
 					const argv = table(argvPtr, argc);
 					let env: Readonly<Record<string, string>>;
 					if (flags === 1) {

@@ -11,6 +11,7 @@ WASI(environ_get) int environ_get(char **, char *);
 WASI(path_open) int path_open(int,u32,const char*,u32,u32,u64,u64,u32,u32*);
 WASI(fd_close) int fd_close(int);
 WASI(proc_exit) __attribute__((noreturn)) void proc_exit(u32);
+__attribute__((import_module("wasm_idle_process_v1"), import_name("initial_cwd"))) int initial_cwd(char *, u32);
 static u32 length(const char *s) { u32 n=0; while (s[n]) n++; return n; }
 static int equal(const char *a,const char*b) { while (*a && *a==*b) {a++;b++;} return *a==*b; }
 static void write(int fd, void *b, u32 n) { iovec v={b,n};u32 done=0; if(fd_write(fd,&v,1,&done)||done!=n)proc_exit(91); }
@@ -22,6 +23,10 @@ static void file(const char *name) {
  write(fd,"saved",5); if(fd_close(fd))proc_exit(93);
 }
 __attribute__((export_name("_start"))) void _start(void) {
+ char cwd[4096]; int cwd_length = initial_cwd(cwd, sizeof(cwd));
+ if (cwd_length < 2 || cwd_length > sizeof(cwd) || cwd[0] != '/' || cwd[cwd_length-1]) proc_exit(125);
+ /* This no-libc ABI fixture uses the host's cwd directory preopen directly.
+    libc-linked producers must call real chdir(cwd) before their main function. */
  u32 argc,as,ec,es;args_sizes_get(&argc,&as);environ_sizes_get(&ec,&es);
  if(argc>128||as>4096||ec>128||es>4096)proc_exit(90);
  args_get(argv,argbytes);environ_get(env,envbytes);
