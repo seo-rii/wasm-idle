@@ -17,6 +17,7 @@ import {
 	type PerlRuntimePreflightPayload
 } from '@wasm-idle/core';
 import { BUNDLED_AWK_RUNTIME_PROFILE } from '../src/bundledAwkRuntime.js';
+import { offsetAt, positionAt, type LspRange } from '../src/lsp.js';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -74,6 +75,40 @@ describe('createRWorkerService', () => {
 });
 
 describe('createAwkWorkerService', () => {
+	it.each([
+		'function total(x) { return x }',
+		'\n\n  function total(x) { return x }',
+		'\r\n\tfunction\r\n total\r\n (x) { return x }',
+		'function function(x) { return x }'
+	])('selects only the function name inside valid document ranges: %j', async (text) => {
+		const service = createAwkWorkerService();
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.awk',
+			languageId: 'awk',
+			version: 1,
+			text
+		};
+		const symbols = (await service.documentSymbols?.(document, contextFor(document))) as Array<{
+			name: string;
+			range: LspRange;
+			selectionRange: LspRange;
+		}>;
+
+		expect(symbols).toHaveLength(1);
+		for (const symbol of symbols) {
+			for (const range of [symbol.range, symbol.selectionRange]) {
+				expect(positionAt(text, offsetAt(text, range.start))).toEqual(range.start);
+				expect(positionAt(text, offsetAt(text, range.end))).toEqual(range.end);
+				expect(offsetAt(text, range.start)).toBeLessThanOrEqual(offsetAt(text, range.end));
+			}
+			const nameStart = offsetAt(text, symbol.selectionRange.start);
+			const nameEnd = offsetAt(text, symbol.selectionRange.end);
+			expect(text.slice(nameStart, nameEnd)).toBe(symbol.name);
+			expect(nameStart).toBeGreaterThanOrEqual(offsetAt(text, symbol.range.start));
+			expect(nameEnd).toBeLessThanOrEqual(offsetAt(text, symbol.range.end));
+		}
+	});
+
 	const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 	const createWorkerOptions = (): AwkWorkerOptions => {
 		const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');

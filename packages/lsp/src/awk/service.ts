@@ -371,13 +371,14 @@ export function createAwkWorkerService(runDiagnostics?: RunAwkDiagnostics): Work
 				const offset = match.index || 0;
 				const start = positionAt(document.text, offset);
 				const end = positionAt(document.text, offset + match[0].length);
+				const nameOffset = offset + match[0].lastIndexOf(match[1]);
 				symbols.push({
 					name: match[1],
 					kind: 12,
 					range: { start, end },
 					selectionRange: {
-						start,
-						end: { line: start.line, character: start.character + match[0].length }
+						start: positionAt(document.text, nameOffset),
+						end: positionAt(document.text, nameOffset + match[1].length)
 					}
 				});
 			}
