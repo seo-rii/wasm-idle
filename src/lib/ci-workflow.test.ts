@@ -12,6 +12,11 @@ describe('required CI workflow gates', () => {
 		);
 		expect(workflow).toContain("WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'");
 	});
+	it('uses the required-browser reporter for the selected workspace family', async () => {
+		const config = await readFile('vitest.config.ts', 'utf8');
+		expect(config).toContain("process.env.WASM_IDLE_REQUIRE_BROWSER_TESTS === '1'");
+		expect(config).toContain('new RequiredBrowserReporter()');
+	});
 	it('runs the root unit suite in the packages job', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');
@@ -80,7 +85,8 @@ describe('required CI workflow gates', () => {
 			'llvm',
 			'workers',
 			'specialized',
-			'compressed-assets'
+			'compressed-assets',
+			'workspace'
 		]);
 		expect(job).not.toContain('asset-group');
 		expect(job).toContain(

@@ -591,7 +591,23 @@ describe('workspace storage browser integration', () => {
 		async () => {
 			expect.hasAssertions();
 			await withWorkspacePage(async (page, context, browserUrl) => {
+				// The imported plain-text file tests storage recovery, independently of LSP.
+				await context.addInitScript((code) => {
+					if (localStorage.getItem('wasm-idle:example-workspace:v3') !== null) return;
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'CPP',
+							activePath: 'main.cpp',
+							files: [{ path: 'main.cpp', content: code }],
+							openTabs: ['main.cpp'],
+							lspEnabled: false
+						})
+					);
+				}, editorDefaults.cpp);
 				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
 				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const previous = await page.evaluate(() =>
@@ -640,9 +656,18 @@ describe('workspace storage browser integration', () => {
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
 				});
-				await page.evaluate(() => {
-					Storage.prototype.setItem = (window as any).__originalSetItem;
-				});
+				// Keep autosave failing until the actual Retry click is delivered.
+				await page
+					.getByRole('button', { name: 'Retry save', exact: true })
+					.evaluate((button) => {
+						button.addEventListener(
+							'click',
+							() => {
+								Storage.prototype.setItem = (window as any).__originalSetItem;
+							},
+							{ capture: true, once: true }
+						);
+					});
 				await page.getByRole('button', { name: 'Retry save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
@@ -676,22 +701,23 @@ describe('workspace storage browser integration', () => {
 				await context.addInitScript((snapshot) => {
 					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
 				}, previous);
-				const manifest = JSON.parse(
-					await readFile(
-						new URL(
-							'../../.svelte-kit/output/client/.vite/manifest.json',
-							import.meta.url
-						),
-						'utf8'
-					)
-				) as Record<string, { file: string }>;
-				const monacoModule = Object.entries(manifest).find(([path]) =>
+				const manifestText = await readFile(
+					new URL('../../.svelte-kit/output/client/.vite/manifest.json', import.meta.url),
+					'utf8'
+				).catch((error) => {
+					if (error.code !== 'ENOENT') throw error;
+					return null;
+				});
+				const manifest = manifestText
+					? (JSON.parse(manifestText) as Record<string, { file: string }>)
+					: null;
+				const monacoModule = Object.entries(manifest || {}).find(([path]) =>
 					path.endsWith('/@seorii/monaco/dist/index.js')
 				)?.[1].file;
-				if (!monacoModule)
+				if (manifest && !monacoModule)
 					throw new Error('Built Monaco module is missing from the manifest');
 				const isMonacoModule = (url: URL) =>
-					url.pathname.endsWith(`/${monacoModule}`) ||
+					(monacoModule !== undefined && url.pathname.endsWith(`/${monacoModule}`)) ||
 					decodeURIComponent(url.pathname).endsWith('/@seorii/monaco/dist/index.js');
 				let releaseModule!: () => void;
 				const released = new Promise<void>((resolve) => (releaseModule = resolve));
