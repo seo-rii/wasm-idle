@@ -535,7 +535,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets, \{ prewarm: true \}\)\);/
 		);
-		expect(pageSource).toMatch(/lspEnabled = \$state\(false\),/);
+		expect(pageSource).toMatch(/lspEnabled = \$state\(true\),/);
 		expect(pageSource).toMatch(/id="lsp-toggle"/);
 		expect(pageSource).toMatch(/type EditorLspStatusView = \{/);
 		expect(pageSource).toMatch(/progressPercent: number \| null;/);

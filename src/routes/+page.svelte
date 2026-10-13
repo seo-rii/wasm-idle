@@ -213,7 +213,7 @@
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
-		lspEnabled = $state(false),
+		lspEnabled = $state(true),
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
