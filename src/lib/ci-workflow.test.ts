@@ -74,17 +74,15 @@ describe('required CI workflow gates', () => {
 		expect(job).toContain(
 			"if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
 		);
-		for (const [shard, assetGroup] of [
-			['stdin', 'none'],
-			['llvm', 'clang'],
-			['workers', 'none'],
-			['specialized', 'ocaml'],
-			['compressed-assets', 'all']
-		]) {
-			expect(job).toContain(
-				`- shard: ${shard}\n                      asset-group: ${assetGroup}`
-			);
-		}
+		const shardMatrix = job.match(/^\s*shard:\s*\[([^\]]+)\]$/m)?.[1];
+		expect(shardMatrix?.split(',').map((shard) => shard.trim())).toEqual([
+			'stdin',
+			'llvm',
+			'workers',
+			'specialized',
+			'compressed-assets'
+		]);
+		expect(job).not.toContain('asset-group');
 		expect(job).toContain(
 			'node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}'
 		);

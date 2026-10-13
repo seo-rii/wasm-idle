@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
@@ -50,14 +51,27 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import { normalizeWorkspacePath } from './workspacePath';
+	import {
+		createSharedWorkspaceUrl,
+		WORKSPACE_STORAGE_KEY,
+		workspaceStorageKey
+	} from './workspaceContext';
+	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
+	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
+	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
+	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
+	import { copyWorkspaceShare } from './workspaceShare';
+	import { serializeWorkspaceBackup } from './workspaceBackup';
+	import { stageWorkspaceImport } from './workspaceImport';
+	import {
+		captureWorkspaceImportDestination,
+		WorkspaceImportCancelled
+	} from './workspaceImportDestination';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
-	import {
-		isEditorDefaultSource,
-		isLegacyEditorDefaultSource,
-		resolveEditorDefaultSource
-	} from './editor-defaults';
+	import { resolveEditorDefaultSource } from './editor-defaults';
 	import {
 		argsHelpLanguages,
 		argsLabels,
@@ -157,7 +171,6 @@
 		id?: number;
 	};
 
-	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
@@ -287,14 +300,19 @@
 		}
 	}
 	let saveStatus = $state('Ready');
+	let manualShareUrl = $state('');
+	let unrestoredWorkspace = $state<string | null>(null);
+	let workspaceRecoveryKey = $state<string | null>(null);
+	let recoveryBackupDownloaded = $state(false);
 	let workspaceSaveState = $state<WorkspaceSaveState>({
 		phase: 'dirty',
 		revision: 0,
 		savedRevision: -1,
 		error: null
 	});
+	let currentWorkspaceStorageKey = $state(WORKSPACE_STORAGE_KEY);
 	const workspaceStorage = createWorkspaceStorage(
-		(value) => localStorage.setItem(WORKSPACE_STORAGE_KEY, value),
+		(value) => localStorage.setItem(currentWorkspaceStorageKey, value),
 		(state) => {
 			workspaceSaveState = state;
 		}
@@ -646,12 +664,12 @@
 	}
 
 	function normalizePath(value: string) {
-		return value
-			.trim()
-			.replaceAll('\\', '/')
-			.split('/')
-			.filter((part) => part && part !== '.' && part !== '..')
-			.join('/');
+		try {
+			return normalizeWorkspacePath(value);
+		} catch {
+			// Debug/source lookups can refer outside the user workspace.
+			return '';
+		}
 	}
 
 	function basename(value: string) {
@@ -950,40 +968,31 @@
 		return resolveEditorDefaultSource(defaultLanguage[nextLanguage], rustTargetTriple);
 	}
 
-	function migrateWorkspaceFileContent(content: string, nextLanguage: PlaygroundLanguage) {
-		const nextDefaultSource = defaultSourceForLanguage(nextLanguage);
-		if (content === nextDefaultSource) {
-			return content;
-		}
-		if (isEditorDefaultSource(content) || isLegacyEditorDefaultSource(content)) {
-			return nextDefaultSource;
-		}
-		return content;
-	}
-
 	function sanitizeWorkspace(
 		value: Partial<LanguageWorkspace> | undefined,
-		nextLanguage: PlaygroundLanguage
+		nextLanguage: PlaygroundLanguage,
+		snapshotVersion?: number
 	): LanguageWorkspace {
 		const fallback = createDefaultWorkspace(nextLanguage);
 		const nextFiles = sanitizeFiles(value?.files);
-		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) => ({
-			...file,
-			content: isBinaryWorkspaceFile(file)
-				? file.content
-				: migrateWorkspaceFileContent(file.content, nextLanguage)
-		}));
+		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) =>
+			migrateLegacyWorkspaceFile(file, {
+				version: snapshotVersion,
+				language: nextLanguage,
+				entryPath: defaultPathForLanguage(nextLanguage),
+				defaultSource: defaultSourceForLanguage(nextLanguage)
+			})
+		);
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
 		const activePath = files.some((file) => file.path === requestedActivePath)
 			? requestedActivePath
 			: files[0].path;
-		const openTabs =
-			value?.openTabs?.filter((tab) => files.some((file) => file.path === tab)) ?? [];
+		const openTabs = normalizeWorkspaceTabs(value?.openTabs, files, activePath);
 		return {
 			activePath,
 			files,
-			openTabs: openTabs.length ? openTabs : [activePath]
+			openTabs
 		};
 	}
 
@@ -1088,7 +1097,7 @@
 	});
 
 	function uniquePath(requestedPath: string) {
-		const safePath = normalizePath(requestedPath) || 'untitled.txt';
+		const safePath = normalizeWorkspacePath(requestedPath) || 'untitled.txt';
 		if (!files.some((file) => file.path === safePath)) return safePath;
 		const slash = safePath.lastIndexOf('/');
 		const directory = slash === -1 ? '' : safePath.slice(0, slash + 1);
@@ -1112,8 +1121,9 @@
 		for (const file of value) {
 			if (!file || typeof file.path !== 'string' || typeof file.content !== 'string')
 				continue;
-			const safePath = normalizePath(file.path);
-			if (!safePath || seen.includes(safePath)) continue;
+			const safePath = normalizeWorkspacePath(file.path);
+			if (!safePath) throw new Error('Workspace file path cannot be empty');
+			if (seen.includes(safePath)) throw new Error(`Duplicate workspace path: ${safePath}`);
 			seen.push(safePath);
 			nextFiles.push({
 				path: safePath,
@@ -1162,7 +1172,11 @@
 		const requested = prompt('File name', defaultPathForLanguage());
 		if (!requested) return;
 		const nextLanguage = languageForPath(requested) || language;
-		addWorkspaceFile(requested, defaultSourceForLanguage(nextLanguage));
+		try {
+			addWorkspaceFile(requested, defaultSourceForLanguage(nextLanguage));
+		} catch (error) {
+			saveStatus = error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	function renameActiveFile() {
@@ -1170,7 +1184,13 @@
 		if (!file) return;
 		const requested = prompt('Rename file', file.path);
 		if (!requested) return;
-		const nextPath = normalizePath(requested);
+		let nextPath: string;
+		try {
+			nextPath = normalizeWorkspacePath(requested);
+		} catch (error) {
+			saveStatus = error instanceof Error ? error.message : String(error);
+			return;
+		}
 		if (!nextPath || nextPath === file.path) return;
 		if (files.some((item) => item.path === nextPath)) {
 			saveStatus = 'File already exists';
@@ -1239,7 +1259,9 @@
 		try {
 			const decoded = decodeBase64Url(location.hash.slice(SHARE_PREFIX.length + 1));
 			if (!decoded) return null;
-			return JSON.parse(decoded) as Partial<WorkspaceSnapshot>;
+			const value: unknown = JSON.parse(decoded);
+			validateWorkspaceSnapshot(value);
+			return value as Partial<WorkspaceSnapshot>;
 		} catch {
 			saveStatus = 'Invalid share URL';
 			return null;
@@ -1266,7 +1288,9 @@
 		};
 	}
 
-	function applySnapshot(value?: Partial<WorkspaceSnapshot>, message = 'Workspace restored') {
+	function applySnapshot(input: unknown, message = 'Workspace restored') {
+		validateWorkspaceSnapshot(input);
+		const value = input as Partial<WorkspaceSnapshot>;
 		const nextLanguage =
 			normalizeRequestedLanguage(
 				typeof value?.language === 'string' ? value.language : null
@@ -1276,7 +1300,11 @@
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
 		for (const nextLanguageKey of playgroundLanguages) {
 			const workspace = value?.workspaces?.[nextLanguageKey];
-			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(workspace, nextLanguageKey);
+			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(
+				workspace,
+				nextLanguageKey,
+				value?.version
+			);
 		}
 		if (!value?.workspaces) {
 			nextWorkspaces[nextLanguage] = sanitizeWorkspace(
@@ -1285,7 +1313,8 @@
 					files: value?.files,
 					openTabs: value?.openTabs
 				},
-				nextLanguage
+				nextLanguage,
+				value?.version
 			);
 		}
 		languageWorkspaces = nextWorkspaces;
@@ -1318,13 +1347,18 @@
 	}
 
 	function saveWorkspace(showStatus = false) {
-		if (!browser || !workspaceInitialized) return false;
+		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return false;
 		const saved = workspaceStorage.save(workspaceSaveKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
 	}
 
 	function readStoredValue(key: string) {
+		if (
+			currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY &&
+			key !== currentWorkspaceStorageKey
+		)
+			return null;
 		try {
 			return localStorage.getItem(key);
 		} catch {
@@ -1334,10 +1368,36 @@
 
 	function downloadWorkspaceBackup() {
 		downloadBlob(
-			new Blob([workspaceSaveKey], { type: 'application/json' }),
+			new Blob([serializeWorkspaceBackup(snapshot())], { type: 'application/json' }),
 			'wasm-idle-workspace.json'
 		);
 		saveStatus = 'Workspace backup downloaded';
+	}
+
+	function downloadUnrestoredWorkspace() {
+		if (unrestoredWorkspace === null) return;
+		downloadBlob(
+			new Blob([unrestoredWorkspace], { type: 'application/json' }),
+			'wasm-idle-recovery.json'
+		);
+		recoveryBackupDownloaded = true;
+	}
+
+	function startNewWorkspaceAfterRecovery() {
+		if (unrestoredWorkspace === null) return;
+		if (!workspaceRecoveryKey && !recoveryBackupDownloaded) {
+			workspaceRecoveryKey = preserveUnrestoredWorkspace(
+				(key, value) => localStorage.setItem(key, value),
+				currentWorkspaceStorageKey,
+				unrestoredWorkspace
+			);
+			if (!workspaceRecoveryKey) {
+				saveStatus = 'Download the original snapshot before starting a new workspace';
+				return;
+			}
+		}
+		unrestoredWorkspace = null;
+		saveWorkspace(true);
 	}
 
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
@@ -1355,10 +1415,15 @@
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
 		const url = new SvelteURL(location.href);
 		url.hash = shareHash;
-		await replaceState(url, page.state);
-		await navigator.clipboard?.writeText(url.toString());
-		saveStatus =
-			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+		url.searchParams.delete('workspace');
+		if (await copyWorkspaceShare(url.toString(), navigator.clipboard)) {
+			manualShareUrl = '';
+			saveStatus =
+				url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+		} else {
+			manualShareUrl = url.toString();
+			saveStatus = 'Select and copy the share URL below';
+		}
 	}
 
 	function downloadBlob(blob: Blob, fileName: string) {
@@ -1411,61 +1476,77 @@
 		saveStatus = 'ZIP downloaded';
 	}
 
-	async function importZip(file: File) {
-		const archive = new Uint8Array(await file.arrayBuffer());
+	async function extractImportedZip(archive: Uint8Array) {
 		const archiveBuffer = archive.slice().buffer;
 		const response = await runWorkspaceArchive({ type: 'extract', archive: archiveBuffer }, [
 			archiveBuffer
 		]);
-		if (response.type !== 'extracted') {
+		if (response.type !== 'extracted')
 			throw new Error('ZIP worker returned an invalid response');
-		}
-		const imported: string[] = [];
-		for (const importedFile of response.files) {
-			imported.push(
-				addWorkspaceFile(
-					importedFile.path,
-					importedFile.content,
-					false,
-					importedFile.encoding
-				)
-			);
-		}
-		return imported;
+		return response.files;
+	}
+
+	async function openImportedZipWorkspace(
+		importedFiles: WorkspaceFile[],
+		destination: ReturnType<typeof captureWorkspaceImportDestination>
+	) {
+		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
+		const nextActivePath = importedFiles.some((file) => file.path === activePath)
+			? activePath
+			: importedFiles[0].path;
+		if (!saveWorkspace()) throw new Error('Save the current workspace before opening a ZIP');
+		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
+		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
+		const importedWorkspace = {
+			files: cloneFiles(importedFiles),
+			activePath: nextActivePath,
+			openTabs: [nextActivePath]
+		};
+		languageWorkspaces = { ...languageWorkspaces, [language]: importedWorkspace };
+		activateWorkspace(importedWorkspace);
+		destination.advance();
+		await replaceState(importedUrl, page.state);
+		destination.assertCurrent();
+		return importedFiles.map((file) => file.path);
 	}
 
 	async function importFiles(fileList: File[]) {
-		const imported: string[] = [];
-		for (const file of fileList) {
-			if (file.name === 'wasm-idle-workspace.json') {
-				const backup = JSON.parse(await file.text());
-				if (!backup.workspaces || typeof backup.version !== 'number')
-					throw new Error('Invalid workspace backup');
-				applySnapshot(backup, 'Workspace backup restored');
-				continue;
-			}
-			if (file.name.toLowerCase().endsWith('.zip')) {
-				imported.push(...(await importZip(file)));
+		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
+		try {
+			const plan = await stageWorkspaceImport(fileList, {
+				extractZip: extractImportedZip,
+				assertDestination: destination.assertCurrent
+			});
+			destination.assertCurrent();
+			let imported: string[] = [];
+			if (plan.kind === 'backup') {
+				applySnapshot(plan.backup, 'Workspace backup restored');
+				return;
+			} else if (plan.fromZip) {
+				imported = await openImportedZipWorkspace(plan.files, destination);
 			} else {
-				const decoded = workspaceFileFromBytes(
-					(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-						file.name,
-					new Uint8Array(await file.arrayBuffer())
-				);
-				imported.push(
-					addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
+				imported = plan.files.map((file) =>
+					addWorkspaceFile(file.path, file.content, false, file.encoding)
 				);
 			}
+			if (imported[0]) selectFile(imported[0]);
+			saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
+		} catch (error) {
+			if (!(error instanceof WorkspaceImportCancelled)) throw error;
+			saveStatus = error.message;
 		}
-		if (imported[0]) selectFile(imported[0]);
-		saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
 	}
 
 	async function handleUpload(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		if (!input.files?.length) return;
-		await importFiles([...input.files]);
-		input.value = '';
+		try {
+			await importFiles([...input.files]);
+		} catch (error) {
+			saveStatus = `Import failed: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			input.value = '';
+		}
 	}
 
 	function handleDragOver(event: DragEvent) {
@@ -1478,7 +1559,11 @@
 		if (!event.dataTransfer?.files.length) return;
 		event.preventDefault();
 		dragActive = false;
-		await importFiles([...event.dataTransfer.files]);
+		try {
+			await importFiles([...event.dataTransfer.files]);
+		} catch (error) {
+			saveStatus = `Import failed: ${error instanceof Error ? error.message : String(error)}`;
+		}
 	}
 
 	function resetWorkspace() {
@@ -1593,7 +1678,7 @@
 	}
 
 	function decodeBase64Url(value: string | null) {
-		if (!value) return null;
+		if (value === null) return null;
 		try {
 			const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
 			const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
@@ -1835,9 +1920,8 @@
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
 		const countText = memoryCountInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
 		const countPattern = /^(?:[1-9][0-9]*)$/u;
-		const requestedOffset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const requestedOffset = parseDebugInteger(offsetText);
 		const count = countPattern.test(countText) ? Number(countText) : Number.NaN;
 
 		if (!requestedReference) {
@@ -1919,8 +2003,7 @@
 	async function writeDebugMemoryPage() {
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
-		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const offset = parseDebugInteger(offsetText);
 		const byteText = memoryWriteInput.trim();
 		const byteTokens = byteText ? byteText.split(/[\s,]+/u) : [];
 
@@ -1989,9 +2072,8 @@
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
 		const countText = memoryCountInput.trim();
-		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
 		const countPattern = /^(?:[1-9][0-9]*)$/u;
-		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const offset = parseDebugInteger(offsetText);
 		const bytes = countPattern.test(countText) ? Number(countText) : Number.NaN;
 		if (!requestedReference) {
 			dataBreakpointError = 'Enter a memory reference.';
@@ -2268,15 +2350,27 @@
 
 	$effect(() => {
 		if (browser && editor && !init) {
+			const currentUrl = new URL(location.href);
+			const requestedWorkspaceUrl = hasWorkspaceQueryInput(currentUrl)
+				? consumeWorkspaceQueryInput(createSharedWorkspaceUrl(currentUrl))
+				: null;
+			currentWorkspaceStorageKey = workspaceStorageKey(requestedWorkspaceUrl ?? currentUrl);
 			const sharedWorkspace = readHashSnapshot();
 			if (sharedWorkspace) {
 				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
+				const consumedUrl = consumeWorkspaceQueryInput(
+					createSharedWorkspaceUrl(currentUrl)
+				);
+				currentWorkspaceStorageKey = workspaceStorageKey(consumedUrl);
+				replaceState(consumedUrl, page.state);
 				workspaceInitialized = true;
 				init = true;
 				return;
 			}
 
-			const storedWorkspace = readStoredValue(WORKSPACE_STORAGE_KEY);
+			const storedWorkspace = requestedWorkspaceUrl
+				? null
+				: readStoredValue(currentWorkspaceStorageKey);
 			if (storedWorkspace) {
 				try {
 					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
@@ -2284,6 +2378,12 @@
 					init = true;
 					return;
 				} catch {
+					unrestoredWorkspace = storedWorkspace;
+					workspaceRecoveryKey = preserveUnrestoredWorkspace(
+						(key, value) => localStorage.setItem(key, value),
+						currentWorkspaceStorageKey,
+						storedWorkspace
+					);
 					saveStatus = 'Stored workspace could not be restored';
 				}
 			}
@@ -2313,7 +2413,8 @@
 					'Workspace restored'
 				);
 			}
-			if (requestedCode ?? code) activeFile.content = requestedCode ?? code ?? '';
+			const nextCode = requestedCode ?? code;
+			if (nextCode !== null) activeFile.content = nextCode;
 			if (requestedArgs !== null) argsInput = requestedArgs;
 			else if (storedArgs !== null) argsInput = storedArgs;
 			if (
@@ -2354,13 +2455,17 @@
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
 			}
+			if (requestedWorkspaceUrl) {
+				replaceState(requestedWorkspaceUrl, page.state);
+				saveStatus = 'URL workspace loaded';
+			}
 			workspaceInitialized = true;
 			init = true;
 		}
 	});
 
 	$effect(() => {
-		if (!browser || !workspaceInitialized) return;
+		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return;
 		const key = workspaceSaveKey;
 		if (!key) return;
 		workspaceStorage.observe(key);
@@ -3571,6 +3676,16 @@
 				<span class="material-symbols-outlined">share</span>
 				<span>Share</span>
 			</button>
+			{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
+				<a
+					class="tool-button"
+					href={resolve('/')}
+					data-sveltekit-reload
+					title="Open your original local workspace"
+				>
+					Local workspace
+				</a>
+			{/if}
 			<button
 				class="tool-button"
 				onclick={restartRuntime}
@@ -3636,6 +3751,31 @@
 			</div>
 		</div>
 	</header>
+	{#if unrestoredWorkspace !== null}
+		<div class="workspace-save-error" role="alert" data-workspace-recovery>
+			<span>
+				Stored workspace could not be restored. The original snapshot is kept;
+				automatic saving is paused.
+			</span>
+			<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
+			<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
+		</div>
+	{/if}
+	{#if manualShareUrl}
+		<div class="workspace-share">
+			<label class="args-chip">
+				<span>Share URL</span>
+				<input
+					aria-label="Share URL"
+					value={manualShareUrl}
+					readonly
+					onfocus={(event) => event.currentTarget.select()}
+					onclick={(event) => event.currentTarget.select()}
+				/>
+			</label>
+			<button class="tool-button" onclick={() => (manualShareUrl = '')}>Close share URL</button>
+		</div>
+	{/if}
 	<div class="workbench">
 		{#if sidebarOpen}
 			<button
@@ -5181,6 +5321,24 @@
 
 	.stdin-panel textarea:focus {
 		border-color: var(--warning);
+	}
+
+	.workspace-share {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		padding: 12px 16px;
+		background: var(--surface);
+		border-bottom: 1px solid var(--line);
+	}
+
+	.workspace-share .args-chip {
+		flex: 1 1 240px;
+	}
+
+	.workspace-share input {
+		width: 100%;
 	}
 
 	.workspace-save-error {

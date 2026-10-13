@@ -31,6 +31,46 @@ beforeEach(() => {
 });
 
 describe('language runtime session ownership', () => {
+	it('reports a failed disposal once and permits later language selections and leases', async () => {
+		const session = createRuntimeSession('https://assets.test');
+		await session.createBinding().load('PYTHON3');
+		const failure = new Error('dispose failed');
+		state.instances[0].dispose.mockRejectedValueOnce(failure);
+		await expect(session.selectLanguage('C')).rejects.toBe(failure);
+		await expect(session.selectLanguage('C')).resolves.toBeUndefined();
+		await session.createBinding().load('C');
+		await expect(session.selectLanguage('CPP')).resolves.toBeUndefined();
+		expect(state.instances[0].dispose).toHaveBeenCalledOnce();
+		expect(state.instances[1].dispose).toHaveBeenCalledOnce();
+		await expect(session.dispose()).resolves.toBeUndefined();
+	});
+
+	it('waits for the previous cleanup even when that cleanup eventually fails', async () => {
+		const session = createRuntimeSession('https://assets.test');
+		await session.createBinding().load('PYTHON3');
+		let fail!: (error: Error) => void;
+		state.instances[0].dispose.mockImplementation(
+			() =>
+				new Promise((_resolve, reject) => {
+					fail = reject;
+				})
+		);
+		const first = session.selectLanguage('C');
+		const rejected = expect(first).rejects.toThrow('late cleanup failure');
+		let settled = false;
+		const second = session.selectLanguage('CPP').then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		fail(new Error('late cleanup failure'));
+		await rejected;
+		await second;
+		expect(settled).toBe(true);
+		await session.dispose();
+	});
+
 	it('keeps cache across clear, panel close, and different problems; executions have separate owners', async () => {
 		const session = createRuntimeSession({ rootUrl: 'https://assets.test/repl' });
 		const panel = session.createBinding();

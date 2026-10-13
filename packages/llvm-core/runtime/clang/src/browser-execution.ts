@@ -1,3 +1,4 @@
+import { WorkspaceValidationError } from '@wasm-idle/core';
 import {
 	Directory,
 	Fd,
@@ -9,6 +10,8 @@ import {
 } from '@bjorn3/browser_wasi_shim';
 
 import type { BrowserClangArtifact } from './types.js';
+import { RuntimeConfigurationError } from '@wasm-idle/core';
+import { assertWasmMemoryLimit, resolveWasmMemoryLimit } from './memory-limit.js';
 
 export interface BrowserExecutionResult {
 	exitCode: number | null;
@@ -17,6 +20,8 @@ export interface BrowserExecutionResult {
 }
 
 export interface BrowserExecutionOptions {
+	/** Native maximum for the guest program's linear memory. Unsupported modules are rejected. */
+	maxWasmMemoryBytes?: number;
 	args?: string[];
 	programName?: string;
 	env?: Record<string, string>;
@@ -175,10 +180,43 @@ class StdinFd extends Fd {
 }
 
 export function createBrowserWasiHost(options: BrowserExecutionOptions = {}): BrowserWasiHost {
+	const files = (options.files || []).map((file) => ({
+		...file,
+		path: normalizeGuestPath(file.path)
+	}));
+	const paths = new Set<string>();
+	for (const file of files) {
+		if (file.path === '/') {
+			throw new WorkspaceValidationError(
+				'invalid-path',
+				'A guest file cannot replace the root directory'
+			);
+		}
+		if (paths.has(file.path)) {
+			throw new WorkspaceValidationError(
+				'duplicate-path',
+				`Duplicate guest file path: ${file.path}`,
+				{ path: file.path }
+			);
+		}
+		paths.add(file.path);
+	}
+	for (const file of files) {
+		const segments = file.path.slice(1).split('/');
+		for (let depth = 1; depth < segments.length; depth++) {
+			const prefix = `/${segments.slice(0, depth).join('/')}`;
+			if (paths.has(prefix)) {
+				throw new WorkspaceValidationError(
+					'path-prefix-collision',
+					`Guest file ${prefix} conflicts with descendant ${file.path}`,
+					{ path: file.path }
+				);
+			}
+		}
+	}
 	const rootDirectory = new Directory(new Map());
-	for (const file of options.files || []) {
-		const guestPath = normalizeGuestPath(file.path);
-		const segments = guestPath.slice(1).split('/');
+	for (const file of files) {
+		const segments = file.path.slice(1).split('/');
 		let directory = rootDirectory;
 		for (const segment of segments.slice(0, -1)) {
 			const existing = directory.contents.get(segment);
@@ -233,7 +271,19 @@ export async function executeBrowserClangArtifact(
 		artifact.bytes instanceof Uint8Array
 			? new Uint8Array(artifact.bytes)
 			: new Uint8Array(artifact.bytes);
-	const module = artifact.wasm || (await WebAssembly.compile(bytes));
+	const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
+	if (memoryLimit !== undefined) assertWasmMemoryLimit(bytes, memoryLimit);
+	// A caller-provided Module may not match the bytes whose memory declaration was checked.
+	const module =
+		memoryLimit === undefined && artifact.wasm
+			? artifact.wasm
+			: await WebAssembly.compile(bytes);
+	if (
+		memoryLimit !== undefined &&
+		WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')
+	) {
+		throw new RuntimeConfigurationError('Clang memory limits do not support imported memory');
+	}
 	const instanceRef: BrowserExecutionImportContext['instance'] = { current: null };
 	const extraImports =
 		typeof options.extraImports === 'function'

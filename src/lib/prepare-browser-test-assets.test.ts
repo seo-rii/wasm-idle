@@ -11,8 +11,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	normalizeBrowserTestAssetGroups,
-	prepareBrowserTestAssets
+	prepareBrowserTestAssets,
+	verifyBrowserTestAssets
 } from '../../scripts/prepare-browser-test-assets.mjs';
+import { loadBundledProfile } from '../../scripts/verify-pinned-runtime-assets.mjs';
+import { computeBundleFingerprint } from '../../scripts/sync-wasm-of-js-of-ocaml.mjs';
 import { WASM_OCAML_RUNTIME_PROFILE } from './playground/wasmOcamlVersion';
 
 const temporaryDirectories: string[] = [];
@@ -27,6 +30,172 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('checks the generated OCaml graph using the same fingerprint before and after delivery compression', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-ocaml-fingerprint-'));
+		temporaryDirectories.push(root);
+		const runtimeDir = path.join(root, 'browser-native');
+		await mkdir(runtimeDir);
+		const first = Buffer.from('compiler wrapper');
+		await writeFile(path.join(runtimeDir, 'first.js'), first);
+		await writeFile(path.join(runtimeDir, 'second.js'), 'worker implementation');
+		const archive = path.join(runtimeDir, 'tool.js.gz');
+		await writeFile(archive, gzipSync(Buffer.from('pinned compressed compiler input')));
+		const expected = await computeBundleFingerprint([runtimeDir]);
+		await rm(path.join(runtimeDir, 'first.js'));
+		await writeFile(path.join(runtimeDir, 'first.js.gz'), gzipSync(first));
+		const compressedManifestPath = path.join(root, 'compressed-runtime-assets.v1.json');
+		await writeFile(
+			compressedManifestPath,
+			JSON.stringify({
+				assets: ['browser-native/first.js', 'browser-native/tool.js'],
+				sizes: { 'browser-native/first.js': first.length, 'browser-native/tool.js': 32 }
+			})
+		);
+		const options = { compressedManifestPath, preserveCompressedPaths: [archive] };
+		expect(await computeBundleFingerprint([runtimeDir], options)).toBe(expected);
+		await writeFile(path.join(runtimeDir, 'second.js'), 'stale worker implementation');
+		expect(await computeBundleFingerprint([runtimeDir], options)).not.toBe(expected);
+	});
+	it('verifies both the pinned download and decoded runtime bytes, including built gzip delivery', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-decoded-assets-'));
+		temporaryDirectories.push(root);
+		const payload = Buffer.from('reviewed compiler bytes');
+		const encoded = gzipSync(payload);
+		const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const manifestPath = path.join(root, 'manifest.json');
+		const manifest = {
+			format: 'wasm-idle-browser-test-assets-v1',
+			defaultBaseUrl: 'https://assets.example.test/legacy/',
+			groupBaseUrls: { c3: 'https://assets.example.test/pinned/' },
+			assets: [
+				{
+					group: 'c3',
+					source: 'wasm-c3/c3c.wasm.gz',
+					target: 'wasm-c3/c3c.wasm',
+					size: encoded.length,
+					sha256: hash(encoded),
+					decoded: { size: payload.length, sha256: hash(payload) }
+				}
+			]
+		};
+		await writeFile(manifestPath, JSON.stringify(manifest));
+		const staticDir = path.join(root, 'static');
+		const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+			expect(String(input)).toBe('https://assets.example.test/pinned/wasm-c3/c3c.wasm.gz');
+			return new Response(encoded);
+		});
+		const options = {
+			groups: ['c3'],
+			manifestPath,
+			staticDir,
+			cacheDir: path.join(root, 'cache'),
+			fetchImpl
+		};
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({ downloaded: 1 });
+		expect(await readFile(path.join(staticDir, 'wasm-c3/c3c.wasm'))).toEqual(payload);
+		await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({ assetCount: 1 });
+		await rm(path.join(staticDir, 'wasm-c3/c3c.wasm'));
+		await expect(verifyBrowserTestAssets(options)).rejects.toThrow(
+			'Missing or oversized required browser test asset'
+		);
+		await writeFile(path.join(staticDir, 'wasm-c3/c3c.wasm.gz'), encoded);
+		await writeFile(
+			path.join(staticDir, 'compressed-runtime-assets.v1.json'),
+			JSON.stringify({ assets: ['wasm-c3/c3c.wasm'] })
+		);
+		await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({ assetCount: 1 });
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({ reused: 1 });
+		await expect(readFile(path.join(staticDir, 'wasm-c3/c3c.wasm'))).rejects.toThrow();
+		await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({ assetCount: 1 });
+		await writeFile(
+			path.join(staticDir, 'wasm-c3/c3c.wasm.gz'),
+			gzipSync(Buffer.from('unreviewed compiler'))
+		);
+		await expect(verifyBrowserTestAssets(options)).rejects.toThrow('size/SHA-256 mismatch');
+		manifest.assets[0].decoded.sha256 = hash(Buffer.from('other compiler'));
+		await writeFile(manifestPath, JSON.stringify(manifest));
+		await expect(prepareBrowserTestAssets(options)).rejects.toThrow(
+			'Decoded browser test asset failed receipt validation'
+		);
+	});
+
+	it('uses the existing receipt-verified Lean and Common Lisp synchronizers', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-runtime-assets-'));
+		temporaryDirectories.push(root);
+		const prepareLean4 = vi.fn().mockResolvedValue({});
+		const prepareCommonLisp = vi.fn().mockResolvedValue({});
+		const fetchImpl = vi.fn();
+		await prepareBrowserTestAssets({
+			groups: ['lean4', 'commonlisp'],
+			staticDir: root,
+			prepareLean4,
+			prepareCommonLisp,
+			fetchImpl
+		});
+		expect(prepareLean4).toHaveBeenCalledWith({
+			targetDir: path.join(root, 'wasm-lean4'),
+			fetchImpl
+		});
+		expect(prepareCommonLisp).toHaveBeenCalledWith({
+			targetDir: path.join(root, 'wasm-commonlisp'),
+			fetchImpl
+		});
+	});
+
+	it('pins complete C3 and LFortran bundles to the committed consumer profiles', async () => {
+		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
+		const c3 = await loadBundledProfile(
+			new URL('./playground/wasmC3Version.ts', import.meta.url)
+		);
+		const lfortran = await loadBundledProfile(
+			new URL('./playground/wasmLfortranVersion.ts', import.meta.url)
+		);
+		for (const [group, expected] of [
+			[
+				'c3',
+				{
+					'c3c.mjs': c3.bundledC3Profile.compilerJavaScriptReceipt,
+					'c3c.wasm': c3.bundledC3Profile.compilerWasmReceipt,
+					'producer-receipt.json': c3.bundledC3Profile.producerReceipt,
+					'runner-worker.js': c3.bundledC3WorkerReceipt
+				}
+			],
+			[
+				'lfortran',
+				{
+					...Object.fromEntries(
+						Object.entries(lfortran.WASM_LFORTRAN_PROFILE.assets).map(
+							([name, receipt]) => [
+								name === 'lfortran.data' ? 'lfortran.data.bin' : name,
+								receipt
+							]
+						)
+					),
+					'runner-worker.js': lfortran.WASM_LFORTRAN_PROFILE.workerReceipt
+				}
+			]
+		] as const) {
+			expect(manifest.groupBaseUrls[group]).toMatch(
+				/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+			);
+			const assets = manifest.assets.filter(
+				(asset: { group: string }) => asset.group === group
+			);
+			expect(assets).toHaveLength(Object.keys(expected).length);
+			for (const [name, receipt] of Object.entries(expected) as [
+				string,
+				{ bytes: number; sha256: string }
+			][]) {
+				const asset = assets.find(
+					(asset: { target: string }) => asset.target === `wasm-${group}/${name}`
+				);
+				expect(asset?.decoded || asset).toMatchObject({
+					size: receipt.bytes,
+					sha256: receipt.sha256
+				});
+			}
+		}
+	});
 	it('prepares all current clangd assets from local producer receipts without replacing remote pins', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-local-clangd-bootstrap-'));
 		temporaryDirectories.push(root);
@@ -331,7 +500,14 @@ describe('browser test asset preparation', () => {
 	});
 
 	it('expands all and rejects unknown groups', () => {
-		expect(normalizeBrowserTestAssetGroups([])).toEqual(['clang', 'ocaml']);
+		expect(normalizeBrowserTestAssetGroups([])).toEqual([
+			'clang',
+			'ocaml',
+			'c3',
+			'lfortran',
+			'lean4',
+			'commonlisp'
+		]);
 		expect(normalizeBrowserTestAssetGroups(['--', 'clangd'])).toEqual(['clangd']);
 		expect(normalizeBrowserTestAssetGroups(['clangd', 'clangd'])).toEqual(['clangd']);
 		expect(() => normalizeBrowserTestAssetGroups(['missing'])).toThrow(

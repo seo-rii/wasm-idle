@@ -1,9 +1,11 @@
 """Real CPython execution/cache tests; Pyodide's import finder is a counted stub here."""
 import asyncio
 import builtins
+import os
 from pathlib import Path
 import sys
 import types
+import tempfile
 import unittest
 
 source = (Path(__file__).resolve().parents[1] / 'src/lib/playground/worker/pythonExecution.ts').read_text()
@@ -58,6 +60,14 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(traceback.extract_tb(error.__traceback__)[-1].filename, filename)
         self.assertEqual(self.helpers['info']()['code']['misses'], 2)
 
+    async def test_file_uses_the_active_filename_on_cached_and_uncached_runs(self):
+        code = 'from pathlib import Path\nprint(Path(__file__).name, str(Path(__file__).parent))'
+        await self.execute(code, '한글/main.py')
+        await self.execute(code, '한글/main.py')
+        await self.execute(code, 'other/tool.py')
+        self.assertEqual([item[0] for item in self.output],
+                         [('main.py', '한글'), ('main.py', '한글'), ('tool.py', 'other')])
+
     async def test_top_level_await_runs_each_time(self):
         code = 'import asyncio\nawait asyncio.sleep(0)\nprint("awaited")'
         await self.execute(code); await self.execute(code)
@@ -87,6 +97,57 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
     async def test_ready_is_not_exposed_in_user_globals(self):
         await self.execute('assert "ready" not in globals()\nassert "runner" not in globals()')
         self.assertEqual(self.ready, 1)
+
+    async def test_main_import_and_pickle_use_fresh_user_scope_and_restore_runtime(self):
+        original = sys.modules['__main__']
+        code = '''import __main__, pickle
+value = globals().get("value", 0) + 1
+class Record:
+    pass
+record = Record()
+record.value = value
+assert __main__.__dict__ is globals()
+assert type(pickle.loads(pickle.dumps(record))) is Record
+print(__main__.value)'''
+        for _ in range(2):
+            await self.execute(code)
+            self.assertIs(sys.modules['__main__'], original)
+        self.assertEqual([item[0] for item in self.output], [(1,), (1,)])
+        with self.assertRaises(RuntimeError):
+            await self.execute('raise RuntimeError("failure")')
+        self.assertIs(sys.modules['__main__'], original)
+
+    async def test_missing_main_module_is_restored_as_missing(self):
+        original = sys.modules.pop('__main__')
+        try:
+            await self.execute('import __main__\nassert __main__.__dict__ is globals()')
+            self.assertNotIn('__main__', sys.modules)
+        finally:
+            sys.modules['__main__'] = original
+
+    async def test_script_import_paths_prefer_siblings_and_restore_after_failure(self):
+        original_cwd, original_path = os.getcwd(), sys.path
+        entries = list(original_path)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            (root / 'subdir').mkdir()
+            (root / 'wid24_helper.py').write_text('VALUE = 100')
+            (root / 'subdir/wid24_helper.py').write_text('VALUE = 7')
+            (root / 'wid24_shared.py').write_text('VALUE = 9')
+            try:
+                os.chdir(root)
+                await self.execute('import wid24_helper, wid24_shared\nprint(wid24_helper.VALUE, wid24_shared.VALUE)', 'subdir/main.py')
+                self.assertEqual(self.output[-1][0], (7, 9))
+                self.assertIs(sys.path, original_path)
+                self.assertEqual(sys.path, entries)
+                with self.assertRaises(RuntimeError):
+                    await self.execute('import sys\nsys.path = []\nraise RuntimeError("failure")', 'subdir/failure.py')
+                self.assertIs(sys.path, original_path)
+                self.assertEqual(sys.path, entries)
+            finally:
+                os.chdir(original_cwd)
+                sys.modules.pop('wid24_helper', None)
+                sys.modules.pop('wid24_shared', None)
 
     async def test_lru_eviction_and_budget(self):
         helpers = self.factory('', max_entries=2, max_bytes=10000)

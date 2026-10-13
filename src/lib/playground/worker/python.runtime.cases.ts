@@ -68,7 +68,10 @@ async function createRuntimeHarness({
 		setStdin: vi.fn(),
 		setStdout: vi.fn<(options: { write: (bytes: Uint8Array) => number }) => void>(),
 		setStderr: vi.fn<(options: { write: (bytes: Uint8Array) => number }) => void>(),
-		FS: { mkdirTree: vi.fn(), writeFile: vi.fn() },
+		FS: {
+			mkdirTree: vi.fn(), writeFile: vi.fn(), cwd: () => '/home/pyodide',
+			analyzePath: () => ({ exists: false }), unlink: vi.fn()
+		},
 		runPython: vi.fn((source: string) => {
 			if (source !== PYTHON_FLUSH_HOOK_FACTORY)
 				throw new Error('Unexpected Python initialization');

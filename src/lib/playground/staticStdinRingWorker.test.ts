@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { StaticStdinRingHost } from './staticStdinRing';
 
 const readers = [
+	{ language: 'j', factory: 'createSharedInputReader', eof: null },
 	{ language: 'bqn', factory: 'createSharedInputReader', eof: null },
 	{ language: 'forth', factory: 'createSharedKeyReader', eof: -1 },
 	{ language: 'tcl', factory: 'createSharedStdinReader', eof: null },

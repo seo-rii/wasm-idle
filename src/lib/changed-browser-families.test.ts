@@ -15,7 +15,9 @@ describe('runtime browser CI selection', () => {
 			'debug',
 			'dotnet',
 			'esolangs',
-			'nim'
+			'go',
+			'nim',
+			'python'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
 		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual(['clang']);
@@ -66,11 +68,79 @@ describe('runtime browser CI selection', () => {
 			'src/lib/playground/worker/wasiInterpreters.test.ts',
 			'src/lib/playground/esolangs.playwright.test.ts'
 		]) {
-			expect(changedBrowserFamilies([file]), file).toEqual(['esolangs']);
+			expect(changedBrowserFamilies([file]), file).toContain('esolangs');
 		}
 		expect(changedBrowserFamilies(['scripts/stdin-browser-probe-lib.mjs'])).toContain(
 			'esolangs'
 		);
+	});
+	it('requires the corresponding real browser family for the audited missing execution files', () => {
+		const cases: [string, string[]][] = [
+			['src/lib/playground/cachedClang.ts', ['clang']],
+			['src/lib/playground/worker/cachedClangCompile.ts', ['clang']],
+			['src/lib/playground/worker/cachedClangExecute.ts', ['clang']],
+			['src/lib/playground/worker/pythonExecution.ts', ['esolangs', 'python']],
+			['src/lib/playground/worker/pythonStdio.ts', ['esolangs', 'python']],
+			['src/lib/playground/go.ts', ['go']],
+			['src/lib/playground/worker/go.ts', ['go']]
+		];
+		for (const [file, families] of cases) {
+			expect(changedBrowserFamilies([file]), file).toEqual(families);
+			expect(
+				changedBrowserFamilies([file.replace(/\.ts$/, '.integration.test.ts')]),
+				file
+			).toEqual(families);
+			for (const family of families) {
+				const plan = createAllLanguageBrowserTestPlan({
+					family: family as 'clang' | 'esolangs' | 'python' | 'go'
+				});
+				expect(plan.testFiles.length).toBeGreaterThan(0);
+				expect(
+					Object.keys(plan.env).some((env) =>
+						env.startsWith('WASM_IDLE_RUN_REAL_BROWSER_')
+					)
+				).toBe(true);
+			}
+		}
+		expect(createAllLanguageBrowserTestPlan({ family: 'go' }).testFiles).toEqual([
+			'src/lib/playground/go.playwright.test.ts'
+		]);
+		expect(createAllLanguageBrowserTestPlan({ family: 'python' }).testFiles).toEqual([
+			'src/lib/playground/python.playwright.test.ts'
+		]);
+	});
+
+	it('covers all required families for shared execution layers and keeps docs out of the selection', () => {
+		const all = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python'];
+		for (const file of [
+			'src/lib/playground/runtimeSession.ts',
+			'src/lib/playground/sandbox.ts',
+			'src/lib/playground/sharedBuffer.ts',
+			'src/lib/playground/workerSession.ts',
+			'src/lib/playground/runtimeAssetCache.ts',
+			'src/lib/playground/worker/assets.ts',
+			'packages/core/src/sandbox.ts',
+			'src/routes/+page.svelte',
+			'scripts/browser-test-cookies.mjs',
+			'scripts/run-all-language-browser-tests.mjs',
+			'.github/workflows/ci.yml'
+		]) {
+			expect(changedBrowserFamilies([file]), file).toEqual(all);
+		}
+		for (const family of changedBrowserFamilies(['package.json'])) {
+			expect(() =>
+				createAllLanguageBrowserTestPlan({ family: family as 'go' | 'python' })
+			).not.toThrow();
+		}
+		expect(
+			changedBrowserFamilies(['docs/clang-cache.md', 'docs/go-browser.md', 'docs/python.md'])
+		).toEqual([]);
+		expect(
+			changedBrowserFamilies([
+				'src/lib/playground/go.ts',
+				'runtimes/wasm-go/src/browser-execution.ts'
+			])
+		).toEqual(['go']);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });

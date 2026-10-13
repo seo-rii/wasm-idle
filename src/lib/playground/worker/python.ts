@@ -9,6 +9,8 @@ import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
 import { createPythonExecutionHelpers } from './pythonExecution';
+import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
+import { createPythonWorkspaceFiles } from './pythonWorkspaceFiles';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
@@ -53,6 +55,8 @@ let installedHyVersion: string | undefined;
 let installedAheuiVersion: string | undefined;
 let installedApecodeVersion: string | undefined;
 let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
+let invalidateWorkspaceImports: ReturnType<typeof createPythonWorkspaceImports> | undefined;
+let syncWorkspaceFiles: ReturnType<typeof createPythonWorkspaceFiles> | undefined;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
@@ -440,8 +444,16 @@ function normalizeWorkspacePath(path: string) {
 		.join('/');
 }
 
-function writeWorkspaceFiles(files: { path: string; content: string }[] = []) {
+function writeWorkspaceFiles(files: { path: string; content: string }[] = [], syncPythonWorkspace = false) {
 	const fs = (pyodide as any).FS;
+	if (syncPythonWorkspace) {
+		const normalized = files.map((file) => ({ ...file, path: normalizeWorkspacePath(file.path) })).filter((file) => file.path);
+		invalidateWorkspaceImports ??= createPythonWorkspaceImports(pyodide);
+		invalidateWorkspaceImports(normalized.map((file) => file.path));
+		syncWorkspaceFiles ??= createPythonWorkspaceFiles(fs);
+		syncWorkspaceFiles(normalized);
+		return;
+	}
 	for (const file of files) {
 		const safePath = normalizeWorkspacePath(file.path);
 		if (!safePath) continue;
@@ -629,7 +641,7 @@ self.onmessage = async (event: any) => {
 			);
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
 			// The genuine language implementations own their source, never Python's import scanner.
 			if (isPython) {
 				postProgress(15, 'Resolving Python imports');
@@ -651,7 +663,7 @@ self.onmessage = async (event: any) => {
 		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
 			if (isHy && installedHyVersion === undefined) {
 				throw new Error('Hy runtime is not installed');
 			}
@@ -820,7 +832,9 @@ self.onmessage = async (event: any) => {
 import builtins
 import inspect
 import json
+import os
 import sys
+import types
 from js import ${executionReadyName} as __wasm_idle_execution_ready
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
@@ -986,17 +1000,27 @@ finally:
     del __wasm_idle_execution_ready
 `
 		: `
+__wasm_idle_missing_main = object()
+__wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main)
+__wasm_idle_previous_path = sys.path
 try:
-    __wasm_idle_globals = {
-        "__name__": "__main__",
+    __wasm_idle_module = types.ModuleType("__main__")
+    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_globals = __wasm_idle_module.__dict__
+    __wasm_idle_globals.update({
         ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,
-    }
+    })
     __wasm_idle_compiled = compile(
         ${JSON.stringify(code)},
         ${executionFilenameLiteral},
         "exec",
         flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
     )
+    sys.modules["__main__"] = __wasm_idle_module
+    __wasm_idle_run_paths = list(dict.fromkeys((
+        os.path.dirname(os.path.abspath(${executionFilenameLiteral})), os.getcwd()
+    )))
+    sys.path = __wasm_idle_run_paths + [path for path in __wasm_idle_previous_path if path not in __wasm_idle_run_paths]
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
     __wasm_idle_result = eval(
         __wasm_idle_compiled,
@@ -1006,6 +1030,11 @@ try:
     if inspect.isawaitable(__wasm_idle_result):
         await __wasm_idle_result
 finally:
+    sys.path = __wasm_idle_previous_path
+    if __wasm_idle_previous_main is __wasm_idle_missing_main:
+        sys.modules.pop("__main__", None)
+    else:
+        sys.modules["__main__"] = __wasm_idle_previous_main
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)}, None)
     del __wasm_idle_execution_ready
     sys.settrace(None)

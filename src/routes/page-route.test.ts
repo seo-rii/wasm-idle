@@ -713,8 +713,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/VBNET: 'Program\.vb'/);
 		expect(source).toMatch(/VBNET: 'vbnet'/);
 		expect(compilerDiagnosticLanguages.has('VBNET')).toBe(true);
-		expect(source).toMatch(/isEditorDefaultSource\(content\)/);
-		expect(source).toMatch(/isLegacyEditorDefaultSource\(content\)/);
+		expect(source).toMatch(/migrateLegacyWorkspaceFile\(file, \{/);
+		expect(source).not.toMatch(/isEditorDefaultSource\(content\)/);
 		expect(source).not.toContain('api/dotnet');
 	});
 

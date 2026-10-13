@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const importsExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 function transpile(source) {
 	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
 	assert.equal(result.diagnostics.length, 0);
@@ -74,9 +76,11 @@ const stdioExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonStdio.ts', import.meta.url), 'utf8')), { exports: stdioExports, TextEncoder, TextDecoder, performance, setTimeout, clearTimeout });
 const previewExports = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonDebugPreview.ts', import.meta.url), 'utf8')), { exports: previewExports });
+const workspaceExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceFiles.ts', import.meta.url), 'utf8')), { exports: workspaceExports });
 const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 function workerFixture() {
-	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [];
+	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [], invalidated = [];
 	let initialized = 0;
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
@@ -86,18 +90,24 @@ function workerFixture() {
 		require(id) {
 			if (id === './pythonStdio') return stdioExports;
 			if (id === './pythonDebugPreview') return previewExports;
+			if (id === './pythonWorkspaceFiles') return workspaceExports;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers() {
 				initialized++;
 				return { importSource(source) { scanned.push(source); return source.includes('numpy') ? 'import numpy' : ''; },
 					async run(code, filename, ready) { cachedRuns.push({ code, filename }); ready(); } };
 			} };
+			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			return {};
 		}
 	});
-	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); } },
+	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); }, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} },
 		setStdin() {}, setStdout() {}, setStderr() {},
+		runPython(source) {
+			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
+			return Object.assign(() => (paths) => invalidated.push(JSON.parse(paths)), { destroy() {} });
+		},
 		async loadPackagesFromImports(source) { packageLoads.push(source); }, setInterruptBuffer() {},
 		async runPythonAsync(source) {
 			legacyRuns.push(source);
@@ -105,7 +115,7 @@ function workerFixture() {
 		} });
 	const send = (data) => self.onmessage({ data: { buffer: new SharedArrayBuffer(64), debugBuffer: new SharedArrayBuffer(64),
 		watchBuffer: new SharedArrayBuffer(64), watchResultBuffer: new SharedArrayBuffer(64), interrupt: new SharedArrayBuffer(4), ...data } });
-	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, initialized: () => initialized };
+	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, invalidated, initialized: () => initialized };
 }
 test('files are analyzed separately and package state is checked again after an execution', async () => {
 	const f = workerFixture();
@@ -119,6 +129,7 @@ test('files are analyzed separately and package state is checked again after an 
 	assert.equal(f.cachedRuns.length, 2);
 	assert.equal(f.legacyRuns.length, 0);
 	assert.equal(f.writes.length, 6); // no unsafe cross-run file-state caching
+	assert.deepEqual(f.invalidated, [['bad.py', 'data.csv'], ['bad.py', 'data.csv'], ['bad.py', 'data.csv']]);
 	assert.equal(f.self.prompt, undefined);
 	assert.ok(!Object.keys(f.self).some((name) => name.startsWith('__pyodide__')));
 });
@@ -129,6 +140,82 @@ test('debug execution retains the legacy trace wrapper', async () => {
 	assert.equal(f.legacyRuns.length, 1);
 	assert.match(f.legacyRuns[0], /sys.settrace\(__wasm_idle_debug_trace\)/);
 	assert.equal(f.messages.at(-1).results, true);
+});
+test('the actual debug wrapper gives user code its active filename', async () => {
+	const f = workerFixture();
+	await f.send({ code: 'assert __file__ == "subdir/main.py"\nprint(__file__)', activePath: 'subdir/main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, 'subdir/main.py\n');
+});
+test('the actual debug wrapper connects user classes and globals to __main__ and restores it', async () => {
+	const f = workerFixture();
+	await f.send({ code: `import __main__, pickle
+value = 7
+class Record:
+    pass
+record = Record()
+assert __main__.__dict__ is globals()
+assert isinstance(pickle.loads(pickle.dumps(record)), Record)
+print(__main__.value)`, activePath: 'main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_main = sys.modules["__main__"]
+asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+assert sys.modules["__main__"] is original_main
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, '7\n');
+	await f.send({ code: 'raise ValueError("user failure")', activePath: 'failure.py', debug: true });
+	execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_main = sys.modules["__main__"]
+original_path = sys.path
+try:
+    asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+except ValueError as error:
+    assert str(error) == "user failure"
+else:
+    raise AssertionError("Expected user failure")
+assert sys.modules["__main__"] is original_main
+assert sys.path is original_path
+`], { input: f.legacyRuns.at(-1) });
+});
+test('the actual debug wrapper searches sibling and root modules and restores sys.path', async () => {
+	const f = workerFixture();
+	await f.send({ code: 'import wid24_helper, wid24_shared\nprint(wid24_helper.VALUE, wid24_shared.VALUE)', activePath: 'subdir/main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, os, sys, types, tempfile
+from pathlib import Path
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_cwd, original_path = os.getcwd(), sys.path
+original_entries = list(original_path)
+with tempfile.TemporaryDirectory() as root:
+    root = Path(root)
+    (root / "subdir").mkdir()
+    (root / "wid24_helper.py").write_text("VALUE = 100")
+    (root / "subdir/wid24_helper.py").write_text("VALUE = 7")
+    (root / "wid24_shared.py").write_text("VALUE = 9")
+    try:
+        os.chdir(root)
+        asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+    finally:
+        os.chdir(original_cwd)
+assert sys.path is original_path
+assert sys.path == original_entries
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, '7 9\n');
 });
 test('Hy retains its genuine compiler wrapper and bypasses the Python source cache', async () => {
 	const f = workerFixture();

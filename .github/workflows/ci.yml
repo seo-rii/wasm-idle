@@ -84,8 +84,6 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - if: matrix.family == 'clang' || matrix.family == 'debug'
-              run: pnpm run prepare:test-assets -- clang
             - run: node scripts/run-all-language-browser-tests.mjs --family=${{ matrix.family }}
 
     lsp-browser-smoke:
@@ -140,17 +138,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                include:
-                    - shard: stdin
-                      asset-group: none
-                    - shard: llvm
-                      asset-group: clang
-                    - shard: workers
-                      asset-group: none
-                    - shard: specialized
-                      asset-group: ocaml
-                    - shard: compressed-assets
-                      asset-group: all
+                shard: [stdin, llvm, workers, specialized, compressed-assets]
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -162,6 +150,4 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - if: matrix.asset-group != 'none'
-              run: pnpm run prepare:test-assets -- ${{ matrix.asset-group }}
             - run: node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}

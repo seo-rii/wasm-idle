@@ -90,16 +90,51 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
-/** @param {string[]} rootDirs @returns {Promise<string>} */
-export async function computeBundleFingerprint(rootDirs) {
+/** @param {string[]} rootDirs
+ * @param {{ compressedManifestPath?: string; preserveCompressedPaths?: string[] }} options
+ * @returns {Promise<string>}
+ */
+export async function computeBundleFingerprint(
+	rootDirs,
+	{ compressedManifestPath, preserveCompressedPaths = [] } = {}
+) {
+	const preserved = new Set(preserveCompressedPaths.map((filePath) => path.resolve(filePath)));
+	const compressed = new Map();
+	if (compressedManifestPath && (await stat(compressedManifestPath).catch(() => null))) {
+		const manifest = JSON.parse(await readFile(compressedManifestPath, 'utf8'));
+		for (const asset of manifest.assets) {
+			const size = manifest.sizes[asset];
+			if (!Number.isSafeInteger(size) || size < 1)
+				throw new Error('Invalid compressed OCaml bundle asset size');
+			compressed.set(path.resolve(path.dirname(compressedManifestPath), asset), size);
+		}
+	}
 	const hash = createHash('sha256');
 	hash.update('wasm-idle:wasm-of-js-of-ocaml-bundle:v1\0');
-	for (const [rootIndex, rootDir] of rootDirs.entries()) {
+	for (const [rootIndex, rootDir] of rootDirs.map((rootDir) => path.resolve(rootDir)).entries()) {
 		hash.update(`root:${rootIndex}\0`);
-		for (const filePath of await listFiles(rootDir)) {
-			hash.update(path.relative(rootDir, filePath).split(path.sep).join('/'));
+		const files = (await listFiles(rootDir))
+			.map((storedPath) => ({
+				storedPath,
+				logicalPath:
+					storedPath.endsWith('.gz') &&
+					compressed.has(storedPath.slice(0, -3)) &&
+					!preserved.has(storedPath)
+						? storedPath.slice(0, -3)
+						: storedPath
+			}))
+			.sort((a, b) =>
+				a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0
+			);
+		for (const { storedPath, logicalPath } of files) {
+			hash.update(path.relative(rootDir, logicalPath).split(path.sep).join('/'));
 			hash.update('\0');
-			hash.update(await readFile(filePath));
+			const stored = await readFile(storedPath);
+			hash.update(
+				storedPath !== logicalPath
+					? gunzipSync(stored, { maxOutputLength: compressed.get(logicalPath) })
+					: stored
+			);
 			hash.update('\n');
 		}
 		hash.update('\n---\n');

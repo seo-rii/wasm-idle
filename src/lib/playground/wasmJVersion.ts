@@ -19,6 +19,6 @@ export const WASM_J_RUNTIME_PROFILE = {
 } as const;
 export const WASM_J_ASSET_VERSION = WASM_J_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_J_RUNNER_RECEIPT = {
-	bytes: 14059,
-	sha256: '98ccb3f1328b5b4029866a73b15c71dbdd1d7575dbaff3914aac5100f391118a'
+	bytes: 14221,
+	sha256: 'b5c01171c686c731eac4b246eb472cc656ca079e386fc16283cc097991643704'
 } as const;

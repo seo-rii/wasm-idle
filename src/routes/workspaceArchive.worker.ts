@@ -1,16 +1,16 @@
-import { Unzip, UnzipInflate, zipSync } from 'fflate';
+import { Unzip, UnzipInflate, Zip, ZipDeflate } from 'fflate';
 
 const MAX_FILES = 1000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
 import { workspaceFileBytes, workspaceFileFromBytes, type WorkspaceFile } from './workspaceCodec';
+import { normalizeWorkspacePath } from './workspacePath';
 
 export type WorkspaceArchiveFile = WorkspaceFile;
 
 type WorkspaceArchiveRequest =
-	| { type: 'create'; files: WorkspaceArchiveFile[] }
-	| { type: 'extract'; archive: ArrayBuffer };
+	{ type: 'create'; files: WorkspaceArchiveFile[] } | { type: 'extract'; archive: ArrayBuffer };
 
 type WorkspaceArchiveResponse =
 	| { type: 'created'; archive: ArrayBuffer }
@@ -18,13 +18,7 @@ type WorkspaceArchiveResponse =
 	| { type: 'error'; message: string };
 
 function normalizeArchivePath(value: string) {
-	const normalized = value.replaceAll('\\', '/');
-	if (normalized.startsWith('/') || /^[a-z]:\//iu.test(normalized)) {
-		throw new Error(`ZIP entry must use a relative path: ${value}`);
-	}
-	const parts = normalized.split('/');
-	if (parts.includes('..')) throw new Error(`ZIP entry cannot traverse directories: ${value}`);
-	const safePath = parts.filter((part) => part && part !== '.').join('/');
+	const safePath = normalizeWorkspacePath(value);
 	if (!safePath) throw new Error('ZIP entry path cannot be empty');
 	return safePath;
 }
@@ -33,9 +27,12 @@ export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
 	if (files.length > MAX_FILES)
 		throw new Error(`ZIP cannot contain more than ${MAX_FILES} files`);
 	let totalBytes = 0;
-	const entries: Record<string, Uint8Array> = {};
+	const entries = new Map<string, Uint8Array>();
+	const paths = new Set<string>();
 	for (const file of files) {
 		const path = normalizeArchivePath(file.path);
+		if (paths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
+		paths.add(path);
 		const contents = workspaceFileBytes(file);
 		if (contents.byteLength > MAX_FILE_BYTES) {
 			throw new Error(`ZIP entry exceeds the ${MAX_FILE_BYTES} byte limit: ${path}`);
@@ -44,24 +41,48 @@ export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
 		if (totalBytes > MAX_TOTAL_BYTES) {
 			throw new Error(`ZIP contents exceed the ${MAX_TOTAL_BYTES} byte limit`);
 		}
-		entries[path] = contents;
+		entries.set(path, contents);
 	}
-	return zipSync(entries, { level: 6 });
+	// zipSync also flattens its input through ordinary objects internally. The
+	// streaming API keeps entry names as strings and supports names like __proto__.
+	const chunks: Uint8Array[] = [];
+	let archiveBytes = 0;
+	const zip = new Zip((error, data) => {
+		if (error) throw error;
+		chunks.push(data);
+		archiveBytes += data.byteLength;
+	});
+	for (const [path, contents] of entries) {
+		const entry = new ZipDeflate(path, { level: 6 });
+		zip.add(entry);
+		entry.push(contents, true);
+	}
+	zip.end();
+	const archive = new Uint8Array(archiveBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		archive.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return archive;
 }
 
 export function extractWorkspaceArchive(source: Uint8Array) {
 	const files: WorkspaceArchiveFile[] = [];
 	let totalBytes = 0;
 	let archiveError: unknown;
+	const paths = new Set<string>();
 	const unzip = new Unzip((file) => {
-		if (!file.name || file.name.endsWith('/')) return;
+		const path = normalizeArchivePath(file.name);
+		if (paths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
+		paths.add(path);
+		if (file.name.replaceAll('\\', '/').endsWith('/')) return;
 		if (file.compression !== 0 && file.compression !== 8) {
 			throw new Error(`Unsupported ZIP compression method ${file.compression}: ${file.name}`);
 		}
 		if (files.length >= MAX_FILES) {
 			throw new Error(`ZIP cannot contain more than ${MAX_FILES} files`);
 		}
-		const path = normalizeArchivePath(file.name);
 		if (file.originalSize !== undefined && file.originalSize > MAX_FILE_BYTES) {
 			throw new Error(`ZIP entry exceeds the ${MAX_FILE_BYTES} byte limit: ${path}`);
 		}

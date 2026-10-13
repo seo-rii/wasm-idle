@@ -67,6 +67,8 @@ export interface SandboxExecutionOptions {
 	workspaceFiles?: SandboxWorkspaceFile[];
 	compileArgs?: string[];
 	programArgs?: string[];
+	/** Requested environment overrides; a runtime may reject unsupported options. */
+	env?: Record<string, string>;
 	cppVersion?: string;
 	cVersion?: string;
 	rustTargetTriple?: RustTargetTriple;

@@ -3,6 +3,7 @@ import { createDwarfDebugDescriptor } from './dwarf.js';
 import { normalizeDwarfWorkspacePath, normalizeWorkspacePath, resolveBuildArtifactNames } from './workspace.js';
 import { resolveDebugMode, type BrowserClangArtifact, type BrowserClangDebugMode, type BrowserClangRuntimeRunOptions } from './types.js';
 import type { ClangSourceLanguage } from './runtime.js';
+import { resolveWasmMemoryLimit } from './memory-limit.js';
 
 const buildRoot = '__wasm_idle_build';
 interface LinkedArtifact { key: string; bytes: Uint8Array; module?: WebAssembly.Module }
@@ -17,6 +18,7 @@ export default class ArtifactRuntime extends Runtime {
 	/** Compatibility escape hatch for callers that intentionally consume dynamic exports. */
 	exportDynamic = false;
 	private minimalLink = false;
+	private memoryLimit?: number;
 	private linked?: LinkedArtifact;
 
 	private invalidateArtifact() {
@@ -48,6 +50,9 @@ export default class ArtifactRuntime extends Runtime {
 		if (this.minimalLink && args[0] === 'wasm-ld') {
 			args = args.filter((argument) => argument !== '--export-dynamic');
 		}
+		if (this.memoryLimit !== undefined && args[0] === 'wasm-ld') {
+			args = [...args, `--max-memory=${this.memoryLimit}`];
+		}
 		return super.run(module, out, ...args);
 	}
 
@@ -66,6 +71,7 @@ export default class ArtifactRuntime extends Runtime {
 			compileArgs = args, cppVersion, cVersion, breakpoints = [], pauseOnEntry = false,
 			debugBuffer, interruptBuffer, watchBuffer, watchResultBuffer, precompiledHeader } = options;
 		const debugMode = resolveDebugMode(options);
+		const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
 		const normalize = debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
 		const files = workspaceFiles.map((file) => ({ ...file, path: normalize(file.path) }));
 		const { input, obj, wasm } = resolveBuildArtifactNames(language,
@@ -93,7 +99,7 @@ export default class ArtifactRuntime extends Runtime {
 		this.debugWatchBuffer = watchBuffer;
 		this.debugWatchResultBuffer = watchResultBuffer;
 		const key = JSON.stringify({ code, input, wasm, language, compileArgs, workspaceFiles: snapshot,
-			cppVersion, cVersion, debugMode, exportDynamic: this.exportDynamic });
+			cppVersion, cVersion, debugMode, memoryLimit, exportDynamic: this.exportDynamic });
 		if (this.linked?.key === key) {
 			this.lastArtifactPath = wasm;
 			this.trace(`reuse ${wasm}`);
@@ -125,7 +131,13 @@ export default class ArtifactRuntime extends Runtime {
 		}
 		// Clear the previous output so close-time/link failures cannot expose stale bytes.
 		this.memfs.addFile(wasm, new Uint8Array(0));
-		await this.link(objects, wasm, debugMode, cOnly ? 'C' : 'CPP');
+		const previousLimit = this.memoryLimit;
+		this.memoryLimit = memoryLimit;
+		try {
+			await this.link(objects, wasm, debugMode, cOnly ? 'C' : 'CPP');
+		} finally {
+			this.memoryLimit = previousLimit;
+		}
 		const bytes = Uint8Array.from(this.memfs.getFileContents(wasm));
 		if (!bytes.length) throw new Error(`Linker produced an empty artifact: ${wasm}`);
 		this.lastArtifactPath = wasm;

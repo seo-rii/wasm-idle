@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 import { RuntimeAssetCache } from './runtimeAssetCache';
+import type { SandboxExecutionOptions } from './options';
 
 const workerInstances: MockWorker[] = [];
 let autoResolveLoad = true;
@@ -81,6 +82,35 @@ describe('Python sandbox', () => {
 		autoResolveLoad = true;
 		autoResolveRun = true;
 	});
+
+	it.each([false, true])(
+		'rejects unsupported arguments and environment before dispatch, prepare=%s',
+		async (prepare) => {
+			const sandbox = new Python();
+			await sandbox.load('/');
+			const worker = workerInstances[0];
+			const requests: { args: string[]; options: SandboxExecutionOptions }[] = [
+				{ args: ['one'], options: {} },
+				{ args: [], options: { programArgs: ['two'] } },
+				{ args: [], options: { env: { MODE: 'requested' } } },
+				{ args: [], options: { env: {} } }
+			];
+			for (const { args, options } of requests) {
+				await expect(sandbox.run('print(42)', prepare, true, undefined, args, options))
+					.rejects.toMatchObject({
+						name: 'RuntimeConfigurationError',
+						code: 'runtime-configuration',
+						runtimeId: 'PYTHON3'
+					});
+				expect(worker.postMessage).toHaveBeenCalledTimes(1);
+			}
+			await expect(sandbox.run('print(42)', false, true, undefined, [], { programArgs: [] }))
+				.resolves.toBe(true);
+			expect(workerInstances).toHaveLength(1);
+			expect(worker.postMessage).toHaveBeenCalledTimes(2);
+			await sandbox.dispose();
+		}
+	);
 
 	it('clears execution state without dropping owned compiled modules, then fully disposes them', async () => {
 		const sandbox = new Python();

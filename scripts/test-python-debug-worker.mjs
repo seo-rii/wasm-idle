@@ -5,6 +5,10 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const workspaceExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceFiles.ts', import.meta.url), 'utf8')), { exports: workspaceExports });
+const importsExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 function transpile(source) {
 	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
 	assert.equal(result.diagnostics.length, 0);
@@ -29,6 +33,8 @@ async function run(check) {
 			if (id === './pythonDebugPreview') return preview;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
 			if (id === './pythonStdio') return stdio;
+			if (id === './pythonWorkspaceImports') return importsExports;
+			if (id === './pythonWorkspaceFiles') return workspaceExports;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			return {};
@@ -37,7 +43,11 @@ async function run(check) {
 	let calls = 0;
 	exports.__inject({
 		setStdin() {}, setStdout() {}, setStderr() {},
-		FS: { mkdirTree() {}, writeFile() {} }, async loadPackagesFromImports() {}, setInterruptBuffer() {},
+		runPython(source) {
+			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
+			return Object.assign(() => () => {}, { destroy() {} });
+		},
+		FS: { mkdirTree() {}, writeFile() {}, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} }, async loadPackagesFromImports() {}, setInterruptBuffer() {},
 		async runPythonAsync(python) {
 			calls++;
 			execFileSync('python', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: python });
