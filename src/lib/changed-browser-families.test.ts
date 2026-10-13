@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { describe, expect, it } from 'vitest';
 import { changedBrowserFamilies } from '../../scripts/changed-browser-families.mjs';
 import { createAllLanguageBrowserTestPlan } from '../../scripts/run-all-language-browser-tests.mjs';
