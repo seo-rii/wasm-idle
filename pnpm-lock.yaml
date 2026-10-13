@@ -339,6 +339,9 @@ importers:
 
   packages/container:
     devDependencies:
+      playwright-core:
+        specifier: ^1.63.0
+        version: 1.63.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

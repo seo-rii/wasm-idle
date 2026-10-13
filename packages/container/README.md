@@ -39,6 +39,9 @@ metadata mutation and durability syscalls return explicit unsupported errors. Ne
 are rejected. One snapshot command owns the workspace writer lease; conflicting startup or
 editor writes fail rather than silently overwrite files. Open host fds must be closed first.
 
+The current cwd fixture exercises raw WASI dirfd/preopen operations. Initialization of cwd
+inside a guest's libc, and general-purpose CLI compatibility, require separate qualification.
+
 Ordinary exit, including a nonzero code, commits a validated filesystem snapshot. Runtime trap,
 output-limit failure and termination discard it. `terminate()` reclaims the dedicated Worker,
 wakes pending batch input/output, and releases the lease. `dispose()` stops all commands and
