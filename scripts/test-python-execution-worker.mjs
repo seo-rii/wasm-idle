@@ -179,6 +179,7 @@ bridge = types.ModuleType("js")
 bridge.__getattr__ = lambda name: lambda *args: None
 sys.modules["js"] = bridge
 original_main = sys.modules["__main__"]
+original_path = sys.path
 try:
     asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
 except ValueError as error:
@@ -186,7 +187,35 @@ except ValueError as error:
 else:
     raise AssertionError("Expected user failure")
 assert sys.modules["__main__"] is original_main
+assert sys.path is original_path
 `], { input: f.legacyRuns.at(-1) });
+});
+test('the actual debug wrapper searches sibling and root modules and restores sys.path', async () => {
+	const f = workerFixture();
+	await f.send({ code: 'import wid24_helper, wid24_shared\nprint(wid24_helper.VALUE, wid24_shared.VALUE)', activePath: 'subdir/main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, os, sys, types, tempfile
+from pathlib import Path
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+original_cwd, original_path = os.getcwd(), sys.path
+original_entries = list(original_path)
+with tempfile.TemporaryDirectory() as root:
+    root = Path(root)
+    (root / "subdir").mkdir()
+    (root / "wid24_helper.py").write_text("VALUE = 100")
+    (root / "subdir/wid24_helper.py").write_text("VALUE = 7")
+    (root / "wid24_shared.py").write_text("VALUE = 9")
+    try:
+        os.chdir(root)
+        asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+    finally:
+        os.chdir(original_cwd)
+assert sys.path is original_path
+assert sys.path == original_entries
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, '7 9\n');
 });
 test('Hy retains its genuine compiler wrapper and bypasses the Python source cache', async () => {
 	const f = workerFixture();

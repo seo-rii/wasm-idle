@@ -1,9 +1,11 @@
 """Real CPython execution/cache tests; Pyodide's import finder is a counted stub here."""
 import asyncio
 import builtins
+import os
 from pathlib import Path
 import sys
 import types
+import tempfile
 import unittest
 
 source = (Path(__file__).resolve().parents[1] / 'src/lib/playground/worker/pythonExecution.ts').read_text()
@@ -122,6 +124,30 @@ print(__main__.value)'''
             self.assertNotIn('__main__', sys.modules)
         finally:
             sys.modules['__main__'] = original
+
+    async def test_script_import_paths_prefer_siblings_and_restore_after_failure(self):
+        original_cwd, original_path = os.getcwd(), sys.path
+        entries = list(original_path)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            (root / 'subdir').mkdir()
+            (root / 'wid24_helper.py').write_text('VALUE = 100')
+            (root / 'subdir/wid24_helper.py').write_text('VALUE = 7')
+            (root / 'wid24_shared.py').write_text('VALUE = 9')
+            try:
+                os.chdir(root)
+                await self.execute('import wid24_helper, wid24_shared\nprint(wid24_helper.VALUE, wid24_shared.VALUE)', 'subdir/main.py')
+                self.assertEqual(self.output[-1][0], (7, 9))
+                self.assertIs(sys.path, original_path)
+                self.assertEqual(sys.path, entries)
+                with self.assertRaises(RuntimeError):
+                    await self.execute('import sys\nsys.path = []\nraise RuntimeError("failure")', 'subdir/failure.py')
+                self.assertIs(sys.path, original_path)
+                self.assertEqual(sys.path, entries)
+            finally:
+                os.chdir(original_cwd)
+                sys.modules.pop('wid24_helper', None)
+                sys.modules.pop('wid24_shared', None)
 
     async def test_lru_eviction_and_budget(self):
         helpers = self.factory('', max_entries=2, max_bytes=10000)

@@ -832,6 +832,7 @@ self.onmessage = async (event: any) => {
 import builtins
 import inspect
 import json
+import os
 import sys
 import types
 from js import ${executionReadyName} as __wasm_idle_execution_ready
@@ -1001,6 +1002,7 @@ finally:
 		: `
 __wasm_idle_missing_main = object()
 __wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main)
+__wasm_idle_previous_path = sys.path
 try:
     __wasm_idle_module = types.ModuleType("__main__")
     __wasm_idle_module.__file__ = ${executionFilenameLiteral}
@@ -1015,6 +1017,10 @@ try:
         flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
     )
     sys.modules["__main__"] = __wasm_idle_module
+    __wasm_idle_run_paths = list(dict.fromkeys((
+        os.path.dirname(os.path.abspath(${executionFilenameLiteral})), os.getcwd()
+    )))
+    sys.path = __wasm_idle_run_paths + [path for path in __wasm_idle_previous_path if path not in __wasm_idle_run_paths]
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
     __wasm_idle_result = eval(
         __wasm_idle_compiled,
@@ -1024,6 +1030,7 @@ try:
     if inspect.isawaitable(__wasm_idle_result):
         await __wasm_idle_result
 finally:
+    sys.path = __wasm_idle_previous_path
     if __wasm_idle_previous_main is __wasm_idle_missing_main:
         sys.modules.pop("__main__", None)
     else:

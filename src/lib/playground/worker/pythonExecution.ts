@@ -7,6 +7,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
     import builtins
     import inspect
     import marshal
+    import os
     import sys
     import types
     from collections import OrderedDict
@@ -66,6 +67,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
         previous_input, previous_print = builtins.input, builtins.print
         missing_main = object()
         previous_main = sys.modules.get("__main__", missing_main)
+        previous_path = sys.path
         def input_wrapper(prompt=""):
             value = input_bridge(prompt)
             if value is None:
@@ -96,11 +98,15 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
             main_module.__file__ = filename
             scope = main_module.__dict__
             sys.modules["__main__"] = main_module
+            # Script siblings take precedence; shared workspace-root modules follow.
+            run_paths = list(dict.fromkeys((os.path.dirname(os.path.abspath(filename)), os.getcwd())))
+            sys.path = run_paths + [path for path in previous_path if path not in run_paths]
             ready()
             result = evaluate(compiled, scope, scope)
             if inspect.isawaitable(result):
                 await result
         finally:
+            sys.path = previous_path
             if previous_main is missing_main:
                 sys.modules.pop("__main__", None)
             else:
