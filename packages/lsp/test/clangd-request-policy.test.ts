@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EditorLanguageServerTransport } from '../src/types.js';
 import { createClangdRequestPolicy } from '../src/clangd/request-policy.js';
 
-function setup() {
+function setup(timeouts: { requestTimeoutMs?: number; initializeTimeoutMs?: number } = {}) {
 	let receive: (message: any) => void = () => {};
 	const write = vi.fn(async (_message: any) => {});
 	const transport = {
@@ -19,6 +19,7 @@ function setup() {
 	const policy = createClangdRequestPolicy(transport, {
 		requestTimeoutMs: 100,
 		initializeTimeoutMs: 1000,
+		...timeouts,
 		onDelay
 	});
 	const received = vi.fn();
@@ -42,6 +43,38 @@ const hover = {
 
 afterEach(() => vi.useRealTimers());
 describe('clangd request policy', () => {
+	it.each(['requestTimeoutMs', 'initializeTimeoutMs'] as const)(
+		'rejects timer overflow in %s before using the transport',
+		(option) => {
+			expect(() =>
+				createClangdRequestPolicy({} as EditorLanguageServerTransport, {
+					[option]: 2 ** 31
+				})
+			).toThrow('timeout must be an integer between 1 and 2147483647 ms');
+		}
+	);
+
+	it('allows maximum request and initialize deadlines without immediate cancellation', async () => {
+		vi.useFakeTimers();
+		const { policy, received } = setup({
+			requestTimeoutMs: 2 ** 31 - 1,
+			initializeTimeoutMs: 2 ** 31 - 1
+		});
+		await policy.transport.writer.write({
+			jsonrpc: '2.0',
+			id: 2,
+			method: 'initialize',
+			params: {}
+		});
+		await policy.transport.writer.write(open);
+		await policy.transport.writer.write(hover);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(received).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(2);
+		policy.dispose();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it('settles an unresponsive feature, cancels it, and keeps the server usable', async () => {
 		vi.useFakeTimers();
 		const { policy, write, receive, received, onDelay } = setup();

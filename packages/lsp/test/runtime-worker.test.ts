@@ -19,6 +19,24 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it.each([0, -1, 0.5, NaN, Infinity, 2 ** 31, Number.MAX_SAFE_INTEGER])(
+		'rejects unsupported timeout %s before loading assets or constructing a worker',
+		async (timeoutMs) => {
+			const worker = vi.fn();
+			vi.stubGlobal('Worker', worker);
+			await expect(
+				runRuntimeWorkerDiagnostics({
+					workerUrl: 'https://assets.example.com/worker.js',
+					message: {},
+					timeoutMs,
+					timeoutMessage: 'Diagnostics timed out'
+				})
+			).rejects.toThrow('timeout must be an integer between 1 and 2147483647 ms');
+			expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
+			expect(worker).not.toHaveBeenCalled();
+		}
+	);
+
 	it('executes only receipt-verified worker bytes through a Blob URL', async () => {
 		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
 		const receipt = {
