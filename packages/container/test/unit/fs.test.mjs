@@ -427,3 +427,18 @@ test('combined readonly package quotas are checked before any package is publish
     assert.deepEqual(fs.exportSnapshot(), before);
   }
 });
+
+test('resolved create and relocated subtree respect absolute path budgets', () => {
+  const fs = new MemoryFileSystem();
+  const deep = '/workspace/' + Array(127).fill('d').join('/');
+  fs.mkdir(deep, { recursive: true });
+  const snapshot = fs.exportSnapshot();
+  assert.throws(() => fs.mkdir('extra', { cwd: deep }), { code: 'EINVAL' });
+  assert.deepEqual(fs.exportSnapshot(), snapshot);
+  fs.mkdir('/workspace/tree/child', { recursive: true });
+  const before = fs.exportSnapshot();
+  const parent = deep.slice(0, -2);
+  assert.throws(() => fs.rename('/workspace/tree', parent + '/tree'), { code: 'EINVAL' });
+  assert.deepEqual(fs.exportSnapshot(), before);
+  assert.doesNotThrow(() => MemoryFileSystem.fromSnapshot(fs.exportSnapshot()));
+});

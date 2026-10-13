@@ -165,6 +165,7 @@ export class MemoryFileSystem {
     const node = stack[stack.length - 1]!;
     if (path.endsWith('/') && node.type !== 'directory') throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     const result = absolute(names);
+    checkPath(result);
     if (!within(result, root)) throw new FsError('EACCES', 'Path escapes the directory capability');
     return { node, path: result };
   }
@@ -196,6 +197,7 @@ export class MemoryFileSystem {
     if (!name || name === '.' || name === '..') throw new FsError('EINVAL', 'Operation requires an ordinary final path component');
     const parent = this.resolve(parts.join('/') || (path.startsWith('/') ? '/' : '.'), options);
     if (parent.node.type !== 'directory') throw new FsError('ENOTDIR', 'Parent is not a directory');
+    checkPath(`${parent.path === '/' ? '' : parent.path}/${name}`);
     return { ...parent, name };
   }
 
@@ -354,6 +356,11 @@ export class MemoryFileSystem {
     if (!node) throw new FsError('ENOENT', 'Source does not exist');
     if (node.mount !== source.node.mount) throw new FsError('EBUSY', 'Cannot rename a mount root');
     if (source.node.mount !== destination.node.mount) throw new FsError('EXDEV', 'Cannot rename across mounts');
+    const pending = [{ node, path: `${destination.path === '/' ? '' : destination.path}/${destination.name}` }];
+    while (pending.length) {
+      const entry = pending.pop()!; checkPath(entry.path);
+      for (const [name, child] of entry.node.children) pending.push({ node: child, path: `${entry.path}/${name}` });
+    }
     this.writable(source.node);
     this.writable(destination.node);
     if (source.node === destination.node && source.name === destination.name) return;
