@@ -1,3 +1,4 @@
+import { WorkspaceValidationError } from '@wasm-idle/core';
 import {
 	Directory,
 	Fd,
@@ -179,10 +180,43 @@ class StdinFd extends Fd {
 }
 
 export function createBrowserWasiHost(options: BrowserExecutionOptions = {}): BrowserWasiHost {
+	const files = (options.files || []).map((file) => ({
+		...file,
+		path: normalizeGuestPath(file.path)
+	}));
+	const paths = new Set<string>();
+	for (const file of files) {
+		if (file.path === '/') {
+			throw new WorkspaceValidationError(
+				'invalid-path',
+				'A guest file cannot replace the root directory'
+			);
+		}
+		if (paths.has(file.path)) {
+			throw new WorkspaceValidationError(
+				'duplicate-path',
+				`Duplicate guest file path: ${file.path}`,
+				{ path: file.path }
+			);
+		}
+		paths.add(file.path);
+	}
+	for (const file of files) {
+		const segments = file.path.slice(1).split('/');
+		for (let depth = 1; depth < segments.length; depth++) {
+			const prefix = `/${segments.slice(0, depth).join('/')}`;
+			if (paths.has(prefix)) {
+				throw new WorkspaceValidationError(
+					'path-prefix-collision',
+					`Guest file ${prefix} conflicts with descendant ${file.path}`,
+					{ path: file.path }
+				);
+			}
+		}
+	}
 	const rootDirectory = new Directory(new Map());
-	for (const file of options.files || []) {
-		const guestPath = normalizeGuestPath(file.path);
-		const segments = guestPath.slice(1).split('/');
+	for (const file of files) {
+		const segments = file.path.slice(1).split('/');
 		let directory = rootDirectory;
 		for (const segment of segments.slice(0, -1)) {
 			const existing = directory.contents.get(segment);
