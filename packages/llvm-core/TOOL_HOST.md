@@ -1,0 +1,81 @@
+# Experimental LLVM tool host
+
+`createLlvmToolHost({ tools, createBindings })` is an opt-in low-level boundary for
+existing producer command modules. `tools` contains `clang` and `wasm-ld`, each
+with `{ bytes: Uint8Array, sha256: string }`. The host snapshots both inputs,
+verifies their application-supplied SHA-256 pins with Core, then compiles them.
+It does not fetch a URL, load a remote manifest, patch a binary, or change the
+existing high-level compiler API. Producer receipts still require their existing
+producer-specific verification before the host receives these pins.
+
+After preparation, `host.run({ executable, argv, cwd, env })` is synchronous.
+`executable` is exactly `clang` or `wasm-ld`; `argv` is the complete original native
+argument vector, including `argv[0]`. Later empty arguments are preserved. Cwd is
+an absolute POSIX path; environment keys and values are snapshotted. The binding
+factory receives those frozen values plus `{ identity, depth }`, where identity
+contains `{ executable, sha256, bytes }`. It supplies synchronous
+`{ imports, run(instance): { code }, dispose() }`. Its closure owns the filesystem,
+cwd implementation and separate raw-byte fd endpoints, including sharing them
+with child invocations. The tool host does not silently synthesize those resources.
+
+The result is `{ code, provenance: { root, invocations } }`. Invocation records
+contain pin identity, depth, code or null, and `exited`, `startup-failure` or
+`runtime-error`, in completion order. They exclude source, argv, environment and
+file contents. A normal nonzero exit is a result. Invalid startup, a Wasm trap,
+invalid exit status and disposal failure are typed `LlvmToolHostError` failures.
+Bindings are disposed after both normal and abnormal execution; instances are
+never pooled. `host.dispose()` releases compiled modules and is idempotent.
+
+## Producer bridge ABI
+
+An opt-in producer patch can import the synchronous function:
+
+```text
+wasm_idle_tool_host.exec_v1(
+  programPtr: i32, programLen: i32,
+  argvPtr: i32, argc: i32,
+  envPtr: i32, envc: i32, flags: i32
+) -> i32
+```
+
+Program and table strings are length-delimited UTF-8 bytes without NUL. Each argv
+or environment table entry is `{ ptr: u32, len: u32 }`, little-endian, stride 8.
+`argc` includes argv[0]. Environment entries are `NAME=value`; empty values and
+values containing `=` are preserved. Duplicate/empty names are rejected because
+the structural environment contract is a record.
+
+Only `wasm-ld`, `ld.lld`, `/usr/bin/wasm-ld` and `/usr/bin/ld.lld` resolve, always to
+the pinned `wasm-ld` module. Other paths, dot traversal, URLs and names fail. Flags
+1 inherit the caller's environment and require `envPtr = envc = 0`. Flags 0 provide
+an explicit environment, including an empty one. Other bits are rejected. Cwd,
+filesystem and fd ownership remain the parent's binding closure; no shell parser
+or interpretation of diagnostic command text participates in dispatch.
+
+Every guest pointer/table is checked against the current exported memory buffer.
+Memory views are rebuilt after growth. Each table has at most 4096 entries, total
+decoded request/invocation text is at most one MiB, and execution depth is at most
+4 including the root. Arguments are copied into strings before child execution.
+Successful child exit codes 0 through `INT32_MAX` return exactly; -1 means packet
+rejection or child startup failure, and -2 means child runtime/cleanup failure.
+The caller must treat negative returns as host failure, not a guest exit status.
+
+The bridge must be called from the initialized command execution path, after
+instantiation exposes memory. An instantiation-time start function cannot invoke
+this bridge successfully. An unpatched module can still run commands such as
+`clang -c` using bindings for its existing imports. General compile-and-link CLI
+support requires a matching producer patch and real compiler acceptance evidence.
+
+## Execution limits and qualification
+
+Run this host in a dedicated Worker: synchronous guest execution can block forever.
+Cancellation, elapsed-time deadlines and forced termination belong to that Worker
+owner. This API alone does not enforce a Wasm memory ceiling; the adapter must
+validate the selected modules' memory/import profile before invoking it. No JS heap
+or process RSS hard limit is claimed. Public `run()` is non-reentrant, while the
+specific synchronous linker bridge creates bounded nested instances.
+
+Protocol tests use real tiny core Wasm modules for parent/child dispatch, UTF-8,
+empty arguments, explicit/inherited environments, memory growth, bounds, recursive
+dispatch and failure cleanup. They do not qualify real Clang, LLD, C/C++ sysroot
+coverage, producer subprocess semantics or a browser shell. Those gates require
+the pinned real producer artifacts and their separate adapter/browser fixtures.
