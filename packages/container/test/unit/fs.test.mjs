@@ -303,3 +303,84 @@ test('independent filesystems never share mutable bytes or inode namespaces', ()
   second.unlink('same');
   assert.equal(text(first.readFile('same')), 'first');
 });
+
+test('snapshot commit preserves renamed directory/file identities and gives replacement paths new identities', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('tree');
+  fs.writeFile('tree/child', bytes('original'));
+  fs.writeFile('replaced', bytes('replacement destination'));
+  const directory = fs.stat('tree').inode;
+  const child = fs.stat('tree/child').inode;
+  const replaced = fs.stat('replaced').inode;
+  const lease = fs.acquireSnapshot();
+  const guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  assert.equal(guest.stat('tree/child').inode, child);
+  guest.rename('tree', 'moved');
+  guest.mkdir('tree');
+  guest.rename('moved/child', 'replaced');
+  guest.writeFile('moved/new', bytes('new file'));
+  lease.commit(guest.exportSnapshot());
+  assert.equal(fs.stat('moved').inode, directory);
+  assert.equal(fs.stat('replaced').inode, child);
+  assert.notEqual(fs.stat('tree').inode, directory);
+  assert.notEqual(fs.stat('moved/new').inode, replaced);
+  assert.equal(new Set(fs.exportSnapshot().entries.map((entry) => entry.inode)).size, fs.inodeCount);
+});
+
+test('snapshot inode allocation never reuses removed IDs across restores, commits or mounts', () => {
+  const fs = new MemoryFileSystem();
+  fs.writeFile('removed', bytes('old'));
+  const retired = fs.stat('removed').inode;
+  fs.unlink('removed');
+  const lease = fs.acquireSnapshot();
+  const guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('temporary', bytes('temporary'));
+  const temporary = guest.stat('temporary').inode;
+  assert.ok(temporary > retired);
+  guest.unlink('temporary');
+  lease.commit(guest.exportSnapshot());
+  fs.mountReadonly('/opt/toolchain', [{ path: 'file', type: 'file', mode: 0o444, data: bytes('tool') }]);
+  assert.ok(fs.stat('/opt/toolchain/file').inode > temporary);
+  const existing = fs.stat('/opt/toolchain/file').inode;
+  fs.writeFile('later', bytes('later'));
+  assert.ok(fs.stat('later').inode > existing);
+  assert.equal(fs.stat('/opt/toolchain/file').inode, existing);
+});
+
+test('snapshot decoder rejects missing, duplicate, invalid and exhausted inode identities', () => {
+  const fs = new MemoryFileSystem();
+  const snapshot = fs.exportSnapshot();
+  for (const mutate of [
+    (value) => { delete value.entries[0].inode; },
+    (value) => { value.entries[0].inode = value.entries[1].inode; },
+    (value) => { value.entries[0].inode = 0; },
+    (value) => { value.entries[0].inode = -1; },
+    (value) => { value.entries[0].inode = 1.5; },
+    (value) => { value.entries[0].inode = Number.MAX_SAFE_INTEGER; },
+    (value) => { delete value.nextInode; },
+    (value) => { value.nextInode = value.entries.at(-1).inode; },
+    (value) => { value.nextInode = Number.MAX_SAFE_INTEGER + 1; }
+  ]) {
+    const invalid = structuredClone(snapshot); mutate(invalid);
+    assert.throws(() => MemoryFileSystem.fromSnapshot(invalid), error('EINVAL'));
+  }
+});
+
+test('snapshot commit rejects recycled identities, type/mount changes and readonly identity substitution', () => {
+  const fs = new MemoryFileSystem();
+  fs.writeFile('retired', bytes('old')); const retired = fs.stat('retired').inode; fs.unlink('retired');
+  fs.writeFile('file', bytes('current'));
+  fs.mountReadonly('/opt/pkg', [{ path: 'tool', type: 'file', mode: 0o444, data: bytes('trusted') }]);
+  const lease = fs.acquireSnapshot();
+  for (const mutate of [
+    (value) => { value.entries.find((entry) => entry.path === '/workspace/file').inode = retired; },
+    (value) => { const entry = value.entries.find((entry) => entry.path === '/workspace/file'); entry.type = 'directory'; delete entry.data; },
+    (value) => { value.entries.find((entry) => entry.path === '/workspace/file').path = '/tmp/file'; },
+    (value) => { value.entries.find((entry) => entry.path === '/opt/pkg/tool').inode = value.nextInode++; }
+  ]) {
+    const tampered = structuredClone(lease.snapshot); mutate(tampered);
+    assert.throws(() => lease.commit(tampered), FsError);
+    assert.equal(text(fs.readFile('file')), 'current');
+  }
+  lease.discard();
+});

@@ -56,7 +56,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 function sameEntry(a: SnapshotEntry, b: SnapshotEntry): boolean {
-  return a.type === b.type && a.mode === b.mode && a.target === b.target &&
+  return a.inode === b.inode && a.type === b.type && a.mode === b.mode && a.target === b.target &&
     (a.type !== 'file' || sameBytes(a.data!, b.data!));
 }
 
@@ -97,6 +97,7 @@ export class MemoryFileSystem {
 
   private allocate(type: FileType, mount: string, mode: number): Inode {
     if (this.nodes.size >= this.maxInodes) throw new FsError('ENOSPC', 'Filesystem inode quota exceeded');
+    if (this.nextInode >= Number.MAX_SAFE_INTEGER) throw new FsError('ENOSPC', 'Filesystem inode identities exhausted');
     checkMode(mode);
     const now = Date.now();
     const node: Inode = {
@@ -522,7 +523,7 @@ export class MemoryFileSystem {
   exportSnapshot(): FileSystemSnapshot {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
-      entries.push({ path, type: node.type, mode: node.mode,
+      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode,
         ...(node.type === 'file' ? { data: node.data.slice() } : {}),
         ...(node.type === 'symlink' ? { target: node.target } : {}),
       });
@@ -531,26 +532,28 @@ export class MemoryFileSystem {
       }
     };
     visit(this.root, '/');
-    return { generation: this.revision, mounts: [...this.mounts].map(([path, readonly]) => ({ path, readonly })), entries };
+    return { generation: this.revision, nextInode: this.nextInode, mounts: [...this.mounts].map(([path, readonly]) => ({ path, readonly })), entries };
   }
 
   private publish(candidate: MemoryFileSystem): void {
-    const adopt = (next: Inode, old?: Inode): void => {
+    const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+    const adopt = (next: Inode): void => {
+      const old = previous.get(next.inode);
       if (old?.type === next.type) {
-        next.inode = old.inode;
         if (old.mode === next.mode && old.target === next.target && sameBytes(old.data, next.data) &&
           old.children.size === next.children.size && [...old.children.keys()].every(name => next.children.has(name))) {
           next.mtimeMs = old.mtimeMs;
           next.ctimeMs = old.ctimeMs;
         }
-      } else next.inode = this.nextInode++;
-      for (const [name, child] of next.children) adopt(child, old?.children.get(name));
+      }
+      for (const child of next.children.values()) adopt(child);
     };
-    adopt(candidate.root, this.root);
+    adopt(candidate.root);
     this.root = candidate.root;
     this.nodes = candidate.nodes;
     this.mounts = candidate.mounts;
     this.usedBytes = candidate.usedBytes;
+    this.nextInode = candidate.nextInode;
     this.revision++;
   }
 
@@ -558,12 +561,20 @@ export class MemoryFileSystem {
   static fromSnapshot(snapshot: FileSystemSnapshot, options: MemoryFileSystemOptions = {}): MemoryFileSystem {
     if (!snapshot || !Array.isArray(snapshot.entries) || !Array.isArray(snapshot.mounts)) throw new FsError('EINVAL', 'Malformed filesystem snapshot');
     integer(snapshot.generation, 'generation');
+    integer(snapshot.nextInode, 'nextInode');
+    if (snapshot.nextInode < 1) throw new FsError('EINVAL', 'Snapshot nextInode must be positive');
     const fs = new MemoryFileSystem(options);
     if (snapshot.entries.length > fs.maxInodes) throw new FsError('ENOSPC', 'Snapshot exceeds inode quota');
     const records = new Map<string, SnapshotEntry>();
+    const identities = new Set<number>();
     let bytes = 0;
     for (const entry of snapshot.entries) {
       if (!entry || typeof entry !== 'object') throw new FsError('EINVAL', 'Invalid snapshot entry');
+      integer(entry.inode, 'inode');
+      if (entry.inode < 1 || entry.inode >= snapshot.nextInode || identities.has(entry.inode)) {
+        throw new FsError('EINVAL', 'Snapshot inode identities must be unique and below nextInode');
+      }
+      identities.add(entry.inode);
       checkPath(entry.path);
       if (!entry.path.startsWith('/') || absolute(components(entry.path)) !== entry.path || components(entry.path).some(part => part === '.' || part === '..')) {
         throw new FsError('EINVAL', 'Snapshot paths must be canonical and absolute');
@@ -598,12 +609,14 @@ export class MemoryFileSystem {
       if (entry.type === 'directory' && components(path).length > 128) throw new FsError('EINVAL', 'Snapshot exceeds directory depth limit');
     }
     fs.nodes.clear();
+    fs.nextInode = 1;
     fs.mounts = mounts;
     const built = new Map<string, Inode>();
     const orderedMounts = [...mounts.keys()].sort((a, b) => b.length - a.length);
     for (const [path, entry] of [...records].sort(([a], [b]) => components(a).length - components(b).length)) {
       const mount = orderedMounts.find(candidate => within(path, candidate))!;
       const node = fs.allocate(entry.type, mount, entry.mode);
+      node.inode = entry.inode;
       node.data = entry.data?.slice() ?? new Uint8Array();
       node.target = entry.target ?? '';
       built.set(path, node);
@@ -615,6 +628,7 @@ export class MemoryFileSystem {
     }
     fs.usedBytes = bytes;
     fs.revision = snapshot.generation;
+    fs.nextInode = snapshot.nextInode;
     return fs;
   }
 
@@ -634,6 +648,15 @@ export class MemoryFileSystem {
         if (finished || this.lease !== token) throw new FsError('ECONFLICT', 'Snapshot lease is no longer active');
         if (this.revision !== generation) throw new FsError('ECONFLICT', 'Filesystem generation changed');
         const candidate = MemoryFileSystem.fromSnapshot(result, { maxBytes: this.maxBytes, maxInodes: this.maxInodes });
+        if (candidate.nextInode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot cannot rewind inode allocation');
+        const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+        for (const next of candidate.nodes) {
+          const old = previous.get(next.inode);
+          if (!old && next.inode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot reused a retired inode identity');
+          if (old && (old.type !== next.type || old.mount !== next.mount)) {
+            throw new FsError('ECONFLICT', 'Snapshot cannot change an inode type or mount identity');
+          }
+        }
         if (candidate.mounts.size !== this.mounts.size || [...this.mounts].some(([path, readonly]) => candidate.mounts.get(path) !== readonly)) {
           throw new FsError('EROFS', 'Snapshot cannot change the mount table');
         }
@@ -657,7 +680,7 @@ export class MemoryFileSystem {
   }
 
   /** Publish a complete readonly tree after namespace, quota and symlink validation. */
-  mountReadonly(path: string, entries: readonly SnapshotEntry[]): void {
+  mountReadonly(path: string, entries: readonly Omit<SnapshotEntry, 'inode'>[]): void {
     if (this.lease || this.descriptors.size) throw new FsError('EBUSY', 'Mount changes require no active lease or descriptors');
     checkPath(path);
     if (!path.startsWith('/') || absolute(components(path)) !== path || components(path).some(part => part === '.' || part === '..') || path === '/') {
@@ -667,6 +690,11 @@ export class MemoryFileSystem {
       throw new FsError('EBUSY', 'Cannot overlap an existing mount');
     }
     const original = this.exportSnapshot();
+    let nextInode = this.nextInode;
+    const identity = () => {
+      if (nextInode >= Number.MAX_SAFE_INTEGER) throw new FsError('ENOSPC', 'Filesystem inode identities exhausted');
+      return nextInode++;
+    };
     const records = new Map(original.entries.map(entry => [entry.path, entry]));
     if ([...records.keys()].some(existing => within(existing, path) && existing !== path)) throw new FsError('EBUSY', 'Mount destination is not empty');
     if (records.has(path) && records.get(path)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount destination is not a directory');
@@ -674,7 +702,7 @@ export class MemoryFileSystem {
     for (const part of components(path)) {
       prefix += `/${part}`;
       if (records.has(prefix) && records.get(prefix)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount parent is not a directory');
-      if (!records.has(prefix)) records.set(prefix, { path: prefix, type: 'directory', mode: 0o755 });
+      if (!records.has(prefix)) records.set(prefix, { inode: identity(), path: prefix, type: 'directory', mode: 0o755 });
     }
     const supplied = new Set<string>();
     for (const entry of entries) {
@@ -683,10 +711,11 @@ export class MemoryFileSystem {
         throw new FsError('EINVAL', 'Package entries need unique canonical relative paths');
       }
       supplied.add(entry.path);
-      records.set(`${path}/${entry.path}`, { ...entry, path: `${path}/${entry.path}` });
+      records.set(`${path}/${entry.path}`, { ...entry, inode: identity(), path: `${path}/${entry.path}` });
     }
     const candidate = MemoryFileSystem.fromSnapshot({
       generation: this.revision + 1,
+      nextInode,
       mounts: [...original.mounts, { path, readonly: true }], entries: [...records.values()],
     }, { maxBytes: this.maxBytes, maxInodes: this.maxInodes });
     for (const entry of entries) {
