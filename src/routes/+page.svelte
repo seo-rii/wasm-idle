@@ -247,6 +247,7 @@
 	let activePath = $state(initialWorkspace.activePath);
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
+	let debugPanelOpen = $state({ variables: true, memory: true, watch: true, stack: true });
 	let languageMenuOpen = $state(false);
 	let languageQuery = $state('');
 	let languageHighlight = $state(0);
@@ -2761,17 +2762,8 @@
 					debug.active && !debug.paused && 'debug-shell--active'
 				]}
 			>
-				<div class="debug-hero">
+				<header class="debug-hero">
 					<div class="debug-hero__intro">
-						<div class="debug-hero__badge">
-							<span class="material-symbols-outlined">bug_report</span>
-						</div>
-						<div class="debug-hero__copy">
-							<p class="debug-hero__eyebrow">Debug Workspace</p>
-							<h2>{debugTitle}</h2>
-						</div>
-					</div>
-					<div class="debug-hero__stats">
 						<div
 							class={[
 								'debug-status-pill',
@@ -2785,55 +2777,135 @@
 							<span class="material-symbols-outlined">{debugStatusIcon}</span>
 							<span>{debugStatusLabel}</span>
 						</div>
-						<div class="debug-metric">
-							<span>Breakpoints</span>
-							<strong>
-								{debug.resolvedBreakpoints.length
-									? `${debug.resolvedBreakpoints.filter((breakpoint) => breakpoint.verified).length}/${debug.resolvedBreakpoints.length}`
-									: debug.breakpoints.length}
-							</strong>
+						<div class="debug-hero__copy">
+							<h2>{debugTitle}</h2>
 						</div>
-						<div class="debug-metric">
-							<span>Watches</span>
-							<strong>{debug.watchExpressions.length}</strong>
-						</div>
-						<div class="debug-metric">
-							<span>Line</span>
-							<strong
-								>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong
-							>
-						</div>
-						{#if debug.paused && debug.threadId !== null}
-							<div class="debug-metric">
-								<span>Thread</span>
-								<strong>{debug.threadId}</strong>
-							</div>
-						{/if}
-						{#if debug.paused && debug.stoppedReason}
-							<div class="debug-metric">
-								<span>Reason</span>
-								<strong>{debug.stoppedReason}</strong>
-							</div>
-						{/if}
-						{#if debug.paused && debug.sourceRevisionStale}
-							<div
-								class="debug-metric"
-								title="The editor source changed after this debug session started."
-							>
-								<span>Source</span>
-								<strong>Changed</strong>
-							</div>
-						{/if}
 					</div>
+					<div class="debug-controls" role="group" aria-label="Debugger controls">
+						<button
+							class={[
+								'action-button',
+								'debug-control',
+								debug.paused && 'debug-control--primary'
+							]}
+							onclick={() => debug.sendCommand('continue')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Continue"
+							aria-label="Continue"
+						>
+							<span class="material-symbols-outlined">play_arrow</span>
+							<span class="debug-control__label">Continue</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.pause()}
+							disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
+							title="Pause"
+							aria-label="Pause"
+						>
+							<span class="material-symbols-outlined">pause</span>
+						</button>
+						<span class="debug-controls__divider" aria-hidden="true"></span>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('nextLine')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Next Line"
+							aria-label="Next Line"
+						>
+							<span class="material-symbols-outlined">redo</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('stepInto')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Step Into"
+							aria-label="Step Into"
+						>
+							<span class="material-symbols-outlined">login</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('stepOut')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Step Out"
+							aria-label="Step Out"
+						>
+							<span class="material-symbols-outlined">logout</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => runToCursorWhileDataBreakpointIdle()}
+							disabled={!debug.canRunToCursor || dataBreakpointLoading}
+							title={debug.cursorLine
+								? `Run to Cursor (L${debug.cursorLine})`
+								: 'Run to Cursor'}
+							aria-label={debug.cursorLine
+								? `Run to Cursor (L${debug.cursorLine})`
+								: 'Run to Cursor'}
+						>
+							<span class="material-symbols-outlined">play_circle</span>
+						</button>
+					</div>
+				</header>
+				<div class="debug-hero__stats">
+					<div class="debug-metric">
+						<span>Breakpoints</span>
+						<strong>
+							{debug.resolvedBreakpoints.length
+								? `${debug.resolvedBreakpoints.filter((breakpoint) => breakpoint.verified).length}/${debug.resolvedBreakpoints.length}`
+								: debug.breakpoints.length}
+						</strong>
+					</div>
+					<div class="debug-metric">
+						<span>Watches</span>
+						<strong>{debug.watchExpressions.length}</strong>
+					</div>
+					<div class="debug-metric">
+						<span>Line</span>
+						<strong>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong>
+					</div>
+					{#if debug.paused && debug.threadId !== null}
+						<div class="debug-metric">
+							<span>Thread</span>
+							<strong>{debug.threadId}</strong>
+						</div>
+					{/if}
+					{#if debug.paused && debug.stoppedReason}
+						<div class="debug-metric">
+							<span>Reason</span>
+							<strong>{debug.stoppedReason}</strong>
+						</div>
+					{/if}
+					{#if debug.paused && debug.sourceRevisionStale}
+						<div
+							class="debug-metric"
+							title="The editor source changed after this debug session started."
+						>
+							<span>Source</span>
+							<strong>Changed</strong>
+						</div>
+					{/if}
 				</div>
 				<div class="debug-panels">
 					<section class="debug-panel">
 						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.variables}
+								aria-controls="debug-panel-variables"
+								onclick={() =>
+									(debugPanelOpen.variables = !debugPanelOpen.variables)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle variables</span>
+							</button>
 							<div class="debug-panel__title">
 								<span class="material-symbols-outlined">data_object</span>
-								<div class="debug-panel__copy">
-									<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
-								</div>
+								<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
 							</div>
 							<span class="debug-count">
 								{debug.scopes.length
@@ -2850,341 +2922,410 @@
 									: debug.locals.length}
 							</span>
 						</header>
-						{#if debug.scopes.length}
-							<div class="debug-scopes">
-								{#each debug.scopes as scope (scope.variablesReference)}
-									{@const loadedScopeVariables =
-										scope.variables.length > 0
-											? scope.variables
-											: debug.variablesByReference.get(
-													scope.variablesReference
-												)}
-									<details
-										class="debug-scope"
-										bind:open={
-											() => debugScopeOpen[scope.name] ?? true,
-											(open) => (debugScopeOpen[scope.name] = open)
-										}
-									>
-										<summary><h4>{scope.name}</h4></summary>
-										{#if loadedScopeVariables?.length}
-											<ul>
-												{@render debugVariableRows(loadedScopeVariables)}
-											</ul>
-											{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
-												<button
-													class="debug-load-scope"
-													disabled={debug.loadingVariableReferences.has(
-														scope.variablesReference
-													)}
-													onclick={() =>
-														debug.loadVariableChildren(
-															scope.variablesReference,
-															loadedScopeVariables.length,
-															50
+						{#if debugPanelOpen.variables}
+							<div class="debug-panel__body" id="debug-panel-variables">
+								{#if debug.scopes.length}
+									<div class="debug-scopes">
+										{#each debug.scopes as scope (scope.variablesReference)}
+											{@const loadedScopeVariables =
+												scope.variables.length > 0
+													? scope.variables
+													: debug.variablesByReference.get(
+															scope.variablesReference
 														)}
-												>
-													Load more {scope.name.toLowerCase()}
-												</button>
-											{/if}
-										{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
-											<button
-												class="debug-load-scope"
-												disabled={debug.loadingVariableReferences.has(
-													scope.variablesReference
-												)}
-												onclick={() =>
-													debug.loadVariableChildren(
-														scope.variablesReference
-													)}
+											<details
+												class="debug-scope"
+												bind:open={
+													() => debugScopeOpen[scope.name] ?? true,
+													(open) => (debugScopeOpen[scope.name] = open)
+												}
 											>
-												Load {scope.name.toLowerCase()}
-											</button>
-										{:else}
-											<p class="empty">No variables</p>
-										{/if}
-									</details>
-								{/each}
+												<summary><h4>{scope.name}</h4></summary>
+												{#if loadedScopeVariables?.length}
+													<ul>
+														{@render debugVariableRows(
+															loadedScopeVariables
+														)}
+													</ul>
+													{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
+														<button
+															class="debug-load-scope"
+															disabled={debug.loadingVariableReferences.has(
+																scope.variablesReference
+															)}
+															onclick={() =>
+																debug.loadVariableChildren(
+																	scope.variablesReference,
+																	loadedScopeVariables.length,
+																	50
+																)}
+														>
+															Load more {scope.name.toLowerCase()}
+														</button>
+													{/if}
+												{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
+													<button
+														class="debug-load-scope"
+														disabled={debug.loadingVariableReferences.has(
+															scope.variablesReference
+														)}
+														onclick={() =>
+															debug.loadVariableChildren(
+																scope.variablesReference
+															)}
+													>
+														Load {scope.name.toLowerCase()}
+													</button>
+												{:else}
+													<p class="empty">No variables</p>
+												{/if}
+											</details>
+										{/each}
+									</div>
+								{:else if debug.locals.length}
+									<ul>
+										{@render debugVariableRows(debug.locals)}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No locals yet</span>
+									</p>
+								{/if}
 							</div>
-						{:else if debug.locals.length}
-							<ul>
-								{@render debugVariableRows(debug.locals)}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No locals yet</span>
-							</p>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.watch}
+								aria-controls="debug-panel-watch"
+								onclick={() => (debugPanelOpen.watch = !debugPanelOpen.watch)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle watch</span>
+							</button>
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">visibility</span>
+								<h3>Watch</h3>
+							</div>
+							<span class="debug-count">{debug.watchExpressions.length}</span>
+						</header>
+						{#if debugPanelOpen.watch}
+							<div class="debug-panel__body" id="debug-panel-watch">
+								<div class="watch-row">
+									<input
+										bind:value={debug.watchInput}
+										maxlength={4096}
+										placeholder="pair.first or items[2]"
+										onkeydown={(event) =>
+											event.key === 'Enter' && debug.addWatchExpression()}
+									/>
+									<button
+										class="watch-add"
+										onclick={() => debug.addWatchExpression()}
+									>
+										<span class="material-symbols-outlined">add</span>
+										<span>Add</span>
+									</button>
+								</div>
+								{#if debug.watchValues.length}
+									<ul>
+										{#each debug.watchValues as watch (watch.expression)}
+											<li class="debug-entry debug-entry--watch">
+												<div class="debug-entry__body">
+													<span class="debug-expression"
+														>{watch.expression}</span
+													>
+													<code class="debug-value">{watch.value}</code>
+												</div>
+												<button
+													class="remove"
+													onclick={() =>
+														debug.removeWatchExpression(
+															watch.expression
+														)}
+													aria-label={`Remove watch expression ${watch.expression}`}
+												>
+													<span class="material-symbols-outlined"
+														>close</span
+													>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No watches yet</span>
+									</p>
+								{/if}
+							</div>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.stack}
+								aria-controls="debug-panel-stack"
+								onclick={() => (debugPanelOpen.stack = !debugPanelOpen.stack)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle call stack</span>
+							</button>
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">layers</span>
+								<h3>Call Stack</h3>
+							</div>
+							<span class="debug-count">{debug.callStack.length}</span>
+						</header>
+						{#if debugPanelOpen.stack}
+							<div class="debug-panel__body" id="debug-panel-stack">
+								{#if debug.callStack.length}
+									<ul>
+										{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}:${index}`)}
+											<li
+												class={[
+													'debug-entry',
+													'debug-entry--stack',
+													debug.frameId === frame.id &&
+														'debug-entry--current'
+												]}
+											>
+												<button
+													class="debug-frame-select"
+													data-frame-id={frame.id}
+													{@attach observeDebugFrame(frame.id)}
+													disabled={!frame.id || dataBreakpointLoading}
+													onclick={() => selectDebugFrame(frame)}
+												>
+													<div class="stack-meta">
+														<span class="stack-order">{index + 1}</span>
+														<span class="stack-function"
+															>{frame.displayName ??
+																(frame.argumentsSummary ===
+																undefined
+																	? frame.functionName ||
+																		'(entry)'
+																	: `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
+														>
+													</div>
+													<code class="stack-line">L{frame.line}</code>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No frames yet</span>
+									</p>
+								{/if}
+							</div>
 						{/if}
 					</section>
 					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
 						<section class="debug-panel debug-memory-panel">
 							<header class="debug-panel__header">
+								<button
+									class="debug-panel__toggle"
+									aria-expanded={debugPanelOpen.memory}
+									aria-controls="debug-panel-memory"
+									onclick={() => (debugPanelOpen.memory = !debugPanelOpen.memory)}
+								>
+									<span
+										class="material-symbols-outlined debug-panel__chevron"
+										aria-hidden="true">expand_more</span
+									>
+									<span class="visually-hidden">Toggle memory</span>
+								</button>
 								<div class="debug-panel__title">
 									<span class="material-symbols-outlined">memory</span>
-									<div class="debug-panel__copy">
-										<h3>Memory</h3>
-									</div>
+									<h3>Memory</h3>
 								</div>
 								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
 							</header>
-							<div class="debug-memory-controls">
-								<label>
-									<span>Reference</span>
-									<input
-										bind:value={memoryReference}
-										aria-label="Memory reference"
-									/>
-								</label>
-								<label>
-									<span>Offset</span>
-									<input
-										bind:value={memoryOffsetInput}
-										aria-label="Memory offset"
-									/>
-								</label>
-								<label>
-									<span>Bytes</span>
-									<input
-										bind:value={memoryCountInput}
-										inputmode="numeric"
-										aria-label="Memory byte count"
-									/>
-								</label>
-								{#if debug.capabilities.readMemory}
-									<button
-										class="debug-memory-read"
-										onclick={() => void readDebugMemoryPage()}
-										disabled={memoryLoading}
-									>
-										{memoryLoading ? 'Reading…' : 'Read'}
-									</button>
-								{/if}
-							</div>
-							{#if debug.capabilities.writeMemory}
-								<div class="debug-memory-watch-controls">
-									<label class="debug-memory-write-field">
-										<span>Write hex bytes</span>
-										<input
-											bind:value={memoryWriteInput}
-											placeholder="64 00 00 00"
-											aria-label="Memory write bytes"
-										/>
-									</label>
-									<button
-										class="debug-memory-write"
-										onclick={() => void writeDebugMemoryPage()}
-										disabled={memoryLoading}
-										aria-label="Write memory"
-									>
-										{memoryLoading ? 'Writing…' : 'Write memory'}
-									</button>
-								</div>
-							{/if}
-							{#if debug.capabilities.writeMemory && memoryWriteStatus}
-								<p class="debug-memory-write-status">
-									<strong>{memoryWriteStatus.bytesWritten} bytes written</strong>
-									{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
-										<span>of {memoryWriteStatus.requestedBytes} requested</span>
-									{/if}
-								</p>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints}
-								<div class="debug-memory-watch-controls">
-									<label>
-										<span>Break on</span>
-										<select
-											bind:value={dataBreakpointAccessType}
-											disabled={dataBreakpointLoading}
-											aria-label="Data breakpoint access"
-										>
-											<option value="write">Write</option>
-											<option value="read">Read</option>
-											<option value="readWrite">Read or write</option>
-										</select>
-									</label>
-									<button
-										class="debug-data-breakpoint-set"
-										onclick={() => void setMemoryDataBreakpoint()}
-										disabled={dataBreakpointLoading}
-										aria-label="Set data breakpoint"
-									>
-										{dataBreakpointLoading && !activeDataBreakpoint
-											? 'Setting…'
-											: 'Set data breakpoint'}
-									</button>
-									{#if activeDataBreakpoint}
-										<button
-											class="debug-data-breakpoint-clear"
-											onclick={() => void clearMemoryDataBreakpoint()}
-											disabled={dataBreakpointLoading}
-											aria-label="Clear data breakpoint"
-										>
-											Clear
-										</button>
-									{/if}
-								</div>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
-								<p class="debug-data-breakpoint-status">
-									<strong>{activeDataBreakpoint.accessType}</strong>
-									<span>{activeDataBreakpoint.description}</span>
-								</p>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
-								<p class="debug-memory-error" role="alert">{dataBreakpointError}</p>
-							{/if}
-							{#if memoryError}
-								<p class="debug-memory-error" role="alert">{memoryError}</p>
-							{/if}
-							{#if debug.capabilities.readMemory && memoryResult}
-								<div class="debug-memory-toolbar">
-									<button onclick={() => void readDebugMemoryPage(-1)}
-										>Previous</button
-									>
-									<code
-										>{memoryResult.address ??
-											memoryResult.memoryReference}</code
-									>
-									<button onclick={() => void readDebugMemoryPage(1)}>Next</button
-									>
-								</div>
-								<div
-									class="debug-memory-table"
-									role="table"
-									aria-label="Memory contents"
-								>
-									{#each memoryRows as row (row.offset)}
-										<div class="debug-memory-row" role="row">
-											<code class="debug-memory-address">
-												{memoryResult.address ??
-													memoryResult.memoryReference}
-												{#if row.offset > 0}+0x{row.offset.toString(
-														16
-													)}{/if}
-											</code>
-											<div class="debug-memory-hex" role="cell">
-												{#each row.bytes as byte, index (index)}
-													{#if byte === null}
-														<code
-															class="debug-memory-byte debug-memory-byte--unreadable"
-															>??</code
-														>
-													{:else}
-														<code class="debug-memory-byte"
-															>{byte
-																.toString(16)
-																.padStart(2, '0')}</code
-														>
-													{/if}
-												{/each}
-											</div>
-											<div role="cell">
-												<code class="debug-memory-ascii">{row.ascii}</code>
-											</div>
+							{#if debugPanelOpen.memory}
+								<div class="debug-panel__body" id="debug-panel-memory">
+									<div class="debug-memory-controls">
+										<label>
+											<span>Reference</span>
+											<input
+												bind:value={memoryReference}
+												aria-label="Memory reference"
+											/>
+										</label>
+										<label>
+											<span>Offset</span>
+											<input
+												bind:value={memoryOffsetInput}
+												aria-label="Memory offset"
+											/>
+										</label>
+										<label>
+											<span>Bytes</span>
+											<input
+												bind:value={memoryCountInput}
+												inputmode="numeric"
+												aria-label="Memory byte count"
+											/>
+										</label>
+										{#if debug.capabilities.readMemory}
+											<button
+												class="debug-memory-read"
+												onclick={() => void readDebugMemoryPage()}
+												disabled={memoryLoading}
+											>
+												{memoryLoading ? 'Reading…' : 'Read'}
+											</button>
+										{/if}
+									</div>
+									{#if debug.capabilities.writeMemory}
+										<div class="debug-memory-watch-controls">
+											<label class="debug-memory-write-field">
+												<span>Write hex bytes</span>
+												<input
+													bind:value={memoryWriteInput}
+													placeholder="64 00 00 00"
+													aria-label="Memory write bytes"
+												/>
+											</label>
+											<button
+												class="debug-memory-write"
+												onclick={() => void writeDebugMemoryPage()}
+												disabled={memoryLoading}
+												aria-label="Write memory"
+											>
+												{memoryLoading ? 'Writing…' : 'Write memory'}
+											</button>
 										</div>
-									{/each}
+									{/if}
+									{#if debug.capabilities.writeMemory && memoryWriteStatus}
+										<p class="debug-memory-write-status">
+											<strong
+												>{memoryWriteStatus.bytesWritten} bytes written</strong
+											>
+											{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
+												<span
+													>of {memoryWriteStatus.requestedBytes} requested</span
+												>
+											{/if}
+										</p>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints}
+										<div class="debug-memory-watch-controls">
+											<label>
+												<span>Break on</span>
+												<select
+													bind:value={dataBreakpointAccessType}
+													disabled={dataBreakpointLoading}
+													aria-label="Data breakpoint access"
+												>
+													<option value="write">Write</option>
+													<option value="read">Read</option>
+													<option value="readWrite">Read or write</option>
+												</select>
+											</label>
+											<button
+												class="debug-data-breakpoint-set"
+												onclick={() => void setMemoryDataBreakpoint()}
+												disabled={dataBreakpointLoading}
+												aria-label="Set data breakpoint"
+											>
+												{dataBreakpointLoading && !activeDataBreakpoint
+													? 'Setting…'
+													: 'Set data breakpoint'}
+											</button>
+											{#if activeDataBreakpoint}
+												<button
+													class="debug-data-breakpoint-clear"
+													onclick={() => void clearMemoryDataBreakpoint()}
+													disabled={dataBreakpointLoading}
+													aria-label="Clear data breakpoint"
+												>
+													Clear
+												</button>
+											{/if}
+										</div>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
+										<p class="debug-data-breakpoint-status">
+											<strong>{activeDataBreakpoint.accessType}</strong>
+											<span>{activeDataBreakpoint.description}</span>
+										</p>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
+										<p class="debug-memory-error" role="alert">
+											{dataBreakpointError}
+										</p>
+									{/if}
+									{#if memoryError}
+										<p class="debug-memory-error" role="alert">{memoryError}</p>
+									{/if}
+									{#if debug.capabilities.readMemory && memoryResult}
+										<div class="debug-memory-toolbar">
+											<button onclick={() => void readDebugMemoryPage(-1)}
+												>Previous</button
+											>
+											<code
+												>{memoryResult.address ??
+													memoryResult.memoryReference}</code
+											>
+											<button onclick={() => void readDebugMemoryPage(1)}
+												>Next</button
+											>
+										</div>
+										<div
+											class="debug-memory-table"
+											role="table"
+											aria-label="Memory contents"
+										>
+											{#each memoryRows as row (row.offset)}
+												<div class="debug-memory-row" role="row">
+													<code class="debug-memory-address">
+														{memoryResult.address ??
+															memoryResult.memoryReference}
+														{#if row.offset > 0}+0x{row.offset.toString(
+																16
+															)}{/if}
+													</code>
+													<div class="debug-memory-hex" role="cell">
+														{#each row.bytes as byte, index (index)}
+															{#if byte === null}
+																<code
+																	class="debug-memory-byte debug-memory-byte--unreadable"
+																	>??</code
+																>
+															{:else}
+																<code class="debug-memory-byte"
+																	>{byte
+																		.toString(16)
+																		.padStart(2, '0')}</code
+																>
+															{/if}
+														{/each}
+													</div>
+													<div role="cell">
+														<code class="debug-memory-ascii"
+															>{row.ascii}</code
+														>
+													</div>
+												</div>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{/if}
 						</section>
 					{/if}
-					<section class="debug-panel">
-						<header class="debug-panel__header">
-							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">visibility</span>
-								<div class="debug-panel__copy">
-									<h3>Watch</h3>
-								</div>
-							</div>
-							<span class="debug-count">{debug.watchExpressions.length}</span>
-						</header>
-						<div class="watch-row">
-							<input
-								bind:value={debug.watchInput}
-								maxlength={4096}
-								placeholder="pair.first or items[2]"
-								onkeydown={(event) =>
-									event.key === 'Enter' && debug.addWatchExpression()}
-							/>
-							<button class="watch-add" onclick={() => debug.addWatchExpression()}>
-								<span class="material-symbols-outlined">add</span>
-								<span>Add</span>
-							</button>
-						</div>
-						{#if debug.watchValues.length}
-							<ul>
-								{#each debug.watchValues as watch (watch.expression)}
-									<li class="debug-entry debug-entry--watch">
-										<div class="debug-entry__body">
-											<span class="debug-expression">{watch.expression}</span>
-											<code class="debug-value">{watch.value}</code>
-										</div>
-										<button
-											class="remove"
-											onclick={() =>
-												debug.removeWatchExpression(watch.expression)}
-											aria-label={`Remove watch expression ${watch.expression}`}
-										>
-											<span class="material-symbols-outlined">close</span>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No watches yet</span>
-							</p>
-						{/if}
-					</section>
-					<section class="debug-panel">
-						<header class="debug-panel__header">
-							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">layers</span>
-								<div class="debug-panel__copy">
-									<h3>Call Stack</h3>
-								</div>
-							</div>
-							<span class="debug-count">{debug.callStack.length}</span>
-						</header>
-						{#if debug.callStack.length}
-							<ul>
-								{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}:${index}`)}
-									<li
-										class={[
-											'debug-entry',
-											'debug-entry--stack',
-											debug.frameId === frame.id && 'debug-entry--current'
-										]}
-									>
-										<button
-											class="debug-frame-select"
-											data-frame-id={frame.id}
-											{@attach observeDebugFrame(frame.id)}
-											disabled={!frame.id || dataBreakpointLoading}
-											onclick={() => selectDebugFrame(frame)}
-										>
-											<div class="stack-meta">
-												<span class="stack-order">{index + 1}</span>
-												<span class="stack-function"
-													>{frame.displayName ??
-														(frame.argumentsSummary === undefined
-															? frame.functionName || '(entry)'
-															: `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
-												>
-											</div>
-											<code class="stack-line">L{frame.line}</code>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No frames yet</span>
-							</p>
-						{/if}
-					</section>
 				</div>
 			</section>
 		{/if}
@@ -3790,68 +3931,6 @@
 						>
 							<span class="material-symbols-outlined">keyboard_tab_rtl</span>
 						</button>
-						<div class="debug-controls" role="group" aria-label="Debugger controls">
-							<button
-								class="action-button action-button--icon"
-								onclick={() => debug.pause()}
-								disabled={selectedDebugMode !== 'lldb' ||
-									!debug.active ||
-									debug.paused}
-								title="Pause"
-								aria-label="Pause"
-							>
-								<span class="material-symbols-outlined">pause</span>
-							</button>
-							<button
-								class="action-button action-button--icon"
-								onclick={() => debug.sendCommand('continue')}
-								disabled={!debug.paused || dataBreakpointLoading}
-								title="Continue"
-								aria-label="Continue"
-							>
-								<span class="material-symbols-outlined">skip_next</span>
-							</button>
-							<button
-								class="action-button action-button--icon"
-								onclick={() => runToCursorWhileDataBreakpointIdle()}
-								disabled={!debug.canRunToCursor || dataBreakpointLoading}
-								title={debug.cursorLine
-									? `Run to Cursor (L${debug.cursorLine})`
-									: 'Run to Cursor'}
-								aria-label={debug.cursorLine
-									? `Run to Cursor (L${debug.cursorLine})`
-									: 'Run to Cursor'}
-							>
-								<span class="material-symbols-outlined">play_circle</span>
-							</button>
-							<button
-								class="action-button action-button--icon"
-								onclick={() => debug.sendCommand('stepInto')}
-								disabled={!debug.paused || dataBreakpointLoading}
-								title="Step Into"
-								aria-label="Step Into"
-							>
-								<span class="material-symbols-outlined">login</span>
-							</button>
-							<button
-								class="action-button action-button--icon"
-								onclick={() => debug.sendCommand('nextLine')}
-								disabled={!debug.paused || dataBreakpointLoading}
-								title="Next Line"
-								aria-label="Next Line"
-							>
-								<span class="material-symbols-outlined">redo</span>
-							</button>
-							<button
-								class="action-button action-button--icon"
-								onclick={() => debug.sendCommand('stepOut')}
-								disabled={!debug.paused || dataBreakpointLoading}
-								title="Step Out"
-								aria-label="Step Out"
-							>
-								<span class="material-symbols-outlined">logout</span>
-							</button>
-						</div>
 					</div>
 				</header>
 				<div class="console-body">
@@ -5019,15 +5098,6 @@
 		gap: 6px;
 	}
 
-	.debug-controls {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		padding: 2px;
-		border-radius: 10px;
-		background: var(--fill);
-	}
-
 	.action-button--icon {
 		width: 30px;
 		min-width: 30px;
@@ -5502,16 +5572,36 @@
 
 	/* ---------- Debugger ---------- */
 
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+
+	.console-body:has(> .debug-shell) {
+		overflow: hidden;
+	}
+
+	.console-body:has(> .debug-shell) > .terminal-shell {
+		flex: 1 1 38%;
+		min-height: 160px;
+	}
+
 	.debug-shell {
 		--debug-accent: var(--primary);
 		--debug-accent-soft: var(--primary-soft);
+		flex: 0 1 auto;
+		max-height: 64%;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 14px;
 		border-radius: var(--radius-md);
 		background: var(--surface-muted);
-		border: 1px solid var(--line-soft);
+		box-shadow: inset 0 0 0 1px var(--line-soft);
+		overflow: hidden;
 	}
 
 	.debug-shell--active {
@@ -5524,87 +5614,61 @@
 		--debug-accent-soft: var(--debug-tone-soft);
 	}
 
+	/* Session header: status, target and the stepping toolbar. */
 	.debug-hero {
+		flex: none;
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
 		flex-wrap: wrap;
+		gap: 8px 12px;
+		padding: 10px 10px 8px 12px;
 	}
 
 	.debug-hero__intro {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		flex: 1 1 220px;
+		gap: 10px;
+		flex: 1 1 160px;
 		min-width: 0;
-	}
-
-	.debug-hero__badge {
-		width: 36px;
-		height: 36px;
-		display: grid;
-		place-items: center;
-		flex: 0 0 auto;
-		border-radius: 11px;
-		background: var(--debug-accent-soft);
-		color: var(--debug-accent);
-	}
-
-	.debug-hero__badge .material-symbols-outlined {
-		font-size: 20px;
-		font-variation-settings:
-			'FILL' 1,
-			'wght' 500,
-			'GRAD' 0,
-			'opsz' 24;
 	}
 
 	.debug-hero__copy {
 		min-width: 0;
 	}
 
-	.debug-hero__eyebrow {
-		margin: 0 0 2px;
-		color: var(--text-3);
-		font-size: 11px;
-		font-weight: 600;
-	}
-
 	.debug-hero__copy h2 {
 		margin: 0;
+		overflow: hidden;
 		color: var(--text);
-		font-size: 15px;
+		font-size: 13px;
 		font-weight: 700;
-		line-height: 1.25;
-	}
-
-	.debug-hero__stats {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		justify-content: flex-end;
-	}
-
-	.debug-status-pill,
-	.debug-metric {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-height: 30px;
-		padding: 0 10px;
-		border-radius: 999px;
-		background: var(--surface);
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.debug-status-pill {
-		color: var(--text);
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 26px;
+		padding: 0 10px 0 8px;
+		border-radius: 999px;
+		background: var(--fill);
+		color: var(--text-2);
 		font-size: 12px;
 		font-weight: 700;
 	}
 
-	.debug-status-pill--idle {
-		color: var(--text-2);
+	.debug-status-pill .material-symbols-outlined {
+		font-size: 16px;
+		font-variation-settings:
+			'FILL' 1,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
 	}
 
 	.debug-status-pill--active {
@@ -5617,86 +5681,222 @@
 		color: var(--debug-tone);
 	}
 
-	.debug-metric {
-		flex-direction: column;
-		align-items: flex-start;
-		justify-content: center;
+	.debug-controls {
+		flex: none;
+		display: flex;
+		align-items: center;
 		gap: 2px;
-		padding: 5px 10px;
-		border-radius: 10px;
+		padding: 3px;
+		border-radius: 12px;
+		background: var(--surface);
+		box-shadow: var(--shadow-card);
+	}
+
+	.debug-controls__divider {
+		width: 1px;
+		height: 18px;
+		margin: 0 3px;
+		background: var(--line);
+	}
+
+	.debug-control {
+		width: 32px;
+		min-width: 32px;
+		height: 32px;
+		padding: 0;
+		border-radius: 9px;
+		background: transparent;
+		color: var(--text-2);
+		box-shadow: none;
+	}
+
+	.debug-control .material-symbols-outlined {
+		font-size: 20px;
+		font-variation-settings:
+			'FILL' 0,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.debug-control:enabled:hover {
+		background: var(--fill);
+		color: var(--text);
+	}
+
+	.debug-control:disabled {
+		opacity: 0.3;
+	}
+
+	.debug-control__label {
+		display: none;
+	}
+
+	.debug-control--primary {
+		width: auto;
+		padding: 0 12px 0 8px;
+		background: var(--debug-tone);
+		color: white;
+	}
+
+	.debug-control--primary .debug-control__label {
+		display: inline;
+		font-size: 13px;
+	}
+
+	.debug-control--primary .material-symbols-outlined {
+		font-variation-settings:
+			'FILL' 1,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.debug-control--primary:enabled:hover {
+		background: var(--debug-tone);
+		color: white;
+		filter: brightness(1.08);
+	}
+
+	/* Session facts as a quiet, scannable strip. */
+	.debug-hero__stats {
+		flex: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+		padding: 0 12px 10px;
+		border-bottom: 1px solid var(--line-soft);
+	}
+
+	.debug-metric {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 5px;
+		font-size: 12px;
 	}
 
 	.debug-metric span {
 		color: var(--text-3);
-		font-size: 10px;
-		font-weight: 600;
+		font-weight: 500;
 	}
 
 	.debug-metric strong {
 		color: var(--text);
-		font-size: 13px;
-		line-height: 1;
+		font-family: var(--mono);
+		font-size: 12px;
+		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
 
+	/* Stacked, collapsible sections like an IDE run-and-debug sidebar. */
 	.debug-panels {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 8px;
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 
 	.debug-panel {
+		flex: none;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
 		min-width: 0;
-		padding: 12px;
-		border-radius: var(--radius-md);
-		background: var(--surface);
 		font-size: 12px;
 	}
 
-	.debug-panel__header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
+	.debug-panel + .debug-panel {
+		border-top: 1px solid var(--line-soft);
 	}
 
-	.debug-panel__title {
+	.debug-panel__header {
+		position: sticky;
+		top: 0;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		height: 36px;
+		padding: 0 12px 0 6px;
+		background: var(--surface-muted);
+	}
+
+	.debug-panel__toggle {
+		position: static;
+		width: 22px;
+		height: 22px;
+		display: grid;
+		place-items: center;
+		flex: none;
+		padding: 0;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	/* Let the whole header row act as the toggle target. */
+	.debug-panel__toggle::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+
+	.debug-panel__header:hover {
+		background: var(--fill);
+	}
+
+	.debug-panel__chevron {
+		font-size: 18px;
+		transform: rotate(-90deg);
+		transition: transform 0.15s ease;
+	}
+
+	.debug-panel__toggle[aria-expanded='true'] .debug-panel__chevron {
+		transform: none;
+	}
+
+	.debug-panel__title {
+		flex: 1 1 auto;
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		min-width: 0;
 	}
 
 	.debug-panel__title > .material-symbols-outlined {
 		color: var(--debug-accent);
-		font-size: 17px;
-	}
-
-	.debug-panel__copy {
-		min-width: 0;
+		font-size: 16px;
 	}
 
 	.debug-panel h3 {
 		margin: 0;
 		color: var(--text);
-		font-size: 13px;
+		font-size: 12px;
 		font-weight: 700;
 	}
 
 	.debug-count {
-		min-width: 22px;
-		height: 20px;
+		min-width: 20px;
+		height: 18px;
 		display: inline-grid;
 		place-items: center;
-		padding: 0 7px;
+		padding: 0 6px;
 		border-radius: 999px;
 		background: var(--fill);
 		color: var(--text-3);
 		font-size: 11px;
-		font-weight: 700;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.debug-panel__body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 2px 8px 12px;
 	}
 
 	.debug-panel ul {
@@ -5705,24 +5905,30 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 1px;
 	}
 
 	.debug-scopes {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 4px;
 	}
 
 	.debug-scope {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 2px;
 	}
 
 	.debug-scope summary {
-		cursor: pointer;
+		padding: 4px 4px;
+		border-radius: 6px;
 		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.debug-scope summary:hover {
+		background: var(--fill);
 	}
 
 	.debug-scope h4 {
@@ -5730,40 +5936,117 @@
 		margin: 0;
 		color: var(--text-3);
 		font-size: 11px;
-		font-weight: 600;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
 	}
 
 	.debug-load-scope {
 		align-self: flex-start;
-		margin-top: 4px;
-		padding: 6px 10px;
+		margin: 2px 0 2px 8px;
+		padding: 4px 10px;
 		border: 0;
-		border-radius: 8px;
-		background: var(--primary-soft);
+		border-radius: 7px;
+		background: transparent;
 		color: var(--primary);
-		font-size: 11px;
-		font-weight: 700;
+		font-size: 12px;
+		font-weight: 600;
 		cursor: pointer;
 	}
 
-	.debug-variable-type {
-		color: var(--text-3);
+	.debug-load-scope:enabled:hover {
+		background: var(--primary-soft);
+	}
+
+	.debug-load-scope:disabled {
+		cursor: progress;
+		opacity: 0.6;
+	}
+
+	/* Variable, watch and frame rows share one dense row style. */
+	.debug-entry {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 30px;
+		padding: 4px 6px 4px 10px;
+		border-radius: 8px;
+	}
+
+	.debug-entry:hover {
+		background: var(--surface);
+	}
+
+	.debug-entry__body {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	.debug-entry--local .debug-value {
+		flex: 1 1 auto;
+		text-align: right;
+	}
+
+	.debug-entry--watch .debug-entry__body {
+		flex: 1 1 auto;
+		justify-content: space-between;
+	}
+
+	.debug-key,
+	.stack-line,
+	.debug-value {
+		min-width: 0;
 		font-family: var(--mono);
-		font-size: 10px;
+		font-size: 12px;
+	}
+
+	.debug-key {
+		color: var(--debug-accent);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.debug-value {
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+
+	.debug-variable-type {
+		color: var(--text-4);
+		font-family: var(--mono);
+		font-size: 11px;
+		white-space: nowrap;
+	}
+
+	.debug-expression,
+	.stack-function {
+		min-width: 0;
+		color: var(--text);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.debug-variable-children {
+		margin-left: 14px;
+		padding-left: 6px;
+		border-left: 1px solid var(--line);
 	}
 
 	.debug-memory-inspect,
 	.debug-expand {
-		width: 26px;
-		height: 26px;
+		width: 24px;
+		height: 24px;
 		display: inline-grid;
-		flex: 0 0 auto;
+		flex: none;
 		place-items: center;
 		padding: 0;
 		border: 0;
-		border-radius: 7px;
-		background: var(--fill);
-		color: var(--text-2);
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
 		cursor: pointer;
 	}
 
@@ -5783,10 +6066,134 @@
 		font-size: 16px;
 	}
 
+	.debug-entry--stack {
+		padding: 0;
+	}
+
+	.debug-frame-select {
+		width: 100%;
+		min-height: 30px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 4px 10px;
+		border: 0;
+		border-radius: 8px;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.debug-frame-select:disabled {
+		cursor: default;
+	}
+
+	.debug-entry--current {
+		background: var(--debug-accent-soft);
+		box-shadow: inset 3px 0 0 var(--debug-accent);
+	}
+
+	.debug-entry--current:hover {
+		background: var(--debug-accent-soft);
+	}
+
+	.stack-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.stack-order {
+		width: 18px;
+		flex: none;
+		color: var(--text-4);
+		font-family: var(--mono);
+		font-size: 11px;
+		text-align: right;
+	}
+
+	.stack-line {
+		flex: none;
+		color: var(--text-3);
+	}
+
+	.watch-row {
+		display: flex;
+		gap: 6px;
+	}
+
+	.watch-row input {
+		flex: 1;
+	}
+
+	.watch-add {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		height: 32px;
+		padding: 0 12px 0 8px;
+		border: 0;
+		border-radius: 8px;
+		background: var(--primary-soft);
+		color: var(--primary);
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.watch-add:hover {
+		background: var(--primary-soft-strong);
+	}
+
+	.watch-add .material-symbols-outlined {
+		font-size: 16px;
+	}
+
+	.remove {
+		width: 24px;
+		height: 24px;
+		display: grid;
+		place-items: center;
+		flex: none;
+		padding: 0;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.remove:hover {
+		background: var(--danger-soft);
+		color: var(--danger);
+	}
+
+	.remove .material-symbols-outlined {
+		font-size: 15px;
+	}
+
+	.empty {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0;
+		padding: 6px 10px;
+		color: var(--text-3);
+	}
+
+	.empty .material-symbols-outlined {
+		font-size: 15px;
+	}
+
+	/* Memory inspector */
 	.debug-memory-controls {
 		display: grid;
-		grid-template-columns: minmax(110px, 2fr) minmax(70px, 1fr) minmax(60px, 0.7fr) auto;
-		gap: 8px;
+		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+		gap: 6px;
 		align-items: end;
 	}
 
@@ -5802,29 +6209,31 @@
 	}
 
 	.debug-memory-watch-controls label {
-		min-width: 120px;
+		flex: 1 1 120px;
 	}
 
 	.debug-memory-controls input,
 	.debug-memory-watch-controls select,
 	.debug-memory-write-field input,
 	.watch-row input {
+		width: 100%;
 		min-width: 0;
-		height: 34px;
+		height: 32px;
 		padding: 0 10px;
-		border: 1px solid transparent;
-		border-radius: 9px;
-		background: var(--fill);
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--surface);
 		color: var(--text);
 		font-size: 12px;
 		outline: none;
 		transition:
 			border-color 0.15s ease,
-			background-color 0.15s ease;
+			box-shadow 0.15s ease;
 	}
 
 	.debug-memory-controls input,
-	.debug-memory-write-field input {
+	.debug-memory-write-field input,
+	.watch-row input {
 		font-family: var(--mono);
 	}
 
@@ -5833,22 +6242,18 @@
 	.debug-memory-write-field input:focus,
 	.watch-row input:focus {
 		border-color: var(--primary);
-		background: var(--surface);
+		box-shadow: 0 0 0 3px var(--primary-soft);
 	}
 
 	.debug-memory-watch-controls {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: end;
-		gap: 8px;
+		gap: 6px;
 	}
 
 	.debug-memory-write-field {
-		flex: 1 1 180px;
-	}
-
-	.debug-memory-write-field input {
-		width: 100%;
+		flex: 1 1 160px;
 	}
 
 	.debug-memory-read,
@@ -5856,15 +6261,23 @@
 	.debug-memory-write,
 	.debug-data-breakpoint-set,
 	.debug-data-breakpoint-clear {
-		height: 34px;
+		height: 32px;
 		padding: 0 12px;
 		border: 0;
-		border-radius: 9px;
+		border-radius: 8px;
 		background: var(--primary-soft);
 		color: var(--primary);
 		font-size: 12px;
 		font-weight: 700;
+		white-space: nowrap;
 		cursor: pointer;
+	}
+
+	.debug-memory-read:enabled:hover,
+	.debug-memory-toolbar button:hover,
+	.debug-memory-write:enabled:hover,
+	.debug-data-breakpoint-set:enabled:hover {
+		background: var(--primary-soft-strong);
 	}
 
 	.debug-data-breakpoint-clear {
@@ -5888,7 +6301,7 @@
 		gap: 6px;
 		margin: 0;
 		padding: 8px 10px;
-		border-radius: 9px;
+		border-radius: 8px;
 		font-size: 12px;
 	}
 
@@ -5925,12 +6338,13 @@
 	.debug-memory-table {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 2px;
 		max-width: 100%;
 		overflow-x: auto;
-		padding: 10px;
-		border-radius: 9px;
-		background: var(--surface-muted);
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line-soft);
 	}
 
 	.debug-memory-row {
@@ -5967,173 +6381,6 @@
 
 	.debug-memory-ascii {
 		white-space: pre;
-	}
-
-	.debug-variable-children {
-		margin-left: 12px;
-		padding-left: 10px;
-		border-left: 2px solid var(--line-soft);
-	}
-
-	.debug-entry {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 8px;
-		padding: 8px 10px;
-		border-radius: 9px;
-		background: var(--surface-muted);
-	}
-
-	.debug-entry--local {
-		align-items: flex-start;
-	}
-
-	.debug-entry__body {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		flex: 1;
-		min-width: 0;
-	}
-
-	.debug-expression,
-	.stack-function {
-		color: var(--text);
-		font-weight: 600;
-		word-break: break-word;
-	}
-
-	.debug-key,
-	.stack-line,
-	.debug-value {
-		max-width: 100%;
-		font-family: var(--mono);
-		font-size: 12px;
-	}
-
-	.debug-key {
-		color: var(--debug-accent);
-		font-weight: 600;
-	}
-
-	.debug-value {
-		color: var(--text-2);
-		overflow-wrap: anywhere;
-	}
-
-	.stack-line {
-		color: var(--text-3);
-	}
-
-	.debug-entry--stack {
-		align-items: center;
-	}
-
-	.debug-frame-select {
-		width: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 0;
-		border: 0;
-		background: transparent;
-		color: inherit;
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-
-	.debug-frame-select:disabled {
-		cursor: default;
-	}
-
-	.debug-entry--current {
-		background: var(--debug-accent-soft);
-	}
-
-	.stack-meta {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		min-width: 0;
-	}
-
-	.stack-order {
-		width: 20px;
-		height: 20px;
-		display: inline-grid;
-		place-items: center;
-		flex: 0 0 auto;
-		border-radius: 6px;
-		background: var(--fill-strong);
-		color: var(--text-2);
-		font-size: 10px;
-		font-weight: 700;
-	}
-
-	.watch-row {
-		display: flex;
-		gap: 6px;
-	}
-
-	.watch-row input {
-		flex: 1;
-	}
-
-	.watch-add {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		height: 34px;
-		padding: 0 12px;
-		border: 0;
-		border-radius: 9px;
-		background: var(--primary);
-		color: white;
-		font-size: 12px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-
-	.watch-add .material-symbols-outlined {
-		font-size: 16px;
-	}
-
-	.remove {
-		width: 26px;
-		height: 26px;
-		display: grid;
-		place-items: center;
-		flex: 0 0 auto;
-		padding: 0;
-		border: 0;
-		border-radius: 7px;
-		background: transparent;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.remove:hover {
-		background: var(--danger-soft);
-		color: var(--danger);
-	}
-
-	.remove .material-symbols-outlined {
-		font-size: 15px;
-	}
-
-	.empty {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin: 0;
-		padding: 10px;
-		border-radius: 9px;
-		background: var(--surface-muted);
-		color: var(--text-3);
 	}
 
 	/* ---------- Responsive ---------- */
@@ -6284,6 +6531,7 @@
 			justify-content: flex-start;
 		}
 	}
+
 	@media (max-width: 600px) {
 		.action-group .action-button:not(.action-button--run) {
 			width: 36px;

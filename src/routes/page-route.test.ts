@@ -204,7 +204,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}\s+maxlength=\{4096\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
 		expect(source).toMatch(
-			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(watch\.expression\)\}/
+			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(\s*watch\.expression\s*\)\}/
 		);
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
@@ -572,7 +572,7 @@ describe('example route debug actions', () => {
 			/return debug\.writeMemory\([\s\S]{0,160}Uint8Array\.from\(data\)[\s\S]{0,80}allowPartial/
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
-		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
+		expect(source).toMatch(/debug\.frameId === frame\.id &&\s+'debug-entry--current'/);
 	});
 
 	it('marks replaced non-active workspace sources stale during an active debug session', () => {
