@@ -75,12 +75,34 @@ The generated release lock records expected asset hashes and compressed/logical 
 Cache hits are checked against the expected hash before use. Versions can reference the same
 content-addressed body without making duplicate copies. URL, redirect, MIME and size-validation
 policies remain part of loader eligibility: a permissive loader does not vouch for a stricter one.
+Generated artifacts also record the reader's current version on a verified cache hit. Clearing
+the version that originally generated a body therefore preserves a newer version's reference.
 
 Storage belongs to the **application's origin**, not the asset CDN's origin. Two applications
 on different origins cannot share this cache. CacheStorage, IndexedDB and Web Locks must be
 available; blocked/private-mode storage, missing APIs, corruption and quota failures fall back
 to the normal verified download path. Integrity mismatches still fail rather than accepting
 unverified bytes. Concurrent tabs coordinate storage updates using a namespace-scoped lock.
+
+`loadPersistentRuntimeAsset`, `readPersistentRuntimeAsset`, and `writePersistentRuntimeAsset`
+snapshot and validate the receipt before asynchronous work. A malformed digest, byte count or
+identity rejects with `TypeError`, including when storage is disabled or unavailable. A valid
+receipt whose downloaded bytes do not match rejects with an integrity error. Disabling storage
+never disables verification in the load helper.
+
+Each storage attempt has a three-second deadline covering lock acquisition, database/cache
+opening, body reads, verification, metadata transactions and quota estimation. A storage timeout
+becomes a cache miss; caller cancellation rejects with the caller's reason. Body readers are
+cancelled without waiting indefinitely for their cancellation promise, and active IndexedDB
+transactions are aborted. The load callback still owns its network deadline and cancellation.
+
+CacheStorage writes/deletes cannot be cancelled. When one stalls, the caller still returns at
+the deadline, but the callback retains the namespace lock until that native mutation settles.
+No later mutation or metadata publication is allowed from that expired operation. Other tabs
+or calls time out to cache misses while the lock is held. A subsequent writer removes orphaned
+bodies after the lock becomes available. This deliberately prevents an old write from racing a
+new writer or version cleanup; it does not promise recovery of a browser storage API that never
+settles at all.
 
 The browser may evict best-effort data. Persistence is an explicit host action, never an automatic
 permission request:
