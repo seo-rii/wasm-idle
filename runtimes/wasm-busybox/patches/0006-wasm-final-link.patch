@@ -1,0 +1,19 @@
+--- a/scripts/trylink
++++ b/scripts/trylink
+@@ -95,7 +95,16 @@
+ 
+ START_GROUP="-Wl,--start-group"
+ END_GROUP="-Wl,--end-group"
++if test "$ARCH" = wasm32; then
++    # wasm-ld resolves archive dependencies without GNU group options.
++    START_GROUP=""
++    END_GROUP=""
++fi
+ INFO_OPTS() {
++	if test "$ARCH" = wasm32; then
++		echo "-Wl,-Map,$EXE.map"
++		return
++	fi
+ 	echo "-Wl,--warn-common -Wl,-Map,$EXE.map -Wl,--verbose"
+ }
+ 
