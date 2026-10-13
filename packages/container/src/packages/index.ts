@@ -5,3 +5,8 @@ export type {
 } from './distribution.js';
 export { createVerifiedAssetLoader } from './assets.js';
 export type { VerifiedAssetLoaderOptions, AssetLoaderInspection, VerifiedAssetLoader } from './assets.js';
+export { createContainerPackageManager } from './manager.js';
+export type {
+  PreparedPackageFile, PreparedPackage, PreparedPackages, PreparedCommand, PackagePreparationOptions,
+  ContainerPackageManagerOptions, PackageManagerInspection, ContainerPackageManager
+} from './manager.js';
