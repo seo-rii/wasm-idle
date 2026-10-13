@@ -1682,7 +1682,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 
-	it('starts the run deadline at execution-ready and clamps large opted-in timers', async () => {
+	it('starts the run deadline at execution-ready with the largest supported compile timer', async () => {
 		const sandbox = new StaticWorkerRuntimeSandbox({
 			languageId: 'C3',
 			displayName: 'C3',
@@ -1696,7 +1696,7 @@ describe('static worker backed language sandboxes', () => {
 		vi.useFakeTimers();
 		const result = sandbox
 			.run('', false, false, undefined, [], {
-				limits: { compileTimeoutMs: 3_000_000_000, runTimeoutMs: 50 }
+				limits: { compileTimeoutMs: 2_147_483_647, runTimeoutMs: 50 }
 			})
 			.catch((error) => error);
 		await vi.advanceTimersByTimeAsync(100);
@@ -1713,6 +1713,29 @@ describe('static worker backed language sandboxes', () => {
 		});
 		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
+
+	it.each(['compileTimeoutMs', 'runTimeoutMs'] as const)(
+		'rejects an overflowing %s before dispatching static runtime execution',
+		async (name) => {
+			const sandbox = new StaticWorkerRuntimeSandbox({
+				languageId: 'C3',
+				displayName: 'C3',
+				defaultActivePath: 'main.c3',
+				stdin: { mode: 'none' },
+				enforcePhaseTimeouts: true,
+				resolveRuntimeAssets: () => ({ baseUrl: '/test/', workerUrl: '/test/worker.js' })
+			});
+			await sandbox.load();
+			await expect(
+				sandbox.run('', false, false, undefined, [], {
+					limits: { [name]: 2_147_483_648 }
+				})
+			).rejects.toMatchObject({ code: 'runtime-configuration', phase: 'configuration' });
+			expect(workerInstances).toHaveLength(1);
+			expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+			await sandbox.dispose();
+		}
+	);
 
 	it('reports prebuffered stdin for legacy runtimes and the non-isolated fallback', () => {
 		expect(new Julia().stdinMode).toBe('prebuffered');
