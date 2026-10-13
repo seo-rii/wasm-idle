@@ -1,0 +1,5473 @@
+{
+  "schemaVersion": 1,
+  "applicationCommit": "f87f5f3c38ef1ed9fc260f9a51e2740c70a0cc57",
+  "browser": "153.0.8010.12",
+  "os": "linux 6.1.0-53-cloud-amd64",
+  "isolated": true,
+  "cache": "no-store / fresh context per case",
+  "sdkVersion": "0.10.0",
+  "bashSourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+  "assets": {
+    "sdk/index.mjs.bin": {
+      "deliveryBytes": 48694,
+      "deliverySha256": "d5e0424d9de8173c0c7bc6a6b704aecde620d3f424050e0e6a079d863a44d58b",
+      "bytes": 48694,
+      "sha256": "d5e0424d9de8173c0c7bc6a6b704aecde620d3f424050e0e6a079d863a44d58b"
+    },
+    "sdk/wasmer_js_bg.wasm.gz.bin": {
+      "deliveryBytes": 2383903,
+      "deliverySha256": "f592295111f5140a0afd5c5905e31e3ef1c9126df182d1249c86e7d6d4d260da",
+      "bytes": 6598804,
+      "sha256": "49a6646209f5ab5e7c737eac33407d87d9a9959ac83e5ecaaab9261b2323589e"
+    },
+    "bash.webc.gz.bin": {
+      "deliveryBytes": 648807,
+      "deliverySha256": "6f5be27b3c2e685e3ee823a6ff7380c5143e9c7e353975e39e4dbf297a3ea577",
+      "bytes": 1808682,
+      "sha256": "73e34672254faf20f54fa0e7f8ffa8a6117017e8779aaa75c80682c00e6d8468"
+    }
+  },
+  "fixture": {
+    "sourceSha256": "cb1f2be3d277ae44cad53164a7d8eac74ad911e38642a30a670b6b194e34f6d0",
+    "bytes": 3832,
+    "sha256": "a6093f22a01201771b8c570622f5837f07ce24a50ca0f8d13dbba9563b6eac9c",
+    "compiler": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)",
+    "imports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_dir_name",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      }
+    ],
+    "cwd": {
+      "bytes": 4112,
+      "sha256": "0a2b66e132b1b0e9dc40d827ac2649b62e35b420cf3b4188ed6160e5271ebbeb",
+      "imports": [
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "getcwd",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "id": "G0-SHELL",
+      "script": "./probe.wasm report \"space arg\" \"한글\" \"\"; :",
+      "type": "result",
+      "result": {
+        "code": 0,
+        "stdout": [
+          97,
+          114,
+          103,
+          61,
+          46,
+          47,
+          112,
+          114,
+          111,
+          98,
+          101,
+          46,
+          119,
+          97,
+          115,
+          109,
+          0,
+          97,
+          114,
+          103,
+          61,
+          114,
+          101,
+          112,
+          111,
+          114,
+          116,
+          0,
+          97,
+          114,
+          103,
+          61,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          97,
+          114,
+          103,
+          0,
+          97,
+          114,
+          103,
+          61,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0,
+          71,
+          48,
+          61,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0
+        ],
+        "stderr": [
+          115,
+          116,
+          100,
+          101,
+          114,
+          114,
+          0,
+          255,
+          226,
+          130,
+          172
+        ]
+      },
+      "files": {},
+      "trackedWorkersBeforeCleanup": 0,
+      "trackedWorkers": 0,
+      "trace": [],
+      "syscalls": [
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8684456,
+            1,
+            8684448
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            154,
+            0,
+            0,
+            0,
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686728,
+            0,
+            8686720
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "args": [
+            8717936,
+            12,
+            8718160,
+            38,
+            8718000,
+            84
+          ],
+          "phase": "call",
+          "program": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109
+            ],
+            "text": "./probe.wasm"
+          },
+          "argv": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10,
+              114,
+              101,
+              112,
+              111,
+              114,
+              116,
+              10,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              97,
+              114,
+              103,
+              10,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              10,
+              10
+            ],
+            "text": "./probe.wasm\nreport\nspace arg\n한글\n\n"
+          },
+          "env": {
+            "bytes": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              71,
+              48,
+              61,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              10,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              49,
+              10,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              10,
+              95,
+              61,
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10
+            ],
+            "text": "PWD=/workspace\nG0=space 한글\nSHLVL=1\nPATH=/workspace:/usr/bin:/bin\n_=./probe.wasm\n"
+          }
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 0,
+          "pid": [
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            1,
+            0,
+            0,
+            0,
+            155,
+            0,
+            0,
+            0,
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686712,
+            1,
+            8686704
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            154,
+            0,
+            0,
+            0,
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "args": [
+            0
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "phase": "throw",
+          "error": "[object Object]"
+        }
+      ],
+      "elapsedMs": 6497,
+      "remainingWorkerTargets": 0,
+      "consoleErrors": [],
+      "blockedRequests": []
+    },
+    {
+      "id": "G0-ARGV-FRAME",
+      "script": "./probe.wasm report \"\" $'line\\nbreak' $'carriage\\rreturn' \"\"; :",
+      "type": "result",
+      "result": {
+        "code": 0,
+        "stdout": [
+          97,
+          114,
+          103,
+          61,
+          46,
+          47,
+          112,
+          114,
+          111,
+          98,
+          101,
+          46,
+          119,
+          97,
+          115,
+          109,
+          0,
+          97,
+          114,
+          103,
+          61,
+          114,
+          101,
+          112,
+          111,
+          114,
+          116,
+          0,
+          97,
+          114,
+          103,
+          61,
+          108,
+          105,
+          110,
+          101,
+          0,
+          97,
+          114,
+          103,
+          61,
+          98,
+          114,
+          101,
+          97,
+          107,
+          0,
+          97,
+          114,
+          103,
+          61,
+          99,
+          97,
+          114,
+          114,
+          105,
+          97,
+          103,
+          101,
+          0,
+          97,
+          114,
+          103,
+          61,
+          114,
+          101,
+          116,
+          117,
+          114,
+          110,
+          0,
+          71,
+          48,
+          61,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0
+        ],
+        "stderr": [
+          115,
+          116,
+          100,
+          101,
+          114,
+          114,
+          0,
+          255,
+          226,
+          130,
+          172
+        ]
+      },
+      "files": {},
+      "trackedWorkersBeforeCleanup": 0,
+      "trackedWorkers": 0,
+      "trace": [],
+      "syscalls": [
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8684456,
+            1,
+            8684448
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            94,
+            0,
+            0,
+            0,
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686728,
+            0,
+            8686720
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "args": [
+            8718784,
+            12,
+            8718592,
+            49,
+            8718240,
+            84
+          ],
+          "phase": "call",
+          "program": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109
+            ],
+            "text": "./probe.wasm"
+          },
+          "argv": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10,
+              114,
+              101,
+              112,
+              111,
+              114,
+              116,
+              10,
+              10,
+              108,
+              105,
+              110,
+              101,
+              10,
+              98,
+              114,
+              101,
+              97,
+              107,
+              10,
+              99,
+              97,
+              114,
+              114,
+              105,
+              97,
+              103,
+              101,
+              13,
+              114,
+              101,
+              116,
+              117,
+              114,
+              110,
+              10,
+              10
+            ],
+            "text": "./probe.wasm\nreport\n\nline\nbreak\ncarriage\rreturn\n\n"
+          },
+          "env": {
+            "bytes": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              71,
+              48,
+              61,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              10,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              49,
+              10,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              10,
+              95,
+              61,
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10
+            ],
+            "text": "PWD=/workspace\nG0=space 한글\nSHLVL=1\nPATH=/workspace:/usr/bin:/bin\n_=./probe.wasm\n"
+          }
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 0,
+          "pid": [
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            1,
+            0,
+            0,
+            0,
+            155,
+            0,
+            0,
+            0,
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686712,
+            1,
+            8686704
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            155,
+            0,
+            0,
+            0,
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "args": [
+            0
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "phase": "throw",
+          "error": "[object Object]"
+        }
+      ],
+      "elapsedMs": 8730,
+      "remainingWorkerTargets": 1,
+      "consoleErrors": [],
+      "blockedRequests": []
+    },
+    {
+      "id": "G0-ENV-UNSET",
+      "script": "unset G0; ./probe.wasm report; :",
+      "type": "result",
+      "result": {
+        "code": 0,
+        "stdout": [
+          97,
+          114,
+          103,
+          61,
+          46,
+          47,
+          112,
+          114,
+          111,
+          98,
+          101,
+          46,
+          119,
+          97,
+          115,
+          109,
+          0,
+          97,
+          114,
+          103,
+          61,
+          114,
+          101,
+          112,
+          111,
+          114,
+          116,
+          0,
+          71,
+          48,
+          61,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0
+        ],
+        "stderr": [
+          115,
+          116,
+          100,
+          101,
+          114,
+          114,
+          0,
+          255,
+          226,
+          130,
+          172
+        ]
+      },
+      "files": {},
+      "trackedWorkersBeforeCleanup": 0,
+      "trackedWorkers": 0,
+      "trace": [],
+      "syscalls": [
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8684456,
+            1,
+            8684448
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            155,
+            0,
+            0,
+            0,
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686596
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686596
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686616,
+            0,
+            8686608
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686596
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "args": [
+            8718016,
+            12,
+            8718048,
+            20,
+            8718080,
+            68
+          ],
+          "phase": "call",
+          "program": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109
+            ],
+            "text": "./probe.wasm"
+          },
+          "argv": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10,
+              114,
+              101,
+              112,
+              111,
+              114,
+              116,
+              10
+            ],
+            "text": "./probe.wasm\nreport\n"
+          },
+          "env": {
+            "bytes": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              49,
+              10,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              10,
+              95,
+              61,
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10
+            ],
+            "text": "PWD=/workspace\nSHLVL=1\nPATH=/workspace:/usr/bin:/bin\n_=./probe.wasm\n"
+          }
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 0,
+          "pid": [
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            1,
+            0,
+            0,
+            0,
+            154,
+            0,
+            0,
+            0,
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686600,
+            1,
+            8686592
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            188,
+            0,
+            0,
+            0,
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "args": [
+            0
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "phase": "throw",
+          "error": "[object Object]"
+        }
+      ],
+      "elapsedMs": 7137,
+      "remainingWorkerTargets": 0,
+      "consoleErrors": [],
+      "blockedRequests": []
+    },
+    {
+      "id": "G0-TAIL-EXEC",
+      "script": "./probe.wasm report tail",
+      "type": "timeout",
+      "syscalls": [
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8684456,
+            1,
+            8684448
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            154,
+            0,
+            0,
+            0,
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "args": [
+            8717424,
+            12,
+            8713568,
+            25,
+            8717008,
+            84
+          ],
+          "phase": "call",
+          "program": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109
+            ],
+            "text": "./probe.wasm"
+          },
+          "argv": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10,
+              114,
+              101,
+              112,
+              111,
+              114,
+              116,
+              10,
+              116,
+              97,
+              105,
+              108,
+              10
+            ],
+            "text": "./probe.wasm\nreport\ntail\n"
+          },
+          "env": {
+            "bytes": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              71,
+              48,
+              61,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              10,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              48,
+              10,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              10,
+              95,
+              61,
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10
+            ],
+            "text": "PWD=/workspace\nG0=space 한글\nSHLVL=0\nPATH=/workspace:/usr/bin:/bin\n_=./probe.wasm\n"
+          }
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            }
+          ]
+        }
+      ],
+      "elapsedMs": 22176,
+      "remainingWorkerTargets": 0,
+      "consoleErrors": [],
+      "blockedRequests": []
+    },
+    {
+      "id": "G0-EXIT",
+      "script": "./probe.wasm exit; printf \"exit=%d\\n\" \"$?\"",
+      "type": "result",
+      "result": {
+        "code": 0,
+        "stdout": [
+          101,
+          120,
+          105,
+          116,
+          61,
+          50,
+          51,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {},
+      "trackedWorkersBeforeCleanup": 0,
+      "trackedWorkers": 0,
+      "trace": [],
+      "syscalls": [
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8684456,
+            1,
+            8684448
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            155,
+            0,
+            0,
+            0,
+            0,
+            131,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686728,
+            0,
+            8686720
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_exec2",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "args": [
+            1,
+            8686708
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_fork",
+          "phase": "return",
+          "value": 0
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "args": [
+            8717680,
+            12,
+            8717472,
+            18,
+            8717744,
+            84
+          ],
+          "phase": "call",
+          "program": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109
+            ],
+            "text": "./probe.wasm"
+          },
+          "argv": {
+            "bytes": [
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10,
+              101,
+              120,
+              105,
+              116,
+              10
+            ],
+            "text": "./probe.wasm\nexit\n"
+          },
+          "env": {
+            "bytes": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              71,
+              48,
+              61,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              10,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              49,
+              10,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              10,
+              95,
+              61,
+              46,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              46,
+              119,
+              97,
+              115,
+              109,
+              10
+            ],
+            "text": "PWD=/workspace\nG0=space 한글\nSHLVL=1\nPATH=/workspace:/usr/bin:/bin\n_=./probe.wasm\n"
+          }
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "phase": "instance",
+          "imports": [
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "args": [
+            23
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-4",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "phase": "throw",
+          "error": "[object Object]"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-3",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_exec2",
+          "phase": "throw",
+          "error": "[object Object]"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 0,
+          "pid": [
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            1,
+            0,
+            23,
+            0,
+            155,
+            0,
+            0,
+            0,
+            1,
+            140,
+            132,
+            0,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "args": [
+            8686712,
+            1,
+            8686704
+          ],
+          "phase": "call",
+          "pid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasix_32v1",
+          "name": "proc_join",
+          "phase": "return",
+          "value": 12,
+          "pid": [
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": [
+            0,
+            124,
+            0,
+            0,
+            187,
+            0,
+            0,
+            0,
+            0,
+            140,
+            132,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "args": [
+            0
+          ],
+          "phase": "call"
+        },
+        {
+          "type": "g0Syscall",
+          "worker": "worker-2",
+          "id": 1,
+          "namespace": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "phase": "throw",
+          "error": "[object Object]"
+        }
+      ],
+      "elapsedMs": 3777,
+      "remainingWorkerTargets": 0,
+      "consoleErrors": [],
+      "blockedRequests": []
+    }
+  ],
+  "requests": [
+    "/",
+    "/worker.mjs",
+    "/syscall-trace.mjs",
+    "/sdk/index.mjs",
+    "/sdk/wasmer.wasm",
+    "/bash.webc",
+    "/probe.wasm",
+    "/cwd.wasm",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/",
+    "/worker.mjs",
+    "/syscall-trace.mjs",
+    "/sdk/index.mjs",
+    "/sdk/wasmer.wasm",
+    "/bash.webc",
+    "/probe.wasm",
+    "/cwd.wasm",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/",
+    "/worker.mjs",
+    "/syscall-trace.mjs",
+    "/sdk/index.mjs",
+    "/sdk/wasmer.wasm",
+    "/bash.webc",
+    "/probe.wasm",
+    "/cwd.wasm",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/",
+    "/worker.mjs",
+    "/syscall-trace.mjs",
+    "/sdk/index.mjs",
+    "/sdk/wasmer.wasm",
+    "/bash.webc",
+    "/probe.wasm",
+    "/cwd.wasm",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/",
+    "/worker.mjs",
+    "/syscall-trace.mjs",
+    "/sdk/index.mjs",
+    "/sdk/wasmer.wasm",
+    "/bash.webc",
+    "/probe.wasm",
+    "/cwd.wasm",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs",
+    "/syscall-trace.mjs"
+  ],
+  "qualification": {
+    "shellBackendReady": false,
+    "checks": [
+      {
+        "id": "argv-env",
+        "fixture": "G0-SHELL",
+        "status": "failed",
+        "expectation": "Preserve spaces, UTF-8 and the empty argument, plus the exported environment."
+      },
+      {
+        "id": "argv-framing",
+        "fixture": "G0-ARGV-FRAME",
+        "status": "failed",
+        "expectation": "Preserve empty arguments and embedded LF/CR as separate length-delimited values."
+      },
+      {
+        "id": "environment-replacement",
+        "fixture": "G0-ENV-UNSET",
+        "status": "failed",
+        "expectation": "An explicit child environment must not retain a variable unset by the real shell."
+      },
+      {
+        "id": "stderr-bytes",
+        "fixture": "G0-SHELL",
+        "status": "passed",
+        "expectation": "Keep stderr distinct and preserve NUL, invalid UTF-8 and multi-byte UTF-8."
+      },
+      {
+        "id": "nonzero-exit",
+        "fixture": "G0-EXIT",
+        "status": "passed",
+        "expectation": "Preserve the real guest exit code 23."
+      },
+      {
+        "id": "cwd",
+        "fixture": "G0-CWD",
+        "status": "not-run",
+        "expectation": "Read the child cwd with wasix_32v1.getcwd after the real shell changes directory."
+      },
+      {
+        "id": "tail-exec",
+        "fixture": "G0-TAIL-EXEC",
+        "status": "failed",
+        "expectation": "A script ending with an external command completes without a host timeout."
+      },
+      {
+        "id": "pipe-bytes",
+        "fixture": "G0-FD",
+        "status": "not-run",
+        "expectation": "Two real external commands preserve the pipe bytes and observe EOF."
+      },
+      {
+        "id": "redirect-mount",
+        "fixture": "G0-FD",
+        "status": "not-run",
+        "expectation": "The pipeline redirect creates the same file visible through the host Directory."
+      },
+      {
+        "id": "shared-files",
+        "fixture": "G0-FS",
+        "status": "not-run",
+        "expectation": "Shell writes, child reads/writes, and host/parent shell observe the same bytes."
+      },
+      {
+        "id": "cancel-cpu",
+        "fixture": "G0-CANCEL-CPU",
+        "status": "not-run",
+        "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+      },
+      {
+        "id": "cancel-read",
+        "fixture": "G0-CANCEL-READ",
+        "status": "not-run",
+        "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+      },
+      {
+        "id": "cancel-download",
+        "fixture": "G0-CANCEL-DOWNLOAD",
+        "status": "not-run",
+        "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+      },
+      {
+        "id": "clang-version",
+        "fixture": "G0-CLANG-VERSION",
+        "status": "not-run",
+        "expectation": "The pinned real Clang binary reports its version under the Bash backend."
+      },
+      {
+        "id": "g0-clang-relative",
+        "fixture": "G0-CLANG-RELATIVE",
+        "status": "not-run",
+        "expectation": "The unmodified Clang argv succeeds and creates /main.o with Wasm magic."
+      },
+      {
+        "id": "g0-clang-compile",
+        "fixture": "G0-CLANG-COMPILE",
+        "status": "not-run",
+        "expectation": "The unmodified Clang argv succeeds and creates /main.o with Wasm magic."
+      },
+      {
+        "id": "g0-clang-link",
+        "fixture": "G0-CLANG-LINK",
+        "status": "not-run",
+        "expectation": "The unmodified Clang argv succeeds and creates /hello.wasm with Wasm magic."
+      },
+      {
+        "id": "clang-artifact-run",
+        "fixture": "G0-CLANG-LINK",
+        "status": "not-run",
+        "expectation": "Instantiate the linked freestanding artifact and execute its actual exported function."
+      },
+      {
+        "id": "resource-groups",
+        "status": "failed",
+        "expectation": "All observed Worker groups retire within five seconds and no external network request is attempted."
+      }
+    ]
+  },
+  "runtimeInventory": {
+    "bashWasmSha256": "62a39c0b18b34ad15eb54388dfc4c323430cd002cc45a54f121690c9b459d3d0",
+    "bashImports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_set_flags",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_dir_name",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_renumber",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_tell",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "sched_yield",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "fd_dup",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "fd_pipe",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "tty_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "tty_set",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "getcwd",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "chdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "callback_signal",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "thread_id",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "thread_signal",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "futex_wait",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "futex_wake",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "futex_wake_all",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "thread_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "stack_checkpoint",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "stack_restore",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_raise_interval",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_fork",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_exec2",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_id",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_parent",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_join",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "proc_signal",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "sock_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasix_32v1",
+        "name": "sock_connect",
+        "kind": "function"
+      },
+      {
+        "module": "env",
+        "name": "memory",
+        "kind": "memory"
+      }
+    ],
+    "publicApi": {
+      "runtime": [
+        "constructor",
+        "__destroy_into_raw",
+        "free",
+        "__getClassname"
+      ],
+      "instance": [
+        "constructor",
+        "__destroy_into_raw",
+        "free",
+        "stdin",
+        "stdout",
+        "stderr",
+        "wait"
+      ],
+      "directory": [
+        "constructor",
+        "__destroy_into_raw",
+        "free",
+        "__getClassname",
+        "readDir",
+        "writeFile",
+        "readFile",
+        "readTextFile",
+        "createDir",
+        "removeDir",
+        "removeFile"
+      ]
+    }
+  },
+  "harness": {
+    "runnerSha256": "70138e6336bb26eee04cb2ee74d85d821cd8a0c2860d69adda8a32495d0bf87f",
+    "workerSha256": "0973ecbe456f38e101073685a19a0dc9f8f5573fc350ec7ded710d253179b586",
+    "syscallTraceSha256": "ba500e5f535227750194c12e25767d199b108af405441a879a2da7ecad777db6"
+  }
+}

@@ -5,6 +5,12 @@ globalThis.Worker = class extends NativeWorker {
 	constructor(...args) {
 		super(...args);
 		children.add(this);
+		this.addEventListener('message', (event) => {
+			if (event.data?.type === 'g0Syscall') {
+				event.stopImmediatePropagation();
+				postMessage(event.data);
+			}
+		});
 	}
 	terminate() {
 		children.delete(this);
@@ -28,6 +34,10 @@ globalThis.onmessage = async ({ data }) => {
 	}
 	if (data.type !== 'run') return;
 	try {
+		if (data.traceSyscalls) {
+			const { installSyscallTrace } = await import('/syscall-trace.mjs');
+			installSyscallTrace((entry) => postMessage(entry));
+		}
 		const sdkBytes = await bytes('/sdk/index.mjs');
 		const sdkUrl = URL.createObjectURL(new Blob([sdkBytes], { type: 'text/javascript' }));
 		const sdk = await import(sdkUrl);
@@ -35,6 +45,24 @@ globalThis.onmessage = async ({ data }) => {
 			new Blob(
 				[
 					`
+${
+	data.traceSyscalls
+		? `import { installSyscallTrace } from '${location.origin}/syscall-trace.mjs';
+installSyscallTrace((entry) => postMessage(entry));
+const NativeWorker = globalThis.Worker;
+globalThis.Worker = class extends NativeWorker {
+  constructor(...args) {
+    super(...args);
+    this.addEventListener('message', (event) => {
+      if (event.data?.type === 'g0Syscall') {
+        event.stopImmediatePropagation();
+        postMessage(event.data);
+      }
+    });
+  }
+};`
+		: ''
+}
 let thread; const queue = [];
 onmessage = async ({data}) => {
   if (data?.type === 'init') {

@@ -27,6 +27,21 @@ export function judgeShellProbe(results) {
 		'Preserve spaces, UTF-8 and the empty argument, plus the exported environment.'
 	);
 	check(
+		'argv-framing',
+		'G0-ARGV-FRAME',
+		stdout(
+			find('G0-ARGV-FRAME'),
+			'arg=./probe.wasm\0arg=report\0arg=\0arg=line\nbreak\0arg=carriage\rreturn\0arg=\0G0=space 한글\0'
+		),
+		'Preserve empty arguments and embedded LF/CR as separate length-delimited values.'
+	);
+	check(
+		'environment-replacement',
+		'G0-ENV-UNSET',
+		stdout(find('G0-ENV-UNSET'), 'arg=./probe.wasm\0arg=report\0'),
+		'An explicit child environment must not retain a variable unset by the real shell.'
+	);
+	check(
 		'stderr-bytes',
 		'G0-SHELL',
 		completed(report) &&

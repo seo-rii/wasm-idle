@@ -27,6 +27,42 @@ test('exit zero cannot hide a lost empty argument', () => {
 	assert.equal(check([observed('G0-SHELL', prefix + 'arg=\0' + suffix)], 'argv-env'), 'passed');
 });
 
+test('ABI framing checks LF/CR boundaries and explicit environment replacement', () => {
+	assert.equal(
+		check(
+			[
+				observed(
+					'G0-ARGV-FRAME',
+					'arg=./probe.wasm\0arg=report\0arg=\0arg=line\nbreak\0arg=carriage\rreturn\0arg=\0G0=space 한글\0'
+				)
+			],
+			'argv-framing'
+		),
+		'passed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ARGV-FRAME', 'arg=./probe.wasm\0arg=report\0arg=line\0arg=break\0')],
+			'argv-framing'
+		),
+		'failed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ENV-UNSET', 'arg=./probe.wasm\0arg=report\0')],
+			'environment-replacement'
+		),
+		'passed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ENV-UNSET', 'arg=./probe.wasm\0arg=report\0G0=space 한글\0')],
+			'environment-replacement'
+		),
+		'failed'
+	);
+});
+
 test('pipe stdout does not prove that a redirect reached the common mount', () => {
 	const binary = [0, 255, 226, 130, 172, 10, 13, 97, 98];
 	const result = observed('G0-FD', '', {

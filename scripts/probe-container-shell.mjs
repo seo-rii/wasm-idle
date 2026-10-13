@@ -87,6 +87,7 @@ try {
 		};
 	}
 	assets.set('/worker.mjs', await readFile(join(fixtureRoot, 'worker.mjs')));
+	assets.set('/syscall-trace.mjs', await readFile(join(fixtureRoot, 'syscall-trace.mjs')));
 	assets.set('/', Buffer.from('<!doctype html><title>Container G0 shell probe</title>'));
 	const requests = [];
 	let activeDownloads = 0,
@@ -129,6 +130,11 @@ try {
 	});
 	const cases = [
 		{ id: 'G0-SHELL', script: './probe.wasm report "space arg" "한글" ""; :' },
+		{
+			id: 'G0-ARGV-FRAME',
+			script: './probe.wasm report "" $\'line\\nbreak\' $\'carriage\\rreturn\' ""; :'
+		},
+		{ id: 'G0-ENV-UNSET', script: 'unset G0; ./probe.wasm report; :' },
 		{ id: 'G0-TAIL-EXEC', script: './probe.wasm report tail' },
 		{ id: 'G0-EXIT', script: './probe.wasm exit; printf "exit=%d\\n" "$?"' },
 		{ id: 'G0-CWD', script: 'cd sub; /workspace/cwd.wasm cwd; printf "\\nexit=%d\\n" "$?"' },
@@ -173,6 +179,7 @@ try {
 	const results = [];
 	let runtimeInventory;
 	for (const fixture of cases) {
+		if (process.env.WASM_IDLE_CONTAINER_TRACE_SYSCALLS === '1') fixture.traceSyscalls = true;
 		if (
 			process.env.WASM_IDLE_CONTAINER_PROBE_CASES &&
 			!process.env.WASM_IDLE_CONTAINER_PROBE_CASES.split(',').includes(fixture.id)
@@ -202,11 +209,13 @@ try {
 				return await new Promise((done) => {
 					const worker = new Worker('/worker.mjs', { type: 'module' });
 					const trace = [];
+					const syscalls = [];
 					const timer = setTimeout(() => {
 						worker.terminate();
-						done({ type: 'timeout' });
+						done({ type: 'timeout', syscalls });
 					}, 20000);
 					worker.onmessage = ({ data }) => {
+						if (data.type === 'g0Syscall') syscalls.push(data);
 						if (data.type === 'downloadPending' && fixture.cancel)
 							setTimeout(() => worker.postMessage({ type: 'cancel' }), 100);
 						if (data.type === 'output' && data.stream === 'stdout' && fixture.cancel)
@@ -215,7 +224,11 @@ try {
 						if (['result', 'failure', 'cancelled'].includes(data.type)) {
 							clearTimeout(timer);
 							worker.terminate();
-							done({ ...data, trace });
+							done({
+								...data,
+								trace,
+								...(fixture.traceSyscalls ? { syscalls } : {})
+							});
 						}
 					};
 					worker.onerror = (event) => {
@@ -303,6 +316,10 @@ try {
 		runnerSha256: sha256(await readFile(fileURLToPath(import.meta.url))),
 		workerSha256: sha256(await readFile(join(fixtureRoot, 'worker.mjs')))
 	};
+	if (process.env.WASM_IDLE_CONTAINER_TRACE_SYSCALLS === '1')
+		receipt.harness.syscallTraceSha256 = sha256(
+			await readFile(join(fixtureRoot, 'syscall-trace.mjs'))
+		);
 	if (process.env.WASM_IDLE_CONTAINER_PROBE_OUTPUT)
 		await writeFile(
 			process.env.WASM_IDLE_CONTAINER_PROBE_OUTPUT,
