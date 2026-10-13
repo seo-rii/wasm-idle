@@ -6,6 +6,13 @@ self.onmessage = async ({ data }) => {
 	const { id, code, stdin, args } = data;
 	let url;
 	let outputBytes = 0;
+	let outputLimitError;
+	let terminalSent = false;
+	const reportError = (error) => {
+		if (terminalSent) return;
+		terminalSent = true;
+		self.postMessage({ id, type: 'error', message: String(error) });
+	};
 	try {
 		if (
 			typeof code !== 'string' ||
@@ -20,10 +27,17 @@ self.onmessage = async ({ data }) => {
 		)
 			throw new Error('Scala execution request exceeds limits.');
 		globalThis.wasmIdleScalaWrite = (stream, text) => {
+			if (outputLimitError) throw outputLimitError;
 			if (!['stdout', 'stderr'].includes(stream) || typeof text !== 'string')
 				throw new Error('Invalid Scala console write.');
 			outputBytes += new TextEncoder().encode(text).length;
-			if (outputBytes > 1024 * 1024) throw new Error('Scala output exceeds 1 MiB.');
+			if (outputBytes > 1024 * 1024) {
+				outputLimitError = new Error('Scala output exceeds 1 MiB.');
+				// Report before throwing: guest code can catch this exception or loop forever.
+				// The host can now terminate this execution even if the guest never returns.
+				reportError(outputLimitError);
+				throw outputLimitError;
+			}
 			self.postMessage({ id, type: stream, data: text });
 		};
 		const decoders = {
@@ -31,6 +45,7 @@ self.onmessage = async ({ data }) => {
 			stderr: new TextDecoder('utf-8', { ignoreBOM: true })
 		};
 		globalThis.wasmIdleScalaWriteBytes = (stream, values) => {
+			if (outputLimitError) throw outputLimitError;
 			const decoder = decoders[stream];
 			if (!decoder) throw new Error('Invalid Scala stream.');
 			globalThis.wasmIdleScalaWrite(
@@ -43,13 +58,15 @@ self.onmessage = async ({ data }) => {
 		if (typeof module.runWasmIdleScala !== 'function')
 			throw new Error('Missing Scala entry export.');
 		await module.runWasmIdleScala(stdin, args);
+		if (outputLimitError) return;
 		for (const [stream, decoder] of Object.entries(decoders)) {
 			const tail = decoder.decode();
 			if (tail) globalThis.wasmIdleScalaWrite(stream, tail);
 		}
+		terminalSent = true;
 		self.postMessage({ id, type: 'exit', exitCode: 0 });
 	} catch (error) {
-		self.postMessage({ id, type: 'error', message: String(error) });
+		reportError(outputLimitError ?? error);
 	} finally {
 		if (url) URL.revokeObjectURL(url);
 	}

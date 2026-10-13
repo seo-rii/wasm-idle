@@ -1,5 +1,5 @@
 {
-	"startedAt": "2026-10-12T15:21:26.841Z",
+	"startedAt": "2026-10-13T02:17:48.572Z",
 	"status": "passed",
 	"contract": "Scala 3 / Scala.js candidate; buffered stdin; object Main",
 	"compileTimeoutMs": 120000,
@@ -59,8 +59,8 @@
 	"adapterSources": [
 		{
 			"path": "src/candidate.js",
-			"bytes": 3498,
-			"sha256": "51eabd099413334de7bee5d1347b910d4e174ef505c3c0bd986a12ea1ea03468"
+			"bytes": 3865,
+			"sha256": "588fc8bb28d67e1e940494197ac1531e05105c342aec54d3826959155e5d499a"
 		},
 		{
 			"path": "src/compiler.worker.js",
@@ -69,8 +69,8 @@
 		},
 		{
 			"path": "src/execution.worker.js",
-			"bytes": 2081,
-			"sha256": "9ab56764810826f92f2cecc1723d72becc8c5616bfad451bca0619ba9967e149"
+			"bytes": 2668,
+			"sha256": "16575b26d263680336bed7ecd696bccc00a7093cd6c2d41e3bcc861921557363"
 		},
 		{
 			"path": "src/memory-fs.js",
@@ -88,11 +88,11 @@
 			"name": "hello and runtime arguments",
 			"sourceSha256": "ced738aa0e8238167ccb367543490b2b446c0359d31293aa8ca663a26d00fb2e",
 			"status": "passed",
-			"compileMs": 13276.849999999627,
+			"compileMs": 21288.97500000149,
 			"compilerTimings": {
-				"initializeMs": 1559.5250000003725,
-				"compileMs": 7390.045000001788,
-				"linkMs": 4270.359999999404
+				"initializeMs": 1992.125,
+				"compileMs": 10271.710000000894,
+				"linkMs": 8963.289999999106
 			},
 			"diagnostics": [],
 			"execution": {
@@ -101,18 +101,18 @@
 				"exitCode": 0,
 				"stdout": "Hello, Scala!\nfirst|둘\n",
 				"stderr": "",
-				"elapsedMs": 40.46499999985099
+				"elapsedMs": 106.02499999850988
 			}
 		},
 		{
 			"name": "collections, case classes, matching, given/using",
 			"sourceSha256": "cc6c126fc6fd0cf9c918163af791b1c624efe554b7ad8d01fce2e318c5eb6775",
 			"status": "passed",
-			"compileMs": 8980.040000000969,
+			"compileMs": 14451.929999999702,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 5707.604999998584,
-				"linkMs": 3268.2099999990314
+				"initializeMs": 0.005000002682209015,
+				"compileMs": 10125.879999995232,
+				"linkMs": 4320.72500000149
 			},
 			"diagnostics": [],
 			"execution": {
@@ -121,18 +121,18 @@
 				"exitCode": 0,
 				"stdout": "value=12\n",
 				"stderr": "",
-				"elapsedMs": 65.38000000081956
+				"elapsedMs": 62.024999998509884
 			}
 		},
 		{
 			"name": "exact stdout and stderr whitespace",
 			"sourceSha256": "d6d7e63bae06ced91d43359df5e6a74bc6841a027e9d819253b21d51378c18cf",
 			"status": "passed",
-			"compileMs": 8570.620000001043,
+			"compileMs": 11908.22500000149,
 			"compilerTimings": {
-				"initializeMs": 0.009999999776482582,
-				"compileMs": 5712.710000000894,
-				"linkMs": 2851.359999999404
+				"initializeMs": 0.009999997913837433,
+				"compileMs": 7685.064999997616,
+				"linkMs": 4216.304999999702
 			},
 			"diagnostics": [],
 			"execution": {
@@ -141,18 +141,18 @@
 				"exitCode": 0,
 				"stdout": " \t\n\nlast",
 				"stderr": "\n \t\nerror",
-				"elapsedMs": 49.84500000067055
+				"elapsedMs": 105.73000000417233
 			}
 		},
 		{
 			"name": "initial Unicode BOM is preserved independently on stdout and stderr",
 			"sourceSha256": "256cc1dd4838ba7445884b681afdfc42a6757aa87a89a7790f3c687342d44ebf",
 			"status": "passed",
-			"compileMs": 8290.589999999851,
+			"compileMs": 10739.479999996722,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 4351.13000000082,
-				"linkMs": 3936.4099999982864
+				"initializeMs": 0,
+				"compileMs": 7077.664999999106,
+				"linkMs": 3658.829999998212
 			},
 			"diagnostics": [],
 			"execution": {
@@ -161,18 +161,18 @@
 				"exitCode": 0,
 				"stdout": "﻿한글😀",
 				"stderr": "﻿é",
-				"elapsedMs": 60.459999999031425
+				"elapsedMs": 77.17499999701977
 			}
 		},
 		{
 			"name": "empty stdin reaches EOF",
 			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
 			"status": "passed",
-			"compileMs": 9579.535000000149,
+			"compileMs": 13035.80000000447,
 			"compilerTimings": {
-				"initializeMs": 0.005000000819563866,
-				"compileMs": 6919.910000000149,
-				"linkMs": 2657.2999999988824
+				"initializeMs": 0.01000000536441803,
+				"compileMs": 9405.054999999702,
+				"linkMs": 3627.5499999970198
 			},
 			"diagnostics": [],
 			"execution": {
@@ -181,18 +181,18 @@
 				"exitCode": 0,
 				"stdout": "EOF\n",
 				"stderr": "",
-				"elapsedMs": 55.30499999970198
+				"elapsedMs": 61.07000000029802
 			}
 		},
 		{
 			"name": "non-newline terminated stdin",
 			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
 			"status": "passed",
-			"compileMs": 9635.865000000224,
+			"compileMs": 11212.295000001788,
 			"compilerTimings": {
-				"initializeMs": 0,
-				"compileMs": 5910.519999999553,
-				"linkMs": 3722.1899999994785
+				"initializeMs": 0.004999995231628418,
+				"compileMs": 7145.585000000894,
+				"linkMs": 4063.9500000029802
 			},
 			"diagnostics": [],
 			"execution": {
@@ -201,18 +201,18 @@
 				"exitCode": 0,
 				"stdout": "[tail]\nEOF\n",
 				"stderr": "",
-				"elapsedMs": 43.89000000059605
+				"elapsedMs": 45.104999996721745
 			}
 		},
 		{
 			"name": "Unicode and empty input lines",
 			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
 			"status": "passed",
-			"compileMs": 14242.309999998659,
+			"compileMs": 12720.814999997616,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 8235.224999999627,
-				"linkMs": 6003.470000000671
+				"initializeMs": 0,
+				"compileMs": 7944.070000000298,
+				"linkMs": 4773.370000004768
 			},
 			"diagnostics": [],
 			"execution": {
@@ -221,18 +221,18 @@
 				"exitCode": 0,
 				"stdout": "[한글😀]\n[]\n[é]\nEOF\n",
 				"stderr": "",
-				"elapsedMs": 55.67499999888241
+				"elapsedMs": 67.4100000038743
 			}
 		},
 		{
 			"name": "fresh mutable state on successive executions",
 			"sourceSha256": "e7323e23e3a80e54d9cac129aa761c4acbe3dc1dc0ba6c9a788aeb1667de7e71",
 			"status": "passed",
-			"compileMs": 12086.394999999553,
+			"compileMs": 18282.65000000596,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 7704.535000000149,
-				"linkMs": 4376.9900000002235
+				"initializeMs": 0.005000002682209015,
+				"compileMs": 9808.809999994934,
+				"linkMs": 8468.420000001788
 			},
 			"diagnostics": [],
 			"executions": [
@@ -242,7 +242,7 @@
 					"exitCode": 0,
 					"stdout": "starts=1\nHello, Ada\n",
 					"stderr": "",
-					"elapsedMs": 103.43999999947846
+					"elapsedMs": 76.07999999821186
 				},
 				{
 					"id": 17,
@@ -250,7 +250,7 @@
 					"exitCode": 0,
 					"stdout": "starts=1\nHello, Grace\n",
 					"stderr": "",
-					"elapsedMs": 68.23000000044703
+					"elapsedMs": 84.20499999821186
 				}
 			]
 		},
@@ -258,7 +258,7 @@
 			"name": "invalid type rejects without returning an old artifact",
 			"sourceSha256": "e167ae93feeeb78f318565fdcfc56916ee167eeca6ce120cbf0a39bb6a76ab7c",
 			"status": "passed",
-			"compileMs": 12456.419999999925,
+			"compileMs": 13154.32500000298,
 			"diagnostics": [
 				"\u001b[31m\u001b[31m-- [E007] Type Mismatch Error: /workspace/Main.scala:3:21 ----------------------\u001b[0m\u001b[0m",
 				"\u001b[31m3 |\u001b[0m    \u001b[33mval\u001b[0m \u001b[36mvalue\u001b[0m: \u001b[32mInt\u001b[0m = \u001b[32m\"invalid\"\u001b[0m",
@@ -274,11 +274,11 @@
 			"name": "compiler recovery after type error",
 			"sourceSha256": "f9a147ef2c5ac07d5c00396077d6bbd6a1fe1ae47ae9c0261f2f5aaacfd84b02",
 			"status": "passed",
-			"compileMs": 14153.910000000149,
+			"compileMs": 12152.880000002682,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 9658.52999999933,
-				"linkMs": 4492.304999999702
+				"initializeMs": 0.009999997913837433,
+				"compileMs": 8303.464999996126,
+				"linkMs": 3846.0350000038743
 			},
 			"diagnostics": [],
 			"execution": {
@@ -287,36 +287,36 @@
 				"exitCode": 0,
 				"stdout": "recovered\n",
 				"stderr": "",
-				"elapsedMs": 48.494999999180436
+				"elapsedMs": 58.24499999731779
 			}
 		},
 		{
 			"name": "terminate infinite execution worker",
 			"sourceSha256": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f",
 			"status": "passed",
-			"compileMs": 12727.370000001043,
+			"compileMs": 11122.22500000149,
 			"compilerTimings": {
-				"initializeMs": 0,
-				"compileMs": 8572.300000000745,
-				"linkMs": 4151.644999999553
+				"initializeMs": 0.005000002682209015,
+				"compileMs": 6768.859999999404,
+				"linkMs": 4350.234999999404
 			},
 			"diagnostics": [],
 			"execution": {
 				"type": "timeout",
 				"stdout": "started\n",
 				"stderr": "",
-				"elapsedMs": 10000.455000000075
+				"elapsedMs": 10000.479999996722
 			}
 		},
 		{
 			"name": "recovery after stopped execution",
 			"sourceSha256": "3a2c0da449cc93f1d33f68c5ddbba45e45247859743f0d6c4befe3b6f63befe6",
 			"status": "passed",
-			"compileMs": 15074.275000000373,
+			"compileMs": 10768.759999997914,
 			"compilerTimings": {
-				"initializeMs": 0.004999998956918716,
-				"compileMs": 8697.485000001267,
-				"linkMs": 6373.7050000000745
+				"initializeMs": 0,
+				"compileMs": 6674.2200000062585,
+				"linkMs": 4086.7299999967217
 			},
 			"diagnostics": [],
 			"execution": {
@@ -325,7 +325,7 @@
 				"exitCode": 0,
 				"stdout": "after stop\n",
 				"stderr": "",
-				"elapsedMs": 64.92999999970198
+				"elapsedMs": 68.18500000238419
 			}
 		},
 		{
@@ -341,11 +341,11 @@
 				}
 			],
 			"status": "passed",
-			"compileMs": 14041.535000000149,
+			"compileMs": 13994.285000003874,
 			"compilerTimings": {
-				"initializeMs": 0.009999999776482582,
-				"compileMs": 9188.509999999776,
-				"linkMs": 4849.445000000298
+				"initializeMs": 0.005000002682209015,
+				"compileMs": 8476.460000000894,
+				"linkMs": 5514.295000001788
 			},
 			"execution": {
 				"id": 26,
@@ -353,7 +353,7 @@
 				"exitCode": 0,
 				"stdout": "multiple files\n",
 				"stderr": "",
-				"elapsedMs": 37.40499999932945
+				"elapsedMs": 77.47499999403954
 			}
 		},
 		{
@@ -373,7 +373,7 @@
 					},
 					"stdout": "candidate hello\n",
 					"stderr": "",
-					"elapsedMs": 22766.205000000075
+					"elapsedMs": 24201.335000000894
 				},
 				{
 					"name": "stop active program",
@@ -381,7 +381,7 @@
 					"cancelled": true,
 					"stdout": "started\n",
 					"stderr": "",
-					"elapsedMs": 14965.455000000075
+					"elapsedMs": 9832.370000004768
 				},
 				{
 					"name": "recover after Stop",
@@ -391,7 +391,7 @@
 					},
 					"stdout": "candidate recovered\n",
 					"stderr": "",
-					"elapsedMs": 12298.435000000522
+					"elapsedMs": 9435.904999993742
 				},
 				{
 					"name": "abort active program",
@@ -399,7 +399,7 @@
 					"cancelled": true,
 					"stdout": "started\n",
 					"stderr": "",
-					"elapsedMs": 9841.769999999553
+					"elapsedMs": 8604.189999997616
 				},
 				{
 					"name": "recover after AbortController",
@@ -409,7 +409,7 @@
 					},
 					"stdout": "candidate recovered\n",
 					"stderr": "",
-					"elapsedMs": 10514.320000000298
+					"elapsedMs": 8731.92499999702
 				}
 			],
 			"countsBeforeDispose": {
@@ -439,5 +439,5 @@
 		"Suspending": true,
 		"promising": true
 	},
-	"finishedAt": "2026-10-12T15:25:22.554Z"
+	"finishedAt": "2026-10-13T02:21:56.591Z"
 }

@@ -16,6 +16,7 @@ node runtimes/wasm-scala/prepare-assets.mjs
 node runtimes/wasm-scala/prepare-assets.mjs --verify
 node --test runtimes/wasm-scala/src/candidate.test.mjs
 node runtimes/wasm-scala/test/browser.mjs
+node runtimes/wasm-scala/test/output-limit.mjs
 ```
 
 Preparation downloads 10 committed upstream assets (62,554,449 bytes) from the
@@ -96,9 +97,13 @@ input would need a preserving shared-buffer Reader and a delayed-input side-effe
 regression; the demo's exception/replay implementation must not be reused.
 
 The checked-in Chromium 153.0.8010.12 receipt passes all 14 browser cases. On
-this machine it records about 1.6s cold initialization, 13.3s first compile/link,
-and 8.3–15.1s successful warm compile/link (including workspace I/O). These are
-local measurements, not latency guarantees. Nine Node lifecycle tests also pass.
+this machine it records about 2.0s cold initialization, 21.3s first compile/link,
+and 10.7–18.3s successful warm compile/link (including workspace I/O). These are
+local measurements, not latency guarantees. Thirteen Node lifecycle tests also pass, including cancellation between compiler
+completion and execution. The focused output-limit browser test compiles a real
+Scala program and checks the exact 1 MiB budget, a caught one-byte overflow,
+a caught overflow followed by an infinite loop, and recovery in fresh Workers.
+Limit failures notify the host immediately and cannot be cleared by guest code.
 Cold download size and compile/link timings are measured by this spike. Browser
 heap/memory trends and full language compatibility are not established. A Scala.js
 Wasm+JS backend, browser JVM, and TeaVM compiler port remain separate future work.
