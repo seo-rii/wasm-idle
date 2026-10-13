@@ -1168,7 +1168,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onkeydown=\{\(event\) => \{/);
 		expect(source).toMatch(/height: 100dvh;/);
 		expect(source).toMatch(
-			/@media \(max-width: 960px\) \{\s+main \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s
+			/@media \(max-width: 960px\) \{\s+\.ide \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s
 		);
 		expect(source).toMatch(
 			/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s

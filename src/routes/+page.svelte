@@ -543,6 +543,15 @@
 		const requestedWidth = terminalPaneWidth ?? fallbackWidth;
 		return Math.min(Math.max(requestedWidth, minTerminalPaneWidth), maxTerminalPaneWidth);
 	});
+	// Keep the explorer open by default only when the editor and console still have room beside it.
+	let lastRoomyLayout: boolean | null = null;
+	$effect(() => {
+		if (!examplePaneWidth) return;
+		const roomy = examplePaneWidth > 1200;
+		if (roomy === lastRoomyLayout) return;
+		lastRoomyLayout = roomy;
+		sidebarOpen = roomy;
+	});
 	let availableRustTargetTriples = $state<RustTargetTriple[]>(['wasm32-wasip1', 'wasm32-wasip2']);
 	let availableGoTargets = $state<GoTarget[]>(['wasip1/wasm']);
 	type WasmIdleDebugApi = {
@@ -3889,7 +3898,9 @@
 		width: 100%;
 		height: 100vh;
 		height: 100dvh;
+		min-width: 0;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: auto minmax(0, 1fr) auto;
 		box-sizing: border-box;
 		overflow: hidden;
@@ -4645,7 +4656,13 @@
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
+		overflow: hidden;
 		white-space: nowrap;
+	}
+
+	.pane-title strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.pane-title > .material-symbols-outlined {
@@ -4691,10 +4708,10 @@
 	}
 
 	.console-controls {
+		flex: none;
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		min-width: 0;
 	}
 
 	.debug-controls {
@@ -5834,7 +5851,7 @@
 	}
 
 	@media (max-width: 960px) {
-		main {
+		.ide {
 			height: auto;
 			min-height: 100vh;
 			min-height: 100dvh;
@@ -5855,10 +5872,6 @@
 
 		.topbar__lead > .topbar__divider {
 			display: none;
-		}
-
-		.topbar__config {
-			flex: 1 1 100%;
 		}
 
 		.topbar__actions {
@@ -5964,6 +5977,21 @@
 		.debug-hero__stats {
 			width: 100%;
 			justify-content: flex-start;
+		}
+	}
+	@media (max-width: 600px) {
+		.action-group .action-button:not(.action-button--run) {
+			width: 36px;
+			padding: 0;
+		}
+
+		.action-group .action-button:not(.action-button--run) span:not(.material-symbols-outlined) {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
 		}
 	}
 </style>
