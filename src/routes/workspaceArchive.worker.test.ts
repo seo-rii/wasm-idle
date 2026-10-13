@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { strToU8, Zip, ZipPassThrough, zipSync } from 'fflate';
 import { createWorkspaceArchive, extractWorkspaceArchive } from './workspaceArchive.worker';
 
-function duplicateEntryArchive() {
+function entryArchive(entries: Array<[string, string]>) {
 	const chunks: Uint8Array[] = [];
 	let length = 0;
 	const zip = new Zip((error, data) => {
@@ -10,8 +10,8 @@ function duplicateEntryArchive() {
 		chunks.push(data);
 		length += data.byteLength;
 	});
-	for (const content of ['first', 'second']) {
-		const file = new ZipPassThrough('duplicate.txt');
+	for (const [path, content] of entries) {
+		const file = new ZipPassThrough(path);
 		zip.add(file);
 		file.push(strToU8(content), true);
 	}
@@ -51,11 +51,77 @@ describe('workspace archive worker', () => {
 		]);
 	});
 
-	it('preserves duplicate ZIP entries in archive order', () => {
-		expect(extractWorkspaceArchive(duplicateEntryArchive())).toEqual([
-			{ path: 'duplicate.txt', content: 'first', encoding: 'utf-8' },
-			{ path: 'duplicate.txt', content: 'second', encoding: 'utf-8' }
+	it.each([
+		['duplicate.txt', 'duplicate.txt'],
+		['a/./b.py', 'a/b.py'],
+		['a//b.py', 'a/b.py'],
+		['a\\b.py', 'a/b.py'],
+		['자료/./실행.py', '자료/실행.py']
+	])(
+		'rejects duplicate or canonical-colliding paths %j and %j in both directions',
+		(left, right) => {
+			for (const paths of [
+				[left, right],
+				[right, left]
+			]) {
+				const files = paths.map((path, index) => ({ path, content: String(index) }));
+				expect(() => createWorkspaceArchive(files)).toThrow(/duplicate entry path/u);
+				expect(() =>
+					extractWorkspaceArchive(
+						entryArchive(files.map(({ path, content }) => [path, content]))
+					)
+				).toThrow(/duplicate entry path/u);
+			}
+		}
+	);
+
+	it('rejects traversal instead of merging it with a distinct valid file', () => {
+		const files = [
+			{ path: 'a/../b.py', content: 'traversal' },
+			{ path: 'a/b.py', content: 'valid' }
+		];
+		expect(() => createWorkspaceArchive(files)).toThrow(/traverse directories/u);
+		expect(() =>
+			extractWorkspaceArchive(entryArchive(files.map(({ path, content }) => [path, content])))
+		).toThrow(/traverse directories/u);
+	});
+
+	it.each(['', '.', '/absolute.py', 'C:file.py', 'a\0b.py'])(
+		'rejects invalid file path %j on export and import',
+		(path) => {
+			expect(() => createWorkspaceArchive([{ path, content: 'invalid' }])).toThrow();
+			expect(() => extractWorkspaceArchive(entryArchive([[path, 'invalid']]))).toThrow();
+		}
+	);
+
+	it('validates directory paths before skipping their entries', () => {
+		expect(() =>
+			extractWorkspaceArchive(
+				entryArchive([
+					['a/../', ''],
+					['valid.py', 'valid']
+				])
+			)
+		).toThrow(/traverse directories/u);
+		expect(() =>
+			extractWorkspaceArchive(
+				entryArchive([
+					['a/', ''],
+					['a/./', ''],
+					['a/valid.py', 'valid']
+				])
+			)
+		).toThrow(/duplicate entry path/u);
+	});
+
+	it('normalizes unambiguous Unicode and separator paths consistently', () => {
+		const files = [{ path: '資料\\.\\실행.py', content: 'print("안녕")' }];
+		expect(extractWorkspaceArchive(createWorkspaceArchive(files))).toEqual([
+			{ path: '資料/실행.py', content: 'print("안녕")', encoding: 'utf-8' }
 		]);
+		expect(
+			extractWorkspaceArchive(entryArchive(files.map(({ path, content }) => [path, content])))
+		).toEqual([{ path: '資料/실행.py', content: 'print("안녕")', encoding: 'utf-8' }]);
 	});
 
 	it('rejects traversal paths, malformed archives, and excessive file counts', () => {

@@ -57,6 +57,24 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 }
 
 describe('workspace import browser integration', () => {
+	it(
+		'rejects traversal in new and renamed file paths without changing the workspace',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				page.once('dialog', (dialog) => dialog.accept('a/../b.py'));
+				await page.getByRole('button', { name: 'New', exact: true }).click();
+				await page.getByText(/cannot traverse directories/u).waitFor();
+				expect(await page.locator('button[title="a/b.py"]').count()).toBe(0);
+				expect(await page.locator('button[title="b.py"]').count()).toBe(0);
+				page.once('dialog', (dialog) => dialog.accept('../renamed.cpp'));
+				await page.getByRole('button', { name: 'Rename', exact: true }).click();
+				await page.getByText(/cannot traverse directories/u).waitFor();
+				expect(await page.locator('button[title="renamed.cpp"]').count()).toBe(0);
+				expect(await page.locator('button[title="main.cpp"]').count()).toBeGreaterThan(0);
+			});
+		}
+	);
 	it.each(['file', 'zip'] as const)(
 		'cancels a delayed %s import when the language changes',
 		browserOptions,
