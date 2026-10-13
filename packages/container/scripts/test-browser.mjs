@@ -6,12 +6,14 @@ import { resolve, relative, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 const root = fileURLToPath(new URL('../', import.meta.url));
+const coreRoot = resolve(root, '../core/dist');
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
-    if (pathname === '/') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><meta charset="utf-8"><title>Container contract</title>'); return; }
-    const path = resolve(root, '.' + decodeURIComponent(pathname));
-    if (relative(root, path).startsWith('..') || !(await stat(path)).isFile()) { response.writeHead(404).end(); return; }
+    if (pathname === '/') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><meta charset="utf-8"><title>Container contract</title><script type="importmap">{"imports":{"@wasm-idle/core":"/core/index.js"}}</script>'); return; }
+    const base = pathname.startsWith('/core/') ? coreRoot : root;
+    const path = resolve(base, '.' + decodeURIComponent(pathname.startsWith('/core/') ? pathname.slice(5) : pathname));
+    if (relative(base, path).startsWith('..') || !(await stat(path)).isFile()) { response.writeHead(404).end(); return; }
     response.setHeader('Content-Type', extname(path) === '.wasm' ? 'application/wasm' : 'text/javascript');
     response.end(await readFile(path));
   } catch { response.writeHead(404).end(); }
