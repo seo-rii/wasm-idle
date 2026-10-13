@@ -41,7 +41,8 @@ test('PROC-03/04: terminate CPU loop and run again, timeout and aborted startup'
     await new Promise((r) => setTimeout(r, 30)); await p.terminate();
     assert.deepEqual(await p.exited, { code: null, reason: 'terminated' });
     assert.equal((await c.run('tool')).code, 0);
-    const result = await c.run('tool', ['loop'], { timeoutMs: 500 });
+    // Includes Worker startup. Allow loaded CI machines to reach the actual loop.
+    const result = await c.run('tool', ['loop'], { timeoutMs: 5000 });
     assert.equal(result.reason, 'timeout');
     const abort = new AbortController(); abort.abort();
     await assert.rejects(c.spawn('tool', [], { signal: abort.signal }), { code: 'ABORTED' });
