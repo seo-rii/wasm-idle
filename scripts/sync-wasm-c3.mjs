@@ -9,6 +9,24 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const receiptFor = (bytes) => ({ bytes: bytes.length, sha256: sha256(bytes) });
 const expectedManifest = '6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb';
 
+/** Render the consumer wrapper from current sources and a pinned compiler profile.
+ * @param {Record<string, unknown>} profile
+ */
+export async function renderC3RunnerWorker(profile) {
+	const memory = await readFile(path.join(root, 'scripts/runtime-workers/c3-memory.mjs'), 'utf8');
+	const worker = await readFile(
+		path.join(root, 'scripts/runtime-workers/wasm-c3-runner-worker.js'),
+		'utf8'
+	);
+	if (worker.split('__WASM_IDLE_C3_PROFILE__').length !== 2)
+		throw new Error('C3 worker profile placeholder must occur exactly once');
+	return Buffer.from(
+		memory.replace(/^export /gm, '') +
+			'\n' +
+			worker.replace('__WASM_IDLE_C3_PROFILE__', JSON.stringify(profile))
+	);
+}
+
 /** Publish an already-verified bundle and its generated profile with rollback on publication failure.
  * @param {{ targetDir: string; versionModulePath: string; files: Record<string, Uint8Array>; version: string }} options
  */
@@ -89,18 +107,7 @@ export async function syncC3(producer) {
 		compilerWasmReceipt: receiptFor(files['c3c.wasm']),
 		producerReceipt: receiptFor(files['producer-receipt.json'])
 	};
-	const memory = await readFile(path.join(root, 'scripts/runtime-workers/c3-memory.mjs'), 'utf8');
-	const worker = await readFile(
-		path.join(root, 'scripts/runtime-workers/wasm-c3-runner-worker.js'),
-		'utf8'
-	);
-	if (worker.split('__WASM_IDLE_C3_PROFILE__').length !== 2)
-		throw new Error('C3 worker profile placeholder must occur exactly once');
-	files['runner-worker.js'] = Buffer.from(
-		memory.replace(/^export /gm, '') +
-			'\n' +
-			worker.replace('__WASM_IDLE_C3_PROFILE__', JSON.stringify(profile))
-	);
+	files['runner-worker.js'] = await renderC3RunnerWorker(profile);
 	const target = path.join(root, 'static/wasm-c3');
 	const versionModulePath = path.join(root, 'src/lib/playground/wasmC3Version.ts');
 	const { format, resolveConfig } = await import('prettier');

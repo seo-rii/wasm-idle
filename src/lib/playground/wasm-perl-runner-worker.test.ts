@@ -625,7 +625,7 @@ describe('WebPerl runner worker', { timeout: 60_000 }, () => {
 				stdin: undefined,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					controlBytes: 16,
 					capacity: 32,
 					buffer: new SharedArrayBuffer(24)

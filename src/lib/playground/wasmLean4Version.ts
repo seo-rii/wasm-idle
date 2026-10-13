@@ -105,7 +105,7 @@ export const WASM_LEAN4_PROFILE = {
 		}
 	},
 	workerReceipt: {
-		bytes: 15759,
-		sha256: '469ef5ec7accf4c221d06134ccd4989f14e9229c61dd35c386617a015aec6f03'
+		bytes: 16049,
+		sha256: '3902446f528bfb9fb09fdfe5a9618aac64100e1b7ab70265cfe205e344be5140'
 	}
 } as const;

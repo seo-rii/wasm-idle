@@ -31,8 +31,8 @@ export const WASM_PERL_RUNTIME_PROFILE = {
 export const WASM_PERL_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_PERL_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 24597,
-		sha256: 'f5c4a623cae150451794db91643822bed017eb5fa5a8aab9ea3171250273aab3'
+		bytes: 24887,
+		sha256: '755ae3281b7ddd0a86e82137af9ee87a40a7cef4252b71348fe173c80fb19ce1'
 	}
 });
 export const WASM_PERL_ASSET_VERSION = WASM_PERL_RUNTIME_PROFILE.manifestFingerprint;

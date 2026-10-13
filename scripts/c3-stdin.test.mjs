@@ -7,7 +7,7 @@ test('C3 stdin observes EOF even when close notification arrives immediately bef
 	const buffer = new SharedArrayBuffer(17);
 	const channel = {
 		protocol: 'wasm-idle-static-stdin-ring',
-		protocolVersion: 1,
+		protocolVersion: 2,
 		controlBytes: 16,
 		capacity: 1,
 		buffer

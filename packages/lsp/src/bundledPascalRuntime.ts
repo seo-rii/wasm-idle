@@ -26,8 +26,8 @@ export const BUNDLED_PASCAL_RUNTIME_PROFILE = {
 export const BUNDLED_PASCAL_RUNTIME_BUNDLE = Object.freeze({
 	profile: BUNDLED_PASCAL_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 20309,
-		sha256: '1067c3d36b7cf7d56b2679b43a18105dfac7c4a6f234f68e5bce11e15dc3ff12'
+		bytes: 20599,
+		sha256: 'd43aa025f5f64bf5129ddb78ca5d9787cfd8d4c9c302c59d10b24f20459b2e62'
 	}
 });
 export const BUNDLED_PASCAL_MANIFEST_FINGERPRINT =

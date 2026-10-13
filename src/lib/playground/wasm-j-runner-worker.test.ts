@@ -346,7 +346,7 @@ describe('J runner worker', () => {
 			runtimeRequest({
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					buffer: new SharedArrayBuffer(32),
 					capacity: 16,
 					controlBytes: 8

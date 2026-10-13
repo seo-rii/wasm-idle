@@ -181,7 +181,8 @@ describe('browser test asset preparation', () => {
 			const assets = manifest.assets.filter(
 				(asset: { group: string }) => asset.group === group
 			);
-			expect(assets).toHaveLength(Object.keys(expected).length);
+			expect(manifest.generatedWorkers).toContain(group);
+			expect(assets).toHaveLength(Object.keys(expected).length - 1);
 			for (const [name, receipt] of Object.entries(expected) as [
 				string,
 				{ bytes: number; sha256: string }
@@ -189,11 +190,41 @@ describe('browser test asset preparation', () => {
 				const asset = assets.find(
 					(asset: { target: string }) => asset.target === `wasm-${group}/${name}`
 				);
+				if (name === 'runner-worker.js') {
+					expect(asset).toBeUndefined();
+					continue;
+				}
 				expect(asset?.decoded || asset).toMatchObject({
 					size: receipt.bytes,
 					sha256: receipt.sha256
 				});
 			}
+		}
+	});
+	it('generates current C3 and LFortran workers locally and verifies their committed receipts', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-generated-workers-'));
+		temporaryDirectories.push(root);
+		const manifestPath = path.join(root, 'manifest.json');
+		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
+		await writeFile(manifestPath, JSON.stringify({ ...manifest, assets: [] }));
+		const staticDir = path.join(root, 'static');
+		const fetchImpl = vi.fn<typeof fetch>();
+		const groups = ['c3', 'lfortran'];
+		const options = { groups, staticDir, manifestPath, fetchImpl };
+		for (const group of groups) {
+			const target = path.join(staticDir, `wasm-${group}/runner-worker.js`);
+			await mkdir(path.dirname(target), { recursive: true });
+			await writeFile(target, 'stale downloaded wrapper');
+		}
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({ downloaded: 0 });
+		expect(fetchImpl).not.toHaveBeenCalled();
+		await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({ assetCount: 2 });
+		for (const group of groups) {
+			const target = path.join(staticDir, `wasm-${group}/runner-worker.js`);
+			expect(await readFile(target, 'utf8')).toContain('protocolVersion !== 2');
+			await writeFile(target, 'stale downloaded wrapper');
+			await expect(verifyBrowserTestAssets(options)).rejects.toThrow('size/SHA-256 mismatch');
+			await prepareBrowserTestAssets(options);
 		}
 	});
 	it('prepares all current clangd assets from local producer receipts without replacing remote pins', async () => {
