@@ -71,15 +71,27 @@ export function createCachedClangSandbox(
 	let precompiledHeader: BrowserClangPrecompiledHeader | undefined;
 	let headerWorker: { worker: Worker; dispose(): void } | undefined;
 
+	function disposeWorker(worker: Worker, bridge?: WorkerAssetBridge) {
+		worker.onmessage = null;
+		worker.onerror = null;
+		worker.onmessageerror = null;
+		try {
+			bridge?.dispose();
+		} catch {
+			// Cleanup must preserve the primary result and still attempt Worker termination.
+		}
+		try {
+			worker.terminate();
+		} catch {
+			// Preserve the primary result even if a custom Worker fails to terminate.
+		}
+	}
+
 	function adoptHeaderWorker(worker: Worker, bridge?: WorkerAssetBridge) {
 		headerWorker?.dispose();
 		const dispose = () => {
 			if (headerWorker?.worker === worker) headerWorker = undefined;
-			bridge?.dispose();
-			worker.onmessage = null;
-			worker.onerror = null;
-			worker.onmessageerror = null;
-			worker.terminate();
+			disposeWorker(worker, bridge);
 		};
 		headerWorker = { worker, dispose };
 		worker.onerror = dispose;
@@ -154,7 +166,7 @@ export function createCachedClangSandbox(
 	) {
 		const worker = await factory();
 		if (token !== generation || signal?.aborted) {
-			worker.terminate();
+			disposeWorker(worker);
 			throw signal?.reason ?? new Error('Process terminated');
 		}
 		return new Promise<T>((resolve, reject) => {
@@ -171,7 +183,7 @@ export function createCachedClangSandbox(
 						runtimeCache
 					);
 			} catch (error) {
-				worker.terminate();
+				disposeWorker(worker);
 				reject(error);
 				return;
 			}
@@ -187,14 +199,8 @@ export function createCachedClangSandbox(
 				activeWorker = undefined;
 				cancelWorker = undefined;
 				signal?.removeEventListener('abort', abort);
-				worker.onmessage = null;
-				worker.onerror = null;
-				worker.onmessageerror = null;
 				if (keepForHeader) adoptHeaderWorker(worker, bridge);
-				else {
-					bridge?.dispose();
-					worker.terminate();
-				}
+				else disposeWorker(worker, bridge);
 				if (error) reject(error);
 				else resolve(value!);
 			};

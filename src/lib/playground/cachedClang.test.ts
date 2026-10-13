@@ -693,6 +693,56 @@ describe('cached C/C++ sandbox', () => {
 		expect(h.cache.stats().entries).toBe(1);
 	});
 
+	it.each(['compiled', 'error'] as const)(
+		'settles %s even when bridge and Worker cleanup both throw',
+		async (type) => {
+			const h = makeHarness();
+			h.behavior.compile = (worker) => {
+				const bridge = bridges.instances.find(
+					(entry) => entry.worker === (worker as unknown as Worker)
+				)!;
+				bridge.dispose.mockImplementationOnce(() => {
+					throw new Error('bridge cleanup failed');
+				});
+				worker.terminate.mockImplementationOnce(() => {
+					throw new Error('Worker cleanup failed');
+				});
+				worker.respond({ type, artifact: h.artifact, error: 'original compile failure' });
+			};
+			await h.sandbox.load(assets);
+			if (type === 'compiled')
+				await expect(run(h.sandbox, source, {}, true)).resolves.toBe(true);
+			else
+				await expect(run(h.sandbox, source, {}, true)).rejects.toThrow(
+					'original compile failure'
+				);
+			expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+			h.behavior.compile = (worker) =>
+				worker.respond({ type: 'compiled', artifact: h.artifact });
+			await expect(run(h.sandbox, `${source}\n`, {}, true)).resolves.toBe(true);
+		}
+	);
+
+	it('settles cancellation and permits a fresh run when bridge cleanup throws', async () => {
+		const h = makeHarness();
+		h.behavior.compile = () => {};
+		await h.sandbox.load(assets);
+		const pending = run(h.sandbox);
+		const rejected = expect(pending).rejects.toThrow('Process terminated');
+		await vi.waitFor(() => expect(h.compileWorkers).toHaveLength(1));
+		const bridge = bridges.instances.find(
+			(entry) => entry.worker === (h.compileWorkers[0] as unknown as Worker)
+		)!;
+		bridge.dispose.mockImplementationOnce(() => {
+			throw new Error('bridge cleanup failed');
+		});
+		await h.sandbox.cancel?.();
+		await rejected;
+		expect(h.compileWorkers[0].terminate).toHaveBeenCalledOnce();
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await expect(run(h.sandbox, source, {}, true)).resolves.toBe(true);
+	});
+
 	it.each([
 		['debug', assets, { debugMode: 'lldb' }],
 		['custom asset integrity', { ...assets, clang: { integrity: {} } }, {}],
