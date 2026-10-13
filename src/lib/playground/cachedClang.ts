@@ -1,6 +1,7 @@
 import {
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
+	OutputLimitError,
 	type Sandbox,
 	type SandboxExecutionOptions,
 	type SandboxProgress,
@@ -80,6 +81,10 @@ export function createCachedClangSandbox(
 		worker.onmessageerror = dispose;
 		worker.onmessage = (event) => {
 			if (bridge?.handleMessage(event)) return;
+			if (event.data?.type === 'error' && event.data.code === 'output-limit') {
+				dispose();
+				return;
+			}
 			if (event.data?.type !== 'precompiled-header') return;
 			if (event.data.header) precompiledHeader = event.data.header;
 			dispose();
@@ -203,6 +208,16 @@ export function createCachedClangSandbox(
 						});
 						flushInput();
 					} else if (data.type === 'compiled' || data.type === 'error') {
+						if (data.type === 'error' && data.code === 'output-limit') {
+							finish(
+								new OutputLimitError(data.error, {
+									limit: data.limit,
+									actual: data.actual,
+									phase: 'compile'
+								})
+							);
+							return;
+						}
 						for (const diagnostic of data.diagnostics ?? []) {
 							legacy.oncompilerdiagnostic?.({ ...diagnostic });
 						}
@@ -361,6 +376,7 @@ export function createCachedClangSandbox(
 							request,
 							runtimeBaseUrl,
 							maxAssetBytes: limit,
+							maxOutputBytes: resolveExecutionLimits(options.limits).maxOutputBytes,
 							languageSysroots,
 							log,
 							persistentCache: executionAssetConfig.persistentCache,
