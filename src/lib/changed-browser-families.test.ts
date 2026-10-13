@@ -99,14 +99,43 @@ describe('runtime browser CI selection', () => {
 		}
 		for (const file of [
 			'runtimes/new-runtime/src/index.ts',
+			'static/new-runtime/runtime.wasm',
 			'static/wasm-new-runtime/runtime.wasm',
+			'producers/wasm-new-runtime/src/index.ts',
 			'src/lib/playground/newRuntime.ts',
+			'src/lib/playground/worker/newRuntime.ts',
+			'scripts/new-runtime-pack.mjs',
+			'scripts/wasm-new-runtime-pack.mjs',
+			'scripts/sync-new-runtime.mjs',
 			'scripts/sync-wasm-new-runtime.mjs',
-			'scripts/runtime-workers/wasm-new-runtime-runner-worker.js'
+			'scripts/probe-new-runtime-stdin.mjs',
+			'scripts/runtime-workers/new-runtime-runner-worker.js',
+			'scripts/runtime-workers/wasm-new-runtime-runner-worker.js',
+			'scripts/runtime-build/wasm-new-runtime-build.mjs',
+			'scripts/runtime-modules/new-runtime.mjs',
+			'scripts/llvm-contracts/new-runtime.mjs',
+			'scripts/llvm-contracts/new-runtime/contract.mjs'
 		])
 			expect(changedBrowserFamilies(['src/lib/playground/go.ts', file]), file).toEqual(
 				ALL_BROWSER_FAMILIES
 			);
+	});
+	it.each([
+		['awk', ['workers']],
+		['clojurescript', ['workers']],
+		['rescript', ['specialized']],
+		['j', ['workers']],
+		['java', ['stdin']],
+		['r', ['stdin']],
+		['rust', ['specialized']]
+	] as const)('selects only the owners of hyphenated %s worker modules', (runtime, families) => {
+		for (const directory of ['', 'worker/']) {
+			expect(
+				changedBrowserFamilies([
+					`src/lib/playground/${directory}wasm-${runtime}-runner-worker.test.ts`
+				])
+			).toEqual(families);
+		}
 	});
 
 	it('runs the change selector before dependencies have been installed', () => {

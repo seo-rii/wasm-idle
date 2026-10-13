@@ -130,9 +130,9 @@ export function changedBrowserFamilies(files) {
 			/^(src\/routes\/|packages\/(core|terminal|llvm-core)\/|scripts\/(stdin-browser|run-all-language|changed-browser|runtime-browser|browser-preview|required-browser|browser-test|prepare-browser-test|support-matrix)|\.github\/workflows\/|(?:package\.json|pnpm-lock\.yaml|vite\.config\.ts|vitest\.config\.ts|sveltekit\.config\.mjs)$)/.test(
 				file
 			) ||
-			// New runtime roots/helpers must never silently select no browser tests.
+			// Cover the runtime ownership shapes even before a source name is registered.
 			(fileFamilies.size === 0 &&
-				/^(runtimes\/[^/]+\/|producers\/|static\/(?:wasm-[^/]+|clang|pyodide|teavm|webr)\/|src\/lib\/playground\/|scripts\/(?:runtime-|llvm-contracts\/|sync-|probe-))/.test(
+				/^(runtimes\/[^/]+\/|producers\/|static\/[^/]+\/|src\/lib\/playground\/|scripts\/(?:[^/]+-|llvm-contracts\/))/.test(
 					file
 				))
 		) {

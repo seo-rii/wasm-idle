@@ -133,7 +133,8 @@ function ownsSource(file, name) {
 		// "wasm" is also the naming prefix for unrelated runtime modules and scripts.
 		if (
 			name !== 'wasm' &&
-			(module.startsWith(`${name}-`) ||
+			(module.startsWith(`wasm-${name}-`) ||
+				module.startsWith(`${name}-`) ||
 				(module.startsWith(name) && /^[A-Z]/.test(module.slice(name.length))))
 		)
 			return true;
