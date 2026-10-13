@@ -4273,7 +4273,7 @@
 		min-width: 0;
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: auto minmax(0, 1fr) auto;
+		grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 		box-sizing: border-box;
 		overflow: hidden;
 		background: var(--bg);
@@ -4357,6 +4357,7 @@
 	/* ---------- Top bar ---------- */
 
 	.topbar {
+		grid-row: 1;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -4805,6 +4806,7 @@
 	/* ---------- Workbench ---------- */
 
 	.workbench {
+		grid-row: 4;
 		display: flex;
 		gap: 8px;
 		min-height: 0;
@@ -5326,6 +5328,7 @@
 	}
 
 	.workspace-share {
+		grid-row: 3;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
@@ -5341,6 +5344,10 @@
 
 	.workspace-share input {
 		width: 100%;
+	}
+
+	.ide > .workspace-save-error {
+		grid-row: 2;
 	}
 
 	.workspace-save-error {
@@ -5518,6 +5525,7 @@
 	/* ---------- Status bar ---------- */
 
 	.statusbar {
+		grid-row: 5;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
