@@ -7,9 +7,12 @@ describe('cross-realm workspace content', () => {
 		const content = runInNewContext('new Uint8Array([1, 2, 3])') as Uint8Array;
 
 		expect(content instanceof Uint8Array).toBe(false);
-		expect(validateWorkspaceFiles([{ path: 'data.bin', content }])).toEqual([
-			{ path: 'data.bin', content }
-		]);
+		const files = validateWorkspaceFiles([{ path: 'data.bin', content }]);
+		expect(files[0].path).toBe('data.bin');
+		expect(Array.from(files[0].content)).toEqual([1, 2, 3]);
+		expect(files[0].content).not.toBe(content);
+		content.fill(9);
+		expect(Array.from(files[0].content)).toEqual([1, 2, 3]);
 	});
 
 	it('continues to reject non-byte typed-array views', () => {
