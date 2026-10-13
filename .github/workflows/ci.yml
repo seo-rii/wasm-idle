@@ -138,7 +138,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                shard: [stdin, llvm, workers, specialized, compressed-assets]
+                shard: [stdin, llvm, workers, specialized, compressed-assets, workspace]
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4

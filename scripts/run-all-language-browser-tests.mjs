@@ -18,6 +18,20 @@ const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
 const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.test.ts';
 const LONG_DOUBLE_TEST_FILE = 'src/lib/playground/long-double.playwright.test.ts';
 const PYTHON_TEST_FILE = 'src/lib/playground/python.playwright.test.ts';
+const WORKSPACE_TEST_FILES = [
+	'src/routes/workspace-archive.playwright.test.ts',
+	'src/routes/workspace-import.playwright.test.ts',
+	'src/routes/workspace-storage.playwright.test.ts',
+	'src/routes/workspace-identity.playwright.test.ts',
+	'src/routes/workspace-share-paths.playwright.test.ts',
+	'src/routes/workspace-banners.playwright.test.ts',
+	'src/routes/workspace-whitespace-paths.playwright.test.ts',
+	'src/routes/debugger-toolbar-layout.playwright.test.ts'
+];
+const WORKSPACE_BROWSER_ENV = {
+	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
+	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1'
+};
 const ESOLANG_TEST_FILE = 'src/lib/playground/esolangs.playwright.test.ts';
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
@@ -45,7 +59,8 @@ const BROWSER_TEST_ASSET_ENVIRONMENTS = {
 		'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
 		'WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS',
 		'WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE',
-		'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE'
+		'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE',
+		'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE'
 	],
 	clangd: ['WASM_IDLE_RUN_REAL_BROWSER_LSP'],
 	ocaml: ['WASM_IDLE_RUN_REAL_BROWSER_OCAML', 'WASM_IDLE_RUN_REAL_BROWSER_LSP'],
@@ -64,7 +79,7 @@ export function browserTestAssetGroups(plan) {
 }
 
 /**
- * @typedef {'stdin' | 'llvm' | 'workers' | 'specialized' | 'compressed-assets'} BrowserTestShard
+ * @typedef {'stdin' | 'llvm' | 'workers' | 'specialized' | 'compressed-assets' | 'workspace'} BrowserTestShard
  */
 
 /** @type {BrowserTestShard[]} */
@@ -73,7 +88,8 @@ export const ALL_LANGUAGE_BROWSER_TEST_SHARDS = [
 	'llvm',
 	'workers',
 	'specialized',
-	'compressed-assets'
+	'compressed-assets',
+	'workspace'
 ];
 
 /** @param {typeof import('./support-matrix.mjs').supportMatrixRows[number]} row */
@@ -98,7 +114,7 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
  * }} options
  * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
@@ -110,6 +126,7 @@ export function createAllLanguageBrowserTestPlan({
 } = {}) {
 	if (family) {
 		const families = {
+			workspace: { env: { ...WORKSPACE_BROWSER_ENV }, testFiles: [...WORKSPACE_TEST_FILES] },
 			go: {
 				env: { WASM_IDLE_RUN_REAL_BROWSER_GO: '1' },
 				testFiles: ['src/lib/playground/go.playwright.test.ts']
@@ -176,6 +193,10 @@ export function createAllLanguageBrowserTestPlan({
 	const testFiles = new Set();
 	/** @type {Record<string, string>} */
 	const env = {};
+	if (!shard || shard === 'workspace') {
+		for (const file of WORKSPACE_TEST_FILES) testFiles.add(file);
+		Object.assign(env, WORKSPACE_BROWSER_ENV);
+	}
 
 	for (const row of supportMatrixRows) {
 		if (!row.browserTest) continue;
@@ -305,7 +326,7 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
  *   useBuild?: boolean;
  * }} options
  * @param {{
@@ -378,7 +399,7 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
-	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python';
+	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
 	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
@@ -404,10 +425,21 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			options.useBuild = true;
 		} else if (arg.startsWith('--family=')) {
 			const family = arg.slice('--family='.length);
-			if (!['dotnet', 'nim', 'clang', 'debug', 'esolangs', 'go', 'python'].includes(family))
+			if (
+				![
+					'dotnet',
+					'nim',
+					'clang',
+					'debug',
+					'esolangs',
+					'go',
+					'python',
+					'workspace'
+				].includes(family)
+			)
 				throw new Error(`Unknown runtime browser family: ${family}`);
 			options.family =
-				/** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python'} */ (
+				/** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace'} */ (
 					family
 				);
 		} else {

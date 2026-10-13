@@ -53,6 +53,20 @@ describe('workspace ZIP browser integration', () => {
 				});
 				const context = await browser.newContext();
 				await addBrowserTestCookies(context, previewServer.browserUrl);
+				// ZIP and binary preservation are independent of language-server analysis.
+				await context.addInitScript(() => {
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'CPP',
+							activePath: 'main.cpp',
+							files: [{ path: 'main.cpp', content: 'int main() {}' }],
+							openTabs: ['main.cpp'],
+							lspEnabled: false
+						})
+					);
+				});
 				const page = await context.newPage();
 				const pageErrors: string[] = [];
 				page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -125,7 +139,8 @@ describe('workspace ZIP browser integration', () => {
 										content: 'data:application/wasm;base64,AGFzbQEAAAA='
 									}
 								],
-								openTabs: ['legacy.wasm']
+								openTabs: ['legacy.wasm'],
+								lspEnabled: false
 							})
 						);
 					});

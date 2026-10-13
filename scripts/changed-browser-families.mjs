@@ -2,7 +2,16 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const ALL_BROWSER_FAMILIES = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python'];
+const ALL_BROWSER_FAMILIES = [
+	'clang',
+	'debug',
+	'dotnet',
+	'esolangs',
+	'go',
+	'nim',
+	'python',
+	'workspace'
+];
 const PLAYGROUND_MODULE_FAMILIES = new Map();
 for (const [family, modules] of Object.entries({
 	clang: [
@@ -27,6 +36,27 @@ for (const [family, modules] of Object.entries({
 		'long-double'
 	],
 	debug: ['lldbSession', 'debug'],
+	workspace: [
+		'cachedClang',
+		'clangAssetIntegrity',
+		'clangStreamingPolicy',
+		'clangWorkerProtocol',
+		'assetBridge',
+		'compiledArtifactCache',
+		'clang-runtime-bundle',
+		'worker/clang',
+		'worker/cachedClangCompile',
+		'worker/cachedClangExecute',
+		'worker/clangStreaming',
+		'python',
+		'pythonPackageLock',
+		'worker/python',
+		'worker/pythonExecution',
+		'worker/pythonStdio',
+		'worker/pythonDebugPreview',
+		'worker/pythonWorkspaceFiles',
+		'worker/pythonWorkspaceImports'
+	],
 	dotnet: [
 		'dotnet',
 		'worker/dotnet',
@@ -102,6 +132,7 @@ for (const module of [
 PLAYGROUND_MODULE_FAMILIES.set('runtime-recovery', ['dotnet', 'nim']);
 
 const RUNTIME_DIRECTORIES = {
+	workspace: ['packages/llvm-core/', 'static/clang/', 'runtimes/pyodide/', 'static/pyodide/'],
 	clang: ['packages/llvm-core/', 'static/clang/', 'static/wasm-objectivec/'],
 	debug: ['packages/debug/', 'static/wasm-debug/'],
 	dotnet: ['runtimes/wasm-dotnet/', 'static/wasm-dotnet/'],
@@ -126,6 +157,14 @@ const RUNTIME_DIRECTORIES = {
 	]
 };
 const RUNTIME_SCRIPT_FAMILIES = {
+	workspace: [
+		'sync-wasm-clang',
+		'prepare-clangd-assets',
+		'clang-cpp-headers.lock',
+		'clang-resource-headers.lock',
+		'sync-pyodide',
+		'python-package-lock'
+	],
 	clang: [
 		'sync-wasm-clang',
 		'sync-wasm-objectivec',
@@ -155,6 +194,14 @@ const RUNTIME_SCRIPT_FAMILIES = {
 export function changedBrowserFamilies(files) {
 	const families = new Set();
 	for (const file of files) {
+		if (
+			/^src\/routes\/(?:workspace[^/]*|debugger-toolbar-layout\.playwright\.test)\.ts$/.test(
+				file
+			)
+		) {
+			families.add('workspace');
+			continue;
+		}
 		const playgroundModule = file.match(/^src\/lib\/playground\/(.+?)\.(?:[^/]+\.)?ts$/)?.[1];
 		for (const family of PLAYGROUND_MODULE_FAMILIES.get(playgroundModule) || [])
 			families.add(family);

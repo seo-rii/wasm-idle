@@ -17,12 +17,17 @@ describe('runtime browser CI selection', () => {
 			'esolangs',
 			'go',
 			'nim',
-			'python'
+			'python',
+			'workspace'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
-		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual(['clang']);
+		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual([
+			'clang',
+			'workspace'
+		]);
 		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual([
-			'clang'
+			'clang',
+			'workspace'
 		]);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
 	});
@@ -75,8 +80,8 @@ describe('runtime browser CI selection', () => {
 		);
 	});
 	it.each([
-		['src/lib/playground/worker/pythonWorkspaceFiles.ts', ['python']],
-		['src/lib/playground/worker/pythonWorkspaceImports.ts', ['python']],
+		['src/lib/playground/worker/pythonWorkspaceFiles.ts', ['python', 'workspace']],
+		['src/lib/playground/worker/pythonWorkspaceImports.ts', ['python', 'workspace']],
 		['src/lib/playground/staticWorkerRuntime.ts', ['nim']],
 		['src/lib/playground/staticStdinRing.ts', ['nim']]
 	] as const)('requires browser coverage for the execution dependency %s', (file, families) => {
@@ -87,8 +92,8 @@ describe('runtime browser CI selection', () => {
 
 	it.each([
 		['scripts/wasm-nim-assets.lock.json', ['nim']],
-		['scripts/clang-cpp-headers.lock.json', ['clang']],
-		['scripts/clang-resource-headers.lock.json', ['clang']],
+		['scripts/clang-cpp-headers.lock.json', ['clang', 'workspace']],
+		['scripts/clang-resource-headers.lock.json', ['clang', 'workspace']],
 		['scripts/wasm-debug-release.v2.json', ['debug']]
 	] as const)('requires browser coverage for the runtime metadata %s', (file, families) => {
 		expect(changedBrowserFamilies([file])).toEqual(families);
@@ -96,11 +101,11 @@ describe('runtime browser CI selection', () => {
 
 	it('requires the corresponding real browser family for the audited missing execution files', () => {
 		const cases: [string, string[]][] = [
-			['src/lib/playground/cachedClang.ts', ['clang']],
-			['src/lib/playground/worker/cachedClangCompile.ts', ['clang']],
-			['src/lib/playground/worker/cachedClangExecute.ts', ['clang']],
-			['src/lib/playground/worker/pythonExecution.ts', ['esolangs', 'python']],
-			['src/lib/playground/worker/pythonStdio.ts', ['esolangs', 'python']],
+			['src/lib/playground/cachedClang.ts', ['clang', 'workspace']],
+			['src/lib/playground/worker/cachedClangCompile.ts', ['clang', 'workspace']],
+			['src/lib/playground/worker/cachedClangExecute.ts', ['clang', 'workspace']],
+			['src/lib/playground/worker/pythonExecution.ts', ['esolangs', 'python', 'workspace']],
+			['src/lib/playground/worker/pythonStdio.ts', ['esolangs', 'python', 'workspace']],
 			['src/lib/playground/go.ts', ['go']],
 			['src/lib/playground/worker/go.ts', ['go']]
 		];
@@ -131,7 +136,7 @@ describe('runtime browser CI selection', () => {
 	});
 
 	it('covers all required families for shared execution layers and keeps docs out of the selection', () => {
-		const all = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python'];
+		const all = ['clang', 'debug', 'dotnet', 'esolangs', 'go', 'nim', 'python', 'workspace'];
 		for (const file of [
 			'src/lib/playground/runtimeSession.ts',
 			'src/lib/playground/sandbox.ts',
@@ -161,6 +166,21 @@ describe('runtime browser CI selection', () => {
 				'runtimes/wasm-go/src/browser-execution.ts'
 			])
 		).toEqual(['go']);
+	});
+	it.each([
+		'src/routes/workspace-archive.playwright.test.ts',
+		'src/routes/workspace-import.playwright.test.ts',
+		'src/routes/workspace-storage.playwright.test.ts',
+		'src/routes/workspace-identity.playwright.test.ts',
+		'src/routes/workspace-share-paths.playwright.test.ts',
+		'src/routes/workspace-banners.playwright.test.ts',
+		'src/routes/workspace-whitespace-paths.playwright.test.ts',
+		'src/routes/debugger-toolbar-layout.playwright.test.ts',
+		'src/routes/workspaceStorage.ts',
+		'src/routes/workspaceArchive.worker.ts'
+	])('selects one required workspace family for %s', (file) => {
+		expect(changedBrowserFamilies([file])).toEqual(['workspace']);
+		expect(createAllLanguageBrowserTestPlan({ family: 'workspace' }).testFiles).toHaveLength(8);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });
