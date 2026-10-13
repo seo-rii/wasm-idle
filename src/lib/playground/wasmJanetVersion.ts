@@ -22,8 +22,8 @@ export const WASM_JANET_RUNTIME_PROFILE = {
 export const WASM_JANET_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_JANET_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 21453,
-		sha256: 'cf081654226f8e2dcc2ac778bf95cc72bf9c27bd641bec0a10ab15e07103726d'
+		bytes: 21743,
+		sha256: 'f2b134d4d3cdf493e2eaadf4d46101e6fb27e24654302ee97630d4e4717a0230'
 	}
 });
 export const WASM_JANET_ASSET_VERSION = WASM_JANET_RUNTIME_PROFILE.manifestFingerprint;

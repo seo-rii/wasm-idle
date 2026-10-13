@@ -28,7 +28,7 @@ describe('StaticStdinRingHost', () => {
 
 		expect(host.descriptor).toMatchObject({
 			protocol: 'wasm-idle-static-stdin-ring',
-			protocolVersion: 1,
+			protocolVersion: 2,
 			capacity: 8,
 			controlBytes: 16
 		});
@@ -37,6 +37,14 @@ describe('StaticStdinRingHost', () => {
 		expect(Atomics.load(control, STATIC_STDIN_RING_READ_INDEX)).toBe(0);
 		expect([...data.subarray(0, 3)]).toEqual([0xc3, 0xa9, 0x41]);
 		expect(host.bufferedBytes).toBe(3);
+	});
+	it('keeps unread bytes valid across the signed counter boundary', () => {
+		const host = new StaticStdinRingHost({ capacity: 8, maxBufferedBytes: 16 });
+		const { control } = views(host);
+		Atomics.store(control, STATIC_STDIN_RING_WRITE_INDEX, 2 ** 31 - 2);
+		Atomics.store(control, STATIC_STDIN_RING_READ_INDEX, 2 ** 31 - 2);
+		host.enqueue('abcd');
+		expect(host.bufferedBytes).toBe(4);
 	});
 
 	it('keeps pending input bounded and publishes it after consumer progress', () => {
@@ -98,6 +106,9 @@ describe('StaticStdinRingHost', () => {
 	});
 
 	it('rejects invalid or internally inconsistent bounds', () => {
+		expect(
+			() => new StaticStdinRingHost({ capacity: 2 ** 31 + 1, maxBufferedBytes: 2 ** 31 + 1 })
+		).toThrow('Static stdin ring capacity must not exceed 2^31 bytes');
 		expect(() => new StaticStdinRingHost({ capacity: 0 })).toThrow(
 			'Static stdin ring capacity must be a positive safe integer'
 		);

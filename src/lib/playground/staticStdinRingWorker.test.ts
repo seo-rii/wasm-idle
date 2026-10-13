@@ -17,10 +17,17 @@ const readers = [
 ] as const;
 
 describe.each(readers)('$language shared stdin wakeup races', ({ language, factory, eof }) => {
-	it.each(['close', 'cancel'] as const)(
-		'observes %s between the state check and entering Atomics.wait',
-		async (operation) => {
-			const host = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 32 });
+	it.each(
+		(['close', 'cancel'] as const).flatMap((operation) =>
+			[0, 2 ** 31 - 2, Math.floor(2 ** 32 / 7) * 7 - 2].map((start) => ({ operation, start }))
+		)
+	)(
+		'observes $operation between the state check and entering Atomics.wait from counter $start',
+		async ({ operation, start }) => {
+			const host = new StaticStdinRingHost({ capacity: 7, maxBufferedBytes: 32 });
+			const control = new Int32Array(host.descriptor.buffer, 0, 4);
+			Atomics.store(control, 0, start);
+			Atomics.store(control, 1, start);
 			host.enqueue('68\n');
 			const gate = new Int32Array(new SharedArrayBuffer(4));
 			const source = await readFile(

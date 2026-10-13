@@ -13,6 +13,6 @@ export const WASM_FORTH_RUNTIME_PROFILE = {
 } as const;
 export const WASM_FORTH_ASSET_VERSION = WASM_FORTH_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_FORTH_RUNNER_RECEIPT = {
-	bytes: 11027,
-	sha256: '8687b1564fe91c027ba258b18acdce370745c0ac2aec35c7d02cf0421460b145'
+	bytes: 11317,
+	sha256: '7e54832ea9c4983bda8261dcde49b5968c626bf674792304d97ee200541ccbbd'
 } as const;

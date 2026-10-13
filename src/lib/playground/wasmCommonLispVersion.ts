@@ -27,7 +27,7 @@ export const WASM_COMMONLISP_PROFILE = {
 		}
 	},
 	workerReceipt: {
-		bytes: 11814,
-		sha256: '46b24c0fbde93dfaa71ddbce697d717c772ad8fd03f8486ad2102c41145606c6'
+		bytes: 12104,
+		sha256: 'd179242c40cdce862ff45bb35f736eaf8e79b97bdc06754576406ad4de698b7d'
 	}
 } as const;
