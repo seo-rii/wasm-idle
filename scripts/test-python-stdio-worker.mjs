@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const importsExports = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonWorkspaceImports.ts', import.meta.url), 'utf8')), { exports: importsExports });
 const workerPath = new URL('../src/lib/playground/worker/python.ts', import.meta.url);
 function transpile(source) {
 	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
@@ -20,6 +22,10 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 	let out;
 	const runtime = {
 		FS: { mkdirTree() {}, writeFile() {} },
+		runPython(source) {
+			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
+			return Object.assign(() => () => {}, { destroy() {} });
+		},
 		async loadPackagesFromImports() {},
 		setInterruptBuffer() {}, setStdin() {}, setStdout(value) { out = value; }, setStderr() {},
 		async runPythonAsync(source) {
@@ -35,6 +41,7 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 		TextEncoder, TextDecoder, URL, Blob, ArrayBuffer, SharedArrayBuffer, Int32Array, Uint8Array, Atomics,
 		require(id) {
 			if (id === './pythonStdio') return stdioExports;
+			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({
 				importSource: () => '',
 				async run(source, _filename, ready) { ready(); await runtime.runPythonAsync(source); }

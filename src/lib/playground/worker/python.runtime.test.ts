@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { vi } from 'vitest';
 
+vi.mock('./pythonWorkspaceImports', () => ({
+	createPythonWorkspaceImports: () => vi.fn()
+}));
+
 // Keep dispatch/asset/preparation cases unchanged. This boundary mock does not
 // replace the separate actual-Pyodide helper integration or executable regressions.
 vi.mock('./pythonExecution', () => ({
