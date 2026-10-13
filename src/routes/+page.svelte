@@ -226,7 +226,7 @@
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
-		lspEnabled = $state(false),
+		lspEnabled = $state(true),
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -238,6 +238,8 @@
 		stdinInput = $state(''),
 		init = $state(false),
 		editorLspStatus = $state<EditorLspStatusView | null>(null),
+		splitPane = $state<HTMLDivElement>(),
+		splitPaneWidth = $state(0),
 		examplePane = $state<HTMLElement | null>(null),
 		examplePaneWidth = $state(0),
 		terminalPaneWidth = $state<number | null>(null),
@@ -258,6 +260,45 @@
 	let activePath = $state(initialWorkspace.activePath);
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
+	let debugPanelOpen = $state({ variables: true, memory: true, watch: true, stack: true });
+	let languageMenuOpen = $state(false);
+	let languageQuery = $state('');
+	let languageHighlight = $state(0);
+	let languagePicker = $state<HTMLDivElement>();
+	let languageTrigger = $state<HTMLButtonElement>();
+	let languageSearchInput = $state<HTMLInputElement>();
+	let languageMenuList = $state<HTMLUListElement>();
+	const themeStorageKey = 'wasm-idle:theme';
+	let themePreference = $state<'light' | 'dark' | null>(null);
+	let systemDark = $state(false);
+	const darkMode = $derived(themePreference ? themePreference === 'dark' : systemDark);
+
+	$effect(() => {
+		const media = window.matchMedia('(prefers-color-scheme: dark)');
+		systemDark = media.matches;
+		try {
+			const stored = localStorage.getItem(themeStorageKey);
+			if (stored === 'light' || stored === 'dark') themePreference = stored;
+		} catch {
+			// Storage can be unavailable in private or sandboxed contexts.
+		}
+		const handleChange = (event: MediaQueryListEvent) => (systemDark = event.matches);
+		media.addEventListener('change', handleChange);
+		return () => media.removeEventListener('change', handleChange);
+	});
+
+	$effect(() => {
+		document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+	});
+
+	function toggleTheme() {
+		themePreference = darkMode ? 'light' : 'dark';
+		try {
+			localStorage.setItem(themeStorageKey, themePreference);
+		} catch {
+			// The theme still applies for this session.
+		}
+	}
 	let saveStatus = $state('Ready');
 	let manualShareUrl = $state('');
 	let unrestoredWorkspace = $state<string | null>(null);
@@ -505,17 +546,16 @@
 	const progressLabel = $derived(
 		progressStage || (runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime')
 	);
-	const examplePaneHorizontalPadding = 40;
-	const panelResizerWidth = 14;
+	const panelResizerWidth = 12;
+	const terminalFont =
+		"'JetBrains Mono', 'D2 coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 	const desktopExampleLayout = $derived(examplePaneWidth > 960);
 	const resizablePaneWidth = $derived(
-		desktopExampleLayout
-			? Math.max(0, examplePaneWidth - examplePaneHorizontalPadding - panelResizerWidth)
-			: examplePaneWidth
+		desktopExampleLayout ? Math.max(0, splitPaneWidth - panelResizerWidth) : examplePaneWidth
 	);
 	const minTerminalPaneWidth = $derived(
 		desktopExampleLayout
-			? Math.min(420, Math.max(320, Math.floor(resizablePaneWidth * 0.28)))
+			? Math.min(420, Math.max(300, Math.floor(resizablePaneWidth * 0.28)))
 			: 0
 	);
 	const maxTerminalPaneWidth = $derived(
@@ -525,9 +565,18 @@
 	);
 	const terminalPanePixelWidth = $derived.by(() => {
 		if (!desktopExampleLayout || !resizablePaneWidth) return null;
-		const fallbackWidth = Math.round(resizablePaneWidth * 0.5);
+		const fallbackWidth = Math.round(resizablePaneWidth * 0.42);
 		const requestedWidth = terminalPaneWidth ?? fallbackWidth;
 		return Math.min(Math.max(requestedWidth, minTerminalPaneWidth), maxTerminalPaneWidth);
+	});
+	// Keep the explorer open by default only when the editor and console still have room beside it.
+	let lastRoomyLayout: boolean | null = null;
+	$effect(() => {
+		if (!examplePaneWidth) return;
+		const roomy = examplePaneWidth > 1200;
+		if (roomy === lastRoomyLayout) return;
+		lastRoomyLayout = roomy;
+		sidebarOpen = roomy;
 	});
 	let availableRustTargetTriples = $state<RustTargetTriple[]>(['wasm32-wasip1', 'wasm32-wasip2']);
 	let availableGoTargets = $state<GoTarget[]>(['wasip1/wasm']);
@@ -989,6 +1038,63 @@
 		);
 		if (nextLanguage) switchLanguage(nextLanguage);
 	}
+
+	const compactSearchText = (text: string) => text.toLowerCase().replace(/[^a-z0-9#+]/g, '');
+	const filteredLanguages = $derived.by(() => {
+		const query = compactSearchText(languageQuery);
+		if (!query) return playgroundLanguages;
+		const matches = playgroundLanguages
+			.map((option) => {
+				const label = compactSearchText(languageLabels[option]);
+				const id = compactSearchText(option);
+				const rank = label.startsWith(query) || id.startsWith(query) ? 0 : 1;
+				return label.includes(query) || id.includes(query) ? { option, rank } : null;
+			})
+			.filter((match) => match !== null);
+		return matches.sort((left, right) => left.rank - right.rank).map((match) => match.option);
+	});
+
+	function openLanguageMenu() {
+		if (!workspaceInitialized) return;
+		languageQuery = '';
+		languageHighlight = Math.max(0, playgroundLanguages.indexOf(language));
+		languageMenuOpen = true;
+	}
+
+	function closeLanguageMenu(restoreFocus = false) {
+		languageMenuOpen = false;
+		if (restoreFocus) languageTrigger?.focus();
+	}
+
+	function chooseLanguage(nextLanguage: PlaygroundLanguage) {
+		closeLanguageMenu(true);
+		if (workspaceInitialized) switchLanguage(nextLanguage);
+	}
+
+	function handleLanguageSearchKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeLanguageMenu(true);
+		} else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (!filteredLanguages.length) return;
+			const step = event.key === 'ArrowDown' ? 1 : -1;
+			languageHighlight =
+				(languageHighlight + step + filteredLanguages.length) % filteredLanguages.length;
+		} else if (event.key === 'Enter') {
+			event.preventDefault();
+			const highlighted = filteredLanguages[languageHighlight];
+			if (highlighted) chooseLanguage(highlighted);
+		}
+	}
+
+	$effect(() => {
+		if (!languageMenuOpen) return;
+		languageSearchInput?.focus();
+		languageMenuList
+			?.querySelector(`[data-index="${languageHighlight}"]`)
+			?.scrollIntoView({ block: 'nearest' });
+	});
 
 	function uniquePath(requestedPath: string) {
 		const safePath = normalizeWorkspacePath(requestedPath) || 'untitled.txt';
@@ -2667,16 +2773,31 @@
 		rel="stylesheet"
 		crossorigin="anonymous"
 	/>
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+		rel="stylesheet"
+		crossorigin="anonymous"
+	/>
 </svelte:head>
 
 <svelte:window
 	onbeforeunload={warnUnsavedChanges}
+	onpointerdown={(event) => {
+		if (languageMenuOpen && !languagePicker?.contains(event.target as Node))
+			closeLanguageMenu();
+	}}
 	ondragover={handleDragOver}
 	ondragleave={() => (dragActive = false)}
 	ondrop={handleDrop}
 />
 
-<main bind:this={examplePane} bind:clientWidth={examplePaneWidth} class:drag-active={dragActive}>
+<main
+	bind:this={examplePane}
+	bind:clientWidth={examplePaneWidth}
+	class="ide"
+	class:drag-active={dragActive}
+	data-theme={darkMode ? 'dark' : 'light'}
+>
 	<input
 		bind:this={fileInput}
 		class="hidden-input"
@@ -2684,285 +2805,700 @@
 		onchange={handleUpload}
 		type="file"
 	/>
-	{#if sidebarOpen}
-		<button
-			aria-label="Close explorer"
-			class="sidebar-backdrop"
-			onclick={() => (sidebarOpen = false)}
-		></button>
-		<aside class="workspace-sidebar">
-			<header class="workspace-sidebar__header">
-				<div>
-					<span class="material-symbols-outlined">folder_open</span>
-					<strong>Explorer</strong>
-				</div>
-				<button aria-label="Close explorer" onclick={() => (sidebarOpen = false)}>
-					<span class="material-symbols-outlined">close</span>
-				</button>
-			</header>
-			<div class="workspace-files">
-				{#each sortedFiles as file (file.path)}
-					<button
-						class:active={file.path === activePath}
-						onclick={() => selectFile(file.path)}
-						title={file.path}
-					>
-						<span>{basename(file.path)}</span>
-						<small>{extension(file.path).replace('.', '') || 'txt'}</small>
-					</button>
-				{/each}
-			</div>
-			<div class="workspace-sidebar__actions">
-				<button onclick={newFile}>New</button>
-				<button onclick={renameActiveFile}>Rename</button>
-				<button onclick={duplicateActiveFile}>Duplicate</button>
-				<button onclick={deleteActiveFile}>Delete</button>
-				<button onclick={() => fileInput?.click()}>Upload</button>
-				<button onclick={downloadActiveFile}>Download</button>
-				<button onclick={downloadZip}>ZIP</button>
-				<button onclick={resetWorkspace}>Reset</button>
-			</div>
-		</aside>
-	{/if}
-	<div
-		class="terminal-pane"
-		style:width={terminalPanePixelWidth === null ? undefined : `${terminalPanePixelWidth}px`}
-	>
-		<section class="toolbar">
-			<div class="toolbar-row">
-				<div class="path-chip">
-					<span class="material-symbols-outlined">terminal</span>
-					<code>{path || '/'}</code>
-				</div>
-				<div class="action-group">
-					{#if runningMode === 'run'}
+	{#snippet consoleTail()}
+		{#snippet debugVariableRows(variables: DebugVariable[])}
+			{#each variables as variable, index (`${variable.name}:${index}`)}
+				{@const reference = variable.variablesReference || 0}
+				{@const children = debug.variablesByReference.get(reference)}
+				{@const childCount =
+					(variable.namedVariables ?? 0) + (variable.indexedVariables ?? 0)}
+				{@const loadingChildren = debug.loadingVariableReferences.has(reference)}
+				<li class="debug-entry debug-entry--local">
+					<div class="debug-entry__body">
+						<code class="debug-key">{variable.name}</code>
+						{#if variable.type}<span class="debug-variable-type">{variable.type}</span
+							>{/if}
+					</div>
+					<code class="debug-value">{variable.value}</code>
+					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
 						<button
-							class="action-button action-button--stop"
-							onclick={stopExecution}
-							disabled={executionStopPending}
+							class="debug-memory-inspect"
+							onclick={() => inspectDebugVariable(variable)}
+							aria-label={`Inspect memory for ${variable.name}`}
 						>
-							<span class="material-symbols-outlined">stop_circle</span>
-							<span>Stop Running</span>
+							<span class="material-symbols-outlined">memory</span>
 						</button>
-					{:else}
+					{/if}
+					{#if reference > 0}
 						<button
-							class="action-button action-button--run"
-							onclick={() => exec(false)}
-							disabled={runningMode === 'debug' || !executionAvailable}
+							class="debug-expand"
+							onclick={() => debug.loadMoreVariableChildren(variable)}
+							disabled={children !== undefined || loadingChildren}
+							aria-label={`Load children for ${variable.name}`}
+						>
+							<span class="material-symbols-outlined">
+								{children === undefined ? 'chevron_right' : 'expand_more'}
+							</span>
+						</button>
+					{/if}
+				</li>
+				{#if children?.length}
+					<li class="debug-variable-children">
+						<ul>{@render debugVariableRows(children)}</ul>
+						{#if (variable.indexedVariables ?? 0) > 0 && children.length < childCount}
+							<button
+								class="debug-load-scope"
+								onclick={() => debug.loadMoreVariableChildren(variable)}
+								disabled={loadingChildren}
+								aria-label={`Load more children for ${variable.name}`}
+							>
+								Load more ({children.length} / {childCount})
+							</button>
+						{/if}
+					</li>
+				{/if}
+			{/each}
+		{/snippet}
+		{#if debugLanguage && debug.active}
+			<section
+				class={[
+					'debug-shell',
+					debug.paused && 'debug-shell--paused',
+					debug.active && !debug.paused && 'debug-shell--active'
+				]}
+			>
+				<header class="debug-hero">
+					<div class="debug-hero__intro">
+						<div
+							class={[
+								'debug-status-pill',
+								debug.paused
+									? 'debug-status-pill--paused'
+									: debug.active
+										? 'debug-status-pill--active'
+										: 'debug-status-pill--idle'
+							]}
+						>
+							<span class="material-symbols-outlined">{debugStatusIcon}</span>
+							<span>{debugStatusLabel}</span>
+						</div>
+						<div class="debug-hero__copy">
+							<h2>{debugTitle}</h2>
+						</div>
+					</div>
+					<div class="debug-controls" role="group" aria-label="Debugger controls">
+						<button
+							class={[
+								'action-button',
+								'debug-control',
+								debug.paused && 'debug-control--primary'
+							]}
+							onclick={() => debug.sendCommand('continue')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Continue"
+							aria-label="Continue"
 						>
 							<span class="material-symbols-outlined">play_arrow</span>
-							<span>Run</span>
-						</button>
-					{/if}
-					{#if runningMode === 'debug'}
-						<button
-							class="action-button action-button--debug-restart"
-							onclick={restartDebugExecution}
-							disabled={restartDebugPending || executionStopPending}
-							aria-label="Restart Debug"
-						>
-							<span class="material-symbols-outlined">restart_alt</span>
-							<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
+							<span class="debug-control__label">Continue</span>
 						</button>
 						<button
-							class="action-button action-button--stop"
-							onclick={stopExecution}
-							disabled={executionStopPending || restartDebugPending}
+							class="action-button debug-control"
+							onclick={() => debug.pause()}
+							disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
+							title="Pause"
+							aria-label="Pause"
 						>
-							<span class="material-symbols-outlined">stop_circle</span>
-							<span>Stop Debug</span>
+							<span class="material-symbols-outlined">pause</span>
 						</button>
-					{:else}
+						<span class="debug-controls__divider" aria-hidden="true"></span>
 						<button
-							class="action-button action-button--debug"
-							onclick={() => exec(true)}
-							disabled={!!runningMode ||
-								!debugLanguage ||
-								!sharedBufferAvailable ||
-								!debugTargetAvailable}
-							title={debugUnavailableReason}
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('nextLine')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Next Line"
+							aria-label="Next Line"
 						>
-							<span class="material-symbols-outlined">bug_report</span>
-							<span>Debug</span>
+							<span class="material-symbols-outlined">redo</span>
 						</button>
-					{/if}
-					<button
-						class="action-button action-button--icon"
-						onclick={sendTerminalEof}
-						disabled={!runningMode}
-						title="Send EOF"
-						aria-label="Send EOF"
-					>
-						<span class="material-symbols-outlined">keyboard_tab_rtl</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => debug.pause()}
-						disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
-						title="Pause"
-						aria-label="Pause"
-					>
-						<span class="material-symbols-outlined">pause</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => debug.sendCommand('continue')}
-						disabled={!debug.paused || dataBreakpointLoading}
-						title="Continue"
-						aria-label="Continue"
-					>
-						<span class="material-symbols-outlined">skip_next</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => runToCursorWhileDataBreakpointIdle()}
-						disabled={!debug.canRunToCursor || dataBreakpointLoading}
-						title={debug.cursorLine
-							? `Run to Cursor (L${debug.cursorLine})`
-							: 'Run to Cursor'}
-						aria-label={debug.cursorLine
-							? `Run to Cursor (L${debug.cursorLine})`
-							: 'Run to Cursor'}
-					>
-						<span class="material-symbols-outlined">play_circle</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => debug.sendCommand('stepInto')}
-						disabled={!debug.paused || dataBreakpointLoading}
-						title="Step Into"
-						aria-label="Step Into"
-					>
-						<span class="material-symbols-outlined">login</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => debug.sendCommand('nextLine')}
-						disabled={!debug.paused || dataBreakpointLoading}
-						title="Next Line"
-						aria-label="Next Line"
-					>
-						<span class="material-symbols-outlined">redo</span>
-					</button>
-					<button
-						class="action-button action-button--icon"
-						onclick={() => debug.sendCommand('stepOut')}
-						disabled={!debug.paused || dataBreakpointLoading}
-						title="Step Out"
-						aria-label="Step Out"
-					>
-						<span class="material-symbols-outlined">logout</span>
-					</button>
-				</div>
-			</div>
-			{#if !sharedBufferAvailable || preloadedStdinLanguages.has(language)}
-				<div class="stdin-panel">
-					<div>
-						<strong>Preloaded stdin</strong>
-						<span>
-							{language === 'BASH'
-								? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-								: language === 'POSTGRESQL'
-									? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-									: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
-						</span>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('stepInto')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Step Into"
+							aria-label="Step Into"
+						>
+							<span class="material-symbols-outlined">login</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => debug.sendCommand('stepOut')}
+							disabled={!debug.paused || dataBreakpointLoading}
+							title="Step Out"
+							aria-label="Step Out"
+						>
+							<span class="material-symbols-outlined">logout</span>
+						</button>
+						<button
+							class="action-button debug-control"
+							onclick={() => runToCursorWhileDataBreakpointIdle()}
+							disabled={!debug.canRunToCursor || dataBreakpointLoading}
+							title={debug.cursorLine
+								? `Run to Cursor (L${debug.cursorLine})`
+								: 'Run to Cursor'}
+							aria-label={debug.cursorLine
+								? `Run to Cursor (L${debug.cursorLine})`
+								: 'Run to Cursor'}
+						>
+							<span class="material-symbols-outlined">play_circle</span>
+						</button>
 					</div>
-					<textarea
-						bind:value={stdinInput}
-						placeholder="Input to pass before running"
-						spellcheck={false}></textarea>
+				</header>
+				<div class="debug-hero__stats">
+					<div class="debug-metric">
+						<span>Breakpoints</span>
+						<strong>
+							{debug.resolvedBreakpoints.length
+								? `${debug.resolvedBreakpoints.filter((breakpoint) => breakpoint.verified).length}/${debug.resolvedBreakpoints.length}`
+								: debug.breakpoints.length}
+						</strong>
+					</div>
+					<div class="debug-metric">
+						<span>Watches</span>
+						<strong>{debug.watchExpressions.length}</strong>
+					</div>
+					<div class="debug-metric">
+						<span>Line</span>
+						<strong>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong>
+					</div>
+					{#if debug.paused && debug.threadId !== null}
+						<div class="debug-metric">
+							<span>Thread</span>
+							<strong>{debug.threadId}</strong>
+						</div>
+					{/if}
+					{#if debug.paused && debug.stoppedReason}
+						<div class="debug-metric">
+							<span>Reason</span>
+							<strong>{debug.stoppedReason}</strong>
+						</div>
+					{/if}
+					{#if debug.paused && debug.sourceRevisionStale}
+						<div
+							class="debug-metric"
+							title="The editor source changed after this debug session started."
+						>
+							<span>Source</span>
+							<strong>Changed</strong>
+						</div>
+					{/if}
 				</div>
-			{/if}
-			{#if unrestoredWorkspace !== null}
-				<div class="workspace-save-error" role="alert" data-workspace-recovery>
-					<span>
-						Stored workspace could not be restored. The original snapshot is kept;
-						automatic saving is paused.
-					</span>
-					<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button
-					>
-					<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
+				<div class="debug-panels">
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.variables}
+								aria-controls="debug-panel-variables"
+								onclick={() =>
+									(debugPanelOpen.variables = !debugPanelOpen.variables)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle variables</span>
+							</button>
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">data_object</span>
+								<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
+							</div>
+							<span class="debug-count">
+								{debug.scopes.length
+									? debug.scopes.reduce(
+											(total, scope) =>
+												total +
+												(
+													debug.variablesByReference.get(
+														scope.variablesReference
+													) ?? scope.variables
+												).length,
+											0
+										)
+									: debug.locals.length}
+							</span>
+						</header>
+						{#if debugPanelOpen.variables}
+							<div class="debug-panel__body" id="debug-panel-variables">
+								{#if debug.scopes.length}
+									<div class="debug-scopes">
+										{#each debug.scopes as scope (scope.variablesReference)}
+											{@const loadedScopeVariables =
+												scope.variables.length > 0
+													? scope.variables
+													: debug.variablesByReference.get(
+															scope.variablesReference
+														)}
+											<details
+												class="debug-scope"
+												bind:open={
+													() => debugScopeOpen[scope.name] ?? true,
+													(open) => (debugScopeOpen[scope.name] = open)
+												}
+											>
+												<summary><h4>{scope.name}</h4></summary>
+												{#if loadedScopeVariables?.length}
+													<ul>
+														{@render debugVariableRows(
+															loadedScopeVariables
+														)}
+													</ul>
+													{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
+														<button
+															class="debug-load-scope"
+															disabled={debug.loadingVariableReferences.has(
+																scope.variablesReference
+															)}
+															onclick={() =>
+																debug.loadVariableChildren(
+																	scope.variablesReference,
+																	loadedScopeVariables.length,
+																	50
+																)}
+														>
+															Load more {scope.name.toLowerCase()}
+														</button>
+													{/if}
+												{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
+													<button
+														class="debug-load-scope"
+														disabled={debug.loadingVariableReferences.has(
+															scope.variablesReference
+														)}
+														onclick={() =>
+															debug.loadVariableChildren(
+																scope.variablesReference
+															)}
+													>
+														Load {scope.name.toLowerCase()}
+													</button>
+												{:else}
+													<p class="empty">No variables</p>
+												{/if}
+											</details>
+										{/each}
+									</div>
+								{:else if debug.locals.length}
+									<ul>
+										{@render debugVariableRows(debug.locals)}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No locals yet</span>
+									</p>
+								{/if}
+							</div>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.watch}
+								aria-controls="debug-panel-watch"
+								onclick={() => (debugPanelOpen.watch = !debugPanelOpen.watch)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle watch</span>
+							</button>
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">visibility</span>
+								<h3>Watch</h3>
+							</div>
+							<span class="debug-count">{debug.watchExpressions.length}</span>
+						</header>
+						{#if debugPanelOpen.watch}
+							<div class="debug-panel__body" id="debug-panel-watch">
+								<div class="watch-row">
+									<input
+										bind:value={debug.watchInput}
+										maxlength={4096}
+										placeholder="pair.first or items[2]"
+										onkeydown={(event) =>
+											event.key === 'Enter' && debug.addWatchExpression()}
+									/>
+									<button
+										class="watch-add"
+										onclick={() => debug.addWatchExpression()}
+									>
+										<span class="material-symbols-outlined">add</span>
+										<span>Add</span>
+									</button>
+								</div>
+								{#if debug.watchValues.length}
+									<ul>
+										{#each debug.watchValues as watch (watch.expression)}
+											<li class="debug-entry debug-entry--watch">
+												<div class="debug-entry__body">
+													<span class="debug-expression"
+														>{watch.expression}</span
+													>
+													<code class="debug-value">{watch.value}</code>
+												</div>
+												<button
+													class="remove"
+													onclick={() =>
+														debug.removeWatchExpression(
+															watch.expression
+														)}
+													aria-label={`Remove watch expression ${watch.expression}`}
+												>
+													<span class="material-symbols-outlined"
+														>close</span
+													>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No watches yet</span>
+									</p>
+								{/if}
+							</div>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<button
+								class="debug-panel__toggle"
+								aria-expanded={debugPanelOpen.stack}
+								aria-controls="debug-panel-stack"
+								onclick={() => (debugPanelOpen.stack = !debugPanelOpen.stack)}
+							>
+								<span
+									class="material-symbols-outlined debug-panel__chevron"
+									aria-hidden="true">expand_more</span
+								>
+								<span class="visually-hidden">Toggle call stack</span>
+							</button>
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">layers</span>
+								<h3>Call Stack</h3>
+							</div>
+							<span class="debug-count">{debug.callStack.length}</span>
+						</header>
+						{#if debugPanelOpen.stack}
+							<div class="debug-panel__body" id="debug-panel-stack">
+								{#if debug.callStack.length}
+									<ul>
+										{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}:${index}`)}
+											<li
+												class={[
+													'debug-entry',
+													'debug-entry--stack',
+													debug.frameId === frame.id &&
+														'debug-entry--current'
+												]}
+											>
+												<button
+													class="debug-frame-select"
+													data-frame-id={frame.id}
+													{@attach observeDebugFrame(frame.id)}
+													disabled={!frame.id || dataBreakpointLoading}
+													onclick={() => selectDebugFrame(frame)}
+												>
+													<div class="stack-meta">
+														<span class="stack-order">{index + 1}</span>
+														<span class="stack-function"
+															>{frame.displayName ??
+																(frame.argumentsSummary ===
+																undefined
+																	? frame.functionName ||
+																		'(entry)'
+																	: `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
+														>
+													</div>
+													<code class="stack-line">L{frame.line}</code>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="empty">
+										<span class="material-symbols-outlined">info</span>
+										<span>No frames yet</span>
+									</p>
+								{/if}
+							</div>
+						{/if}
+					</section>
+					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
+						<section class="debug-panel debug-memory-panel">
+							<header class="debug-panel__header">
+								<button
+									class="debug-panel__toggle"
+									aria-expanded={debugPanelOpen.memory}
+									aria-controls="debug-panel-memory"
+									onclick={() => (debugPanelOpen.memory = !debugPanelOpen.memory)}
+								>
+									<span
+										class="material-symbols-outlined debug-panel__chevron"
+										aria-hidden="true">expand_more</span
+									>
+									<span class="visually-hidden">Toggle memory</span>
+								</button>
+								<div class="debug-panel__title">
+									<span class="material-symbols-outlined">memory</span>
+									<h3>Memory</h3>
+								</div>
+								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
+							</header>
+							{#if debugPanelOpen.memory}
+								<div class="debug-panel__body" id="debug-panel-memory">
+									<div class="debug-memory-controls">
+										<label>
+											<span>Reference</span>
+											<input
+												bind:value={memoryReference}
+												aria-label="Memory reference"
+											/>
+										</label>
+										<label>
+											<span>Offset</span>
+											<input
+												bind:value={memoryOffsetInput}
+												aria-label="Memory offset"
+											/>
+										</label>
+										<label>
+											<span>Bytes</span>
+											<input
+												bind:value={memoryCountInput}
+												inputmode="numeric"
+												aria-label="Memory byte count"
+											/>
+										</label>
+										{#if debug.capabilities.readMemory}
+											<button
+												class="debug-memory-read"
+												onclick={() => void readDebugMemoryPage()}
+												disabled={memoryLoading}
+											>
+												{memoryLoading ? 'Reading…' : 'Read'}
+											</button>
+										{/if}
+									</div>
+									{#if debug.capabilities.writeMemory}
+										<div class="debug-memory-watch-controls">
+											<label class="debug-memory-write-field">
+												<span>Write hex bytes</span>
+												<input
+													bind:value={memoryWriteInput}
+													placeholder="64 00 00 00"
+													aria-label="Memory write bytes"
+												/>
+											</label>
+											<button
+												class="debug-memory-write"
+												onclick={() => void writeDebugMemoryPage()}
+												disabled={memoryLoading}
+												aria-label="Write memory"
+											>
+												{memoryLoading ? 'Writing…' : 'Write memory'}
+											</button>
+										</div>
+									{/if}
+									{#if debug.capabilities.writeMemory && memoryWriteStatus}
+										<p class="debug-memory-write-status">
+											<strong
+												>{memoryWriteStatus.bytesWritten} bytes written</strong
+											>
+											{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
+												<span
+													>of {memoryWriteStatus.requestedBytes} requested</span
+												>
+											{/if}
+										</p>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints}
+										<div class="debug-memory-watch-controls">
+											<label>
+												<span>Break on</span>
+												<select
+													bind:value={dataBreakpointAccessType}
+													disabled={dataBreakpointLoading}
+													aria-label="Data breakpoint access"
+												>
+													<option value="write">Write</option>
+													<option value="read">Read</option>
+													<option value="readWrite">Read or write</option>
+												</select>
+											</label>
+											<button
+												class="debug-data-breakpoint-set"
+												onclick={() => void setMemoryDataBreakpoint()}
+												disabled={dataBreakpointLoading}
+												aria-label="Set data breakpoint"
+											>
+												{dataBreakpointLoading && !activeDataBreakpoint
+													? 'Setting…'
+													: 'Set data breakpoint'}
+											</button>
+											{#if activeDataBreakpoint}
+												<button
+													class="debug-data-breakpoint-clear"
+													onclick={() => void clearMemoryDataBreakpoint()}
+													disabled={dataBreakpointLoading}
+													aria-label="Clear data breakpoint"
+												>
+													Clear
+												</button>
+											{/if}
+										</div>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
+										<p class="debug-data-breakpoint-status">
+											<strong>{activeDataBreakpoint.accessType}</strong>
+											<span>{activeDataBreakpoint.description}</span>
+										</p>
+									{/if}
+									{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
+										<p class="debug-memory-error" role="alert">
+											{dataBreakpointError}
+										</p>
+									{/if}
+									{#if memoryError}
+										<p class="debug-memory-error" role="alert">{memoryError}</p>
+									{/if}
+									{#if debug.capabilities.readMemory && memoryResult}
+										<div class="debug-memory-toolbar">
+											<button onclick={() => void readDebugMemoryPage(-1)}
+												>Previous</button
+											>
+											<code
+												>{memoryResult.address ??
+													memoryResult.memoryReference}</code
+											>
+											<button onclick={() => void readDebugMemoryPage(1)}
+												>Next</button
+											>
+										</div>
+										<div
+											class="debug-memory-table"
+											role="table"
+											aria-label="Memory contents"
+										>
+											{#each memoryRows as row (row.offset)}
+												<div class="debug-memory-row" role="row">
+													<code class="debug-memory-address">
+														{memoryResult.address ??
+															memoryResult.memoryReference}
+														{#if row.offset > 0}+0x{row.offset.toString(
+																16
+															)}{/if}
+													</code>
+													<div class="debug-memory-hex" role="cell">
+														{#each row.bytes as byte, index (index)}
+															{#if byte === null}
+																<code
+																	class="debug-memory-byte debug-memory-byte--unreadable"
+																	>??</code
+																>
+															{:else}
+																<code class="debug-memory-byte"
+																	>{byte
+																		.toString(16)
+																		.padStart(2, '0')}</code
+																>
+															{/if}
+														{/each}
+													</div>
+													<div role="cell">
+														<code class="debug-memory-ascii"
+															>{row.ascii}</code
+														>
+													</div>
+												</div>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</section>
+					{/if}
 				</div>
-			{/if}
-			{#if workspaceSaveState.phase === 'error'}
-				<div class="workspace-save-error" role="alert">
-					<span
-						>Not saved locally. Keep this tab open and retry or download a workspace
-						backup.</span
-					>
-					<button onclick={() => saveWorkspace(true)}>Retry save</button>
-					<button onclick={downloadWorkspaceBackup}>Export workspace</button>
-				</div>
-			{/if}
-			<div class="toolbar-row toolbar-row--secondary">
-				{#if manualShareUrl}
-					<label class="args-chip">
-						<span>Share URL</span>
-						<input
-							aria-label="Share URL"
-							value={manualShareUrl}
-							readonly
-							onfocus={(event) => event.currentTarget.select()}
-							onclick={(event) => event.currentTarget.select()}
+			</section>
+		{/if}
+		<div class="terminal-shell">
+			<Terminal
+				bind:terminal
+				{playground}
+				font={terminalFont}
+				dark={darkMode}
+				ondebug={onDebugEvent}
+				oncompilediagnostic={onCompileDiagnostic}
+			/>
+		</div>
+	{/snippet}
+	<header class="topbar">
+		<div class="topbar__lead">
+			<button
+				class="icon-button"
+				class:icon-button--active={sidebarOpen}
+				onclick={() => (sidebarOpen = !sidebarOpen)}
+				title={sidebarOpen ? 'Hide files' : 'Show files'}
+				aria-label={sidebarOpen ? 'Hide files' : 'Show files'}
+				aria-pressed={sidebarOpen}
+			>
+				<span class="material-symbols-outlined" aria-hidden="true">dock_to_right</span>
+			</button>
+			<div class="brand">
+				<span class="brand__mark" aria-hidden="true">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+						<path
+							d="M9 7 4 12l5 5M15 7l5 5-5 5"
+							stroke="currentColor"
+							stroke-width="2.4"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						/>
-					</label>
-					<button class="tool-button" onclick={() => (manualShareUrl = '')}
-						>Close share URL</button
+					</svg>
+				</span>
+				<strong>wasm-idle</strong>
+			</div>
+			<span class="topbar__divider" aria-hidden="true"></span>
+			<div class="topbar__config">
+				<div class="language-picker" bind:this={languagePicker}>
+					<button
+						bind:this={languageTrigger}
+						class="select-chip language-trigger"
+						type="button"
+						disabled={!workspaceInitialized}
+						aria-haspopup="listbox"
+						aria-expanded={languageMenuOpen}
+						aria-label={`Language: ${languageLabels[language]}`}
+						onclick={() =>
+							languageMenuOpen ? closeLanguageMenu() : openLanguageMenu()}
 					>
-				{/if}
-				<button class="tool-button" onclick={() => (sidebarOpen = !sidebarOpen)}>
-					<span class="material-symbols-outlined">folder_open</span>
-					<span>Files</span>
-				</button>
-				<button class="tool-button" onclick={() => saveWorkspace(true)}>
-					<span class="material-symbols-outlined">save</span>
-					<span>Save</span>
-				</button>
-				<button
-					class="tool-button"
-					onclick={restartRuntime}
-					disabled={!terminal || !!runningMode || !executionAvailable}
-					title="Restart runtime"
-				>
-					<span class="material-symbols-outlined">restart_alt</span>
-					<span>Restart Runtime</span>
-				</button>
-				<button class="tool-button" onclick={shareWorkspace}>
-					<span class="material-symbols-outlined">share</span>
-					<span>Share</span>
-				</button>
-				{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
-					<a
-						class="tool-button"
-						href={resolve('/')}
-						data-sveltekit-reload
-						title="Open your original local workspace"
-					>
-						Local workspace
-					</a>
-				{/if}
-				<label class="toggle-chip" for="log-toggle">
-					<input id="log-toggle" type="checkbox" bind:checked={log} />
-					<span class="material-symbols-outlined">notes</span>
-					<span>Log</span>
-				</label>
-				<label
-					class="toggle-chip"
-					for="prewarm-toggle"
-					title="Prepare the selected runtime during idle time. Does not run your code."
-				>
-					<input id="prewarm-toggle" type="checkbox" bind:checked={prewarmEnabled} />
-					<span>Prewarm</span>
-				</label>
-				<label class="toggle-chip" for="lsp-toggle">
-					<input id="lsp-toggle" type="checkbox" bind:checked={lspEnabled} />
-					<span class="material-symbols-outlined">hub</span>
-					<span>LSP</span>
-				</label>
-				<label class="select-chip">
-					<span class="material-symbols-outlined">code_blocks</span>
+						<span class="material-symbols-outlined" aria-hidden="true">code_blocks</span
+						>
+						<span class="language-trigger__label">{languageLabels[language]}</span>
+						<span
+							class="material-symbols-outlined language-trigger__chevron"
+							aria-hidden="true">expand_more</span
+						>
+					</button>
+					<!-- The native select stays the source of truth for automation and form semantics. -->
 					<select
 						id="language-select"
+						class="language-picker__native"
+						tabindex="-1"
+						aria-hidden="true"
 						value={language}
 						disabled={!workspaceInitialized}
 						data-workspace-ready={workspaceInitialized}
@@ -2972,7 +3508,68 @@
 							<option value={languageOption}>{languageLabels[languageOption]}</option>
 						{/each}
 					</select>
-				</label>
+					{#if languageMenuOpen}
+						<div class="language-menu">
+							<div class="language-menu__search">
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>search</span
+								>
+								<input
+									bind:this={languageSearchInput}
+									bind:value={languageQuery}
+									oninput={() => (languageHighlight = 0)}
+									onkeydown={handleLanguageSearchKeydown}
+									type="search"
+									role="combobox"
+									aria-label="Search languages"
+									aria-expanded="true"
+									aria-controls="language-menu-list"
+									aria-activedescendant={filteredLanguages[languageHighlight]
+										? `language-option-${filteredLanguages[languageHighlight]}`
+										: undefined}
+									placeholder="Search languages"
+									autocomplete="off"
+									spellcheck={false}
+								/>
+								<span class="language-menu__count">{filteredLanguages.length}</span>
+							</div>
+							<ul
+								bind:this={languageMenuList}
+								id="language-menu-list"
+								class="language-menu__list"
+								role="listbox"
+								aria-label="Languages"
+							>
+								{#each filteredLanguages as languageOption, index (languageOption)}
+									<!-- Keyboard selection goes through the combobox input (aria-activedescendant). -->
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<li
+										id={`language-option-${languageOption}`}
+										role="option"
+										aria-selected={languageOption === language}
+										data-index={index}
+										class:highlighted={index === languageHighlight}
+										onpointermove={() => (languageHighlight = index)}
+										onpointerdown={(event) => event.preventDefault()}
+										onclick={() => chooseLanguage(languageOption)}
+									>
+										<span>{languageLabels[languageOption]}</span>
+										{#if languageOption === language}
+											<span
+												class="material-symbols-outlined"
+												aria-hidden="true">check</span
+											>
+										{/if}
+									</li>
+								{:else}
+									<li class="language-menu__empty" role="presentation">
+										No languages match “{languageQuery}”
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+				</div>
 				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
@@ -3039,1124 +3636,1179 @@
 					{/if}
 				{/if}
 			</div>
-			{#if loading}
-				<div class="progress-shell" aria-live="polite">
-					<div class="progress-copy">
-						<div class="progress-copy__text">
-							<span class="material-symbols-outlined">hourglass_top</span>
-							<strong>{progressLabel}</strong>
-						</div>
-						{#if !progressIndeterminate}
-							<span class="progress-percent">{progressPercent}%</span>
-						{/if}
-					</div>
-					<div
-						class="progress-track"
-						class:progress-track--indeterminate={progressIndeterminate}
-						role="progressbar"
-						aria-label={progressLabel}
-						aria-valuemin={0}
-						aria-valuemax={100}
-						aria-valuenow={progressIndeterminate ? undefined : progressPercent}
-						aria-valuetext={progressIndeterminate
-							? progressLabel
-							: `${progressPercent}%`}
-						data-progress-mode={progressIndeterminate ? 'indeterminate' : 'determinate'}
-					>
-						<div
-							class="progress-fill"
-							style={progressIndeterminate
-								? undefined
-								: `transform: scaleX(${progressValue})`}
-						></div>
-					</div>
-				</div>
-			{/if}
-		</section>
-		{#if language === 'JAVA'}
-			<p class="hint">Run after that type into the terminal below and press Enter.</p>
-		{/if}
-		{#if language === 'RUST'}
-			<p class="hint">
-				Type into the terminal below and press Enter to send a line. The selector only shows
-				Rust targets advertised by the bundled wasm-rust runtime manifest. `wasm32-wasip1`
-				uses preview1 core wasm. {#if availableRustTargetTriples.includes('wasm32-wasip2')}
-					`wasm32-wasip2` uses preview2 component execution.
-				{/if}
-				{#if availableRustTargetTriples.includes('wasm32-wasip3')}
-					`wasm32-wasip3` is only shown for the current transitional component path while
-					upstream Rust still requires the documented libc patch.
-				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'GO'}
-			<p class="hint">
-				Go uses the bundled `wasm-go` browser compiler runtime. The selector only shows Go
-				targets advertised by the bundled runtime manifest. `wasip1/wasm` runs as preview1
-				core wasm. {#if availableGoTargets.includes('wasip2/wasm')}
-					`wasip2/wasm` follows the bundled runtime manifest and currently still maps to
-					the preview1 core backend in the official Go bundle until upstream Go ships a
-					native preview2 port.
-				{/if}
-				{#if availableGoTargets.includes('wasip3/wasm')}
-					`wasip3/wasm` is only shown when the runtime bundle advertises the transitional
-					preview3 path.
-				{/if}
-				{#if availableGoTargets.includes('js/wasm')}
-					`js/wasm` runs through the bundled `wasm_exec.js` browser host.
-				{/if}
-				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button while
-				running if the program reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'TINYGO'}
-			<p class="hint">
-				TinyGo 0.40.1 compiles locally through the receipt-verified upstream toolchain for
-				`wasip1`. Compilation, package discovery, linking, and optimization run in a
-				disposable worker with phase and WebAssembly memory limits. Add `vendor/modules.txt`
-				to use offline vendored modules; network module downloads remain disabled.
-			</p>
-		{/if}
-		{#if language === 'D'}
-			<p class="hint">
-				D compiles in the browser with the bundled LDC WASI compiler and Emscripten LLD
-				linker assets, then executes the emitted WASI artifact locally. Pass CLI args here,
-				type into the terminal below, and use Ctrl+D or the EOF button if the program reads
-				stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET'}
-			<p class="hint">
-				{language === 'CSHARP' ? 'C#' : language === 'VBNET' ? 'VB.NET' : 'F#'} uses a `wasm-dotnet`
-				browser runtime module plus its bundled static .NET `browser-wasm` compiler app. The page
-				loads `runtime/dotnet.js`, compiles in the browser, and runs the generated assembly in
-				the same runtime. Pass CLI args here; terminal input submitted before or during preparation
-				is passed to `Console.In`.
-			</p>
-		{/if}
-		{#if language === 'OCAML'}
-			<p class="hint">
-				OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain. The backend
-				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. Binaryen fast is the
-				default low-memory wasm path; Binaryen full runs the original static `wasm-metadce`
-				and `wasm-opt` passes. The current playground path focuses on browser
-				compile-and-run for standalone source files. Type into the terminal below and press
-				Enter to send a line; use Ctrl+D or the EOF button while running if the program
-				reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'ELIXIR'}
-			<p class="hint">
-				Elixir runs through a bundled Popcorn evaluator. Each run boots a fresh `.avm`
-				bundle, evaluates the editor contents with `Code.eval_string`, streams stdout and
-				stderr into the terminal, and prints the final expression as `=&gt; ...`. Type into
-				the terminal below and press Enter to send stdin. CLI args are still disabled.
-			</p>
-		{/if}
-		{#if language === 'ERLANG'}
-			<p class="hint">
-				Erlang runs through the bundled Popcorn/AtomVM evaluator. Expression files use
-				`erl_eval`, module files compile with the bundled Erlang compiler and then call
-				`main/0`. Use `io:get_line("")` or `io:get_chars("", N)` for stdin.
-			</p>
-		{/if}
-		{#if language === 'PROLOG'}
-			<p class="hint">
-				Prolog runs through bundled SWI-Prolog WebAssembly assets. Define `main/0` to run
-				after consult; use `read_line_to_string(user_input, Line)` for line input.
-			</p>
-		{/if}
-		{#if language === 'GLEAM'}
-			<p class="hint">
-				Gleam compiles in the browser with the bundled Gleam WebAssembly compiler and runs
-				the JavaScript target output locally. Import `wasm_idle/stdin` for line input.
-			</p>
-		{/if}
-		{#if language === 'GRAIN'}
-			<p class="hint">
-				Grain 0.7.2 compiles in the browser with the upstream js_of_ocaml compiler and runs
-				the emitted WASI module locally. Read input with `File.fdRead(File.stdin, n)` from
-				`wasi/file`; send Ctrl+D or use the EOF button to finish input.
-			</p>
-		{/if}
-		{#if language === 'PERL'}
-			<p class="hint">
-				Perl runs through bundled WebPerl WebAssembly assets. Use `&lt;STDIN&gt;` for line
-				input and pass CLI args here.
-			</p>
-		{/if}
-		{#if language === 'TCL'}
-			<p class="hint">
-				Tcl runs through bundled Wacl WebAssembly assets. Use `gets stdin line` for line
-				input and read CLI args from `$argv`.
-			</p>
-		{/if}
-		{#if language === 'AWK'}
-			<p class="hint">
-				AWK runs through bundled GoAWK WebAssembly assets. Input records are read from stdin
-				by default; CLI args are exposed through `ARGV` and `var=value` assignments.
-			</p>
-		{/if}
-		{#if language === 'BASH'}
-			<p class="hint">
-				Bash runs locally through the bundled GNU Bash WASIX binary and Wasmer browser
-				runtime. Enter stdin in the preloaded input panel, use `read -r` to consume it, and
-				read CLI args from `$1`, `$2`, …. Bash builtins are available; external coreutils
-				are not bundled yet.
-			</p>
-		{/if}
-		{#if language === 'HY'}
-			<p class="hint">
-				Hy 1.3.1 compiles to Python bytecode inside the bundled Pyodide runtime. Use
-				`(input)` for stdin and `(print)` for stdout; send Ctrl+D or use the EOF button to
-				finish input.
-			</p>
-		{/if}
-		{#if language === 'CLOJURESCRIPT'}
-			<p class="hint">
-				ClojureScript is compiled and evaluated locally with the official self-hosted
-				`cljs.js` compiler. Require `[wasm-idle.runtime :as runtime]` for `read-line`,
-				`stdin`, and `args` helpers.
-			</p>
-		{/if}
-		{#if language === 'RESCRIPT'}
-			<p class="hint">
-				ReScript 12.3.1 compiles locally with the official js_of_ocaml playground compiler,
-				then runs the generated CommonJS with the upstream stdlib runtime. Bind stdin like
-				the JavaScript runtime: `@module("fs") external readLineSync: int =&gt; string =
-				"readLineSync"`, or read everything with `readFileSync(0, "utf8")`.
-			</p>
-		{/if}
-		{#if language === 'COBOL'}
-			<p class="hint">
-				COBOL compiles locally with GnuCOBOL 3.2, then the llvm-core Clang runtime compiles
-				and links the generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for
-				stdout.
-			</p>
-		{/if}
-		{#if language === 'V'}
-			<p class="hint">
-				V compiles locally with the real V 0.5.2 compiler to C, then the llvm-core Clang
-				runtime compiles and links that C to WebAssembly. Use `os.get_line()` for stdin and
-				`println` for stdout.
-			</p>
-		{/if}
-		{#if language === 'PASCAL'}
-			<p class="hint">
-				Pascal compiles in the browser with bundled `pas2js` assets and runs the generated
-				JavaScript locally. Use `ReadLn` for line input.
-			</p>
-		{/if}
-		{#if language === 'FORTH'}
-			<p class="hint">
-				Forth runs through bundled WAForth WebAssembly assets. Use `KEY`, `ACCEPT`, or
-				`REFILL` for stdin.
-			</p>
-		{/if}
-		{#if language === 'J'}
-			<p class="hint">
-				J runs through the official J playground WebAssembly runtime. Use `1!:1 [ 1` to read
-				stdin.
-			</p>
-		{/if}
-		{#if language === 'BQN'}
-			<p class="hint">
-				BQN runs through bundled CBQN WebAssembly assets. Use `•GetLine @` for line input.
-			</p>
-		{/if}
-		{#if language === 'JANET'}
-			<p class="hint">
-				Janet runs through the upstream Janet VM compiled to WebAssembly. Use `getline` or
-				`file/read stdin :line` for line input.
-			</p>
-		{/if}
-		{#if language === 'JULIA'}
-			<p class="hint">
-				Julia runs through the legacy Julia 1.3.0-DEV.560 WebAssembly runtime bundled in
-				`@chriskoch/julia-wasm@1.0.4`. Use `readline()` for line input; the worker connects
-				terminal stdin through a streaming channel when cross-origin isolation is available,
-				and otherwise provides buffered input through a Julia `IOBuffer`.
-			</p>
-		{/if}
-		{#if language === 'COMMONLISP'}
-			<p class="hint">
-				Common Lisp runs upstream ECL 26.5.5 compiled to WebAssembly. The active file is
-				loaded with <code>LOAD</code> using ECL's bytecode compiler; read input with
-				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run. The
-				browser call-stack limit varies (about 150 recursive calls in a Chromium Worker);
-				deeper recursion fails with a stack-overflow error.
-			</p>
-		{/if}
-		{#if language === 'C3'}
-			<p class="hint">
-				C3 0.8.3 compiles in the browser with a 1 GiB Wasm memory budget. The example uses
-				UTF-8 byte input and output; send Ctrl+D or use the EOF button to finish input. This
-				runtime supports the
-				<code>env.readByte</code> / <code>env.writeByte</code> ABI; C3 <code>std::io</code>
-				and WASI are not available.
-			</p>
-		{/if}
-		{#if language === 'NIM'}
-			<p class="hint">
-				Nim runs through the bundled Nim 2.2.4 WebAssembly compiler, then links generated C
-				with clang/lld WebAssembly assets. Use `readLine(stdin)` for line input.
-			</p>
-		{/if}
-		{#if language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}
-			<p class="hint">
-				{language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript'} runs through the bundled `wasm-typescript`
-				browser module. `require('fs')`, `require('node:fs')`, and `fs.readLineSync(0)` are available
-				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
-				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
-				typing input.
-			</p>
-		{/if}
-		{#if language === 'ASSEMBLYSCRIPT'}
-			<p class="hint">
-				AssemblyScript compiles in the browser with the bundled `assemblyscript` compiler,
-				then instantiates the emitted WebAssembly locally. `_start` or `main` runs first; if
-				neither exists, zero-argument numeric, boolean, and string exports are printed to
-				the terminal. Import `readLine`, `readAll`, or `readByte` from `env` for stdin; use
-				Ctrl+D or the EOF button for full-input reads.
-			</p>
-		{/if}
-		{#if language === 'WAT'}
-			<p class="hint">
-				WAT compiles through the bundled WABT browser module, then instantiates the emitted
-				WebAssembly locally. Zero-argument numeric exports are called automatically and
-				printed to the terminal. Import `env.readByte` for byte-oriented stdin; it returns
-				`-1` after EOF.
-			</p>
-		{/if}
-		{#if language === 'WASM'}
-			<p class="hint">
-				WASM executes a WebAssembly binary from base64, hex, or a `data:application/wasm`
-				URL. Uploading a `.wasm` file stores it as base64 in the workspace. `_start`,
-				`main`, or zero-argument numeric exports run automatically; WASI preview1 stdin,
-				stdout, stderr, and `env.readByte` are wired to the terminal.
-			</p>
-		{/if}
-		{#if language === 'LUA'}
-			<p class="hint">
-				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
-				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
-				if the program reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'FENNEL'}
-			<p class="hint">
-				Fennel runs the official `fennel.lua` compiler on the bundled `wasmoon` Lua VM. Use
-				`(io.read)` to read a line from the terminal below and Ctrl+D or the EOF button for
-				programs that read stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'RUBY'}
-			<p class="hint">
-				Ruby runs through a receipt-verified split CRuby WebAssembly profile. Its manifest,
-				wrapper, core Wasm, and complete standard-library pack are verified before the
-				worker starts. Pass CLI args here, type into the terminal below, and use Ctrl+D or
-				the EOF button if the program reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'R'}
-			<p class="hint">
-				R runs through bundled webR WebAssembly assets. Type into the terminal below and
-				press Enter before code using `stdin()` reads a line.
-			</p>
-		{/if}
-		{#if language === 'OCTAVE'}
-			<p class="hint">
-				Octave runs through bundled GNU Octave WebAssembly assets. Type into the terminal
-				below and press Enter before code using `stdin` reads a line.
-			</p>
-		{/if}
-		{#if language === 'SQLITE'}
-			<p class="hint">
-				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
-				database on every run. SELECT results are printed as tab-separated tables.
-			</p>
-		{/if}
-		{#if language === 'POSTGRESQL'}
-			<p class="hint">
-				PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly by PGlite,
-				against a fresh in-memory cluster on every run. The script is sent as one simple
-				query, so SELECT results are printed as tab-separated tables, notices and `COPY ...
-				TO STDOUT` are printed in order, and other workspace `.sql` files run first.
-				Preloaded stdin is readable as `/dev/blob`.
-			</p>
-		{/if}
-		{#if language === 'DUCKDB'}
-			<p class="hint">
-				DuckDB runs through `@duckdb/duckdb-wasm` in a browser worker against a fresh
-				in-memory database on every run. Workspace `.csv`, `.json`, `.parquet`, `.sql`, and
-				`.duckdb` files are registered before the active query; SELECT results are printed
-				as tab-separated tables.
-			</p>
-		{/if}
-		{#if language === 'PHP'}
-			<p class="hint">
-				PHP 8.4 runs from the external static runtime in the browser worker. Pass CLI args
-				here; terminal stdin is provided as `php://input`, so use Ctrl+D or the EOF button
-				after typing full-input data.
-			</p>
-		{/if}
-		{#if language === 'ZIG'}
-			<p class="hint">
-				Zig runs the bundled `zig_small.wasm` compiler. It uses the `std.tar.gz` standard
-				library inside the browser worker, compiles for `wasm64-wasi`. It executes the
-				emitted WASI artifact locally. Pass CLI args here, type into the terminal below, and
-				use Ctrl+D or the EOF button if the program reads stdin until EOF.
-			</p>
-		{/if}
-		{#if language === 'HASKELL'}
-			<p class="hint">
-				Haskell loads a wasm GHC/GHCi root filesystem in the browser worker and invokes the
-				bundled `ghc-in-browser` entry point locally. The argument field is passed to GHC;
-				program stdin is currently treated as EOF by the upstream browser runtime.
-			</p>
-		{/if}
-		{#snippet debugVariableRows(variables: DebugVariable[])}
-			{#each variables as variable, index (`${variable.name}:${index}`)}
-				{@const reference = variable.variablesReference || 0}
-				{@const children = debug.variablesByReference.get(reference)}
-				{@const childCount =
-					(variable.namedVariables ?? 0) + (variable.indexedVariables ?? 0)}
-				{@const loadingChildren = debug.loadingVariableReferences.has(reference)}
-				<li class="debug-entry debug-entry--local">
-					<div class="debug-entry__body">
-						<code class="debug-key">{variable.name}</code>
-						{#if variable.type}<span class="debug-variable-type">{variable.type}</span
-							>{/if}
-					</div>
-					<code class="debug-value">{variable.value}</code>
-					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
-						<button
-							class="debug-memory-inspect"
-							onclick={() => inspectDebugVariable(variable)}
-							aria-label={`Inspect memory for ${variable.name}`}
-						>
-							<span class="material-symbols-outlined">memory</span>
-						</button>
-					{/if}
-					{#if reference > 0}
-						<button
-							class="debug-expand"
-							onclick={() => debug.loadMoreVariableChildren(variable)}
-							disabled={children !== undefined || loadingChildren}
-							aria-label={`Load children for ${variable.name}`}
-						>
-							<span class="material-symbols-outlined">
-								{children === undefined ? 'chevron_right' : 'expand_more'}
-							</span>
-						</button>
-					{/if}
-				</li>
-				{#if children?.length}
-					<li class="debug-variable-children">
-						<ul>{@render debugVariableRows(children)}</ul>
-						{#if (variable.indexedVariables ?? 0) > 0 && children.length < childCount}
-							<button
-								class="debug-load-scope"
-								onclick={() => debug.loadMoreVariableChildren(variable)}
-								disabled={loadingChildren}
-								aria-label={`Load more children for ${variable.name}`}
-							>
-								Load more ({children.length} / {childCount})
-							</button>
-						{/if}
-					</li>
-				{/if}
-			{/each}
-		{/snippet}
-		{#if debugLanguage && debug.active}
-			<section
-				class={[
-					'debug-shell',
-					debug.paused && 'debug-shell--paused',
-					debug.active && !debug.paused && 'debug-shell--active'
-				]}
+		</div>
+		<div class="topbar__actions">
+			<button
+				class="icon-button"
+				onclick={toggleTheme}
+				title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+				aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
 			>
-				<div class="debug-hero">
-					<div class="debug-hero__intro">
-						<div class="debug-hero__badge">
-							<span class="material-symbols-outlined">bug_report</span>
-						</div>
-						<div class="debug-hero__copy">
-							<p class="debug-hero__eyebrow">Debug Workspace</p>
-							<h2>{debugTitle}</h2>
-						</div>
+				<span class="material-symbols-outlined" aria-hidden="true"
+					>{darkMode ? 'light_mode' : 'dark_mode'}</span
+				>
+			</button>
+			<a
+				class="icon-button"
+				href="https://github.com/seo-rii/wasm-idle"
+				target="_blank"
+				rel="noopener noreferrer"
+				title="View on GitHub"
+				aria-label="View wasm-idle on GitHub"
+			>
+				<svg
+					viewBox="0 0 16 16"
+					width="19"
+					height="19"
+					fill="currentColor"
+					aria-hidden="true"
+				>
+					<path
+						d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+					/>
+				</svg>
+			</a>
+			<button class="tool-button" onclick={() => saveWorkspace(true)} title="Save workspace">
+				<span class="material-symbols-outlined">save</span>
+				<span>Save</span>
+			</button>
+			<button class="tool-button" onclick={shareWorkspace} title="Copy share link">
+				<span class="material-symbols-outlined">share</span>
+				<span>Share</span>
+			</button>
+			{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
+				<a
+					class="tool-button"
+					href={resolve('/')}
+					data-sveltekit-reload
+					title="Open your original local workspace"
+					aria-label="Local workspace"
+				>
+					<span class="material-symbols-outlined" aria-hidden="true">home</span>
+					<span>Local workspace</span>
+				</a>
+			{/if}
+			<button
+				class="tool-button"
+				onclick={restartRuntime}
+				disabled={!terminal || !!runningMode || !executionAvailable}
+				title="Restart runtime"
+			>
+				<span class="material-symbols-outlined">restart_alt</span>
+				<span>Restart Runtime</span>
+			</button>
+			<span class="topbar__divider" aria-hidden="true"></span>
+			<div class="action-group">
+				{#if runningMode === 'debug'}
+					<button
+						class="action-button action-button--debug-restart"
+						onclick={restartDebugExecution}
+						disabled={restartDebugPending || executionStopPending}
+						aria-label="Restart Debug"
+					>
+						<span class="material-symbols-outlined">restart_alt</span>
+						<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
+					</button>
+					<button
+						class="action-button action-button--stop"
+						onclick={stopExecution}
+						disabled={executionStopPending || restartDebugPending}
+					>
+						<span class="material-symbols-outlined">stop_circle</span>
+						<span>Stop Debug</span>
+					</button>
+				{:else}
+					<button
+						class="action-button action-button--debug"
+						onclick={() => exec(true)}
+						disabled={!!runningMode ||
+							!debugLanguage ||
+							!sharedBufferAvailable ||
+							!debugTargetAvailable}
+						title={debugUnavailableReason}
+					>
+						<span class="material-symbols-outlined">bug_report</span>
+						<span>Debug</span>
+					</button>
+				{/if}
+				{#if runningMode === 'run'}
+					<button
+						class="action-button action-button--stop"
+						onclick={stopExecution}
+						disabled={executionStopPending}
+					>
+						<span class="material-symbols-outlined">stop_circle</span>
+						<span>Stop Running</span>
+					</button>
+				{:else}
+					<button
+						class="action-button action-button--run"
+						onclick={() => exec(false)}
+						disabled={runningMode === 'debug' || !executionAvailable}
+					>
+						<span class="material-symbols-outlined">play_arrow</span>
+						<span>Run</span>
+					</button>
+				{/if}
+			</div>
+		</div>
+	</header>
+	{#if unrestoredWorkspace !== null}
+		<div class="workspace-save-error" role="alert" data-workspace-recovery>
+			<span>
+				Stored workspace could not be restored. The original snapshot is kept;
+				automatic saving is paused.
+			</span>
+			<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
+			<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
+		</div>
+	{/if}
+	{#if manualShareUrl}
+		<div class="workspace-share">
+			<label class="args-chip">
+				<span>Share URL</span>
+				<input
+					aria-label="Share URL"
+					value={manualShareUrl}
+					readonly
+					onfocus={(event) => event.currentTarget.select()}
+					onclick={(event) => event.currentTarget.select()}
+				/>
+			</label>
+			<button class="tool-button" onclick={() => (manualShareUrl = '')}>Close share URL</button>
+		</div>
+	{/if}
+	<div class="workbench">
+		{#if sidebarOpen}
+			<button
+				aria-label="Close explorer"
+				class="sidebar-backdrop"
+				onclick={() => (sidebarOpen = false)}
+			></button>
+			<aside class="workspace-sidebar">
+				<header class="workspace-sidebar__header">
+					<div class="workspace-sidebar__title">
+						<strong>Files</strong>
+						<span class="count-badge">{sortedFiles.length}</span>
 					</div>
-					<div class="debug-hero__stats">
-						<div
-							class={[
-								'debug-status-pill',
-								debug.paused
-									? 'debug-status-pill--paused'
-									: debug.active
-										? 'debug-status-pill--active'
-										: 'debug-status-pill--idle'
-							]}
+					<div class="workspace-sidebar__tools">
+						<button aria-label="New file" title="New file" onclick={newFile}>
+							<span class="material-symbols-outlined" aria-hidden="true">add</span>
+						</button>
+						<button
+							aria-label="Upload files"
+							title="Upload files"
+							onclick={() => fileInput?.click()}
 						>
-							<span class="material-symbols-outlined">{debugStatusIcon}</span>
-							<span>{debugStatusLabel}</span>
-						</div>
-						<div class="debug-metric">
-							<span>Breakpoints</span>
-							<strong>
-								{debug.resolvedBreakpoints.length
-									? `${debug.resolvedBreakpoints.filter((breakpoint) => breakpoint.verified).length}/${debug.resolvedBreakpoints.length}`
-									: debug.breakpoints.length}
-							</strong>
-						</div>
-						<div class="debug-metric">
-							<span>Watches</span>
-							<strong>{debug.watchExpressions.length}</strong>
-						</div>
-						<div class="debug-metric">
-							<span>Line</span>
-							<strong
-								>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong
+							<span class="material-symbols-outlined" aria-hidden="true">upload</span>
+						</button>
+						<button
+							class="workspace-sidebar__close"
+							aria-label="Close explorer"
+							onclick={() => (sidebarOpen = false)}
+						>
+							<span class="material-symbols-outlined" aria-hidden="true">close</span>
+						</button>
+					</div>
+				</header>
+				<div class="workspace-files">
+					{#each sortedFiles as file (file.path)}
+						<button
+							class:active={file.path === activePath}
+							onclick={() => selectFile(file.path)}
+							title={file.path}
+						>
+							<i class="file-dot" aria-hidden="true"></i>
+							<span>{basename(file.path)}</span>
+							<small>{extension(file.path).replace('.', '') || 'txt'}</small>
+						</button>
+					{/each}
+				</div>
+				<div class="workspace-sidebar__section">
+					<p class="section-label">Active file</p>
+					<div class="workspace-sidebar__actions">
+						<button onclick={renameActiveFile}>
+							<span class="material-symbols-outlined" aria-hidden="true">edit</span>
+							<span>Rename</span>
+						</button>
+						<button onclick={duplicateActiveFile}>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>content_copy</span
 							>
-						</div>
-						{#if debug.paused && debug.threadId !== null}
-							<div class="debug-metric">
-								<span>Thread</span>
-								<strong>{debug.threadId}</strong>
-							</div>
-						{/if}
-						{#if debug.paused && debug.stoppedReason}
-							<div class="debug-metric">
-								<span>Reason</span>
-								<strong>{debug.stoppedReason}</strong>
-							</div>
-						{/if}
-						{#if debug.paused && debug.sourceRevisionStale}
-							<div
-								class="debug-metric"
-								title="The editor source changed after this debug session started."
+							<span>Duplicate</span>
+						</button>
+						<button onclick={downloadActiveFile}>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>download</span
 							>
-								<span>Source</span>
-								<strong>Changed</strong>
-							</div>
-						{/if}
+							<span>Download</span>
+						</button>
+						<button class="danger" onclick={deleteActiveFile}>
+							<span class="material-symbols-outlined" aria-hidden="true">delete</span>
+							<span>Delete</span>
+						</button>
+					</div>
+					<p class="section-label">Workspace</p>
+					<div class="workspace-sidebar__actions">
+						<button onclick={downloadZip}>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>folder_zip</span
+							>
+							<span>ZIP</span>
+						</button>
+						<button onclick={resetWorkspace}>
+							<span class="material-symbols-outlined" aria-hidden="true">history</span
+							>
+							<span>Reset</span>
+						</button>
 					</div>
 				</div>
-				<div class="debug-panels">
-					<section class="debug-panel">
-						<header class="debug-panel__header">
-							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">data_object</span>
-								<div class="debug-panel__copy">
-									<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
-								</div>
-							</div>
-							<span class="debug-count">
-								{debug.scopes.length
-									? debug.scopes.reduce(
-											(total, scope) =>
-												total +
-												(
-													debug.variablesByReference.get(
-														scope.variablesReference
-													) ?? scope.variables
-												).length,
-											0
-										)
-									: debug.locals.length}
-							</span>
-						</header>
-						{#if debug.scopes.length}
-							<div class="debug-scopes">
-								{#each debug.scopes as scope (scope.variablesReference)}
-									{@const loadedScopeVariables =
-										scope.variables.length > 0
-											? scope.variables
-											: debug.variablesByReference.get(
-													scope.variablesReference
-												)}
-									<details
-										class="debug-scope"
-										bind:open={
-											() => debugScopeOpen[scope.name] ?? true,
-											(open) => (debugScopeOpen[scope.name] = open)
-										}
-									>
-										<summary><h4>{scope.name}</h4></summary>
-										{#if loadedScopeVariables?.length}
-											<ul>
-												{@render debugVariableRows(loadedScopeVariables)}
-											</ul>
-											{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
-												<button
-													class="debug-load-scope"
-													disabled={debug.loadingVariableReferences.has(
-														scope.variablesReference
-													)}
-													onclick={() =>
-														debug.loadVariableChildren(
-															scope.variablesReference,
-															loadedScopeVariables.length,
-															50
-														)}
-												>
-													Load more {scope.name.toLowerCase()}
-												</button>
-											{/if}
-										{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
-											<button
-												class="debug-load-scope"
-												disabled={debug.loadingVariableReferences.has(
-													scope.variablesReference
-												)}
-												onclick={() =>
-													debug.loadVariableChildren(
-														scope.variablesReference
-													)}
-											>
-												Load {scope.name.toLowerCase()}
-											</button>
-										{:else}
-											<p class="empty">No variables</p>
-										{/if}
-									</details>
-								{/each}
-							</div>
-						{:else if debug.locals.length}
-							<ul>
-								{@render debugVariableRows(debug.locals)}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No locals yet</span>
-							</p>
-						{/if}
-					</section>
-					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
-						<section class="debug-panel debug-memory-panel">
-							<header class="debug-panel__header">
-								<div class="debug-panel__title">
-									<span class="material-symbols-outlined">memory</span>
-									<div class="debug-panel__copy">
-										<h3>Memory</h3>
-									</div>
-								</div>
-								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
-							</header>
-							<div class="debug-memory-controls">
-								<label>
-									<span>Reference</span>
-									<input
-										bind:value={memoryReference}
-										aria-label="Memory reference"
-									/>
-								</label>
-								<label>
-									<span>Offset</span>
-									<input
-										bind:value={memoryOffsetInput}
-										aria-label="Memory offset"
-									/>
-								</label>
-								<label>
-									<span>Bytes</span>
-									<input
-										bind:value={memoryCountInput}
-										inputmode="numeric"
-										aria-label="Memory byte count"
-									/>
-								</label>
-								{#if debug.capabilities.readMemory}
-									<button
-										class="debug-memory-read"
-										onclick={() => void readDebugMemoryPage()}
-										disabled={memoryLoading}
-									>
-										{memoryLoading ? 'Reading…' : 'Read'}
-									</button>
-								{/if}
-							</div>
-							{#if debug.capabilities.writeMemory}
-								<div class="debug-memory-watch-controls">
-									<label class="debug-memory-write-field">
-										<span>Write hex bytes</span>
-										<input
-											bind:value={memoryWriteInput}
-											placeholder="64 00 00 00"
-											aria-label="Memory write bytes"
-										/>
-									</label>
-									<button
-										class="debug-memory-write"
-										onclick={() => void writeDebugMemoryPage()}
-										disabled={memoryLoading}
-										aria-label="Write memory"
-									>
-										{memoryLoading ? 'Writing…' : 'Write memory'}
-									</button>
-								</div>
-							{/if}
-							{#if debug.capabilities.writeMemory && memoryWriteStatus}
-								<p class="debug-memory-write-status">
-									<strong>{memoryWriteStatus.bytesWritten} bytes written</strong>
-									{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
-										<span>of {memoryWriteStatus.requestedBytes} requested</span>
-									{/if}
-								</p>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints}
-								<div class="debug-memory-watch-controls">
-									<label>
-										<span>Break on</span>
-										<select
-											bind:value={dataBreakpointAccessType}
-											disabled={dataBreakpointLoading}
-											aria-label="Data breakpoint access"
-										>
-											<option value="write">Write</option>
-											<option value="read">Read</option>
-											<option value="readWrite">Read or write</option>
-										</select>
-									</label>
-									<button
-										class="debug-data-breakpoint-set"
-										onclick={() => void setMemoryDataBreakpoint()}
-										disabled={dataBreakpointLoading}
-										aria-label="Set data breakpoint"
-									>
-										{dataBreakpointLoading && !activeDataBreakpoint
-											? 'Setting…'
-											: 'Set data breakpoint'}
-									</button>
-									{#if activeDataBreakpoint}
-										<button
-											class="debug-data-breakpoint-clear"
-											onclick={() => void clearMemoryDataBreakpoint()}
-											disabled={dataBreakpointLoading}
-											aria-label="Clear data breakpoint"
-										>
-											Clear
-										</button>
-									{/if}
-								</div>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
-								<p class="debug-data-breakpoint-status">
-									<strong>{activeDataBreakpoint.accessType}</strong>
-									<span>{activeDataBreakpoint.description}</span>
-								</p>
-							{/if}
-							{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
-								<p class="debug-memory-error" role="alert">{dataBreakpointError}</p>
-							{/if}
-							{#if memoryError}
-								<p class="debug-memory-error" role="alert">{memoryError}</p>
-							{/if}
-							{#if debug.capabilities.readMemory && memoryResult}
-								<div class="debug-memory-toolbar">
-									<button onclick={() => void readDebugMemoryPage(-1)}
-										>Previous</button
-									>
-									<code
-										>{memoryResult.address ??
-											memoryResult.memoryReference}</code
-									>
-									<button onclick={() => void readDebugMemoryPage(1)}>Next</button
-									>
-								</div>
-								<div
-									class="debug-memory-table"
-									role="table"
-									aria-label="Memory contents"
+			</aside>
+		{/if}
+		<div class="workbench-split" bind:this={splitPane} bind:clientWidth={splitPaneWidth}>
+			<section class="editor-column">
+				<nav class="file-tabs" aria-label="Open files">
+					{#each openTabs as tab (tab)}
+						<div class:active={tab === activePath} class="file-tab" title={tab}>
+							<button onclick={() => selectFile(tab)}>{basename(tab)}</button>
+							{#if openTabs.length > 1}
+								<button
+									aria-label={`Close ${tab}`}
+									onclick={(event) => closeTab(tab, event)}
 								>
-									{#each memoryRows as row (row.offset)}
-										<div class="debug-memory-row" role="row">
-											<code class="debug-memory-address">
-												{memoryResult.address ??
-													memoryResult.memoryReference}
-												{#if row.offset > 0}+0x{row.offset.toString(
-														16
-													)}{/if}
-											</code>
-											<div class="debug-memory-hex" role="cell">
-												{#each row.bytes as byte, index (index)}
-													{#if byte === null}
-														<code
-															class="debug-memory-byte debug-memory-byte--unreadable"
-															>??</code
-														>
-													{:else}
-														<code class="debug-memory-byte"
-															>{byte
-																.toString(16)
-																.padStart(2, '0')}</code
-														>
-													{/if}
-												{/each}
-											</div>
-											<div role="cell">
-												<code class="debug-memory-ascii">{row.ascii}</code>
-											</div>
-										</div>
-									{/each}
-								</div>
+									<span class="material-symbols-outlined">close</span>
+								</button>
 							{/if}
-						</section>
-					{/if}
-					<section class="debug-panel">
-						<header class="debug-panel__header">
-							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">visibility</span>
-								<div class="debug-panel__copy">
-									<h3>Watch</h3>
-								</div>
-							</div>
-							<span class="debug-count">{debug.watchExpressions.length}</span>
-						</header>
-						<div class="watch-row">
-							<input
-								bind:value={debug.watchInput}
-								maxlength={4096}
-								placeholder="pair.first or items[2]"
-								onkeydown={(event) =>
-									event.key === 'Enter' && debug.addWatchExpression()}
-							/>
-							<button class="watch-add" onclick={() => debug.addWatchExpression()}>
-								<span class="material-symbols-outlined">add</span>
-								<span>Add</span>
-							</button>
 						</div>
-						{#if debug.watchValues.length}
-							<ul>
-								{#each debug.watchValues as watch (watch.expression)}
-									<li class="debug-entry debug-entry--watch">
-										<div class="debug-entry__body">
-											<span class="debug-expression">{watch.expression}</span>
-											<code class="debug-value">{watch.value}</code>
-										</div>
-										<button
-											class="remove"
-											onclick={() =>
-												debug.removeWatchExpression(watch.expression)}
-											aria-label={`Remove watch expression ${watch.expression}`}
-										>
-											<span class="material-symbols-outlined">close</span>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No watches yet</span>
-							</p>
-						{/if}
-					</section>
-					<section class="debug-panel">
-						<header class="debug-panel__header">
-							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">layers</span>
-								<div class="debug-panel__copy">
-									<h3>Call Stack</h3>
-								</div>
-							</div>
-							<span class="debug-count">{debug.callStack.length}</span>
-						</header>
-						{#if debug.callStack.length}
-							<ul>
-								{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}:${index}`)}
-									<li
-										class={[
-											'debug-entry',
-											'debug-entry--stack',
-											debug.frameId === frame.id && 'debug-entry--current'
-										]}
-									>
-										<button
-											class="debug-frame-select"
-											data-frame-id={frame.id}
-											{@attach observeDebugFrame(frame.id)}
-											disabled={!frame.id || dataBreakpointLoading}
-											onclick={() => selectDebugFrame(frame)}
-										>
-											<div class="stack-meta">
-												<span class="stack-order">{index + 1}</span>
-												<span class="stack-function"
-													>{frame.displayName ??
-														(frame.argumentsSummary === undefined
-															? frame.functionName || '(entry)'
-															: `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
-												>
-											</div>
-											<code class="stack-line">L{frame.line}</code>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="empty">
-								<span class="material-symbols-outlined">info</span>
-								<span>No frames yet</span>
-							</p>
-						{/if}
-					</section>
+					{/each}
+				</nav>
+				<div class="editor-surface">
+					{#key `${language}:${activePath}`}
+						<Monaco
+							language={editorLanguage}
+							lspLanguage={monacoLspLanguage}
+							filePath={activePath}
+							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
+							goTarget={languageExecutionOptions.goTarget}
+							bind:editor
+							value={activeFile?.content ?? ''}
+							onChange={updateActiveContent}
+							{compact}
+							dark={darkMode}
+							{lspEnabled}
+							clangdEnabled={clangdLspEnabled}
+							{clangdBaseUrl}
+							clangdRuntimeAssets={runtimeAssets}
+							clangdCppVersion={cppVersion}
+							clangdCVersion={languageExecutionOptions.cVersion}
+							{dotnetLspEnabled}
+							{dotnetLspModuleUrl}
+							{elixirLspEnabled}
+							{elixirLspBundleUrl}
+							elixirLspWorkerUrl={beamLspWorkerUrl}
+							{elixirLspIntegrity}
+							{erlangLspEnabled}
+							{erlangLspBundleUrl}
+							erlangLspWorkerUrl={beamLspWorkerUrl}
+							{erlangLspIntegrity}
+							{gleamLspEnabled}
+							{gleamLspBaseUrl}
+							{gleamLspManifestUrl}
+							{gleamLspManifestFingerprint}
+							{dLspEnabled}
+							{dLspModuleUrl}
+							{dLspManifestUrl}
+							{dLspIntegrity}
+							{tclLspEnabled}
+							{tclLspBaseUrl}
+							{tclLspWorkerUrl}
+							{pascalLspEnabled}
+							{pascalLspRuntime}
+							{goLspEnabled}
+							{goLspCompilerUrl}
+							{rustLspEnabled}
+							{rustLspCompilerUrl}
+							{zigLspEnabled}
+							{zigLspCompilerUrl}
+							{zigLspStdlibUrl}
+							{luaLspEnabled}
+							{luaLspModuleUrl}
+							{janetLspEnabled}
+							{janetLspRuntime}
+							{lispLspEnabled}
+							{lispLspModuleUrl}
+							{lispLspManifestUrl}
+							{lispLspManifestFingerprint}
+							{ocamlLspEnabled}
+							{ocamlLspModuleUrl}
+							{ocamlLspManifestUrl}
+							{haskellLspEnabled}
+							{haskellLspModuleUrl}
+							{haskellLspRootfsUrl}
+							{haskellLspBsdtarUrl}
+							{haskellLspIntegrity}
+							{fortranLspAnalyzerUrl}
+							{assemblyScriptLspModuleUrl}
+							{duckDbLspModuleUrl}
+							{sqlLspEnabled}
+							{sqlLspModuleUrl}
+							{prologLspEnabled}
+							{prologLspBaseUrl}
+							{prologLspWorkerUrl}
+							{rubyLspEnabled}
+							{rubyLspRuntime}
+							{rLspEnabled}
+							{rLspBaseUrl}
+							{octaveLspEnabled}
+							{octaveLspBaseUrl}
+							{octaveLspWorkerUrl}
+							{octaveLspManifestUrl}
+							{awkLspEnabled}
+							{awkLspBaseUrl}
+							{awkLspWorkerUrl}
+							{perlLspEnabled}
+							{perlLspRuntime}
+							{pythonLspBaseUrl}
+							{typescriptLspLibUrl}
+							breakpoints={debug.effectiveBreakpoints}
+							debugLocals={debug.locals}
+							{debugLanguage}
+							{compilerDiagnostics}
+							pausedLine={debug.pausedLine}
+							bind:lspStatus={editorLspStatus}
+							onCursorLineChange={debug.setCursorLine}
+							onRunToCursor={runToCursorWhileDataBreakpointIdle}
+							onBreakpointsChange={debug.setBreakpoints}
+						/>
+					{/key}
 				</div>
 			</section>
-		{/if}
-		<div class="terminal-shell">
-			<Terminal
-				bind:terminal
-				{playground}
-				ondebug={onDebugEvent}
-				oncompilediagnostic={onCompileDiagnostic}
-			/>
-		</div>
-	</div>
-	<div
-		class:panel-resizer--active={resizingPane}
-		class="panel-resizer"
-		role="slider"
-		aria-label="Resize example panes"
-		aria-orientation="horizontal"
-		aria-hidden={!desktopExampleLayout}
-		tabindex={desktopExampleLayout ? 0 : -1}
-		aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
-		aria-valuemax={desktopExampleLayout ? maxTerminalPaneWidth : undefined}
-		aria-valuenow={desktopExampleLayout ? (terminalPanePixelWidth ?? undefined) : undefined}
-		onpointerdown={(event) => {
-			if (!desktopExampleLayout || !examplePane) return;
-			event.preventDefault();
-			const handle = event.currentTarget as HTMLDivElement;
-			const pointerId = event.pointerId;
-			const rect = examplePane.getBoundingClientRect();
-			const updateWidth = (clientX: number) => {
-				terminalPaneWidth = Math.min(
-					Math.max(
-						clientX -
-							rect.left -
-							examplePaneHorizontalPadding / 2 -
-							panelResizerWidth / 2,
-						minTerminalPaneWidth
-					),
-					maxTerminalPaneWidth
-				);
-			};
-			updateWidth(event.clientX);
-			resizingPane = true;
-			handle.setPointerCapture(pointerId);
-			const handlePointerMove = (moveEvent: PointerEvent) => {
-				updateWidth(moveEvent.clientX);
-			};
-			const handlePointerUp = () => {
-				resizingPane = false;
-				handle.releasePointerCapture(pointerId);
-				handle.removeEventListener('pointermove', handlePointerMove);
-				handle.removeEventListener('pointerup', handlePointerUp);
-				handle.removeEventListener('pointercancel', handlePointerUp);
-			};
-			handle.addEventListener('pointermove', handlePointerMove);
-			handle.addEventListener('pointerup', handlePointerUp);
-			handle.addEventListener('pointercancel', handlePointerUp);
-		}}
-		onkeydown={(event) => {
-			if (!desktopExampleLayout) return;
-			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-			event.preventDefault();
-			const step = event.key === 'ArrowLeft' ? -24 : 24;
-			const currentWidth = terminalPanePixelWidth ?? Math.round(resizablePaneWidth * 0.5);
-			terminalPaneWidth = Math.min(
-				Math.max(currentWidth + step, minTerminalPaneWidth),
-				maxTerminalPaneWidth
-			);
-		}}
-	>
-		<span class="panel-resizer__thumb" aria-hidden="true"></span>
-	</div>
-	<section class="editor-column">
-		<nav class="file-tabs" aria-label="Open files">
-			{#each openTabs as tab (tab)}
-				<div class:active={tab === activePath} class="file-tab" title={tab}>
-					<button onclick={() => selectFile(tab)}>{basename(tab)}</button>
-					{#if openTabs.length > 1}
-						<button
-							aria-label={`Close ${tab}`}
-							onclick={(event) => closeTab(tab, event)}
-						>
-							<span class="material-symbols-outlined">close</span>
-						</button>
-					{/if}
-				</div>
-			{/each}
-			<div class="workspace-status">
-				{#if editorLspStatus}
-					<span
-						class="lsp-status lsp-status--{editorLspStatus.state}"
-						data-lsp-state={editorLspStatus.state}
-						title={editorLspStatus.title}
-						aria-live="polite"
-					>
-						{#if editorLspStatus.state === 'loading'}
-							<span class="lsp-status__spinner" aria-hidden="true"></span>
-						{:else}
-							<span class="material-symbols-outlined" aria-hidden="true">
-								{editorLspStatus.state === 'error' ? 'error' : 'check_circle'}
+			<div
+				class:panel-resizer--active={resizingPane}
+				class="panel-resizer"
+				role="slider"
+				aria-label="Resize example panes"
+				aria-orientation="horizontal"
+				aria-hidden={!desktopExampleLayout}
+				tabindex={desktopExampleLayout ? 0 : -1}
+				aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
+				aria-valuemax={desktopExampleLayout ? maxTerminalPaneWidth : undefined}
+				aria-valuenow={desktopExampleLayout
+					? (terminalPanePixelWidth ?? undefined)
+					: undefined}
+				onpointerdown={(event) => {
+					if (!desktopExampleLayout || !splitPane) return;
+					event.preventDefault();
+					const handle = event.currentTarget as HTMLDivElement;
+					const pointerId = event.pointerId;
+					const rect = splitPane.getBoundingClientRect();
+					const updateWidth = (clientX: number) => {
+						terminalPaneWidth = Math.min(
+							Math.max(
+								rect.right - clientX - panelResizerWidth / 2,
+								minTerminalPaneWidth
+							),
+							maxTerminalPaneWidth
+						);
+					};
+					updateWidth(event.clientX);
+					resizingPane = true;
+					handle.setPointerCapture(pointerId);
+					const handlePointerMove = (moveEvent: PointerEvent) => {
+						updateWidth(moveEvent.clientX);
+					};
+					const handlePointerUp = () => {
+						resizingPane = false;
+						handle.releasePointerCapture(pointerId);
+						handle.removeEventListener('pointermove', handlePointerMove);
+						handle.removeEventListener('pointerup', handlePointerUp);
+						handle.removeEventListener('pointercancel', handlePointerUp);
+					};
+					handle.addEventListener('pointermove', handlePointerMove);
+					handle.addEventListener('pointerup', handlePointerUp);
+					handle.addEventListener('pointercancel', handlePointerUp);
+				}}
+				onkeydown={(event) => {
+					if (!desktopExampleLayout) return;
+					if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+					event.preventDefault();
+					const step = event.key === 'ArrowLeft' ? 24 : -24;
+					const currentWidth =
+						terminalPanePixelWidth ?? Math.round(resizablePaneWidth * 0.42);
+					terminalPaneWidth = Math.min(
+						Math.max(currentWidth + step, minTerminalPaneWidth),
+						maxTerminalPaneWidth
+					);
+				}}
+			>
+				<span class="panel-resizer__thumb" aria-hidden="true"></span>
+			</div>
+			<div
+				class="terminal-pane"
+				style:width={terminalPanePixelWidth === null
+					? undefined
+					: `${terminalPanePixelWidth}px`}
+			>
+				<header class="pane-header">
+					<div class="pane-title">
+						<span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+						<strong>Console</strong>
+						{#if runningMode}
+							<span
+								class="run-indicator"
+								class:run-indicator--debug={runningMode === 'debug'}
+							>
+								<i aria-hidden="true"></i>
+								{runningMode === 'debug' ? 'Debugging' : 'Running'}
 							</span>
 						{/if}
-						<span class="lsp-status__text">{editorLspStatus.text}</span>
-						{#if editorLspStatus.state === 'loading'}
-							{#if editorLspStatus.progressPercent === null}
-								<span
-									class="lsp-status__progress lsp-status__progress--indeterminate"
-									role="progressbar"
-									aria-label={`${editorLspStatus.label} loading progress`}
-								>
-									<span class="lsp-status__progress-fill"></span>
+					</div>
+					<div class="console-controls">
+						<button
+							class="action-button action-button--icon"
+							onclick={sendTerminalEof}
+							disabled={!runningMode}
+							title="Send EOF"
+							aria-label="Send EOF"
+						>
+							<span class="material-symbols-outlined">keyboard_tab_rtl</span>
+						</button>
+					</div>
+				</header>
+				<div class="console-body">
+					{#if loading}
+						<div class="progress-shell" aria-live="polite">
+							<div class="progress-copy">
+								<div class="progress-copy__text">
+									<span class="material-symbols-outlined">hourglass_top</span>
+									<strong>{progressLabel}</strong>
+								</div>
+								{#if !progressIndeterminate}
+									<span class="progress-percent">{progressPercent}%</span>
+								{/if}
+							</div>
+							<div
+								class="progress-track"
+								class:progress-track--indeterminate={progressIndeterminate}
+								role="progressbar"
+								aria-label={progressLabel}
+								aria-valuemin={0}
+								aria-valuemax={100}
+								aria-valuenow={progressIndeterminate ? undefined : progressPercent}
+								aria-valuetext={progressIndeterminate
+									? progressLabel
+									: `${progressPercent}%`}
+								data-progress-mode={progressIndeterminate
+									? 'indeterminate'
+									: 'determinate'}
+							>
+								<div
+									class="progress-fill"
+									style={progressIndeterminate
+										? undefined
+										: `transform: scaleX(${progressValue})`}
+								></div>
+							</div>
+						</div>
+					{/if}
+					{#if workspaceSaveState.phase === 'error'}
+						<div class="workspace-save-error" role="alert">
+							<span
+								>Not saved locally. Keep this tab open and retry or download a
+								workspace backup.</span
+							>
+							<button onclick={() => saveWorkspace(true)}>Retry save</button>
+							<button onclick={downloadWorkspaceBackup}>Export workspace</button>
+						</div>
+					{/if}
+					{#if !sharedBufferAvailable || preloadedStdinLanguages.has(language)}
+						<div class="stdin-panel">
+							<div>
+								<strong>Preloaded stdin</strong>
+								<span>
+									{language === 'BASH'
+										? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+										: language === 'POSTGRESQL'
+											? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+											: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
-							{:else}
-								<span
-									class="lsp-status__progress"
-									role="progressbar"
-									aria-label={`${editorLspStatus.label} loading progress`}
-									aria-valuemin="0"
-									aria-valuemax="100"
-									aria-valuenow={editorLspStatus.progressPercent}
-									style={`--lsp-progress-scale: ${editorLspStatus.progressPercent / 100};`}
-								>
-									<span class="lsp-status__progress-fill"></span>
-								</span>
-							{/if}
-						{/if}
-					</span>
-				{/if}
-				<span role="status" data-workspace-save-state={workspaceSaveState.phase}>
-					{workspaceSaveState.phase === 'saved'
-						? 'Saved locally'
-						: workspaceSaveState.phase === 'saving'
-							? 'Saving…'
-							: 'Not saved locally'}
-				</span>
-				<span>{saveStatus}</span>
-				<span>{activeLines} lines</span>
-				<span>{activeBytes} bytes</span>
+							</div>
+							<textarea
+								bind:value={stdinInput}
+								placeholder="Input to pass before running"
+								spellcheck={false}></textarea>
+						</div>
+					{/if}
+					{@render consoleTail()}
+				</div>
 			</div>
-		</nav>
-		{#key `${language}:${activePath}`}
-			<Monaco
-				language={editorLanguage}
-				lspLanguage={monacoLspLanguage}
-				filePath={activePath}
-				rustTargetTriple={languageExecutionOptions.rustTargetTriple}
-				goTarget={languageExecutionOptions.goTarget}
-				bind:editor
-				value={activeFile?.content ?? ''}
-				onChange={updateActiveContent}
-				{compact}
-				{lspEnabled}
-				clangdEnabled={clangdLspEnabled}
-				{clangdBaseUrl}
-				clangdRuntimeAssets={runtimeAssets}
-				clangdCppVersion={cppVersion}
-				clangdCVersion={languageExecutionOptions.cVersion}
-				{dotnetLspEnabled}
-				{dotnetLspModuleUrl}
-				{elixirLspEnabled}
-				{elixirLspBundleUrl}
-				elixirLspWorkerUrl={beamLspWorkerUrl}
-				{elixirLspIntegrity}
-				{erlangLspEnabled}
-				{erlangLspBundleUrl}
-				erlangLspWorkerUrl={beamLspWorkerUrl}
-				{erlangLspIntegrity}
-				{gleamLspEnabled}
-				{gleamLspBaseUrl}
-				{gleamLspManifestUrl}
-				{gleamLspManifestFingerprint}
-				{dLspEnabled}
-				{dLspModuleUrl}
-				{dLspManifestUrl}
-				{dLspIntegrity}
-				{tclLspEnabled}
-				{tclLspBaseUrl}
-				{tclLspWorkerUrl}
-				{pascalLspEnabled}
-				{pascalLspRuntime}
-				{goLspEnabled}
-				{goLspCompilerUrl}
-				{rustLspEnabled}
-				{rustLspCompilerUrl}
-				{zigLspEnabled}
-				{zigLspCompilerUrl}
-				{zigLspStdlibUrl}
-				{luaLspEnabled}
-				{luaLspModuleUrl}
-				{janetLspEnabled}
-				{janetLspRuntime}
-				{lispLspEnabled}
-				{lispLspModuleUrl}
-				{lispLspManifestUrl}
-				{lispLspManifestFingerprint}
-				{ocamlLspEnabled}
-				{ocamlLspModuleUrl}
-				{ocamlLspManifestUrl}
-				{haskellLspEnabled}
-				{haskellLspModuleUrl}
-				{haskellLspRootfsUrl}
-				{haskellLspBsdtarUrl}
-				{haskellLspIntegrity}
-				{fortranLspAnalyzerUrl}
-				{assemblyScriptLspModuleUrl}
-				{duckDbLspModuleUrl}
-				{sqlLspEnabled}
-				{sqlLspModuleUrl}
-				{prologLspEnabled}
-				{prologLspBaseUrl}
-				{prologLspWorkerUrl}
-				{rubyLspEnabled}
-				{rubyLspRuntime}
-				{rLspEnabled}
-				{rLspBaseUrl}
-				{octaveLspEnabled}
-				{octaveLspBaseUrl}
-				{octaveLspWorkerUrl}
-				{octaveLspManifestUrl}
-				{awkLspEnabled}
-				{awkLspBaseUrl}
-				{awkLspWorkerUrl}
-				{perlLspEnabled}
-				{perlLspRuntime}
-				{pythonLspBaseUrl}
-				{typescriptLspLibUrl}
-				breakpoints={debug.effectiveBreakpoints}
-				debugLocals={debug.locals}
-				{debugLanguage}
-				{compilerDiagnostics}
-				pausedLine={debug.pausedLine}
-				bind:lspStatus={editorLspStatus}
-				onCursorLineChange={debug.setCursorLine}
-				onRunToCursor={runToCursorWhileDataBreakpointIdle}
-				onBreakpointsChange={debug.setBreakpoints}
-			/>
-		{/key}
-	</section>
+		</div>
+	</div>
+	<footer class="statusbar">
+		<div class="statusbar__group">
+			<span
+				class="save-state save-state--{workspaceSaveState.phase}"
+				role="status"
+				data-workspace-save-state={workspaceSaveState.phase}
+			>
+				<i aria-hidden="true"></i>
+				{workspaceSaveState.phase === 'saved'
+					? 'Saved locally'
+					: workspaceSaveState.phase === 'saving'
+						? 'Saving…'
+						: 'Not saved locally'}
+			</span>
+			<span class="statusbar__message">{saveStatus}</span>
+		</div>
+		<div class="statusbar__group statusbar__group--end">
+			{#if editorLspStatus}
+				<span
+					class="lsp-status lsp-status--{editorLspStatus.state}"
+					data-lsp-state={editorLspStatus.state}
+					title={editorLspStatus.title}
+					aria-live="polite"
+				>
+					{#if editorLspStatus.state === 'loading'}
+						<span class="lsp-status__spinner" aria-hidden="true"></span>
+					{:else}
+						<span class="material-symbols-outlined" aria-hidden="true">
+							{editorLspStatus.state === 'error' ? 'error' : 'check_circle'}
+						</span>
+					{/if}
+					<span class="lsp-status__text">{editorLspStatus.text}</span>
+					{#if editorLspStatus.state === 'loading'}
+						{#if editorLspStatus.progressPercent === null}
+							<span
+								class="lsp-status__progress lsp-status__progress--indeterminate"
+								role="progressbar"
+								aria-label={`${editorLspStatus.label} loading progress`}
+							>
+								<span class="lsp-status__progress-fill"></span>
+							</span>
+						{:else}
+							<span
+								class="lsp-status__progress"
+								role="progressbar"
+								aria-label={`${editorLspStatus.label} loading progress`}
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-valuenow={editorLspStatus.progressPercent}
+								style={`--lsp-progress-scale: ${editorLspStatus.progressPercent / 100};`}
+							>
+								<span class="lsp-status__progress-fill"></span>
+							</span>
+						{/if}
+					{/if}
+				</span>
+			{/if}
+			<span class="statusbar__meta">{activeLines} lines</span>
+			<span class="statusbar__meta">{activeBytes} bytes</span>
+			<span class="statusbar__divider" aria-hidden="true"></span>
+			<label class="switch" for="log-toggle" title="Show runtime logs in the console">
+				<input id="log-toggle" type="checkbox" bind:checked={log} />
+				<span>Log</span>
+			</label>
+			<label
+				class="switch"
+				for="prewarm-toggle"
+				title="Prepare the selected runtime during idle time. Does not run your code."
+			>
+				<input id="prewarm-toggle" type="checkbox" bind:checked={prewarmEnabled} />
+				<span>Prewarm</span>
+			</label>
+			<label class="switch" for="lsp-toggle" title="Language server features in the editor">
+				<input id="lsp-toggle" type="checkbox" bind:checked={lspEnabled} />
+				<span>LSP</span>
+			</label>
+		</div>
+	</footer>
 </main>
 
 <style>
-	main {
+	:global(body) {
+		background: #f2f4f6;
+	}
+
+	:global(html[data-theme='dark'] body) {
+		background: #101012;
+	}
+
+	.ide {
+		--bg: #f2f4f6;
+		--surface: #ffffff;
+		--surface-muted: #f9fafb;
+		--fill: #f2f4f6;
+		--fill-strong: #e5e8eb;
+		--line: #e5e8eb;
+		--line-soft: #f2f4f6;
+		--text: #191f28;
+		--text-2: #4e5968;
+		--text-3: #8b95a1;
+		--text-4: #b0b8c1;
+		--primary: #3182f6;
+		--primary-strong: #1b64da;
+		--primary-soft: #e8f3ff;
+		--danger: #f04452;
+		--danger-soft: #ffeeee;
+		--success: #03b26c;
+		--warning: #ff9f00;
+		--warning-soft: #fff6e5;
+		--debug-tone: #7b61ff;
+		--debug-tone-soft: #f1edff;
+		--primary-soft-strong: #d6e8ff;
+		--success-soft: #e5f8f0;
+		--warning-text: #6b4500;
+		--danger-text: #b0202d;
+		--topbar-bg: rgba(255, 255, 255, 0.86);
+		--overlay: rgba(232, 243, 255, 0.86);
+		color-scheme: light;
+		--radius-lg: 16px;
+		--radius-md: 12px;
+		--radius-sm: 8px;
+		--shadow-card: 0 1px 2px rgba(0, 23, 51, 0.04), 0 2px 12px rgba(0, 23, 51, 0.04);
+		--mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		width: 100%;
 		height: 100vh;
 		height: 100dvh;
-		display: flex;
-		flex-direction: row;
-		padding: 20px;
+		min-width: 0;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr) auto;
 		box-sizing: border-box;
 		overflow: hidden;
-		background:
-			radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 28%),
-			linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+		background: var(--bg);
+		color: var(--text);
+		font-family:
+			-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Apple SD Gothic Neo',
+			Pretendard, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+		font-size: 13px;
+		letter-spacing: -0.01em;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	.ide[data-theme='dark'] {
+		--bg: #101012;
+		--surface: #1b1b1e;
+		--surface-muted: #222226;
+		--fill: #2a2a2f;
+		--fill-strong: #35353b;
+		--line: #2a2a2f;
+		--line-soft: #25252a;
+		--text: #f2f3f5;
+		--text-2: #c3c7ce;
+		--text-3: #8b9099;
+		--text-4: #5c6169;
+		--primary: #4593fc;
+		--primary-strong: #2f80f0;
+		--primary-soft: rgba(69, 147, 252, 0.16);
+		--primary-soft-strong: rgba(69, 147, 252, 0.26);
+		--danger: #f5525f;
+		--danger-soft: rgba(245, 82, 95, 0.15);
+		--danger-text: #ff8a94;
+		--success: #2ac985;
+		--success-soft: rgba(42, 201, 133, 0.15);
+		--warning: #ffb331;
+		--warning-soft: rgba(255, 179, 49, 0.12);
+		--warning-text: #ffd48a;
+		--debug-tone: #9d8bff;
+		--debug-tone-soft: rgba(157, 139, 255, 0.16);
+		--topbar-bg: rgba(27, 27, 30, 0.82);
+		--overlay: rgba(16, 16, 18, 0.8);
+		--shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 2px 12px rgba(0, 0, 0, 0.3);
+		color-scheme: dark;
+	}
+
+	.ide,
+	.ide div,
+	.ide section,
+	.ide aside,
+	.ide header,
+	.ide nav,
+	.ide footer,
+	.ide label,
+	.ide button,
+	.ide input,
+	.ide select,
+	.ide textarea {
+		box-sizing: border-box;
+	}
+
+	.ide button,
+	.ide input,
+	.ide select,
+	.ide textarea {
+		font-family: inherit;
+		letter-spacing: inherit;
+	}
+
+	.ide button {
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.ide :global(:focus-visible) {
+		outline: 2px solid rgba(49, 130, 246, 0.45);
+		outline-offset: 2px;
 	}
 
 	.hidden-input {
 		display: none;
+	}
+
+	/* ---------- Top bar ---------- */
+
+	.topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 60px;
+		padding: 10px 16px;
+		background: var(--topbar-bg);
+		backdrop-filter: saturate(180%) blur(20px);
+		-webkit-backdrop-filter: saturate(180%) blur(20px);
+		border-bottom: 1px solid var(--line);
+		position: relative;
+		z-index: 5;
+	}
+
+	.topbar__lead,
+	.topbar__actions,
+	.topbar__config {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.topbar__lead {
+		flex: 1 1 auto;
+	}
+
+	.topbar__config {
+		flex-wrap: wrap;
+	}
+
+	.topbar__actions {
+		flex: 0 0 auto;
+	}
+
+	.topbar__divider,
+	.statusbar__divider {
+		width: 1px;
+		height: 20px;
+		background: var(--line);
+		flex: 0 0 auto;
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding-right: 4px;
+		white-space: nowrap;
+	}
+
+	.brand strong {
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+	}
+
+	.brand__mark {
+		width: 28px;
+		height: 28px;
+		display: grid;
+		place-items: center;
+		border-radius: 9px;
+		background: linear-gradient(145deg, #4c9bff 0%, #3182f6 55%, #1b64da 100%);
+		color: white;
+		box-shadow: 0 4px 10px rgba(49, 130, 246, 0.28);
+	}
+
+	.icon-button {
+		width: 36px;
+		height: 36px;
+		display: grid;
+		place-items: center;
+		flex: 0 0 auto;
+		padding: 0;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--text-2);
+		cursor: pointer;
+		transition: background-color 0.15s ease;
+	}
+
+	.icon-button:hover {
+		background: var(--fill);
+	}
+
+	.icon-button--active {
+		color: var(--primary);
+	}
+
+	.icon-button .material-symbols-outlined {
+		font-size: 20px;
+	}
+
+	.select-chip,
+	.args-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 36px;
+		padding: 0 6px 0 10px;
+		border-radius: 10px;
+		background: var(--fill);
+		color: var(--text);
+		font-weight: 600;
+		transition: background-color 0.15s ease;
+	}
+
+	.select-chip:hover,
+	.args-chip:focus-within {
+		background: var(--fill-strong);
+	}
+
+	.select-chip .material-symbols-outlined,
+	.args-chip .material-symbols-outlined {
+		color: var(--text-3);
+		font-size: 18px;
+	}
+
+	.select-chip select,
+	.args-chip input {
+		height: 100%;
+		border: 0;
+		background: transparent;
+		font: inherit;
+		font-weight: 600;
+		color: inherit;
+		outline: none;
+	}
+
+	.select-chip select {
+		padding-right: 2px;
+		cursor: pointer;
+	}
+
+	.select-chip select:disabled {
+		cursor: progress;
+		color: var(--text-3);
+	}
+
+	.language-picker {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.language-trigger {
+		border: 0;
+		padding: 0 8px 0 10px;
+		font-size: 14px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.language-trigger:disabled {
+		cursor: progress;
+		color: var(--text-3);
+	}
+
+	.language-trigger[aria-expanded='true'] {
+		background: var(--fill-strong);
+	}
+
+	.language-trigger__label {
+		max-width: 160px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.select-chip .language-trigger__chevron {
+		font-size: 18px;
+		transition: transform 0.15s ease;
+	}
+
+	.language-trigger[aria-expanded='true'] .language-trigger__chevron {
+		transform: rotate(180deg);
+	}
+
+	/* Invisible but still "visible" to automation so selectOption keeps working. */
+	.language-picker__native {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.language-menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		z-index: 30;
+		width: min(300px, calc(100vw - 24px));
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius-md);
+		background: var(--surface);
+		box-shadow:
+			0 0 0 1px var(--line),
+			0 16px 40px rgba(0, 23, 51, 0.16);
+		overflow: hidden;
+		animation: language-menu-in 0.14s ease-out;
+	}
+
+	@keyframes language-menu-in {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+	}
+
+	.language-menu__search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 48px;
+		padding: 0 12px;
+		border-bottom: 1px solid var(--line-soft);
+	}
+
+	.language-menu__search .material-symbols-outlined {
+		color: var(--text-3);
+		font-size: 18px;
+	}
+
+	.language-menu__search input {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: 100%;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font-size: 15px;
+		font-weight: 500;
+		outline: none;
+	}
+
+	.language-menu__search input:focus-visible {
+		outline: none;
+	}
+
+	.language-menu__search input::placeholder {
+		color: var(--text-4);
+	}
+
+	.language-menu__search input::-webkit-search-cancel-button {
+		display: none;
+	}
+
+	.language-menu__count {
+		padding: 2px 7px;
+		border-radius: 6px;
+		background: var(--fill);
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.language-menu__list {
+		max-height: min(360px, 60vh);
+		margin: 0;
+		padding: 6px;
+		overflow-y: auto;
+		list-style: none;
+		overscroll-behavior: contain;
+	}
+
+	.language-menu__list li[role='option'] {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-height: 36px;
+		padding: 0 10px;
+		border-radius: 8px;
+		color: var(--text);
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+	}
+
+	.language-menu__list li.highlighted {
+		background: var(--fill);
+	}
+
+	.language-menu__list li[aria-selected='true'] {
+		color: var(--primary);
+		font-weight: 700;
+	}
+
+	.language-menu__list li .material-symbols-outlined {
+		font-size: 18px;
+	}
+
+	.language-menu__empty {
+		padding: 20px 10px;
+		color: var(--text-3);
+		font-size: 13px;
+		text-align: center;
+	}
+
+	.args-chip input {
+		width: 180px;
+		min-width: 64px;
+		font-family: var(--mono);
+		font-size: 12px;
+		font-weight: 500;
+	}
+
+	.args-chip input::placeholder {
+		color: var(--text-4);
+	}
+
+	.args-chip > span:last-child {
+		padding: 2px 7px;
+		border-radius: 6px;
+		background: var(--surface);
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.args-chip:has(input[aria-invalid='true']) {
+		background: var(--danger-soft);
+	}
+
+	.topbar__config > [role='alert'] {
+		color: var(--danger);
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.tool-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 36px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--text-2);
+		font-size: 13px;
+		font-weight: 600;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			background-color 0.15s ease,
+			color 0.15s ease;
+	}
+
+	.tool-button:enabled:hover {
+		background: var(--fill);
+		color: var(--text);
+	}
+
+	.tool-button:disabled {
+		color: var(--text-4);
+		cursor: not-allowed;
+	}
+
+	.tool-button .material-symbols-outlined {
+		font-size: 18px;
+	}
+
+	.action-group {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.action-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		height: 36px;
+		padding: 0 16px;
+		border: 0;
+		border-radius: 10px;
+		font-size: 14px;
+		font-weight: 700;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			transform 0.12s ease,
+			background-color 0.15s ease,
+			box-shadow 0.15s ease,
+			opacity 0.15s ease;
+	}
+
+	.action-button:enabled:active {
+		transform: scale(0.97);
+	}
+
+	.action-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.action-button .material-symbols-outlined {
+		font-size: 19px;
+		font-variation-settings:
+			'FILL' 1,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.action-button--run {
+		min-width: 92px;
+		background: var(--primary);
+		color: white;
+		box-shadow: 0 4px 12px rgba(49, 130, 246, 0.3);
+	}
+
+	.action-button--run:enabled:hover {
+		background: var(--primary-strong);
+	}
+
+	.action-button--debug,
+	.action-button--debug-restart {
+		background: var(--primary-soft);
+		color: var(--primary);
+	}
+
+	.action-button--debug:enabled:hover,
+	.action-button--debug-restart:enabled:hover {
+		background: var(--primary-soft-strong);
+	}
+
+	.action-button--stop {
+		min-width: 92px;
+		background: var(--danger);
+		color: white;
+		box-shadow: 0 4px 12px rgba(240, 68, 82, 0.28);
+	}
+
+	.action-button--stop:enabled:hover {
+		background: #d22030;
+	}
+
+	/* ---------- Workbench ---------- */
+
+	.workbench {
+		display: flex;
+		gap: 8px;
+		min-height: 0;
+		padding: 8px;
 	}
 
 	.sidebar-backdrop {
@@ -4164,20 +4816,15 @@
 	}
 
 	.workspace-sidebar {
-		flex: 0 0 250px;
-		width: 250px;
-		min-width: 220px;
-		height: 100%;
+		flex: 0 0 240px;
+		width: 240px;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		margin-right: 12px;
-		border: 1px solid rgba(148, 163, 184, 0.26);
-		border-radius: 16px;
-		background: rgba(15, 23, 42, 0.94);
-		color: #e5edf7;
+		border-radius: var(--radius-lg);
+		background: var(--surface);
+		box-shadow: var(--shadow-card);
 		overflow: hidden;
-		box-shadow: 0 22px 40px rgba(15, 23, 42, 0.12);
 	}
 
 	.workspace-sidebar__header {
@@ -4185,74 +4832,115 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		min-height: 44px;
-		padding: 0 10px;
-		border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+		height: 48px;
+		padding: 0 8px 0 16px;
 	}
 
-	.workspace-sidebar__header > div {
+	.workspace-sidebar__title {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		min-width: 0;
 	}
 
-	.workspace-sidebar__header button,
-	.workspace-sidebar__actions button,
-	.tool-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		min-height: 30px;
-		border: 1px solid rgba(148, 163, 184, 0.28);
-		border-radius: 10px;
-		background: rgba(248, 250, 252, 0.92);
-		color: #0f172a;
-		font: inherit;
+	.workspace-sidebar__title strong {
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.count-badge {
+		min-width: 20px;
+		height: 20px;
+		display: inline-grid;
+		place-items: center;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--fill);
+		color: var(--text-3);
 		font-size: 11px;
 		font-weight: 700;
+	}
+
+	.workspace-sidebar__tools {
+		display: flex;
+		gap: 2px;
+	}
+
+	.workspace-sidebar__tools button {
+		width: 30px;
+		height: 30px;
+		display: grid;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--text-2);
 		cursor: pointer;
 	}
 
-	.workspace-sidebar__header button {
-		width: 30px;
-		padding: 0;
-		background: rgba(255, 255, 255, 0.08);
-		color: #e5edf7;
+	.workspace-sidebar__tools button:hover {
+		background: var(--fill);
+		color: var(--text);
+	}
+
+	.workspace-sidebar__tools .material-symbols-outlined {
+		font-size: 19px;
+	}
+
+	.workspace-sidebar__close {
+		display: none !important;
 	}
 
 	.workspace-files {
 		flex: 1 1 auto;
 		min-height: 0;
 		overflow: auto;
-		padding: 8px;
+		padding: 0 8px 8px;
 	}
 
 	.workspace-files button {
 		width: 100%;
-		min-height: 34px;
+		height: 36px;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		padding: 0 9px;
-		border: 1px solid transparent;
+		gap: 10px;
+		padding: 0 10px;
+		border: 0;
 		border-radius: 10px;
 		background: transparent;
-		color: inherit;
-		font: inherit;
+		color: var(--text-2);
+		font-size: 13px;
+		font-weight: 500;
 		text-align: left;
 		cursor: pointer;
+		transition: background-color 0.12s ease;
 	}
 
-	.workspace-files button.active,
 	.workspace-files button:hover {
-		border-color: rgba(74, 222, 128, 0.18);
-		background: rgba(59, 130, 246, 0.18);
+		background: var(--surface-muted);
+		color: var(--text);
+	}
+
+	.workspace-files button.active {
+		background: var(--primary-soft);
+		color: var(--primary-strong);
+		font-weight: 650;
+	}
+
+	.file-dot {
+		width: 8px;
+		height: 8px;
+		flex: 0 0 auto;
+		border-radius: 3px;
+		background: var(--text-4);
+	}
+
+	.workspace-files button.active .file-dot {
+		background: var(--primary);
 	}
 
 	.workspace-files span {
+		flex: 1 1 auto;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -4260,28 +4948,73 @@
 	}
 
 	.workspace-files small {
-		color: #94a3b8;
+		color: var(--text-3);
+		font-family: var(--mono);
 		font-size: 10px;
-		text-transform: uppercase;
+		text-transform: lowercase;
+	}
+
+	.workspace-sidebar__section {
+		padding: 12px 12px 14px;
+		border-top: 1px solid var(--line-soft);
+	}
+
+	.section-label {
+		margin: 4px 4px 8px;
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.section-label:not(:first-child) {
+		margin-top: 14px;
 	}
 
 	.workspace-sidebar__actions {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 6px;
-		padding: 8px;
-		border-top: 1px solid rgba(148, 163, 184, 0.18);
 	}
 
 	.workspace-sidebar__actions button {
-		flex: 1 1 calc(50% - 6px);
-		background: rgba(30, 41, 59, 0.92);
-		color: #e5edf7;
+		height: 34px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 6px;
+		padding: 0 10px;
+		border: 0;
+		border-radius: 9px;
+		background: var(--fill);
+		color: var(--text-2);
+		font-size: 12px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background-color 0.12s ease;
 	}
 
-	.tool-button {
-		padding: 0 10px;
+	.workspace-sidebar__actions button:hover {
+		background: var(--fill-strong);
+		color: var(--text);
 	}
+
+	.workspace-sidebar__actions button.danger:hover {
+		background: var(--danger-soft);
+		color: var(--danger);
+	}
+
+	.workspace-sidebar__actions .material-symbols-outlined {
+		font-size: 16px;
+	}
+
+	.workbench-split {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 0;
+		display: flex;
+	}
+
+	/* ---------- Editor ---------- */
 
 	.editor-column {
 		flex: 1 1 auto;
@@ -4290,34 +5023,44 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		border: 1px solid rgba(148, 163, 184, 0.24);
-		border-radius: 16px;
-		background: rgba(15, 23, 42, 0.96);
+		border-radius: var(--radius-lg);
+		background: var(--surface);
+		box-shadow: var(--shadow-card);
 	}
 
 	.file-tabs {
-		flex: 0 0 38px;
+		flex: 0 0 48px;
 		display: flex;
-		align-items: stretch;
+		align-items: center;
+		gap: 4px;
 		min-width: 0;
+		padding: 0 8px;
 		overflow-x: auto;
-		border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-		background: #111827;
+		border-bottom: 1px solid var(--line-soft);
+		scrollbar-width: none;
 	}
 
 	.file-tab {
 		display: flex;
 		align-items: center;
-		min-width: 112px;
-		max-width: 210px;
-		border-right: 1px solid rgba(148, 163, 184, 0.14);
-		background: rgba(30, 41, 59, 0.82);
-		color: #cbd5e1;
+		flex: 0 0 auto;
+		max-width: 220px;
+		height: 32px;
+		border-radius: 8px;
+		color: var(--text-3);
+		transition:
+			background-color 0.12s ease,
+			color 0.12s ease;
+	}
+
+	.file-tab:hover {
+		background: var(--surface-muted);
+		color: var(--text-2);
 	}
 
 	.file-tab.active {
-		background: #1e293b;
-		color: #f8fafc;
+		background: var(--fill);
+		color: var(--text);
 	}
 
 	.file-tab button {
@@ -4336,30 +5079,548 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		text-align: left;
-		padding: 0 10px;
+		padding: 0 12px;
+		font-size: 13px;
+		font-weight: 600;
 	}
 
-	.file-tab button:last-child {
-		width: 32px;
+	.file-tab button:nth-child(2) {
+		width: 24px;
+		height: 24px;
+		margin-right: 4px;
 		display: grid;
 		place-items: center;
-		color: #94a3b8;
+		padding: 0;
+		border-radius: 6px;
+		color: var(--text-3);
+	}
+
+	.file-tab button:nth-child(2):hover {
+		background: var(--fill-strong);
+		color: var(--text);
+	}
+
+	.file-tab:has(button:nth-child(2)) button:first-child {
+		padding-right: 4px;
 	}
 
 	.file-tab .material-symbols-outlined {
-		font-size: 14px;
+		font-size: 15px;
 	}
 
-	.workspace-status {
-		margin-left: auto;
+	.editor-surface {
+		letter-spacing: normal;
+		flex: 1 1 auto;
+		min-height: 0;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* ---------- Resizer ---------- */
+
+	.panel-resizer {
+		flex: 0 0 12px;
+		width: 12px;
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		justify-content: center;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		appearance: none;
+		cursor: col-resize;
+		touch-action: none;
+		user-select: none;
+		position: relative;
+	}
+
+	.panel-resizer__thumb {
+		width: 4px;
+		height: 40px;
+		border-radius: 999px;
+		background: var(--fill-strong);
+		transition:
+			height 0.18s ease,
+			background-color 0.18s ease;
+	}
+
+	.panel-resizer:hover .panel-resizer__thumb,
+	.panel-resizer:focus-visible .panel-resizer__thumb,
+	.panel-resizer--active .panel-resizer__thumb {
+		height: 72px;
+		background: var(--primary);
+	}
+
+	/* ---------- Console ---------- */
+
+	.terminal-pane {
 		flex: 0 0 auto;
-		padding: 0 10px;
-		color: #94a3b8;
-		font-size: 11px;
+		width: 42%;
+		min-width: 300px;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border-radius: var(--radius-lg);
+		background: var(--surface);
+		box-shadow: var(--shadow-card);
+	}
+
+	.pane-header {
+		flex: 0 0 48px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 0 8px 0 16px;
+		border-bottom: 1px solid var(--line-soft);
+	}
+
+	.pane-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		overflow: hidden;
 		white-space: nowrap;
+	}
+
+	.pane-title strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.pane-title > .material-symbols-outlined {
+		color: var(--text-3);
+		font-size: 18px;
+	}
+
+	.pane-title strong {
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.run-indicator {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 22px;
+		padding: 0 8px;
+		border-radius: 999px;
+		background: var(--success-soft);
+		color: var(--success);
+		font-size: 11px;
+		font-weight: 700;
+	}
+
+	.run-indicator i {
+		width: 6px;
+		height: 6px;
+		border-radius: 999px;
+		background: currentColor;
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+
+	.run-indicator--debug {
+		background: var(--debug-tone-soft);
+		color: var(--debug-tone);
+	}
+
+	@keyframes pulse {
+		50% {
+			opacity: 0.3;
+		}
+	}
+
+	.console-controls {
+		flex: none;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.action-button--icon {
+		width: 30px;
+		min-width: 30px;
+		height: 30px;
+		padding: 0;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--text-2);
+		box-shadow: none;
+	}
+
+	.action-button--icon:enabled:hover {
+		background: var(--surface);
+		color: var(--text);
+		box-shadow: 0 1px 3px rgba(0, 23, 51, 0.08);
+	}
+
+	.action-button--icon:disabled {
+		opacity: 0.32;
+	}
+
+	.action-button--icon .material-symbols-outlined {
+		font-size: 18px;
+		font-variation-settings:
+			'FILL' 0,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.console-controls > .action-button--icon {
+		background: var(--fill);
+	}
+
+	.console-body {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 12px;
+		overflow-y: auto;
+	}
+
+	.stdin-panel {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 10px;
+		padding: 14px;
+		border-radius: var(--radius-md);
+		background: var(--warning-soft);
+		color: var(--warning-text);
+	}
+
+	.stdin-panel > div {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 12px;
+		line-height: 1.5;
+	}
+
+	.stdin-panel strong {
+		color: var(--text);
+		font-size: 13px;
+	}
+
+	.stdin-panel textarea {
+		width: 100%;
+		min-height: 86px;
+		resize: vertical;
+		padding: 10px 12px;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--text);
+		font: 12px/1.5 var(--mono);
+		outline: none;
+		transition: border-color 0.15s ease;
+	}
+
+	.stdin-panel textarea:focus {
+		border-color: var(--warning);
+	}
+
+	.workspace-share {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		padding: 12px 16px;
+		background: var(--surface);
+		border-bottom: 1px solid var(--line);
+	}
+
+	.workspace-share .args-chip {
+		flex: 1 1 240px;
+	}
+
+	.workspace-share input {
+		width: 100%;
+	}
+
+	.workspace-save-error {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		padding: 12px 14px;
+		border-radius: var(--radius-md);
+		background: var(--danger-soft);
+		color: var(--danger-text);
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.workspace-save-error span {
+		flex: 1 1 200px;
+	}
+
+	.workspace-save-error button {
+		height: 30px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 8px;
+		background: var(--surface);
+		color: var(--danger);
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.progress-shell {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 14px;
+		border-radius: var(--radius-md);
+		background: var(--primary-soft);
+	}
+
+	.progress-copy {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.progress-copy__text {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		color: var(--text);
+	}
+
+	.progress-copy__text .material-symbols-outlined {
+		color: var(--primary);
+		font-size: 18px;
+	}
+
+	.progress-copy__text strong {
+		font-size: 13px;
+		font-weight: 650;
+	}
+
+	.progress-percent {
+		color: var(--primary);
+		font-size: 13px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.progress-track {
+		height: 6px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: rgba(49, 130, 246, 0.16);
+	}
+
+	.progress-fill {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		transform-origin: left center;
+		background: var(--primary);
+		transition: transform 0.2s ease;
+	}
+
+	.progress-track--indeterminate .progress-fill {
+		transform: scaleX(1);
+		transform-origin: center;
+		animation: progress-activity 1.4s ease-in-out infinite;
+	}
+
+	@keyframes progress-activity {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+
+		50% {
+			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.progress-track--indeterminate .progress-fill {
+			animation: none;
+			opacity: 0.65;
+		}
+
+		.run-indicator i {
+			animation: none;
+		}
+	}
+
+	.terminal-shell {
+		letter-spacing: normal;
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 260px;
+		overflow: hidden;
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport) {
+		scrollbar-width: thin;
+		scrollbar-color: var(--fill-strong) transparent;
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar) {
+		width: 10px;
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-track) {
+		background: transparent;
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb) {
+		border: 3px solid transparent;
+		border-radius: 999px;
+		background: var(--fill-strong) padding-box;
+	}
+
+	.terminal-shell :global(.xterm:hover .xterm-viewport::-webkit-scrollbar-thumb),
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover) {
+		background: var(--text-4) padding-box;
+	}
+
+	.material-symbols-outlined {
+		font-family: 'Material Symbols Outlined';
+		font-weight: normal;
+		font-style: normal;
+		font-size: 15px;
+		line-height: 1;
+		letter-spacing: normal;
+		text-transform: none;
+		display: inline-block;
+		width: 1em;
+		flex: none;
+		overflow: hidden;
+		white-space: nowrap;
+		word-wrap: normal;
+		direction: ltr;
+		font-feature-settings: 'liga';
+		-webkit-font-feature-settings: 'liga';
+		-webkit-font-smoothing: antialiased;
+		font-variation-settings:
+			'FILL' 0,
+			'wght' 450,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	/* ---------- Status bar ---------- */
+
+	.statusbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 36px;
+		padding: 0 16px 8px;
+		color: var(--text-3);
+		font-size: 12px;
+		white-space: nowrap;
+	}
+
+	.statusbar__group {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
+	}
+
+	.statusbar__group--end {
+		flex: 0 0 auto;
+	}
+
+	.statusbar__message {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: var(--text-2);
+	}
+
+	.statusbar__meta {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.save-state {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-weight: 600;
+		color: var(--text-2);
+	}
+
+	.save-state i {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: var(--success);
+	}
+
+	.save-state--saving i {
+		background: var(--warning);
+	}
+
+	.save-state--error {
+		color: var(--danger);
+	}
+
+	.save-state--error i {
+		background: var(--danger);
+	}
+
+	.switch {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-2);
+		font-weight: 600;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.switch input {
+		appearance: none;
+		-webkit-appearance: none;
+		position: relative;
+		width: 28px;
+		height: 16px;
+		margin: 0;
+		flex: 0 0 auto;
+		border-radius: 999px;
+		background: var(--fill-strong);
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.switch input::before {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 12px;
+		height: 12px;
+		border-radius: 999px;
+		background: white;
+		box-shadow: 0 1px 3px rgba(0, 23, 51, 0.2);
+		transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1.2);
+	}
+
+	.switch input:checked {
+		background: var(--primary);
+	}
+
+	.switch input:checked::before {
+		transform: translateX(12px);
 	}
 
 	.lsp-status {
@@ -4367,14 +5628,13 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		max-width: min(260px, 42vw);
-		min-height: 24px;
-		padding: 0 8px 3px;
-		border: 1px solid rgba(148, 163, 184, 0.28);
+		max-width: min(280px, 36vw);
+		height: 24px;
+		padding: 0 9px;
 		border-radius: 999px;
-		background: rgba(15, 23, 42, 0.72);
-		color: #cbd5e1;
-		font-weight: 650;
+		background: var(--surface);
+		color: var(--text-2);
+		font-weight: 600;
 		overflow: hidden;
 	}
 
@@ -4391,25 +5651,23 @@
 	}
 
 	.lsp-status--loading {
-		border-color: rgba(56, 189, 248, 0.4);
-		color: #bae6fd;
+		color: var(--primary);
 	}
 
 	.lsp-status--ready {
-		border-color: rgba(34, 197, 94, 0.34);
-		color: #bbf7d0;
+		color: var(--success);
 	}
 
 	.lsp-status--error {
-		border-color: rgba(248, 113, 113, 0.42);
-		color: #fecaca;
+		background: var(--danger-soft);
+		color: var(--danger);
 	}
 
 	.lsp-status__spinner {
 		flex: 0 0 auto;
 		width: 10px;
 		height: 10px;
-		border: 2px solid rgba(186, 230, 253, 0.28);
+		border: 2px solid rgba(49, 130, 246, 0.22);
 		border-top-color: currentColor;
 		border-radius: 999px;
 		animation: lsp-status-spin 0.8s linear infinite;
@@ -4417,13 +5675,13 @@
 
 	.lsp-status__progress {
 		position: absolute;
-		right: 8px;
-		bottom: 3px;
-		left: 8px;
+		right: 9px;
+		bottom: 2px;
+		left: 9px;
 		height: 2px;
 		overflow: hidden;
 		border-radius: 999px;
-		background: rgba(125, 211, 252, 0.2);
+		background: rgba(49, 130, 246, 0.16);
 	}
 
 	.lsp-status__progress-fill {
@@ -4457,478 +5715,115 @@
 	.drag-active::after {
 		content: 'Drop files to import';
 		position: fixed;
-		inset: 20px;
+		inset: 12px;
 		z-index: 30;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border: 2px dashed #14b8a6;
-		border-radius: 18px;
-		background: rgba(15, 23, 42, 0.72);
-		color: white;
-		font-weight: 800;
+		border: 2px dashed var(--primary);
+		border-radius: 20px;
+		background: var(--overlay);
+		backdrop-filter: blur(6px);
+		color: var(--primary-strong);
+		font-size: 17px;
+		font-weight: 700;
 		pointer-events: none;
 	}
 
-	.terminal-pane {
-		flex: 0 0 auto;
-		width: 50%;
-		min-width: 320px;
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-		min-height: 0;
-		padding-bottom: 6px;
-		padding-right: 6px;
-		box-sizing: border-box;
-		overflow-y: auto;
-	}
+	/* ---------- Debugger ---------- */
 
-	.panel-resizer {
-		flex: 0 0 14px;
-		width: 14px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0;
-		border: 0;
-		background: transparent;
-		appearance: none;
-		cursor: col-resize;
-		touch-action: none;
-		user-select: none;
-		position: relative;
-	}
-
-	.panel-resizer::before {
-		content: '';
-		width: 1px;
-		height: 100%;
-		border-radius: 999px;
-		background: linear-gradient(
-			180deg,
-			rgba(148, 163, 184, 0),
-			rgba(148, 163, 184, 0.72),
-			rgba(148, 163, 184, 0)
-		);
-	}
-
-	.panel-resizer__thumb {
+	.visually-hidden {
 		position: absolute;
-		width: 6px;
-		height: 72px;
-		border-radius: 999px;
-		background: linear-gradient(180deg, rgba(15, 118, 110, 0.76), rgba(20, 184, 166, 0.98));
-		box-shadow:
-			0 10px 18px rgba(20, 184, 166, 0.18),
-			0 0 0 4px rgba(20, 184, 166, 0.08);
-		transition:
-			transform 0.18s ease,
-			box-shadow 0.18s ease,
-			background 0.18s ease;
-	}
-
-	.panel-resizer:hover .panel-resizer__thumb,
-	.panel-resizer:focus-visible .panel-resizer__thumb,
-	.panel-resizer--active .panel-resizer__thumb {
-		transform: scaleX(1.15);
-		box-shadow:
-			0 12px 22px rgba(20, 184, 166, 0.22),
-			0 0 0 5px rgba(20, 184, 166, 0.12);
-	}
-
-	.toolbar {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		margin-bottom: 8px;
-		padding: 10px;
-		border: 1px solid rgba(148, 163, 184, 0.25);
-		border-radius: 14px;
-		background: rgba(255, 255, 255, 0.82);
-		backdrop-filter: blur(14px);
-		box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-	}
-
-	.toolbar-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px;
-	}
-
-	.toolbar-row--secondary {
-		gap: 8px;
-	}
-
-	.stdin-panel {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 8px;
-		padding: 10px;
-		border: 1px solid rgba(245, 158, 11, 0.28);
-		border-radius: 12px;
-		background: rgba(255, 251, 235, 0.92);
-		color: #451a03;
-	}
-
-	.stdin-panel > div {
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
-		font-size: 12px;
-		line-height: 1.35;
-	}
-
-	.stdin-panel strong {
-		font-size: 12px;
-	}
-
-	.stdin-panel textarea {
-		width: 100%;
-		min-height: 86px;
-		resize: vertical;
-		box-sizing: border-box;
-		padding: 8px 9px;
-		border: 1px solid rgba(180, 83, 9, 0.22);
-		border-radius: 10px;
-		background: rgba(255, 255, 255, 0.88);
-		color: #0f172a;
-		font:
-			12px/1.45 ui-monospace,
-			SFMono-Regular,
-			Menlo,
-			Monaco,
-			Consolas,
-			monospace;
-	}
-
-	.stdin-panel textarea:focus {
-		outline: 2px solid rgba(245, 158, 11, 0.24);
-		border-color: rgba(217, 119, 6, 0.45);
-	}
-
-	.progress-shell {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding: 10px 12px;
-		border-radius: 14px;
-		border: 1px solid rgba(45, 212, 191, 0.2);
-		background:
-			linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(236, 253, 245, 0.92)),
-			radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 42%);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.9),
-			0 12px 24px rgba(20, 184, 166, 0.08);
-	}
-
-	.progress-copy {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		flex-wrap: wrap;
-	}
-
-	.progress-copy__text {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		color: #0f172a;
-		font-size: 12px;
-	}
-
-	.progress-copy__text strong {
-		font-size: 12px;
-	}
-
-	.progress-percent {
-		font-size: 12px;
-		font-weight: 700;
-		color: #0f766e;
-	}
-
-	.progress-track {
-		height: 8px;
+		width: 1px;
+		height: 1px;
 		overflow: hidden;
-		border-radius: 999px;
-		background: rgba(148, 163, 184, 0.18);
-		box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
 	}
 
-	.progress-fill {
-		width: 100%;
-		height: 100%;
-		border-radius: inherit;
-		transform-origin: left center;
-		background: linear-gradient(90deg, #0f766e 0%, #14b8a6 52%, #34d399 100%);
-		box-shadow: 0 0 24px rgba(20, 184, 166, 0.28);
-		transition: transform 0.18s ease;
-	}
-
-	.progress-track--indeterminate .progress-fill {
-		transform: scaleX(1);
-		transform-origin: center;
-		animation: progress-activity 1.4s ease-in-out infinite;
-	}
-
-	@keyframes progress-activity {
-		0%,
-		100% {
-			opacity: 0.35;
-		}
-
-		50% {
-			opacity: 1;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.progress-track--indeterminate .progress-fill {
-			animation: none;
-			opacity: 0.65;
-		}
-	}
-
-	.path-chip,
-	.toggle-chip,
-	.select-chip,
-	.args-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-height: 30px;
-		padding: 0 9px;
-		border-radius: 999px;
-		border: 1px solid rgba(148, 163, 184, 0.28);
-		background: rgba(248, 250, 252, 0.92);
-		color: #0f172a;
-		box-sizing: border-box;
-	}
-
-	.path-chip {
-		max-width: 100%;
-		font-size: 11px;
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-	}
-
-	.path-chip code {
-		max-width: 100%;
+	.console-body:has(> .debug-shell) {
 		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: 11px;
 	}
 
-	.action-group {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	.action-button {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-height: 30px;
-		padding: 0 9px;
-		border: 1px solid transparent;
-		border-radius: 999px;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.01em;
-		cursor: pointer;
-		transition:
-			transform 0.18s ease,
-			box-shadow 0.18s ease,
-			border-color 0.18s ease,
-			background-color 0.18s ease;
-	}
-
-	.action-button:enabled:hover {
-		transform: translateY(-1px);
-	}
-
-	.action-button:enabled:active {
-		transform: translateY(0);
-	}
-
-	.action-button:disabled {
-		opacity: 0.48;
-		cursor: not-allowed;
-		box-shadow: none;
-	}
-
-	.action-button--run {
-		background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
-		color: #f8fffe;
-		box-shadow: 0 12px 22px rgba(20, 184, 166, 0.28);
-	}
-
-	.action-button--debug {
-		background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
-		color: #f8faff;
-		box-shadow: 0 12px 22px rgba(99, 102, 241, 0.24);
-	}
-
-	.action-button--stop {
-		background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
-		color: #fff8f8;
-		box-shadow: 0 12px 22px rgba(239, 68, 68, 0.24);
-	}
-
-	.action-button--icon {
-		width: 30px;
-		min-width: 30px;
-		padding: 0;
-		justify-content: center;
-		background: rgba(255, 255, 255, 0.92);
-		border-color: rgba(148, 163, 184, 0.32);
-		color: #0f172a;
-		box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-	}
-
-	.terminal-shell {
-		flex: 1 1 auto;
-		min-height: 0;
-		min-height: 280px;
-	}
-
-	.terminal-shell :global(.xterm .xterm-viewport) {
-		scrollbar-width: thin;
-		scrollbar-color: rgba(15, 118, 110, 0.62) rgba(148, 163, 184, 0.12);
-	}
-
-	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar) {
-		width: 12px;
-	}
-
-	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-track) {
-		margin: 8px 0;
-		border-radius: 999px;
-		background:
-			linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(226, 232, 240, 0.26)),
-			rgba(148, 163, 184, 0.08);
-		box-shadow:
-			inset 0 0 0 1px rgba(148, 163, 184, 0.08),
-			inset 0 1px 2px rgba(15, 23, 42, 0.05);
-	}
-
-	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb) {
-		border: 3px solid transparent;
-		border-radius: 999px;
-		background: linear-gradient(180deg, rgba(45, 212, 191, 0.86), rgba(15, 118, 110, 0.94))
-			padding-box;
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.42),
-			0 4px 10px rgba(15, 118, 110, 0.18);
-	}
-
-	.terminal-shell :global(.xterm:hover .xterm-viewport::-webkit-scrollbar-thumb),
-	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-		background: linear-gradient(180deg, rgba(52, 211, 153, 0.94), rgba(13, 148, 136, 1))
-			padding-box;
-	}
-
-	.material-symbols-outlined {
-		font-family: 'Material Symbols Outlined';
-		font-weight: normal;
-		font-style: normal;
-		font-size: 15px;
-		line-height: 1;
-		letter-spacing: normal;
-		text-transform: none;
-		display: inline-block;
-		white-space: nowrap;
-		word-wrap: normal;
-		direction: ltr;
-		font-feature-settings: 'liga';
-		-webkit-font-feature-settings: 'liga';
-		-webkit-font-smoothing: antialiased;
-		font-variation-settings:
-			'FILL' 0,
-			'wght' 500,
-			'GRAD' 0,
-			'opsz' 24;
-	}
-
-	.action-button--icon .material-symbols-outlined {
-		font-size: 16px;
-	}
-
-	.workspace-save-error {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		align-items: center;
-		padding: 0.75rem;
-		border: 1px solid #d97706;
-		border-radius: 0.5rem;
-	}
-
-	.hint {
-		margin: 0 0 8px;
-		font-size: 12px;
-		color: #475569;
+	.console-body:has(> .debug-shell) > .terminal-shell {
+		flex: 1 1 38%;
+		min-height: 160px;
 	}
 
 	.debug-shell {
-		--debug-accent: #6366f1;
-		--debug-accent-soft: rgba(99, 102, 241, 0.14);
+		--debug-accent: var(--primary);
+		--debug-accent-soft: var(--primary-soft);
+		flex: 0 1 auto;
+		max-height: 64%;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		margin: 8px 0 10px;
-		padding: 12px;
-		border: 1px solid rgba(148, 163, 184, 0.24);
-		border-radius: 18px;
-		background:
-			radial-gradient(circle at top left, var(--debug-accent-soft), transparent 34%),
-			linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
-		box-shadow: 0 22px 40px rgba(15, 23, 42, 0.08);
+		border-radius: var(--radius-md);
+		background: var(--surface-muted);
+		box-shadow: inset 0 0 0 1px var(--line-soft);
+		overflow: hidden;
 	}
 
 	.debug-shell--active {
-		--debug-accent: #0f766e;
-		--debug-accent-soft: rgba(20, 184, 166, 0.16);
+		--debug-accent: var(--success);
+		--debug-accent-soft: var(--success-soft);
 	}
 
 	.debug-shell--paused {
-		--debug-accent: #7c3aed;
-		--debug-accent-soft: rgba(124, 58, 237, 0.16);
+		--debug-accent: var(--debug-tone);
+		--debug-accent-soft: var(--debug-tone-soft);
 	}
 
+	/* Session header: status, target and the stepping toolbar. */
 	.debug-hero {
+		flex: none;
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
 		flex-wrap: wrap;
+		gap: 8px 12px;
+		padding: 10px 10px 8px 12px;
 	}
 
 	.debug-hero__intro {
 		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-		flex: 1 1 260px;
+		align-items: center;
+		gap: 10px;
+		flex: 1 1 160px;
 		min-width: 0;
 	}
 
-	.debug-hero__badge {
-		width: 42px;
-		height: 42px;
-		display: grid;
-		place-items: center;
-		border-radius: 14px;
-		background: linear-gradient(135deg, var(--debug-accent) 0%, #0f172a 180%);
-		color: white;
-		box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
-		flex: 0 0 auto;
+	.debug-hero__copy {
+		min-width: 0;
 	}
 
-	.debug-hero__badge .material-symbols-outlined {
-		font-size: 20px;
+	.debug-hero__copy h2 {
+		margin: 0;
+		overflow: hidden;
+		color: var(--text);
+		font-size: 13px;
+		font-weight: 700;
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.debug-status-pill {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 26px;
+		padding: 0 10px 0 8px;
+		border-radius: 999px;
+		background: var(--fill);
+		color: var(--text-2);
+		font-size: 12px;
+		font-weight: 700;
+	}
+
+	.debug-status-pill .material-symbols-outlined {
+		font-size: 16px;
 		font-variation-settings:
 			'FILL' 1,
 			'wght' 500,
@@ -4936,511 +5831,415 @@
 			'opsz' 24;
 	}
 
-	.debug-hero__copy {
-		min-width: 0;
-	}
-
-	.debug-hero__eyebrow {
-		margin: 0 0 4px;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--debug-accent);
-	}
-
-	.debug-hero__copy h2 {
-		margin: 0;
-		font-size: 18px;
-		line-height: 1.1;
-		color: #0f172a;
-	}
-
-	.debug-hero__stats {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		justify-content: flex-end;
-	}
-
-	.debug-status-pill,
-	.debug-metric {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-height: 32px;
-		padding: 0 10px;
-		border-radius: 999px;
-		border: 1px solid rgba(148, 163, 184, 0.26);
-		background: rgba(255, 255, 255, 0.86);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-	}
-
-	.debug-status-pill {
-		font-size: 11px;
-		font-weight: 700;
-		color: #0f172a;
-	}
-
-	.debug-status-pill--idle {
-		color: #475569;
-	}
-
 	.debug-status-pill--active {
-		color: #0f766e;
+		background: var(--success-soft);
+		color: var(--success);
 	}
 
 	.debug-status-pill--paused {
-		color: #7c3aed;
+		background: var(--debug-tone-soft);
+		color: var(--debug-tone);
+	}
+
+	.debug-controls {
+		flex: none;
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 3px;
+		border-radius: 12px;
+		background: var(--surface);
+		box-shadow: var(--shadow-card);
+	}
+
+	.debug-controls__divider {
+		width: 1px;
+		height: 18px;
+		margin: 0 3px;
+		background: var(--line);
+	}
+
+	.debug-control {
+		width: 32px;
+		min-width: 32px;
+		height: 32px;
+		padding: 0;
+		border-radius: 9px;
+		background: transparent;
+		color: var(--text-2);
+		box-shadow: none;
+	}
+
+	.debug-control .material-symbols-outlined {
+		font-size: 20px;
+		font-variation-settings:
+			'FILL' 0,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.debug-control:enabled:hover {
+		background: var(--fill);
+		color: var(--text);
+	}
+
+	.debug-control:disabled {
+		opacity: 0.3;
+	}
+
+	.debug-control__label {
+		display: none;
+	}
+
+	.debug-control--primary {
+		width: auto;
+		padding: 0 12px 0 8px;
+		background: var(--debug-tone);
+		color: white;
+	}
+
+	.debug-control--primary .debug-control__label {
+		display: inline;
+		font-size: 13px;
+	}
+
+	.debug-control--primary .material-symbols-outlined {
+		font-variation-settings:
+			'FILL' 1,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.debug-control--primary:enabled:hover {
+		background: var(--debug-tone);
+		color: white;
+		filter: brightness(1.08);
+	}
+
+	/* Session facts as a quiet, scannable strip. */
+	.debug-hero__stats {
+		flex: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+		padding: 0 12px 10px;
+		border-bottom: 1px solid var(--line-soft);
 	}
 
 	.debug-metric {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 1px;
-		padding-top: 6px;
-		padding-bottom: 6px;
-		border-radius: 14px;
-	}
-
-	.debug-metric span {
-		font-size: 10px;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
-	}
-
-	.debug-metric strong {
-		font-size: 13px;
-		line-height: 1;
-		color: #0f172a;
-	}
-
-	.debug-panels {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 10px;
-	}
-
-	.debug-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		border: 1px solid rgba(203, 213, 225, 0.72);
-		border-radius: 16px;
-		padding: 12px;
-		background: rgba(255, 255, 255, 0.82);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.88),
-			0 12px 24px rgba(15, 23, 42, 0.05);
+		display: inline-flex;
+		align-items: baseline;
+		gap: 5px;
 		font-size: 12px;
 	}
 
-	.debug-panel__header {
+	.debug-metric span {
+		color: var(--text-3);
+		font-weight: 500;
+	}
+
+	.debug-metric strong {
+		color: var(--text);
+		font-family: var(--mono);
+		font-size: 12px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Stacked, collapsible sections like an IDE run-and-debug sidebar. */
+	.debug-panels {
+		flex: 1 1 auto;
+		min-height: 0;
 		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 10px;
+		flex-direction: column;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	.debug-panel {
+		flex: none;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		font-size: 12px;
+	}
+
+	.debug-panel + .debug-panel {
+		border-top: 1px solid var(--line-soft);
+	}
+
+	.debug-panel__header {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 36px;
+		padding: 0 12px 0 6px;
+		background: var(--surface-muted);
+	}
+
+	.debug-panel__toggle {
+		position: static;
+		width: 22px;
+		height: 22px;
+		display: grid;
+		place-items: center;
+		flex: none;
+		padding: 0;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	/* Let the whole header row act as the toggle target. */
+	.debug-panel__toggle::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+
+	.debug-panel__header:hover {
+		background: var(--fill);
+	}
+
+	.debug-panel__chevron {
+		font-size: 18px;
+		transform: rotate(-90deg);
+		transition: transform 0.15s ease;
+	}
+
+	.debug-panel__toggle[aria-expanded='true'] .debug-panel__chevron {
+		transform: none;
 	}
 
 	.debug-panel__title {
+		flex: 1 1 auto;
 		display: flex;
-		gap: 10px;
+		align-items: center;
+		gap: 6px;
 		min-width: 0;
 	}
 
 	.debug-panel__title > .material-symbols-outlined {
-		width: 28px;
-		height: 28px;
-		display: grid;
-		place-items: center;
-		border-radius: 10px;
-		background: rgba(99, 102, 241, 0.08);
 		color: var(--debug-accent);
-		flex: 0 0 auto;
-	}
-
-	.debug-panel__copy {
-		min-width: 0;
+		font-size: 16px;
 	}
 
 	.debug-panel h3 {
 		margin: 0;
+		color: var(--text);
 		font-size: 12px;
-		color: #0f172a;
+		font-weight: 700;
 	}
 
 	.debug-count {
-		min-width: 22px;
-		height: 22px;
+		min-width: 20px;
+		height: 18px;
 		display: inline-grid;
 		place-items: center;
 		padding: 0 6px;
 		border-radius: 999px;
-		background: rgba(15, 23, 42, 0.06);
-		color: #334155;
+		background: var(--fill);
+		color: var(--text-3);
 		font-size: 11px;
-		font-weight: 700;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.debug-panel__body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 2px 8px 12px;
 	}
 
 	.debug-panel ul {
 		list-style: none;
-		padding: 0;
 		margin: 0;
+		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 1px;
 	}
 
 	.debug-scopes {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 4px;
 	}
 
 	.debug-scope {
 		display: flex;
 		flex-direction: column;
-		gap: 7px;
+		gap: 2px;
+	}
+
+	.debug-scope summary {
+		padding: 4px 4px;
+		border-radius: 6px;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.debug-scope summary:hover {
+		background: var(--fill);
 	}
 
 	.debug-scope h4 {
+		display: inline;
 		margin: 0;
-		color: #475569;
-		font-size: 10px;
-		letter-spacing: 0.08em;
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.02em;
 		text-transform: uppercase;
 	}
 
 	.debug-load-scope {
 		align-self: flex-start;
-		border: 1px solid rgba(37, 99, 235, 0.18);
+		margin: 2px 0 2px 8px;
+		padding: 4px 10px;
+		border: 0;
 		border-radius: 7px;
-		background: rgba(37, 99, 235, 0.06);
-		padding: 5px 9px;
-		color: #1d4ed8;
-		font-size: 11px;
-		font-weight: 650;
+		background: transparent;
+		color: var(--primary);
+		font-size: 12px;
+		font-weight: 600;
 		cursor: pointer;
 	}
 
-	.debug-variable-type {
-		color: #64748b;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-		font-size: 10px;
+	.debug-load-scope:enabled:hover {
+		background: var(--primary-soft);
 	}
 
-	.debug-memory-inspect {
-		display: inline-grid;
-		width: 24px;
-		height: 24px;
-		flex: 0 0 auto;
-		place-items: center;
-		border: 0;
-		border-radius: 8px;
-		background: rgba(14, 116, 144, 0.09);
-		color: #0e7490;
-		cursor: pointer;
+	.debug-load-scope:disabled {
+		cursor: progress;
+		opacity: 0.6;
 	}
 
-	.debug-memory-inspect .material-symbols-outlined {
-		font-size: 16px;
-	}
-
-	.debug-memory-controls {
-		display: grid;
-		grid-template-columns: minmax(120px, 2fr) minmax(72px, 1fr) minmax(64px, 0.7fr) auto;
-		gap: 8px;
-		align-items: end;
-	}
-
-	.debug-memory-controls label {
-		display: flex;
-		min-width: 0;
-		flex-direction: column;
-		gap: 4px;
-		color: #64748b;
-		font-size: 10px;
-		font-weight: 650;
-	}
-
-	.debug-memory-controls input {
-		min-width: 0;
-		height: 34px;
-		box-sizing: border-box;
-		border: 1px solid rgba(148, 163, 184, 0.35);
-		border-radius: 9px;
-		background: rgba(255, 255, 255, 0.94);
-		padding: 0 9px;
-		color: #0f172a;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-		font-size: 11px;
-	}
-
-	.debug-memory-watch-controls {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: end;
-		gap: 8px;
-	}
-
-	.debug-memory-watch-controls label {
-		display: flex;
-		min-width: 120px;
-		flex-direction: column;
-		gap: 4px;
-		color: #64748b;
-		font-size: 10px;
-		font-weight: 650;
-	}
-
-	.debug-memory-watch-controls select,
-	.debug-memory-write-field input,
-	.debug-memory-write,
-	.debug-data-breakpoint-set,
-	.debug-data-breakpoint-clear {
-		height: 34px;
-		box-sizing: border-box;
-		border: 1px solid rgba(99, 102, 241, 0.24);
-		border-radius: 9px;
-		background: rgba(99, 102, 241, 0.08);
-		padding: 0 11px;
-		color: #4338ca;
-		font: inherit;
-		font-size: 11px;
-		font-weight: 700;
-	}
-
-	.debug-data-breakpoint-set,
-	.debug-memory-write,
-	.debug-data-breakpoint-clear {
-		cursor: pointer;
-	}
-
-	.debug-memory-write-field {
-		flex: 1 1 180px;
-	}
-
-	.debug-memory-write-field input {
-		min-width: 0;
-		width: 100%;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-		font-weight: 500;
-	}
-
-	.debug-data-breakpoint-clear {
-		border-color: rgba(239, 68, 68, 0.2);
-		background: rgba(239, 68, 68, 0.08);
-		color: #b91c1c;
-	}
-
-	.debug-data-breakpoint-set:disabled,
-	.debug-memory-write:disabled,
-	.debug-data-breakpoint-clear:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
-
-	.debug-data-breakpoint-status {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin: 0;
-		border-radius: 9px;
-		background: rgba(99, 102, 241, 0.08);
-		padding: 8px 10px;
-		color: #4338ca;
-		font-size: 11px;
-	}
-
-	.debug-memory-write-status {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin: 0;
-		border-radius: 9px;
-		background: rgba(14, 116, 144, 0.08);
-		padding: 8px 10px;
-		color: #0e7490;
-		font-size: 11px;
-	}
-
-	.debug-memory-read,
-	.debug-memory-toolbar button {
-		height: 34px;
-		border: 0;
-		border-radius: 9px;
-		background: rgba(14, 116, 144, 0.1);
-		padding: 0 11px;
-		color: #0e7490;
-		font: inherit;
-		font-size: 11px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-
-	.debug-memory-read:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
-
-	.debug-memory-error {
-		margin: 0;
-		border-radius: 9px;
-		background: rgba(239, 68, 68, 0.08);
-		padding: 8px 10px;
-		color: #b91c1c;
-		font-size: 11px;
-	}
-
-	.debug-memory-toolbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-	}
-
-	.debug-memory-toolbar code {
-		min-width: 0;
-		overflow-wrap: anywhere;
-		color: #475569;
-		font-size: 10px;
-	}
-
-	.debug-memory-table {
-		display: flex;
-		max-width: 100%;
-		flex-direction: column;
-		gap: 4px;
-		overflow-x: auto;
-		padding-bottom: 2px;
-	}
-
-	.debug-memory-row {
-		display: grid;
-		min-width: max-content;
-		grid-template-columns: minmax(72px, auto) auto minmax(16ch, auto);
-		gap: 10px;
-		align-items: center;
-	}
-
-	.debug-memory-address,
-	.debug-memory-ascii {
-		color: #64748b;
-		font-size: 10px;
-	}
-
-	.debug-memory-hex {
-		display: grid;
-		grid-template-columns: repeat(16, 2ch);
-		gap: 4px;
-	}
-
-	.debug-memory-byte {
-		color: #0f172a;
-		font-size: 10px;
-		text-align: center;
-	}
-
-	.debug-memory-byte--unreadable {
-		color: #dc2626;
-	}
-
-	.debug-memory-ascii {
-		white-space: pre;
-	}
-
-	.debug-expand {
-		display: inline-grid;
-		width: 24px;
-		height: 24px;
-		flex: 0 0 auto;
-		place-items: center;
-		border: 0;
-		border-radius: 8px;
-		background: rgba(99, 102, 241, 0.08);
-		color: var(--debug-accent);
-		cursor: pointer;
-	}
-
-	.debug-expand:disabled {
-		cursor: default;
-		opacity: 0.65;
-	}
-
-	.debug-expand .material-symbols-outlined {
-		font-size: 17px;
-	}
-
-	.debug-variable-children {
-		margin-left: 14px;
-		padding-left: 10px;
-		border-left: 1px solid rgba(99, 102, 241, 0.18);
-	}
-
+	/* Variable, watch and frame rows share one dense row style. */
 	.debug-entry {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		flex-wrap: wrap;
-		padding: 10px;
-		border: 1px solid rgba(226, 232, 240, 0.92);
-		border-radius: 12px;
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
+		gap: 8px;
+		min-height: 30px;
+		padding: 4px 6px 4px 10px;
+		border-radius: 8px;
 	}
 
-	.debug-entry--local {
-		align-items: flex-start;
+	.debug-entry:hover {
+		background: var(--surface);
 	}
 
 	.debug-entry__body {
 		display: flex;
-		flex-direction: column;
+		align-items: baseline;
 		gap: 6px;
-		flex: 1;
+		flex: 0 1 auto;
 		min-width: 0;
 	}
 
-	.debug-expression,
-	.stack-function {
-		font-weight: 600;
-		color: #0f172a;
-		word-break: break-word;
+	.debug-entry--local .debug-value {
+		flex: 1 1 auto;
+		text-align: right;
+	}
+
+	.debug-entry--watch .debug-entry__body {
+		flex: 1 1 auto;
+		justify-content: space-between;
 	}
 
 	.debug-key,
 	.stack-line,
 	.debug-value {
-		max-width: 100%;
-		padding: 4px 7px;
-		border-radius: 9px;
-		background: rgba(241, 245, 249, 0.95);
-		border: 1px solid rgba(226, 232, 240, 0.95);
+		min-width: 0;
+		font-family: var(--mono);
+		font-size: 12px;
 	}
 
 	.debug-key {
 		color: var(--debug-accent);
-		font-weight: 700;
+		font-weight: 600;
+		white-space: nowrap;
 	}
 
 	.debug-value {
-		color: #334155;
+		color: var(--text);
 		overflow-wrap: anywhere;
 	}
 
+	.debug-variable-type {
+		color: var(--text-4);
+		font-family: var(--mono);
+		font-size: 11px;
+		white-space: nowrap;
+	}
+
+	.debug-expression,
+	.stack-function {
+		min-width: 0;
+		color: var(--text);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.debug-variable-children {
+		margin-left: 14px;
+		padding-left: 6px;
+		border-left: 1px solid var(--line);
+	}
+
+	.debug-memory-inspect,
+	.debug-expand {
+		width: 24px;
+		height: 24px;
+		display: inline-grid;
+		flex: none;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.debug-memory-inspect:hover,
+	.debug-expand:enabled:hover {
+		background: var(--debug-accent-soft);
+		color: var(--debug-accent);
+	}
+
+	.debug-expand:disabled {
+		cursor: default;
+		opacity: 0.55;
+	}
+
+	.debug-memory-inspect .material-symbols-outlined,
+	.debug-expand .material-symbols-outlined {
+		font-size: 16px;
+	}
+
 	.debug-entry--stack {
-		align-items: center;
+		padding: 0;
 	}
 
 	.debug-frame-select {
 		width: 100%;
+		min-height: 30px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		padding: 0;
+		padding: 4px 10px;
 		border: 0;
+		border-radius: 8px;
 		background: transparent;
 		color: inherit;
 		font: inherit;
@@ -5453,8 +6252,12 @@
 	}
 
 	.debug-entry--current {
-		border-color: rgba(99, 102, 241, 0.24);
-		box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
+		background: var(--debug-accent-soft);
+		box-shadow: inset 3px 0 0 var(--debug-accent);
+	}
+
+	.debug-entry--current:hover {
+		background: var(--debug-accent-soft);
 	}
 
 	.stack-meta {
@@ -5465,98 +6268,68 @@
 	}
 
 	.stack-order {
-		width: 20px;
-		height: 20px;
-		display: inline-grid;
-		place-items: center;
-		border-radius: 999px;
-		background: rgba(15, 23, 42, 0.08);
-		color: #475569;
-		font-size: 10px;
-		font-weight: 700;
+		width: 18px;
+		flex: none;
+		color: var(--text-4);
+		font-family: var(--mono);
+		font-size: 11px;
+		text-align: right;
+	}
+
+	.stack-line {
+		flex: none;
+		color: var(--text-3);
 	}
 
 	.watch-row {
 		display: flex;
-		gap: 8px;
+		gap: 6px;
 	}
 
 	.watch-row input {
 		flex: 1;
-		min-width: 0;
-		padding: 0 12px;
-		min-height: 36px;
-		border: 1px solid rgba(148, 163, 184, 0.3);
-		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.94);
-		font: inherit;
-		color: #0f172a;
-		outline: none;
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-	}
-
-	.watch-row input:focus {
-		border-color: rgba(99, 102, 241, 0.42);
-		box-shadow:
-			0 0 0 3px rgba(99, 102, 241, 0.12),
-			inset 0 1px 0 rgba(255, 255, 255, 0.8);
 	}
 
 	.watch-add {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		min-height: 36px;
-		padding: 0 12px;
+		gap: 2px;
+		height: 32px;
+		padding: 0 12px 0 8px;
 		border: 0;
-		border-radius: 12px;
-		background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
-		color: #f8faff;
-		font: inherit;
-		font-size: 11px;
+		border-radius: 8px;
+		background: var(--primary-soft);
+		color: var(--primary);
+		font-size: 12px;
 		font-weight: 700;
 		cursor: pointer;
-		box-shadow: 0 10px 18px rgba(99, 102, 241, 0.22);
+	}
+
+	.watch-add:hover {
+		background: var(--primary-soft-strong);
 	}
 
 	.watch-add .material-symbols-outlined {
 		font-size: 16px;
 	}
 
-	.toggle-chip input {
-		margin: 0;
-		accent-color: #14b8a6;
-	}
-
-	.select-chip select,
-	.args-chip input {
-		border: 0;
-		background: transparent;
-		font: inherit;
-		color: inherit;
-		outline: none;
-	}
-
-	.select-chip select {
-		padding-right: 4px;
-	}
-
-	.args-chip input {
-		min-width: 64px;
-	}
-
 	.remove {
-		width: 28px;
-		height: 28px;
+		width: 24px;
+		height: 24px;
 		display: grid;
 		place-items: center;
+		flex: none;
 		padding: 0;
 		border: 0;
-		border-radius: 999px;
-		background: rgba(239, 68, 68, 0.09);
-		color: #b91c1c;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-3);
 		cursor: pointer;
-		flex: 0 0 auto;
+	}
+
+	.remove:hover {
+		background: var(--danger-soft);
+		color: var(--danger);
 	}
 
 	.remove .material-symbols-outlined {
@@ -5564,25 +6337,289 @@
 	}
 
 	.empty {
-		margin: 0;
-		padding: 14px 12px;
 		display: flex;
 		align-items: center;
+		gap: 6px;
+		margin: 0;
+		padding: 6px 10px;
+		color: var(--text-3);
+	}
+
+	.empty .material-symbols-outlined {
+		font-size: 15px;
+	}
+
+	/* Memory inspector */
+	.debug-memory-controls {
+		display: grid;
+		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+		gap: 6px;
+		align-items: end;
+	}
+
+	.debug-memory-controls label,
+	.debug-memory-watch-controls label {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		min-width: 0;
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.debug-memory-watch-controls label {
+		flex: 1 1 120px;
+	}
+
+	.debug-memory-controls input,
+	.debug-memory-watch-controls select,
+	.debug-memory-write-field input,
+	.watch-row input {
+		width: 100%;
+		min-width: 0;
+		height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--surface);
+		color: var(--text);
+		font-size: 12px;
+		outline: none;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+
+	.debug-memory-controls input,
+	.debug-memory-write-field input,
+	.watch-row input {
+		font-family: var(--mono);
+	}
+
+	.debug-memory-controls input:focus,
+	.debug-memory-watch-controls select:focus,
+	.debug-memory-write-field input:focus,
+	.watch-row input:focus {
+		border-color: var(--primary);
+		box-shadow: 0 0 0 3px var(--primary-soft);
+	}
+
+	.debug-memory-watch-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: 6px;
+	}
+
+	.debug-memory-write-field {
+		flex: 1 1 160px;
+	}
+
+	.debug-memory-read,
+	.debug-memory-toolbar button,
+	.debug-memory-write,
+	.debug-data-breakpoint-set,
+	.debug-data-breakpoint-clear {
+		height: 32px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 8px;
+		background: var(--primary-soft);
+		color: var(--primary);
+		font-size: 12px;
+		font-weight: 700;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.debug-memory-read:enabled:hover,
+	.debug-memory-toolbar button:hover,
+	.debug-memory-write:enabled:hover,
+	.debug-data-breakpoint-set:enabled:hover {
+		background: var(--primary-soft-strong);
+	}
+
+	.debug-data-breakpoint-clear {
+		background: var(--danger-soft);
+		color: var(--danger);
+	}
+
+	.debug-memory-read:disabled,
+	.debug-memory-write:disabled,
+	.debug-data-breakpoint-set:disabled,
+	.debug-data-breakpoint-clear:disabled {
+		cursor: wait;
+		opacity: 0.6;
+	}
+
+	.debug-data-breakpoint-status,
+	.debug-memory-write-status,
+	.debug-memory-error {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		padding: 8px 10px;
+		border-radius: 8px;
+		font-size: 12px;
+	}
+
+	.debug-data-breakpoint-status {
+		background: var(--debug-tone-soft);
+		color: var(--debug-tone);
+	}
+
+	.debug-memory-write-status {
+		background: var(--primary-soft);
+		color: var(--primary-strong);
+	}
+
+	.debug-memory-error {
+		background: var(--danger-soft);
+		color: var(--danger);
+	}
+
+	.debug-memory-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		gap: 8px;
-		border: 1px dashed rgba(148, 163, 184, 0.35);
-		border-radius: 12px;
-		background: rgba(248, 250, 252, 0.76);
-		color: #64748b;
+	}
+
+	.debug-memory-toolbar code {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		color: var(--text-2);
+		font-family: var(--mono);
+		font-size: 11px;
+	}
+
+	.debug-memory-table {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-width: 100%;
+		overflow-x: auto;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line-soft);
+	}
+
+	.debug-memory-row {
+		display: grid;
+		min-width: max-content;
+		grid-template-columns: minmax(72px, auto) auto minmax(16ch, auto);
+		gap: 12px;
+		align-items: center;
+	}
+
+	.debug-memory-address,
+	.debug-memory-ascii {
+		color: var(--text-3);
+		font-family: var(--mono);
+		font-size: 11px;
+	}
+
+	.debug-memory-hex {
+		display: grid;
+		grid-template-columns: repeat(16, 2ch);
+		gap: 4px;
+	}
+
+	.debug-memory-byte {
+		color: var(--text);
+		font-family: var(--mono);
+		font-size: 11px;
+		text-align: center;
+	}
+
+	.debug-memory-byte--unreadable {
+		color: var(--danger);
+	}
+
+	.debug-memory-ascii {
+		white-space: pre;
+	}
+
+	/* ---------- Responsive ---------- */
+
+	@media (max-width: 1280px) {
+		.topbar__actions .tool-button span:not(.material-symbols-outlined) {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+		}
+
+		.topbar__actions .tool-button {
+			width: 36px;
+			justify-content: center;
+			padding: 0;
+		}
 	}
 
 	@media (max-width: 960px) {
-		main {
+		.ide {
 			height: auto;
 			min-height: 100vh;
 			min-height: 100dvh;
+			overflow: visible;
+		}
+
+		.topbar {
+			position: sticky;
+			top: 0;
+			flex-wrap: wrap;
+			padding: 10px 12px;
+		}
+
+		.topbar__lead {
+			flex: 1 1 100%;
+			flex-wrap: wrap;
+		}
+
+		.topbar__lead > .topbar__divider {
+			display: none;
+		}
+
+		.topbar__actions {
+			flex: 1 1 100%;
+			justify-content: space-between;
+		}
+
+		.topbar__actions > .topbar__divider {
+			display: none;
+		}
+
+		.topbar__actions {
+			gap: 2px;
+		}
+
+		.topbar__actions .icon-button,
+		.topbar__actions .tool-button {
+			width: 32px;
+		}
+
+		.action-group {
+			margin-left: auto;
+			gap: 6px;
+		}
+
+		.action-button {
+			padding: 0 12px;
+		}
+
+		.action-button--run,
+		.action-button--stop {
+			min-width: 0;
+		}
+
+		.workbench {
 			flex-direction: column;
-			padding: 16px;
-			overflow: auto;
 		}
 
 		.sidebar-backdrop {
@@ -5591,65 +6628,83 @@
 			z-index: 20;
 			display: block;
 			border: 0;
-			background: rgba(15, 23, 42, 0.48);
+			background: rgba(0, 23, 51, 0.32);
+			backdrop-filter: blur(2px);
 		}
 
 		.workspace-sidebar {
 			position: fixed;
-			inset: 16px auto 16px 16px;
+			inset: 12px auto 12px 12px;
 			z-index: 21;
-			width: min(340px, calc(100vw - 32px));
-			max-width: calc(100vw - 32px);
-			height: auto;
-			margin-right: 0;
+			width: min(320px, calc(100vw - 24px));
+			box-shadow: 0 20px 48px rgba(0, 23, 51, 0.2);
+		}
+
+		.workspace-sidebar__close {
+			display: grid !important;
+		}
+
+		.workbench-split {
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.editor-column {
+			flex: 0 0 auto;
+			height: 62vh;
+			min-height: 380px;
 		}
 
 		.terminal-pane {
 			width: 100% !important;
 			min-width: 0;
-			height: auto;
-			padding-right: 0;
-			padding-bottom: 0;
-		}
-
-		.editor-column {
-			width: 100%;
-			min-height: 440px;
-			flex: 0 0 auto;
-		}
-
-		.file-tabs {
-			flex-basis: 42px;
-		}
-
-		.file-tab {
-			min-width: 108px;
-		}
-
-		.workspace-status > span:nth-child(n + 2):not(.lsp-status) {
-			display: none;
-		}
-
-		.tool-button,
-		.action-button,
-		.path-chip,
-		.toggle-chip,
-		.select-chip,
-		.args-chip {
-			min-height: 38px;
-		}
-
-		.args-chip input {
-			font-size: 16px;
+			min-height: 460px;
 		}
 
 		.panel-resizer {
 			display: none;
 		}
 
+		.statusbar {
+			flex-wrap: wrap;
+			padding: 4px 12px 12px;
+			white-space: normal;
+		}
+
+		.statusbar__group--end {
+			flex: 1 1 100%;
+			flex-wrap: wrap;
+		}
+
+		.statusbar__meta,
+		.statusbar__divider {
+			display: none;
+		}
+
+		.args-chip input {
+			width: 140px;
+			font-size: 16px;
+		}
+
 		.debug-hero__stats {
 			width: 100%;
 			justify-content: flex-start;
+		}
+	}
+
+	@media (max-width: 600px) {
+		.action-group .action-button:not(.action-button--run) {
+			width: 36px;
+			padding: 0;
+		}
+
+		.action-group .action-button:not(.action-button--run) span:not(.material-symbols-outlined) {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
 		}
 	}
 </style>

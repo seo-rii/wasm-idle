@@ -204,7 +204,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}\s+maxlength=\{4096\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
 		expect(source).toMatch(
-			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(watch\.expression\)\}/
+			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(\s*watch\.expression\s*\)\}/
 		);
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
@@ -572,7 +572,7 @@ describe('example route debug actions', () => {
 			/return debug\.writeMemory\([\s\S]{0,160}Uint8Array\.from\(data\)[\s\S]{0,80}allowPartial/
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
-		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
+		expect(source).toMatch(/debug\.frameId === frame\.id &&\s+'debug-entry--current'/);
 	});
 
 	it('marks replaced non-active workspace sources stale during an active debug session', () => {
@@ -596,7 +596,7 @@ describe('example route debug actions', () => {
 	});
 
 	it('keeps LSP opt-in and persists the toggle in workspace snapshots', () => {
-		expect(source).toMatch(/lspEnabled = \$state\(false\),/);
+		expect(source).toMatch(/lspEnabled = \$state\(true\),/);
 		expect(source).toMatch(
 			/function snapshot\(\): WorkspaceSnapshot \{[\s\S]*log,\s+lspEnabled,[\s\S]*version: 6,/s
 		);
@@ -610,21 +610,6 @@ describe('example route debug actions', () => {
 			/<Monaco[\s\S]*\{lspEnabled\}[\s\S]*clangdEnabled=\{clangdLspEnabled\}/s
 		);
 		expect(source).toMatch(/\{typescriptLspLibUrl\}/);
-	});
-
-	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
-		expect(source).toMatch(/press Enter to send a line\./);
-		expect(source).toMatch(
-			/selector only shows\s+Rust targets advertised by the bundled wasm-rust runtime manifest/
-		);
-		expect(source).toMatch(/`wasm32-wasip1`\s+uses preview1 core wasm/);
-		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip2'\)/);
-		expect(source).toMatch(/`wasm32-wasip2`\s+uses preview2 component execution/);
-		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip3'\)/);
-		expect(source).toMatch(
-			/`wasm32-wasip3`\s+is only shown for the current transitional component path/
-		);
-		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
 	});
 
 	it('publishes upstream TinyGo without exposing unsupported target controls', () => {
@@ -691,19 +676,7 @@ describe('example route debug actions', () => {
 		] as const) {
 			expect(argsHelpLanguages.has(argsLanguage)).toBe(true);
 		}
-		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
-		expect(source).toMatch(
-			/selector only shows Go\s+targets advertised by the bundled runtime manifest/
-		);
-		expect(source).toMatch(/`wasip1\/wasm`/);
-		expect(source).toMatch(/preview1\s+core wasm/);
-		expect(source).toMatch(/availableGoTargets\.includes\('wasip2\/wasm'\)/);
-		expect(source).toMatch(/availableGoTargets\.includes\('wasip3\/wasm'\)/);
-		expect(source).toMatch(/availableGoTargets\.includes\('js\/wasm'\)/);
-		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
 		expect(source).not.toContain('id="tinygo-target"');
-		expect(source).toContain("language === 'TINYGO'");
-		expect(source).toMatch(/receipt-verified upstream toolchain for\s+`wasip1`/);
 	});
 
 	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {
@@ -716,13 +689,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/D: 'main\.d'/);
 		expect(source).toMatch(/D: 'd'/);
 		expect(compilerDiagnosticLanguages.has('D')).toBe(true);
-		expect(source).toMatch(/D compiles in the browser with the bundled LDC WASI compiler/);
-		expect(source).toMatch(/Emscripten LLD\s+linker assets/);
-		expect(source).toMatch(/executes the emitted WASI artifact locally/);
-		expect(source).toMatch(/stdin until EOF/);
 	});
 
-	it('surfaces C#, F#, and VB.NET through wasm-dotnet runtime assets and the browser compiler hint', () => {
+	it('surfaces C#, F#, and VB.NET through wasm-dotnet runtime assets and the browser compiler', () => {
 		expect(applicationRuntimeAssets.dotnet?.moduleUrl).toContain('/wasm-dotnet/index.js?');
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
 		expectPlaygroundLanguage('CSHARP');
@@ -746,14 +715,6 @@ describe('example route debug actions', () => {
 		expect(compilerDiagnosticLanguages.has('VBNET')).toBe(true);
 		expect(source).toMatch(/migrateLegacyWorkspaceFile\(file, \{/);
 		expect(source).not.toMatch(/isEditorDefaultSource\(content\)/);
-		expect(source).toMatch(
-			/\{language === 'CSHARP' \? 'C#' : language === 'VBNET' \? 'VB\.NET' : 'F#'\} uses a\s+`wasm-dotnet`\s+browser runtime module/
-		);
-		expect(source).toMatch(/static \.NET `browser-wasm` compiler app/);
-		expect(source).toMatch(/`runtime\/dotnet\.js`/);
-		expect(source).toMatch(
-			/terminal input submitted before or during preparation\s+is passed to `Console\.In`/
-		);
 		expect(source).not.toContain('api/dotnet');
 	});
 
@@ -776,12 +737,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/TYPESCRIPT: 'main\.ts'/);
 		expect(source).toMatch(/JAVASCRIPT: 'javascript'/);
 		expect(source).toMatch(/TYPESCRIPT: 'typescript'/);
-		expect(source).toMatch(
-			/\{\s*language === 'JAVASCRIPT'\s+\?\s+'JavaScript'\s+:\s+'TypeScript'\s*\}\s+runs through the bundled\s+`wasm-typescript`\s+browser module/
-		);
-		expect(source).toMatch(/`fs\.readFileSync\('\/dev\/stdin', 'utf8'\)`/);
-		expect(source).toMatch(/`fs\.readFileSync\(0,\s+'utf8'\)`/);
-		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after\s+typing input/s);
 	});
 
 	it('surfaces AssemblyScript through the bundled browser compiler', () => {
@@ -795,9 +750,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/endsWith\('\.as\.ts'\)\) return 'ASSEMBLYSCRIPT'/);
 		expect(source).toMatch(/ASSEMBLYSCRIPT: 'main\.as\.ts'/);
 		expect(source).toMatch(/ASSEMBLYSCRIPT: 'assemblyscript'/);
-		expect(source).toMatch(/AssemblyScript compiles in the browser/);
-		expect(source).toMatch(/bundled `assemblyscript` compiler/);
-		expect(source).toMatch(/zero-argument numeric, boolean, and string exports/);
 	});
 
 	it('surfaces WAT through the wasm-wat browser compiler contract', () => {
@@ -809,8 +761,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.wat': 'WAT'/);
 		expect(source).toMatch(/WAT: 'main\.wat'/);
 		expect(source).toMatch(/WAT: 'wat'/);
-		expect(source).toMatch(/WAT compiles through the bundled WABT browser module/);
-		expect(source).toMatch(/Zero-argument numeric exports are called automatically/);
 	});
 
 	it('surfaces WASM through the binary WebAssembly runner contract', () => {
@@ -821,10 +771,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.wasm': 'WASM'/);
 		expect(source).toMatch(/WASM: 'main\.wasm'/);
 		expect(source).toMatch(/WASM: 'wasm'/);
-		expect(source).toMatch(
-			/WASM executes a WebAssembly binary from base64, hex, or a `data:application\/wasm`/
-		);
-		expect(source).toMatch(/WASI preview1 stdin/);
 	});
 
 	it('surfaces Lua through the wasm-lua browser runtime contract', () => {
@@ -835,8 +781,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.lua': 'LUA'/);
 		expect(source).toMatch(/LUA: 'main\.lua'/);
 		expect(source).toMatch(/LUA: 'lua'/);
-		expect(source).toMatch(/Lua runs through the bundled `wasmoon` Lua VM/);
-		expect(source).toMatch(/backed by its local wasm payload/);
 	});
 
 	it('surfaces BQN through the CBQN wasm worker runtime contract', () => {
@@ -847,8 +791,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.bqn': 'BQN'/);
 		expect(source).toMatch(/BQN: 'main\.bqn'/);
 		expect(source).toMatch(/BQN: 'bqn'/);
-		expect(source).toMatch(/BQN runs through bundled CBQN WebAssembly assets/);
-		expect(source).toMatch(/`•GetLine @`/);
 	});
 
 	it('surfaces Janet through the upstream Janet VM wasm worker runtime contract', () => {
@@ -861,8 +803,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.janet': 'JANET'/);
 		expect(source).toMatch(/JANET: 'main\.janet'/);
 		expect(source).toMatch(/JANET: 'janet'/);
-		expect(source).toMatch(/Janet runs through the upstream Janet VM compiled to WebAssembly/);
-		expect(source).toMatch(/Use `getline` or[\s\S]*`file\/read stdin :line`/);
 	});
 
 	it('surfaces Hy through the shared Pyodide runtime', () => {
@@ -873,7 +813,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.hy': 'HY'/);
 		expect(source).toMatch(/HY: 'main\.hy'/);
 		expect(source).toMatch(/HY: 'hy'/);
-		expect(source).toMatch(/Hy 1\.3\.1 compiles to Python bytecode inside the bundled Pyodide/);
 	});
 
 	it('surfaces Julia through the Julia wasm worker runtime contract', () => {
@@ -887,8 +826,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.jl': 'JULIA'/);
 		expect(source).toMatch(/JULIA: 'main\.jl'/);
 		expect(source).toMatch(/JULIA: 'julia'/);
-		expect(source).toMatch(/legacy Julia 1\.3\.0-DEV\.560 WebAssembly runtime/);
-		expect(source).toMatch(/Use `readline\(\)`/);
 	});
 
 	it('surfaces Nim through the Nim wasm compiler worker runtime contract', () => {
@@ -900,11 +837,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.nim': 'NIM'/);
 		expect(source).toMatch(/NIM: 'main\.nim'/);
 		expect(source).toMatch(/NIM: 'nim'/);
-		expect(source).toMatch(/Nim runs through the bundled Nim 2\.2\.4 WebAssembly compiler/);
-		expect(source).toMatch(/Use `readLine\(stdin\)`/);
 	});
 
-	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {
+	it('surfaces Zig through bundled wasm compiler assets and the browser runtime', () => {
 		expect(applicationRuntimeAssets.zig?.compilerUrl).toContain('/wasm-zig/zig_small.wasm?');
 		expect(applicationRuntimeAssets.zig?.stdlibUrl).toContain('/wasm-zig/std.tar.gz?');
 		expectPlaygroundLanguage('ZIG');
@@ -914,10 +849,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/ZIG: 'main\.zig'/);
 		expect(source).toMatch(/ZIG: 'zig'/);
 		expect(source).toMatch(/ZIG: \(\) => \(\{ zigTargetTriple: 'wasm64-wasi' \}\)/);
-		expect(source).toMatch(/Zig runs the bundled `zig_small\.wasm` compiler/);
-		expect(source).toMatch(/`std\.tar\.gz` standard\s+library inside\s+the browser worker/s);
-		expect(source).toMatch(/compiles for `wasm64-wasi`/);
-		expect(source).toMatch(/executes the\s+emitted WASI artifact locally/s);
 		expect(source).not.toContain('api/zig');
 	});
 
@@ -952,13 +883,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.rb': 'RUBY'/);
 		expect(source).toMatch(/RUBY: 'main\.rb'/);
 		expect(source).toMatch(/RUBY: 'ruby'/);
-		expect(source).toMatch(
-			/Ruby runs through a receipt-verified split CRuby WebAssembly profile/
-		);
-		expect(source).toMatch(
-			/manifest,\s+wrapper, core Wasm, and complete standard-library pack are verified before the\s+worker starts/
-		);
-		expect(source).toMatch(/reads stdin until EOF/);
 	});
 
 	it('surfaces Haskell through the ghc-in-browser wasm compiler contract', () => {
@@ -976,8 +900,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/HASKELL: 'haskell'/);
 		expect(argsLabels.HASKELL).toBe('GHC Args');
 		expect(source).toMatch(/<span>\{argsLabel\}<\/span>/);
-		expect(source).toMatch(/Haskell loads a wasm GHC\/GHCi root filesystem/);
-		expect(source).toMatch(/program stdin is currently treated as EOF/);
 	});
 
 	it('surfaces R through the bundled webR runtime contract', () => {
@@ -988,7 +910,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.r': 'R'/);
 		expect(source).toMatch(/R: 'main\.R'/);
 		expect(source).toMatch(/R: 'r'/);
-		expect(source).toMatch(/R runs through bundled webR WebAssembly assets/);
 	});
 
 	it('surfaces Octave through the bundled GNU Octave wasm runtime contract', () => {
@@ -1005,8 +926,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.m': 'OCTAVE'/);
 		expect(source).toMatch(/OCTAVE: 'main\.m'/);
 		expect(source).toMatch(/OCTAVE: 'octave'/);
-		expect(source).toMatch(/Octave runs through bundled GNU Octave WebAssembly assets/);
-		expect(source).toMatch(/code using `stdin` reads a line/);
 	});
 
 	it('surfaces SQLite through the bundled sql.js worker runtime contract', () => {
@@ -1019,8 +938,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.sqlite': 'SQLITE'/);
 		expect(source).toMatch(/SQLITE: 'main\.sql'/);
 		expect(source).toMatch(/SQLITE: 'sqlite'/);
-		expect(source).toMatch(/SQLite runs through bundled sql\.js WebAssembly assets/);
-		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 	});
 
 	it('surfaces PostgreSQL through the bundled PGlite worker runtime contract', () => {
@@ -1034,10 +951,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.pgsql': 'POSTGRESQL'/);
 		expect(source).toMatch(/POSTGRESQL: 'main\.sql'/);
 		expect(source).toMatch(/POSTGRESQL: 'postgresql'/);
-		expect(source).toMatch(
-			/PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly/
-		);
-		expect(source).toMatch(/readable as `\/dev\/blob`/);
 	});
 
 	it('surfaces DuckDB through the bundled DuckDB-Wasm worker runtime contract', () => {
@@ -1048,8 +961,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.duckdb': 'DUCKDB'/);
 		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
 		expect(source).toMatch(/DUCKDB: 'duckdb'/);
-		expect(source).toMatch(/DuckDB runs through `@duckdb\/duckdb-wasm`/);
-		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 	});
 
@@ -1060,7 +971,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.v': 'V'/);
 		expect(source).toMatch(/V: 'main\.v'/);
 		expect(source).toMatch(/V: 'v'/);
-		expect(source).toMatch(/real V 0\.5\.2 compiler/);
 		expect(editorOnlyLanguages.has('V')).toBe(false);
 	});
 
@@ -1072,8 +982,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.cob': 'COBOL'/);
 		expect(source).toMatch(/COBOL: 'main\.cob'/);
 		expect(source).toMatch(/COBOL: 'cobol'/);
-		expect(source).toMatch(/GnuCOBOL 3\.2/);
-		expect(source).toMatch(/Use `ACCEPT` for stdin and `DISPLAY` for\s+stdout/);
 		expect(editorOnlyLanguages.has('COBOL')).toBe(false);
 	});
 
@@ -1150,23 +1058,16 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.php': 'PHP'/);
 		expect(source).toMatch(/PHP: 'main\.php'/);
 		expect(source).toMatch(/PHP: 'php'/);
-		expect(source).toMatch(/PHP 8\.4 runs from the external static runtime/);
-		expect(source).toMatch(/stdin is provided as `php:\/\/input`/);
 	});
 
-	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {
+	it('surfaces Elixir through the shared language selector and Popcorn runtime', () => {
 		expect(applicationRuntimeAssets.elixir?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
 		expectPlaygroundLanguage('ELIXIR');
 		expect(source).toMatch(/elixir: 'ELIXIR'/);
 		expectEditorLanguage('ELIXIR', 'elixir');
-		expect(source).toMatch(/Elixir runs through a bundled Popcorn evaluator/);
-		expect(source).toMatch(/Code\.eval_string/);
-		expect(source).toMatch(/prints the final expression as `=&gt; \.\.\.`/);
-		expect(source).toMatch(/press Enter to send stdin/);
-		expect(source).toMatch(/CLI args are still disabled/);
 	});
 
-	it('surfaces Erlang through the shared language selector and Popcorn hint', () => {
+	it('surfaces Erlang through the shared language selector and Popcorn runtime', () => {
 		expect(applicationRuntimeAssets.erlang?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
 		expectPlaygroundLanguage('ERLANG');
 		expect(source).toMatch(/erlang: 'ERLANG'/);
@@ -1175,9 +1076,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/ERLANG: 'main\.erl'/);
 		expect(source).toMatch(/ERLANG: 'erlang'/);
 		expectEditorLanguage('ERLANG', 'erlang');
-		expect(source).toMatch(/Erlang runs through the bundled Popcorn\/AtomVM evaluator/);
-		expect(source).toMatch(/module files compile with the bundled Erlang compiler/);
-		expect(source).toMatch(/`io:get_line\(""\)` or `io:get_chars\("", N\)`/);
 	});
 
 	it('surfaces Prolog, Gleam, and Perl through static wasm worker runtime contracts', () => {
@@ -1210,14 +1108,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/GLEAM: 'gleam'/);
 		expect(source).toMatch(/GRAIN: 'grain'/);
 		expect(source).toMatch(/PERL: 'perl'/);
-		expect(source).toMatch(/SWI-Prolog WebAssembly assets/);
-		expect(source).toMatch(/Gleam WebAssembly compiler/);
-		expect(source).toMatch(/WebPerl WebAssembly assets/);
-		expect(source).toMatch(/`wasm_idle\/stdin`/);
-		expect(source).toMatch(/`&lt;STDIN&gt;`/);
 	});
 
-	it('surfaces OCaml through the shared language selector and backend hint', () => {
+	it('surfaces OCaml through the shared language selector and backend selector', () => {
 		expect(source).toMatch(/ocamlBackend = \$state<OcamlBackend>\('wasm'\),/);
 		expect(source).toMatch(/ocamlWasmBinaryenMode = \$state<OcamlWasmBinaryenMode>\('fast'\),/);
 		expect(source).toMatch(/localStorage\.setItem\('ocamlBackend', ocamlBackend\);/);
@@ -1254,15 +1147,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="js">js_of_ocaml<\/option>/);
 		expect(source).toMatch(/<option value="fast">Binaryen fast<\/option>/);
 		expect(source).toMatch(/<option value="full">Binaryen full<\/option>/);
-		expect(source).toMatch(
-			/OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain/
-		);
-		expect(source).toMatch(/selector switches between `wasm_of_ocaml` and `js_of_ocaml`/);
-		expect(source).toMatch(/Binaryen fast is the\s+default low-memory wasm path/s);
-		expect(source).toMatch(
-			/Binaryen full runs the original static `wasm-metadce`\s+and `wasm-opt` passes/s
-		);
-		expect(source).toMatch(/Type into the\s+terminal below and press Enter to send a line/s);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {
@@ -1284,7 +1168,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onkeydown=\{\(event\) => \{/);
 		expect(source).toMatch(/height: 100dvh;/);
 		expect(source).toMatch(
-			/@media \(max-width: 960px\) \{\s+main \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s
+			/@media \(max-width: 960px\) \{\s+\.ide \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s
 		);
 		expect(source).toMatch(
 			/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s

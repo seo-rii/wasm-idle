@@ -249,6 +249,12 @@ export async function assertFrameworkIndependentPackage(packagePath, manifest, p
 			}
 		}
 	}
+	const testFixtures = packedPaths.filter((packedPath) =>
+		/\.(?:test|spec|cases)\./iu.test(path.basename(packedPath))
+	);
+	if (testFixtures.length) {
+		throw new Error(`${manifest.name} contains test fixtures: ${testFixtures.join(', ')}`);
+	}
 	for (const packedPath of packedPaths) {
 		if (!/\.[cm]?[jt]sx?$/iu.test(packedPath)) continue;
 		const source = await readFile(path.join(packagePath, packedPath), 'utf8');

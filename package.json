@@ -257,7 +257,8 @@
 	"files": [
 		"dist",
 		"!dist/**/*.test.*",
-		"!dist/**/*.spec.*"
+		"!dist/**/*.spec.*",
+		"!dist/**/*.cases.*"
 	],
 	"publishConfig": {
 		"tag": "latest"

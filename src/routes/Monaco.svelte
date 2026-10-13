@@ -2350,6 +2350,7 @@
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
 		compact?: boolean;
+		dark?: boolean;
 		editor: monaco.editor.IStandaloneCodeEditor | null;
 		language: any;
 		lspLanguage?: string;
@@ -2446,6 +2447,7 @@
 
 	let {
 		compact = false,
+		dark = false,
 		editor = $bindable(),
 		language,
 		lspLanguage,
@@ -2610,9 +2612,13 @@
 	const modelUriString = $derived(`file:///workspace/${normalizedFilePath}`);
 	const editorSetting = $derived<IMonacoSetting>({
 		automaticLayout: true,
+		fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 		fontSize: compact ? 13 : 14,
 		lineHeight: compact ? 20 : 22,
-		lineNumbersMinChars: compact ? 3 : 5,
+		lineNumbersMinChars: compact ? 3 : 4,
+		renderLineHighlight: 'all',
+		overviewRulerBorder: false,
+		hideCursorInOverviewRuler: true,
 		minimap: { enabled: false },
 		occurrencesHighlight: 'off',
 		glyphMargin: debugViewLanguages.has(language) || !!debugLanguage,
@@ -3570,6 +3576,10 @@
 		}
 	});
 
+	$effect(() => {
+		Monaco?.editor.setTheme(dark ? 'wasm-idle-dark' : 'wasm-idle-light');
+	});
+
 	const handleEditorLoad = (nextEditor: monaco.editor.IStandaloneCodeEditor) => {
 		editor = nextEditor;
 		if (monacoTestHooksEnabled()) {
@@ -3726,6 +3736,47 @@
 			if (disposed) return;
 			const monacoApi = m;
 			Monaco = monacoApi;
+			monacoApi.editor.defineTheme('wasm-idle-light', {
+				base: 'vs',
+				inherit: true,
+				rules: [],
+				colors: {
+					'editor.background': '#ffffff',
+					'editor.lineHighlightBackground': '#f6f8fa',
+					'editor.lineHighlightBorder': '#00000000',
+					'editorLineNumber.foreground': '#b0b8c1',
+					'editorLineNumber.activeForeground': '#4e5968',
+					'editorIndentGuide.background1': '#eef0f3',
+					'editor.selectionBackground': '#cfe3ff',
+					'editor.inactiveSelectionBackground': '#e8f3ff',
+					'editorCursor.foreground': '#3182f6',
+					'editorOverviewRuler.border': '#00000000',
+					'scrollbar.shadow': '#00000000',
+					'scrollbarSlider.background': '#d1d6db80',
+					'scrollbarSlider.hoverBackground': '#b0b8c1aa'
+				}
+			});
+			monacoApi.editor.defineTheme('wasm-idle-dark', {
+				base: 'vs-dark',
+				inherit: true,
+				rules: [],
+				colors: {
+					'editor.background': '#1b1b1e',
+					'editor.lineHighlightBackground': '#232327',
+					'editor.lineHighlightBorder': '#00000000',
+					'editorLineNumber.foreground': '#5c6169',
+					'editorLineNumber.activeForeground': '#c3c7ce',
+					'editorIndentGuide.background1': '#2a2a2f',
+					'editor.selectionBackground': '#2f4f80',
+					'editor.inactiveSelectionBackground': '#283a56',
+					'editorCursor.foreground': '#4593fc',
+					'editorOverviewRuler.border': '#00000000',
+					'scrollbar.shadow': '#00000000',
+					'editorGutter.background': '#1b1b1e',
+					'scrollbarSlider.background': '#35353b80',
+					'scrollbarSlider.hoverBackground': '#5c6169aa'
+				}
+			});
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
 				monacoApi.languages.register({
 					id: 'ocaml',
@@ -4011,7 +4062,7 @@
 	}
 
 	:global(.monaco-editor .debug-inline-values) {
-		color: #475569;
+		color: var(--text-3, #475569);
 		font-style: italic;
 		font-weight: 500;
 	}
@@ -4020,7 +4071,7 @@
 		main {
 			min-height: 360px;
 			border-left: 0;
-			border-top: 1px solid #e5e7eb;
+			border-top: 0;
 		}
 	}
 </style>
