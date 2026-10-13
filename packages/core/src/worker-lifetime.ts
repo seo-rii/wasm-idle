@@ -107,14 +107,26 @@ export class RuntimeWorkerLifetimeController<Worker, Context = void> {
 
 	evictIdle() {
 		const idleEntries = this.entries.filter((entry) => !entry.busy);
-		for (const entry of idleEntries) this.removeAndDispose(entry);
+		this.disposeEntries(idleEntries);
 		return idleEntries.length;
 	}
 
 	dispose() {
 		if (this.disposed) return;
 		this.disposed = true;
-		for (const entry of [...this.entries]) this.removeAndDispose(entry);
+		this.disposeEntries([...this.entries]);
+	}
+
+	private disposeEntries(entries: WorkerEntry<Worker>[]) {
+		const errors: unknown[] = [];
+		for (const entry of entries) {
+			try {
+				this.removeAndDispose(entry);
+			} catch (error) {
+				errors.push(error);
+			}
+		}
+		if (errors.length) throw new AggregateError(errors, 'Runtime worker cleanup failed');
 	}
 
 	private requireActive() {

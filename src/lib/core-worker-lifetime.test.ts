@@ -27,6 +27,50 @@ afterEach(() => {
 });
 
 describe('runtime worker lifetime controller', () => {
+	it.each(['dispose', 'evictIdle'] as const)(
+		'attempts every worker cleanup when %s encounters failures',
+		async (method) => {
+			vi.useFakeTimers();
+			let id = 0;
+			const errors = [new Error('first cleanup'), new Error('second cleanup')];
+			const disposeWorker = vi.fn((worker: TestWorker) => {
+				worker.disposed = true;
+				if (worker.id <= 2) throw errors[worker.id - 1];
+			});
+			const controller = new RuntimeWorkerLifetimeController<TestWorker>({
+				policy: {
+					mode: 'pool',
+					idleTimeoutMs: 1000,
+					maxWorkers: 3,
+					evictOnMemoryPressure: true
+				},
+				createWorker: () => ({ id: ++id, disposed: false }),
+				disposeWorker
+			});
+			const leases = await Promise.all([
+				controller.acquire(),
+				controller.acquire(),
+				controller.acquire()
+			]);
+			for (const lease of leases) lease.release();
+
+			try {
+				controller[method]();
+				throw new Error('Expected cleanup failures');
+			} catch (error) {
+				expect(error).toBeInstanceOf(AggregateError);
+				expect((error as AggregateError).errors).toEqual(errors);
+			}
+			expect(disposeWorker).toHaveBeenCalledTimes(3);
+			expect(leases.every((lease) => lease.worker.disposed)).toBe(true);
+			expect(controller.totalWorkers).toBe(0);
+			expect(vi.getTimerCount()).toBe(0);
+			expect(() => controller.dispose()).not.toThrow();
+			for (const lease of leases) lease.release();
+			expect(disposeWorker).toHaveBeenCalledTimes(3);
+		}
+	);
+
 	it('disposes per-run workers when their lease is released', async () => {
 		const controller = createController({ mode: 'per-run' });
 		const first = await controller.acquire();
