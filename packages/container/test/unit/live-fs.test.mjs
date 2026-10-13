@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { MemoryFileSystem } from '../../dist/fs/index.js';
+const bytes = (text) => new TextEncoder().encode(text);
+const text = (bytes) => new TextDecoder().decode(bytes);
+test('additive package mount retains live inode identity, offset and unlinked open files', () => {
+  const fs = new MemoryFileSystem(), live = fs.acquireLive();
+  fs.writeFile('/workspace/data', bytes('abcd'));
+  const descriptor = fs.open('/workspace/data', { read: true, write: true });
+  const identity = fs.fstat(descriptor).inode;
+  assert.equal(text(fs.read(descriptor, 1)), 'a');
+  fs.writeFile('/workspace/unlinked', bytes('kept'));
+  const unlinked = fs.open('/workspace/unlinked', { read: true }); fs.unlink('/workspace/unlinked');
+  const root = fs.open('/', { directory: true });
+  fs.mountReadonly('/opt/live', [{ path: 'file', type: 'file', mode: 0o444, data: bytes('package') }]);
+  assert.equal(fs.fstat(descriptor).inode, identity); assert.equal(fs.tell(descriptor), 1);
+  fs.write(descriptor, bytes('X')); assert.equal(text(fs.readFile('/workspace/data')), 'aXcd');
+  assert.equal(text(fs.read(unlinked, 10)), 'kept');
+  assert.equal(fs.getDirectoryPath(root), '/');
+  assert.equal(fs.byteLength, 15); fs.close(unlinked); assert.equal(fs.byteLength, 11);
+  assert.throws(() => fs.writeFile('/opt/live/file', bytes('bad')), { code: 'EROFS' });
+  assert.throws(() => fs.acquireSnapshot(), { code: 'EBUSY' });
+  fs.close(root); fs.close(descriptor); assert.throws(() => fs.acquireSnapshot(), { code: 'EBUSY' });
+  live.release(); live.release(); const snapshot = fs.acquireSnapshot();
+  assert.throws(() => fs.acquireLive(), { code: 'EBUSY' }); snapshot.discard();
+});
+test('mount failure counts unlinked bytes and leaves the original tree/descriptors unchanged', () => {
+  const fs = new MemoryFileSystem({ maxBytes: 8 }); fs.writeFile('/workspace/gone', bytes('12345678'));
+  const descriptor = fs.open('/workspace/gone', { read: true }); fs.unlink('/workspace/gone');
+  const generation = fs.generation, inodes = fs.inodeCount;
+  assert.throws(() => fs.mountReadonly('/opt/full', [{ path: 'a', type: 'file', mode: 0o444, data: bytes('x') }]), { code: 'ENOSPC' });
+  assert.equal(fs.generation, generation); assert.equal(fs.inodeCount, inodes);
+  assert.throws(() => fs.stat('/opt/full'), { code: 'ENOENT' });
+  assert.equal(text(fs.read(descriptor, 8)), '12345678'); fs.close(descriptor);
+});
