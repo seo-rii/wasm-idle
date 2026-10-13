@@ -99,6 +99,7 @@ export function pipeWritable(writer: PipeWriter) {
   let closed = false;
   const close = () => { if (!closed) { closed = true; writer.close(); } };
   return new WritableStream<Uint8Array>({
+    start(controller) { controller.signal.addEventListener('abort', close, { once: true }); },
     async write(bytes) {
       if (!(bytes instanceof Uint8Array)) throw new PipeError('EINVAL');
       let offset = 0;

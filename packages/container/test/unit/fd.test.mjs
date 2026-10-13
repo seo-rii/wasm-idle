@@ -62,3 +62,11 @@ test('abort wakes pending readers and descriptor cleanup is idempotent', async (
   assert.equal(table.size, 0);
   assert.throws(() => table.close(0), { code: 'EBADF' });
 });
+
+test('writable abort wakes an in-flight write before the sink abort callback', async () => {
+  const p = createPipe(1), writer = pipeWritable(p.writer).getWriter();
+  const pending = writer.write(new Uint8Array([1, 2]));
+  const rejected = assert.rejects(pending, { code: 'EBADF' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await writer.abort(); await rejected;
+});
