@@ -58,6 +58,14 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(traceback.extract_tb(error.__traceback__)[-1].filename, filename)
         self.assertEqual(self.helpers['info']()['code']['misses'], 2)
 
+    async def test_file_uses_the_active_filename_on_cached_and_uncached_runs(self):
+        code = 'from pathlib import Path\nprint(Path(__file__).name, str(Path(__file__).parent))'
+        await self.execute(code, '한글/main.py')
+        await self.execute(code, '한글/main.py')
+        await self.execute(code, 'other/tool.py')
+        self.assertEqual([item[0] for item in self.output],
+                         [('main.py', '한글'), ('main.py', '한글'), ('tool.py', 'other')])
+
     async def test_top_level_await_runs_each_time(self):
         code = 'import asyncio\nawait asyncio.sleep(0)\nprint("awaited")'
         await self.execute(code); await self.execute(code)

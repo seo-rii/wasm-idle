@@ -141,6 +141,18 @@ test('debug execution retains the legacy trace wrapper', async () => {
 	assert.match(f.legacyRuns[0], /sys.settrace\(__wasm_idle_debug_trace\)/);
 	assert.equal(f.messages.at(-1).results, true);
 });
+test('the actual debug wrapper gives user code its active filename', async () => {
+	const f = workerFixture();
+	await f.send({ code: 'assert __file__ == "subdir/main.py"\nprint(__file__)', activePath: 'subdir/main.py', debug: true });
+	assert.equal(f.messages.at(-1).results, true);
+	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
+bridge = types.ModuleType("js")
+bridge.__getattr__ = lambda name: lambda *args: None
+sys.modules["js"] = bridge
+asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+`], { input: f.legacyRuns[0], encoding: 'utf8' });
+	assert.equal(output, 'subdir/main.py\n');
+});
 test('Hy retains its genuine compiler wrapper and bypasses the Python source cache', async () => {
 	const f = workerFixture();
 	await f.send({ code: '(print 42)', language: 'hy' });
