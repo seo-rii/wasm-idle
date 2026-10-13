@@ -1348,7 +1348,7 @@
 
 	function saveWorkspace(showStatus = false) {
 		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return false;
-		const saved = workspaceStorage.save(workspaceSaveKey);
+		const saved = workspaceStorage.save(workspaceSaveKey, currentWorkspaceStorageKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
 	}
@@ -1402,7 +1402,7 @@
 
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
 		if (!workspaceInitialized) return;
-		workspaceStorage.observe(workspaceSaveKey);
+		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
 		if (state.revision === state.savedRevision || saveWorkspace()) return;
 		event.preventDefault();
@@ -2468,7 +2468,7 @@
 		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return;
 		const key = workspaceSaveKey;
 		if (!key) return;
-		workspaceStorage.observe(key);
+		workspaceStorage.observe(key, currentWorkspaceStorageKey);
 		if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);
 		workspaceSaveTimer = setTimeout(() => saveWorkspace(), 400);
 		return () => {
