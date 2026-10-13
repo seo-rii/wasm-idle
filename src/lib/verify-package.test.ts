@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +11,64 @@ import {
 } from '../../scripts/verify-package.mjs';
 
 const MiB = 1024 * 1024;
+
+describe('published SDK test fixtures', () => {
+	it('omits shared Python cases from the actual npm archive', async () => {
+		const packagePath = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-test-fixture-pack-'));
+		try {
+			const root = JSON.parse(await readFile('package.json', 'utf8')) as { files: string[] };
+			const directory = path.join(packagePath, 'dist/playground/worker');
+			await mkdir(directory, { recursive: true });
+			await writeFile(
+				path.join(packagePath, 'package.json'),
+				JSON.stringify({
+					name: 'wasm-idle-pack-fixture',
+					version: '1.0.0',
+					files: root.files
+				})
+			);
+			await writeFile(path.join(directory, 'python.js'), 'export default {};\n');
+			for (const name of ['python.runtime.cases.js', 'python.runtime.cases.d.ts']) {
+				await writeFile(path.join(directory, name), 'export {};\n');
+			}
+			const output = execFileSync(
+				'npm',
+				['pack', '--dry-run', '--ignore-scripts', '--json'],
+				{
+					cwd: packagePath,
+					encoding: 'utf8',
+					stdio: ['ignore', 'pipe', 'pipe']
+				}
+			);
+			const archives = JSON.parse(output) as { files: { path: string }[] }[];
+			expect(archives[0].files.map((file) => file.path).sort()).toEqual([
+				'dist/playground/worker/python.js',
+				'package.json'
+			]);
+		} finally {
+			await rm(packagePath, { recursive: true, force: true });
+		}
+	});
+
+	it.each(['test', 'spec', 'cases'])(
+		'rejects packed %s fixtures even when their contents have no framework imports',
+		async (suffix) => {
+			const packagePath = await mkdtemp(
+				path.join(os.tmpdir(), 'wasm-idle-test-fixture-guard-')
+			);
+			const files = [`module.${suffix}.js`, `module.${suffix}.d.ts`];
+			try {
+				for (const file of files)
+					await writeFile(path.join(packagePath, file), 'export {};\n');
+				await expect(
+					assertFrameworkIndependentPackage(packagePath, { name: 'wasm-idle' }, files)
+				).rejects.toThrow(`wasm-idle contains test fixtures: ${files.join(', ')}`);
+			} finally {
+				await rm(packagePath, { recursive: true, force: true });
+			}
+		}
+	);
+});
 
 describe('published SDK framework independence', () => {
 	it.each([
