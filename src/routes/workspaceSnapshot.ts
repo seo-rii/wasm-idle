@@ -1,5 +1,6 @@
 import { playgroundLanguages } from './language-registry';
 import type { WorkspaceFile } from './workspaceCodec';
+import { normalizeWorkspacePath } from './workspacePath';
 
 function invalid(field: string): never {
 	throw new Error(`Invalid workspace snapshot: ${field}`);
@@ -19,6 +20,7 @@ function validateWorkspace(value: Record<string, unknown>, field: string) {
 		invalid(`${field}.openTabs`);
 	if (value.files === undefined) return;
 	if (!Array.isArray(value.files)) invalid(`${field}.files`);
+	const paths = new Set<string>();
 	for (const file of value.files) {
 		assertRecord(file, `${field}.files[]`);
 		if (
@@ -28,6 +30,9 @@ function validateWorkspace(value: Record<string, unknown>, field: string) {
 		) {
 			invalid(`${field}.files[]`);
 		}
+		const path = normalizeWorkspacePath(file.path);
+		if (!path || paths.has(path)) invalid(`${field}.files[].path`);
+		paths.add(path);
 		if (
 			file.encoding !== undefined &&
 			file.encoding !== 'utf-8' &&
