@@ -60,6 +60,7 @@
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
+	import { copyWorkspaceShare } from './workspaceShare';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -252,6 +253,7 @@
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
 	let saveStatus = $state('Ready');
+	let manualShareUrl = $state('');
 	let unrestoredWorkspace = $state<string | null>(null);
 	let workspaceRecoveryKey = $state<string | null>(null);
 	let recoveryBackupDownloaded = $state(false);
@@ -1291,9 +1293,14 @@
 		const url = new SvelteURL(location.href);
 		url.hash = shareHash;
 		url.searchParams.delete('workspace');
-		await navigator.clipboard?.writeText(url.toString());
-		saveStatus =
-			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+		if (await copyWorkspaceShare(url.toString(), navigator.clipboard)) {
+			manualShareUrl = '';
+			saveStatus =
+				url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+		} else {
+			manualShareUrl = url.toString();
+			saveStatus = 'Select and copy the share URL below';
+		}
 	}
 
 	function downloadBlob(blob: Blob, fileName: string) {
@@ -2849,6 +2856,19 @@
 				</div>
 			{/if}
 			<div class="toolbar-row toolbar-row--secondary">
+				{#if manualShareUrl}
+					<label class="args-chip">
+						<span>Share URL</span>
+						<input
+							aria-label="Share URL"
+							value={manualShareUrl}
+							readonly
+							onfocus={(event) => event.currentTarget.select()}
+							onclick={(event) => event.currentTarget.select()}
+						/>
+					</label>
+					<button class="tool-button" onclick={() => (manualShareUrl = '')}>Close share URL</button>
+				{/if}
 				<button class="tool-button" onclick={() => (sidebarOpen = !sidebarOpen)}>
 					<span class="material-symbols-outlined">folder_open</span>
 					<span>Files</span>
