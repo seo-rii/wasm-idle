@@ -444,7 +444,7 @@ describe('SWI-Prolog runner worker', () => {
 				const legacy = await readFile(
 					new URL(storageReceipt.path.slice(0, -4), staticRuntimeUrl)
 				);
-				expect(legacy).toEqual(stored);
+				expect(legacy.equals(stored)).toBe(true);
 			}
 			expect(stored.byteLength).toBe(storageReceipt.size);
 			expect(sha256(stored)).toBe(storageReceipt.sha256);

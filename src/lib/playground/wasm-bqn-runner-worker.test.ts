@@ -264,9 +264,11 @@ describe('CBQN runner worker', () => {
 			'BQN.js': await readFile(new URL('BQN.js', staticRuntimeUrl)),
 			'BQN.wasm': gunzipSync(await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl)))
 		};
-		expect(await readFile(new URL('BQN.wasm.gz', staticRuntimeUrl))).toEqual(
-			await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl))
-		);
+		expect(
+			(await readFile(new URL('BQN.wasm.gz', staticRuntimeUrl))).equals(
+				await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl))
+			)
+		).toBe(true);
 		for (const receipt of manifest.assets) {
 			const bytes = logicalBytes[receipt.path as keyof typeof logicalBytes];
 			expect(bytes.byteLength).toBe(receipt.size);

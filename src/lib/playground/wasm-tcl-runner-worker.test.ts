@@ -566,9 +566,11 @@ describe('Wacl Tcl runner worker', { timeout: 20_000 }, () => {
 			['tcl/wacl-library.data.gz.bin', 'tcl/wacl-library.data.gz'],
 			['tcl/wacl.wasm.gz.bin', 'tcl/wacl.wasm.gz']
 		]) {
-			expect(await readFile(new URL(legacy, staticRuntimeUrl))).toEqual(
-				await readFile(new URL(canonical, staticRuntimeUrl))
-			);
+			expect(
+				(await readFile(new URL(legacy, staticRuntimeUrl))).equals(
+					await readFile(new URL(canonical, staticRuntimeUrl))
+				)
+			).toBe(true);
 		}
 	});
 

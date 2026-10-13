@@ -355,7 +355,9 @@ describe('WebPerl runner worker', { timeout: 60_000 }, () => {
 				uncompressedSha256: logicalReceipt.sha256
 			});
 			const legacyPath = storageReceipt.path.replace(/\.bin$/u, '');
-			expect(await readFile(new URL(legacyPath, staticRuntimeUrl))).toEqual(stored);
+			expect((await readFile(new URL(legacyPath, staticRuntimeUrl))).equals(stored)).toBe(
+				true
+			);
 		}
 	});
 
