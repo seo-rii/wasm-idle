@@ -3,6 +3,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { serializeWorkspaceBackup } from './workspaceBackup';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import {
 	runBrowserPreparationScripts,
@@ -57,6 +58,29 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 }
 
 describe('workspace import browser integration', () => {
+	it.each(['renamed.txt', 'wasm-idle-workspace (1).json'] as const)(
+		'restores a backup named %s by its format',
+		browserOptions,
+		async (name) => {
+			await withImportPage(async (page) => {
+				const backup = {
+					version: 6,
+					language: 'PYTHON',
+					activePath: 'restored.py',
+					files: [{ path: 'restored.py', content: 'print("restored backup")\n' }],
+					openTabs: ['restored.py']
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name,
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('button[title="restored.py"]').waitFor();
+				expect(await page.locator('#language-select').inputValue()).toBe('PYTHON');
+				expect(await page.locator(`button[title="${name}"]`).count()).toBe(0);
+			});
+		}
+	);
 	it(
 		'opens ZIP paths unchanged in a new workspace and preserves the original local code',
 		browserOptions,
