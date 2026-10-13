@@ -46,8 +46,9 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		// The V host and PostgreSQL/ReScript adapters bring the production install to 5.54 MiB.
-		budget: { maxBytes: 5.75 * MiB, maxFiles: 700, maxPackages: 6 },
+		// Lifecycle contracts add 6,392 bytes to the measured 6,024,294-byte main install.
+		// A 16 KiB increment keeps 15,010 bytes of headroom with the same file/package caps.
+		budget: { maxBytes: 5.75 * MiB + 16 * 1024, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -417,8 +418,9 @@ export function assertInstallBudget(scenario, installed, contributors = []) {
 	/** @type {string[]} */
 	const violations = [];
 	if (installed.bytes > scenario.budget.maxBytes) {
+		const overflowBytes = installed.bytes - scenario.budget.maxBytes;
 		violations.push(
-			`size ${formatMiB(installed.bytes)} exceeds ${formatMiB(scenario.budget.maxBytes)} by ${formatMiB(installed.bytes - scenario.budget.maxBytes)}`
+			`size ${formatMiB(installed.bytes)} exceeds ${formatMiB(scenario.budget.maxBytes)} by ${formatCount(overflowBytes)} byte${overflowBytes === 1 ? '' : 's'} (${formatMiB(overflowBytes)})`
 		);
 	}
 	if (installed.files > scenario.budget.maxFiles) {
@@ -515,10 +517,10 @@ async function verifyScenario(tempRoot, tarballs, scenario, index) {
 		};
 		console.log(`\n${scenario.name}:`);
 		console.log(
-			`  Production install contains ${formatCount(installed.packages)} packages and ${formatCount(installed.files)} files totaling ${formatMiB(installed.bytes)}.`
+			`  Production install contains ${formatCount(installed.packages)} packages and ${formatCount(installed.files)} files totaling ${formatMiB(installed.bytes)} (${formatCount(installed.bytes)} bytes).`
 		);
 		console.log(
-			`  Budget: ${formatMiB(scenario.budget.maxBytes)}, ${formatCount(scenario.budget.maxFiles)} files, ${formatCount(scenario.budget.maxPackages)} packages.`
+			`  Budget: ${formatMiB(scenario.budget.maxBytes)} (${formatCount(scenario.budget.maxBytes)} bytes), ${formatCount(scenario.budget.maxFiles)} files, ${formatCount(scenario.budget.maxPackages)} packages.`
 		);
 		console.log(
 			`  Top ${Math.min(TOP_CONTRIBUTOR_COUNT, contributors.length)} package contributors:`
