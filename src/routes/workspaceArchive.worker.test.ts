@@ -26,6 +26,18 @@ function entryArchive(entries: Array<[string, string]>) {
 }
 
 describe('workspace archive worker', () => {
+	it('round trips prototype-like filenames as real ZIP entries', () => {
+		const files = [
+			'__proto__',
+			'constructor',
+			'toString',
+			'hasOwnProperty',
+			'nested/__proto__'
+		].map((path) => ({ path, content: `contents of ${path}` }));
+		expect(extractWorkspaceArchive(createWorkspaceArchive(files))).toEqual(
+			files.map((file) => ({ ...file, encoding: 'utf-8' }))
+		);
+	});
 	it('round trips Unicode files and nested paths', () => {
 		const files = [
 			{ path: 'src/main.ts', content: 'console.log("안녕");\n' },
