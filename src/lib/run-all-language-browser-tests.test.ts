@@ -19,6 +19,29 @@ import { supportMatrixRows } from '../../scripts/support-matrix.mjs';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('all-language browser test runner', () => {
+	it.each([
+		['go', 'WASM_IDLE_RUN_REAL_BROWSER_GO', 'src/lib/playground/go.playwright.test.ts'],
+		[
+			'python',
+			'WASM_IDLE_RUN_REAL_BROWSER_PYTHON',
+			'src/lib/playground/python.playwright.test.ts'
+		]
+	] as const)(
+		'enables required real %s coverage for changes to its runtime family',
+		(family, env, file) => {
+			const options = parseAllLanguageBrowserTestArgs([`--family=${family}`]);
+			const plan = createAllLanguageBrowserTestPlan(options);
+			expect(plan.env).toEqual({ [env]: '1' });
+			expect(plan.testFiles).toEqual([file]);
+			const invocation = createVitestChildInvocation(
+				plan,
+				'http://127.0.0.1:4573/wasm-idle/'
+			);
+			expect(invocation.env[env]).toBe('1');
+			expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
+			expect(invocation.args).toContain(file);
+		}
+	);
 	it('includes every browserTest environment declared by the support matrix', () => {
 		const plan = createAllLanguageBrowserTestPlan();
 		expect(supportMatrixRows.filter((row) => !row.browserTest)).toEqual([]);
