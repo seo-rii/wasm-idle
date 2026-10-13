@@ -173,7 +173,7 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 5.75 * MiB,
+				maxBytes: 5.75 * MiB + 16 * 1024,
 				maxFiles: 700,
 				maxPackages: 6
 			},
@@ -231,10 +231,21 @@ describe('package install budgets', () => {
 		).toThrowError(
 			expect.objectContaining({
 				message: expect.stringMatching(
-					/fixture install[\s\S]*size 2\.25 MiB exceeds 2\.00 MiB by 0\.25 MiB[\s\S]*file count 105 exceeds 100 by 5[\s\S]*package count 6 exceeds 5 by 1[\s\S]*large-package@1\.0\.0: 1\.50 MiB, 80 files/u
+					/fixture install[\s\S]*size 2\.25 MiB exceeds 2\.00 MiB by 262,144 bytes \(0\.25 MiB\)[\s\S]*file count 105 exceeds 100 by 5[\s\S]*package count 6 exceeds 5 by 1[\s\S]*large-package@1\.0\.0: 1\.50 MiB, 80 files/u
 				)
 			})
 		);
+	});
+
+	it('reports a one-byte overflow even when the rounded MiB values are equal', () => {
+		const scenario = scenarios[0];
+		expect(() =>
+			assertInstallBudget(scenario, {
+				bytes: scenario.budget.maxBytes + 1,
+				files: scenario.budget.maxFiles,
+				packages: scenario.budget.maxPackages
+			})
+		).toThrow('by 1 byte (0.00 MiB)');
 	});
 
 	it('keeps heavy optional tooling out of focused installs', () => {

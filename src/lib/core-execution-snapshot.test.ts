@@ -3,7 +3,8 @@ import {
 	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
 	type ExecutionRequest,
 	type ExecutionResult,
-	type Sandbox
+	type Sandbox,
+	type SandboxExecutionOptions
 } from '../../packages/core/src/index';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +33,68 @@ function runtime(execute: NonNullable<Sandbox['execute']>): Sandbox {
 }
 
 describe('execution request snapshots', () => {
+	it.each(['load', 'run'] as const)(
+		'snapshots legacy %s arguments before asynchronous dispatch',
+		async (method) => {
+			const raw = runtime(vi.fn(async () => result));
+			const load = vi.fn(async (..._args: Parameters<Sandbox['load']>) => undefined);
+			const run = vi.fn(async (..._args: Parameters<Sandbox['run']>) => true);
+			raw.load = load;
+			raw.run = run;
+			const binding = createPlaygroundBinding('/runtime', async () => raw);
+			const sandbox = await binding.load('C');
+			const args = ['first'];
+			const compileArgs = ['-O1'];
+			const programArgs = ['arg'];
+			const breakpoints = [2];
+			const content = new Uint8Array([1, 2]);
+			const options: SandboxExecutionOptions = {
+				env: { MODE: 'original' },
+				compileArgs,
+				programArgs,
+				breakpoints,
+				sourceBreakpoints: [{ sourcePath: 'main.c', lines: [2] }],
+				workspaceFiles: [{ path: 'data.bin', content }],
+				workspaceLimits: { maxFiles: 5 },
+				limits: { maxOutputBytes: 123 },
+				persistentCache: { namespace: 'original' }
+			};
+			const operation =
+				method === 'load'
+					? sandbox.load('original', false, args, options)
+					: sandbox.run('original', false, false, undefined, args, options);
+			args[0] = 'changed';
+			compileArgs.push('-DCHANGED');
+			programArgs[0] = 'changed';
+			breakpoints.push(999);
+			options.env!.MODE = 'changed';
+			options.sourceBreakpoints![0].sourcePath = 'other.c';
+			options.sourceBreakpoints![0].lines.push(999);
+			options.workspaceLimits!.maxFiles = 999;
+			options.limits!.maxOutputBytes = 999;
+			if (options.persistentCache) options.persistentCache.namespace = 'changed';
+			content.fill(99);
+			await operation;
+
+			const receivedArgs = method === 'load' ? load.mock.calls[0][3] : run.mock.calls[0][4];
+			const receivedOptions =
+				method === 'load' ? load.mock.calls[0][4] : run.mock.calls[0][5];
+			expect(receivedArgs).toEqual(['first']);
+			expect(receivedOptions).toMatchObject({
+				env: { MODE: 'original' },
+				compileArgs: ['-O1'],
+				programArgs: ['arg'],
+				breakpoints: [2],
+				sourceBreakpoints: [{ sourcePath: 'main.c', lines: [2] }],
+				workspaceFiles: [{ path: 'data.bin', content: new Uint8Array([1, 2]) }],
+				workspaceLimits: { maxFiles: 5 },
+				limits: { maxOutputBytes: 123 },
+				persistentCache: { namespace: 'original' }
+			});
+			await binding.dispose();
+		}
+	);
+
 	it('isolates admitted binary workspace contents from caller mutations', async () => {
 		const execute = vi.fn(async (_request: ExecutionRequest) => result);
 		const binding = createPlaygroundBinding('/runtime', async () => runtime(execute));

@@ -36,6 +36,7 @@ import { normalizeLanguageId } from './languages.js';
 import {
 	resolveExecutionLimits,
 	validateExecutionResult,
+	type ExecutionDebugOptions,
 	type ExecutionLimits,
 	type ExecutionRequest,
 	type ExecutionResult,
@@ -79,6 +80,8 @@ interface ValidatedSandboxExecutionOptions extends SandboxExecutionOptions {
 
 interface SandboxOperationState {
 	active: boolean;
+	acceptOutput: boolean;
+	generation: number;
 	outputBytes: number;
 	diagnosticCount: number;
 	maxOutputBytes: number;
@@ -86,14 +89,17 @@ interface SandboxOperationState {
 	phase: RuntimePhase;
 	limitExceeded: boolean;
 	onLimit?: (error: OutputLimitError | DiagnosticLimitError) => void;
+	onCancel?: (cancel: () => void | Promise<void>) => Promise<void>;
 	onDispose?: () => void;
 }
 
 export interface SandboxLifecycle {
+	/** Stop the current generation and settle all its pending operations before resolving. */
 	cancel: (runId?: RuntimeRunId) => void | Promise<void>;
 	reset: () => void | Promise<void>;
 	restart: () => void | Promise<void>;
 	clearOutput: () => void | Promise<void>;
+	/** Permanently stop event producers and settle every pending operation before resolving. */
 	dispose: () => void | Promise<void>;
 }
 
@@ -206,6 +212,39 @@ export interface PlaygroundBindingOptions {
 }
 
 const workspaceTextEncoder = new TextEncoder();
+// A broken adapter must never keep an otherwise usable binding permanently busy.
+const cancellationGraceMs = 1_000;
+
+function snapshotExecutionInputs<T extends SandboxExecutionOptions | ExecutionRequest>(
+	options: T
+): T {
+	const snapshot = { ...options };
+	const values = snapshot as SandboxExecutionOptions;
+	for (const name of ['args', 'compileArgs', 'programArgs', 'breakpoints']) {
+		const value = values[name];
+		if (Array.isArray(value)) values[name] = value.slice();
+	}
+	if (values.env && typeof values.env === 'object' && !Array.isArray(values.env)) {
+		values.env = { ...values.env };
+	}
+	if (values.sourceBreakpoints) {
+		values.sourceBreakpoints = values.sourceBreakpoints.map((source) => ({
+			...source,
+			lines: source.lines.slice()
+		}));
+	}
+	if (values.debug && typeof values.debug === 'object' && !Array.isArray(values.debug)) {
+		const debug = values.debug as ExecutionDebugOptions;
+		values.debug = {
+			...debug,
+			sourceBreakpoints: debug.sourceBreakpoints?.map((source) => ({
+				...source,
+				lines: source.lines.slice()
+			}))
+		};
+	}
+	return snapshot;
+}
 
 function validateSandboxExecutionOptions(
 	code: string,
@@ -324,7 +363,9 @@ function runSandboxOperation<T>(
 	signal: AbortSignal | undefined,
 	timeoutMs: number | null,
 	limits: ExecutionLimits,
-	phase: RuntimePhase
+	phase: RuntimePhase,
+	retire: () => void,
+	installSinks: (generation: number) => void
 ): Promise<T> {
 	if (operationState.active) {
 		return Promise.reject(
@@ -334,6 +375,9 @@ function runSandboxOperation<T>(
 		);
 	}
 	operationState.active = true;
+	operationState.acceptOutput = true;
+	const generation = ++operationState.generation;
+	installSinks(generation);
 	operationState.outputBytes = 0;
 	operationState.diagnosticCount = 0;
 	operationState.maxOutputBytes = limits.maxOutputBytes;
@@ -345,7 +389,11 @@ function runSandboxOperation<T>(
 		let operationStarted = false;
 		let cancellationRequested = false;
 		let cancellationPromise: Promise<void> | undefined;
+		let cancellationCompletion: Promise<void> | undefined;
+		let finishCancellation: (() => void) | undefined;
+		let failCancellation: ((error: unknown) => void) | undefined;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let cancellationTimeout: ReturnType<typeof setTimeout> | undefined;
 
 		const cleanup = () => {
 			if (timeout !== undefined) clearTimeout(timeout);
@@ -353,41 +401,69 @@ function runSandboxOperation<T>(
 			operationState.onLimit = undefined;
 			operationState.onDispose = undefined;
 		};
-		const requestCancellation = () => {
-			if (cancellationRequested) return;
+		const requestCancellation = (cancel?: () => void | Promise<void>) => {
+			if (cancellationRequested) return cancellationCompletion!;
 			cancellationRequested = true;
+			cancellationCompletion = new Promise<void>((yes, no) => {
+				finishCancellation = yes;
+				failCancellation = no;
+			});
+			// Automatic aborts report the original boundary error; explicit cancel callers can
+			// additionally observe whether the adapter actually completed its cleanup.
+			void cancellationCompletion.catch(() => undefined);
+			cancellationTimeout = setTimeout(() => {
+				retire();
+				failCancellation?.(
+					new TimeoutError('Sandbox cancellation did not settle within 1000 ms', {
+						phase: 'dispose',
+						timeoutMs: cancellationGraceMs
+					})
+				);
+			}, cancellationGraceMs);
 			try {
-				const cancellation = sandbox.cancel
-					? sandbox.cancel()
-					: sandbox.kill
-						? sandbox.kill()
-						: sandbox.terminate();
+				const cancellation = cancel
+					? cancel()
+					: sandbox.cancel
+						? sandbox.cancel()
+						: sandbox.kill
+							? sandbox.kill()
+							: sandbox.terminate();
 				cancellationPromise = Promise.resolve(cancellation).then(
 					() => undefined,
-					() => undefined
+					(error: unknown) => {
+						retire();
+						failCancellation?.(error);
+					}
 				);
-			} catch {
+			} catch (error) {
 				// The boundary error remains authoritative even if runtime cleanup fails.
+				retire();
+				failCancellation?.(error);
 				cancellationPromise = Promise.resolve();
 			}
+			return cancellationCompletion;
 		};
 		const releaseOperation = () => {
+			if (cancellationTimeout !== undefined) clearTimeout(cancellationTimeout);
+			finishCancellation?.();
+			if (operationState.generation !== generation) return;
 			operationState.active = false;
+			operationState.acceptOutput = false;
 			operationState.outputBytes = 0;
 			operationState.diagnosticCount = 0;
 			operationState.limitExceeded = false;
 			operationState.onLimit = undefined;
 			operationState.onDispose = undefined;
+			operationState.onCancel = undefined;
 		};
 		const settle = (callback: () => void) => {
 			if (settled) return;
 			settled = true;
+			operationState.acceptOutput = false;
 			cleanup();
 			callback();
 		};
 		const onAbort = () => {
-			if (operationStarted) requestCancellation();
-			else releaseOperation();
 			settle(() =>
 				reject(
 					new CancelledError('Runtime operation cancelled', {
@@ -396,11 +472,19 @@ function runSandboxOperation<T>(
 					})
 				)
 			);
-		};
-		operationState.onLimit = (error) => {
 			if (operationStarted) requestCancellation();
 			else releaseOperation();
+		};
+		operationState.onLimit = (error) => {
 			settle(() => reject(error));
+			if (operationStarted) requestCancellation();
+			else releaseOperation();
+		};
+		operationState.onCancel = (cancel) => {
+			settle(() => reject(new CancelledError('Runtime operation cancelled', { phase })));
+			const completion = requestCancellation(cancel);
+			if (!operationStarted) void cancellationPromise!.then(releaseOperation);
+			return completion;
 		};
 		operationState.onDispose = () => {
 			if (!operationStarted) releaseOperation();
@@ -423,8 +507,6 @@ function runSandboxOperation<T>(
 		}
 		if (timeoutMs !== null) {
 			timeout = setTimeout(() => {
-				if (operationStarted) requestCancellation();
-				else releaseOperation();
 				settle(() =>
 					reject(
 						new TimeoutError(`Runtime ${phase} exceeded ${timeoutMs} ms`, {
@@ -433,11 +515,13 @@ function runSandboxOperation<T>(
 						})
 					)
 				);
+				if (operationStarted) requestCancellation();
+				else releaseOperation();
 			}, timeoutMs);
 		}
 		void Promise.resolve().then(async () => {
 			if (settled) {
-				releaseOperation();
+				if (!cancellationRequested) releaseOperation();
 				return;
 			}
 			operationStarted = true;
@@ -466,7 +550,8 @@ function bindRuntimeAssets(
 	sandbox: Sandbox,
 	runtimeAssets: SandboxRuntimeAssets,
 	trustProfile?: RuntimeTrustProfile,
-	persistentCache?: RuntimeAssetCacheOptions
+	persistentCache?: RuntimeAssetCacheOptions,
+	onDispose?: () => void
 ): BoundSandbox {
 	const cacheOptions = (
 		call?: RuntimeAssetCacheOptions
@@ -494,6 +579,8 @@ function bindRuntimeAssets(
 	let disposed = false;
 	const operationState: SandboxOperationState = {
 		active: false,
+		acceptOutput: false,
+		generation: 0,
 		outputBytes: 0,
 		diagnosticCount: 0,
 		maxOutputBytes: 0,
@@ -503,11 +590,9 @@ function bindRuntimeAssets(
 	};
 	let outputSink = sandbox.output;
 	let diagnosticSink = sandbox.oncompilerdiagnostic;
-	const emitOutput = (data: string) => {
-		if (!operationState.active) {
-			outputSink?.(data);
+	const emitOutput = (generation: number, data: string) => {
+		if (disposed || !operationState.acceptOutput || operationState.generation !== generation)
 			return;
-		}
 		if (operationState.limitExceeded) return;
 		const actual = operationState.outputBytes + workspaceTextEncoder.encode(data).byteLength;
 		if (actual > operationState.maxOutputBytes) {
@@ -528,11 +613,9 @@ function bindRuntimeAssets(
 		operationState.outputBytes = actual;
 		outputSink?.(data);
 	};
-	const emitDiagnostic = (diagnostic: unknown) => {
-		if (!operationState.active) {
-			diagnosticSink?.(diagnostic);
+	const emitDiagnostic = (generation: number, diagnostic: unknown) => {
+		if (disposed || !operationState.acceptOutput || operationState.generation !== generation)
 			return;
-		}
 		if (operationState.limitExceeded) return;
 		const actual = operationState.diagnosticCount + 1;
 		if (actual > operationState.maxDiagnostics) {
@@ -553,9 +636,47 @@ function bindRuntimeAssets(
 		operationState.diagnosticCount = actual;
 		diagnosticSink?.(diagnostic);
 	};
-	const installBoundarySinks = () => {
-		sandbox.output = emitOutput;
-		sandbox.oncompilerdiagnostic = emitDiagnostic;
+	const installBoundarySinks = (generation = operationState.generation) => {
+		sandbox.output = (data) => emitOutput(generation, data);
+		sandbox.oncompilerdiagnostic = (diagnostic) => emitDiagnostic(generation, diagnostic);
+	};
+	const dispose = () => {
+		if (!disposePromise) {
+			disposed = true;
+			operationState.acceptOutput = false;
+			operationState.onDispose?.();
+			onDispose?.();
+			const cleanup = Promise.resolve().then(async () => {
+				if (sandbox.dispose) await sandbox.dispose();
+				else await sandbox.terminate();
+			});
+			disposePromise = new Promise<void>((resolve, reject) => {
+				const deadline = setTimeout(() => {
+					reject(
+						new TimeoutError('Sandbox disposal did not settle within 1000 ms', {
+							phase: 'dispose',
+							timeoutMs: cancellationGraceMs
+						})
+					);
+				}, cancellationGraceMs);
+				cleanup.then(
+					() => {
+						clearTimeout(deadline);
+						resolve();
+					},
+					(error: unknown) => {
+						clearTimeout(deadline);
+						reject(error);
+					}
+				);
+			});
+		}
+		return disposePromise;
+	};
+	const retire = () => {
+		// A retirement fences the instance even when disposal itself never settles.
+		// Only a fresh instance from binding.load() may be used after this point.
+		void dispose().catch(() => undefined);
 	};
 	const assertNotDisposed = () => {
 		if (disposed) {
@@ -572,17 +693,20 @@ function bindRuntimeAssets(
 			if (prop === 'output') return outputSink;
 			if (prop === 'oncompilerdiagnostic') return diagnosticSink;
 			if (prop === 'dispose') {
-				return () => {
-					if (!disposePromise) {
-						disposed = true;
-						operationState.onDispose?.();
-						disposePromise = (async () => {
-							if (target.dispose) await target.dispose();
-							else await target.terminate();
-						})();
-					}
-					return disposePromise;
-				};
+				return dispose;
+			}
+			if (prop === 'cancel' || prop === 'kill' || prop === 'terminate') {
+				const cancel = target[prop];
+				if (cancel) {
+					return (runId?: RuntimeRunId) => {
+						if (disposed) return disposePromise;
+						const invoke = () => cancel.call(target, runId);
+						// Only the adapter can match its protocol run IDs; a stale targeted cancel
+						// must not cancel the boundary's unrelated current operation.
+						if (runId !== undefined) return invoke();
+						return operationState.onCancel ? operationState.onCancel(invoke) : invoke();
+					};
+				}
 			}
 			if (prop === 'restart') {
 				return async () => {
@@ -609,25 +733,36 @@ function bindRuntimeAssets(
 					progress?: SandboxProgress
 				) => {
 					assertNotDisposed();
+					const executionArgs = args.slice();
+					const snapshot = snapshotExecutionInputs(options);
 					const validated = validateSandboxExecutionOptions(
 						code,
-						{ ...options, persistentCache: cacheOptions(options.persistentCache) },
+						{ ...snapshot, persistentCache: cacheOptions(snapshot.persistentCache) },
 						'startup',
 						trustProfile,
 						defaultExecutionLimits
 					);
-					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
-						() => target.load(runtimeAssets, code, log, args, validated, progress),
+						() =>
+							target.load(
+								runtimeAssets,
+								code,
+								log,
+								executionArgs,
+								validated,
+								progress
+							),
 						validated.signal,
 						combinedPhaseTimeoutMs(
 							validated.limits.assetTimeoutMs,
 							validated.limits.startupTimeoutMs
 						),
 						validated.limits,
-						'startup'
+						'startup',
+						retire,
+						installBoundarySinks
 					);
 				};
 			}
@@ -636,25 +771,7 @@ function bindRuntimeAssets(
 				return async (request: ExecutionRequest) => {
 					assertNotDisposed();
 					// Copy caller-owned values before validation and the asynchronous dispatch.
-					const snapshot: ExecutionRequest = { ...request };
-					snapshot.args = snapshot.args?.slice();
-					snapshot.compileArgs = snapshot.compileArgs?.slice();
-					if (
-						snapshot.env &&
-						typeof snapshot.env === 'object' &&
-						!Array.isArray(snapshot.env)
-					) {
-						snapshot.env = { ...snapshot.env };
-					}
-					if (snapshot.debug) {
-						snapshot.debug = {
-							...snapshot.debug,
-							sourceBreakpoints: snapshot.debug.sourceBreakpoints?.map((source) => ({
-								...source,
-								lines: source.lines.slice()
-							}))
-						};
-					}
+					const snapshot = snapshotExecutionInputs(request);
 					const validated = validateSandboxExecutionOptions(
 						snapshot.code,
 						{
@@ -676,7 +793,6 @@ function bindRuntimeAssets(
 						trustProfile,
 						defaultExecutionLimits
 					);
-					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
@@ -700,7 +816,9 @@ function bindRuntimeAssets(
 							validated.limits.runTimeoutMs
 						),
 						validated.limits,
-						'execute'
+						'execute',
+						retire,
+						installBoundarySinks
 					);
 				};
 			}
@@ -714,18 +832,19 @@ function bindRuntimeAssets(
 					options: SandboxExecutionOptions = {}
 				) => {
 					assertNotDisposed();
+					const executionArgs = args?.slice();
+					const snapshot = snapshotExecutionInputs(options);
 					const validated = validateSandboxExecutionOptions(
 						code,
-						{ ...options, persistentCache: cacheOptions(options.persistentCache) },
+						{ ...snapshot, persistentCache: cacheOptions(snapshot.persistentCache) },
 						'execute',
 						trustProfile,
 						defaultExecutionLimits
 					);
-					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
-						() => target.run(code, prepare, log, progress, args, validated),
+						() => target.run(code, prepare, log, progress, executionArgs, validated),
 						validated.signal,
 						// Legacy prepare hooks may lazily fetch and initialize compiler assets.
 						// Reserve those phase budgets without granting prepare any run time.
@@ -742,7 +861,9 @@ function bindRuntimeAssets(
 										validated.limits.runTimeoutMs
 									),
 						validated.limits,
-						'execute'
+						'execute',
+						retire,
+						installBoundarySinks
 					);
 				};
 			}
@@ -752,12 +873,12 @@ function bindRuntimeAssets(
 		set(target, prop, value, receiver) {
 			if (prop === 'output') {
 				outputSink = typeof value === 'function' ? value : undefined;
-				target.output = emitOutput;
+				installBoundarySinks();
 				return true;
 			}
 			if (prop === 'oncompilerdiagnostic') {
 				diagnosticSink = typeof value === 'function' ? value : undefined;
-				target.oncompilerdiagnostic = emitDiagnostic;
+				installBoundarySinks();
 				return true;
 			}
 			return Reflect.set(target, prop, value, receiver);
@@ -777,6 +898,8 @@ export function createPlaygroundBinding(
 		? defineRuntimeTrustProfile(options.trustProfile)
 		: undefined;
 	const sandboxes = new Set<BoundSandbox>();
+	const claimedKeys = new Map<string, number>();
+	const claimedSandboxes = new WeakMap<BoundSandbox, string>();
 	let disposed = false;
 	let disposePromise: Promise<void> | undefined;
 	const normalize = (language: string) => {
@@ -793,7 +916,16 @@ export function createPlaygroundBinding(
 			await loadSandbox(language),
 			runtimeAssets,
 			trustProfile,
-			options.persistentCache
+			options.persistentCache,
+			() => {
+				sandboxes.delete(sandbox);
+				const cacheKey = claimedSandboxes.get(sandbox);
+				if (cacheKey === undefined) return;
+				claimedSandboxes.delete(sandbox);
+				const remaining = (claimedKeys.get(cacheKey) ?? 1) - 1;
+				if (remaining > 0) claimedKeys.set(cacheKey, remaining);
+				else claimedKeys.delete(cacheKey);
+			}
 		);
 		if (disposed) {
 			if (sandbox.dispose) await sandbox.dispose();
@@ -807,7 +939,6 @@ export function createPlaygroundBinding(
 	};
 	const key = (language: string) =>
 		JSON.stringify([language, createRuntimeAssetsKey(runtimeAssets)]);
-	const claimedKeys = new Set<string>();
 	const loadingKeys = new Map<string, number>();
 	const prewarmer = createRuntimePrewarmer(
 		async (cacheKey, signal) => {
@@ -846,7 +977,8 @@ export function createPlaygroundBinding(
 				// Disposing a binding during warm-up must never hand out a dead resource.
 				normalize(normalized);
 				const sandbox = warmed ?? (await create(normalized));
-				claimedKeys.add(cacheKey);
+				claimedSandboxes.set(sandbox, cacheKey);
+				claimedKeys.set(cacheKey, (claimedKeys.get(cacheKey) ?? 0) + 1);
 				return sandbox;
 			} finally {
 				const remaining = (loadingKeys.get(cacheKey) ?? 1) - 1;
@@ -869,12 +1001,19 @@ export function createPlaygroundBinding(
 				disposed = true;
 				const ownedSandboxes = [...sandboxes];
 				sandboxes.clear();
-				disposePromise = Promise.all([
+				disposePromise = Promise.allSettled([
 					prewarmer.dispose(),
 					...ownedSandboxes.map((sandbox) =>
 						sandbox.dispose ? sandbox.dispose() : sandbox.terminate()
 					)
-				]).then(() => undefined);
+				]).then((results) => {
+					const errors = results.flatMap((result) =>
+						result.status === 'rejected' ? [result.reason] : []
+					);
+					if (errors.length === 1) throw errors[0];
+					if (errors.length > 1)
+						throw new AggregateError(errors, 'Playground binding cleanup failed');
+				});
 			}
 			return disposePromise;
 		}
