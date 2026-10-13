@@ -184,14 +184,15 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 		}
 		filePaths.set(pathKey, path);
 
+		const content = file.content;
 		let fileBytes: number;
-		if (typeof file.content === 'string') {
-			fileBytes = textEncoder.encode(file.content).byteLength;
+		if (typeof content === 'string') {
+			fileBytes = textEncoder.encode(content).byteLength;
 		} else if (
-			ArrayBuffer.isView(file.content) &&
-			Object.prototype.toString.call(file.content) === '[object Uint8Array]'
+			ArrayBuffer.isView(content) &&
+			Object.prototype.toString.call(content) === '[object Uint8Array]'
 		) {
-			fileBytes = file.content.byteLength;
+			fileBytes = content.byteLength;
 		} else {
 			throw new WorkspaceValidationError(
 				'invalid-content',
@@ -215,7 +216,15 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 			);
 		}
 
-		return { ...file, path };
+		return {
+			...file,
+			path,
+			// Copy only accepted bytes; never retain the caller's mutable or growable buffer.
+			content:
+				typeof content === 'string'
+					? content
+					: new Uint8Array(new Uint8Array(content.buffer, content.byteOffset, fileBytes))
+		};
 	});
 }
 

@@ -32,6 +32,54 @@ function runtime(execute: NonNullable<Sandbox['execute']>): Sandbox {
 }
 
 describe('execution request snapshots', () => {
+	it('isolates admitted binary workspace contents from caller mutations', async () => {
+		const execute = vi.fn(async (_request: ExecutionRequest) => result);
+		const binding = createPlaygroundBinding('/runtime', async () => runtime(execute));
+		const sandbox = await binding.load('C');
+		const content = new Uint8Array(8).fill(7);
+		const operation = sandbox.execute!({
+			code: 'x',
+			workspaceFiles: [{ path: 'data.bin', content }],
+			limits: { maxWorkspaceBytes: 16 }
+		});
+		content.fill(99);
+		await operation;
+
+		const admitted = execute.mock.calls[0][0].workspaceFiles![0].content;
+		expect(admitted).toEqual(new Uint8Array(8).fill(7));
+		expect(admitted).not.toBe(content);
+		await binding.dispose();
+	});
+
+	it('keeps resizable workspace buffers within the admitted byte budget', async () => {
+		const execute = vi.fn(async (_request: ExecutionRequest) => result);
+		const binding = createPlaygroundBinding('/runtime', async () => runtime(execute));
+		const sandbox = await binding.load('C');
+		const buffer = new ArrayBuffer(8, { maxByteLength: 1024 });
+		const content = new Uint8Array(buffer).fill(7);
+		const operation = sandbox.execute!({
+			code: 'x',
+			workspaceFiles: [{ path: 'data.bin', content }],
+			limits: { maxWorkspaceBytes: 16 }
+		});
+		buffer.resize(1024);
+		content.fill(99);
+		await operation;
+
+		const admitted = execute.mock.calls[0][0].workspaceFiles![0].content;
+		expect(admitted).toEqual(new Uint8Array(8).fill(7));
+		expect(admitted).not.toBe(content);
+		await expect(
+			sandbox.execute!({
+				code: 'x',
+				workspaceFiles: [{ path: 'data.bin', content }],
+				limits: { maxWorkspaceBytes: 16 }
+			})
+		).rejects.toMatchObject({ code: 'file-size-limit' });
+		expect(execute).toHaveBeenCalledTimes(1);
+		await binding.dispose();
+	});
+
 	it('executes the code and environment admitted by the trust policy', async () => {
 		const execute = vi.fn(async (_request: ExecutionRequest) => result);
 		const binding = createPlaygroundBinding('/runtime', async () => runtime(execute), {
