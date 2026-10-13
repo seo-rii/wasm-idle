@@ -38,7 +38,8 @@ def __wasm_idle_make_workspace_imports():
             if filename.endswith(".py"):
                 try:
                     os.unlink(importlib.util.cache_from_source(filename))
-                except FileNotFoundError:
+                except (FileNotFoundError, NotADirectoryError):
+                    # Python imports also tolerate an unavailable cache parent.
                     pass
         importlib.invalidate_caches()
         previous_paths = current_paths
