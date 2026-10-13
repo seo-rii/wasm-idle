@@ -247,6 +247,13 @@
 	let activePath = $state(initialWorkspace.activePath);
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
+	let languageMenuOpen = $state(false);
+	let languageQuery = $state('');
+	let languageHighlight = $state(0);
+	let languagePicker = $state<HTMLDivElement>();
+	let languageTrigger = $state<HTMLButtonElement>();
+	let languageSearchInput = $state<HTMLInputElement>();
+	let languageMenuList = $state<HTMLUListElement>();
 	const themeStorageKey = 'wasm-idle:theme';
 	let themePreference = $state<'light' | 'dark' | null>(null);
 	let systemDark = $state(false);
@@ -1021,6 +1028,63 @@
 		);
 		if (nextLanguage) switchLanguage(nextLanguage);
 	}
+
+	const compactSearchText = (text: string) => text.toLowerCase().replace(/[^a-z0-9#+]/g, '');
+	const filteredLanguages = $derived.by(() => {
+		const query = compactSearchText(languageQuery);
+		if (!query) return playgroundLanguages;
+		const matches = playgroundLanguages
+			.map((option) => {
+				const label = compactSearchText(languageLabels[option]);
+				const id = compactSearchText(option);
+				const rank = label.startsWith(query) || id.startsWith(query) ? 0 : 1;
+				return label.includes(query) || id.includes(query) ? { option, rank } : null;
+			})
+			.filter((match) => match !== null);
+		return matches.sort((left, right) => left.rank - right.rank).map((match) => match.option);
+	});
+
+	function openLanguageMenu() {
+		if (!workspaceInitialized) return;
+		languageQuery = '';
+		languageHighlight = Math.max(0, playgroundLanguages.indexOf(language));
+		languageMenuOpen = true;
+	}
+
+	function closeLanguageMenu(restoreFocus = false) {
+		languageMenuOpen = false;
+		if (restoreFocus) languageTrigger?.focus();
+	}
+
+	function chooseLanguage(nextLanguage: PlaygroundLanguage) {
+		closeLanguageMenu(true);
+		if (workspaceInitialized) switchLanguage(nextLanguage);
+	}
+
+	function handleLanguageSearchKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeLanguageMenu(true);
+		} else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (!filteredLanguages.length) return;
+			const step = event.key === 'ArrowDown' ? 1 : -1;
+			languageHighlight =
+				(languageHighlight + step + filteredLanguages.length) % filteredLanguages.length;
+		} else if (event.key === 'Enter') {
+			event.preventDefault();
+			const highlighted = filteredLanguages[languageHighlight];
+			if (highlighted) chooseLanguage(highlighted);
+		}
+	}
+
+	$effect(() => {
+		if (!languageMenuOpen) return;
+		languageSearchInput?.focus();
+		languageMenuList
+			?.querySelector(`[data-index="${languageHighlight}"]`)
+			?.scrollIntoView({ block: 'nearest' });
+	});
 
 	function uniquePath(requestedPath: string) {
 		const safePath = normalizePath(requestedPath) || 'untitled.txt';
@@ -2612,6 +2676,10 @@
 
 <svelte:window
 	onbeforeunload={warnUnsavedChanges}
+	onpointerdown={(event) => {
+		if (languageMenuOpen && !languagePicker?.contains(event.target as Node))
+			closeLanguageMenu();
+	}}
 	ondragover={handleDragOver}
 	ondragleave={() => (dragActive = false)}
 	ondrop={handleDrop}
@@ -3159,10 +3227,32 @@
 			</div>
 			<span class="topbar__divider" aria-hidden="true"></span>
 			<div class="topbar__config">
-				<label class="select-chip">
-					<span class="material-symbols-outlined">code_blocks</span>
+				<div class="language-picker" bind:this={languagePicker}>
+					<button
+						bind:this={languageTrigger}
+						class="select-chip language-trigger"
+						type="button"
+						disabled={!workspaceInitialized}
+						aria-haspopup="listbox"
+						aria-expanded={languageMenuOpen}
+						aria-label={`Language: ${languageLabels[language]}`}
+						onclick={() =>
+							languageMenuOpen ? closeLanguageMenu() : openLanguageMenu()}
+					>
+						<span class="material-symbols-outlined" aria-hidden="true">code_blocks</span
+						>
+						<span class="language-trigger__label">{languageLabels[language]}</span>
+						<span
+							class="material-symbols-outlined language-trigger__chevron"
+							aria-hidden="true">expand_more</span
+						>
+					</button>
+					<!-- The native select stays the source of truth for automation and form semantics. -->
 					<select
 						id="language-select"
+						class="language-picker__native"
+						tabindex="-1"
+						aria-hidden="true"
 						value={language}
 						disabled={!workspaceInitialized}
 						data-workspace-ready={workspaceInitialized}
@@ -3172,7 +3262,68 @@
 							<option value={languageOption}>{languageLabels[languageOption]}</option>
 						{/each}
 					</select>
-				</label>
+					{#if languageMenuOpen}
+						<div class="language-menu">
+							<div class="language-menu__search">
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>search</span
+								>
+								<input
+									bind:this={languageSearchInput}
+									bind:value={languageQuery}
+									oninput={() => (languageHighlight = 0)}
+									onkeydown={handleLanguageSearchKeydown}
+									type="search"
+									role="combobox"
+									aria-label="Search languages"
+									aria-expanded="true"
+									aria-controls="language-menu-list"
+									aria-activedescendant={filteredLanguages[languageHighlight]
+										? `language-option-${filteredLanguages[languageHighlight]}`
+										: undefined}
+									placeholder="Search languages"
+									autocomplete="off"
+									spellcheck={false}
+								/>
+								<span class="language-menu__count">{filteredLanguages.length}</span>
+							</div>
+							<ul
+								bind:this={languageMenuList}
+								id="language-menu-list"
+								class="language-menu__list"
+								role="listbox"
+								aria-label="Languages"
+							>
+								{#each filteredLanguages as languageOption, index (languageOption)}
+									<!-- Keyboard selection goes through the combobox input (aria-activedescendant). -->
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<li
+										id={`language-option-${languageOption}`}
+										role="option"
+										aria-selected={languageOption === language}
+										data-index={index}
+										class:highlighted={index === languageHighlight}
+										onpointermove={() => (languageHighlight = index)}
+										onpointerdown={(event) => event.preventDefault()}
+										onclick={() => chooseLanguage(languageOption)}
+									>
+										<span>{languageLabels[languageOption]}</span>
+										{#if languageOption === language}
+											<span
+												class="material-symbols-outlined"
+												aria-hidden="true">check</span
+											>
+										{/if}
+									</li>
+								{:else}
+									<li class="language-menu__empty" role="presentation">
+										No languages match “{languageQuery}”
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+				</div>
 				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
@@ -4126,12 +4277,166 @@
 		color: var(--text-3);
 	}
 
-	#language-select {
-		field-sizing: content;
-		min-width: 64px;
-		max-width: 180px;
+	.language-picker {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.language-trigger {
+		border: 0;
+		padding: 0 8px 0 10px;
 		font-size: 14px;
 		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.language-trigger:disabled {
+		cursor: progress;
+		color: var(--text-3);
+	}
+
+	.language-trigger[aria-expanded='true'] {
+		background: var(--fill-strong);
+	}
+
+	.language-trigger__label {
+		max-width: 160px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.select-chip .language-trigger__chevron {
+		font-size: 18px;
+		transition: transform 0.15s ease;
+	}
+
+	.language-trigger[aria-expanded='true'] .language-trigger__chevron {
+		transform: rotate(180deg);
+	}
+
+	/* Invisible but still "visible" to automation so selectOption keeps working. */
+	.language-picker__native {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.language-menu {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		z-index: 30;
+		width: min(300px, calc(100vw - 24px));
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius-md);
+		background: var(--surface);
+		box-shadow:
+			0 0 0 1px var(--line),
+			0 16px 40px rgba(0, 23, 51, 0.16);
+		overflow: hidden;
+		animation: language-menu-in 0.14s ease-out;
+	}
+
+	@keyframes language-menu-in {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+	}
+
+	.language-menu__search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 48px;
+		padding: 0 12px;
+		border-bottom: 1px solid var(--line-soft);
+	}
+
+	.language-menu__search .material-symbols-outlined {
+		color: var(--text-3);
+		font-size: 18px;
+	}
+
+	.language-menu__search input {
+		flex: 1 1 auto;
+		min-width: 0;
+		height: 100%;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font-size: 15px;
+		font-weight: 500;
+		outline: none;
+	}
+
+	.language-menu__search input:focus-visible {
+		outline: none;
+	}
+
+	.language-menu__search input::placeholder {
+		color: var(--text-4);
+	}
+
+	.language-menu__search input::-webkit-search-cancel-button {
+		display: none;
+	}
+
+	.language-menu__count {
+		padding: 2px 7px;
+		border-radius: 6px;
+		background: var(--fill);
+		color: var(--text-3);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.language-menu__list {
+		max-height: min(360px, 60vh);
+		margin: 0;
+		padding: 6px;
+		overflow-y: auto;
+		list-style: none;
+		overscroll-behavior: contain;
+	}
+
+	.language-menu__list li[role='option'] {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-height: 36px;
+		padding: 0 10px;
+		border-radius: 8px;
+		color: var(--text);
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+	}
+
+	.language-menu__list li.highlighted {
+		background: var(--fill);
+	}
+
+	.language-menu__list li[aria-selected='true'] {
+		color: var(--primary);
+		font-weight: 700;
+	}
+
+	.language-menu__list li .material-symbols-outlined {
+		font-size: 18px;
+	}
+
+	.language-menu__empty {
+		padding: 20px 10px;
+		color: var(--text-3);
+		font-size: 13px;
+		text-align: center;
 	}
 
 	.args-chip input {
