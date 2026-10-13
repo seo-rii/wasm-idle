@@ -59,6 +59,7 @@ describe('workspace ZIP browser integration', () => {
 
 				try {
 					await page.goto(previewServer.browserUrl, { waitUntil: 'domcontentloaded' });
+					await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
 					const wasmBytes = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
 					const binaryBytes = Buffer.from([255, 254, 0, 128, 13, 10]);
 					const fixtureFiles = [
