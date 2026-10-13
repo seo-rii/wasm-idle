@@ -54,6 +54,21 @@ export const DEFAULT_WORKSPACE_LIMITS = Object.freeze({
 const textEncoder = new TextEncoder();
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
+// Use native view metadata: callers can shadow these properties on a real typed array.
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const typedArrayName = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	Symbol.toStringTag
+)!.get!;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	'byteLength'
+)!.get!;
+const typedArrayByteOffset = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	'byteOffset'
+)!.get!;
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get!;
 
 function resolveWorkspaceLimits(limits: Partial<WorkspaceLimits>): WorkspaceLimits {
 	const resolvedLimits: WorkspaceLimits = {
@@ -186,13 +201,15 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 
 		const content = file.content;
 		let fileBytes: number;
+		let binarySpan: { buffer: ArrayBufferLike; byteOffset: number } | undefined;
 		if (typeof content === 'string') {
 			fileBytes = textEncoder.encode(content).byteLength;
-		} else if (
-			ArrayBuffer.isView(content) &&
-			Object.prototype.toString.call(content) === '[object Uint8Array]'
-		) {
-			fileBytes = content.byteLength;
+		} else if (ArrayBuffer.isView(content) && typedArrayName.call(content) === 'Uint8Array') {
+			fileBytes = typedArrayByteLength.call(content);
+			binarySpan = {
+				buffer: typedArrayBuffer.call(content),
+				byteOffset: typedArrayByteOffset.call(content)
+			};
 		} else {
 			throw new WorkspaceValidationError(
 				'invalid-content',
@@ -223,7 +240,9 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 			content:
 				typeof content === 'string'
 					? content
-					: new Uint8Array(new Uint8Array(content.buffer, content.byteOffset, fileBytes))
+					: new Uint8Array(
+							new Uint8Array(binarySpan!.buffer, binarySpan!.byteOffset, fileBytes)
+						)
 		};
 	});
 }
