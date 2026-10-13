@@ -469,7 +469,6 @@ describe('browser test asset preparation', () => {
 			expect.arrayContaining([
 				'clang/bin/clang.wasm.gz',
 				'clang/bin/lld.wasm.gz',
-				'clang/bin/sysroot.tar.gz',
 				'clangd/clangd.js',
 				'clangd/clangd.wasm.gz'
 			])
@@ -477,6 +476,8 @@ describe('browser test asset preparation', () => {
 		// The small rebuilt MemFS is checked in; fetching the legacy copy would
 		// restore the 1,024-node limit and break Objective-C header installation.
 		expect(clangTargets).not.toContain('clang/bin/memfs.wasm.gz');
+		// All sysroot profiles are checked in; the historical remote archive has trimmed headers.
+		expect(clangTargets).not.toContain('clang/bin/sysroot.tar.gz');
 		expect(ocamlTargets).toEqual(
 			expect.arrayContaining([
 				'wasm-of-js-of-ocaml/browser-native/src/index.js',

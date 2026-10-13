@@ -50,7 +50,7 @@ const cases = [
 
 describe('C++ standard library browser compatibility', () => {
 	it.each(cases)(
-		'$cppVersion compiles iostream and runs stdin/stdout with the bundled sysroot',
+		'$cppVersion runs restored standard library headers with stdin/stdout',
 		{
 			skip: !enabled,
 			meta: { browser: true, requiredBrowser: enabled },
@@ -63,16 +63,63 @@ describe('C++ standard library browser compatibility', () => {
 				const source = `#if __cplusplus < ${minimum}L${maximum ? ` || __cplusplus >= ${maximum}L` : ''}
 #error The selected C++ standard was not applied
 #endif
+#include <any>
+#include <array>
+#include <bit>
+#include <charconv>
+#include <chrono>
+#include <cinttypes>
+#include <complex>
 #include <iostream>
+#include <random>
+#include <ranges>
+#include <regex>
+#include <span>
+#include <string>
+#if __cplusplus >= 202302L
+#include <expected>
+#endif
 
 int main() {
     int value = 0;
     if (!(std::cin >> value)) return 1;
-    std::cout << "${cppVersion} main=" << value + 5 << '\\n';
+
+    const std::any stored = value;
+    std::array<char, 32> digits{};
+    const auto encoded = std::to_chars(digits.data(), digits.data() + digits.size(), std::any_cast<int>(stored));
+    if (encoded.ec != std::errc{}) return 2;
+    int decoded = 0;
+    const auto parsed = std::from_chars(digits.data(), encoded.ptr, decoded);
+    if (parsed.ec != std::errc{} || decoded != value) return 3;
+    if (!std::regex_match(std::string(digits.data(), encoded.ptr), std::regex("[0-9]+"))) return 4;
+
+    std::mt19937 first(7), second(7);
+    if (first() != second()) return 5;
+    const std::complex<double> product = std::complex<double>(decoded, 2) * std::complex<double>(1, -1);
+    const int values[] = {decoded, 5};
+    const std::span<const int> view(values);
+    int total = 0;
+    for (int item : view | std::views::transform([](int item) { return item + 1; })) total += item;
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(decoded));
+
+    std::cout << "${cppVersion} main=" << decoded + 5
+              << " complex=" << product.real() << ',' << product.imag()
+              << " range=" << total << " duration=" << milliseconds.count();
+#if __cplusplus >= 202302L
+    const std::expected<int, int> result(total);
+    const std::expected<int, int> error(std::unexpected(9));
+    if (!result || error || error.error() != 9) return 6;
+    const auto reversed = std::byteswap(std::uint32_t{0x01020304});
+    if (reversed != 0x04030201) return 7;
+    std::cout << " expected=" << result.value() << " byteswap=" << reversed;
+#endif
+    std::cout << '\\n';
     return 0;
 }
 `;
-				const expectedOutput = `${cppVersion} main=73`;
+				const expectedOutput =
+					`${cppVersion} main=73 complex=70,-66 range=75 duration=68000` +
+					(cppVersion === 'CPP20' ? '' : ' expected=75 byteswap=67305985');
 				const summary = await runStdinBrowserProbe({
 					browserUrl: preview.browserUrl,
 					language: 'CPP',

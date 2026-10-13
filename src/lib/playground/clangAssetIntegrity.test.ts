@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { untar } from '@wasm-idle/llvm-core';
 
 import { describe, expect, it } from 'vitest';
 
@@ -27,7 +28,40 @@ const hasPreparedClangRuntime = ['clang.wasm.gz', 'lld.wasm.gz', 'sysroot.tar.gz
 	existsSync(resolve(process.cwd(), 'static/clang/bin', asset))
 );
 
+// Keep the complete selected SDK inventory, including headers outside bits/stdc++.h's closure.
+const publicCppHeaders = `
+algorithm any array atomic barrier bit bitset cassert ccomplex cctype cerrno cfenv
+cfloat charconv chrono cinttypes ciso646 climits clocale cmath codecvt compare
+complex complex.h concepts condition_variable coroutine csetjmp csignal cstdalign
+cstdarg cstdbool cstddef cstdint cstdio cstdlib cstring ctgmath ctime ctype.h cuchar
+cwchar cwctype cxxabi.h deque errno.h exception execution expected fenv.h filesystem
+flat_map flat_set float.h format forward_list fstream functional future initializer_list
+inttypes.h iomanip ios iosfwd iostream istream iterator latch limits list locale map
+math.h mdspan memory memory_resource mutex new numbers numeric optional ostream print
+queue random ranges ratio regex scoped_allocator semaphore set shared_mutex source_location
+span sstream stack stdatomic.h stddef.h stdexcept stdio.h stdlib.h stop_token streambuf
+string string.h string_view strstream syncstream system_error tgmath.h thread tuple
+type_traits typeindex typeinfo uchar.h unordered_map unordered_set utility valarray variant
+vector version wchar.h wctype.h
+`
+	.trim()
+	.split(/\s+/u);
+
 describe('bundled clang asset integrity', () => {
+	it('keeps the unchanged MemFS source receipt self-contained after a sysroot refresh', async () => {
+		const root = resolve(process.cwd(), 'static/clang');
+		const build = JSON.parse(await readFile(resolve(root, 'runtime-build.json'), 'utf8'));
+		const receipt = build.toolchain.memfs;
+		expect(receipt.format).toBe('wasm-llvm-memfs-build-v1');
+		expect(receipt).not.toHaveProperty('buildReceipt');
+		expect(receipt).not.toHaveProperty('files');
+		const module = gunzipSync(await readFile(resolve(root, 'bin/memfs.wasm.gz')));
+		expect(receipt.outputs['memfs.wasm']).toMatchObject({
+			bytes: module.byteLength,
+			sha256: createHash('sha256').update(module).digest('hex')
+		});
+	});
+
 	it('pins the separate long double archive, its ABI receipt and bundled license', async () => {
 		const root = resolve(process.cwd(), 'static/clang');
 		const receipt = JSON.parse(
@@ -122,6 +156,7 @@ describe('bundled clang asset integrity', () => {
 		});
 		const profileNames = ['c-sysroot.tar.gz', 'cpp-addon.tar.gz'] as const;
 		const paths = new Set<string>();
+		const splitFiles = new Map<string, Uint8Array>();
 		for (const name of profileNames) {
 			const assetReceipt = profiles.assets[name];
 			const compressed = await readFile(resolve(process.cwd(), 'static/clang/bin', name));
@@ -133,12 +168,56 @@ describe('bundled clang asset integrity', () => {
 				uncompressedSha256: createHash('sha256').update(logical).digest('hex')
 			});
 			expect(assetReceipt).toMatchObject(BUNDLED_CLANG_ASSET_INTEGRITY[`bin/${name}`]);
+			const mountedFiles = new Map<string, Uint8Array>();
+			untar(logical, {
+				addDirectory: () => {},
+				addFile: (filePath, contents) => {
+					expect(mountedFiles.has(filePath), `duplicate mounted file: ${filePath}`).toBe(
+						false
+					);
+					mountedFiles.set(filePath, contents);
+				}
+			});
+			expect([...mountedFiles.keys()].sort()).toEqual(
+				assetReceipt.files.map((file) => file.path).sort()
+			);
 			for (const file of assetReceipt.files) {
 				expect(paths.has(file.path)).toBe(false);
 				paths.add(file.path);
+				const contents = mountedFiles.get(file.path)!;
+				expect(contents.byteLength, file.path).toBe(file.bytes);
+				expect(createHash('sha256').update(contents).digest('hex'), file.path).toBe(
+					file.sha256
+				);
+				splitFiles.set(file.path, contents);
 			}
 		}
-		expect(paths.size).toBe(900);
+		const monolithicFiles = new Map<string, Uint8Array>();
+		untar(
+			gunzipSync(await readFile(resolve(process.cwd(), 'static/clang/bin/sysroot.tar.gz'))),
+			{
+				addDirectory: () => {},
+				addFile: (filePath, contents) => monolithicFiles.set(filePath, contents)
+			}
+		);
+		expect([...paths].sort()).toEqual([...monolithicFiles.keys()].sort());
+		for (const [filePath, contents] of splitFiles) {
+			expect(Buffer.compare(monolithicFiles.get(filePath)!, contents), filePath).toBe(0);
+		}
+		const requiredHeaders = [
+			...publicCppHeaders.map((header) => `include/c++/v1/${header}`),
+			...['complex.h', 'fenv.h', 'inttypes.h', 'signal.h', 'threads.h', 'uchar.h'].map(
+				(header) => `include/wasm32-wasi/${header}`
+			),
+			'include/c++/v1/__bit/byteswap.h',
+			'include/c++/v1/experimental/simd',
+			'include/c++/v1/libcxx.imp',
+			'include/c++/v1/module.modulemap',
+			'lib/clang/22/include/wasm_simd128.h'
+		];
+		for (const header of requiredHeaders) {
+			expect(paths.has(header), `selected SDK header is missing: ${header}`).toBe(true);
+		}
 		expect(BUNDLED_CLANG_ASSET_INTEGRITY['language-sysroots.v1.json']).toEqual({
 			bytes: profileManifestBytes.byteLength,
 			sha256: createHash('sha256').update(profileManifestBytes).digest('hex'),

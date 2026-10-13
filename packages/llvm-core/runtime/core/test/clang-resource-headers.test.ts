@@ -91,7 +91,7 @@ describe('pinned Clang resource headers', () => {
 
 	const archiveUrl = new URL('static/clang/bin/sysroot.tar.gz', root);
 	it.skipIf(!existsSync(archiveUrl))(
-		'repairs the shipped sysroot without replacing its 17 matching resource headers',
+		'leaves the complete shipped resource headers unchanged',
 		async () => {
 			const manifest = JSON.parse(
 				readFileSync(new URL('static/clang/runtime-manifest.v1.json', root), 'utf8')
@@ -114,16 +114,17 @@ describe('pinned Clang resource headers', () => {
 			const before = new Set(
 				[...fs.files.keys()].filter((path) => path.startsWith(`${resourceDir}/include/`))
 			);
-			expect(before.size).toBe(17);
+			for (const name of Object.keys(CLANG_RESOURCE_HEADERS)) {
+				expect(before.has(`${resourceDir}/include/${name}`), name).toBe(true);
+			}
 			installClangResourceHeaders(
 				fs,
 				manifest.compiler.provenance,
 				manifest.compiler.resourceDir
 			);
-			expect(fs.writeFile).toHaveBeenCalledTimes(21);
-			for (const [path] of fs.writeFile.mock.calls) expect(before.has(path)).toBe(false);
-			expect(fs.readFile(`${resourceDir}/include/stdbool.h`)).toEqual(
-				new TextEncoder().encode(CLANG_RESOURCE_HEADERS['stdbool.h'])
+			expect(fs.writeFile).not.toHaveBeenCalled();
+			expect(new TextDecoder().decode(fs.readFile(`${resourceDir}/include/stdbool.h`)!)).toBe(
+				CLANG_RESOURCE_HEADERS['stdbool.h']
 			);
 		}
 	);

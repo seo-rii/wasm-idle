@@ -116,8 +116,7 @@ describe('LLDB browser integration workflow', () => {
 		expect(workflow).not.toContain('sync:wasm-clang');
 		for (const [asset, sha256] of [
 			['clang.wasm.gz', '8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75'],
-			['lld.wasm.gz', '495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11'],
-			['sysroot.tar.gz', 'c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00']
+			['lld.wasm.gz', '495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11']
 		]) {
 			expect(assetManifest.assets).toContainEqual(
 				expect.objectContaining({
@@ -127,14 +126,16 @@ describe('LLDB browser integration workflow', () => {
 				})
 			);
 		}
-		const memfs = await readFile('static/clang/bin/memfs.wasm.gz');
-		expect(memfs.byteLength).toBe(BUNDLED_CLANG_ASSET_INTEGRITY['bin/memfs.wasm.gz'].bytes);
-		expect(createHash('sha256').update(memfs).digest('hex')).toBe(
-			BUNDLED_CLANG_ASSET_INTEGRITY['bin/memfs.wasm.gz'].sha256
-		);
-		expect(
-			assetManifest.assets.some((asset) => asset.target === 'clang/bin/memfs.wasm.gz')
-		).toBe(false);
+		// MemFS and the complete sysroot are checked in instead of fetched from the legacy release.
+		for (const asset of ['memfs.wasm.gz', 'sysroot.tar.gz'] as const) {
+			const bytes = await readFile(`static/clang/bin/${asset}`);
+			const integrity = BUNDLED_CLANG_ASSET_INTEGRITY[`bin/${asset}`];
+			expect(bytes.byteLength).toBe(integrity.bytes);
+			expect(createHash('sha256').update(bytes).digest('hex')).toBe(integrity.sha256);
+			expect(
+				assetManifest.assets.some((entry) => entry.target === `clang/bin/${asset}`)
+			).toBe(false);
+		}
 		expect(pkg.scripts?.['prepare:wasm-debug-release']).toBe(
 			'node scripts/prepare-wasm-debug-release.mjs'
 		);
