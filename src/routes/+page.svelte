@@ -59,6 +59,7 @@
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
+	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
@@ -1228,6 +1229,11 @@
 	}
 
 	function readStoredValue(key: string) {
+		if (
+			currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY &&
+			key !== currentWorkspaceStorageKey
+		)
+			return null;
 		try {
 			return localStorage.getItem(key);
 		} catch {
@@ -1522,7 +1528,7 @@
 	}
 
 	function decodeBase64Url(value: string | null) {
-		if (!value) return null;
+		if (value === null) return null;
 		try {
 			const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
 			const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
@@ -2194,11 +2200,15 @@
 
 	$effect(() => {
 		if (browser && editor && !init) {
-			currentWorkspaceStorageKey = workspaceStorageKey(new URL(location.href));
+			const currentUrl = new URL(location.href);
+			const requestedWorkspaceUrl = hasWorkspaceQueryInput(currentUrl)
+				? consumeWorkspaceQueryInput(createSharedWorkspaceUrl(currentUrl))
+				: null;
+			currentWorkspaceStorageKey = workspaceStorageKey(requestedWorkspaceUrl ?? currentUrl);
 			const sharedWorkspace = readHashSnapshot();
 			if (sharedWorkspace) {
 				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
-				const consumedUrl = createSharedWorkspaceUrl(new URL(location.href));
+				const consumedUrl = consumeWorkspaceQueryInput(createSharedWorkspaceUrl(currentUrl));
 				currentWorkspaceStorageKey = workspaceStorageKey(consumedUrl);
 				replaceState(consumedUrl, page.state);
 				workspaceInitialized = true;
@@ -2206,7 +2216,9 @@
 				return;
 			}
 
-			const storedWorkspace = readStoredValue(currentWorkspaceStorageKey);
+			const storedWorkspace = requestedWorkspaceUrl
+				? null
+				: readStoredValue(currentWorkspaceStorageKey);
 			if (storedWorkspace) {
 				try {
 					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
@@ -2249,7 +2261,8 @@
 					'Workspace restored'
 				);
 			}
-			if (requestedCode ?? code) activeFile.content = requestedCode ?? code ?? '';
+			const nextCode = requestedCode ?? code;
+			if (nextCode !== null) activeFile.content = nextCode;
 			if (requestedArgs !== null) argsInput = requestedArgs;
 			else if (storedArgs !== null) argsInput = storedArgs;
 			if (
@@ -2289,6 +2302,10 @@
 				requestedRustTargetTriple === 'wasm32-wasip3'
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
+			}
+			if (requestedWorkspaceUrl) {
+				replaceState(requestedWorkspaceUrl, page.state);
+				saveStatus = 'URL workspace loaded';
 			}
 			workspaceInitialized = true;
 			init = true;

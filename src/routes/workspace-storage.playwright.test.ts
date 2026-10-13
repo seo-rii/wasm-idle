@@ -64,6 +64,98 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it.each(['plain', 'base64', 'empty base64'])(
+		'opens explicit %s URL inputs before existing saved work',
+		browserOptions,
+		async (format) => {
+			expect.hasAssertions();
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const original = JSON.stringify({
+					version: 6,
+					language: 'CPP',
+					activePath: 'original.cpp',
+					files: [{ path: 'original.cpp', content: 'int original_local = 73;' }],
+					openTabs: ['original.cpp']
+				});
+				await context.addInitScript((snapshot) => {
+					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
+					localStorage.setItem('code', 'stale legacy code');
+					localStorage.setItem('language', 'CPP');
+					localStorage.setItem('argsInput', 'stale legacy arguments');
+				}, original);
+				const url = new URL(browserUrl);
+				const source = format === 'empty base64' ? '' : 'print("url_workspace_한글")';
+				const args = format === 'empty base64' ? '' : '--name "URL visitor"';
+				url.searchParams.set('lang', 'python');
+				url.searchParams.set(
+					format === 'plain' ? 'code' : 'code64',
+					format === 'plain' ? source : Buffer.from(source).toString('base64url')
+				);
+				url.searchParams.set(
+					format === 'plain' ? 'args' : 'args64',
+					format === 'plain' ? args : Buffer.from(args).toString('base64url')
+				);
+				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				expect(await page.locator('#language-select').inputValue()).toBe('PYTHON');
+				await page.waitForFunction(
+					(source) => (window as any).__wasmIdleDebug.getEditorValue() === source,
+					source
+				);
+				const editableUrl = new URL(page.url());
+				expect(editableUrl.searchParams.get('workspace')).toBeTruthy();
+				expect(editableUrl.searchParams.has('lang')).toBe(false);
+				expect(editableUrl.searchParams.has('code')).toBe(false);
+				expect(editableUrl.searchParams.has('code64')).toBe(false);
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				const storageKey = `wasm-idle:example-workspace:v3:${editableUrl.searchParams.get('workspace')}`;
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+						storageKey
+					)
+				).toBe(source);
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).argsInput,
+						storageKey
+					)
+				).toBe(args);
+				expect(
+					await page.evaluate(() =>
+						localStorage.getItem('wasm-idle:example-workspace:v3')
+					)
+				).toBe(original);
+				await page.evaluate(() =>
+					(window as any).__wasmIdleDebug.setEditorValue('print("edited_workspace")')
+				);
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.waitForFunction(
+					() =>
+						(window as any).__wasmIdleDebug.getEditorValue() ===
+						'print("edited_workspace")'
+				);
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).argsInput,
+						storageKey
+					)
+				).toBe(args);
+				expect(
+					await page.evaluate(() =>
+						localStorage.getItem('wasm-idle:example-workspace:v3')
+					)
+				).toBe(original);
+			});
+		}
+	);
+
 	it(
 		'recovers failed isolated snapshots under their own storage key',
 		browserOptions,
