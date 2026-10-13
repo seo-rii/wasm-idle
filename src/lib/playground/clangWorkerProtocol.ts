@@ -12,6 +12,7 @@ export type ClangCompileWorkerRequest = {
 	request: Omit<BrowserClangCompileRequest, 'onProgress'>;
 	runtimeBaseUrl: string;
 	maxAssetBytes?: number;
+	maxOutputBytes?: number;
 	languageSysroots?: boolean;
 	log?: boolean;
 	assets: WorkerRuntimeAssetConfig;
@@ -34,14 +35,14 @@ export type ClangCompileWorkerResponse =
 			diagnostics?: CompilerDiagnostic[];
 			precompiledHeader?: 'building';
 	  }
-	| {
+	| ({
 			type: 'error';
 			error: string;
 			stdout: string;
 			stderr: string;
 			diagnostics?: CompilerDiagnostic[];
 			precompiledHeader?: 'building';
-	  }
+	  } & ({ code?: undefined } | { code: 'output-limit'; limit: number; actual: number }))
 	| { type: 'precompiled-header'; header?: BrowserClangPrecompiledHeader };
 
 export type ClangExecuteWorkerRequest = {
