@@ -237,7 +237,9 @@ function createSharedInputReader(channel) {
 			}
 			if (Atomics.load(control, 2) === 1) return null;
 			self.postMessage({ type: 'stdin-request' });
-			Atomics.wait(control, 0, write);
+			// EOF/cancel update separate flags; their notification may arrive before
+			// this wait starts. Periodically recheck those flags after a missed wakeup.
+			Atomics.wait(control, 0, write, 100);
 		}
 	};
 }
