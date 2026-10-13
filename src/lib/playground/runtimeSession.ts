@@ -43,15 +43,16 @@ export function createRuntimeSession(
 		});
 	const release = (owned: Array<{ dispose(): Promise<void> }>) => {
 		const previous = retiring;
-		retiring = Promise.allSettled([previous, ...owned.map((lease) => lease.dispose())]).then(
-			(results) => {
-				const failure = results.find((result) => result.status === 'rejected');
-				if (failure?.status === 'rejected') throw failure.reason;
-			}
-		);
-		// Errors remain visible to the caller without unhandled background rejections.
-		void retiring.catch(() => undefined);
-		return retiring;
+		const released = Promise.allSettled([
+			previous,
+			...owned.map((lease) => lease.dispose())
+		]).then((results) => {
+			const failure = results.find((result) => result.status === 'rejected');
+			if (failure?.status === 'rejected') throw failure.reason;
+		});
+		// Keep ordering as a completion barrier; report this failure only to its owner.
+		retiring = released.catch(() => undefined);
+		return released;
 	};
 
 	const session: PlaygroundRuntimeSession = {
