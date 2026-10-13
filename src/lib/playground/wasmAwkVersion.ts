@@ -3,14 +3,14 @@ export const WASM_AWK_RUNTIME_PROFILE = Object.freeze({
 	profileId: 'goawk-v1.31.0-go1.25.3',
 	goVersion: 'go1.25.3',
 	goawkVersion: 'v1.31.0',
-	manifestFingerprint: '73f047e9cc32fea4d353f5f77da9137dd16c0c5196b512475f55bb25ea5a4e43',
+	manifestFingerprint: 'cd2659272709dbe3a2609a937aa241725947f69fed399f8e2ca50cc4bddb74fa',
 	manifestReceipt: Object.freeze({
 		bytes: 887,
-		sha256: '82b7da83f543cbf22eead6920b09901e61b98f7afa26f9004b937e6ab42843e6'
+		sha256: '768849f02ac2160bd8cdfe0475e664ffd26391ff3c725281df080ed86d419882'
 	}),
 	workerReceipt: Object.freeze({
-		bytes: 14124,
-		sha256: '4a199657d6d56f8626b4c67cbed3219e7852db8152743758968693553ef8c75e'
+		bytes: 14414,
+		sha256: 'fbf451ecea7de93ac1bc83f4ff5f52f23558394af787e48ddaf815932a0c3556'
 	}),
 	goShimReceipt: Object.freeze({
 		bytes: 16992,

@@ -566,9 +566,11 @@ describe('Wacl Tcl runner worker', { timeout: 20_000 }, () => {
 			['tcl/wacl-library.data.gz.bin', 'tcl/wacl-library.data.gz'],
 			['tcl/wacl.wasm.gz.bin', 'tcl/wacl.wasm.gz']
 		]) {
-			expect(await readFile(new URL(legacy, staticRuntimeUrl))).toEqual(
-				await readFile(new URL(canonical, staticRuntimeUrl))
-			);
+			expect(
+				(await readFile(new URL(legacy, staticRuntimeUrl))).equals(
+					await readFile(new URL(canonical, staticRuntimeUrl))
+				)
+			).toBe(true);
 		}
 	});
 
@@ -955,7 +957,7 @@ describe('Wacl Tcl runner worker', { timeout: 20_000 }, () => {
 				stdin: undefined,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					buffer: new SharedArrayBuffer(32),
 					capacity: 16,
 					controlBytes: 8

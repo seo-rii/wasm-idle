@@ -37,8 +37,8 @@ export const BUNDLED_TCL_RUNTIME_PROFILE = {
 } as const;
 export const BUNDLED_TCL_MANIFEST_FINGERPRINT = BUNDLED_TCL_RUNTIME_PROFILE.manifestFingerprint;
 export const BUNDLED_TCL_RUNNER_RECEIPT = {
-	bytes: 31654,
-	sha256: 'f65d0ed41589fe280219948afe7b4bb5f07766faac66fd2b15b70c5c2c50c4f2'
+	bytes: 31944,
+	sha256: '1f0656df1a3be8d8ff1f3da40ec8eb82aa79d4253b095d613e02278fdd945fca'
 } as const;
 export const BUNDLED_TCL_RUNTIME_BUNDLE = Object.freeze({
 	profile: BUNDLED_TCL_RUNTIME_PROFILE,

@@ -225,7 +225,7 @@ describe('Grain browser runtime assets', () => {
 		const buffer = new SharedArrayBuffer(17);
 		const channel = {
 			protocol: 'wasm-idle-static-stdin-ring',
-			protocolVersion: 1,
+			protocolVersion: 2,
 			controlBytes: 16,
 			capacity: 1,
 			buffer

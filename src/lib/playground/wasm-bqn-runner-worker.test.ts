@@ -264,9 +264,11 @@ describe('CBQN runner worker', () => {
 			'BQN.js': await readFile(new URL('BQN.js', staticRuntimeUrl)),
 			'BQN.wasm': gunzipSync(await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl)))
 		};
-		expect(await readFile(new URL('BQN.wasm.gz', staticRuntimeUrl))).toEqual(
-			await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl))
-		);
+		expect(
+			(await readFile(new URL('BQN.wasm.gz', staticRuntimeUrl))).equals(
+				await readFile(new URL('BQN.wasm.gz.bin', staticRuntimeUrl))
+			)
+		).toBe(true);
 		for (const receipt of manifest.assets) {
 			const bytes = logicalBytes[receipt.path as keyof typeof logicalBytes];
 			expect(bytes.byteLength).toBe(receipt.size);
@@ -364,7 +366,7 @@ describe('CBQN runner worker', () => {
 			runtimeRequest({
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					buffer: new SharedArrayBuffer(32),
 					capacity: 16,
 					controlBytes: 8

@@ -31,8 +31,8 @@ export const WASM_JULIA_RUNTIME_PROFILE = {
 export const WASM_JULIA_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_JULIA_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 28124,
-		sha256: '1e4980140a6f38b08c03fe0a7b57d4c3a5a289a94c4f96274d16a40a4adb58f0'
+		bytes: 28414,
+		sha256: 'c49b20c0345ab0d8c25c574679c9b204b412a65f4f51996522095fe475f3a590'
 	}
 });
 export const WASM_JULIA_ASSET_VERSION = WASM_JULIA_RUNTIME_PROFILE.manifestFingerprint;

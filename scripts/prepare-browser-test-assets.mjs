@@ -9,6 +9,8 @@ import { prepareOcamlBrowserWrapper } from './prepare-ocaml-browser-wrapper.mjs'
 import { prepareClangdAssets } from './prepare-clangd-assets.mjs';
 import { loadBundledProfile } from './verify-pinned-runtime-assets.mjs';
 import { computeBundleFingerprint } from './sync-wasm-of-js-of-ocaml.mjs';
+import { renderC3RunnerWorker } from './sync-wasm-c3.mjs';
+import { renderLfortranRunnerWorker } from './sync-wasm-lfortran.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -35,6 +37,7 @@ const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
  *   defaultBaseUrl: string;
  *   assets: BrowserTestAsset[];
  *   groupBaseUrls?: Record<string, string>;
+ *   generatedWorkers?: ('c3' | 'lfortran')[];
  * }} BrowserTestAssetManifest
  */
 
@@ -71,6 +74,14 @@ function parseManifest(value) {
 			normalizeBaseUrl(baseUrl);
 		}
 	}
+	if (
+		value.generatedWorkers !== undefined &&
+		(!Array.isArray(value.generatedWorkers) ||
+			value.generatedWorkers.some((group) => group !== 'c3' && group !== 'lfortran') ||
+			new Set(value.generatedWorkers).size !== value.generatedWorkers.length)
+	) {
+		throw new Error('Invalid generated browser worker groups');
+	}
 	const seen = new Set();
 	for (const asset of value.assets) {
 		if (
@@ -99,11 +110,41 @@ function parseManifest(value) {
 			throw new Error('browser test asset manifest contains invalid decoded metadata');
 		}
 		const key = `${asset.group}\0${asset.target}`;
+		if (
+			Array.isArray(value.generatedWorkers) &&
+			value.generatedWorkers.includes(asset.group) &&
+			asset.target === `wasm-${asset.group}/runner-worker.js`
+		) {
+			throw new Error('Generated browser workers must not also be downloaded');
+		}
 		if (seen.has(key))
 			throw new Error(`duplicate browser test asset: ${asset.group}/${asset.target}`);
 		seen.add(key);
 	}
 	return /** @type {BrowserTestAssetManifest} */ (value);
+}
+
+/** @param {'c3' | 'lfortran'} group */
+async function loadGeneratedWorker(group) {
+	if (group === 'c3') {
+		const { bundledC3Profile, bundledC3WorkerReceipt } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmC3Version.ts', import.meta.url)
+		);
+		return {
+			receipt: bundledC3WorkerReceipt,
+			render: () => renderC3RunnerWorker(bundledC3Profile)
+		};
+	}
+	const { WASM_LFORTRAN_PROFILE } = await loadBundledProfile(
+		new URL('../src/lib/playground/wasmLfortranVersion.ts', import.meta.url)
+	);
+	const lock = JSON.parse(
+		await readFile(new URL('./wasm-lfortran-assets.lock.json', import.meta.url), 'utf8')
+	);
+	return {
+		receipt: WASM_LFORTRAN_PROFILE.workerReceipt,
+		render: () => renderLfortranRunnerWorker(lock)
+	};
 }
 
 /** @param {BrowserTestAsset[]} assets @param {string} targetRoot @param {URL} baseUrl @param {{ bypassCookie: string; fetchImpl: typeof fetch; timeoutMs: number }} options */
@@ -286,6 +327,21 @@ export async function prepareBrowserTestAssets({
 				...(versionModulePath ? { versionModulePath } : {})
 			});
 		}
+		if (manifest.generatedWorkers?.some((generatedGroup) => generatedGroup === group)) {
+			const { receipt, render } = await loadGeneratedWorker(
+				/** @type {'c3' | 'lfortran'} */ (group)
+			);
+			const bytes = await render();
+			if (
+				bytes.length !== receipt.bytes ||
+				createHash('sha256').update(bytes).digest('hex') !== receipt.sha256
+			) {
+				throw new Error(`Generated browser worker failed receipt validation: ${group}`);
+			}
+			const target = path.join(staticDir, `wasm-${group}/runner-worker.js`);
+			await mkdir(path.dirname(target), { recursive: true });
+			await writeFile(target, bytes);
+		}
 	}
 
 	return {
@@ -310,6 +366,15 @@ export async function verifyBrowserTestAssets({
 	const receipts = manifest.assets
 		.filter((asset) => selectedGroups.includes(asset.group) && asset.group !== 'ocaml')
 		.map((asset) => ({ target: asset.target, ...(asset.decoded || asset) }));
+	for (const group of manifest.generatedWorkers || []) {
+		if (!selectedGroups.includes(group)) continue;
+		const { receipt } = await loadGeneratedWorker(group);
+		receipts.push({
+			target: `wasm-${group}/runner-worker.js`,
+			size: receipt.bytes,
+			sha256: receipt.sha256
+		});
+	}
 	if (selectedGroups.includes('ocaml')) {
 		const { WASM_OCAML_RUNTIME_PROFILE: profile } = await loadBundledProfile(
 			new URL('../src/lib/playground/wasmOcamlVersion.ts', import.meta.url)

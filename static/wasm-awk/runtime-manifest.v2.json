@@ -7,8 +7,8 @@
   "assets": {
     "worker": {
       "path": "runner-worker.v2.js",
-      "bytes": 14124,
-      "sha256": "4a199657d6d56f8626b4c67cbed3219e7852db8152743758968693553ef8c75e"
+      "bytes": 14414,
+      "sha256": "fbf451ecea7de93ac1bc83f4ff5f52f23558394af787e48ddaf815932a0c3556"
     },
     "goShim": {
       "path": "wasm_exec.js",
@@ -23,5 +23,5 @@
       "uncompressedSha256": "04ea6a3b3024ce6c4fd779a620eb5569a23879fb8fe2afaac87103ea7dd4b7a6"
     }
   },
-  "fingerprint": "73f047e9cc32fea4d353f5f77da9137dd16c0c5196b512475f55bb25ea5a4e43"
+  "fingerprint": "cd2659272709dbe3a2609a937aa241725947f69fed399f8e2ca50cc4bddb74fa"
 }

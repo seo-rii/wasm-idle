@@ -1894,7 +1894,7 @@ describe('static worker backed language sandboxes', () => {
 				stdinEof: false,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1
+					protocolVersion: 2
 				}
 			});
 
