@@ -10,8 +10,41 @@ remaining output. Callers of `spawn` must drain both output streams to release b
 `run` will drain both and deliver stdin EOF. Cancellation and disposal do not delete workspace
 data. Persistent storage, actual shell, Clang CLI and BusyBox require separate qualification.
 
-This first stack layer exports API types and errors. Runtime construction is added by the
-Supervisor layer; declarations are not a claim that unimplemented adapters are available.
+```ts
+import { createContainer } from '@wasm-idle/container';
+import { createWasiAdapter } from '@wasm-idle/container/adapters/wasi';
 
-See [development plan](../../docs/container-development-plan.md) and
-[compatibility ledger](../../docs/container-compatibility.md).
+// `bytes` is a trusted, previously verified core Wasm command, not a URL.
+const container = createContainer({
+  adapters: [createWasiAdapter()],
+  commands: { tool: { adapter: 'wasi-preview1', bytes } }
+});
+container.fs.writeFile('/workspace/input', new TextEncoder().encode('hello'));
+const result = await container.run('tool', ['input']);
+await container.dispose();
+```
+
+The current **batch** adapter runs in a dedicated Worker with a private leased filesystem
+snapshot. `spawn()` waits for Worker/profile readiness; guest execution starts after stdin is
+closed. `run()` closes stdin automatically. Output is collected under a hard combined bound,
+then exposed as byte streams after guest exit. This profile does not support live output,
+interactive stdin or process pipelines. The standalone bounded-pipe primitives are tested but
+are not a claim of live guest I/O. A future isolated adapter has its own qualification gate.
+
+Defaults: 64 MiB workspace, 16,384 inodes, 64 MiB native Wasm memory maximum, 8 MiB input and
+combined output, 8 MiB `run()` capture. Memory limits require one defined, unshared wasm32 memory
+with an explicit maximum; modules with imported/shared/unbounded memories or a start section
+are rejected before execution. Only enumerated Preview1 function imports are accepted. Polling,
+metadata mutation and durability syscalls return explicit unsupported errors. Network imports
+are rejected. One snapshot command owns the workspace writer lease; conflicting startup or
+editor writes fail rather than silently overwrite files. Open host fds must be closed first.
+
+Ordinary exit, including a nonzero code, commits a validated filesystem snapshot. Runtime trap,
+output-limit failure and termination discard it. `terminate()` reclaims the dedicated Worker,
+wakes pending batch input/output, and releases the lease. `dispose()` stops all commands and
+retains the filesystem for inspection/export; `flush()` explicitly rejects memory-only mode.
+Worker factory injection is trusted local application code and remains responsible for matching
+the native Worker termination contract. No arbitrary JavaScript adapter isolation is claimed.
+
+See [filesystem contract](./FS.md), [development plan](../../docs/container-development-plan.md)
+and [compatibility ledger](../../docs/container-compatibility.md).
