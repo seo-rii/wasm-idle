@@ -11,21 +11,28 @@ export function createWorkspaceStorage(
 	onChange: (state: WorkspaceSaveState) => void
 ) {
 	let currentSnapshot: string | undefined;
+	let currentStorageIdentity: string | undefined;
 	let state: WorkspaceSaveState = { phase: 'dirty', revision: 0, savedRevision: -1, error: null };
 	function publish(next: Partial<WorkspaceSaveState>) {
 		state = { ...state, ...next };
 		onChange({ ...state });
 	}
-	function observe(snapshot: string) {
-		if (snapshot === currentSnapshot) return;
+	function observe(snapshot: string, storageIdentity = '') {
+		const identityChanged = storageIdentity !== currentStorageIdentity;
+		if (snapshot === currentSnapshot && !identityChanged) return;
 		currentSnapshot = snapshot;
-		publish({ revision: state.revision + 1, phase: state.error ? 'error' : 'dirty' });
+		currentStorageIdentity = storageIdentity;
+		publish({
+			revision: state.revision + 1,
+			phase: identityChanged ? 'dirty' : state.error ? 'error' : 'dirty',
+			...(identityChanged ? { savedRevision: -1, error: null } : {})
+		});
 	}
 	return {
 		observe,
 		getState: () => ({ ...state }),
-		save(snapshot: string) {
-			observe(snapshot);
+		save(snapshot: string, storageIdentity = '') {
+			observe(snapshot, storageIdentity);
 			const revision = state.revision;
 			publish({ phase: 'saving' });
 			try {
