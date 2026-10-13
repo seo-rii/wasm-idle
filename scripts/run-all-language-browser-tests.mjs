@@ -8,6 +8,11 @@ import {
 } from './browser-preview-server.mjs';
 import { supportMatrixRows } from './support-matrix.mjs';
 import {
+	ALL_BROWSER_FAMILIES,
+	browserFamilyForLanguage,
+	runtimeBrowserRegistry
+} from './runtime-browser-registry.mjs';
+import {
 	prepareBrowserTestAssets,
 	verifyBrowserTestAssets
 } from './prepare-browser-test-assets.mjs';
@@ -32,7 +37,6 @@ const WORKSPACE_BROWSER_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
 	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1'
 };
-const ESOLANG_TEST_FILE = 'src/lib/playground/esolangs.playwright.test.ts';
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
 	WASM_IDLE_REQUIRE_LLDB_DEBUG: '1',
@@ -114,7 +118,7 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
+ *   family?: import('./runtime-browser-registry.mjs').BrowserFamily;
  * }} options
  * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
@@ -125,27 +129,42 @@ export function createAllLanguageBrowserTestPlan({
 	family
 } = {}) {
 	if (family) {
-		const families = {
+		if (!ALL_BROWSER_FAMILIES.includes(family))
+			throw new Error(`Unknown runtime browser family: ${family}`);
+		const rowsByLanguage = new Map(
+			supportMatrixRows.flatMap((row) => row.ids.map((id) => [id, row]))
+		);
+		for (const { languages } of runtimeBrowserRegistry) {
+			for (const language of languages) {
+				if (!rowsByLanguage.get(language)?.browserTest)
+					throw new Error(`Missing required browser test for ${language}`);
+			}
+		}
+		/** @type {Record<string, string>} */
+		const env = {};
+		const testFiles = new Set();
+		for (const row of supportMatrixRows) {
+			if (!row.ids.some((id) => browserFamilyForLanguage(id) === family)) continue;
+			// Python and .NET have focused suites below, in addition to the full
+			// shared-stdin coverage used by the scheduled matrix.
+			if (family === 'python' || family === 'dotnet') continue;
+			if (!row.browserTest)
+				throw new Error(`Missing required browser test for ${row.language}`);
+			testFiles.add(row.browserTest.file);
+			env[
+				row.browserTest.env === 'WASM_IDLE_RUN_REAL_BROWSER_STDIN'
+					? SHARED_STDIN_BROWSER_TEST_ENVIRONMENT
+					: row.browserTest.env
+			] = '1';
+		}
+		/** @type {Partial<Record<import('./runtime-browser-registry.mjs').BrowserFamily, { env: Record<string, string>; testFiles: string[] }>>} */
+		const additionalCoverage = {
 			workspace: { env: { ...WORKSPACE_BROWSER_ENV }, testFiles: [...WORKSPACE_TEST_FILES] },
-			go: {
-				env: { WASM_IDLE_RUN_REAL_BROWSER_GO: '1' },
-				testFiles: ['src/lib/playground/go.playwright.test.ts']
-			},
 			python: {
 				env: { WASM_IDLE_RUN_REAL_BROWSER_PYTHON: '1' },
 				testFiles: [PYTHON_TEST_FILE]
 			},
 			debug: { env: { ...DEBUG_REGRESSION_ENV }, testFiles: [DEBUG_TEST_FILE] },
-			esolangs: {
-				env: Object.fromEntries(
-					supportMatrixRows.flatMap((row) =>
-						row.browserTest?.file === ESOLANG_TEST_FILE
-							? [[row.browserTest.env, '1']]
-							: []
-					)
-				),
-				testFiles: [ESOLANG_TEST_FILE]
-			},
 			dotnet: {
 				env: {
 					WASM_IDLE_RUN_REAL_BROWSER_DOTNET: '1',
@@ -159,34 +178,24 @@ export function createAllLanguageBrowserTestPlan({
 				]
 			},
 			nim: {
-				env: {
-					WASM_IDLE_RUN_REAL_BROWSER_NIM: '1',
-					WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY: '1'
-				},
-				testFiles: [
-					STATIC_WORKER_TEST_FILE,
-					'src/lib/playground/runtime-recovery.playwright.test.ts'
-				]
+				env: { WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY: '1' },
+				testFiles: ['src/lib/playground/runtime-recovery.playwright.test.ts']
 			},
 			clang: {
 				env: {
-					WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
-					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1',
-					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC: '1',
-					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1'
+					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1'
 				},
-				testFiles: [
-					'src/lib/playground/stdin.playwright.test.ts',
-					CPP_STANDARDS_TEST_FILE,
-					LONG_DOUBLE_TEST_FILE,
-					'src/lib/playground/objectivecxx.playwright.test.ts'
-				]
+				testFiles: [CPP_STANDARDS_TEST_FILE, LONG_DOUBLE_TEST_FILE]
 			}
 		};
-		if (!families[family]) throw new Error(`Unknown runtime browser family: ${family}`);
-		return families[family];
+		const additional = additionalCoverage[family];
+		if (additional) {
+			Object.assign(env, additional.env);
+			for (const file of additional.testFiles) testFiles.add(file);
+		}
+		return { env, testFiles: [...testFiles] };
 	}
 	if (shard) parseBrowserTestShard(shard);
 	/** @type {Set<string>} */
@@ -326,7 +335,7 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
+ *   family?: import('./runtime-browser-registry.mjs').BrowserFamily;
  *   useBuild?: boolean;
  * }} options
  * @param {{
@@ -399,7 +408,7 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
-	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace';
+	 *   family?: import('./runtime-browser-registry.mjs').BrowserFamily;
 	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
@@ -425,23 +434,11 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			options.useBuild = true;
 		} else if (arg.startsWith('--family=')) {
 			const family = arg.slice('--family='.length);
-			if (
-				![
-					'dotnet',
-					'nim',
-					'clang',
-					'debug',
-					'esolangs',
-					'go',
-					'python',
-					'workspace'
-				].includes(family)
-			)
+			const parsedFamily =
+				/** @type {import('./runtime-browser-registry.mjs').BrowserFamily} */ (family);
+			if (!ALL_BROWSER_FAMILIES.includes(parsedFamily))
 				throw new Error(`Unknown runtime browser family: ${family}`);
-			options.family =
-				/** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs' | 'go' | 'python' | 'workspace'} */ (
-					family
-				);
+			options.family = parsedFamily;
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}
