@@ -52,3 +52,27 @@ it('removes a cached child attribute from a retained namespace package', async (
 		expect(runtime.runPython('from wid_namespace import helper\nhelper.VALUE')).toBe(value);
 	}
 }, 120_000);
+
+it('reloads modules when their bytecode cache parent is a file and still reports unexpected cleanup failures', async () => {
+	const runtime = await loadPyodide();
+	const invalidate = createPythonWorkspaceImports(runtime);
+	const paths = ['wid_cache_parent/__init__.py', 'wid_cache_parent/__pycache__'];
+	runtime.FS.mkdir('wid_cache_parent');
+	runtime.FS.writeFile('wid_cache_parent/__pycache__', 'bytecode cache unavailable');
+	for (const value of [1, 2, 3]) {
+		invalidate(paths);
+		runtime.FS.writeFile('wid_cache_parent/__init__.py', `VALUE = ${value}\n`);
+		expect(runtime.runPython('import wid_cache_parent\nwid_cache_parent.VALUE')).toBe(value);
+	}
+	expect(() => invalidate([])).not.toThrow();
+	expect(runtime.runPython('"wid_cache_parent" in __import__("sys").modules')).toBe(false);
+
+	runtime.runPython(`from unittest.mock import patch
+__wid_cache_unlink_patch = patch("os.unlink", side_effect=PermissionError("cache cleanup denied"))
+__wid_cache_unlink_patch.start()`);
+	try {
+		expect(() => invalidate(paths)).toThrow('PermissionError');
+	} finally {
+		runtime.runPython('__wid_cache_unlink_patch.stop()');
+	}
+}, 120_000);
