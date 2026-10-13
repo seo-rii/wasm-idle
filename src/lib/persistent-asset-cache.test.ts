@@ -376,13 +376,66 @@ describe('persistent runtime asset cache', () => {
 		expect(load).toHaveBeenCalledTimes(1);
 	});
 
-	it('never implicitly caches assets without a valid trusted hash', async () => {
+	it.each([
+		{ sha256: '' },
+		{ sha256: 'not-a-sha256' },
+		{ url: '' },
+		{ url: 'asset\0.wasm' },
+		{ bytes: -1 },
+		{ bytes: NaN },
+		{ bytes: Infinity },
+		{ bytes: 0.5 },
+		{ bytes: Number.MAX_SAFE_INTEGER + 1 },
+		{ version: '' },
+		{ validationKey: 1 }
+	])('rejects invalid integrity metadata before storage or download: %j', async (invalid) => {
 		const bytes = payload('unversioned');
-		const key = { ...identity(bytes), sha256: '' };
-		expect(
-			await loadPersistentRuntimeAsset({ identity: key, load: async () => bytes })
-		).toEqual(bytes);
+		const key = { ...identity(bytes), ...invalid } as RuntimePersistentAssetIdentity;
+		const load = vi.fn(async () => bytes);
+		for (const cache of [undefined, false] as const) {
+			await expect(
+				loadPersistentRuntimeAsset({ identity: key, cache, load })
+			).rejects.toThrow(TypeError);
+			await expect(readPersistentRuntimeAsset({ identity: key, cache })).rejects.toThrow(
+				TypeError
+			);
+			await expect(
+				writePersistentRuntimeAsset({ identity: key, bytes, cache })
+			).rejects.toThrow(TypeError);
+		}
+		expect(load).not.toHaveBeenCalled();
 		expect(storage.cacheOpen).not.toHaveBeenCalled();
+		expect(storage.databaseOpen).not.toHaveBeenCalled();
+		expect(storage.lockRequest).not.toHaveBeenCalled();
+	});
+
+	it.each(['disabled', 'unavailable'])(
+		'still verifies downloaded bytes when caching is %s',
+		async (mode) => {
+			if (mode === 'disabled') configureRuntimeAssetCache(false);
+			else vi.stubGlobal('caches', undefined);
+			await expect(
+				loadPersistentRuntimeAsset({
+					identity: identity(payload('good')),
+					load: async () => payload('evil')
+				})
+			).rejects.toThrow(/mismatch/);
+		}
+	);
+
+	it('snapshots trusted metadata before an asynchronous download', async () => {
+		const bytes = payload('good');
+		const key = identity(bytes);
+		await expect(
+			loadPersistentRuntimeAsset({
+				identity: key,
+				cache: false,
+				load: async () => {
+					Object.assign(key, identity(payload('evil')));
+					return bytes;
+				}
+			})
+		).resolves.toEqual(bytes);
 	});
 
 	it('enforces byte, entry-size and entry-count budgets using LRU eviction', async () => {

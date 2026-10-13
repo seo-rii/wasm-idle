@@ -354,6 +354,8 @@ function validIdentity(identity: RuntimePersistentAssetIdentity): boolean {
 		typeof identity.url === 'string' &&
 		identity.url.length > 0 &&
 		identity.url.length <= 8192 &&
+		!identity.url.includes('\0') &&
+		typeof identity.sha256 === 'string' &&
 		/^[a-f0-9]{64}$/u.test(identity.sha256) &&
 		(identity.bytes === undefined ||
 			(Number.isSafeInteger(identity.bytes) && identity.bytes >= 0)) &&
@@ -365,6 +367,14 @@ function validIdentity(identity: RuntimePersistentAssetIdentity): boolean {
 				identity.version.length > 0 &&
 				identity.version.length <= 256))
 	);
+}
+
+function snapshotIdentity(
+	identity: RuntimePersistentAssetIdentity
+): RuntimePersistentAssetIdentity {
+	const snapshot = { ...identity };
+	if (!validIdentity(snapshot)) throw new TypeError('Invalid runtime asset integrity identity');
+	return snapshot;
 }
 
 function storageName(options: ResolvedRuntimeAssetCacheOptions): string {
@@ -647,11 +657,11 @@ async function makeRoom(
 export async function readPersistentRuntimeAsset(
 	request: RuntimePersistentAssetRequest
 ): Promise<Uint8Array | undefined> {
+	request = { ...request, identity: snapshotIdentity(request.identity) };
 	const options = resolveRuntimeAssetCacheOptions(request.cache);
 	checkAbort(request.signal);
 	if (
 		!options.enabled ||
-		!validIdentity(request.identity) ||
 		(request.identity.bytes !== undefined &&
 			request.identity.bytes > Math.min(options.maxBytes, options.maxEntryBytes))
 	)
@@ -715,11 +725,11 @@ export async function readPersistentRuntimeAsset(
 export async function writePersistentRuntimeAsset(
 	request: RuntimePersistentAssetRequest & { bytes: Uint8Array }
 ): Promise<boolean> {
+	request = { ...request, identity: snapshotIdentity(request.identity) };
 	const options = resolveRuntimeAssetCacheOptions(request.cache);
 	checkAbort(request.signal);
 	if (
 		!options.enabled ||
-		!validIdentity(request.identity) ||
 		!canStore(options) ||
 		request.bytes.byteLength > Math.min(options.maxBytes, options.maxEntryBytes)
 	)
@@ -784,6 +794,7 @@ export async function writePersistentRuntimeAsset(
 export async function loadPersistentRuntimeAsset(
 	request: RuntimePersistentAssetRequest & { load: () => Promise<Uint8Array> }
 ): Promise<Uint8Array> {
+	request = { ...request, identity: snapshotIdentity(request.identity) };
 	const cache = resolveRuntimeAssetCacheOptions(request.cache);
 	const hit = await readPersistentRuntimeAsset({ ...request, cache });
 	if (hit) return hit;
@@ -791,13 +802,11 @@ export async function loadPersistentRuntimeAsset(
 	const bytes = Uint8Array.from(await request.load());
 	checkAbort(request.signal);
 	// Validate downloads even if the user disabled caching or storage is unavailable.
-	if (validIdentity(request.identity)) {
-		await verifyRuntimeAssetIntegrity({
-			asset: request.identity.url,
-			bytes,
-			expected: { sha256: request.identity.sha256, bytes: request.identity.bytes }
-		});
-	}
+	await verifyRuntimeAssetIntegrity({
+		asset: request.identity.url,
+		bytes,
+		expected: { sha256: request.identity.sha256, bytes: request.identity.bytes }
+	});
 	await writePersistentRuntimeAsset({ ...request, cache, bytes });
 	checkAbort(request.signal);
 	return bytes;
