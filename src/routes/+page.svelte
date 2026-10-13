@@ -3682,8 +3682,10 @@
 					href={resolve('/')}
 					data-sveltekit-reload
 					title="Open your original local workspace"
+					aria-label="Local workspace"
 				>
-					Local workspace
+					<span class="material-symbols-outlined" aria-hidden="true">home</span>
+					<span>Local workspace</span>
 				</a>
 			{/if}
 			<button
