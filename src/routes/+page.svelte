@@ -5852,6 +5852,8 @@
 	.debug-controls {
 		flex: none;
 		display: flex;
+		flex-wrap: wrap;
+		max-width: 100%;
 		align-items: center;
 		gap: 2px;
 		padding: 3px;
