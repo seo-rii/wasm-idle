@@ -55,8 +55,9 @@ function checkMode(mode: number): void {
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
-function sameEntry(a: SnapshotEntry, b: SnapshotEntry): boolean {
+function sameEntry(a: SnapshotEntry, b: SnapshotEntry, compareTimes: boolean): boolean {
   return a.inode === b.inode && a.type === b.type && a.mode === b.mode && a.target === b.target &&
+    (!compareTimes || a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs) &&
     (a.type !== 'file' || sameBytes(a.data!, b.data!));
 }
 
@@ -530,7 +531,7 @@ export class MemoryFileSystem {
   exportSnapshot(): FileSystemSnapshot {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
-      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode,
+      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
         ...(node.type === 'file' ? { data: node.data.slice() } : {}),
         ...(node.type === 'symlink' ? { target: node.target } : {}),
       });
@@ -548,7 +549,7 @@ export class MemoryFileSystem {
       const old = previous.get(next.inode);
       if (old?.type === next.type) {
         if (old.mode === next.mode && old.target === next.target && sameBytes(old.data, next.data) &&
-          old.children.size === next.children.size && [...old.children.keys()].every(name => next.children.has(name))) {
+          old.children.size === next.children.size && [...old.children].every(([name, child]) => next.children.get(name)?.inode === child.inode)) {
           next.mtimeMs = old.mtimeMs;
           next.ctimeMs = old.ctimeMs;
         }
@@ -588,6 +589,8 @@ export class MemoryFileSystem {
       }
       if (records.has(entry.path)) throw new FsError('EINVAL', 'Duplicate snapshot path');
       checkMode(entry.mode);
+      if (entry.mtimeMs !== undefined) integer(entry.mtimeMs, 'mtimeMs');
+      if (entry.ctimeMs !== undefined) integer(entry.ctimeMs, 'ctimeMs');
       if (!['file', 'directory', 'symlink'].includes(entry.type)) throw new FsError('EINVAL', 'Invalid snapshot entry type');
       if (entry.type === 'file') {
         if (!(entry.data instanceof Uint8Array) || entry.target !== undefined) throw new FsError('EINVAL', 'Invalid file entry');
@@ -624,6 +627,8 @@ export class MemoryFileSystem {
       const mount = orderedMounts.find(candidate => within(path, candidate))!;
       const node = fs.allocate(entry.type, mount, entry.mode);
       node.inode = entry.inode;
+      if (entry.mtimeMs !== undefined) node.mtimeMs = entry.mtimeMs;
+      if (entry.ctimeMs !== undefined) node.ctimeMs = entry.ctimeMs;
       node.data = entry.data?.slice() ?? new Uint8Array();
       node.target = entry.target ?? '';
       built.set(path, node);
@@ -673,7 +678,8 @@ export class MemoryFileSystem {
         for (const path of new Set([...before.keys(), ...after.keys()])) {
           const mount = mountPaths.find(candidatePath => within(path, candidatePath))!;
           const old = before.get(path), next = after.get(path);
-          if ((this.mounts.get(mount) || this.mounts.has(path)) && (!old || !next || !sameEntry(old, next))) {
+          // Writable mount roots retain their identity but their child changes update timestamps.
+          if ((this.mounts.get(mount) || this.mounts.has(path)) && (!old || !next || !sameEntry(old, next, this.mounts.get(mount)!))) {
             throw new FsError('EROFS', 'Snapshot changed a readonly entry or mount root');
           }
         }

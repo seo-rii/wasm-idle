@@ -7,19 +7,21 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const coreRoot = resolve(root, '../core/dist');
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/') {
       response.setHeader('Content-Type', 'text/html');
-      response.end('<!doctype html><meta charset="utf-8"><title>Workspace persistence contract</title>');
+      response.end('<!doctype html><meta charset="utf-8"><title>Workspace persistence contract</title><script type="importmap">{"imports":{"@wasm-idle/core":"/core/index.js"}}</script>');
       return;
     }
-    const path = resolve(root, '.' + decodeURIComponent(pathname));
-    if (!pathname.startsWith('/dist/') || relative(root, path).startsWith('..') || !(await stat(path)).isFile()) {
+    const base = pathname.startsWith('/core/') ? coreRoot : root;
+    const path = resolve(base, '.' + decodeURIComponent(pathname.startsWith('/core/') ? pathname.slice(5) : pathname));
+    if (!['/dist/', '/core/', '/test/fixtures/'].some((prefix) => pathname.startsWith(prefix)) || relative(base, path).startsWith('..') || !(await stat(path)).isFile()) {
       response.writeHead(404).end(); return;
     }
-    response.setHeader('Content-Type', 'text/javascript'); response.end(await readFile(path));
+    response.setHeader('Content-Type', path.endsWith('.wasm') ? 'application/wasm' : 'text/javascript'); response.end(await readFile(path));
   } catch { response.writeHead(404).end(); }
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -61,7 +63,7 @@ try {
     owner.fs.writeFile('/tmp/transient', encode('temporary'));
     owner.fs.mountReadonly('/opt/toolchains/fixture', [{ path: 'tool', type: 'file', mode: 0o555, data: encode('tool') }]);
     const flushed = await owner.flush();
-    return { inode, flushed, snapshot: owner.exportSnapshot(), secure: isSecureContext, userAgent: navigator.userAgent };
+    return { inode, timestamps: owner.fs.stat('/workspace/한 글/result'), flushed, snapshot: owner.exportSnapshot(), secure: isSecureContext, userAgent: navigator.userAgent };
   });
   assert.equal(initial.secure, true); assert.equal(initial.flushed.state, 'saved');
   assert.equal(initial.snapshot.entries.some((e) => e.path === '/tmp/transient' || e.path.startsWith('/opt/toolchains/fixture')), false);
@@ -80,10 +82,12 @@ try {
     return {
       bytes: Array.from(owner.fs.readFile('/workspace/한 글/link')),
       inode: owner.fs.stat('/workspace/한 글/result').inode, link: owner.fs.readlink('/workspace/한 글/link'),
+      timestamps: owner.fs.stat('/workspace/한 글/result'),
       inspection: owner.inspect(), tmp, tool
     };
   });
   assert.deepEqual(restored.bytes, [0, 255, 13, 10, 128]); assert.equal(restored.inode, initial.inode);
+  assert.deepEqual(restored.timestamps, initial.timestamps);
   assert.equal(restored.link, 'result'); assert.equal(restored.tmp, false); assert.equal(restored.tool, false);
   assert.equal(restored.inspection.state, 'saved');
   checks.push('PERSIST-01: reload restores binary data, symlinks, renamed inode IDs and only user files');
@@ -200,6 +204,27 @@ try {
   assert.equal(budget.code, 'STORAGE'); assert.equal(budget.failed.dirty, true);
   assert.equal(budget.memoryFiles, 11); assert.deepEqual(budget.storedFiles, ['file']); assert.equal(budget.text, 'baseline');
   checks.push('PERSIST-02: metadata budget failure preserves the previous root and unsaved in-memory files');
+
+  const integration = await page.evaluate(async () => {
+    await owner.dispose();
+    owner = await persistence.openPersistentWorkspace({ id: 'container-lifecycle', maxBytes: 1024 });
+    const { createContainer } = await import('/dist/index.js');
+    const { createWasiAdapter } = await import('/dist/adapters/wasi/index.js');
+    const bytes = new Uint8Array(await (await fetch('/test/fixtures/command.wasm')).arrayBuffer());
+    let mismatch;
+    try { createContainer({ workspace: owner, maxBytes: 2048 }); } catch (error) { mismatch = error.code; }
+    const container = createContainer({ workspace: owner, adapters: [createWasiAdapter()], commands: { tool: { adapter: 'wasi-preview1', bytes } } });
+    const result = await container.run('tool', ['exit']);
+    const dirty = await container.inspect(); await container.flush(); const saved = await container.inspect();
+    await container.dispose();
+    const data = decode(container.fs.readFile('/workspace/partial'));
+    let locked;
+    try { await persistence.openPersistentWorkspace({ id: 'container-lifecycle' }); } catch (error) { locked = error.code; }
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'container-lifecycle', maxBytes: 1024 });
+    return { mismatch, result: result.code, dirty: dirty.workspace.state, saved: saved.workspace.state, profile: saved.persistence, quota: saved.limits.maxWorkspaceBytes, data, locked, restored: decode(owner.fs.readFile('/workspace/partial')) };
+  });
+  assert.deepEqual(integration, { mismatch: 'INVALID_ARGUMENT', result: 23, dirty: 'new', saved: 'saved', profile: 'opfs', quota: 1024, data: 'saved', locked: 'BUSY', restored: 'saved' });
+  checks.push('PERSIST-01: container guest writes, explicit flush, quotas and owner lifetime compose with persistence');
 
   const irrecoverable = await page.evaluate(async () => {
     await owner.dispose();

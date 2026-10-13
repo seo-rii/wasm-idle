@@ -109,7 +109,16 @@ storage. Fault hooks receive only named commit boundaries, never file contents.
 Throwing after root publication can reject a flush whose data has already committed;
 inspection reports that committed generation rather than claiming rollback.
 
+An explicitly opened owner can be injected as `createContainer({ workspace: owner,
+adapters, packages })`. The container uses that same filesystem and its byte/inode
+quotas. `container.flush()` publishes its visible workspace revision; a running
+snapshot command's private changes are not visible until normal completion. Inspect
+reports the owner's saved/dirty/error state. Container disposal stops its commands;
+the injecting host must then call `owner.dispose()` to release the writer lock. This
+allows export and an explicit final flush without deleting data or implicitly saving.
+Passing conflicting container/owner quotas or a disposed owner fails explicitly.
+
 This is a persistence primitive with Chromium/Linux coverage, not qualification of
-the complete persistent container beta. Container/editor integration, autosave UI,
+the complete persistent container beta. Editor integration, autosave UI,
 downloadable export, orphan collection, broader browser coverage and process-crash
 testing during an active IndexedDB transaction remain separate work.

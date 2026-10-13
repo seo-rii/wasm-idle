@@ -184,7 +184,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
           total += blob.bytes;
           if (total > fs.maxBytes) corrupt('Workspace root exceeds its byte budget');
         } else if (entry.blob !== undefined) corrupt('Non-file entry references blob data');
-        return { inode: entry.inode, path: entry.path, type: entry.type, mode: entry.mode,
+        return { inode: entry.inode, path: entry.path, type: entry.type, mode: entry.mode, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs,
           ...(entry.type === 'file' ? { data: new Uint8Array() } : {}),
           ...(entry.type === 'symlink' ? { target: entry.target } : {}) };
       });
