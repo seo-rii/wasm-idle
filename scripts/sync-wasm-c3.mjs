@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+/** @param {Uint8Array} bytes */
 const receiptFor = (bytes) => ({ bytes: bytes.length, sha256: sha256(bytes) });
 const expectedManifest = '6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb';
 
@@ -73,7 +75,9 @@ export async function publishC3Bundle({ targetDir, versionModulePath, files, ver
 	}
 }
 
-/** The producer path is an explicitly supplied trusted local checkout, never a runtime URL. */
+/** The producer path is an explicitly supplied trusted local checkout, never a runtime URL.
+ * @param {string} producer
+ */
 export async function syncC3(producer) {
 	const producerRoot = path.resolve(producer);
 	const directory = path.join(producerRoot, 'out/c3-browser');
@@ -87,6 +91,7 @@ export async function syncC3(producer) {
 	) {
 		throw new Error('C3 producer revision is not the reviewed 0.8.3 profile');
 	}
+	/** @type {Record<string, Buffer>} */
 	const files = {};
 	for (const name of ['c3c.mjs', 'c3c.wasm', 'producer-receipt.json']) {
 		files[name] = await readFile(path.join(directory, name));
@@ -97,7 +102,10 @@ export async function syncC3(producer) {
 			throw new Error(`C3 producer asset changed during sync: ${name}`);
 		}
 	}
-	if (JSON.stringify(JSON.parse(files['producer-receipt.json'])) !== JSON.stringify(receipt)) {
+	if (
+		JSON.stringify(JSON.parse(files['producer-receipt.json'].toString('utf8'))) !==
+		JSON.stringify(receipt)
+	) {
 		throw new Error('C3 producer receipt changed during sync');
 	}
 	const profile = {
