@@ -304,7 +304,6 @@ export async function runStdinBrowserProbe(options) {
 		throw new Error('runStdinBrowserProbe requires a browserUrl');
 	}
 	const requestedBrowserUrl = new URL(browserUrl);
-	if (argsInput) requestedBrowserUrl.searchParams.set('args', argsInput);
 	const executablePath = await resolveChromiumExecutable(chromiumExecutable);
 	const browser = await chromium.launch({
 		headless: true,
@@ -313,6 +312,13 @@ export async function runStdinBrowserProbe(options) {
 	const context = await browser.newContext();
 	await addBrowserTestCookies(context, browserUrl);
 	await disableBrowserPrewarm(context);
+	// These probes measure execution assets, independently of the default editor LSP.
+	await context.addInitScript((argsInput) => {
+		localStorage.setItem(
+			'wasm-idle:example-workspace:v3',
+			JSON.stringify({ version: 6, files: [], lspEnabled: false, argsInput })
+		);
+	}, argsInput);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 

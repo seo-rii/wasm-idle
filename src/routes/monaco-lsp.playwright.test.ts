@@ -668,6 +668,11 @@ async function prepareBrowserContext(context: BrowserContext, browserUrl: string
 			]) {
 				localStorage.removeItem(key);
 			}
+			// Observe loading and pre-enable requests from an explicit LSP-off workspace.
+			localStorage.setItem(
+				'wasm-idle:example-workspace:v3',
+				JSON.stringify({ version: 6, files: [], lspEnabled: false })
+			);
 		} catch {
 			// Ignore storage access failures in sandboxed browser contexts.
 		}
