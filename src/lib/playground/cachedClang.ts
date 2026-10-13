@@ -46,6 +46,7 @@ export function createCachedClangSandbox(
 	let runtimeBaseUrl = '';
 	let assetConfig: ResolvedRuntimeAssetConfig;
 	let maxAssetBytes = 0;
+	let maxWasmMemoryBytes = 0;
 	let languageSysroots = false;
 	let activeWorker: Worker | undefined;
 	let cancelWorker: ((error: Error) => void) | undefined;
@@ -257,6 +258,7 @@ export function createCachedClangSandbox(
 			if (!cached) return legacy.load(assets, code, log, args, options, progress);
 			runtimeBaseUrl = assetConfig.baseUrl;
 			maxAssetBytes = resolveExecutionLimits(options.limits).maxAssetBytes;
+			maxWasmMemoryBytes = resolveExecutionLimits(options.limits).maxWasmMemoryBytes;
 			languageSysroots = config?.clang?.bundledLanguageSysroots === true;
 		},
 		async run(
@@ -301,6 +303,10 @@ export function createCachedClangSandbox(
 			// Snapshot known fields before awaiting compilation, so the cache key,
 			// compiler and executor also observe the same input values.
 			const request: BrowserClangCompileRequest = {
+				maxWasmMemoryBytes: Math.min(
+					maxWasmMemoryBytes,
+					resolveExecutionLimits(options.limits).maxWasmMemoryBytes
+				),
 				code,
 				language,
 				activePath: options.activePath,
@@ -365,6 +371,7 @@ export function createCachedClangSandbox(
 					() => factories.execute(),
 					{
 						artifact,
+						maxWasmMemoryBytes: request.maxWasmMemoryBytes,
 						code,
 						activePath: request.activePath,
 						workspaceFiles: request.workspaceFiles,

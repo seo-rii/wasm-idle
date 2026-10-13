@@ -64,7 +64,6 @@ function resolveMaxAssetBytes(maxAssetBytes?: number) {
 	return resolved;
 }
 
-
 function pushRecord(
 	records: CompilerLogRecord[],
 	enabled: boolean,
@@ -214,6 +213,7 @@ export async function compileClang(
 		await runtime.ready;
 		pushRecord(logRecords, enabledLogs, '[wasm-clang] runtime ready');
 		const builtArtifact = await runtime.compileArtifact(request.code, {
+			maxWasmMemoryBytes: request.maxWasmMemoryBytes,
 			language: request.language || 'CPP',
 			fileName: request.fileName,
 			activePath: request.activePath,

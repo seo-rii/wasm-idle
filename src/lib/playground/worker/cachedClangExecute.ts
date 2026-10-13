@@ -37,6 +37,7 @@ worker.onmessage = async ({ data }) => {
 		// The public executor creates a fresh WASI host, files, descriptors and Wasm
 		// instance. Only the immutable compiled Module is reused across executions.
 		const result = await executeBrowserClangArtifact(data.artifact, {
+			maxWasmMemoryBytes: data.maxWasmMemoryBytes,
 			args: data.programArgs,
 			env: data.env,
 			files,

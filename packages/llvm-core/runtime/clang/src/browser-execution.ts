@@ -9,6 +9,8 @@ import {
 } from '@bjorn3/browser_wasi_shim';
 
 import type { BrowserClangArtifact } from './types.js';
+import { RuntimeConfigurationError } from '@wasm-idle/core';
+import { assertWasmMemoryLimit, resolveWasmMemoryLimit } from './memory-limit.js';
 
 export interface BrowserExecutionResult {
 	exitCode: number | null;
@@ -17,6 +19,8 @@ export interface BrowserExecutionResult {
 }
 
 export interface BrowserExecutionOptions {
+	/** Native maximum for the guest program's linear memory. Unsupported modules are rejected. */
+	maxWasmMemoryBytes?: number;
 	args?: string[];
 	programName?: string;
 	env?: Record<string, string>;
@@ -233,7 +237,19 @@ export async function executeBrowserClangArtifact(
 		artifact.bytes instanceof Uint8Array
 			? new Uint8Array(artifact.bytes)
 			: new Uint8Array(artifact.bytes);
-	const module = artifact.wasm || (await WebAssembly.compile(bytes));
+	const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
+	if (memoryLimit !== undefined) assertWasmMemoryLimit(bytes, memoryLimit);
+	// A caller-provided Module may not match the bytes whose memory declaration was checked.
+	const module =
+		memoryLimit === undefined && artifact.wasm
+			? artifact.wasm
+			: await WebAssembly.compile(bytes);
+	if (
+		memoryLimit !== undefined &&
+		WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')
+	) {
+		throw new RuntimeConfigurationError('Clang memory limits do not support imported memory');
+	}
 	const instanceRef: BrowserExecutionImportContext['instance'] = { current: null };
 	const extraImports =
 		typeof options.extraImports === 'function'

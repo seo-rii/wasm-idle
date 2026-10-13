@@ -63,7 +63,7 @@ export function clangCompileKey(
 	languageSysroots = false
 ) {
 	return JSON.stringify([
-		'wasm-idle/clang-cache-v2',
+		'wasm-idle/clang-cache-v3',
 		runtimeBaseUrl,
 		maxAssetBytes,
 		languageSysroots,
@@ -73,6 +73,7 @@ export function clangCompileKey(
 		request.compileArgs,
 		request.cVersion,
 		request.cppVersion,
+		request.maxWasmMemoryBytes,
 		[...(request.workspaceFiles || [])].sort((a, b) => a.path.localeCompare(b.path))
 	]);
 }

@@ -126,6 +126,22 @@ async function run(
 }
 
 describe('cached C/C++ sandbox', () => {
+	it('forwards memory ceilings on cache misses and hits and recompiles when the ceiling changes', async () => {
+		const h = makeHarness();
+		await h.sandbox.load(assets, '', false, [], { limits: { maxWasmMemoryBytes: 4 * 65536 } });
+		await run(h.sandbox, source, { limits: { maxWasmMemoryBytes: 2 * 65536 } });
+		await run(h.sandbox, source, { limits: { maxWasmMemoryBytes: 2 * 65536 } });
+		expect(h.compileWorkers).toHaveLength(1);
+		expect(h.compileWorkers[0].messages[0].request.maxWasmMemoryBytes).toBe(2 * 65536);
+		for (const worker of h.executionWorkers) {
+			expect(worker.messages[0].maxWasmMemoryBytes).toBe(2 * 65536);
+		}
+		await run(h.sandbox, source, { limits: { maxWasmMemoryBytes: 8 * 65536 } });
+		expect(h.compileWorkers).toHaveLength(2);
+		expect(h.compileWorkers[1].messages[0].request.maxWasmMemoryBytes).toBe(4 * 65536);
+		expect(h.executionWorkers[2].messages[0].maxWasmMemoryBytes).toBe(4 * 65536);
+	});
+
 	it('uses one-call persistent overrides without mutating the load baseline', async () => {
 		const h = makeHarness();
 		await h.sandbox.load({ ...assets, persistentCache: { enabled: true, maxBytes: 4096 } });

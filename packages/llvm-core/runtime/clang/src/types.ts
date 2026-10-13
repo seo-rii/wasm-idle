@@ -96,6 +96,7 @@ export interface BrowserClangWorkspaceFile {
 }
 
 export interface BrowserClangCompileRequest {
+	maxWasmMemoryBytes?: number;
 	code: string;
 	language?: SupportedClangLanguage;
 	target?: SupportedClangTarget;
@@ -172,6 +173,7 @@ export interface BrowserClangCompilerResult {
 }
 
 export interface BrowserExecutionOptions {
+	maxWasmMemoryBytes?: number;
 	args?: string[];
 	programName?: string;
 	env?: Record<string, string>;
@@ -216,6 +218,7 @@ export interface BrowserClangRuntimeOptions {
 }
 
 export interface BrowserClangRuntimeRunOptions {
+	maxWasmMemoryBytes?: number;
 	language?: SupportedClangLanguage;
 	fileName?: string;
 	args?: string[];
