@@ -138,6 +138,30 @@ describe('persistent runtime asset cache', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('closes a database opened after cancellation without starting metadata work', async () => {
+		const started = Promise.withResolvers<void>();
+		const close = vi.fn();
+		const transaction = vi.fn();
+		const request: Record<string, any> = { result: { close, transaction } };
+		storage.databaseOpen.mockImplementationOnce(() => {
+			started.resolve();
+			return request;
+		});
+		const controller = new AbortController();
+		const reason = new Error('cancel database opening');
+		const pending = readPersistentRuntimeAsset({
+			identity: identity(payload('late')),
+			signal: controller.signal
+		});
+		const rejected = expect(pending).rejects.toBe(reason);
+		await started.promise;
+		controller.abort(reason);
+		await rejected;
+		request.onsuccess();
+		expect(close).toHaveBeenCalledOnce();
+		expect(transaction).not.toHaveBeenCalled();
+		expect(storage.cacheOpen).not.toHaveBeenCalled();
+	});
 
 	it('aborts an active metadata transaction and waits for its abort before reusing storage', async () => {
 		const bytes = payload('metadata');
