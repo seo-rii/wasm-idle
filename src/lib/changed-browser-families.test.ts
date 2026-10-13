@@ -74,6 +74,26 @@ describe('runtime browser CI selection', () => {
 			'esolangs'
 		);
 	});
+	it.each([
+		['src/lib/playground/worker/pythonWorkspaceFiles.ts', ['python']],
+		['src/lib/playground/worker/pythonWorkspaceImports.ts', ['python']],
+		['src/lib/playground/staticWorkerRuntime.ts', ['nim']],
+		['src/lib/playground/staticStdinRing.ts', ['nim']]
+	] as const)('requires browser coverage for the execution dependency %s', (file, families) => {
+		for (const extension of ['.ts', '.test.ts', '.integration.test.ts']) {
+			expect(changedBrowserFamilies([file.replace(/\.ts$/, extension)])).toEqual(families);
+		}
+	});
+
+	it.each([
+		['scripts/wasm-nim-assets.lock.json', ['nim']],
+		['scripts/clang-cpp-headers.lock.json', ['clang']],
+		['scripts/clang-resource-headers.lock.json', ['clang']],
+		['scripts/wasm-debug-release.v2.json', ['debug']]
+	] as const)('requires browser coverage for the runtime metadata %s', (file, families) => {
+		expect(changedBrowserFamilies([file])).toEqual(families);
+	});
+
 	it('requires the corresponding real browser family for the audited missing execution files', () => {
 		const cases: [string, string[]][] = [
 			['src/lib/playground/cachedClang.ts', ['clang']],

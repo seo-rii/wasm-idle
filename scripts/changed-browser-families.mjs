@@ -34,7 +34,15 @@ for (const [family, modules] of Object.entries({
 		'dotnet-switch',
 		'wasmDotnetVersion'
 	],
-	nim: ['nim', 'worker/nim', 'wasmNimVersion', 'wasm-nim-runner-worker', 'wasm-nim-lifecycle'],
+	nim: [
+		'nim',
+		'worker/nim',
+		'wasmNimVersion',
+		'wasm-nim-runner-worker',
+		'wasm-nim-lifecycle',
+		'staticWorkerRuntime',
+		'staticStdinRing'
+	],
 	go: ['go', 'worker/go'],
 	python: [
 		'python',
@@ -42,7 +50,9 @@ for (const [family, modules] of Object.entries({
 		'worker/python',
 		'worker/pythonExecution',
 		'worker/pythonStdio',
-		'worker/pythonDebugPreview'
+		'worker/pythonDebugPreview',
+		'worker/pythonWorkspaceFiles',
+		'worker/pythonWorkspaceImports'
 	],
 	esolangs: [
 		'aheui',
@@ -116,10 +126,21 @@ const RUNTIME_DIRECTORIES = {
 	]
 };
 const RUNTIME_SCRIPT_FAMILIES = {
-	clang: ['sync-wasm-clang', 'sync-wasm-objectivec', 'prepare-clangd-assets'],
-	debug: ['sync-wasm-debug', 'prepare-wasm-debug-release', 'verify-page-wasm-debug'],
+	clang: [
+		'sync-wasm-clang',
+		'sync-wasm-objectivec',
+		'prepare-clangd-assets',
+		'clang-cpp-headers.lock',
+		'clang-resource-headers.lock'
+	],
+	debug: [
+		'sync-wasm-debug',
+		'prepare-wasm-debug-release',
+		'verify-page-wasm-debug',
+		'wasm-debug-release.v2'
+	],
 	dotnet: ['sync-wasm-dotnet', 'wasm-dotnet-runner-worker'],
-	nim: ['sync-wasm-nim', 'wasm-nim-runner-worker'],
+	nim: ['sync-wasm-nim', 'wasm-nim-runner-worker', 'wasm-nim-assets.lock'],
 	go: ['sync-wasm-go', 'go-browser-probe-lib', 'probe-go-browser'],
 	python: ['sync-pyodide', 'python-package-lock'],
 	esolangs: [
@@ -141,7 +162,7 @@ export function changedBrowserFamilies(files) {
 			if (directories.some((directory) => file.startsWith(directory))) families.add(family);
 		}
 		const script = file.match(
-			/^scripts\/(?:runtime-workers\/)?([^/]+?)(?:\.test)?\.(?:mjs|js)$/
+			/^scripts\/(?:runtime-workers\/)?([^/]+?)(?:\.test)?\.(?:mjs|js|json)$/
 		)?.[1];
 		for (const [family, scripts] of Object.entries(RUNTIME_SCRIPT_FAMILIES)) {
 			if (script && scripts.includes(script)) families.add(family);
