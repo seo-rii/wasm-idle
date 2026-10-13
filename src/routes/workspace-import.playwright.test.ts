@@ -224,7 +224,7 @@ describe('workspace import browser integration', () => {
 		async () => {
 			await withImportPage(async (page) => {
 				page.once('dialog', (dialog) => dialog.accept('a/../b.py'));
-				await page.getByRole('button', { name: 'New', exact: true }).click();
+				await page.getByRole('button', { name: 'New file', exact: true }).click();
 				await page.getByText(/cannot traverse directories/u).waitFor();
 				expect(await page.locator('button[title="a/b.py"]').count()).toBe(0);
 				expect(await page.locator('button[title="b.py"]').count()).toBe(0);
