@@ -12,6 +12,7 @@ import {
 	BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES
 } from '../clangAssetIntegrity';
 import type { ClangCompileWorkerRequest, ClangCompileWorkerResponse } from '../clangWorkerProtocol';
+import { OutputLimitError, resolveExecutionLimits } from '@wasm-idle/core';
 
 const worker = globalThis as unknown as {
 	onmessage: ((event: MessageEvent<ClangCompileWorkerRequest>) => void) | null;
@@ -24,8 +25,39 @@ worker.onmessage = async ({ data }) => {
 	if (started) return;
 	started = true;
 	const output: string[] = [];
+	const encoder = new TextEncoder();
+	let outputBytes = 0;
+	let outputLimitError: OutputLimitError | undefined;
+	const controller = new AbortController();
 	let runtime: BrowserClangRuntime | undefined;
 	try {
+		const maxOutputBytes = resolveExecutionLimits(
+			data.maxOutputBytes === undefined ? {} : { maxOutputBytes: data.maxOutputBytes }
+		).maxOutputBytes;
+		const checkOutputBytes = (additionalBytes: number) => {
+			if (outputLimitError) throw outputLimitError;
+			const actual = outputBytes + additionalBytes;
+			if (actual <= maxOutputBytes) return;
+			outputLimitError = new OutputLimitError(
+				`Compiler output exceeded ${maxOutputBytes} bytes`,
+				{ limit: maxOutputBytes, actual, phase: 'compile' }
+			);
+			const stdout = output.join('');
+			// Report before retaining a chunk, including temporarily buffered PCH diagnostics.
+			worker.postMessage({
+				type: 'error',
+				error: outputLimitError.message,
+				code: 'output-limit',
+				limit: maxOutputBytes,
+				actual,
+				stdout,
+				diagnostics: extractCompilerDiagnostics(stdout),
+				stderr: ''
+			});
+			// A header builder can recover close-time stream errors; prevent its cache write too.
+			controller.abort(outputLimitError);
+			throw outputLimitError;
+		};
 		if (data.request.debug || (data.request.debugMode && data.request.debugMode !== 'none')) {
 			throw new Error('Cached C/C++ execution does not support debug artifacts.');
 		}
@@ -72,8 +104,15 @@ worker.onmessage = async ({ data }) => {
 			maxAssetBytes: data.maxAssetBytes,
 			manifest,
 			persistentCache: data.persistentCache,
+			signal: controller.signal,
 			log: data.log ?? false,
-			stdout: (chunk) => output.push(chunk),
+			stdout: (chunk) => {
+				if (!chunk) return;
+				const bytes = encoder.encode(chunk).byteLength;
+				checkOutputBytes(bytes);
+				outputBytes += bytes;
+				output.push(chunk);
+			},
 			progress: (value) =>
 				worker.postMessage({
 					type: 'progress',
@@ -99,9 +138,11 @@ worker.onmessage = async ({ data }) => {
 		});
 		const artifact = await runtime.compileArtifact(data.request.code, {
 			...data.request,
+			onBufferedOutput: checkOutputBytes,
 			persistentCache: data.persistentCache,
 			precompiledHeader: data.precompiledHeader
 		});
+		if (outputLimitError) return;
 		if (runtime.usedPrecompiledHeader)
 			worker.postMessage({
 				type: 'progress',
@@ -123,6 +164,7 @@ worker.onmessage = async ({ data }) => {
 			...buildingPrecompiledHeader(runtime)
 		});
 	} catch (error) {
+		if (outputLimitError) return;
 		const stdout = output.join('');
 		worker.postMessage({
 			type: 'error',
@@ -137,6 +179,7 @@ worker.onmessage = async ({ data }) => {
 	// headers, prepares <bits/stdc++.h> for the next compile.
 	if (runtime && buildingPrecompiledHeader(runtime).precompiledHeader) {
 		const header = await runtime.buildPrecompiledHeader().catch(() => undefined);
+		if (outputLimitError) return;
 		worker.postMessage(
 			{ type: 'precompiled-header', header },
 			header ? [header.bytes.buffer] : []

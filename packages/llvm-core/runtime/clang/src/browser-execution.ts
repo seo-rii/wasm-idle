@@ -192,6 +192,13 @@ export function createBrowserWasiHost(options: BrowserExecutionOptions = {}): Br
 				'A guest file cannot replace the root directory'
 			);
 		}
+		if (file.path === '/tmp') {
+			throw new WorkspaceValidationError(
+				'path-prefix-collision',
+				'Guest file /tmp conflicts with the preopened temporary directory',
+				{ path: file.path }
+			);
+		}
 		if (paths.has(file.path)) {
 			throw new WorkspaceValidationError(
 				'duplicate-path',
@@ -230,6 +237,14 @@ export function createBrowserWasiHost(options: BrowserExecutionOptions = {}): Br
 		}
 		directory.contents.set(segments.at(-1)!, new File(toStandaloneBytes(file.contents)));
 	}
+	const existingTmpDirectory = rootDirectory.contents.get('tmp');
+	const tmpPreopen = new PreopenDirectory(
+		'/tmp',
+		existingTmpDirectory instanceof Directory ? existingTmpDirectory.contents : new Map()
+	);
+	// PreopenDirectory creates a Directory around its entries. Install that same node
+	// under root so both routes share its inode and nested directories' parent identity.
+	rootDirectory.contents.set('tmp', tmpPreopen.dir);
 	const stdin = new BufferedExecutionInput(options.stdin);
 	const stdout = new CaptureFd(options.stdout);
 	const stderr = new CaptureFd(options.stderr);
@@ -247,7 +262,7 @@ export function createBrowserWasiHost(options: BrowserExecutionOptions = {}): Br
 			new StdinFd(stdin),
 			stdout,
 			stderr,
-			new PreopenDirectory('/tmp', new Map()),
+			tmpPreopen,
 			new PreopenDirectory('/', rootDirectory.contents)
 		]
 	};

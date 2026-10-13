@@ -1,5 +1,5 @@
 import { playgroundLanguages } from './language-registry';
-import type { WorkspaceFile } from './workspaceCodec';
+import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
 import { normalizeWorkspacePath } from './workspacePath';
 
 function invalid(field: string): never {
@@ -39,6 +39,18 @@ function validateWorkspace(value: Record<string, unknown>, field: string) {
 			file.encoding !== 'data-url'
 		) {
 			invalid(`${field}.files[].encoding`);
+		}
+		const workspaceFile: WorkspaceFile = {
+			path,
+			content: file.content,
+			encoding: file.encoding
+		};
+		if (isBinaryWorkspaceFile(workspaceFile)) {
+			try {
+				workspaceFileBytes(workspaceFile);
+			} catch {
+				invalid(`${field}.files[].content`);
+			}
 		}
 	}
 }

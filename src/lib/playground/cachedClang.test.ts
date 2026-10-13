@@ -812,6 +812,38 @@ describe('precompiled <bits/stdc++.h> in the cached C++ sandbox', () => {
 		expect(builder.terminate).toHaveBeenCalledOnce();
 	});
 
+	it('retires an overflowing header builder immediately and rejects its late result', async () => {
+		vi.useFakeTimers();
+		const h = makeHarness(undefined, 'CPP');
+		h.behavior.compile = (worker) =>
+			worker.respond({
+				type: 'compiled',
+				artifact: h.artifact,
+				precompiledHeader: 'building'
+			});
+		await h.sandbox.load(assets);
+		await run(h.sandbox, stdcpp, {}, true);
+		const [builder] = h.compileWorkers;
+		const lateMessage = builder.onmessage!;
+		builder.respond({
+			type: 'error',
+			code: 'output-limit',
+			error: 'Header output exceeded its limit'
+		});
+		expect(builder.terminate).toHaveBeenCalledOnce();
+		expect(vi.getTimerCount()).toBe(0);
+		lateMessage({
+			data: {
+				type: 'precompiled-header',
+				header: { key: 'overflowed', bytes: Uint8Array.of(1) }
+			}
+		});
+		h.behavior.compile = (worker) => worker.respond({ type: 'compiled', artifact: h.artifact });
+		await run(h.sandbox, `${stdcpp}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0]).not.toHaveProperty('precompiledHeader');
+		expect(builder.terminate).toHaveBeenCalledOnce();
+	});
+
 	it.each([
 		[10, 20],
 		[20, 10]

@@ -63,6 +63,7 @@
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
+	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
 	import { stageWorkspaceImport } from './workspaceImport';
 	import {
 		captureWorkspaceImportDestination,
@@ -95,13 +96,6 @@
 		workspaceFileFromBytes,
 		type WorkspaceFile
 	} from './workspaceCodec';
-	type WorkspaceArchiveRequest =
-		{ type: 'create'; files: WorkspaceFile[] } | { type: 'extract'; archive: ArrayBuffer };
-	type WorkspaceArchiveResponse =
-		| { type: 'created'; archive: ArrayBuffer }
-		| { type: 'extracted'; files: WorkspaceFile[] }
-		| { type: 'error'; message: string };
-
 	type LanguageWorkspace = {
 		activePath: string;
 		files: WorkspaceFile[];
@@ -1449,18 +1443,7 @@
 		const { default: WorkspaceArchiveWorker } =
 			await import('./workspaceArchive.worker?worker');
 		const worker = new WorkspaceArchiveWorker();
-		try {
-			return await new Promise<WorkspaceArchiveResponse>((resolve, reject) => {
-				worker.onmessage = ({ data }: MessageEvent<WorkspaceArchiveResponse>) => {
-					if (data.type === 'error') reject(new Error(data.message));
-					else resolve(data);
-				};
-				worker.onerror = (event) => reject(new Error(event.message || 'ZIP worker failed'));
-				worker.postMessage(request, transfer);
-			});
-		} finally {
-			worker.terminate();
-		}
+		return await requestWorkspaceArchive(worker, request, transfer);
 	}
 
 	async function downloadZip() {

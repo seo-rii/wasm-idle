@@ -210,6 +210,8 @@ export interface BrowserClangRuntimeOptions {
 }
 
 export interface BrowserClangRuntimeRunOptions {
+	/** Check cumulative UTF-8 bytes before temporarily retaining PCH diagnostics. */
+	onBufferedOutput?: (byteLength: number) => void;
 	maxWasmMemoryBytes?: number;
 	language?: SupportedClangLanguage;
 	fileName?: string;
