@@ -63,6 +63,54 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it('keeps edited shared code after a reload and sharing again', browserOptions, async () => {
+		expect.hasAssertions();
+		await withWorkspacePage(async (page, context, browserUrl) => {
+			const shared = {
+				version: 6,
+				language: 'CPP',
+				activePath: 'main.cpp',
+				files: [{ path: 'main.cpp', content: 'int shared_original = 1;' }],
+				openTabs: ['main.cpp']
+			};
+			const url = new URL(browserUrl);
+			url.hash = `workspace=${Buffer.from(JSON.stringify(shared)).toString('base64url')}`;
+			await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+			await page.waitForFunction(() => location.hash === '');
+			expect(
+				await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+			).toBe('int shared_original = 1;');
+			await page.evaluate(() =>
+				(window as any).__wasmIdleDebug.setEditorValue('int shared_edited = 222;')
+			);
+			await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+			await page.locator('[data-workspace-save-state="saved"]').waitFor();
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+			expect(
+				await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+			).toBe('int shared_edited = 222;');
+			await context.grantPermissions(['clipboard-write', 'clipboard-read']);
+			await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+			await page.getByText('Share URL copied', { exact: true }).waitFor();
+			expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).hash).toMatch(
+				/^#workspace=/
+			);
+			expect(new URL(page.url()).hash).toBe('');
+			await page.evaluate(() =>
+				(window as any).__wasmIdleDebug.setEditorValue('int shared_newer = 333;')
+			);
+			await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+			await page.locator('[data-workspace-save-state="saved"]').waitFor();
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+			expect(
+				await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+			).toBe('int shared_newer = 333;');
+		});
+	});
+
 	it(
 		'shows failed saves, preserves the last snapshot, shares, exports, and retries',
 		browserOptions,
@@ -96,7 +144,10 @@ describe('workspace storage browser integration', () => {
 				// Sharing must serialize current edits even while local writes fail.
 				await context.grantPermissions(['clipboard-write', 'clipboard-read']);
 				await page.getByRole('button', { name: /^share\s+Share$/ }).click();
-				await page.waitForFunction(() => location.hash.startsWith('#workspace='));
+				await page.getByText('Share URL copied', { exact: true }).waitFor();
+				const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
+				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
+				expect(new URL(page.url()).hash).toBe('');
 				expect(
 					await page
 						.getByRole('alert')
