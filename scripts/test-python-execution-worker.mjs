@@ -81,6 +81,23 @@ vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/
 const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8') + '\nexport function __inject(runtime: any) { pyodide = runtime; installedHyVersion = "test"; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 function workerFixture() {
 	const messages = [], scanned = [], packageLoads = [], cachedRuns = [], legacyRuns = [], writes = [], invalidated = [];
+	const filesystemNodes = new Map();
+	const absolutePath = (path) => path.startsWith('/') ? path : `/home/pyodide/${path}`;
+	const fs = {
+		mkdirTree(path) { filesystemNodes.set(absolutePath(path), { mode: 0o040755 }); },
+		writeFile(...args) {
+			writes.push(args);
+			filesystemNodes.set(absolutePath(args[0]), { mode: 0o100644 });
+		},
+		cwd: () => '/home/pyodide',
+		analyzePath: (path) => ({ exists: filesystemNodes.has(absolutePath(path)) }),
+		lstat: (path) => filesystemNodes.get(absolutePath(path)),
+		isDir: (mode) => (mode & 0o170000) === 0o040000,
+		unlink(path) {
+			if (fs.isDir(fs.lstat(path).mode)) throw new Error('cannot unlink a directory');
+			filesystemNodes.delete(absolutePath(path));
+		}
+	};
 	let initialized = 0;
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
@@ -102,7 +119,7 @@ function workerFixture() {
 			return {};
 		}
 	});
-	exports.__inject({ FS: { mkdirTree() {}, writeFile(...args) { writes.push(args); }, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} },
+	exports.__inject({ FS: fs,
 		setStdin() {}, setStdout() {}, setStderr() {},
 		runPython(source) {
 			assert.equal(source, importsExports.PYTHON_WORKSPACE_IMPORTS_FACTORY);
@@ -115,8 +132,25 @@ function workerFixture() {
 		} });
 	const send = (data) => self.onmessage({ data: { buffer: new SharedArrayBuffer(64), debugBuffer: new SharedArrayBuffer(64),
 		watchBuffer: new SharedArrayBuffer(64), watchResultBuffer: new SharedArrayBuffer(64), interrupt: new SharedArrayBuffer(4), ...data } });
-	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, invalidated, initialized: () => initialized };
+	return { send, self, messages, scanned, packageLoads, cachedRuns, legacyRuns, writes, invalidated, filesystemNodes, initialized: () => initialized };
 }
+test('worker preparation and execution preserve generated directories replacing supplied inputs', async () => {
+	const f = workerFixture();
+	await f.send({ code: 'pass', workspaceFiles: [{ path: 'input', content: 'input data' }] });
+	f.filesystemNodes.set('/home/pyodide/input', { mode: 0o040755 });
+	f.filesystemNodes.set('/home/pyodide/input/output.txt', { mode: 0o100644 });
+	await f.send({ code: 'pass', workspaceFiles: [], prepare: true });
+	assert.equal(f.messages.at(-1).results, true);
+	assert.ok(f.filesystemNodes.has('/home/pyodide/input/output.txt'));
+	await f.send({ code: 'pass', workspaceFiles: [] });
+	assert.equal(f.messages.at(-1).results, true);
+
+	// Once ownership is released, later generated files at that path survive.
+	f.filesystemNodes.set('/home/pyodide/input', { mode: 0o100644 });
+	await f.send({ code: 'pass', workspaceFiles: [], prepare: true });
+	assert.equal(f.messages.at(-1).results, true);
+	assert.ok(f.filesystemNodes.has('/home/pyodide/input'));
+});
 test('files are analyzed separately and package state is checked again after an execution', async () => {
 	const f = workerFixture();
 	const data = { code: 'import numpy', activePath: 'main.py', workspaceFiles: [{ path: 'bad.py', content: 'def :' }, { path: 'data.csv', content: '1,2,3' }] };

@@ -61,3 +61,36 @@ it('tracks absolute ownership if user code changes its cwd or removes an input',
 	expect(runtime.runPython('os.path.exists("partial.txt")')).toBe(false);
 	expect(runtime.runPython('os.path.isdir("blocked")')).toBe(true);
 }, 120_000);
+
+it('preserves generated directories replacing supplied files and releases their former ownership', async () => {
+	const runtime = await loadPyodide();
+	const sync = createPythonWorkspaceFiles(runtime.FS);
+	sync([{ path: 'wid_generated', content: 'input' }]);
+	runtime.runPython(`import os
+os.unlink("wid_generated")
+os.mkdir("wid_generated")
+open("wid_generated/output.txt", "w").write("generated")`);
+	expect(() => sync([])).not.toThrow();
+	expect(runtime.runPython('open("wid_generated/output.txt").read()')).toBe('generated');
+
+	// The former input path is no longer owned, even if generated code later
+	// replaces that directory with another regular file.
+	runtime.runPython(`os.unlink("wid_generated/output.txt")
+os.rmdir("wid_generated")
+open("wid_generated", "w").write("new generated output")`);
+	sync([]);
+	expect(runtime.runPython('open("wid_generated").read()')).toBe('new generated output');
+
+	sync([{ path: 'wid_unlink_failure.txt', content: 'input' }]);
+	const originalUnlink = runtime.FS.unlink;
+	runtime.FS.unlink = () => {
+		throw new Error('unlink denied');
+	};
+	try {
+		expect(() => sync([])).toThrow('unlink denied');
+	} finally {
+		runtime.FS.unlink = originalUnlink;
+	}
+	sync([]);
+	expect(runtime.runPython('os.path.exists("wid_unlink_failure.txt")')).toBe(false);
+}, 120_000);
