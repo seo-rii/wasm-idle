@@ -289,6 +289,22 @@ wasm32 target are now installed in a private toolchain home, with exit 0 and com
 cleanup. Genuine patched SDK/example typechecking remains a separate pending gate, using
 fresh physical Cargo target and intermediate directories.
 
+The first #188 actual Node attempt passed C compilation, then exposed fixture include
+flags that searched C headers before libc++ wrappers. Removing those overrides preserves
+the real driver's ordering. The next attempt compiled C and GNU C++98/03/11 successfully,
+then failed an expected-path assertion: the original producer's GNU aggregate headers
+are `include/bits/stdc++.h` and `include/bits/extc++.h`. The corrected metadata matches
+their original bytes, preserves all 14 source cases and the full sysroot, and preflights
+required paths before compiler execution. Both failed receipts remain unchanged; they
+do not qualify the complete corpus or Chromium header profile.
+
+The first #189 offline SDK check exited 101 before Rust typing because a locked host
+dependency was missing after wasm-target-filtered fetch. Unfiltered locked fetch and
+fully offline fetch validation now pass for both SDK and pinned standard-library graphs,
+with both lockfile hashes unchanged. The separate preparation receipt records the original
+failure and full cleanup. Genuine SDK/example typing is still a distinct pending gate;
+successful dependency downloads do not qualify a modified runtime or actual Bash.
+
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
 It comes from the existing producer revision `25ef7345eba86fce0352e7eb0a881e23ed0e684f`;
