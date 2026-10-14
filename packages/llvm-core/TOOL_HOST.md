@@ -47,7 +47,9 @@ the structural environment contract is a record.
 By default `wasm-ld`, `ld.lld`, `/usr/bin/wasm-ld` and `/usr/bin/ld.lld` resolve, always to
 the pinned `wasm-ld` module. Trusted host code may add up to sixteen exact canonical
 absolute filesystem names with `linkerPaths`. Other paths, dot traversal, URLs and names fail. Flags
-1 inherit the caller's environment and require `envPtr = envc = 0`. Flags 0 provide
+1 inherit the caller's environment and require `envc = 0`. The unused pointer can
+be nonzero because LLVM's empty SmallVector retains inline storage; the host never
+dereferences it. Flags 0 provide
 an explicit environment, including an empty one. Other bits are rejected. Cwd,
 filesystem and fd ownership remain the parent's binding closure; no shell parser
 or interpretation of diagnostic command text participates in dispatch.

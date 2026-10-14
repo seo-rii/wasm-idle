@@ -112,6 +112,15 @@ describe('LLVM low-level tool host', () => {
 			expect(contexts[1]!.env).toEqual(env.length ? { OTHER: 'x=y', EMPTY: '' } : {}); host.dispose();
 		}
 	});
+	it('flags1 ignores the pointer of a zero-length producer environment slice without reading memory', async () => {
+		for (const pointer of [128, 0xffffffff]) {
+			const contexts: LlvmToolBindingContext[] = [];
+			const body = packet({ mutate: (value) => { value.args[4] = pointer; } });
+			const host = await createLlvmToolHost({ tools: fixtures(moduleBytes({ packet: body })), createBindings: bindings((context) => contexts.push(context)) });
+			expect(host.run(invocation()).code).toBe(37);
+			expect(contexts[1]!.env).toEqual({ TEST: '한 글' }); host.dispose();
+		}
+	});
 	it('rejects arbitrary linker paths, malformed packets, unknown flags and environment ambiguity before child bindings', async () => {
 		const packets = [
 			...['/tmp/wasm-ld', '../wasm-ld', 'https://bad.test/wasm-ld', 'clang', 'wasm-ld\0'].map((program) => packet({ program })),

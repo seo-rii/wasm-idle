@@ -190,7 +190,8 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 					const argv = table(argvPtr, argc);
 					let env: Readonly<Record<string, string>>;
 					if (flags === 1) {
-						if (u32(envPtr) !== 0 || u32(envc) !== 0) return -1;
+						u32(envPtr); // An empty SmallVector may still have a non-null data pointer.
+						if (u32(envc) !== 0) return -1;
 						env = invocation.env;
 					} else {
 						const explicit: Record<string, string> = Object.create(null);
