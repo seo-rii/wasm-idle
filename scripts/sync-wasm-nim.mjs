@@ -1,24 +1,11 @@
-import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import {
-	lstat,
-	mkdtemp,
-	mkdir,
-	readFile,
-	readdir,
-	realpath,
-	rename,
-	rm,
-	writeFile
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { NIM_LLVM_PROFILE, validateNimLlvmProfile } from './llvm-contracts/nim.mjs';
+import { NIM_LLVM_PROFILE } from './llvm-contracts/nim.mjs';
+import { withRuntimeWasmModuleClient } from './runtime-wasm-module-client.mjs';
 
-const execFileAsync = promisify(execFile);
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
@@ -37,7 +24,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmNimVersion.ts'
 );
 const DEFAULT_LOCK_FILE_PATH = path.resolve(THIS_DIR, 'wasm-nim-assets.lock.json');
-const DEFAULT_NOTICE_SOURCE_PATH = path.resolve(THIS_DIR, 'wasm-nim-third-party-notices.md');
+const DEFAULT_PRODUCER_LOCK_PATH = path.resolve(THIS_DIR, 'wasm-nim-producer.lock.json');
 
 export const NIM_MANIFEST_FORMAT = 'wasm-nim-runtime-manifest-v2';
 export const NIM_FINGERPRINT_DOMAIN = 'wasm-idle:nim-runtime-manifest:v2';
@@ -56,7 +43,6 @@ const MAX_ARCHIVE_BYTES = 48 * 1024 * 1024;
 const MAX_SOURCE_ASSET_BYTES = 40 * 1024 * 1024;
 const MAX_METADATA_BYTES = 1024 * 1024;
 const MAX_WORKER_BYTES = 8 * 1024 * 1024;
-const ARCHIVE_TIMEOUT_MS = 120_000;
 const EXPECTED_ARTIFACT = Object.freeze({
 	kind: 'content-locked-git-archive-prebuilt',
 	repository: 'https://github.com/benagastov/Nim-WASM-Compiler.git',
@@ -181,6 +167,7 @@ const EXPECTED_LOCK_KEYS = Object.freeze(
 		'documentation',
 		'license',
 		'licenseExpression',
+		'legacyRuntime',
 		'notices',
 		'profileId',
 		'schemaVersion'
@@ -207,9 +194,8 @@ const EXPECTED_DOCUMENTATION_KEYS = Object.freeze(['bytes', 'mediaType', 'path',
  * @property {string} [workerSourcePath]
  * @property {string} [versionModulePath]
  * @property {string} [lockFilePath]
- * @property {string} [noticeSourcePath]
+ * @property {string} [producerLockFilePath]
  * @property {(sourcePath: string, targetPath: string) => Promise<void>} [renamePath]
- * @property {(input: string, init?: RequestInit) => Promise<Response>} [fetchImpl]
  */
 
 /** @param {Uint8Array} bytes */
@@ -299,8 +285,10 @@ async function readInputLock(lockFilePath) {
 		throw new Error(`wasm-nim input lock must be a regular file: ${lockFilePath}`);
 	}
 	let value;
+	let lockBytes;
 	try {
-		value = JSON.parse(await readFile(lockFilePath, 'utf8'));
+		lockBytes = await readFile(lockFilePath);
+		value = JSON.parse(lockBytes.toString('utf8'));
 	} catch (error) {
 		throw new Error(
 			`wasm-nim input lock is not valid JSON: ${error instanceof Error ? error.message : error}`
@@ -377,6 +365,7 @@ async function readInputLock(lockFilePath) {
 		throw new Error('wasm-nim archive receipt is internally inconsistent');
 	}
 	return Object.freeze({
+		sourceLockSha256: sha256(lockBytes),
 		profileId: EXPECTED_PROFILE_ID,
 		licenseExpression: EXPECTED_LICENSE_EXPRESSION,
 		artifact: EXPECTED_ARTIFACT,
@@ -452,168 +441,6 @@ export function computeNimRuntimeFingerprint(manifest) {
 	return hash.digest('hex');
 }
 
-/** @param {Response} response @param {unknown} reason */
-function cancelResponse(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the boundary failure that caused cancellation.
-	}
-}
-
-/**
- * @param {typeof EXPECTED_ARTIFACT} artifact
- * @param {(input: string, init?: RequestInit) => Promise<Response>} fetchImpl
- */
-async function downloadRepositorySource(artifact, fetchImpl) {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
-	let response;
-	try {
-		response = await fetchImpl(artifact.archiveUrl, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			signal: controller.signal
-		});
-	} catch (error) {
-		clearTimeout(timeout);
-		throw new Error(
-			`Nim source archive download failed: ${controller.signal.aborted ? 'timeout' : error}`
-		);
-	}
-	try {
-		if (!response.url || response.url !== artifact.archiveUrl) {
-			throw new Error('Nim source archive response URL does not match the pinned URL');
-		}
-		if (!response.ok) {
-			throw new Error(`Nim source archive request failed with status ${response.status}`);
-		}
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error('Nim source archive has an invalid Content-Length');
-			}
-			if (parsed !== artifact.bytes) {
-				throw new Error('Nim source archive Content-Length does not match the input lock');
-			}
-		}
-	} catch (error) {
-		clearTimeout(timeout);
-		cancelResponse(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error('Nim source archive response does not provide a byte stream');
-		clearTimeout(timeout);
-		cancelResponse(response, error);
-		throw error;
-	}
-	const reader = response.body.getReader();
-	const bytes = new Uint8Array(artifact.bytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error('Nim source archive returned an invalid byte stream');
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > artifact.bytes) {
-				throw new Error('Nim source archive exceeds the input lock size');
-			}
-			bytes.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== artifact.bytes) throw new Error('Nim source archive is truncated');
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the bounded-read failure.
-		}
-		throw error;
-	} finally {
-		clearTimeout(timeout);
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary download result.
-		}
-	}
-	if (sha256(bytes) !== artifact.sha256) {
-		throw new Error('Nim source archive does not match the input lock');
-	}
-
-	const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'wasm-idle-nim-'));
-	try {
-		const archivePath = path.join(temporaryRoot, 'source.tar.gz');
-		await writeFile(archivePath, bytes);
-		const { stdout } = await execFileAsync('tar', ['-tzf', archivePath], {
-			maxBuffer: 1024 * 1024
-		});
-		const entries = stdout.split(/\r?\n/u).filter(Boolean);
-		if (
-			entries.length === 0 ||
-			entries.some(
-				(entry) =>
-					!entry.startsWith(`${artifact.archiveRoot}/`) ||
-					entry.includes('/../') ||
-					entry.includes('\\')
-			)
-		) {
-			throw new Error('Nim source archive has an invalid entry path');
-		}
-		await execFileAsync('tar', ['-xzf', archivePath, '-C', temporaryRoot], {
-			maxBuffer: 1024 * 1024
-		});
-		const sourceRoot = path.join(temporaryRoot, artifact.archiveRoot);
-		return {
-			sourceDir: path.join(sourceRoot, 'demo', 'static'),
-			sourceRoot,
-			mode: 'source',
-			temporaryRoot
-		};
-	} catch (error) {
-		await rm(temporaryRoot, { recursive: true, force: true });
-		throw error;
-	}
-}
-
-/** @param {string} candidate */
-async function resolveExternalSource(candidate) {
-	const resolved = path.resolve(candidate);
-	for (const staticDir of [
-		resolved,
-		path.join(resolved, 'static'),
-		path.join(resolved, 'demo', 'static')
-	]) {
-		if (await isRegularFile(path.join(staticDir, 'nim', 'nim-bundle.js'))) {
-			let sourceRoot = staticDir;
-			for (let depth = 0; depth < 4; depth += 1) {
-				if (
-					(await isRegularFile(path.join(sourceRoot, LICENSE_FILE))) &&
-					(await isRegularFile(path.join(sourceRoot, DOCUMENTATION_FILE)))
-				) {
-					return {
-						sourceDir: staticDir,
-						sourceRoot,
-						mode: 'source',
-						temporaryRoot: null
-					};
-				}
-				const parent = path.dirname(sourceRoot);
-				if (parent === sourceRoot) break;
-				sourceRoot = parent;
-			}
-		}
-	}
-	throw new Error(`Nim WASM source assets were not found under ${resolved}`);
-}
-
 /** @param {string} targetDir */
 async function targetLooksUsable(targetDir) {
 	for (const asset of LOGICAL_ASSETS) {
@@ -629,95 +456,6 @@ async function targetLooksUsable(targetDir) {
 		(await isRegularFile(path.join(targetDir, NOTICES_FILE))) &&
 		(await isRegularFile(path.join(targetDir, DOCUMENTATION_FILE)))
 	);
-}
-
-const CLANG_MODIFICATION_NOTICE = `/*
- * wasm-idle modification notice:
- * This file was modified to consume an exact host-verified compiler asset map,
- * remove embedded-worker network fetches, and return the linked Wasm artifact
- * without executing it in the compiler worker. See THIRD_PARTY_NOTICES.md.
- */
-`;
-
-/** @param {string} source */
-export function patchNimLicense(source) {
-	const projectNeedle = 'binji/clang.js project';
-	const urlNeedle = 'https://github.com/binji/clang.js';
-	if (
-		source.split(projectNeedle).length !== 2 ||
-		source.split(urlNeedle).length !== 2 ||
-		source.includes(NOTICES_FILE)
-	) {
-		throw new Error('Nim source license did not match the expected legacy notice');
-	}
-	return `${source
-		.replace(projectNeedle, 'binji/wasm-clang project')
-		.replace(urlNeedle, 'https://github.com/binji/wasm-clang')
-		.trimEnd()}\n\nFull upstream license texts and the wasm-idle modification notice are provided in\n${NOTICES_FILE}.\n`;
-}
-
-/** @param {string} source */
-export function patchClangJs(source) {
-	const match = source.match(/a="([A-Za-z0-9+/=]+)"/);
-	if (!match) throw new Error('clang.js did not contain the embedded worker payload');
-	let workerSource = Buffer.from(match[1], 'base64').toString('utf8');
-	const fetchNeedle =
-		'readBuffer:async t=>(await fetch(`${a}/${t}`)).arrayBuffer(),async compileStreaming(t){const e=await fetch(`${a}/${t}`,{cache:"no-store"});return WebAssembly.compile(await e.arrayBuffer())}';
-	const fetchReplacement =
-		'readBuffer:async t=>readAsset(a,t),async compileStreaming(t){return WebAssembly.compile(readAsset(a,t))}';
-	if (!workerSource.includes(fetchNeedle)) {
-		throw new Error('clang.js embedded worker fetch path did not match the expected source');
-	}
-	workerSource = workerSource.replace(fetchNeedle, fetchReplacement);
-	const helperNeedle = 'let s,i;let r=null;const n=async t=>{';
-	const helper =
-		'function validateAssets(a){const e=["clang.wasm","lld.wasm","memfs.wasm","sysroot.tar"];if(!a||typeof a!=="object"||JSON.stringify(Object.keys(a).sort())!==JSON.stringify(e))throw new Error("invalid compiler asset map");for(const t of e)if(!(a[t] instanceof ArrayBuffer))throw new Error(`invalid compiler asset: ${t}`);return a}function readAsset(a,t){if(!Object.prototype.hasOwnProperty.call(a,t))throw new Error(`undeclared compiler asset: ${t}`);return a[t]}';
-	if (!workerSource.includes(helperNeedle)) {
-		throw new Error('clang.js embedded worker init block did not match the expected source');
-	}
-	workerSource = workerSource.replace(helperNeedle, `${helper}${helperNeedle}`);
-	const constructorNeedle = 'a=h.path,{readBuffer:';
-	if (!workerSource.includes(constructorNeedle)) {
-		throw new Error('clang.js embedded worker constructor did not match the expected source');
-	}
-	workerSource = workerSource.replace(
-		constructorNeedle,
-		'a=validateAssets(h.assets),{readBuffer:'
-	);
-	const compileEachNeedle = 'case"compile-each-link":{const files=h.files;';
-	if (!workerSource.includes(compileEachNeedle)) {
-		throw new Error('clang.js embedded worker compile-each-link case did not match');
-	}
-	workerSource = workerSource.replace(
-		compileEachNeedle,
-		'case"compile-each-link":{try{const files=h.files;'
-	);
-	const runNeedle =
-		'const o=s.memfs.getFileContents(h.out);const inst=await s.hostLogAsync(`Compiling ${h.out}`,WebAssembly.compile(o));const finalResult=await s.run(inst,h.out);i.postMessage({id:"compile-each-link-done",data:finalResult?{ok:true}:{ok:false}});';
-	if (!workerSource.includes(runNeedle)) {
-		throw new Error('clang.js embedded worker compile-each-link block did not match');
-	}
-	workerSource = workerSource.replace(
-		runNeedle,
-		'i.postMessage({id:"compile-each-link-done",data:{ok:true}});}catch(err){i.postMessage({id:"compile-each-link-done",data:{ok:false,error:String(err&&err.message||err)}});}'
-	);
-	let patched = source.replace(match[1], Buffer.from(workerSource, 'utf8').toString('base64'));
-	const outerConstructorNeedle =
-		'this.worker.postMessage({id:"constructor",payload:{port:c,path:l}},[c])';
-	const outerConstructorReplacement =
-		'const v=Object.values(l);this.worker.postMessage({id:"constructor",payload:{port:c,assets:l}},[c,...v])';
-	if (!patched.includes(outerConstructorNeedle)) {
-		throw new Error('clang.js outer worker constructor did not match the expected source');
-	}
-	patched = patched.replace(outerConstructorNeedle, outerConstructorReplacement);
-	const outerInitNeedle =
-		'async function p({path:l}){m||(y=new o(l||location.origin),await y.onReady,m=!0)}';
-	const outerInitReplacement =
-		'async function p({assets:l}){m||(y=new o(l),await y.onReady,m=!0)}';
-	if (!patched.includes(outerInitNeedle)) {
-		throw new Error('clang.js outer init did not match the expected source');
-	}
-	return `${CLANG_MODIFICATION_NOTICE}${patched.replace(outerInitNeedle, outerInitReplacement)}`;
 }
 
 /**
@@ -741,6 +479,65 @@ async function readReceiptFile(root, relativePath, expectedBytes, expectedSha256
 	const bytes = await readFile(fileBoundary);
 	if (sha256(bytes) !== expectedSha256) throw new Error(`${label} does not match its receipt`);
 	return bytes;
+}
+
+/** Verify producer identity and its complete logical output against reviewed consumer pins.
+ * @param {string} sourceRoot
+ * @param {Record<string, unknown>} producerLock
+ * @param {Awaited<ReturnType<typeof readInputLock>>} lock
+ */
+async function verifyProducerReceipt(sourceRoot, producerLock, lock) {
+	if (
+		producerLock.producerId !== 'wasm-llvm/nim-browser' ||
+		producerLock.format !== 'wasm-llvm-nim-browser-artifacts-v1' ||
+		typeof producerLock.manifestSha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(producerLock.manifestSha256) ||
+		typeof producerLock.sourceLockSha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(producerLock.sourceLockSha256) ||
+		producerLock.sourceLockSha256 !== lock.sourceLockSha256 ||
+		typeof producerLock.receiptSha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(producerLock.receiptSha256)
+	)
+		throw new Error('Nim producer lock is invalid');
+	const receiptPath = path.join(sourceRoot, 'producer-receipt.json');
+	const stats = await lstat(receiptPath);
+	if (!stats.isFile() || stats.size <= 0 || stats.size > MAX_METADATA_BYTES)
+		throw new Error('Nim producer receipt has an invalid file type or size');
+	const receiptBytes = await readFile(receiptPath);
+	if (sha256(receiptBytes) !== producerLock.receiptSha256)
+		throw new Error('Nim producer receipt failed SHA-256 verification');
+	const receipt = JSON.parse(receiptBytes.toString('utf8'));
+	if (
+		receipt.schemaVersion !== 1 ||
+		receipt.producerId !== producerLock.producerId ||
+		receipt.format !== producerLock.format ||
+		receipt.manifestSha256 !== producerLock.manifestSha256 ||
+		receipt.sourceLockSha256 !== producerLock.sourceLockSha256 ||
+		!Array.isArray(receipt.artifacts) ||
+		receipt.artifacts.length !== 11
+	)
+		throw new Error('Nim producer receipt does not match the reviewed wasm-llvm profile');
+	const expected = new Map([
+		...lock.receipts,
+		[LICENSE_FILE, lock.license],
+		[NOTICES_FILE, lock.notices],
+		[DOCUMENTATION_FILE, lock.documentation]
+	]);
+	const seen = new Set();
+	for (const artifact of receipt.artifacts) {
+		const pin = expected.get(artifact?.path);
+		if (
+			!hasExactKeys(artifact, ['bytes', 'path', 'sha256']) ||
+			!pin ||
+			seen.has(artifact.path) ||
+			artifact.bytes !== pin.bytes ||
+			artifact.sha256 !== pin.sha256
+		)
+			throw new Error(
+				'Nim producer artifact receipt does not match the reviewed logical assets'
+			);
+		seen.add(artifact.path);
+	}
 }
 
 /** @param {Uint8Array} bytes @param {string} label */
@@ -775,16 +572,16 @@ export async function syncWasmNimAssets(options = {}) {
 				: `${targetDir}.version.ts`)
 	);
 	const lockFilePath = path.resolve(options.lockFilePath || DEFAULT_LOCK_FILE_PATH);
-	const noticeSourcePath = path.resolve(options.noticeSourcePath || DEFAULT_NOTICE_SOURCE_PATH);
 	const renamePath = options.renamePath || rename;
-	const fetchImpl = options.fetchImpl || globalThis.fetch;
-	if (typeof fetchImpl !== 'function') throw new Error('Nim source download requires fetch');
 	const lock = await readInputLock(lockFilePath);
+	const producerLock = JSON.parse(
+		await readFile(options.producerLockFilePath || DEFAULT_PRODUCER_LOCK_PATH, 'utf8')
+	);
+	const sourceArg = options.sourceDir ?? process.env.WASM_NIM_SOURCE_DIR;
 	let source;
-	if (options.sourceDir !== undefined) {
-		source = await resolveExternalSource(options.sourceDir);
-	} else if (process.env.WASM_NIM_SOURCE_DIR !== undefined) {
-		source = await resolveExternalSource(process.env.WASM_NIM_SOURCE_DIR);
+	if (sourceArg !== undefined) {
+		const sourceRoot = path.resolve(sourceArg);
+		source = { sourceDir: sourceRoot, sourceRoot, mode: 'producer', temporaryRoot: null };
 	} else if (await targetLooksUsable(targetDir)) {
 		source = {
 			sourceDir: targetDir,
@@ -793,7 +590,9 @@ export async function syncWasmNimAssets(options = {}) {
 			temporaryRoot: null
 		};
 	} else {
-		source = await downloadRepositorySource(lock.artifact, fetchImpl);
+		throw new Error(
+			'Nim sync requires wasm-llvm/out/nim-browser via sourceDir or WASM_NIM_SOURCE_DIR; prepare it with wasm-llvm prepare:nim first.'
+		);
 	}
 
 	try {
@@ -808,8 +607,7 @@ export async function syncWasmNimAssets(options = {}) {
 		}
 		for (const [filePath, label] of [
 			[workerSourcePath, 'worker source'],
-			[lockFilePath, 'input lock'],
-			[noticeSourcePath, 'third-party notice source']
+			[lockFilePath, 'input lock']
 		]) {
 			if (!(await isRegularFile(filePath))) {
 				throw new Error(`wasm-nim ${label} must be a regular file: ${filePath}`);
@@ -818,12 +616,13 @@ export async function syncWasmNimAssets(options = {}) {
 		if (!(await lstat(source.sourceDir).catch(() => null))?.isDirectory()) {
 			throw new Error(`wasm-nim source must be a directory: ${source.sourceDir}`);
 		}
-		await validateNimLlvmProfile(source.sourceDir);
+		if (source.mode === 'producer')
+			await verifyProducerReceipt(source.sourceRoot, producerLock, lock);
 
 		const outputBoundaries = await Promise.all(
 			[targetDir, versionModulePath].map(resolveBoundaryPath)
 		);
-		const inputPaths = [workerSourcePath, lockFilePath, noticeSourcePath];
+		const inputPaths = [workerSourcePath, lockFilePath];
 		if (source.mode !== 'installed') inputPaths.push(source.sourceRoot);
 		const inputBoundaries = await Promise.all(inputPaths.map(resolveBoundaryPath));
 		if (pathsOverlap(outputBoundaries[0], outputBoundaries[1])) {
@@ -877,26 +676,13 @@ export async function syncWasmNimAssets(options = {}) {
 					}
 				}
 			} else {
-				const sourceBytes = await readReceiptFile(
+				bytes = await readReceiptFile(
 					source.sourceDir,
 					assetPath,
-					receipt.sourceBytes,
-					receipt.sourceSha256,
-					`Nim source ${assetPath}`
+					receipt.bytes,
+					receipt.sha256,
+					`Nim producer ${assetPath}`
 				);
-				bytes = sourceBytes;
-				if (assetPath === 'clang/clang.js') {
-					let sourceText;
-					try {
-						sourceText = new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes);
-					} catch {
-						throw new Error('Nim source clang/clang.js is not valid UTF-8');
-					}
-					bytes = Buffer.from(patchClangJs(sourceText), 'utf8');
-				}
-				if (bytes.byteLength !== receipt.bytes || sha256(bytes) !== receipt.sha256) {
-					throw new Error(`Nim derived ${assetPath} does not match its receipt`);
-				}
 			}
 			logicalBytes.set(assetPath, bytes);
 		}
@@ -905,43 +691,13 @@ export async function syncWasmNimAssets(options = {}) {
 		if (workerStats.size <= 0 || workerStats.size > MAX_WORKER_BYTES) {
 			throw new Error('Nim worker source exceeds the producer limit');
 		}
-		let licenseBytes;
-		if (source.mode === 'installed') {
-			licenseBytes = await readReceiptFile(
-				source.sourceRoot,
-				lock.license.path,
-				lock.license.bytes,
-				lock.license.sha256,
-				'Nim installed license'
-			);
-		} else {
-			const sourceLicenseBytes = await readReceiptFile(
-				source.sourceRoot,
-				lock.license.path,
-				lock.license.sourceBytes,
-				lock.license.sourceSha256,
-				'Nim source license'
-			);
-			let sourceLicense;
-			try {
-				sourceLicense = new TextDecoder('utf-8', { fatal: true }).decode(
-					sourceLicenseBytes
-				);
-			} catch {
-				throw new Error('Nim source license is not valid UTF-8');
-			}
-			licenseBytes = Buffer.from(patchNimLicense(sourceLicense), 'utf8');
-			if (
-				licenseBytes.byteLength !== lock.license.bytes ||
-				sha256(licenseBytes) !== lock.license.sha256
-			) {
-				throw new Error('Nim derived license does not match its receipt');
-			}
-		}
-		const noticeStats = await lstat(noticeSourcePath);
-		if (noticeStats.size !== lock.notices.bytes) {
-			throw new Error('Nim third-party notice source has an invalid size');
-		}
+		const licenseBytes = await readReceiptFile(
+			source.sourceRoot,
+			lock.license.path,
+			lock.license.bytes,
+			lock.license.sha256,
+			'Nim license'
+		);
 		const [documentationBytes, noticeBytes, workerBytes] = await Promise.all([
 			readReceiptFile(
 				source.sourceRoot,
@@ -950,12 +706,15 @@ export async function syncWasmNimAssets(options = {}) {
 				lock.documentation.sha256,
 				'Nim documentation'
 			),
-			readFile(noticeSourcePath),
+			readReceiptFile(
+				source.sourceRoot,
+				lock.notices.path,
+				lock.notices.bytes,
+				lock.notices.sha256,
+				'Nim third-party notices'
+			),
 			readFile(workerSourcePath)
 		]);
-		if (sha256(noticeBytes) !== lock.notices.sha256) {
-			throw new Error('Nim third-party notice source does not match its receipt');
-		}
 
 		let nimBundleSource;
 		let clangSource;
@@ -980,8 +739,8 @@ export async function syncWasmNimAssets(options = {}) {
 		if (
 			!nimBundleSource.includes('__NIM_USER_CODE__') ||
 			!nimBundleSource.includes('callMain') ||
-			!clangSource.includes('payload:{port:c,assets:l}') ||
-			!clangSource.includes('async function p({assets:l})') ||
+			!clangSource.includes('payload:{port:c,assets:l.assets,modules:l.modules}') ||
+			!clangSource.includes('async function p({assets:l,modules:c})') ||
 			!clangSource.includes('compile-each-link-done') ||
 			!nimbaseSource.includes('NIM_INTBITS') ||
 			!licenseSource.includes('Permission is hereby granted') ||
@@ -1093,6 +852,7 @@ export async function syncWasmNimAssets(options = {}) {
 			runtime: RUNTIME,
 			profileId: lock.profileId,
 			provenanceLevel: 'content-locked-opaque-prebuilt',
+			producer: producerLock,
 			licenseExpression: lock.licenseExpression,
 			artifact: lock.artifact,
 			components: lock.components,
@@ -1104,7 +864,7 @@ export async function syncWasmNimAssets(options = {}) {
 			},
 			transformations: [
 				{
-					id: 'wasm-idle-clang-js-asset-map-and-compile-each-link-v2',
+					id: 'wasm-llvm-clang-js-verified-module-map-v3',
 					path: 'clang/clang.js',
 					modificationNotice: NOTICES_FILE
 				},
@@ -1166,7 +926,10 @@ export async function syncWasmNimAssets(options = {}) {
 			}
 			publishedWorkerSource = publishedWorkerSource.replace(placeholder, expected);
 		}
-		const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
+		const publishedWorkerBytes = Buffer.from(
+			await withRuntimeWasmModuleClient(publishedWorkerSource),
+			'utf8'
+		);
 		const workerReceipt = Object.freeze({
 			bytes: publishedWorkerBytes.byteLength,
 			sha256: sha256(publishedWorkerBytes)
@@ -1329,7 +1092,6 @@ export async function syncWasmNimAssets(options = {}) {
 			if (JSON.stringify(installedFiles.sort()) !== JSON.stringify(expectedFiles)) {
 				throw new Error('wasm-nim temporary installation has unexpected files');
 			}
-			await validateNimLlvmProfile(publications[0].temporary);
 			const installedManifest = JSON.parse(
 				await readFile(path.join(publications[0].temporary, MANIFEST_FILE), 'utf8')
 			);

@@ -31,7 +31,7 @@ const logicalFixture = Object.freeze({
 	'nim/nim.wasm': wasmBytes,
 	'nim/nimbase.h': encoder.encode('#define NIM_INTBITS 32\n'),
 	'clang/clang.js': encoder.encode(
-		'const fixture="payload:{port:c,assets:l} async function p({assets:l}) compile-each-link-done";\n'
+		'const fixture="payload:{port:c,assets:l.assets,modules:l.modules} async function p({assets:l,modules:c}) compile-each-link-done";\n'
 	),
 	'clang/clang.wasm': wasmBytes,
 	'clang/lld.wasm': wasmBytes,

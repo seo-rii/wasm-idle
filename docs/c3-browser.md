@@ -46,3 +46,11 @@ The producer compiler defines its own memory with a 128 MiB initial size and a 2
 `sandbox.memoryEvidence.current` records the original and derived SHA-256 hashes, initial/maximum byte counts, and total requested budget. Evidence is emitted before compiler instantiation and updated after linking the guest. Lower-budget Chromium tests observe the real Emscripten `WebAssembly.Memory.grow(): Maximum memory size exceeded` failure. The guest boundary test grows to 64 MiB and observes `memory.grow` returning `-1` on the next page.
 
 Asset and startup deadlines reuse the existing host. Once a run is dispatched, the compilation deadline covers compiler initialization, compilation and linking. The execution deadline starts when the compiled module is ready to instantiate, including guest initialization and stdin waits. All deadline timers stay on the host thread, so they can terminate a blocked or nonterminating Worker.
+
+## Shared compiler modules
+
+`createRuntimeSession` injects one bounded application cache. The verified original compiler
+bytes reach the core module service before the defined-memory cap is applied. Cache identities
+include producer and loader receipts, source URLs and the exact cap/transform version. A new
+Worker and Emscripten compiler instance are created for each run; compiled modules alone survive.
+Standalone sandboxes keep the existing independently compiled path.

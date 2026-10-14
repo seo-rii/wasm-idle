@@ -241,6 +241,24 @@ parentPort.on('message', (data) => self.onmessage({ data }));
 	return new NodeWorker(harness, { eval: true });
 }
 
+async function createExecutionLimitsHarnessWorker() {
+	const workerSource = await readPublishedWorkerSource();
+	const harness = `
+const { parentPort } = require('node:worker_threads');
+globalThis.self = globalThis;
+self.postMessage = (message) => parentPort.postMessage(message);
+self.close = () => undefined;
+(0, eval)(${JSON.stringify(workerSource)});
+verifyRuntimePreflight = async () => ({});
+runVerifiedNim = async (options) => {
+  parentPort.postMessage({ observedCompileTimeoutMs: options.compileTimeoutMs });
+  return { code: 0 };
+};
+parentPort.on('message', (data) => self.onmessage({ data }));
+`;
+	return new NodeWorker(harness, { eval: true });
+}
+
 async function createOneShotHarnessWorker() {
 	const workerSource = await readPublishedWorkerSource();
 	const harness = `
@@ -554,6 +572,18 @@ describe('Nim runner worker', () => {
 			])
 		);
 		expect(messages).toContainEqual({ harnessClosed: true });
+	});
+
+	it('forwards the host execution limits sent by the static runtime host', async () => {
+		// StaticWorkerRuntimeSandbox sends `limits` when includeExecutionLimits is enabled.
+		const messages = await runHarness(createExecutionLimitsHarnessWorker, {
+			code: 'echo 1',
+			stdin: '',
+			activePath: 'main.nim',
+			limits: { compileTimeoutMs: 4321 }
+		});
+		expect(messages).toContainEqual({ observedCompileTimeoutMs: 4321 });
+		expect(terminalMessage(messages)).toMatchObject({ results: true, exitCode: 0 });
 	});
 
 	it('clears stale runtime globals and restores them after verified evaluation', async () => {

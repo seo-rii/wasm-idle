@@ -1,6 +1,6 @@
 {
   "generatedAt": "1970-01-01T00:00:00.000Z",
-  "source": "../ldc-wasm/dist/wasm-idle",
+  "source": "ldc-wasm:174dbc2653effe358c03b5d28f8d596487e3dc3d/dist/wasm-idle",
   "manifestSha256": "1df7310e813913397f3e1ee49ee77665603745651b678767a82fa2057ffa2690",
   "sourceAssets": [
     "bin/ldc2.wasm",
