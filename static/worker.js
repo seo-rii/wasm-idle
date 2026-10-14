@@ -194,16 +194,26 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 					const layer = manifest.layers[entry.layer];
 					let layerPath = entry.layer;
 					let layerVersion = null;
+					let layerLength = null;
+					let layerCompressedLength = null;
 					if (typeof layer === 'string') {
 						layerPath = layer;
 					} else if (layer && typeof layer === 'object') {
 						if (typeof layer.path === 'string') layerPath = layer.path;
 						if (/^[0-9a-f]{64}$/u.test(layer.sha256)) layerVersion = layer.sha256;
+						if (Number.isSafeInteger(layer.length) && layer.length >= 0) {
+							layerLength = layer.length;
+						}
+						if (Number.isSafeInteger(layer.compressedLength) && layer.compressedLength >= 0) {
+							layerCompressedLength = layer.compressedLength;
+						}
 					}
 					if (!layerPath || !layerVersion) continue;
 					assets.set(logicalPath, {
 						layerPath,
 						layerVersion,
+						layerLength,
+						layerCompressedLength,
 						offset: entry.offset,
 						length: entry.length
 					});
@@ -287,7 +297,17 @@ function removeCachedLayer(key, entry) {
 	decompressedLayerCacheBytes -= entry.bytes;
 }
 
-async function readLayerBytes(body, signal) {
+// Layer failures answer with this status instead of falling through to the logical path,
+// which is not deployed once its bytes live in a layer.
+class RuntimeLayerError extends Error {
+	constructor(status, statusText) {
+		super(statusText);
+		this.status = status;
+		this.statusText = statusText;
+	}
+}
+
+async function readLayerBytes(body, signal, maxBytes) {
 	const reader = body.getReader();
 	const chunks = [];
 	let total = 0;
@@ -303,8 +323,8 @@ async function readLayerBytes(body, signal) {
 			signal.throwIfAborted();
 			if (done) break;
 			total += value.byteLength;
-			if (total > maxDecompressedLayerBytes) {
-				throw new Error('decompressed layer exceeds byte limit');
+			if (total > maxBytes) {
+				throw new RuntimeLayerError(502, 'Runtime Layer Too Large');
 			}
 			chunks.push(value);
 		}
@@ -325,12 +345,12 @@ async function readLayerBytes(body, signal) {
 	}
 }
 
-async function fetchLayerBytes(request, cacheKey) {
+async function fetchLayerBytes(request, cacheKey, asset) {
 	const controller = new AbortController();
 	let timeout;
 	const deadline = new Promise((_, reject) => {
 		timeout = setTimeout(() => {
-			const error = new Error('runtime layer load timed out');
+			const error = new RuntimeLayerError(504, 'Runtime Layer Timeout');
 			controller.abort(error);
 			reject(error);
 		}, layerLoadTimeoutMs);
@@ -356,10 +376,27 @@ async function fetchLayerBytes(request, cacheKey) {
 			void response.body?.cancel().catch(() => {});
 			throw new Error('layer fetch failed');
 		}
-		const body = hasGzipContentEncoding(response)
-			? response.body
-			: response.body.pipeThrough(new DecompressionStream('gzip'));
-		return await readLayerBytes(body, controller.signal);
+		let body = response.body;
+		// The manifest digest covers the gzip bytes. When fetch has already content-decoded the
+		// body those bytes are gone, so only the decoded length can be checked.
+		if (!hasGzipContentEncoding(response)) {
+			const compressedBytes = await readLayerBytes(
+				body,
+				controller.signal,
+				asset.layerCompressedLength ?? maxDecompressedLayerBytes
+			);
+			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', compressedBytes));
+			const digestHex = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+			if (digestHex !== asset.layerVersion) {
+				throw new RuntimeLayerError(502, 'Runtime Layer Digest Mismatch');
+			}
+			body = new Response(compressedBytes).body.pipeThrough(new DecompressionStream('gzip'));
+		}
+		const bytes = await readLayerBytes(body, controller.signal, maxDecompressedLayerBytes);
+		if (asset.layerLength !== null && bytes.byteLength !== asset.layerLength) {
+			throw new RuntimeLayerError(502, 'Runtime Layer Length Mismatch');
+		}
+		return bytes;
 	})();
 	try {
 		return await Promise.race([loading, deadline]);
@@ -368,8 +405,8 @@ async function fetchLayerBytes(request, cacheKey) {
 	}
 }
 
-function decompressedLayer(request, layerPath, layerVersion) {
-	const cacheKey = layerCacheKey(layerPath, layerVersion);
+function decompressedLayer(request, asset) {
+	const cacheKey = layerCacheKey(asset.layerPath, asset.layerVersion);
 	const cached = decompressedLayerPromises.get(cacheKey);
 	if (cached) {
 		decompressedLayerPromises.delete(cacheKey);
@@ -383,7 +420,7 @@ function decompressedLayer(request, layerPath, layerVersion) {
 			removeCachedLayer(cacheKey, entry);
 			return null;
 		}
-		const bytes = await fetchLayerBytes(request, cacheKey);
+		const bytes = await fetchLayerBytes(request, cacheKey, asset);
 		if (decompressedLayerPromises.get(cacheKey) === entry && currentLayerKeys.has(cacheKey)) {
 			if (bytes.byteLength === 0 || bytes.byteLength > maxDecompressedLayerCacheBytes) {
 				removeCachedLayer(cacheKey, entry);
@@ -399,9 +436,10 @@ function decompressedLayer(request, layerPath, layerVersion) {
 			}
 		}
 		return bytes;
-	}).catch(() => {
+	}).catch((error) => {
+		// Rejected layers are never retained, so the next request fetches the layer again.
 		removeCachedLayer(cacheKey, entry);
-		return null;
+		return error instanceof RuntimeLayerError ? error : null;
 	});
 	layerDecompressionQueue = entry.promise.then(() => undefined);
 	decompressedLayerPromises.set(cacheKey, entry);
@@ -478,7 +516,14 @@ async function fetchLayeredRuntimeAsset(request, url) {
 		return new Response(null, { status, statusText, headers });
 	}
 
-	const layerBytes = await decompressedLayer(request, asset.layerPath, asset.layerVersion);
+	const layerBytes = await decompressedLayer(request, asset);
+	if (layerBytes instanceof RuntimeLayerError) {
+		return new Response(`${layerBytes.statusText}: ${asset.layerPath}\n`, {
+			status: layerBytes.status,
+			statusText: layerBytes.statusText,
+			headers: { 'content-type': 'text/plain; charset=utf-8' }
+		});
+	}
 	if (!layerBytes || asset.offset + asset.length > layerBytes.byteLength) return null;
 	const body = layerBytes.slice(asset.offset + rangeStart, asset.offset + rangeEnd + 1);
 	return new Response(body, { status, statusText, headers });
