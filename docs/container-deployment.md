@@ -64,7 +64,7 @@ node --test packages/container/test/unit/*.test.mjs packages/container/test/cont
 pnpm --dir packages/llvm-core exec vitest run runtime/clang/test --maxWorkers=2
 pnpm --dir packages/container verify:package-boundary
 CONTAINER_EVIDENCE=.codex/container-batch.json node packages/container/scripts/test-browser.mjs
-CONTAINER_ISOLATED=1 CONTAINER_EVIDENCE=.codex/container-isolated.json node packages/container/scripts/test-browser.mjs
+CONTAINER_ISOLATED=1 CONTAINER_EVIDENCE=.codex/container-isolated-headers.json node packages/container/scripts/test-browser.mjs
 CONTAINER_PERSISTENCE_EVIDENCE=.codex/container-persistence.json node packages/container/scripts/test-persistence-browser.mjs
 ```
 

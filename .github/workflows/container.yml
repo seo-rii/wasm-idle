@@ -54,4 +54,6 @@ jobs:
         with:
           name: container-browser-evidence
           path: .codex/container-*.json
-          if-no-files-found: ignore
+          # The receipts live in a dot directory, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: error
