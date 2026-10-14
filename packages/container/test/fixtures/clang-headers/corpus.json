@@ -135,8 +135,8 @@
       "language": "c++",
       "standard": "gnu++11",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"
@@ -148,8 +148,8 @@
       "language": "c++",
       "standard": "gnu++14",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"
@@ -161,8 +161,8 @@
       "language": "c++",
       "standard": "gnu++17",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"
@@ -174,8 +174,8 @@
       "language": "c++",
       "standard": "gnu++20",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"
@@ -187,8 +187,8 @@
       "language": "c++",
       "standard": "gnu++23",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"
@@ -200,8 +200,8 @@
       "language": "c++",
       "standard": "gnu++26",
       "requiredHeaders": [
-        "include/c++/v1/bits/stdc++.h",
-        "include/c++/v1/bits/extc++.h",
+        "include/bits/stdc++.h",
+        "include/bits/extc++.h",
         "include/c++/v1/ext/rope",
         "include/c++/v1/ext/pb_ds/assoc_container.hpp",
         "include/c++/v1/ext/pb_ds/tree_policy.hpp"

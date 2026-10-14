@@ -27,6 +27,19 @@ any/bit/charconv/chrono/complex/filesystem/forward_list/fstream/memory_resource/
 random/ranges/regex/span/valarray. `gnu++26` describes the pinned compiler's draft
 mode, not final-standard conformance.
 
+The selected producer installs its aggregate compatibility headers at
+`include/bits/stdc++.h` and `include/bits/extc++.h`, while its `ext/rope` and
+`ext/pb_ds` headers live under `include/c++/v1/ext`. Required dependency paths use
+those actual canonical locations from the pinned sysroot. The aggregate bytes
+match `GCC_COMPATIBILITY_HEADERS` in the baseline producer's
+`producer/clang-browser/scripts/gcc-compat.mjs`: `stdc++.h` is 754 bytes with
+SHA-256 `67497db6594bfbb7c4b1e5d86f034e94073aa1504f7f28d7c943728922d80423`,
+and `extc++.h` is 323 bytes with SHA-256
+`e8e13f8051b1c07228c0385a77cc95553ef0ce5e59b8eea7a35d1528adff9b49`.
+These paths describe the existing files; the fixture does not move, duplicate,
+alias or rewrite headers. Compiler dependency evidence and header byte checks
+still apply to every required family in every original case.
+
 The runner passes `-fno-exceptions` explicitly for every C++ case. The selected
 sysroot is the existing no-exception WASI profile; the adapter does not add or
 remove flags. Every command uses `--target=wasm32-wasi`, the pinned sysroot and
