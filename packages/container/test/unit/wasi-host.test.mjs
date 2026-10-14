@@ -26,3 +26,26 @@ test('path create and truncate require parent capabilities even with inherited w
   assert.equal(fs.readFile('/workspace/x')[0], 1);
   assert.throws(() => fs.stat('/workspace/y'));
 }));
+test('unsupported descriptor flags fail before truncating an existing file', () => hostTest((w, memory, fs) => {
+  fs.writeFile('/workspace/x', new Uint8Array([42]));
+  new Uint8Array(memory.buffer)[0] = 120;
+  for (const flags of [2, 8, 16]) assert.equal(w.path_open(3, 1, 0, 1, 8, 66n, 0n, flags, 100), 58);
+  assert.deepEqual(fs.readFile('/workspace/x'), new Uint8Array([42]));
+}));
+test('regular files and directories retain NONBLOCK without changing append or granting rights', () => hostTest((w, memory, fs) => {
+  fs.writeFile('/workspace/x', new Uint8Array([42]));
+  const bytes = new Uint8Array(memory.buffer), view = new DataView(memory.buffer);
+  const flags = fd => { assert.equal(w.fd_fdstat_get(fd, 120), 0); return view.getUint16(122, true); };
+  for (const directory of [false, true]) {
+    bytes[0] = directory ? 46 : 120;
+    assert.equal(w.path_open(3, 1, 0, 1, directory ? 2 : 0, 8n, 0n, 4, 100), 0);
+    const fd = view.getUint32(100, true);
+    assert.equal(flags(fd), 4); assert.equal(w.fd_fdstat_set_flags(fd, 0), 0); assert.equal(flags(fd), 0);
+    assert.equal(w.fd_fdstat_set_flags(fd, 4), 0); assert.equal(flags(fd), 4);
+    assert.equal(w.fd_fdstat_set_flags(fd, 1), 58); assert.equal(flags(fd), 4);
+    assert.equal(w.fd_fdstat_set_rights(fd, 0n, 0n), 0);
+    assert.equal(w.fd_fdstat_set_flags(fd, 0), 76); assert.equal(flags(fd), 4);
+    assert.equal(w.fd_close(fd), 0);
+  }
+  for (const fd of [0, 1, 2]) assert.equal(w.fd_fdstat_set_flags(fd, 4), 58);
+}));

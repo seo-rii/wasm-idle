@@ -174,7 +174,14 @@ export function createWasiHost(options: HostOptions) {
       v.setBigUint64(8, h?.rights ?? (fd === 0 ? 2n : 64n), true); v.setBigUint64(16, h?.inherited ?? 0n, true); return 0;
     },
     fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if ((base | h.rights) !== h.rights || (inherited | h.inherited) !== h.inherited) return 76; h.rights = base; h.inherited = inherited; return 0; },
-    fd_fdstat_set_flags: (fd, flags) => { const h = handle(fd, 8n); return flags === h.flags ? 0 : 58; },
+    fd_fdstat_set_flags: (fd, flags) => {
+      if (standard.has(fd)) return 58;
+      const h = handle(fd, 8n);
+      // Files/directories complete synchronously; NONBLOCK does not change I/O.
+      // APPEND is part of the open description and cannot be changed here yet.
+      if ((flags & ~5) || (flags & 1) !== (h.flags & 1)) return 58;
+      h.flags = flags; return 0;
+    },
     fd_filestat_get: (fd, ptr) => {
       if (!standard.has(fd)) return stat(ptr, options.fs.fstat(handle(fd, 1n << 21n).fd));
       span(ptr, 64).fill(0); return 0;
@@ -183,7 +190,7 @@ export function createWasiHost(options: HostOptions) {
     fd_prestat_get: (fd, ptr) => { const h = handle(fd); if (h.label === undefined) return 8; span(ptr, 8).fill(0); put32(ptr + 4, encoder.encode(h.label).length); return 0; },
     fd_prestat_dir_name: (fd, ptr, length) => { const h = handle(fd); if (h.label === undefined) return 8; const bytes = encoder.encode(h.label); if ((length >>> 0) < bytes.length) return 37; span(ptr, bytes.length).set(bytes); return 0; },
     path_open: (fd, flags, ptr, len, oflags, rights, inherited, fdflags, result) => {
-      span(result, 4); if ((flags & ~1) || (oflags & ~15) || (fdflags & ~1)) return 58;
+      span(result, 4); if ((flags & ~1) || (oflags & ~15) || (fdflags & ~5)) return 58;
       const parent = handle(fd, 1n << 13n);
       if ((rights | parent.inherited) !== parent.inherited || (inherited | parent.inherited) !== parent.inherited) return 76;
       if ((oflags & 1) && !(parent.rights & (1n << 10n))) return 76;
