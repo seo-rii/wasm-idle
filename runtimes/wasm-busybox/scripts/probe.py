@@ -51,6 +51,21 @@ def build_environment():
     return environment
 
 
+def implicit_wasm_opt(sdk, environment):
+    """Identify the host wasm-opt that clang's WebAssembly driver runs after optimized links.
+
+    The driver looks in its own directory and then PATH. The tool is outside the SDK
+    pin and changes output bytes, so the receipt records it.
+    """
+    found = shutil.which('wasm-opt', path=os.pathsep.join([str(sdk / 'bin'), environment.get('PATH', '')]))
+    if not found:
+        return None
+    path = Path(found).resolve()
+    version = subprocess.run([str(path), '--version'], capture_output=True, text=True,
+                             env=environment, timeout=30, check=True).stdout.strip()
+    return {'path': str(path), 'sha256': digest(path), 'version': version}
+
+
 def run_logged(command, path, environment, cwd=None, timeout=240):
     print('RUN', json.dumps([str(arg) for arg in command]), flush=True)
     with path.open('xb') as log:
@@ -189,6 +204,7 @@ def main():
     source_dir = work / source['directory']
     unpack(archive, source_dir, source)
     environment = build_environment()
+    toolchain['implicitWasmOpt'] = implicit_wasm_opt(sdk, environment)
     for index, patch in enumerate(manifest['patches']):
         applied = run_logged(['patch', '-p1', '--forward', '--batch', '-i', str(ROOT / patch['path'])],
                              work / ('patch-' + str(index) + '.log'), environment, cwd=source_dir)

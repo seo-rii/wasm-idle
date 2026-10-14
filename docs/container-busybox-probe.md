@@ -14,7 +14,9 @@ The existing WASI SDK 33.0+m uses LLVM
 the manifest also pins actual compiler/linker/archive tools, the shared
 `libclang-cpp`/`libLLVM` libraries those launchers load, the automatically loaded
 `bin/clang.cfg` sysroot selection, and sysroot/resource tree hashes. Merely
-installing another SDK named `33` does not satisfy that pin.
+installing another SDK named `33` does not satisfy that pin. Clang can also run an
+unpinned host `wasm-opt` after an optimized link; the receipt records that tool's
+path, hash and version rather than pinning it.
 
 The producer's current gate and measured bytes are recorded in
 [`evidence/g0-busybox.json`](../runtimes/wasm-busybox/evidence/g0-busybox.json).
