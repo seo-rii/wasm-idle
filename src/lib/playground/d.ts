@@ -545,9 +545,11 @@ class D implements Sandbox {
 				} catch {
 					// Handler cleanup must not replace the operation result.
 				}
-				// Only immutable compiler modules survive a run. Retire the worker, its
-				// Emscripten heaps, filesystem and compiled guest before the next run.
-				this.workerSession.reset();
+				// Only immutable compiler modules survive an execution. Retire the worker, its
+				// Emscripten heaps, filesystem and compiled guest before the next run. A
+				// prepare-only call has executed no guest; keep its compiled artifact for
+				// the following execution instead of compiling the same source twice.
+				if (!prepare) this.workerSession.reset();
 				return true;
 			};
 			const failRun = (error: unknown, disposeWorker = false) => {

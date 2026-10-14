@@ -102,7 +102,10 @@ void main() {
 		).resolves.toBe(true);
 		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(true);
 
-		expect(workerInstances).toHaveLength(2);
+		// The prepared artifact stays in its worker for one execution; that worker then retires.
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
 			expect.objectContaining({
@@ -124,8 +127,8 @@ void main() {
 				log: true
 			})
 		);
-		expect(workerInstances[1].postMessage).toHaveBeenNthCalledWith(
-			2,
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			3,
 			expect.objectContaining({
 				prepare: false,
 				code,

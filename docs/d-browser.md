@@ -48,9 +48,10 @@ LLD identity includes its profile, JavaScript loader and data hashes.
 
 The worker passes the resulting `WebAssembly.Module` to the actual WASI
 instantiation and Emscripten `instantiateWasm` hook. Only immutable compiler
-modules survive execution. Every completed run retires its worker; the next run
-loads a fresh worker and receives new compiler instances, memories, filesystem and
-guest state. Cancellation closes that run's service endpoints without cancelling
+modules survive execution. Every completed execution retires its worker; the next
+run loads a fresh worker and receives new compiler instances, memories, filesystem and
+guest state. A prepare-only call executes no guest, so its worker keeps the compiled
+artifact for the following execution of the same source instead of compiling twice. Cancellation closes that run's service endpoints without cancelling
 another consumer of the same pending native compilation.
 
 A sandbox disposes only the cache it owns. A borrowed application cache survives
