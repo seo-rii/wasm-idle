@@ -42,6 +42,7 @@ function checkPath(path: string): void {
 
 function components(path: string): string[] { return path.split('/').filter(Boolean); }
 function absolute(parts: readonly string[]): string { return `/${parts.join('/')}`; }
+function childPath(parent: string, name: string): string { return `${parent === '/' ? '' : parent}/${name}`; }
 function within(path: string, root: string): boolean {
   return root === '/' || path === root || path.startsWith(`${root}/`);
 }
@@ -228,6 +229,27 @@ export class MemoryFileSystem {
     };
   }
 
+  /**
+   * Every reachable canonical path must stay within the checkPath limits. A cwd-relative
+   * name or a moved subtree can otherwise exceed them, leaving entries that path lookups
+   * cannot name and that exportSnapshot/fromSnapshot cannot round-trip.
+   */
+  private checkPlacement(path: string, node?: Inode): void {
+    let depth = 0, size = 0;
+    const visit = (current: Inode, parentDepth: number, parentSize: number): void => {
+      for (const [name, child] of current.children) {
+        const childDepth = parentDepth + 1, childSize = parentSize + 1 + encoder.encode(name).byteLength;
+        depth = Math.max(depth, childDepth);
+        size = Math.max(size, childSize);
+        visit(child, childDepth, childSize);
+      }
+    };
+    if (node) visit(node, 0, 0);
+    if (encoder.encode(path).byteLength + size > 4096 || components(path).length + depth > 128) {
+      throw new FsError('EINVAL', 'Resulting path exceeds 4096 UTF-8 bytes or 128 components');
+    }
+  }
+
   stat(path: string, options: PathOptions = {}): FileStat { return this.info(this.resolve(path, options).node); }
   lstat(path: string, options: PathOptions = {}): FileStat { return this.info(this.resolve(path, options, false).node); }
   realpath(path: string, options: PathOptions = {}): string { return this.resolve(path, options).path; }
@@ -262,6 +284,7 @@ export class MemoryFileSystem {
       this.writable(parent.node);
       if (parent.node.children.has(parent.name)) throw error;
       if (path.endsWith('/')) throw new FsError('ENOTDIR', 'File path ends with a slash');
+      this.checkPlacement(childPath(parent.path, parent.name));
       if (this.usedBytes + bytes.length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
       const copied = bytes.slice();
       node = this.allocate('file', parent.node.mount, options.mode ?? 0o644);
@@ -300,6 +323,7 @@ export class MemoryFileSystem {
     const parent = this.parent(path, options);
     this.writable(parent.node);
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');
+    this.checkPlacement(childPath(parent.path, parent.name));
     parent.node.children.set(parent.name, this.allocate('directory', parent.node.mount, options.mode ?? 0o755));
     this.changed(parent.node);
   }
@@ -310,6 +334,7 @@ export class MemoryFileSystem {
     this.writable(parent.node);
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');
     if (path.endsWith('/')) throw new FsError('ENOENT', 'Symlink destination has a trailing slash');
+    this.checkPlacement(childPath(parent.path, parent.name));
     const size = encoder.encode(target).length;
     if (this.usedBytes + size > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
     const node = this.allocate('symlink', parent.node.mount, 0o777);
@@ -358,8 +383,9 @@ export class MemoryFileSystem {
     if (source.node === destination.node && source.name === destination.name) return;
     const old = destination.node.children.get(destination.name);
     if ((from.endsWith('/') || to.endsWith('/')) && node.type !== 'directory') throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
-    const sourcePath = `${source.path === '/' ? '' : source.path}/${source.name}`;
+    const sourcePath = childPath(source.path, source.name);
     if (node.type === 'directory' && within(destination.path, sourcePath)) throw new FsError('EINVAL', 'Cannot move a directory inside itself');
+    this.checkPlacement(childPath(destination.path, destination.name), node);
     if (old) {
       if (old.mount !== destination.node.mount) throw new FsError('EBUSY', 'Cannot replace a mount root');
       if (old.type === 'directory' && node.type !== 'directory') throw new FsError('EISDIR', 'Destination is a directory');

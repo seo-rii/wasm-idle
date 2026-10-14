@@ -8,7 +8,10 @@ unlinked files, to 64 MiB and 16,384 inodes. Hosts can set `maxBytes` and `maxIn
 
 Paths are well-formed UTF-8 strings with `/` separators. A backslash is an ordinary
 filename character. NUL, empty paths, paths over 4096 UTF-8 bytes, and paths over
-128 components fail with `EINVAL`. Relative host paths default to `/workspace`.
+128 components fail with `EINVAL`. The same limits apply to the resulting canonical path
+of every created or renamed entry, including the deepest descendant of a moved directory,
+so each entry stays addressable and snapshot-representable. Relative host paths default to
+`/workspace`.
 `{cwd, root}` selects a real working directory and directory capability. Absolute
 paths must name that capability's canonical subtree. Traversal applies `..` after
 symlinks, rejects capability escape with `EACCES`, and follows at most 40 links.
