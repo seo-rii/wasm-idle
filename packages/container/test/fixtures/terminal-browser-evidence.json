@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "applicationCommit": "bc1e1f04cbc96741953732b17f20156b0c54cf76",
+  "sourceHashes": {
+    "adapters/clang/index.ts": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae",
+    "adapters/clang/worker.ts": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6",
+    "adapters/types.ts": "6a5a1d15ae1444ab4ad83fa55ac9f6e54d5f1de84484d34f9327823abea58641",
+    "adapters/wasi-live/index.ts": "a050bac3205ab45e7873d11cbb88b890bfa98f79fd6eddfb83ea896a47c5b439",
+    "adapters/wasi-live/io.ts": "4287a5280df31b3a061a04c0c9568f21b493b536fc071932e326072fb0932748",
+    "adapters/wasi-live/worker.ts": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a",
+    "adapters/wasi/host.ts": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7",
+    "adapters/wasi/index.ts": "c2485cb72ebc8c4baefe0d897e56be203857962cf052311d3fcc058c5a332691",
+    "adapters/wasi/profile.ts": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4",
+    "adapters/wasi/stdio.ts": "e6ae9fee901d4e68393553463372eab33b06f5da755daff9ff86aa446973ef4e",
+    "adapters/wasi/worker.ts": "d5eeb20dc98706b2aa6cd2c770f67ee5f3ca839f4faddf097651ccc73a3d8e88",
+    "adapters/worker-adapter.ts": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e",
+    "container.ts": "b224cd38367f4976e4fd293a0eed042b40d19e296fdb3a9fa352187925f79087",
+    "errors.ts": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8",
+    "fd/pipe.ts": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646",
+    "fd/table.ts": "3c29a6ab85bb7e217135749f1aa5fa2fac19b3cf8bb538b48fff9b089e1f8107",
+    "fs/errors.ts": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a",
+    "fs/index.ts": "3f8a41ad71e991cfa2faf5b84d265102dafdd2afc791f66f1fc06a444bbf6472",
+    "fs/memory.ts": "49c71c959c30d51d135b5723f2661e4da9667981bda544e3fac7a05725c8c04d",
+    "fs/persistence/index.ts": "5d712c0a5cea7491232b00f0b91fd853f56043cb726d65e3efef8d3eeaa59f12",
+    "fs/types.ts": "d3b767c4287650229d6d7dc38351143111eda1fe0a6130ec041416d779c75453",
+    "fs/watch.ts": "df7d0c1e3bc72b87d1e19fed986afcf36e3f63034e8764bc731269a7479b58cc",
+    "index.ts": "7cc81ac37766db88bcb99e97b2d86d8584d07d9b6f50e455fdd283b2be38da18",
+    "packages/assets.ts": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5",
+    "packages/distribution.ts": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7",
+    "packages/index.ts": "8cbc81e19bf2a5009331e9fe4bac2bb401e3827c655215bfcf7356fbfa1ac0b1",
+    "packages/manager.ts": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c",
+    "process/lifecycle.ts": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b",
+    "terminal/index.ts": "126b527ec6561171b49f69922027d36eb1e7b9c40caddd4ca08cde3a2f37fa6d",
+    "transport/rpc.ts": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900",
+    "types.ts": "29d1480d8ad6f6947574f20cee33d768855e6cdcc1a2f33093b81d80da7dce0e",
+    "workspace/index.ts": "7e0b908f8a9bafbb97c48d8b2f8971b1235577edfec68903787ec6d907455383"
+  },
+  "browser": "153.0.8010.12",
+  "platform": "linux",
+  "kernel": "6.1.0-53-cloud-amd64",
+  "arch": "x64",
+  "contentSecurityPolicy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-5bh8BKFCI1Pgu7GG9aJbtOko33UMRHL1KtY/cyFs1Iw='; worker-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'",
+  "fixtureSha256": "c5200762b2e31b6eed4626c811dd65766465481934cc55003b87ab36419653d8",
+  "result": {
+    "cases": [
+      {
+        "name": "utf8",
+        "frames": 7,
+        "processes": 0
+      },
+      {
+        "name": "input-eof",
+        "frames": 4,
+        "processes": 0
+      },
+      {
+        "name": "blocked-input",
+        "frames": 5,
+        "processes": 0
+      },
+      {
+        "name": "blocked-output",
+        "frames": 0,
+        "processes": 0
+      },
+      {
+        "name": "terminate",
+        "frames": 5,
+        "processes": 0
+      },
+      {
+        "name": "render-error",
+        "frames": 0,
+        "processes": 0
+      },
+      {
+        "name": "exit-results",
+        "frames": 10,
+        "processes": 0
+      }
+    ],
+    "createdWorkers": 15,
+    "activeWorkers": 0,
+    "isolated": true
+  },
+  "faults": []
+}

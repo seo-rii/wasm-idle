@@ -83,3 +83,9 @@ isolated Chromium under restrictive CSP. Its JSON evidence records the exact
 application commit, source and guest hashes, browser/OS, worker counts and results;
 CI writes this to `.codex/container-terminal.json`. These contracts qualify the SDK
 binding, not an application renderer, PTY or actual shell.
+
+The committed `test/fixtures/terminal-browser-evidence.json` records the first
+passing Chromium 153/Linux run: seven scenarios, fifteen Workers created and none
+remaining, cross-origin isolation enabled, and no CSP or page errors. Its source
+hashes identify the tested implementation independently of later documentation
+or evidence commits.
