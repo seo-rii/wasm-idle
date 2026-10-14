@@ -45,6 +45,24 @@ test('watch abort wakes a pending reader, releases ownership, and enforces subsc
   assert.throws(() => fs.watch(), { code: 'ENOSPC' }); await Promise.all(watchers.map(w => w.cancel()));
   assert.equal(fs.watcherCount, 0); assert.throws(() => fs.watch({ maxQueuedEvents: 0 }), { code: 'EINVAL' });
 });
+test('writes to an unlinked open file are not reported as workspace invalidations', async () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('temporary', bytes('x'));
+  const fd = fs.open('temporary', { write: true }), reader = fs.watch().getReader();
+  fs.unlink('temporary'); assert.equal((await reader.read()).value.kind, 'remove');
+  fs.write(fd, bytes('hidden')); fs.ftruncate(fd, 1); fs.close(fd);
+  fs.writeFile('next', bytes('next'));
+  assert.deepEqual((await reader.read()).value, { kind: 'create', path: '/workspace/next', inode: fs.stat('next').inode, generation: fs.generation });
+  await reader.cancel();
+});
+test('directory descriptors resolve current names, including the root, after renames', () => {
+  const fs = new MemoryFileSystem(); fs.mkdir('/workspace/a/b', { recursive: true }); fs.writeFile('/workspace/a/file', bytes('x'));
+  const root = fs.open('/', { directory: true }), nested = fs.open('/workspace/a/b', { directory: true });
+  try {
+    assert.equal(fs.getDirectoryPath(root), '/'); assert.equal(fs.getDirectoryPath(nested), '/workspace/a/b');
+    fs.rename('/workspace/a', '/workspace/renamed'); assert.equal(fs.getDirectoryPath(nested), '/workspace/renamed/b');
+    fs.rmdir('/workspace/renamed/b'); assert.throws(() => fs.getDirectoryPath(nested), { code: 'ENOENT' });
+  } finally { fs.close(root); fs.close(nested); }
+});
 test('editor staged bytes remain separate until publish; unrelated workspace updates are preserved', () => {
   const fs = new MemoryFileSystem(); fs.writeFile('main.c', bytes('old'));
   const editor = openWorkspaceEditor(fs, 'main.c'), initial = editor.inspect().baseGeneration;
