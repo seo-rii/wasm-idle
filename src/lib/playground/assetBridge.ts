@@ -55,6 +55,8 @@ type LoadedAsset = {
 	contentEncoding?: string;
 	mimeType?: string;
 	transferOwnership?: boolean;
+	/** Publishes network bytes to persistent storage after runtime validation accepts them. */
+	persist?: () => Promise<unknown>;
 };
 
 type AssetBridgeState = 'active' | 'rebinding' | 'disposed';
@@ -949,6 +951,7 @@ export class WorkerAssetBridge {
 		if (signal.aborted) throw runtimeAssetAbortReason(signal);
 		if (this.runtime === 'python' && asset === 'pyodide-lock.json')
 			readPythonPackageAssets(runtimeBytes);
+		await loaded.persist?.();
 		return {
 			bytes: runtimeBytes,
 			mimeType: loaded.mimeType,
@@ -1173,7 +1176,8 @@ export class WorkerAssetBridge {
 						'bridge-v1',
 						context.config.baseUrl,
 						allowedBaseUrlsKey(context.config),
-						maxAssetBytes
+						maxAssetBytes,
+						expected?.mediaType
 					])
 				}
 			: undefined;
@@ -1186,18 +1190,24 @@ export class WorkerAssetBridge {
 			if (bytes) {
 				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
 				context.progress.update(asset, bytes.byteLength, bytes.byteLength);
-				return { bytes, mimeType: receipt?.mediaType, transferOwnership: true };
+				// A hit was validated against this same expected MIME type before it was stored.
+				return {
+					bytes,
+					mimeType: expected?.mediaType ?? receipt?.mediaType,
+					transferOwnership: true
+				};
 			}
 		}
 		const loaded = await this.fetchAssetFromNetwork(context, url, asset, signal, maxAssetBytes);
 		if (identity && !loaded.contentEncoding) {
-			// Only checksum-matching bytes are published. Existing runtime validation still runs.
-			await writePersistentRuntimeAsset({
-				identity,
-				cache: persistentCache,
-				signal,
-				bytes: loaded.bytes
-			});
+			// A hit skips the response MIME check, so publish only bytes that passed it.
+			loaded.persist = () =>
+				writePersistentRuntimeAsset({
+					identity,
+					cache: persistentCache,
+					signal,
+					bytes: loaded.bytes
+				});
 		}
 		return loaded;
 	}

@@ -150,4 +150,55 @@ describe('worker bridge per-execution persistent policy', () => {
 		]);
 		for (const bridge of bridges) bridge.dispose();
 	});
+
+	it('stores only MIME-validated responses and keys hits by the expected MIME type', async () => {
+		const bytes = new TextEncoder().encode('export default 1;');
+		const asset = 'clangd.js';
+		const baseUrl = 'https://assets.example/clang/';
+		const receipt = {
+			bytes: bytes.length,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		};
+		const stored = new Map<string, Uint8Array>();
+		const keyOf = ({ identity }: { identity: Record<string, unknown> }) =>
+			JSON.stringify([identity.url, identity.sha256, identity.validationKey]);
+		storage.read.mockImplementation(async (request) => stored.get(keyOf(request)));
+		storage.write.mockImplementation(async (request) => {
+			stored.set(keyOf(request), Uint8Array.from(request.bytes));
+			return true;
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				const response = new Response(bytes, { headers: { 'content-type': 'text/plain' } });
+				Object.defineProperty(response, 'url', { value: `${baseUrl}${asset}` });
+				return response;
+			})
+		);
+		const load = async (mediaType?: string) => {
+			const postMessage = vi.fn();
+			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clangd', {
+				baseUrl,
+				useAssetBridge: true,
+				integrity: { [asset]: mediaType ? { ...receipt, mediaType } : receipt }
+			});
+			bridge.handleMessage({ data: { assetRequest: { id: 1, asset } } } as MessageEvent);
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+			bridge.dispose();
+			return postMessage.mock.calls[0][0].assetResponse;
+		};
+		const mismatch = {
+			ok: false,
+			error: `Runtime asset ${asset} MIME type mismatch: expected text/javascript, received text/plain`
+		};
+
+		expect(await load('text/javascript')).toMatchObject(mismatch);
+		expect(storage.write).not.toHaveBeenCalled();
+		expect(await load('text/javascript')).toMatchObject(mismatch);
+		// An entry stored without a MIME expectation cannot vouch for a stricter receipt.
+		expect(await load()).toMatchObject({ ok: true, mimeType: 'text/plain' });
+		expect(stored.size).toBe(1);
+		expect(await load('text/javascript')).toMatchObject(mismatch);
+		expect(globalThis.fetch).toHaveBeenCalledTimes(4);
+	});
 });
