@@ -368,8 +368,17 @@ class Go implements Sandbox {
 					if (worker.onmessage === handler) worker.onmessage = null;
 					return;
 				}
-				const { output, results, error, buffer, diagnostic, progress, debugEvent, phase } =
-					event.data;
+				const {
+					output,
+					results,
+					error,
+					fatal,
+					buffer,
+					diagnostic,
+					progress,
+					debugEvent,
+					phase
+				} = event.data;
 				if (phase === 'compile' || phase === 'execute') {
 					if (phase !== activePhase) armTimeout(phase);
 				}
@@ -401,7 +410,13 @@ class Go implements Sandbox {
 					this.waitingForInput = false;
 					this.pendingEof = false;
 					this.workerSession.complete(operation);
-					this.ondebug?.({ type: 'stop' });
+					if (fatal === true && this.worker === worker) {
+						// The worker abandoned a program that may still be running; terminating
+						// it stops that program, and disposal reports the debug stop.
+						this.workerSession.reset();
+					} else {
+						this.ondebug?.({ type: 'stop' });
+					}
 					reject(error);
 				}
 			};
