@@ -1,6 +1,6 @@
 export const WASM_GLEAM_ASSET_VERSION =
 	'4cdb70d711e433b4b077680beb4d16cdc5503344b30fcf889bd410982f337506';
 export const WASM_GLEAM_RUNNER_RECEIPT = {
-	bytes: 22127,
-	sha256: 'b0ef3ee151e1ef359df659016bbe0c535dae67674f78adb6645eaa43f4cbb453'
+	bytes: 22223,
+	sha256: 'ac239a59fbcc08a4f31b13e21ad535fb8f70dc22fc7eb02ed955699d313bdfbf'
 } as const;

@@ -31,8 +31,8 @@ export const BUNDLED_PERL_RUNTIME_PROFILE = {
 export const BUNDLED_PERL_RUNTIME_BUNDLE = Object.freeze({
 	profile: BUNDLED_PERL_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 24887,
-		sha256: '755ae3281b7ddd0a86e82137af9ee87a40a7cef4252b71348fe173c80fb19ce1'
+		bytes: 24983,
+		sha256: '66b459b166a4f927fe1e689c5eae646cd21e9f911da12f93b30e057751e04623'
 	}
 });
 export const BUNDLED_PERL_MANIFEST_FINGERPRINT = BUNDLED_PERL_RUNTIME_PROFILE.manifestFingerprint;
