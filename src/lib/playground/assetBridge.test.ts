@@ -2133,6 +2133,21 @@ describe('WorkerAssetBridge asset requests', () => {
 			'a fragment',
 			'https://assets.example.com/clang/tool.wasm#token',
 			'URL must not include a fragment'
+		],
+		[
+			'an encoded slash',
+			'https://assets.example.com/clang/..%2fprivate/tool.wasm',
+			'URL must not include encoded path separators'
+		],
+		[
+			'encoded dot segments and slash',
+			'https://assets.example.com/clang/%2e%2e%2Fprivate/tool.wasm',
+			'URL must not include encoded path separators'
+		],
+		[
+			'an encoded backslash',
+			'https://assets.example.com/clang/..%5Cprivate/tool.wasm',
+			'URL must not include encoded path separators'
 		]
 	])('rejects loader URLs containing %s before fetching', async (_kind, url, errorSuffix) => {
 		const postMessage = vi.fn();
@@ -2993,6 +3008,47 @@ describe('WorkerAssetBridge asset requests', () => {
 		await vi.waitFor(() => expect(secondWorkerPostMessage).toHaveBeenCalledOnce());
 		expect(secondWorkerPostMessage.mock.calls[0]?.[0]).toMatchObject({
 			assetResponse: { id: 10, ok: true }
+		});
+	});
+
+	it('answers a load superseded by a rebind to the same worker', async () => {
+		const postMessage = vi.fn();
+		const worker = { postMessage } as unknown as Worker;
+		let resolveFirstLoad!: (value: Uint8Array) => void;
+		const loader = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise<Uint8Array>((resolve) => {
+						resolveFirstLoad = resolve;
+					})
+			)
+			.mockResolvedValue(new Uint8Array([4, 5, 6]));
+		const config = { baseUrl: '/clang/', loader, useAssetBridge: true };
+		const bridge = new WorkerAssetBridge(worker, 'clang', config);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 34, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		bridge.rebind(worker, config);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 34,
+				ok: false,
+				error: `Runtime asset ${asset} request was superseded by a rebind`
+			}
+		});
+		resolveFirstLoad(new Uint8Array([1, 2, 3]));
+		bridge.handleMessage({
+			data: { assetRequest: { id: 35, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+		expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
+			assetResponse: { id: 35, ok: true }
 		});
 	});
 
