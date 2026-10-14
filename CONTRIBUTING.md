@@ -118,7 +118,7 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 existing history: `type(scope): summary` with an optional scope, for example
 `fix(clang): bound stdin and background Worker ownership` or
 `feat(golfscript): run the original interpreter on Ruby/WASI`. The types in use are `fix`,
-`feat`, `test`, `perf`, `chore`, `ci`, `build`, `docs` and `refactor`.
+`feat`, `test`, `perf`, `chore`, `ci`, `build`, `docs`, `refactor` and `style`.
 
 Keep each commit and pull request to one coherent change, include tests for behavior changes, and
 list the commands you ran in the pull request description.

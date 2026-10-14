@@ -100,7 +100,8 @@ logical names. The files take three forms.
 `scripts/compress-static-runtime-assets.mjs` runs on `static/` (`compress:static-runtimes`) and on
 `build/` (`compress:build-runtimes`). It compresses files of at least 256 KiB under `wasm-*`,
 `clang`, `clangd`, `pyodide`, `teavm`, `webr`, `_app/immutable/assets` and
-`_app/immutable/workers` with gzip level 9, writes `<file>.gz`, records each path and its original
+`_app/immutable/workers` that have no extension or a listed runtime extension (such as `.wasm`,
+`.js`, `.mjs`, `.json`, `.data`, `.so` or `.tar`), with gzip level 9, writes `<file>.gz`, records each path and its original
 size in `compressed-runtime-assets.v1.json`, and then **deletes the original**. Files that are
 already compressed (`.gz`, `.br`, `.brotli`, `.tgz`, `.zip`, `.zst`, `.gz.bin`) and inert
 JavaScript storage (`.js.bin`, `.js.gz.bin`) are skipped, so nothing is compressed twice. TinyGo's

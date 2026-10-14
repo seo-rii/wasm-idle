@@ -56,8 +56,12 @@ Lisp).
 - [ ] **Page build**: run the sync from `page:build`, directly or through `sync:page-runtimes`,
       when deployments must rebuild the bundle. Common Lisp added `sync:wasm-commonlisp` to
       `page:build`.
-- [ ] **Browser test assets**: for an ignored bundle, add a group to
-      `scripts/prepare-browser-test-assets.mjs` so CI can prepare it.
+- [ ] **Browser test assets**: for an ignored bundle, add a group to `ASSET_GROUPS` in
+      `scripts/prepare-browser-test-assets.mjs`, with its downloads in
+      `scripts/browser-test-assets.v1.json` or a call to the sync script (as Lean 4 and Common
+      Lisp do). Then map the test's `WASM_IDLE_RUN_REAL_BROWSER_<LANG>` switch to that group in
+      `BROWSER_TEST_ASSET_ENVIRONMENTS` in `scripts/run-all-language-browser-tests.mjs`; CI
+      prepares only the groups mapped from the switches a browser run sets.
 - [ ] **Size budget**: a `wasm-<lang>` entry in `scripts/static-asset-budgets.v1.json`
       (`"optional": true` for ignored bundles) and a raised `total` if needed; checked by
       `pnpm run check:asset-sizes`.
