@@ -247,7 +247,7 @@ public class Main {
 		expect(outputs.join('')).toBe('49\n');
 	}, 60_000);
 
-	it('compiles and runs character stream and typed NIO buffer programs under Wasm GC', async () => {
+	it('compiles and runs character stream, NIO buffer and Formatter programs under Wasm GC', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		// Readers and Writers reach CharBuffer.allocate/wrap. The bundled runtime classlib must
 		// not retain their JS-only @JSByRef typed array paths.
@@ -323,6 +323,24 @@ public class Main {
 }`,
 				stdin: '',
 				expected: `${Array.from({ length: 20 }, (_, i) => `line ${i} 한글\n`).join('')}pw\nend\n`
+			},
+			{
+				// %n and %% do not consume an argument (TeaVM #1317)
+				name: 'Formatter line separator and escaped percent',
+				code: `public class Main {
+    public static void main(String[] args) {
+        System.out.printf("%d%n", 7);
+        System.out.print(String.format("%d%% of %s|%% %d|%5%|%-5%|%n", 50, "x", 5));
+        try {
+            String.format("%5n");
+        } catch (RuntimeException e) {
+            System.out.println("rejected: " + e);
+        }
+    }
+}`,
+				stdin: '',
+				expected:
+					'7\n50% of x|% 5|    %|%    |\nrejected: java.util.IllegalFormatWidthException: Illegal width: 5\n'
 			},
 			{
 				name: 'typed NIO buffers',

@@ -36,10 +36,16 @@ It also repairs two defects in the Wasm GC `System.out`/`System.err` byte path,
 null dereference on the first flush after a byte write (for example `BufferedWriter.flush()`), and
 `write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes.
 
+`TFormatter` handles `%n` and `%%` without consuming an argument, as `java.util.Formatter` does
+(TeaVM issue #1317): `%n` emits the line separator instead of throwing
+`UnknownFormatConversionException`, and `%%` no longer shifts later arguments. The overlay adds
+`TIllegalFormatWidthException`, which TeaVM 0.13.1 lacks, for the `%5n` case; the producer appends
+it to the archive and rejects an archive that already contains it.
+
 The producer verifies each original source entry, transform occurrence count, transformed source,
-JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive, and
-final byte receipts before publication. Do not broaden this overlay while performing a
-provenance-only refresh.
+JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive,
+appended entries, and final byte receipts before publication. Do not broaden this overlay while
+performing a provenance-only refresh.
 
 To reproduce and publish the generation, check out the revision above, download the exact JDK
 archive recorded in `scripts/wasm-teavm-assets.lock.json`, and run:
