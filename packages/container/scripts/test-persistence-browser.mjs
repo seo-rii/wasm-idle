@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { execFileSync } from 'node:child_process';
+import { release } from 'node:os';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const coreRoot = resolve(root, '../core/dist');
@@ -240,7 +242,8 @@ try {
   assert.deepEqual(pageErrors, []);
   const implementation = await readFile(resolve(root, 'dist/fs/persistence/index.js'));
   const evidence = {
-    schemaVersion: 1, browser: await browser.version(), platform: process.platform,
+    schemaVersion: 1, applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+    browser: await browser.version(), platform: process.platform, kernel: release(), image: process.env.ImageVersion, arch: process.arch,
     userAgent: initial.userAgent, secureContext: initial.secure, isolatedProfileRequired: false,
     implementationSha256: createHash('sha256').update(implementation).digest('hex'),
     results: checks, fixtureCount: checks.length
