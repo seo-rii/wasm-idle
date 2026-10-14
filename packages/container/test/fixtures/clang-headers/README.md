@@ -92,4 +92,28 @@ only `--version` to check verified body-cache reuse. It does not claim a second
 complete warm corpus run. Commands run sequentially, with the configured
 per-command timeout, and each Worker must be reclaimed before the next command.
 
-No runtime qualification receipt has been recorded for this follow-up yet.
+The original [Node Worker receipt](node-evidence.json) and
+[Chromium receipt](chromium-evidence.json) both pass all 14 cases at source commit
+`b8edc146c4ba26905c9a0639726f24407825b3a3`. Their SHA-256 values are respectively
+`c69fa7bc702ba653e98e9919307de54cbbf120817181799cf7241d19f4a1329e`
+and `c2c5de32cc85f53eb5dc051f599714e178ca8f0111593a0ae4083a159e3c4d6f`.
+The corpus digest is
+`f8c5a9360642a7fd676ba10edbc8ac5a07fea9c4f9d75698b6aad32d7769bee2`.
+Both runs read the same 1,050 headers; every recorded byte identity matches the
+original complete pinned sysroot tar. All 68 recorded Node source hashes and
+67 Chromium source hashes match the tested checkout.
+
+Node starts 14 Workers and Chromium 153.0.8010.12/Linux x64 starts 16 (version
+plus 14 cold cases, then only version after reload). All Workers and process
+entries are reclaimed. Chromium reports no CSP/browser faults and no additional
+asset body downloads on reload; boot requests zero bodies and cold execution
+requests each of Clang, LLD and the full sysroot once. The independent
+[Node supervision record](node-process-evidence.json) and
+[Chromium supervision record](chromium-process-evidence.json) both report exit 0
+and all owned OS descendants reaped. These receipts keep the tested source
+identity when later evidence or documentation commits are added.
+
+The earlier include-order and expected GNU-path failures remain separate failed
+attempts. The passing receipts qualify these concrete compile cases; they do not
+qualify every included family's linked runtime behavior or exhaustive header
+combinations.
