@@ -412,7 +412,7 @@ describe('syncWasmTinyGoDist', () => {
 			'wasm-idle:tinygo-executable-graph:v1\n'
 		);
 		expect(computeTinyGoExecutableGraphFingerprint(lock)).toBe(
-			'8ecbffd4b4e44ff67288d8c46328a1b06d0a0ac76d7a50a9e458603b68d0d795'
+			'8b2e87ec50b586591903adcff8c547b37c3b23d4e12f97d8266035cefdeebac4'
 		);
 		expect(
 			[...lock.modules.values()].map(({ path: modulePath, bytes, sha256: digest }) => ({
@@ -427,14 +427,14 @@ describe('syncWasmTinyGoDist', () => {
 				digest: 'e497b67a6bcbee29639792a3d58ecacb22781287f7fe155bfdf079e6ca159dff'
 			},
 			{
+				modulePath: 'assets/upstream-compile-worker-6CYe8gHb.js',
+				bytes: 105574,
+				digest: '30c6b0d3f0968222e0d78f7ec54300838eca0326558e448bc48ab213e35aae2f'
+			},
+			{
 				modulePath: 'assets/upstream-compile-worker-CFw6Ych6.js',
 				bytes: 558,
 				digest: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209'
-			},
-			{
-				modulePath: 'assets/upstream-compile-worker-CUrboB1_.js',
-				bytes: 103559,
-				digest: '42337c2f06d04b51d79f0ec66ae685f0cfb2a78718b0636df980dc92dd1db9d5'
 			},
 			{
 				modulePath: 'assets/upstream-compile-worker-CeYS3ydo.js',
@@ -448,8 +448,8 @@ describe('syncWasmTinyGoDist', () => {
 			},
 			{
 				modulePath: 'upstream.js',
-				bytes: 126073,
-				digest: '136a957aa940c3e2b8c7a925eb538f3fce81f699aa9113e1fd93ce0b35c879aa'
+				bytes: 126235,
+				digest: 'b780e6d7492c60f9c7481eda0b3ef45be15887ee367b8728532e824a4592e3b1'
 			}
 		]);
 	});

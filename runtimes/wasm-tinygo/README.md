@@ -21,6 +21,13 @@ toolchain—not the legacy subset. Go/Plan 9 assembly remains an upstream TinyGo
 network module downloads remain disabled, and the path is not a general browser replacement for
 the TinyGo CLI.
 
+The wasm-idle host can attach receipt-bound module services for the TinyGo compiler, package
+provider, and LLD. These services retain only compiled `WebAssembly.Module` objects in the host's
+session cache, keyed by the reviewed runtime graph, asset receipts, loader, and memory cap. The
+compiler worker still verifies its complete producer asset set before requesting modules. Every
+compile creates fresh compiler instances, virtual filesystems, and guest memories, and retiring
+its worker closes that job's service ports without discarding the host session cache.
+
 The repository also retains a repo-local host probe that downloads the official TinyGo release,
 runs `tinygo build -target wasip1`, executes the resulting wasm artifact under a WASI shim, and
 records a normalized driver/host bridge manifest.

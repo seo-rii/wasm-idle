@@ -1,9 +1,12 @@
 /// <reference lib="webworker" />
 
+import { requestRuntimeWasmModule } from '@wasm-idle/core/runtime-wasm-module-service';
+
 import {
 	compileUpstreamTinyGo,
 	createBinaryenTinyGoOptimizer,
 	prepareTinyGoUpstreamToolchain,
+	type TinyGoToolchainModuleKind,
 	type TinyGoUpstreamCompileRequest,
 	type TinyGoUpstreamToolchainAssets
 } from './upstream-runtime.ts';
@@ -16,6 +19,7 @@ interface CompileMessage {
 	assets: TinyGoUpstreamToolchainAssets;
 	request: Omit<TinyGoUpstreamCompileRequest, 'signal' | 'onPhase'>;
 	maxWasmMemoryBytes: number;
+	modulePorts?: Readonly<Record<TinyGoToolchainModuleKind, MessagePort>>;
 }
 
 function postPhase(phase: TinyGoWorkerPhase) {
@@ -28,8 +32,17 @@ self.onmessage = async (event: MessageEvent<CompileMessage>) => {
 			throw new Error('TinyGo compiler worker expected one compile request');
 		}
 		postPhase('prepare');
+		const modulePorts = event.data.modulePorts;
 		const toolchain = await prepareTinyGoUpstreamToolchain(event.data.assets, {
-			maxWasmMemoryBytes: event.data.maxWasmMemoryBytes
+			maxWasmMemoryBytes: event.data.maxWasmMemoryBytes,
+			...(modulePorts
+				? {
+						compileModule: (bytes: Uint8Array, kind: TinyGoToolchainModuleKind) =>
+							requestRuntimeWasmModule(bytes, modulePorts[kind], {
+								timeoutMs: 300_000
+							})
+					}
+				: {})
 		});
 		const result = await compileUpstreamTinyGo(
 			toolchain,

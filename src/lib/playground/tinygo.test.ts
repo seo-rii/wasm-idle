@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 import { resolveEditorDefaultSource } from '../../routes/editor-defaults';
+import { RuntimeAssetCache } from '@wasm-idle/core';
+import { WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
 
 const workerInstances: MockWorker[] = [];
 
@@ -53,9 +55,11 @@ const { executableGraphFixture } = vi.hoisted(() => ({
 }));
 
 const pinnedFetch = vi.hoisted(() => vi.fn());
+const moduleService = vi.hoisted(() => vi.fn());
 vi.mock('@wasm-idle/core', async (original) => ({
 	...(await original<typeof import('@wasm-idle/core')>()),
-	fetchPinnedRuntimeAsset: pinnedFetch
+	fetchPinnedRuntimeAsset: pinnedFetch,
+	createRuntimeWasmModuleService: moduleService
 }));
 
 function installExecutableGraphFixture() {
@@ -145,12 +149,17 @@ const runtimeModuleUrl = `data:text/javascript;base64,${Buffer.from(runtimeModul
 
 const createUpstreamFixtureState = () => ({
 	onLoad: null as ((options: { fetchImpl?: typeof fetch }) => Promise<void>) | null,
+	onCompile: null as ((options: { signal?: AbortSignal }) => Promise<void>) | null,
+	capCalls: [] as Array<{ maxBytes: number; label: string }>,
 	loadCalls: 0,
 	loadFailures: 0,
 	compileCalls: 0,
 	loadOptions: null as Record<string, unknown> | null,
 	compileRequest: null as { workspaceFiles?: Record<string, string> } | null,
-	compileOptions: null as { maxWasmMemoryBytes?: number } | null
+	compileOptions: null as {
+		maxWasmMemoryBytes?: number;
+		modulePorts?: Record<'compiler' | 'packageGraph' | 'lld', MessagePort>;
+	} | null
 });
 
 const upstreamFixtureState =
@@ -167,6 +176,10 @@ const upstreamFixtureState =
 
 const upstreamModuleSource = `
 const state = globalThis.__wasmIdleTinyGoUpstreamFixtureState;
+export function capTinyGoWasmMemory(bytes, maxBytes, label) {
+  state.capCalls.push({ maxBytes, label });
+  return bytes;
+}
 export async function loadTinyGoUpstreamToolchainAssets(options) {
   state.loadCalls += 1;
   state.loadOptions = options;
@@ -182,6 +195,7 @@ export async function compileTinyGoInDisposableWorker(_assets, request, options)
   state.compileCalls += 1;
   state.compileRequest = request;
   state.compileOptions = options;
+  await state.onCompile?.(options);
   options.onPhase?.('prepare');
   options.onPhase?.('graph');
   options.onPhase?.('validate');
@@ -237,6 +251,8 @@ describe('TinyGo sandbox', () => {
 		installExecutableGraphFixture();
 		pinnedFetch.mockReset();
 		pinnedFetch.mockResolvedValue(new Uint8Array([0, 97, 115, 109]));
+		moduleService.mockReset();
+		moduleService.mockImplementation(() => ({ port: {}, close: vi.fn() }));
 	});
 
 	it('keeps raw TinyGo 404/query probes native and caches only exact pinned transport URLs', async () => {
@@ -358,6 +374,142 @@ describe('TinyGo sandbox', () => {
 		expect(upstreamFixtureState.compileOptions?.maxWasmMemoryBytes).toBe(131_072);
 		expect(outputs.join('')).toContain('upstream TinyGo phase: compile');
 		expect(outputs.join('')).toContain('upstream TinyGo artifact ready');
+	});
+
+	it('keeps the cache owner fixed while loading, loaded, running, or disposed', async () => {
+		const cache = new RuntimeAssetCache();
+		const replacement = new RuntimeAssetCache();
+		const sandbox = new TinyGo();
+		sandbox.setRuntimeAssetCache(cache);
+		const load = sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		expect(() => sandbox.setRuntimeAssetCache(cache)).not.toThrow();
+		expect(() => sandbox.setRuntimeAssetCache(replacement)).toThrow(
+			'Cannot replace TinyGo runtime asset cache'
+		);
+		await load;
+		expect(() => sandbox.setRuntimeAssetCache(cache)).not.toThrow();
+		expect(() => sandbox.setRuntimeAssetCache(replacement)).toThrow(
+			'Cannot replace TinyGo runtime asset cache'
+		);
+		upstreamFixtureState.onCompile = ({ signal }) =>
+			new Promise<void>((_resolve, reject) => {
+				signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
+			});
+		const pending = sandbox.run('package main\nfunc main() {}', true);
+		const rejection = expect(pending).rejects.toBe('Process terminated');
+		expect(() => sandbox.setRuntimeAssetCache(cache)).not.toThrow();
+		expect(() => sandbox.setRuntimeAssetCache(replacement)).toThrow(
+			'Cannot replace TinyGo runtime asset cache'
+		);
+		await vi.waitFor(() => expect(upstreamFixtureState.compileCalls).toBe(1));
+		sandbox.terminate();
+		await rejection;
+		await sandbox.dispose();
+		expect(() => sandbox.setRuntimeAssetCache(replacement)).toThrow(
+			'TinyGo sandbox is disposed'
+		);
+		expect(cache.stats().disposed).toBe(false);
+		expect(replacement.stats().disposed).toBe(false);
+	});
+
+	it('forwards three receipt-bound module services and closes them after compilation', async () => {
+		const cache = new RuntimeAssetCache();
+		const sandbox = new TinyGo();
+		sandbox.setRuntimeAssetCache(cache);
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		await sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+			limits: { maxWasmMemoryBytes: 65_536 }
+		});
+		expect(moduleService).toHaveBeenCalledTimes(3);
+		const services = moduleService.mock.results.map(({ value }) => value);
+		expect(upstreamFixtureState.compileOptions?.modulePorts).toEqual({
+			compiler: services[0].port,
+			packageGraph: services[1].port,
+			lld: services[2].port
+		});
+		for (const [index, assetPath] of [
+			'tools/upstream/tinygo-compiler.wasm',
+			'tools/upstream/tinygo-package-graph.wasm',
+			'tools/upstream/lld.wasm'
+		].entries()) {
+			const pinned =
+				WASM_TINYGO_RUNTIME_PROFILE.assetReceipts[
+					assetPath as keyof typeof WASM_TINYGO_RUNTIME_PROFILE.assetReceipts
+				];
+			expect(moduleService.mock.calls[index][0]).toMatchObject({
+				cache,
+				receipt: {
+					bytes: 'uncompressedBytes' in pinned ? pinned.uncompressedBytes : pinned.bytes,
+					sha256:
+						'uncompressedSha256' in pinned ? pinned.uncompressedSha256 : pinned.sha256
+				},
+				compileKey: 'tinygo-wasi-memory-cap-v1:65536'
+			});
+			await moduleService.mock.calls[index][0].compile(
+				new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])
+			);
+			expect(services[index].close).toHaveBeenCalledOnce();
+		}
+		expect(upstreamFixtureState.capCalls.map(({ maxBytes }) => maxBytes)).toEqual([
+			65_536, 65_536, 65_536
+		]);
+		await sandbox.dispose();
+		expect(cache.stats().disposed).toBe(false);
+	});
+
+	it('keeps module identities stable on revisit and distinguishes the compiler memory cap', async () => {
+		const cache = new RuntimeAssetCache();
+		for (const cap of [65_536, 65_536, 131_072]) {
+			const sandbox = new TinyGo();
+			sandbox.setRuntimeAssetCache(cache);
+			await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+			await sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+				limits: { maxWasmMemoryBytes: cap }
+			});
+			await sandbox.dispose();
+		}
+		for (let index = 0; index < 3; index += 1) {
+			const first = moduleService.mock.calls[index][0];
+			const revisit = moduleService.mock.calls[index + 3][0];
+			const tighterOrWider = moduleService.mock.calls[index + 6][0];
+			expect(revisit.identity).toBe(first.identity);
+			expect(revisit.compileKey).toBe(first.compileKey);
+			expect(tighterOrWider.compileKey).not.toBe(first.compileKey);
+		}
+		expect(cache.stats().disposed).toBe(false);
+	});
+
+	it('closes only the current compile services on failure or cancellation', async () => {
+		const cache = new RuntimeAssetCache();
+		const sandbox = new TinyGo();
+		sandbox.setRuntimeAssetCache(cache);
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		upstreamFixtureState.onCompile = async () => {
+			throw new Error('compiler fixture failed');
+		};
+		await expect(sandbox.run('package main\nfunc main() {}', true)).rejects.toBe(
+			'compiler fixture failed'
+		);
+		for (const { value } of moduleService.mock.results) {
+			expect(value.close).toHaveBeenCalledOnce();
+		}
+		upstreamFixtureState.onCompile = ({ signal }) =>
+			new Promise<void>((_resolve, reject) => {
+				signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
+			});
+		const pending = sandbox.run('package main\nfunc main() {}', true);
+		const rejection = expect(pending).rejects.toBe('Process terminated');
+		await vi.waitFor(() => expect(upstreamFixtureState.compileCalls).toBe(2));
+		sandbox.terminate();
+		await rejection;
+		await vi.waitFor(() => {
+			for (const { value } of moduleService.mock.results.slice(3)) {
+				expect(value.close).toHaveBeenCalledOnce();
+			}
+		});
+		expect(moduleService.mock.calls[3][0].signal.aborted).toBe(true);
+		expect(cache.stats().disposed).toBe(false);
+		await sandbox.dispose();
 	});
 
 	it('rejects an incomplete TinyGo trust-profile override before worker creation', async () => {

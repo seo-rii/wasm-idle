@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { MessageChannel } from 'node:worker_threads';
 
 import {
 	capTinyGoWasmMemory,
 	compileTinyGoInDisposableWorker,
 	type TinyGoCompileWorkerLike
 } from '../src/upstream-worker.ts';
+import { prepareTinyGoUpstreamToolchain } from '../src/upstream-runtime.ts';
 
 function wasmU32(value: number) {
 	const bytes: number[] = [];
@@ -173,4 +175,91 @@ test('returns a successful worker result and always retires the one-shot worker'
 	);
 	assert.deepEqual(result, expected);
 	assert.equal(terminated, 1);
+});
+
+test('transfers host module service ports with a fresh disposable compiler job', async () => {
+	const channels = [new MessageChannel(), new MessageChannel(), new MessageChannel()];
+	const modulePorts = {
+		compiler: channels[0]!.port1 as unknown as MessagePort,
+		packageGraph: channels[1]!.port1 as unknown as MessagePort,
+		lld: channels[2]!.port1 as unknown as MessagePort
+	};
+	let terminated = 0;
+	let posted = 0;
+	const assets = emptyAssets();
+	const worker: TinyGoCompileWorkerLike = {
+		onmessage: null,
+		onerror: null,
+		postMessage(message, transfer) {
+			posted += 1;
+			const request = message as {
+				assets: ReturnType<typeof emptyAssets>;
+				modulePorts: typeof modulePorts;
+			};
+			assert.deepEqual(request.modulePorts, modulePorts);
+			for (const port of Object.values(modulePorts)) assert.ok(transfer!.includes(port));
+			assert.notEqual(request.assets.compiler.buffer, assets.compiler.buffer);
+			queueMicrotask(() =>
+				this.onmessage?.({
+					data: { type: 'result', result: { wasm: new Uint8Array([1]) } }
+				} as MessageEvent)
+			);
+		},
+		terminate() {
+			terminated += 1;
+		}
+	};
+	try {
+		await compileTinyGoInDisposableWorker(
+			assets,
+			{ workspaceFiles: { 'main.go': 'package main\n' } },
+			{ workerFactory: () => worker, modulePorts }
+		);
+		assert.equal(posted, 1);
+		assert.equal(terminated, 1);
+		assert.equal(assets.compiler.byteLength, 8);
+	} finally {
+		for (const channel of channels) {
+			channel.port1.close();
+			channel.port2.close();
+		}
+	}
+});
+
+test('retires the compiler worker if posting its transferred services fails', async () => {
+	let terminated = 0;
+	const failure = new Error('module service port transfer failed');
+	const worker: TinyGoCompileWorkerLike = {
+		onmessage: null,
+		onerror: null,
+		postMessage() {
+			throw failure;
+		},
+		terminate() {
+			terminated += 1;
+		}
+	};
+	await assert.rejects(
+		compileTinyGoInDisposableWorker(
+			emptyAssets(),
+			{ workspaceFiles: { 'main.go': 'package main\n' } },
+			{ workerFactory: () => worker }
+		),
+		(error) => error === failure
+	);
+	assert.equal(terminated, 1);
+});
+
+test('checks producer receipts before asking a shared module compiler', async () => {
+	let requested = 0;
+	await assert.rejects(
+		prepareTinyGoUpstreamToolchain(emptyAssets(), {
+			maxWasmMemoryBytes: 65_536,
+			compileModule: async () => {
+				requested += 1;
+				throw new Error('unverified bytes must not reach the shared compiler');
+			}
+		})
+	);
+	assert.equal(requested, 0);
 });
