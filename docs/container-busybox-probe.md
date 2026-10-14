@@ -11,8 +11,10 @@ BusyBox 1.37.0's official 2,565,764-byte archive has SHA-256
 `3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4`.
 The existing WASI SDK 33.0+m uses LLVM
 `4434dabb69916856b824f68a64b029c67175e532` and wasi-libc `161b3195fc25`;
-the manifest also pins actual compiler/linker/archive tools and sysroot/resource
-tree hashes. Merely installing another SDK named `33` does not satisfy that pin.
+the manifest also pins actual compiler/linker/archive tools, the shared
+`libclang-cpp`/`libLLVM` libraries those launchers load, the automatically loaded
+`bin/clang.cfg` sysroot selection, and sysroot/resource tree hashes. Merely
+installing another SDK named `33` does not satisfy that pin.
 
 The producer's current gate and measured bytes are recorded in
 [`evidence/g0-busybox.json`](../runtimes/wasm-busybox/evidence/g0-busybox.json).

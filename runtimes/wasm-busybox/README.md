@@ -17,7 +17,12 @@ it does not replace the upstream applet bodies.
 
 `manifest.json` records exact source/config hashes and fingerprints the existing
 local WASI SDK 33 toolchain, its selected WASI Preview 1 sysroot and Clang resource
-directory. The SDK fingerprint is a local build pin, not a claim that every
+directory. `bin/clang`, `wasm-ld` and the LLVM archive tools are small launchers
+over the SDK's shared `libclang-cpp` and `libLLVM` libraries, so those libraries and
+the automatically loaded `bin/clang.cfg`, which selects the sysroot, are pinned as
+well. `evidence/g0-busybox.json` predates these three pins; they were computed from
+the same local SDK installation, which still matches every earlier pin.
+The SDK fingerprint is a local build pin, not a claim that every
 installation with the label `33` has identical bytes. The script refuses different
 bytes. To move to another toolchain, review and update its pin and rerun the probe.
 

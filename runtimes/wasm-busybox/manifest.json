@@ -23,7 +23,10 @@
       "bin/wasm-ld": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26",
       "bin/llvm-ar": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9",
       "bin/llvm-nm": "b3eea1506407d1c3d0d0a6512c6daac22050c305960122c4be19a8a611836455",
-      "bin/llvm-strip": "f020ba49404039ce48e0449bf38c763a5a8e65fd9cfe7e9a26c3d78e21a98ee4"
+      "bin/llvm-strip": "f020ba49404039ce48e0449bf38c763a5a8e65fd9cfe7e9a26c3d78e21a98ee4",
+      "bin/clang.cfg": "61c6cded13c3b915cf17bd2c3be30d23a9eba934c49d7ea55924c815ff7f9fce",
+      "lib/libclang-cpp.so.22.1-wasi-sdk": "8dc7afd0adeb98ede0e87333c8ab4508511503672d3ecf5fe467b93e26c9d2f8",
+      "lib/libLLVM.so.22.1-wasi-sdk": "3baf077cc63ee5c6a30dfd185330fdd84a8a8c6f2748ec7aa4a767f723288cce"
     },
     "trees": {
       "share/wasi-sysroot/include/wasm32-wasip1": {
