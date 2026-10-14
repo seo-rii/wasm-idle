@@ -131,4 +131,29 @@ describe('V worker', () => {
 			error: 'main.v:3:1: error: invalid expression: unexpected token `}`'
 		});
 	});
+
+	it('posts non-Error load and execution failures as error text', async () => {
+		mocks.createVCompiler.mockRejectedValueOnce('V runtime fetch failed');
+		await import('./v');
+		const load = { load: true, log: false, vBaseUrl: '/wasm-v/', maxAssetBytes: 4096 };
+		await (globalThis as any).self.onmessage({ data: load });
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'V runtime fetch failed'
+		});
+
+		await (globalThis as any).self.onmessage({ data: load });
+		const trap = new WebAssembly.Exception(new WebAssembly.Tag({ parameters: [] }), []);
+		mocks.executeBrowserVArtifact.mockRejectedValueOnce(trap);
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				buffer: new SharedArrayBuffer(1024),
+				prepare: false,
+				log: false
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: '[object WebAssembly.Exception]'
+		});
+	});
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const workerMocks = vi.hoisted(() => ({
 	addFile: vi.fn(),
 	configureWorkerRuntimeAssets: vi.fn(),
+	createBrowserWasiHost: vi.fn(),
 	handleWorkerAssetMessage: vi.fn(() => false),
 	loadRuntimeManifest: vi.fn(async () => ({})),
 	resolveRuntimeManifestUrl: vi.fn((baseUrl: string) => `${baseUrl}runtime-manifest.v1.json`),
@@ -32,7 +33,7 @@ vi.mock('@wasm-idle/llvm-core/clang', () => ({
 		ready = Promise.resolve();
 		memfs = { addFile: workerMocks.addFile };
 	},
-	createBrowserWasiHost: vi.fn(),
+	createBrowserWasiHost: workerMocks.createBrowserWasiHost,
 	executeBrowserClangArtifact: vi.fn(),
 	loadRuntimeManifest: workerMocks.loadRuntimeManifest,
 	resolveRuntimeManifestUrl: workerMocks.resolveRuntimeManifestUrl
@@ -79,6 +80,7 @@ describe('Fortran worker runtime assets', () => {
 		vi.restoreAllMocks();
 		workerMocks.addFile.mockReset();
 		workerMocks.configureWorkerRuntimeAssets.mockReset();
+		workerMocks.createBrowserWasiHost.mockReset();
 		workerMocks.handleWorkerAssetMessage.mockReset().mockReturnValue(false);
 		workerMocks.loadRuntimeManifest.mockReset().mockResolvedValue({});
 		workerMocks.resolveRuntimeManifestUrl
@@ -358,5 +360,61 @@ describe('Fortran worker runtime assets', () => {
 		expect(compile).toHaveBeenCalledOnce();
 		expect(workerMocks.addFile).toHaveBeenCalledTimes(2);
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({ load: true });
+	});
+
+	it('posts non-Error load and translation failures as error text', async () => {
+		const assets = new Map([
+			[`${assetBaseUrl}f2c.wasm`, new Uint8Array([0, 97, 115, 109])],
+			[`${assetBaseUrl}libf2c.a`, new Uint8Array([1, 2, 3])],
+			[`${assetBaseUrl}f2c.h`, new TextEncoder().encode('integer f2c(void);')]
+		]);
+		(globalThis as any).fetch = vi.fn(async (url: string) => {
+			const bytes = assets.get(url);
+			if (!bytes) throw new Error(`unexpected asset: ${url}`);
+			return responseFor(bytes, url);
+		});
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
+		workerMocks.loadRuntimeManifest.mockRejectedValueOnce('clang manifest unavailable');
+
+		await import('./fortran');
+		const load = () =>
+			(globalThis as any).self.onmessage({
+				data: {
+					load: true,
+					log: false,
+					clangAssets: {
+						baseUrl: 'https://assets.example.test/clang/',
+						useAssetBridge: false
+					},
+					fortranAssets: {
+						f2cWasmUrl: `${assetBaseUrl}f2c.wasm`,
+						libf2cUrl: `${assetBaseUrl}libf2c.a`,
+						f2cHeaderUrl: `${assetBaseUrl}f2c.h`,
+						integrity: TEST_RECEIPTS,
+						maxAssetBytes: 128 * 1024 * 1024
+					}
+				}
+			});
+		await load();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'clang manifest unavailable'
+		});
+
+		await load();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({ load: true });
+		workerMocks.createBrowserWasiHost.mockImplementationOnce(() => {
+			throw 'f2c host unavailable';
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '      PROGRAM MAIN\n      END\n',
+				buffer: new SharedArrayBuffer(1024),
+				prepare: false,
+				log: false
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'f2c host unavailable'
+		});
 	});
 });
