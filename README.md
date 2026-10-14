@@ -431,7 +431,9 @@ Default sources differ by runtime:
   `wasm-lua`, `wasm-wat`, `wasm-typescript`, `wasm-lisp`, `wasm-awk`, `wasm-pascal`, and
   `wasm-bash`, read `runtimes/<name>/dist`.
 - Some read an installed npm package, such as `webr` or `swipl-wasm`.
-- Some download a pinned upstream release, such as Tcl, Perl, Julia, Nim, and Octave.
+- Some download a pinned upstream release, such as Tcl, Perl, and Octave.
+- Julia and Nim re-verify the checked-in assets and download their pinned release only when those
+  assets are missing.
 - J, BQN, and Janet prefer a sibling checkout and otherwise reuse the checked-in assets.
 - Rust, TinyGo, and ClojureScript re-verify and redeploy the checked-in `static/` snapshot.
 
@@ -988,10 +990,11 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 Static module overrides such as PHP's `moduleUrl` identify an entry module, not a self-contained
 file. Mirror its complete sibling asset tree at the same relative paths. Cross-origin asset hosts
 must provide compatible CORS and COEP/CORP headers and cannot rely on wasm-idle's same-origin gzip
-service worker. The checkout stores Zig's compiler only as `zig_small.wasm.gz`, so a
-`zig.compilerUrl` host must return the decompressed `zig_small.wasm` bytes, either as a
-decompressed file or as that `.gz` served with `Content-Encoding: gzip`; `std.tar.gz` is served as
-stored.
+service worker. The checkout stores several files from the example above only as `.gz`, for
+example `wasm-zig/zig_small.wasm.gz`, `wasm-wat/index.js.gz`, `wasm-lisp/index.js.gz`, and
+`wasm-haskell/bsdtar.wasm.gz`. A host for those URLs must return the decompressed bytes, either as
+a decompressed file or as that `.gz` served with `Content-Encoding: gzip`; Zig's `std.tar.gz` is
+served as stored.
 
 Verified static runtimes such as Janet and Julia intentionally omit URL-only examples: a custom
 `baseUrl`, `manifestUrl`, or `workerUrl` must be accompanied by every identity and asset-receipt
