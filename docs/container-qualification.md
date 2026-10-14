@@ -225,6 +225,13 @@ missing exception-runtime linker diagnostics and remains outside this qualified 
 The adapter does not insert flags or prune headers. A fresh Chromium run will verify the
 same full closure, byte streams, actual command artifacts and cache-preserved reload.
 
+The Node Worker snapshot acceptance also passes the actual C stdio and exception-free
+C++20 compile/link/run workflows, with `hello` and `sum=6` outputs. Its original receipt
+and executed JavaScript host hashes are committed on #159. The npm dry-run packages
+contain 53 Container host/type/document files (183,211 unpacked bytes) and 126 LLVM Core
+files (896,259 bytes), with no executable assets; the root import performs zero fetches.
+These snapshots do not substitute for the pending actual Chromium reload gate.
+
 The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
 dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
 argv/environment/fd/filesystem/cancel acceptance. That source patch is not a production shell
