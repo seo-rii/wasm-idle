@@ -634,6 +634,38 @@ func main() {}`,
 		expect(readBufferedStdin(runMessage.buffer)).toBe('');
 	});
 
+	it('discards a worker only when it reports a fatal abandoned execution', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const debugEvents: unknown[] = [];
+		const code = 'package main\nfunc main() {}';
+		sandbox.output = vi.fn();
+		sandbox.ondebug = (event) => debugEvents.push(event);
+		sandbox.worker = worker as unknown as Worker;
+		const failWith = (data: Record<string, unknown>) =>
+			worker.postMessage.mockImplementationOnce(() => {
+				queueMicrotask(() => worker.onmessage?.({ data } as MessageEvent<any>));
+			});
+
+		failWith({ error: 'Go program exited with code 2' });
+		await expect(sandbox.run(code, false)).rejects.toBe('Go program exited with code 2');
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+
+		failWith({ error: 'Go execution timed out after 5 ms', fatal: true });
+		await expect(
+			sandbox.run(code, false, true, undefined, [], { goTarget: 'js/wasm' })
+		).rejects.toBe('Go execution timed out after 5 ms');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+		expect(debugEvents).toEqual([{ type: 'stop' }, { type: 'stop' }]);
+
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		expect(sandbox.worker).not.toBe(worker);
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+	});
+
 	it('clears explicit stdin state after synchronous dispatch failure', async () => {
 		const sandbox = new Go();
 		const worker = new MockWorker();
