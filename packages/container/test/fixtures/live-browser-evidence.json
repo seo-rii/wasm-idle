@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "applicationCommit": "80a6cb839c731e490c23a2d3ab59f96ac2ac1585",
+  "applicationCommit": "fb5c747cb9e732ab409609fd01775a4b689e4402",
   "sourceHashes": {
     "adapters/clang/index.ts": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae",
     "adapters/clang/worker.ts": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6",
@@ -8,7 +8,7 @@
     "adapters/wasi-live/index.ts": "a050bac3205ab45e7873d11cbb88b890bfa98f79fd6eddfb83ea896a47c5b439",
     "adapters/wasi-live/io.ts": "d92dad50fe1cc7afda4e6cf6fe46c95ff248c276ea7af59766856e572325dcbc",
     "adapters/wasi-live/worker.ts": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a",
-    "adapters/wasi/host.ts": "cb66b042feabbd31cdab3966de8118d89036543b16c058c9d06b370ee319f4ba",
+    "adapters/wasi/host.ts": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7",
     "adapters/wasi/index.ts": "c2485cb72ebc8c4baefe0d897e56be203857962cf052311d3fcc058c5a332691",
     "adapters/wasi/profile.ts": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4",
     "adapters/wasi/stdio.ts": "e6ae9fee901d4e68393553463372eab33b06f5da755daff9ff86aa446973ef4e",
@@ -38,8 +38,10 @@
     "test/fixtures/path.wasm": "5ef6fcb8fd2e5f673d955d5e723864cf85c6fdfc7c8ba1e016447a99e5fa1cb0",
     "test/fixtures/fdflags.c": "fe54735e1ff0a0fa70fa5899991eab1be675a2dfc8538572522ba1595f22fcab",
     "test/fixtures/fdflags.wasm": "b3dbbbf92a410c189154f85e07a360271fe07556f62adbf58b80ec4674baf5ae",
+    "test/fixtures/readdir.c": "2e76e27a0709ea099382c90b63e8a8fcb2e45b993d774727eb596e00b75f810f",
+    "test/fixtures/readdir.wasm": "3f21bedb205c59464f2f48d71bf476f7d4a5897bae256bbcca876bfddab7b447",
     "test/contract/live-path-cases.mjs": "40e06bec3ec6dfcf3f155468f92583b06810c474cdea32fb3fde71f6b8c0dfee",
-    "scripts/test-live-browser.mjs": "74562e82e64e263e668622f35b0b56ca8fa0b618fd85b3c152d776212d7bda12"
+    "scripts/test-live-browser.mjs": "fb5ab280d39ba7343d643cec800c8bd663b176982c63d0541c2917bab0bacb2a"
   },
   "browser": "153.0.8010.12",
   "platform": "linux",
@@ -54,6 +56,7 @@
       "FD-03",
       "non-tty",
       "file-directory-nonblock",
+      "directory-cookies-after-delete",
       "FD-vectored-read-before-eof",
       "output-before-input-eof",
       "FS-07",
@@ -83,7 +86,7 @@
       "atomic-path-readdir",
       "cleanup"
     ],
-    "createdWorkers": 28,
+    "createdWorkers": 29,
     "liveWorkers": 0,
     "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
     "isolated": true,

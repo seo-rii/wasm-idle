@@ -52,6 +52,10 @@ Resolution and the complete operation run synchronously there, including final
 symlink checks for no-follow open, both directory descriptors for rename, and
 directory entry names with their inode metadata. A host rename followed by a new
 directory at the old path cannot redirect a pending operation to that replacement.
+Directory cookies identify entries in one listing held by the open directory
+descriptor, so removing entries between reads does not skip later names. Passing
+cookie zero explicitly refreshes the listing; additions or renames during an
+iteration appear after that rewind. Closing the descriptor releases the listing.
 Batch filesystem bindings use the same structural contract with local synchronous
 operations; they do not issue RPC or change snapshot visibility.
 

@@ -40,6 +40,7 @@ try {
     const bytes = new Uint8Array(await (await fetch('/test/fixtures/live.wasm')).arrayBuffer());
     const pathBytes = new Uint8Array(await (await fetch('/test/fixtures/path.wasm')).arrayBuffer());
     const flagBytes = new Uint8Array(await (await fetch('/test/fixtures/fdflags.wasm')).arrayBuffer());
+    const directoryBytes = new Uint8Array(await (await fetch('/test/fixtures/readdir.wasm')).arrayBuffer());
     let liveWorkers = 0, createdWorkers = 0;
     const createWorker = () => {
       const worker = new Worker('/dist/adapters/wasi-live/worker.js', { type: 'module' });
@@ -49,7 +50,7 @@ try {
       return worker;
     };
     const adapter = createLiveWasiAdapter({ pipeBytes: 4093, workerFactory: createWorker });
-    const c = createContainer({ adapters: [adapter], commands: { tool: { adapter: adapter.id, bytes }, flags: { adapter: adapter.id, bytes: flagBytes } }, maxProcesses: 2 });
+    const c = createContainer({ adapters: [adapter], commands: { tool: { adapter: adapter.id, bytes }, flags: { adapter: adapter.id, bytes: flagBytes }, remove: { adapter: adapter.id, bytes: directoryBytes } }, maxProcesses: 2 });
     const encode = text => new TextEncoder().encode(text), decode = bytes => new TextDecoder().decode(bytes);
     const drain = async stream => new Uint8Array(await new Response(stream).arrayBuffer());
     const checks = [];
@@ -63,6 +64,10 @@ try {
       check('FD-03', flood.code === 0 && flood.stdout.length === 131073 && flood.stderr.length === 131073 && flood.stdout.every((n, i) => n === flood.stderr[i]));
       check('non-tty', (await c.run('tool', ['non-tty'])).code === 0);
       check('file-directory-nonblock', (await c.run('flags')).code === 0 && decode(c.fs.readFile('/workspace/flags-file')) === 'ok');
+      c.fs.mkdir('/workspace/remove-tree');
+      for (let i = 0; i < 200; i++) c.fs.writeFile(`/workspace/remove-tree/entry-${String(i).padStart(3, '0')}-long-filename.bin`, new Uint8Array([i]));
+      const removed = await c.run('remove', [], { cwd: '/workspace/remove-tree' });
+      check('directory-cookies-after-delete', removed.code === 0 && new DataView(removed.stdout.buffer, removed.stdout.byteOffset).getUint32(0, true) === 200 && c.fs.readdir('/workspace/remove-tree').length === 0);
       const vectored = await c.spawn('tool', ['readv']), vectoredInput = vectored.stdin.getWriter();
       const vectoredOutput = drain(vectored.stdout); let readDeadline;
       try {
@@ -128,7 +133,7 @@ try {
   const sourceHashes = {};
   for (const file of (await readdir(resolve(root, 'src'), { recursive: true })).filter(file => file.endsWith('.ts')).sort()) sourceHashes[file] = createHash('sha256').update(await readFile(resolve(root, 'src', file))).digest('hex');
   const testHashes = {};
-  for (const file of ['test/fixtures/live.c', 'test/fixtures/path.c', 'test/fixtures/path.wasm', 'test/fixtures/fdflags.c', 'test/fixtures/fdflags.wasm', 'test/contract/live-path-cases.mjs', 'scripts/test-live-browser.mjs']) testHashes[file] = createHash('sha256').update(await readFile(resolve(root, file))).digest('hex');
+  for (const file of ['test/fixtures/live.c', 'test/fixtures/path.c', 'test/fixtures/path.wasm', 'test/fixtures/fdflags.c', 'test/fixtures/fdflags.wasm', 'test/fixtures/readdir.c', 'test/fixtures/readdir.wasm', 'test/contract/live-path-cases.mjs', 'scripts/test-live-browser.mjs']) testHashes[file] = createHash('sha256').update(await readFile(resolve(root, file))).digest('hex');
   const evidence = {
     schemaVersion: 1, applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceHashes, testHashes,
     browser: browser.version(), platform: process.platform, kernel: release(), arch: process.arch, image: process.env.ImageVersion,
