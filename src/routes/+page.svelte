@@ -2218,6 +2218,12 @@
 			}
 			compilerDiagnostics = [];
 			const codeToRun = activeFile.content;
+			// Tab switches and new files stay available during the LLDB check below; run what Run saw.
+			const runActivePath = activePath;
+			const runWorkspaceFiles = files.map((file) => ({
+				path: file.path,
+				content: file.path === runActivePath ? codeToRun : file.content
+			}));
 			if (browser) {
 				saveWorkspace();
 				try {
@@ -2300,15 +2306,12 @@
 						interactive: enableDebug,
 						breakpoints: [...debug.effectiveBreakpoints],
 						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
-							files.some(
+							runWorkspaceFiles.some(
 								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
 							)
 						),
-						activePath,
-						workspaceFiles: files.map((file) => ({
-							path: file.path,
-							content: file.path === activePath ? codeToRun : file.content
-						})),
+						activePath: runActivePath,
+						workspaceFiles: runWorkspaceFiles,
 						pauseOnEntry: enableDebug,
 						...languageExecutionOptions,
 						signal: abortController.signal,

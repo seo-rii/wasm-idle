@@ -588,6 +588,22 @@ describe('example route debug actions', () => {
 		}
 	});
 
+	it('runs the active path and workspace captured before the LLDB preflight await', () => {
+		const execStart = source.indexOf('function exec(enableDebug = false)');
+		const execSource = source.slice(execStart, source.indexOf('\n\t}\n', execStart));
+		const snapshot = execSource.indexOf('const runActivePath = activePath;');
+		expect(snapshot).toBeGreaterThan(-1);
+		// Tab switches and new files change activePath while the run is pending.
+		expect(snapshot).toBeLessThan(execSource.indexOf('await import('));
+		expect(execSource).toMatch(
+			/const runWorkspaceFiles = files\.map\(\(file\) => \(\{\s+path: file\.path,\s+content: file\.path === runActivePath \? codeToRun : file\.content\s+\}\)\);/
+		);
+		const runCall = execSource.slice(execSource.indexOf('await executeTerminalRun('));
+		expect(runCall).toMatch(/activePath: runActivePath,\s+workspaceFiles: runWorkspaceFiles,/);
+		expect(runCall).toMatch(/runWorkspaceFiles\.some\(/);
+		expect(runCall).not.toMatch(/\bfiles\.(?:map|some)\(/);
+	});
+
 	it('closes the overlay explorer at the same 960px breakpoint the stylesheet uses', () => {
 		const selectFileStart = source.indexOf('function selectFile(');
 		const selectFileSource = source.slice(
