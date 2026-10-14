@@ -152,7 +152,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
-| G0-CLANG / CLI-01–03 | Modified raw Clang/LLD links, exact producer ABI checks and seven actual Node WASI CLI cases pass; a real common VFS link/export probe also returns 42. Initial Chromium compile cases pass but its linker dispatch exposed an empty environment-slice contract mismatch | #159 fixes the zero-count slice handling; repeat the pinned Chromium C/C++/full-sysroot and cache gate; full header-combination coverage remains separate |
+| G0-CLANG / CLI-01–03 | Modified raw links and eight actual Node WASI CLI commands pass, including two-source cc1/linker dispatch. Common VFS C stdio and explicit exception-free C++20 compile/link/artifact probes pass | #159 adds exact opted-in cc1 jobs and directory NONBLOCK support; repeat the pinned Chromium C/C++/full-sysroot/cache gate; full header-combination coverage remains separate |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
@@ -203,6 +203,27 @@ driver/link/export probe pass after the correction. Chromium qualification is be
 with the same compiler, linker and full sysroot. The immutable executable SHA-256 values are
 `e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3` (Clang) and
 `3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a` (LLD).
+
+The subsequent same-byte producer requalification receipt
+`7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd` records the explicit
+compiler-child opt-in policy. Its actual Node WASI CLI receipt
+`f7895ec00fd05cb224b42e085873beb75fd5899cf238acf8f3833aeb2f9bded5` passes eight
+commands, two cc1 and two linker executions, and artifact export 42. The driver disables
+in-process cc1 when multiple jobs exist; the host executes only its exact multicall request
+`program: ''`, argv prefix `['', 'clang', '-cc1' | '-cc1as', ...]` with the same pinned
+compiler bytes. The original array is preserved. Only the root driver can dispatch;
+generic recursion, arbitrary compiler self paths and child response-file-only packets fail.
+Twelve focused host cases cover these boundaries and 63 container unit cases pass.
+
+The actual common VFS C stdio workflow compiles, links and runs with stdout `hello`.
+C++ version discovery initially failed because libc opendir requests NONBLOCK; the
+batch host now admits that flag on directories and regular files while preserving rights
+and rejecting unsupported flags. Four focused WASI fd tests pass. The unchanged complete
+sysroot then compiles, links and runs the C++20 vector/map/string template fixture with
+explicit `-fno-exceptions`, yielding `sum=6`. Exception-enabled input retains its real
+missing exception-runtime linker diagnostics and remains outside this qualified profile.
+The adapter does not insert flags or prune headers. A fresh Chromium run will verify the
+same full closure, byte streams, actual command artifacts and cache-preserved reload.
 
 The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
 dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
