@@ -36,15 +36,18 @@ try {
   const result = await page.evaluate(async () => {
     const { createContainer } = await import('/dist/index.js');
     const { createLiveWasiAdapter } = await import('/dist/adapters/wasi-live/index.js');
+    const { pathCases, runPathCase } = await import('/test/contract/live-path-cases.mjs');
     const bytes = new Uint8Array(await (await fetch('/test/fixtures/live.wasm')).arrayBuffer());
+    const pathBytes = new Uint8Array(await (await fetch('/test/fixtures/path.wasm')).arrayBuffer());
     let liveWorkers = 0, createdWorkers = 0;
-    const adapter = createLiveWasiAdapter({ pipeBytes: 4093, workerFactory: () => {
+    const createWorker = () => {
       const worker = new Worker('/dist/adapters/wasi-live/worker.js', { type: 'module' });
       createdWorkers++; liveWorkers++;
       const terminate = worker.terminate.bind(worker); let dead = false;
       worker.terminate = () => { if (!dead) { dead = true; liveWorkers--; } terminate(); };
       return worker;
-    } });
+    };
+    const adapter = createLiveWasiAdapter({ pipeBytes: 4093, workerFactory: createWorker });
     const c = createContainer({ adapters: [adapter], commands: { tool: { adapter: adapter.id, bytes } }, maxProcesses: 2 });
     const encode = text => new TextEncoder().encode(text), decode = bytes => new TextDecoder().decode(bytes);
     const drain = async stream => new Uint8Array(await new Response(stream).arrayBuffer());
@@ -97,6 +100,10 @@ try {
       check('FD-05', decode(await output) === 'y' && exits[0].code === 64 && exits[1].code === 0 && (await errors).every(bytes => !bytes.length));
       const crash = await c.run('tool', ['crash']);
       check('live-crash-visibility', crash.reason === 'runtime-error' && decode(c.fs.readFile('/workspace/visible')) === 'before');
+      for (const mode of pathCases) {
+        const result = await runPathCase(mode, pathBytes, createWorker);
+        check(`atomic-path-${mode}`, result.code === 0 && result.interleaved);
+      }
       check('cleanup', liveWorkers === 0 && (await c.inspect()).processes.length === 0);
       return { checks, createdWorkers, liveWorkers, browser: navigator.userAgent, isolated: crossOriginIsolated, inspect: await c.inspect() };
     } finally { await c.dispose(); }
@@ -118,8 +125,10 @@ try {
   assert.deepEqual(faults, []);
   const sourceHashes = {};
   for (const file of (await readdir(resolve(root, 'src'), { recursive: true })).filter(file => file.endsWith('.ts')).sort()) sourceHashes[file] = createHash('sha256').update(await readFile(resolve(root, 'src', file))).digest('hex');
+  const testHashes = {};
+  for (const file of ['test/fixtures/live.c', 'test/fixtures/path.c', 'test/fixtures/path.wasm', 'test/contract/live-path-cases.mjs', 'scripts/test-live-browser.mjs']) testHashes[file] = createHash('sha256').update(await readFile(resolve(root, file))).digest('hex');
   const evidence = {
-    schemaVersion: 1, applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceHashes,
+    schemaVersion: 1, applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceHashes, testHashes,
     browser: browser.version(), platform: process.platform, kernel: release(), arch: process.arch, image: process.env.ImageVersion,
     contentSecurityPolicy: csp, fixtureSha256: createHash('sha256').update(await readFile(resolve(root, 'test/fixtures/live.wasm'))).digest('hex'),
     result, batch, faults

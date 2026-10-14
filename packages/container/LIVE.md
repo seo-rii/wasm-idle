@@ -43,9 +43,17 @@ Guest Workers issue synchronous RPC to that owner; only the guest Worker calls
 `Atomics.wait`. Control headers, metadata and byte payloads have fixed bounds.
 Version, process generation, monotonically increasing request ID, operation and
 lengths are checked on both sides. Large I/O repeats partial operations through a
-64 KiB data area. Directory-list metadata currently must fit 64 KiB; larger
+64 KiB data area. Directory-list metadata (names and inode statistics) must fit 64 KiB; larger
 listings return `ENOSPC` explicitly. No network or arbitrary host function RPC
 exists. Each channel can access only its own descriptor map in its container.
+
+Each path syscall carries the process-owned directory descriptor to the Supervisor.
+Resolution and the complete operation run synchronously there, including final
+symlink checks for no-follow open, both directory descriptors for rename, and
+directory entry names with their inode metadata. A host rename followed by a new
+directory at the old path cannot redirect a pending operation to that replacement.
+Batch filesystem bindings use the same structural contract with local synchronous
+operations; they do not issue RPC or change snapshot visibility.
 
 The default per-call wait deadline is 120,000 ms, including idle stdin. Set
 `maxBlockedIoMs` explicitly (1..3,600,000) when a workflow needs a different bound.
@@ -72,9 +80,11 @@ Intermediate stdout streams are owned by the pipeline. It does not parse shell
 strings, choose POSIX pipeline exit status, redirect files, provide job control,
 or qualify WASIX/Bash/BusyBox compatibility.
 
-Validation uses a real no-libc Wasm fixture (source `test/fixtures/live.c`), including
+Validation uses real no-libc Wasm fixtures (`test/fixtures/live.c` and `path.c`), including
 two live guests sharing files, byte counts beyond the ring/RPC bounds, early reader
 exit, cancellation during read/write/CPU execution, crash visibility, and restart.
+Deterministic host interleavings exercise every supported path operation and
+directory listing, plus both rename descriptors and a final symlink replacement.
 These ABI tests do not replace the real BusyBox `yes | head` or shell acceptance
 fixtures. Rebuild with `node scripts/build-fixtures.mjs`; run Node contracts and
 `node scripts/test-live-browser.mjs` for the isolated/nonisolated Chromium gate.

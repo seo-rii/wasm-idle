@@ -50,5 +50,31 @@ test('large directory metadata returns an explicit bounded-profile error', async
   try {
     for (let i = 0; i < 300; i++) fs.writeFile(`/workspace/${'a'.repeat(250)}${i}`, new Uint8Array());
     await assert.rejects(io.dispatch(Operation.Readdir, ['/workspace', {}], new Uint8Array()), { code: 'ENOSPC' });
+    const directory = (await io.dispatch(Operation.Open, ['/workspace', { directory: true }], new Uint8Array())).value;
+    await assert.rejects(io.dispatch(Operation.DirectoryEntries, [directory], new Uint8Array()), { code: 'ENOSPC' });
   } finally { io.dispose(); }
+});
+test('atomic path references retain their descriptor root and reject malformed or widened capabilities', async () => {
+  const fs = new MemoryFileSystem(), io = createLiveIo(fs, limits, 4, assert.fail), empty = new Uint8Array();
+  fs.writeFile('/workspace/file', new Uint8Array([42])); fs.symlink('file', '/workspace/link');
+  try {
+    const directory = (await io.dispatch(Operation.Open, ['.', { directory: true, root: '/workspace' }], empty)).value;
+    const ref = { directory, path: 'file', root: '/workspace' };
+    for (const [value, code] of [
+      [{ ...ref, directory: 91 }, 'EBADF'],
+      [{ ...ref, root: '/' }, 'EACCES'],
+      [{ ...ref, path: '/workspace/file' }, 'EACCES'],
+      [{ ...ref, extra: true }, 'EINVAL'],
+      [{ ...ref, path: 'bad\0path' }, 'EINVAL'],
+      [null, 'EINVAL']
+    ]) await assert.rejects(io.dispatch(Operation.PathStat, [value, true], empty), { code });
+    await assert.rejects(io.dispatch(Operation.PathOpen, [ref, { root: '/' }, true], empty), { code: 'EINVAL' });
+    await assert.rejects(io.dispatch(Operation.PathStat, [ref, 1], empty), { code: 'EINVAL' });
+    await assert.rejects(io.dispatch(Operation.PathOpen, [{ ...ref, path: 'link' }, { read: true }, false], empty), { code: 'ELOOP' });
+    await assert.rejects(io.dispatch(Operation.PathOpen, [{ ...ref, path: '../tmp/file' }, { create: true }, true], empty), { code: 'EACCES' });
+    const opened = (await io.dispatch(Operation.PathOpen, [ref, { read: true }, false], empty)).value;
+    assert.deepEqual((await io.dispatch(Operation.Read, [opened, 1], empty)).bytes, new Uint8Array([42]));
+    assert.equal((await io.dispatch(Operation.DirectoryEntries, [directory], empty)).value.find(entry => entry.name === 'link').stat.type, 'symlink');
+  } finally { io.dispose(); }
+  fs.acquireSnapshot().discard();
 });

@@ -1,4 +1,4 @@
-import { type MemoryFileSystem, FsError } from '../../fs/index.js';
+import { type MemoryFileSystem, type OpenOptions, type FileStat, FsError } from '../../fs/index.js';
 import { createBatchStdio, type WasiStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
@@ -7,7 +7,21 @@ const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 1
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
 interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; }
-export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'>;
+export interface WasiPathReference { readonly directory: number; readonly path: string; readonly root: string; }
+export interface WasiDirectoryEntry { readonly name: string; readonly stat: FileStat; }
+/** Optional atomic path binding: a live host must resolve dirfds on its resource owner. */
+export interface WasiPathBinding {
+  open(reference: WasiPathReference, options: OpenOptions, follow: boolean): number;
+  stat(reference: WasiPathReference, follow: boolean): FileStat;
+  mkdir(reference: WasiPathReference): void;
+  unlink(reference: WasiPathReference): void;
+  rmdir(reference: WasiPathReference): void;
+  readlink(reference: WasiPathReference): string;
+  symlink(target: string, reference: WasiPathReference): void;
+  rename(from: WasiPathReference, to: WasiPathReference): void;
+  entries(directory: number): readonly WasiDirectoryEntry[];
+}
+export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'> & { readonly paths?: WasiPathBinding };
 interface HostOptions { fs: WasiFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: WasiStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : 4;
 const RIGHTS = (1n << 30n) - 1n;
@@ -44,7 +58,35 @@ export function createWasiHost(options: HostOptions) {
   const relative = (fd: number, ptr: number, len: number, right = 0n) => {
     const h = handle(fd, right), path = text(ptr, len);
     if (path.startsWith('/')) throw new WasiFault(76);
-    return { path, options: { cwd: options.fs.getDirectoryPath(h.fd), root: h.root } };
+    return { path, directory: h.fd, root: h.root };
+  };
+  const pathOptions = (reference: WasiPathReference) => ({ cwd: options.fs.getDirectoryPath(reference.directory), root: reference.root });
+  // Batch bindings are synchronous, so resolution and mutation cannot interleave.
+  // Live bindings replace the whole operation, including lookup flags and metadata.
+  const paths: WasiPathBinding = options.fs.paths ?? {
+    open(reference, flags, follow) {
+      const context = pathOptions(reference);
+      if (!follow) {
+        try { if (options.fs.lstat(reference.path, context).type === 'symlink') throw new FsError('ELOOP', 'Final symlink requires follow permission'); }
+        catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
+      }
+      return options.fs.open(reference.path, { ...flags, ...context });
+    },
+    stat: (reference, follow) => follow ? options.fs.stat(reference.path, pathOptions(reference)) : options.fs.lstat(reference.path, pathOptions(reference)),
+    mkdir: reference => options.fs.mkdir(reference.path, pathOptions(reference)),
+    unlink: reference => options.fs.unlink(reference.path, pathOptions(reference)),
+    rmdir: reference => options.fs.rmdir(reference.path, pathOptions(reference)),
+    readlink: reference => options.fs.readlink(reference.path, pathOptions(reference)),
+    symlink: (target, reference) => options.fs.symlink(target, reference.path, pathOptions(reference)),
+    rename(from, to) {
+      if (from.root !== to.root) throw new FsError('EACCES', 'Rename requires a common root capability');
+      const a = pathOptions(from), b = pathOptions(to);
+      options.fs.rename(`${a.cwd}/${from.path}`, `${b.cwd}/${to.path}`, { root: from.root, cwd: from.root });
+    },
+    entries(directory) {
+      const path = options.fs.getDirectoryPath(directory);
+      return options.fs.readdir(path).map(name => ({ name, stat: options.fs.lstat(`${path}/${name}`) }));
+    }
   };
   const iovecs = (ptr: number, count: number) => {
     count >>>= 0;
@@ -147,30 +189,27 @@ export function createWasiHost(options: HostOptions) {
       if ((oflags & 1) && !(parent.rights & (1n << 10n))) return 76;
       if ((oflags & 8) && (!(parent.rights & (1n << 19n)) || !(rights & 64n))) return 76;
       const p = relative(fd, ptr, len);
-      if (!(flags & 1)) { try { if (options.fs.lstat(p.path, p.options).type === 'symlink') return 32; } catch (e) { if (!(e instanceof FsError) || e.code !== 'ENOENT') throw e; } }
       let newFd = 3; while (handles.has(newFd)) newFd++; if (newFd >= 256) return 33;
-      const opened = options.fs.open(p.path, { ...p.options, read: Boolean(rights & 2n) || !(rights & 64n), write: Boolean(rights & 64n), create: Boolean(oflags & 1), directory: Boolean(oflags & 2), exclusive: Boolean(oflags & 4), truncate: Boolean(oflags & 8), append: Boolean(fdflags & 1) });
+      const opened = paths.open(p, { read: Boolean(rights & 2n) || !(rights & 64n), write: Boolean(rights & 64n), create: Boolean(oflags & 1), directory: Boolean(oflags & 2), exclusive: Boolean(oflags & 4), truncate: Boolean(oflags & 8), append: Boolean(fdflags & 1) }, Boolean(flags & 1));
       handles.set(newFd, { fd: opened, root: parent.root, flags: fdflags, rights, inherited }); put32(result, newFd); return 0;
     },
-    path_filestat_get: (fd, flags, ptr, len, result) => { span(result, 64); if (flags & ~1) return 28; const p = relative(fd, ptr, len, 1n << 18n); return stat(result, flags & 1 ? options.fs.stat(p.path, p.options) : options.fs.lstat(p.path, p.options)); },
-    path_create_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 9n); options.fs.mkdir(p.path, p.options); return 0; },
-    path_unlink_file: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 26n); options.fs.unlink(p.path, p.options); return 0; },
-    path_remove_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 25n); options.fs.rmdir(p.path, p.options); return 0; },
-    path_readlink: (fd, ptr, len, buf, length, result) => { span(result, 4); span(buf, length); const p = relative(fd, ptr, len, 1n << 15n); const bytes = encoder.encode(options.fs.readlink(p.path, p.options)).subarray(0, length >>> 0); span(buf, bytes.length).set(bytes); put32(result, bytes.length); return 0; },
-    path_symlink: (ptr, len, fd, newPtr, newLen) => { const target = text(ptr, len), p = relative(fd, newPtr, newLen, 1n << 24n); options.fs.symlink(target, p.path, p.options); return 0; },
+    path_filestat_get: (fd, flags, ptr, len, result) => { span(result, 64); if (flags & ~1) return 28; const p = relative(fd, ptr, len, 1n << 18n); return stat(result, paths.stat(p, Boolean(flags & 1))); },
+    path_create_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 9n); paths.mkdir(p); return 0; },
+    path_unlink_file: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 26n); paths.unlink(p); return 0; },
+    path_remove_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 25n); paths.rmdir(p); return 0; },
+    path_readlink: (fd, ptr, len, buf, length, result) => { span(result, 4); span(buf, length); const p = relative(fd, ptr, len, 1n << 15n); const bytes = encoder.encode(paths.readlink(p)).subarray(0, length >>> 0); span(buf, bytes.length).set(bytes); put32(result, bytes.length); return 0; },
+    path_symlink: (ptr, len, fd, newPtr, newLen) => { const target = text(ptr, len), p = relative(fd, newPtr, newLen, 1n << 24n); paths.symlink(target, p); return 0; },
     path_rename: (oldFd, oldPtr, oldLen, newFd, newPtr, newLen) => {
       const a = relative(oldFd, oldPtr, oldLen, 1n << 16n), b = relative(newFd, newPtr, newLen, 1n << 17n);
-      const parentA = options.fs.realpath(a.options.cwd), parentB = options.fs.realpath(b.options.cwd);
-      // Both dirfds belong to this container's root capability; resolution remains in VFS.
-      options.fs.rename(`${parentA}/${a.path}`, `${parentB}/${b.path}`); return 0;
+      paths.rename(a, b); return 0;
     },
     fd_readdir: (fd, ptr, length, cookie, result) => {
-      const h = handle(fd, 1n << 14n), path = options.fs.getDirectoryPath(h.fd);
+      const h = handle(fd, 1n << 14n);
       span(result, 4); const destination = span(ptr, length); let written = 0;
-      const entries = options.fs.readdir(path), start = safeOffset(cookie);
+      const entries = paths.entries(h.fd), start = safeOffset(cookie);
       if (start < 0) return 28;
       for (let i = start; i < entries.length && written < destination.length; i++) {
-        const name = entries[i]!, encoded = encoder.encode(name), info = options.fs.lstat(`${path}/${name}`);
+        const { name, stat: info } = entries[i]!, encoded = encoder.encode(name);
         const record = new Uint8Array(24 + encoded.length), v = new DataView(record.buffer);
         v.setBigUint64(0, BigInt(i + 1), true); v.setBigUint64(8, BigInt(info.inode), true); v.setUint32(16, encoded.length, true); v.setUint8(20, filetype(info.type)); record.set(encoded, 24);
         const n = Math.min(record.length, destination.length - written); destination.set(record.subarray(0, n), written); written += n;

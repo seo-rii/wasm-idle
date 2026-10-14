@@ -3,11 +3,22 @@ import { createPipe, pipeReadable, PipeError } from '../../fd/pipe.js';
 import { ContainerError } from '../../errors.js';
 import { Operation, RPC_BYTES, type RpcCall, type RpcReply } from '../../transport/rpc.js';
 import type { RuntimeLimits } from '../types.js';
-import type { WasiFileSystem } from '../wasi/host.js';
+import type { WasiFileSystem, WasiPathReference, WasiDirectoryEntry } from '../wasi/host.js';
 import type { WasiStdio } from '../wasi/stdio.js';
 
 export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
   return {
+    paths: {
+      open: (reference, options, follow) => call(Operation.PathOpen, [reference, options, follow]).value as number,
+      stat: (reference, follow) => call(Operation.PathStat, [reference, follow]).value as ReturnType<WasiFileSystem['stat']>,
+      mkdir: reference => { call(Operation.PathMkdir, [reference]); },
+      unlink: reference => { call(Operation.PathUnlink, [reference]); },
+      rmdir: reference => { call(Operation.PathRmdir, [reference]); },
+      readlink: reference => call(Operation.PathReadlink, [reference]).value as string,
+      symlink: (target, reference) => { call(Operation.PathSymlink, [target, reference]); },
+      rename: (from, to) => { call(Operation.PathRename, [from, to]); },
+      entries: directory => call(Operation.DirectoryEntries, [directory]).value as WasiDirectoryEntry[]
+    },
     open: (path, options) => call(Operation.Open, [path, options ?? {}]).value as number,
     close: (fd) => { call(Operation.Close, [fd]); },
     stat: (path, options) => call(Operation.Stat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['stat']>,
@@ -44,7 +55,7 @@ export function createRemoteStdio(call: RpcCall): WasiStdio {
 /** All descriptors and pending I/O belong to this invocation, even in a shared VFS. */
 export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capacity: number, onFailure: (error: unknown) => void) {
   const input = createPipe(capacity), output = createPipe(capacity), errorOutput = createPipe(capacity);
-  const descriptors = new Map<number, number>(), closedStdio = new Set<number>();
+  const descriptors = new Map<number, { fd: number; root: string }>(), closedStdio = new Set<number>();
   let nextFd = 3, disposed = false, inputClosed = false, inputBytes = 0, outputBytes = 0;
   const closeInput = () => { if (!inputClosed) { inputClosed = true; input.writer.close(); } };
   const closeStdio = (fd: number) => {
@@ -56,21 +67,39 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
     if (typeof n !== 'number' || !Number.isSafeInteger(n) || !signed && n < 0) throw new FsError('EINVAL', 'Invalid I/O number');
     return n;
   };
-  const path = (p: unknown) => { if (typeof p !== 'string' || p.length > 4096) throw new FsError('EINVAL', 'Invalid I/O path'); return p; };
-  const options = (value: unknown, open = false): OpenOptions => {
+  const path = (p: unknown) => { if (typeof p !== 'string' || p.length > 4096 || p.includes('\0')) throw new FsError('EINVAL', 'Invalid I/O path'); return p; };
+  const options = (value: unknown, open = false, anchored = false): OpenOptions => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new FsError('EINVAL', 'Invalid path options');
     for (const [key, item] of Object.entries(value)) {
-      if (key === 'cwd' || key === 'root') path(item);
+      if (!anchored && (key === 'cwd' || key === 'root')) path(item);
       else if (open && key === 'mode') number(item);
       else if (open && ['read', 'write', 'create', 'exclusive', 'truncate', 'append', 'directory'].includes(key) && typeof item === 'boolean') continue;
       else throw new FsError('EINVAL', 'Unsupported path option');
     }
     return value as OpenOptions;
   };
-  const fd = (n: unknown) => {
+  const descriptor = (n: unknown) => {
     const descriptor = descriptors.get(number(n));
     if (descriptor === undefined) throw new FsError('EBADF', 'Descriptor does not belong to this process');
     return descriptor;
+  };
+  const fd = (n: unknown) => descriptor(n).fd;
+  const reference = (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).length !== 3 || !Object.keys(value).every(key => ['directory', 'path', 'root'].includes(key))) throw new FsError('EINVAL', 'Invalid path reference');
+    const ref = value as WasiPathReference, owner = descriptor(ref.directory), name = path(ref.path);
+    if (name.startsWith('/') || path(ref.root) !== owner.root) throw new FsError('EACCES', 'Path exceeds directory capability');
+    return { path: name, cwd: fs.getDirectoryPath(owner.fd), root: owner.root };
+  };
+  const follow = (value: unknown) => { if (typeof value !== 'boolean') throw new FsError('EINVAL', 'Invalid lookup flags'); return value; };
+  const open = (name: string, flags: OpenOptions, root: string, allowSymlink = true) => {
+    if (descriptors.size >= 256 || nextFd >= 0x7fffffff) throw new FsError('ENOSPC', 'Descriptor budget exceeded');
+    if (!allowSymlink) {
+      try { if (fs.lstat(name, flags).type === 'symlink') throw new FsError('ELOOP', 'Final symlink requires follow permission'); }
+      catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
+    }
+    const opened = fs.open(name, flags), local = nextFd++;
+    descriptors.set(local, { fd: opened, root }); return local;
   };
   const length = (n: unknown) => { const size = number(n); if (size > RPC_BYTES) throw new FsError('EINVAL', 'I/O exceeds channel'); return size; };
   const stdout = pipeReadable(output.reader), stderr = pipeReadable(errorOutput.reader);
@@ -95,7 +124,7 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
       if (disposed) return;
       disposed = true;
       for (const n of [0, 1, 2]) if (!closedStdio.has(n)) closeStdio(n);
-      for (const descriptor of descriptors.values()) fs.close(descriptor);
+      for (const descriptor of descriptors.values()) fs.close(descriptor.fd);
       descriptors.clear();
     },
     async dispatch(op: Operation, args: unknown[], bytes: Uint8Array): Promise<RpcReply> {
@@ -105,7 +134,10 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
         [Operation.DirectoryPath]: 1, [Operation.Read]: 2, [Operation.Pread]: 3, [Operation.Write]: 1, [Operation.Pwrite]: 2,
         [Operation.Seek]: 3, [Operation.Tell]: 1, [Operation.Truncate]: 2, [Operation.Realpath]: 2, [Operation.Readdir]: 2,
         [Operation.Mkdir]: 2, [Operation.Unlink]: 2, [Operation.Rmdir]: 2, [Operation.Readlink]: 2, [Operation.Symlink]: 3,
-        [Operation.Rename]: 3, [Operation.Stdin]: 1, [Operation.Stdout]: 1, [Operation.StdioClose]: 1
+        [Operation.Rename]: 3, [Operation.Stdin]: 1, [Operation.Stdout]: 1, [Operation.StdioClose]: 1,
+        [Operation.PathOpen]: 3, [Operation.PathStat]: 2, [Operation.PathMkdir]: 1, [Operation.PathUnlink]: 1,
+        [Operation.PathRmdir]: 1, [Operation.PathReadlink]: 1, [Operation.PathSymlink]: 2,
+        [Operation.PathRename]: 2, [Operation.DirectoryEntries]: 1
       };
       if (args.length !== arities[op] || bytes.length > RPC_BYTES || bytes.length && ![Operation.Write, Operation.Pwrite, Operation.Stdout].includes(op)) throw new FsError('EINVAL', 'Invalid I/O arguments');
       const [a, b, c] = args;
@@ -113,8 +145,8 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
       try {
         switch (op) {
           case Operation.Open: {
-            if (descriptors.size >= 256 || nextFd >= 0x7fffffff) throw new FsError('ENOSPC', 'Descriptor budget exceeded');
-            const opened = fs.open(path(a), options(b, true)); value = nextFd++; descriptors.set(value as number, opened); break;
+            const flags = options(b, true), root = fs.realpath(flags.root ?? '/');
+            value = open(path(a), flags, root); break;
           }
           case Operation.Close: fs.close(fd(a)); descriptors.delete(number(a)); break;
           case Operation.Stat: value = fs.stat(path(a), options(b)); break;
@@ -144,6 +176,36 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.Readlink: value = fs.readlink(path(a), options(b)); break;
           case Operation.Symlink: fs.symlink(path(a), path(b), options(c)); break;
           case Operation.Rename: fs.rename(path(a), path(b), options(c) as PathOptions); break;
+          // Resolve the owned descriptor and complete the filesystem operation
+          // synchronously on this owner. Never return a path for a later syscall.
+          case Operation.PathOpen: {
+            const ref = reference(a), flags = options(b, true, true);
+            value = open(ref.path, { ...flags, cwd: ref.cwd, root: ref.root }, ref.root, follow(c)); break;
+          }
+          case Operation.PathStat: {
+            const ref = reference(a); value = follow(b) ? fs.stat(ref.path, ref) : fs.lstat(ref.path, ref); break;
+          }
+          case Operation.PathMkdir: { const ref = reference(a); fs.mkdir(ref.path, ref); break; }
+          case Operation.PathUnlink: { const ref = reference(a); fs.unlink(ref.path, ref); break; }
+          case Operation.PathRmdir: { const ref = reference(a); fs.rmdir(ref.path, ref); break; }
+          case Operation.PathReadlink: { const ref = reference(a); value = fs.readlink(ref.path, ref); break; }
+          case Operation.PathSymlink: { const ref = reference(b); fs.symlink(path(a), ref.path, ref); break; }
+          case Operation.PathRename: {
+            const from = reference(a), to = reference(b);
+            if (from.root !== to.root) throw new FsError('EACCES', 'Rename requires a common root capability');
+            fs.rename(`${from.cwd}/${from.path}`, `${to.cwd}/${to.path}`, { root: from.root, cwd: from.root }); break;
+          }
+          case Operation.DirectoryEntries: {
+            const owner = descriptor(a), cwd = fs.getDirectoryPath(owner.fd), context = { cwd, root: owner.root };
+            const entries: WasiDirectoryEntry[] = []; let size = 2;
+            for (const name of fs.readdir('.', context)) {
+              const entry = { name, stat: fs.lstat(name, context) };
+              size += new TextEncoder().encode(JSON.stringify(entry)).length + 1;
+              if (size > RPC_BYTES) throw new FsError('ENOSPC', 'Directory listing exceeds live profile metadata limit');
+              entries.push(entry);
+            }
+            value = entries; break;
+          }
           case Operation.Stdin:
             if (closedStdio.has(0)) throw new FsError('EBADF', 'stdin is closed');
             return { bytes: await input.reader.read(length(a)) };
