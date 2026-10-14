@@ -130,7 +130,8 @@ node scripts/prepare-container-shell-bridge.mjs --verify-only \
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --fuzz=0`, and checks source identity again. It creates no source copy and
+`patch --dry-run --forward --fuzz=0`, and checks source identity again. A reversed or already
+applied patch fails instead of being silently applied in reverse. It creates no source copy and
 makes no changes to the supplied checkout. The [checked-in receipt](evidence.source-checks.json) says `patches-apply-cleanly-not-built`.
 The report classifier passed 6 Node tests; the native C/Rust protocol passed 5 Rust tests
 (including frames emitted by the actual C encoder). These are bounded local checks only.

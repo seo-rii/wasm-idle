@@ -69,10 +69,16 @@ if (verifyOnly) {
 	const receipts = {};
 	for (const name of patches) {
 		const path = join(bridge, 'patches', name);
-		execFileSync('patch', ['--dry-run', '--batch', '--fuzz=0', '-p1', '-i', path], {
-			cwd: source,
-			stdio: 'pipe'
-		});
+		// --batch alone assumes -R for a patch that looks reversed and still exits 0.
+		// --forward makes a reversed or already-applied patch fail instead.
+		execFileSync(
+			'patch',
+			['--dry-run', '--batch', '--forward', '--fuzz=0', '-p1', '-i', path],
+			{
+				cwd: source,
+				stdio: 'pipe'
+			}
+		);
 		receipts[name] = sha256(await readFile(path));
 	}
 	for (const name of ['exec_frame.rs', 'proc_exec_v1.rs', 'execve.c']) {
@@ -114,7 +120,7 @@ if (verifyOnly) {
 	const receipts = {};
 	for (const name of patches) {
 		const path = join(bridge, 'patches', name);
-		execFileSync('patch', ['--batch', '--fuzz=0', '-p1', '-i', path], {
+		execFileSync('patch', ['--batch', '--forward', '--fuzz=0', '-p1', '-i', path], {
 			cwd: join(output, 'wasmer-wasix'),
 			stdio: 'pipe'
 		});
