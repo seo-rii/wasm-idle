@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "applicationCommit": "bc1e1f04cbc96741953732b17f20156b0c54cf76",
+  "applicationCommit": "7ed345ee3383a42fb29c5579536d5afda69baef7",
   "sourceHashes": {
     "adapters/clang/index.ts": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae",
     "adapters/clang/worker.ts": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6",
@@ -30,7 +30,7 @@
     "packages/index.ts": "8cbc81e19bf2a5009331e9fe4bac2bb401e3827c655215bfcf7356fbfa1ac0b1",
     "packages/manager.ts": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c",
     "process/lifecycle.ts": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b",
-    "terminal/index.ts": "126b527ec6561171b49f69922027d36eb1e7b9c40caddd4ca08cde3a2f37fa6d",
+    "terminal/index.ts": "bf1f3fcfdc97164635ef14c01b15f29a67f06987df81c67e8eed5e65ca81a587",
     "transport/rpc.ts": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900",
     "types.ts": "29d1480d8ad6f6947574f20cee33d768855e6cdcc1a2f33093b81d80da7dce0e",
     "workspace/index.ts": "7e0b908f8a9bafbb97c48d8b2f8971b1235577edfec68903787ec6d907455383"
@@ -64,6 +64,11 @@
         "processes": 0
       },
       {
+        "name": "cooperative-output",
+        "frames": 0,
+        "processes": 0
+      },
+      {
         "name": "terminate",
         "frames": 5,
         "processes": 0
@@ -74,12 +79,17 @@
         "processes": 0
       },
       {
+        "name": "cleanup-failure",
+        "frames": 0,
+        "processes": 0
+      },
+      {
         "name": "exit-results",
         "frames": 10,
         "processes": 0
       }
     ],
-    "createdWorkers": 15,
+    "createdWorkers": 19,
     "activeWorkers": 0,
     "isolated": true
   },
