@@ -112,7 +112,7 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
       }
       inputBytes += bytes.length;
       // Snapshot the caller's write before the first asynchronous wait.
-      const owned = bytes.slice();
+      const owned = Uint8Array.from(bytes);
       let offset = 0;
       while (offset < owned.length) offset += await input.writer.write(owned.subarray(offset));
     },

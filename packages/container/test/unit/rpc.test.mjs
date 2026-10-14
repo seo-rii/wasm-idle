@@ -78,3 +78,18 @@ test('atomic path references retain their descriptor root and reject malformed o
   } finally { io.dispose(); }
   fs.acquireSnapshot().discard();
 });
+test('a backpressured stdin write owns Buffer bytes before its first asynchronous wait', async () => {
+  const io = createLiveIo(new MemoryFileSystem(), limits, 2, assert.fail), writer = io.stdin.getWriter();
+  try {
+    const chunk = Buffer.from([1, 2, 3, 4]); let completed = false;
+    const pending = writer.write(chunk).then(() => { completed = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(completed, false, 'the second part must still be waiting for capacity');
+    chunk.fill(99);
+    const first = (await io.dispatch(Operation.Stdin, [2], new Uint8Array())).bytes;
+    const second = (await io.dispatch(Operation.Stdin, [2], new Uint8Array())).bytes;
+    await pending;
+    assert.deepEqual([...first, ...second], [1, 2, 3, 4]);
+    await writer.close();
+  } finally { io.dispose(); writer.releaseLock(); }
+});

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "applicationCommit": "fb5c747cb9e732ab409609fd01775a4b689e4402",
+  "applicationCommit": "5e0b5d2bbf3d7bfeb9af1eae0114542a02c31cba",
   "sourceHashes": {
     "adapters/clang/index.ts": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae",
     "adapters/clang/worker.ts": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6",
     "adapters/types.ts": "6a5a1d15ae1444ab4ad83fa55ac9f6e54d5f1de84484d34f9327823abea58641",
     "adapters/wasi-live/index.ts": "a050bac3205ab45e7873d11cbb88b890bfa98f79fd6eddfb83ea896a47c5b439",
-    "adapters/wasi-live/io.ts": "d92dad50fe1cc7afda4e6cf6fe46c95ff248c276ea7af59766856e572325dcbc",
+    "adapters/wasi-live/io.ts": "4287a5280df31b3a061a04c0c9568f21b493b536fc071932e326072fb0932748",
     "adapters/wasi-live/worker.ts": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a",
     "adapters/wasi/host.ts": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7",
     "adapters/wasi/index.ts": "c2485cb72ebc8c4baefe0d897e56be203857962cf052311d3fcc058c5a332691",
