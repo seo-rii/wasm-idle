@@ -143,10 +143,61 @@ describe('useWasmIdlePlayground', () => {
 		await vi.waitFor(() => expect(terminate).toHaveBeenCalledTimes(1));
 		expect(first.dispose).toHaveBeenCalledTimes(1);
 		expect(second.dispose).not.toHaveBeenCalled();
-		expect(createPlaygroundBinding).toHaveBeenLastCalledWith('/runtime-b', loadSandbox, {
-			prewarm: false
-		});
+		expect(createPlaygroundBinding).toHaveBeenLastCalledWith(
+			'/runtime-b',
+			expect.any(Function),
+			{
+				prewarm: false
+			}
+		);
 		await second.load('C');
+		expect(loadSandbox).toHaveBeenLastCalledWith('C');
+	});
+
+	it('keeps the binding when re-rendered with equal inline arguments', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const latestLoadSandbox = createSandboxLoader().loadSandbox;
+		const rendered: PlaygroundBinding[] = [];
+		const renderPlayground = (rootUrl: string, loader: SandboxLoader) =>
+			renderStrict(
+				createElement(Playground, {
+					runtimeAssets: { rootUrl, python: { baseUrl: `${rootUrl}/python` } },
+					loadSandbox: (language) => loader(language),
+					options: {
+						persistentCache: { maxEntries: 8 },
+						trustProfile: structuredClone(DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE)
+					},
+					rendered
+				})
+			);
+
+		await renderPlayground('/runtime', loadSandbox);
+		const first = rendered.at(-1)!;
+		const created = vi.mocked(createPlaygroundBinding).mock.calls.length;
+		await renderPlayground('/runtime', loadSandbox);
+		await renderPlayground('/runtime', latestLoadSandbox);
+
+		expect(rendered.at(-1)).toBe(first);
+		expect(createPlaygroundBinding).toHaveBeenCalledTimes(created);
+		expect(first.dispose).not.toHaveBeenCalled();
+		await first.load('C');
+		expect(loadSandbox).not.toHaveBeenCalled();
+		expect(latestLoadSandbox).toHaveBeenCalledWith('C');
+
+		await renderPlayground('/runtime-next', latestLoadSandbox);
+
+		expect(rendered.at(-1)).not.toBe(first);
+		await vi.waitFor(() => expect(first.dispose).toHaveBeenCalledTimes(1));
+	});
+
+	it('reports invalid runtime assets from load() instead of during render', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const rendered: PlaygroundBinding[] = [];
+		const runtimeAssets = { runtimeProfiles: { c: { profileId: '' } } } as never;
+
+		await renderStrict(createElement(Playground, { runtimeAssets, loadSandbox, rendered }));
+
+		await expect(rendered.at(-1)!.load('C')).rejects.toThrow(TypeError);
 	});
 
 	it('recreates a binding that was released while hidden by Activity', async () => {
@@ -187,7 +238,11 @@ describe('useWasmIdleHost', () => {
 		await renderStrict(createElement(Host, { loadSandbox, options, rendered }));
 		const host = rendered.at(-1)!;
 
-		expect(createPlaygroundBinding).toHaveBeenLastCalledWith('/runtime', loadSandbox, options);
+		expect(createPlaygroundBinding).toHaveBeenLastCalledWith(
+			'/runtime',
+			expect.any(Function),
+			options
+		);
 		expect(host.binding.trustProfile?.profileId).toBe(
 			DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE.profileId
 		);

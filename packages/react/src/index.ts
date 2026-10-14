@@ -1,12 +1,21 @@
 import {
 	createPlaygroundBinding,
+	createRuntimeAssetsKey,
 	type PlaygroundBinding,
 	type PlaygroundBindingOptions,
 	type SandboxLoader,
 	type SandboxRuntimeAssets,
 	type TerminalControl
 } from '@wasm-idle/core';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+	useCallback,
+	useEffect,
+	useInsertionEffect,
+	useMemo,
+	useReducer,
+	useRef,
+	useState
+} from 'react';
 import { disposeReactTerminalRef } from './lifecycle.js';
 
 export interface ReactWasmIdleHost {
@@ -24,19 +33,32 @@ export function useWasmIdlePlayground(
 	options: PlaygroundBindingOptions = {}
 ): PlaygroundBinding {
 	const [generation, recreate] = useReducer((count: number) => count + 1, 0);
+	// The binding only calls the loader from load(), so follow the latest one instead of keying on
+	// it. An insertion effect updates it before any layout or passive effect can call load().
+	const loader = useRef(loadSandbox);
+	useInsertionEffect(() => {
+		loader.current = loadSandbox;
+	});
+	let assetsKey: unknown = runtimeAssets;
+	try {
+		assetsKey = createRuntimeAssetsKey(runtimeAssets);
+	} catch {
+		// Invalid assets keep reference identity; load() still reports the error.
+	}
 	const owner = useMemo(
 		() => ({
-			binding: createPlaygroundBinding(runtimeAssets, loadSandbox, options),
+			binding: createPlaygroundBinding(
+				runtimeAssets,
+				(language) => loader.current(language),
+				options
+			),
 			mounted: false,
 			disposed: false
 		}),
-		// Key on option fields so an inline options object does not replace the binding every render.
+		// Key on values so inline asset and option literals do not replace the binding every render.
 		[
-			runtimeAssets,
-			loadSandbox,
-			options.persistentCache,
-			options.prewarm,
-			options.trustProfile,
+			assetsKey,
+			JSON.stringify([options.persistentCache, options.prewarm, options.trustProfile]),
 			generation
 		]
 	);
