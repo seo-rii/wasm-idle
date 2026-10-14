@@ -108,6 +108,77 @@ describe('createHaskellWorkerService', () => {
 		]);
 	});
 
+	it('parses GHC 9.6+ diagnostics with error codes, flag tags, and spans', () => {
+		expect(
+			parseHaskellDiagnostics(`main.hs:3:8: error: [GHC-88464]
+    Variable not in scope: nope :: IO ()
+  |
+3 | main = nope
+  |        ^^^^
+
+main.hs:5:15-21: error: [GHC-83865]
+    • Couldn't match type ‘[Char]’ with ‘Int’
+      Expected: Int
+        Actual: String
+  |
+5 | other = print ("hello" :: Int)
+  |               ^^^^^^^
+
+src/Helper.hs:(7,1)-(8,15): warning: [GHC-62161] [-Wincomplete-patterns]
+    Pattern match(es) are non-exhaustive
+  |
+7 | classify 0 = "zero"
+  | ^^^^^^^^^^^^^^^^^^^...
+
+main.hs:10:1: error: [GHC-40910] [-Wunused-top-binds, Werror=unused-top-binds]
+    Defined but not used: ‘unused’
+   |
+10 | unused = 1
+   | ^^^^^^
+
+main.hs:12:7: error: [GHC-58481] parse error on input ‘=’
+   |
+12 | broken = = 1
+   |          ^`)
+		).toEqual([
+			{
+				fileName: 'main.hs',
+				lineNumber: 3,
+				columnNumber: 8,
+				severity: 'error',
+				message: 'Variable not in scope: nope :: IO ()'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 5,
+				columnNumber: 15,
+				severity: 'error',
+				message: "• Couldn't match type ‘[Char]’ with ‘Int’"
+			},
+			{
+				fileName: 'src/Helper.hs',
+				lineNumber: 7,
+				columnNumber: 1,
+				severity: 'warning',
+				message: 'Pattern match(es) are non-exhaustive'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 10,
+				columnNumber: 1,
+				severity: 'error',
+				message: 'Defined but not used: ‘unused’'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 12,
+				columnNumber: 7,
+				severity: 'error',
+				message: 'parse error on input ‘=’'
+			}
+		]);
+	});
+
 	it('preserves the active compiler, arguments, and diagnostics cache after failed reinitialization', async () => {
 		const compile = vi.fn(async () => ({
 			success: true,
