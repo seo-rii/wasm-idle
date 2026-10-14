@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MemoryFileSystem } from '../../dist/fs/index.js';
+import { MemoryFileSystem, FsError } from '../../dist/fs/index.js';
 import { createRpcBuffer, createRpcServer, Operation, RPC_BYTES } from '../../dist/transport/rpc.js';
-import { createLiveIo } from '../../dist/adapters/wasi-live/io.js';
+import { createLiveIo, createRemoteFileSystem } from '../../dist/adapters/wasi-live/io.js';
 const limits = { maxInputBytes: 1024, maxOutputBytes: 1024 };
 function request(buffer, generation, id, op, args = [], payload = new Uint8Array()) {
   const header = new Int32Array(buffer, 0, 16), encoded = new TextEncoder().encode(JSON.stringify(args));
@@ -92,4 +92,31 @@ test('a backpressured stdin write owns Buffer bytes before its first asynchronou
     assert.deepEqual([...first, ...second], [1, 2, 3, 4]);
     await writer.close();
   } finally { io.dispose(); writer.releaseLock(); }
+});
+test('live regular-file transfers repeat bounded RPC chunks until complete, like batch I/O', () => {
+  const fs = new MemoryFileSystem(), operations = [];
+  const remote = createRemoteFileSystem((op, args, bytes = new Uint8Array()) => {
+    operations.push(op); assert.ok(bytes.length <= RPC_BYTES);
+    if (op === Operation.Write) return { value: fs.write(args[0], bytes) };
+    if (op === Operation.Pwrite) return { value: fs.pwrite(args[0], bytes, args[1]) };
+    assert.ok(args[1] <= RPC_BYTES);
+    if (op === Operation.Read) return { bytes: fs.read(args[0], args[1]) };
+    if (op === Operation.Pread) return { bytes: fs.pread(args[0], args[1], args[2]) };
+    throw new Error('unexpected operation');
+  });
+  const input = Uint8Array.from({ length: 3 * RPC_BYTES + 17 }, (_, i) => i * 7);
+  const fd = fs.open('/workspace/big', { read: true, write: true, create: true });
+  try {
+    assert.equal(remote.write(fd, input), input.length); assert.equal(operations.length, 4);
+    fs.seek(fd, 0); assert.deepEqual(remote.read(fd, input.length + 9), input);
+    assert.deepEqual(remote.pread(fd, 2 * RPC_BYTES, 5), input.subarray(5, 5 + 2 * RPC_BYTES));
+    assert.equal(remote.pwrite(fd, input.subarray(1), 2 * RPC_BYTES), input.length - 1);
+    assert.equal(fs.fstat(fd).size, 2 * RPC_BYTES + input.length - 1);
+  } finally { fs.close(fd); }
+  const failing = errors => createRemoteFileSystem((op, args, bytes) => {
+    const error = errors.shift(); if (error) throw error; return { value: bytes.length };
+  });
+  assert.equal(failing([undefined, new FsError('ENOSPC', 'full')]).write(9, new Uint8Array(RPC_BYTES + 1)), RPC_BYTES, 'errno after progress reports the transferred bytes');
+  assert.throws(() => failing([undefined, new Error('RPC stopped or corrupt response')]).write(9, new Uint8Array(RPC_BYTES + 1)), /RPC stopped/);
+  assert.throws(() => failing([new FsError('ENOSPC', 'full')]).write(9, new Uint8Array(1)), { code: 'ENOSPC' });
 });
