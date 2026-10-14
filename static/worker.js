@@ -121,11 +121,11 @@ function shouldPreserveExactResponseUrl(request, url) {
 }
 
 function relativePathInScope(url) {
-	const scopePath = new URL(self.registration.scope).pathname;
-	if (url.pathname.startsWith(scopePath)) {
-		return url.pathname.slice(scopePath.length);
+	const scopeUrl = new URL(self.registration.scope);
+	if (url.origin !== scopeUrl.origin || !url.pathname.startsWith(scopeUrl.pathname)) {
+		return null;
 	}
-	return url.pathname.replace(/^\/+/, '');
+	return url.pathname.slice(scopeUrl.pathname.length);
 }
 
 async function compressedRuntimeAssetManifest(forceRefresh = false) {
@@ -568,6 +568,9 @@ async function fetchDynamicModule(request, url) {
 }
 
 function withIsolationHeaders(response) {
+	// Opaque, opaqueredirect, and error responses have status 0, which the Response
+	// constructor rejects; they must reach the page unchanged.
+	if (response.status === 0) return response;
 	const newHeaders = new Headers(response.headers);
 	newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
 	newHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
@@ -589,6 +592,8 @@ self.addEventListener('fetch', function (event) {
 		Promise.resolve()
 			.then(async function () {
 				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
+				// Local runtime assets only answer for this origin and registration scope.
+				if (relativePathInScope(url) === null) return fetch(event.request);
 				return (
 					(await fetchDynamicModule(event.request, url)) ||
 					(await fetchRuntimeAssetAlias(event.request, url)) ||
@@ -611,6 +616,8 @@ self.addEventListener('fetch', function (event) {
 			})
 			.catch(function (e) {
 				console.error(e);
+				// Resolving undefined would turn every local failure into a network error.
+				return fetch(event.request);
 			})
 	);
 });

@@ -1,8 +1,9 @@
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
+import { runInNewContext } from 'node:vm';
 import { compile } from 'svelte/compiler';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
 	argsHelpLanguages,
@@ -29,8 +30,49 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 describe('example route debug actions', () => {
 	it('reloads once the Pages isolation service worker is ready', () => {
 		expect(layoutSource).toMatch(/await navigator\.serviceWorker\.ready;/);
-		expect(layoutSource).toMatch(/if \(!crossOriginIsolated\) window\.location\.reload\(\);/);
 		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
+		const isolationGuard = layoutSource.match(
+			/await navigator\.serviceWorker\.ready;([\s\S]*?)\} catch \(err\) \{/
+		)?.[1];
+		expect(isolationGuard).toBeTruthy();
+		const stored = new Map<string, string>();
+		const storage = {
+			getItem: (key: string) => stored.get(key) ?? null,
+			removeItem: (key: string) => void stored.delete(key),
+			setItem: (key: string, value: string) => void stored.set(key, value)
+		};
+		const load = (crossOriginIsolated: boolean, sessionStorage: object = storage) => {
+			const reload = vi.fn();
+			runInNewContext(isolationGuard!, {
+				crossOriginIsolated,
+				sessionStorage,
+				window: { location: { reload } }
+			});
+			return reload.mock.calls.length;
+		};
+
+		expect(load(false)).toBe(1);
+		// Isolation stayed unreachable after the reload: keep the page up in degraded mode.
+		expect(load(false)).toBe(0);
+		expect(load(false)).toBe(0);
+		// Reaching isolation re-arms the guard for a later non-isolated load (e.g. a hard reload).
+		expect(load(true)).toBe(0);
+		expect(stored.size).toBe(0);
+		expect(load(false)).toBe(1);
+		// Without usable storage the guard cannot hold, so never reload.
+		const unavailable = {
+			getItem() {
+				throw new Error('SecurityError');
+			}
+		};
+		expect(load(false, unavailable)).toBe(0);
+		const full = {
+			getItem: () => null,
+			setItem() {
+				throw new Error('QuotaExceededError');
+			}
+		};
+		expect(load(false, full)).toBe(0);
 	});
 
 	it('renders unmeasured activity without fabricating a completion position', () => {

@@ -135,6 +135,7 @@ async function createServiceWorkerHarness(
 		}
 		return new Response('not found', { status: 404 });
 	});
+	const cachesOpen = vi.fn();
 	const workerSelf = {
 		addEventListener(type: string, listener: (event: any) => void) {
 			const registered = listeners.get(type) ?? [];
@@ -158,7 +159,7 @@ async function createServiceWorkerHarness(
 			Request,
 			Response,
 			URL,
-			caches: { open: vi.fn() },
+			caches: { open: cachesOpen },
 			console,
 			fetch: fetchMock,
 			setTimeout,
@@ -170,6 +171,7 @@ async function createServiceWorkerHarness(
 	const fetchListener = listeners.get('fetch')?.[0];
 	if (!fetchListener) throw new Error('service worker did not register a fetch listener');
 	return {
+		cachesOpen,
 		fetchMock,
 		layerCacheState: layerCacheState as () => { bytes: number; entries: number },
 		setCompressedPayloads(nextPayloads: Record<string, Uint8Array>) {
@@ -196,6 +198,97 @@ async function createServiceWorkerHarness(
 }
 
 describe('compressed runtime service worker', () => {
+	it.each([
+		['opaqueredirect', `${scope}redirected`],
+		['opaque', 'https://cdn.example.net/no-cors.js']
+	] as const)('passes %s responses through unchanged', async (type, href) => {
+		const harness = await createServiceWorkerHarness({});
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		// Status 0 cannot be constructed in Node; shadow the getters like a browser response.
+		const response = new Response(null);
+		Object.defineProperties(response, { status: { value: 0 }, type: { value: type } });
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			input instanceof Request && input.url === href ? response : fetch(input, init)
+		);
+
+		expect(await harness.request(href)).toBe(response);
+	});
+
+	it('falls back to the network when local response synthesis throws', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const modulePath = '__wasm_idle_dynamic_modules__/generated.js';
+			const harness = await createServiceWorkerHarness({}, undefined, {
+				[modulePath]: new TextEncoder().encode('network module')
+			});
+			harness.cachesOpen.mockRejectedValue(new Error('Cache Storage unavailable'));
+
+			const response = await harness.request(modulePath);
+
+			expect(await response.text()).toBe('network module');
+			expect(consoleError).toHaveBeenCalledOnce();
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+
+	it('rejects instead of resolving undefined when the network fails', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const harness = await createServiceWorkerHarness({});
+			const fetch = harness.fetchMock.getMockImplementation()!;
+			harness.fetchMock.mockImplementation(async (input, init) => {
+				if (input instanceof Request && input.url === `${scope}offline.js`) {
+					throw new TypeError('Failed to fetch');
+				}
+				return fetch(input, init);
+			});
+
+			await expect(harness.request('offline.js')).rejects.toThrow('Failed to fetch');
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+
+	it.each([
+		'https://cdn.example.net/wasm-idle/wasm-php/assets/php.wasm',
+		'https://cdn.example.net/wasm-idle/wasm-rust/runtime/layered.wasm',
+		'https://cdn.example.net/wasm-idle/wasm-tinygo/vendor/wasm-rust-runtime/layered.wasm',
+		'https://cdn.example.net/wasm-idle/__wasm_idle_dynamic_modules__/generated.js',
+		'https://example.com/wasm-php/assets/php.wasm',
+		'https://example.com/wasm-rust/runtime/layered.wasm'
+	])('sends out-of-scope %s straight to the network', async (href) => {
+		const harness = await createServiceWorkerHarness(
+			{ 'wasm-php/assets/php.wasm': new TextEncoder().encode('local compressed') },
+			{
+				assets: {
+					'wasm-rust/runtime/layered.wasm': {
+						layer: 'layers/local.gz',
+						offset: 0,
+						length: 5
+					}
+				},
+				layers: { 'layers/local.gz': { bytes: new TextEncoder().encode('local') } }
+			}
+		);
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			input instanceof Request && input.url === href
+				? new Response('network')
+				: fetch(input, init)
+		);
+
+		const response = await harness.request(href);
+
+		expect(await response.text()).toBe('network');
+		expect(
+			harness.fetchMock.mock.calls.map(([input]) =>
+				input instanceof Request ? input.url : String(input)
+			)
+		).toEqual([href]);
+		expect(harness.cachesOpen).not.toHaveBeenCalled();
+	});
+
 	it('preserves exact final URLs for pinned AWK v2 network responses', async () => {
 		const receipt = 'a'.repeat(64);
 		for (const assetName of [

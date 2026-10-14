@@ -15,7 +15,19 @@
 					});
 					console.log('COOP/COEP Service Worker registered', registration.scope);
 					await navigator.serviceWorker.ready;
-					if (!crossOriginIsolated) window.location.reload();
+					// Reload at most once per tab: isolation can stay unreachable (for example in a
+					// cross-origin iframe without allow="cross-origin-isolated"), and the page must
+					// then stay usable in degraded mode instead of reloading forever.
+					const isolationReloadKey = 'wasm-idle:isolation-reload';
+					try {
+						if (crossOriginIsolated) sessionStorage.removeItem(isolationReloadKey);
+						else if (sessionStorage.getItem(isolationReloadKey) === null) {
+							sessionStorage.setItem(isolationReloadKey, '1');
+							window.location.reload();
+						}
+					} catch {
+						// Without sessionStorage the one-shot guard cannot hold, so do not reload.
+					}
 				} catch (err) {
 					console.log('COOP/COEP Service Worker failed to register', err);
 				}
