@@ -6,36 +6,38 @@ been implemented; unpassed promotion gates remain explicit.
 
 ## Review order
 
-| Work | PR | Base / dependency |
-| --- | --- | --- |
-| Scope and boundaries | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128) | main at implementation start |
-| Real Bash probe and backend decision | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133) | C-01, independent experiment |
-| Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks and #189 SDK typechecking pass; modified SDK execution pending |
-| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending |
-| Package/API | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135) | C-01 |
-| VFS and writer leases | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136) | C-03 |
-| Byte pipes/fds | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137) | C-04 |
-| WASI Worker Supervisor | [C-06 #138](https://github.com/seo-rii/wasm-idle/pull/138) | C-05 |
-| Pinned distribution index | [C-07 #139](https://github.com/seo-rii/wasm-idle/pull/139) | C-06 |
-| Verified asset loader | [C-08 #141](https://github.com/seo-rii/wasm-idle/pull/141) | C-07 |
-| Atomic lazy package mounts | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142) | C-08 |
-| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual Chromium batch C/C++ and the concrete selected-target header corpus pass on C-11 follow-ups; experimental profile and release gates remain |
-| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links, producer CLI, Chromium consumer and selected header corpus pass; clean build and release gates remain |
-| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache and selected header checks pass; experimental snapshot profile remains |
-| Selected-target header compile corpus | [C-11 headers #188](https://github.com/seo-rii/wasm-idle/pull/188) | #159; 13 established producer cases plus one resource fixture pass in actual Node/Chromium, with original receipts archived; compile-only scope |
-| Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
-| Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
-| BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
-| BusyBox B1 container qualification | [C-13 follow-up #163](https://github.com/seo-rii/wasm-idle/pull/163) | C-13 plus C-12 B1 artifact and portable fd/directory fixes |
-| Explicit workspace persistence | [C-17 #145](https://github.com/seo-rii/wasm-idle/pull/145) | C-10; independent of live shell |
-| Host CI and qualification ledger | [C-19 groundwork #147](https://github.com/seo-rii/wasm-idle/pull/147) | C-17; production release still gated |
-| Live VFS ownership and additive mounts | [C-14a #148](https://github.com/seo-rii/wasm-idle/pull/148) | C-19 groundwork |
-| Isolated live WASI and explicit byte pipelines | [C-14b #150](https://github.com/seo-rii/wasm-idle/pull/150) | C-14a; actual shell backend remains separate |
-| Workspace events and staged editor buffers | [C-16a #155](https://github.com/seo-rii/wasm-idle/pull/155) | C-14b; SDK binding independent of shell/UI renderer |
-| Terminal byte-stream UI binding | [C-16b #170](https://github.com/seo-rii/wasm-idle/pull/170) | C-16a; real guest and host failure/cancellation fixtures |
-| Actual BusyBox live VFS and pipes | [C-14 follow-up #171](https://github.com/seo-rii/wasm-idle/pull/171) | C-14b plus the external pinned B1 artifact; no shell interpreter |
-| Portable workspace backup and atomic restore | [C-18a #157](https://github.com/seo-rii/wasm-idle/pull/157) | C-16a |
-| Save state and optional autosave | [C-18b #164](https://github.com/seo-rii/wasm-idle/pull/164) | C-18a; explicit persistence owner remains separate |
+| Work                                           | PR                                                                               | Base / dependency                                                                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope and boundaries                           | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128)                       | main at implementation start                                                                                                                            |
+| Real Bash probe and backend decision           | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133)                       | C-01, independent experiment                                                                                                                            |
+| Pinned SDK bridge source experiment            | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft)     | C-02; source/protocol checks and #189 SDK typechecking pass; modified SDK execution pending                                                             |
+| Owned prepared-child command metadata          | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft)      | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending     |
+| Pinned SDK Wasm/web-glue build gate            | [C-02 SDK build #191](https://github.com/seo-rii/wasm-idle/pull/191) (draft)     | #189; eight admission/cleanup/static-inspection guards pass; actual SDK build and guest qualification pending                                           |
+| Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; original source/toolchain pins and eight producer guards pass; actual build/import receipt and SDK execution pending                              |
+| Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
+| VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
+| Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
+| WASI Worker Supervisor                         | [C-06 #138](https://github.com/seo-rii/wasm-idle/pull/138)                       | C-05                                                                                                                                                    |
+| Pinned distribution index                      | [C-07 #139](https://github.com/seo-rii/wasm-idle/pull/139)                       | C-06                                                                                                                                                    |
+| Verified asset loader                          | [C-08 #141](https://github.com/seo-rii/wasm-idle/pull/141)                       | C-07                                                                                                                                                    |
+| Atomic lazy package mounts                     | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142)                       | C-08                                                                                                                                                    |
+| LLVM tool-host and snapshot adapter            | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft)               | C-09; actual Chromium batch C/C++ and the concrete selected-target header corpus pass on C-11 follow-ups; experimental profile and release gates remain |
+| Opt-in LLVM driver/cwd producer ABI            | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft)       | wasm-llvm main; real raw links, producer CLI, Chromium consumer and selected header corpus pass; clean build and release gates remain                   |
+| Receipt-gated actual Clang browser fixture     | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft)      | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache and selected header checks pass; experimental snapshot profile remains   |
+| Selected-target header compile corpus          | [C-11 headers #188](https://github.com/seo-rii/wasm-idle/pull/188)               | #159; 13 established producer cases plus one resource fixture pass in actual Node/Chromium, with original receipts archived; compile-only scope         |
+| Real BusyBox B0 producer                       | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143)                       | C-01, separate producer branch                                                                                                                          |
+| Minimal BusyBox B1 producer                    | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156)             | C-12; selected profiles and native/WASI differential evidence                                                                                           |
+| BusyBox container qualification                | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146)                       | C-10 plus external C-12 verified artifact                                                                                                               |
+| BusyBox B1 container qualification             | [C-13 follow-up #163](https://github.com/seo-rii/wasm-idle/pull/163)             | C-13 plus C-12 B1 artifact and portable fd/directory fixes                                                                                              |
+| Explicit workspace persistence                 | [C-17 #145](https://github.com/seo-rii/wasm-idle/pull/145)                       | C-10; independent of live shell                                                                                                                         |
+| Host CI and qualification ledger               | [C-19 groundwork #147](https://github.com/seo-rii/wasm-idle/pull/147)            | C-17; production release still gated                                                                                                                    |
+| Live VFS ownership and additive mounts         | [C-14a #148](https://github.com/seo-rii/wasm-idle/pull/148)                      | C-19 groundwork                                                                                                                                         |
+| Isolated live WASI and explicit byte pipelines | [C-14b #150](https://github.com/seo-rii/wasm-idle/pull/150)                      | C-14a; actual shell backend remains separate                                                                                                            |
+| Workspace events and staged editor buffers     | [C-16a #155](https://github.com/seo-rii/wasm-idle/pull/155)                      | C-14b; SDK binding independent of shell/UI renderer                                                                                                     |
+| Terminal byte-stream UI binding                | [C-16b #170](https://github.com/seo-rii/wasm-idle/pull/170)                      | C-16a; real guest and host failure/cancellation fixtures                                                                                                |
+| Actual BusyBox live VFS and pipes              | [C-14 follow-up #171](https://github.com/seo-rii/wasm-idle/pull/171)             | C-14b plus the external pinned B1 artifact; no shell interpreter                                                                                        |
+| Portable workspace backup and atomic restore   | [C-18a #157](https://github.com/seo-rii/wasm-idle/pull/157)                      | C-16a                                                                                                                                                   |
+| Save state and optional autosave               | [C-18b #164](https://github.com/seo-rii/wasm-idle/pull/164)                      | C-18a; explicit persistence owner remains separate                                                                                                      |
 
 The initial CI/documentation PR is based on C-17; its [follow-up #167](https://github.com/seo-rii/wasm-idle/pull/167)
 is based on C-18b. They implement only the independently testable
@@ -109,7 +111,7 @@ as needed; no PR is automatically merged.
   argv including empty/Korean values, separate byte output, relative cwd files, nonzero exit,
   CPU-loop cancellation/restart and crash discard; no owned Workers remain.
 - Each cache case performs two executions separated by a page reload, with `Cache-Control:
-  no-store` and zero in-memory asset cache entries. Exactly one asset body request occurs;
+no-store` and zero in-memory asset cache entries. Exactly one asset body request occurs;
   command metadata lookup requests none. CacheStorage/IndexedDB retain the verified bytes.
 - The real WASI fixture SHA-256 is
   `d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982`.
@@ -164,14 +166,14 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 ## Blocked or incomplete gates
 
-| Gate | Observed boundary | Next experiment / owner |
-| --- | --- | --- |
-| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; #189 prepared-child metadata passes genuine SDK/example typechecking; linked SDK/glue, JS dispatch and common fd/FS routing still need actual guest acceptance before C-15 |
-| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate |
-| B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
-| P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
-| P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
-| C-19/20 | Local Chromium component evidence, including the selected header corpus; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
+| Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup                      | C-02 backend investigation; #189 prepared-child metadata passes genuine SDK/example typechecking; linked SDK/glue, JS dispatch and common fd/FS routing still need actual guest acceptance before C-15 |
+| G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
+| B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
+| P4 / shell MVP        | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent                                                                                                     | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users                                                                                                                   |
+| P5 / product beta     | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate                                                                                             | Product failure UI/lifecycle and full shell-based reload matrix                                                                                                                                        |
+| C-19/20               | Local Chromium component evidence, including the selected header corpus; no production release or performance baseline                                                                                                                            | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations                                                                                                |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
 real wasi-libc constructor fixture confirmed `getcwd`, relative reads, bad-cwd rejection and
@@ -351,6 +353,23 @@ source-only receipts keep their original identities. This pass qualifies Rust ty
 privacy and the exact pinned SDK API used by the external snapshot example. Actual Wasm SDK
 linking and generated JavaScript glue, JS registry dispatch, modified Bash execution,
 common fd/filesystem ownership and shell MVP acceptance remain separate gates.
+
+The #191 follow-up prepares a sealed offline release build and matching
+`wasm-bindgen 0.2.101` web glue, retaining raw and transformed Wasm identities.
+The exact CLI was built separately with its shipped lock, exit 0 and complete
+owned-process cleanup; this qualifies only the native build tool. Its executable
+SHA-256 is `f78ceef06ed9356f42408f2b32d2f621dfa6fd09f192a41320355abf7f9562cc`.
+The eight helper tests include a real small shared-memory Wasm static inspection
+under the proposed 12 GiB process address-space cap; they do not build the SDK.
+
+The parallel #192 producer preserves the original Bash, WASIX sysroot, WASI SDK
+and Binaryen pins, linking the actual C exec shim through the upstream build.
+Its eight argv/wrapper/import-profile guards and read-only plan pass. A separate
+Node/shared-Wasm preflight passes under the 8 GiB process address-space cap,
+with all processes reaped. Actual SDK and Bash builds remain pending; the
+bounded jobs are prepared to run sequentially without replacing existing
+artifacts or automatically retrying a failed attempt. Local module/Worker
+packaging and real shared fd/VFS/foreground cancellation are still required.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
