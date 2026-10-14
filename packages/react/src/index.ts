@@ -62,8 +62,11 @@ export function useWasmIdlePlayground(
 			generation
 		]
 	);
+	// A hidden <Activity> releases the binding but keeps memoized state. Replace it while rendering
+	// the reveal, so effects committed with it never receive the released binding.
+	if (owner.disposed) recreate();
 	useEffect(() => {
-		// A hidden <Activity> releases the binding but keeps memoized state; replace it when shown.
+		// Fallback for a reveal that skipped rendering this component.
 		if (owner.disposed) {
 			recreate();
 			return;

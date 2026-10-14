@@ -227,6 +227,60 @@ describe('useWasmIdlePlayground', () => {
 		expect(second.dispose).not.toHaveBeenCalled();
 		await second.load('C');
 	});
+
+	it('never hands the released binding to effects run by an Activity reveal', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const loads: Promise<unknown>[] = [];
+		const bindings: PlaygroundBinding[] = [];
+		function Consumer() {
+			const binding = useWasmIdlePlayground('/runtime', loadSandbox);
+			useEffect(() => {
+				bindings.push(binding);
+				loads.push(binding.load('C'));
+			}, [binding]);
+			return null;
+		}
+		const renderConsumer = (mode: 'hidden' | 'visible') =>
+			renderStrict(createElement(Activity, { mode, children: createElement(Consumer) }));
+
+		await renderConsumer('visible');
+		const first = bindings.at(-1)!;
+		await renderConsumer('hidden');
+		await vi.waitFor(() => expect(first.dispose).toHaveBeenCalledTimes(1));
+		bindings.length = 0;
+		loads.length = 0;
+		await renderConsumer('visible');
+
+		expect(bindings.length).toBeGreaterThan(0);
+		expect(bindings).not.toContain(first);
+		await expect(Promise.all(loads)).resolves.toHaveLength(loads.length);
+	});
+
+	it('recreates a released binding when an Activity reveal skips rendering the hook', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const rendered: PlaygroundBinding[] = [];
+		// Reusing the element lets React bail out of rendering Playground when it is shown again.
+		const playground = createElement(Playground, {
+			runtimeAssets: '/runtime',
+			loadSandbox,
+			rendered
+		});
+		const renderPlayground = (mode: 'hidden' | 'visible') =>
+			renderStrict(createElement(Activity, { mode, children: playground }));
+
+		await renderPlayground('visible');
+		const first = rendered.at(-1)!;
+		await renderPlayground('hidden');
+		await vi.waitFor(() => expect(first.dispose).toHaveBeenCalledTimes(1));
+		const renders = rendered.length;
+		await renderPlayground('visible');
+		const second = rendered.at(-1)!;
+
+		expect(rendered.length).toBeGreaterThan(renders);
+		expect(second).not.toBe(first);
+		expect(second.dispose).not.toHaveBeenCalled();
+		await second.load('C');
+	});
 });
 
 describe('useWasmIdleHost', () => {
