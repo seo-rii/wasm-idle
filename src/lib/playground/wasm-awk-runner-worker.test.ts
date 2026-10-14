@@ -298,7 +298,7 @@ describe('GoAWK runner worker', () => {
 		const legacyManifest = JSON.parse(
 			await readFile(new URL('runtime-manifest.v1.json', staticRuntimeUrl), 'utf8')
 		);
-		expect(legacyManifest.fingerprint).toBe('23c307a1611660f8');
+		expect(legacyManifest.fingerprint).toBe('5a2dcd7136e56204');
 		const renderedSource = renderAwkRunnerWorker(Buffer.from(await readWorkerSource()), {
 			profileId: manifest.profileId,
 			goShimReceipt: manifest.assets.goShim,

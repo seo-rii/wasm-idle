@@ -302,8 +302,16 @@ describe('persistent runtime asset cache', () => {
 		controller.abort(reason);
 		await rejected;
 		const second = readPersistentRuntimeAsset({ identity: identity(bytes) });
-		await vi.advanceTimersByTimeAsync(3001);
+		await vi.advanceTimersByTimeAsync(30_001);
 		expect(await second).toBeUndefined();
+		// Once a wait expired, later calls do not pay the full lock wait again for the same holder.
+		let thirdSettled = false;
+		const third = readPersistentRuntimeAsset({ identity: identity(bytes) }).finally(() => {
+			thirdSettled = true;
+		});
+		await vi.advanceTimersByTimeAsync(3001);
+		expect(thirdSettled).toBe(true);
+		expect(await third).toBeUndefined();
 		expect(storage.cacheOpen).toHaveBeenCalledTimes(1);
 		release.resolve();
 		const replacement = payload('new write');
@@ -322,6 +330,32 @@ describe('persistent runtime asset cache', () => {
 			bytes: replacement.byteLength
 		});
 		expect([...storage.bodies.values()][0].size).toBe(1);
+		// Acquiring the lock again restores the full wait for a busy holder.
+		const held = storage.lockRequest(
+			'wasm-idle-assets-v1:wasm-idle',
+			{ signal: new AbortController().signal },
+			() => new Promise<void>((resolve) => setTimeout(resolve, 5000))
+		);
+		const queued = readPersistentRuntimeAsset({ identity: identity(replacement) });
+		await vi.advanceTimersByTimeAsync(5001);
+		await held;
+		expect(await queued).toEqual(replacement);
+	});
+
+	it('waits for another holder of the namespace lock instead of reporting a false miss', async () => {
+		const bytes = payload('queued');
+		await writePersistentRuntimeAsset({ identity: identity(bytes), bytes });
+		vi.useFakeTimers();
+		// Another tab or worker keeps the lock for longer than one operation's deadline.
+		const held = storage.lockRequest(
+			'wasm-idle-assets-v1:wasm-idle',
+			{ signal: new AbortController().signal },
+			() => new Promise<void>((resolve) => setTimeout(resolve, 5000))
+		);
+		const pending = readPersistentRuntimeAsset({ identity: identity(bytes) });
+		await vi.advanceTimersByTimeAsync(5001);
+		await held;
+		expect(await pending).toEqual(bytes);
 	});
 
 	it('persists generated artifacts for a new backend and isolates exact configuration keys', async () => {
@@ -736,6 +770,31 @@ describe('persistent runtime asset cache', () => {
 		await clearRuntimeAssetCache();
 		expect(await getRuntimeAssetCacheStats()).toMatchObject({ available: true, entries: 0 });
 		expect(storage.bodies.get('wasm-idle-assets-v1:wasm-idle')!.size).toBe(0);
+	});
+
+	it('drops one corrupt metadata record without disabling writes for the namespace', async () => {
+		const kept = payload('kept');
+		await writePersistentRuntimeAsset({ identity: identity(kept), bytes: kept });
+		const metadata = storage.databases.get('wasm-idle-assets-v1:wasm-idle')!;
+		const bodies = storage.bodies.get('wasm-idle-assets-v1:wasm-idle')!;
+		const corrupt = identity(payload('corrupt')).sha256;
+		metadata.set(corrupt, { sha256: corrupt, bytes: -1, lastUsed: 0, references: [] });
+		bodies.set(
+			`https://wasm-idle.invalid/.runtime-assets/wasm-idle/${corrupt}`,
+			new Response(payload('corrupt'))
+		);
+		const next = payload('next');
+		expect(await writePersistentRuntimeAsset({ identity: identity(next), bytes: next })).toBe(
+			true
+		);
+		expect(await createRuntimeGeneratedAssetCacheBackend().write('pch', payload('pch'))).toBe(
+			true
+		);
+		expect(metadata.has(corrupt)).toBe(false);
+		expect(bodies.size).toBe(3);
+		expect(await readPersistentRuntimeAsset({ identity: identity(kept) })).toEqual(kept);
+		expect(await readPersistentRuntimeAsset({ identity: identity(next) })).toEqual(next);
+		expect(await getRuntimeAssetCacheStats()).toMatchObject({ available: true, entries: 3 });
 	});
 
 	it('makes persistence requests only through the explicit management method', async () => {

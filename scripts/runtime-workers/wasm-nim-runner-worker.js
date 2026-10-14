@@ -1047,7 +1047,8 @@ function createStdinReader(stdin, channel) {
 				}
 				if (Atomics.load(control, 2) === 1) return new Uint8Array();
 				self.postMessage({ type: 'stdin-request' });
-				Atomics.wait(control, 0, write);
+				// EOF/cancel may notify between the flag check and wait; recheck after a bounded wait.
+				Atomics.wait(control, 0, write, 100);
 			}
 		}
 	};

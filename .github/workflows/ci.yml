@@ -9,9 +9,19 @@ on:
         - cron: '17 18 * * *'
     workflow_dispatch:
 
+permissions:
+    contents: read
+
+# Only pull request runs share a group. changed-runtimes diffs each push against its own
+# `before` commit, so a push run replaced while pending would leave its runtimes untested.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     packages:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -50,9 +60,53 @@ jobs:
             - run: pnpm --dir packages/llvm-core run verify:package-boundary
             - run: pnpm run verify:package
 
+    workspace-unit:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: runtimes/wasm-tinygo/go.mod
+                  cache-dependency-path: runtimes/wasm-awk/go.sum
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm --dir packages/core build
+            - run: pnpm exec svelte-kit sync
+            - run: node --test scripts/*.test.mjs
+            - run: node --test runtimes/wasm-scala/src/candidate.test.mjs
+            - run: pnpm exec vitest run --root packages/node
+            - run: pnpm exec vitest run --root packages/svelte
+            - run: pnpm exec vitest run --root packages/vue
+            - run: pnpm --dir runtimes/wasm-d test
+            - run: pnpm --dir runtimes/wasm-dotnet test
+            - run: pnpm --dir runtimes/wasm-lisp test
+            - run: pnpm --dir runtimes/wasm-lua test
+            - run: pnpm --dir runtimes/wasm-typescript test
+            - run: pnpm --dir runtimes/wasm-wat test
+            # These five files hold stale assertions that fail on main; the rest of the suite runs.
+            - run: >-
+                  pnpm --dir runtimes/wasm-rust exec vitest run
+                  --exclude test/backend-probes.test.ts
+                  --exclude test/ci-script-contract.test.ts
+                  --exclude test/compiler-edge-cases.test.ts
+                  --exclude test/public-api-types.test.ts
+                  --exclude test/rustc-module-service.test.ts
+            - run: go test ./...
+              working-directory: runtimes/wasm-awk
+            - run: go test ./...
+              working-directory: runtimes/wasm-tinygo
+
     changed-runtimes:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         outputs:
             families: ${{ steps.changes.outputs.families }}
         steps:

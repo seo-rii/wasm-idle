@@ -500,4 +500,56 @@ func main() {
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('reports a nonzero exit without repeating already-streamed stderr', async () => {
+		const compilerModuleUrl = await createMockGoRuntimeModule(`
+			export async function createGoCompiler() {
+				return {
+					async compile(options) {
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								bytes: new Uint8Array([0, 97, 115, 109]),
+								target: options.target,
+								format: 'wasi-core-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserGoArtifact(_artifact, options = {}) {
+				options.stderr?.('panic: boom\\n');
+				return {
+					exitCode: 2,
+					stdout: '',
+					stderr: 'panic: boom\\n'
+				};
+			}
+
+			export default createGoCompiler;
+		`);
+
+		await import('./go');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, compilerUrl: compilerModuleUrl }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'package main\nfunc main() { panic("boom") }',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				stdin: ''
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'panic: boom\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'Go program exited with code 2' });
+	});
 });

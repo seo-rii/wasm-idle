@@ -79,7 +79,7 @@ describe('whitespace-only workspace names', () => {
 					.waitFor();
 				page.once('dialog', (dialog) => dialog.accept('\t '));
 				await page.getByRole('button', { name: 'Rename', exact: true }).click();
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const names = await page.evaluate(() =>
 					JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!).files.map(

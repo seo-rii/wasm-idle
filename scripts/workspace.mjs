@@ -6,12 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
-const GROUPS = ['packages', 'runtimes', 'apps'];
+const GROUPS = ['packages', 'runtimes'];
 
 function usage() {
 	console.log(`Usage:
-  node scripts/workspace.mjs list [--group packages|runtimes|apps]
-  node scripts/workspace.mjs run <script> [--group packages|runtimes|apps] [--filter name] [--public] [--if-present] [--continue]
+  node scripts/workspace.mjs list [--group packages|runtimes]
+  node scripts/workspace.mjs run <script> [--group packages|runtimes] [--filter name] [--public] [--if-present] [--continue]
 `);
 }
 

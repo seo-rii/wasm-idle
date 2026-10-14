@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { createRequire } from 'node:module';
@@ -59,7 +59,29 @@ async function withFilesystemLock(lockDir, timeoutMs, action) {
 			}
 			try {
 				const lockStat = statSync(lockDir);
-				if (Date.now() - lockStat.mtimeMs > timeoutMs) {
+				let ownerPid = 0;
+				try {
+					ownerPid = Number.parseInt(
+						readFileSync(path.join(lockDir, 'owner'), 'utf8'),
+						10
+					);
+				} catch {}
+				// A recorded owner keeps the lock for as long as its process lives, however long its
+				// build runs; only ownerless locks (mid-creation or from older writers) age out.
+				let stale = Date.now() - lockStat.mtimeMs > timeoutMs;
+				if (ownerPid > 0) {
+					try {
+						process.kill(ownerPid, 0);
+						stale = false;
+					} catch (error) {
+						stale = !(
+							error instanceof Error &&
+							'code' in error &&
+							error.code === 'EPERM'
+						);
+					}
+				}
+				if (stale) {
 					rmSync(lockDir, { force: true, recursive: true });
 					continue;
 				}
@@ -73,6 +95,7 @@ async function withFilesystemLock(lockDir, timeoutMs, action) {
 		}
 	}
 	try {
+		writeFileSync(path.join(lockDir, 'owner'), String(process.pid));
 		return await action();
 	} finally {
 		rmSync(lockDir, { force: true, recursive: true });

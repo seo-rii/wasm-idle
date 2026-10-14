@@ -1,6 +1,7 @@
 import {
 	createPlaygroundBinding,
 	type PlaygroundBinding,
+	type PlaygroundBindingOptions,
 	type SandboxLoader,
 	type SandboxRuntimeAssets,
 	type TerminalControl
@@ -35,19 +36,27 @@ function disposeInBackground(dispose: () => Promise<void>) {
 
 export function useWasmIdlePlayground(
 	runtimeAssets: MaybeRef<SandboxRuntimeAssets>,
-	loadSandbox: MaybeRef<SandboxLoader>
+	loadSandbox: MaybeRef<SandboxLoader>,
+	options?: MaybeRef<PlaygroundBindingOptions | undefined>
 ): Ref<PlaygroundBinding> {
 	let currentAssets = unref(runtimeAssets);
 	let currentLoader = unref(loadSandbox);
-	let currentBinding = createPlaygroundBinding(currentAssets, currentLoader);
+	let currentOptions = unref(options);
+	let currentBinding = createPlaygroundBinding(currentAssets, currentLoader, currentOptions);
 	const binding = computed(() => {
 		const nextAssets = unref(runtimeAssets);
 		const nextLoader = unref(loadSandbox);
-		if (nextAssets !== currentAssets || nextLoader !== currentLoader) {
+		const nextOptions = unref(options);
+		if (
+			nextAssets !== currentAssets ||
+			nextLoader !== currentLoader ||
+			nextOptions !== currentOptions
+		) {
 			const previousBinding = currentBinding;
 			currentAssets = nextAssets;
 			currentLoader = nextLoader;
-			currentBinding = createPlaygroundBinding(nextAssets, nextLoader);
+			currentOptions = nextOptions;
+			currentBinding = createPlaygroundBinding(nextAssets, nextLoader, nextOptions);
 			disposeInBackground(() => previousBinding.dispose());
 		}
 		return currentBinding;
@@ -60,9 +69,10 @@ export function useWasmIdlePlayground(
 
 export function useWasmIdleHost(
 	runtimeAssets: MaybeRef<SandboxRuntimeAssets>,
-	loadSandbox: MaybeRef<SandboxLoader>
+	loadSandbox: MaybeRef<SandboxLoader>,
+	options?: MaybeRef<PlaygroundBindingOptions | undefined>
 ): VueWasmIdleHost {
-	const binding = useWasmIdlePlayground(runtimeAssets, loadSandbox);
+	const binding = useWasmIdlePlayground(runtimeAssets, loadSandbox, options);
 	const terminal = shallowRef<TerminalControl | undefined>(undefined);
 	const dispose = async () => {
 		const currentTerminal = terminal.value;
@@ -97,6 +107,7 @@ export function useWasmIdleHost(
 
 export type {
 	PlaygroundBinding,
+	PlaygroundBindingOptions,
 	SandboxLoader,
 	SandboxRuntimeAssets,
 	TerminalControl

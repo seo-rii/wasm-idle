@@ -368,8 +368,17 @@ class Go implements Sandbox {
 					if (worker.onmessage === handler) worker.onmessage = null;
 					return;
 				}
-				const { output, results, error, buffer, diagnostic, progress, debugEvent, phase } =
-					event.data;
+				const {
+					output,
+					results,
+					error,
+					fatal,
+					buffer,
+					diagnostic,
+					progress,
+					debugEvent,
+					phase
+				} = event.data;
 				if (phase === 'compile' || phase === 'execute') {
 					if (phase !== activePhase) armTimeout(phase);
 				}
@@ -380,7 +389,14 @@ class Go implements Sandbox {
 				}
 				reportWorkerProgress(_prog, progress);
 				if (output) this.output(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+				// The worker compiles only the active source, which the compiler names main.go.
+				if (diagnostic)
+					this.oncompilerdiagnostic?.(
+						options.activePath &&
+							/(?:^|[\\/])main\.go$/u.test(diagnostic.fileName ?? '')
+							? { ...diagnostic, fileName: options.activePath }
+							: diagnostic
+					);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
 					cleanup();
@@ -401,7 +417,13 @@ class Go implements Sandbox {
 					this.waitingForInput = false;
 					this.pendingEof = false;
 					this.workerSession.complete(operation);
-					this.ondebug?.({ type: 'stop' });
+					if (fatal === true && this.worker === worker) {
+						// The worker abandoned a program that may still be running; terminating
+						// it stops that program, and disposal reports the debug stop.
+						this.workerSession.reset();
+					} else {
+						this.ondebug?.({ type: 'stop' });
+					}
 					reject(error);
 				}
 			};

@@ -1672,7 +1672,7 @@ export async function executeBrowserDotnetArtifact() {
 		expect(workerInstances).toHaveLength(2);
 	});
 
-	it('collects stdin submitted immediately after a cached run starts', async () => {
+	it('collects every stdin chunk submitted after a cached run starts until EOF', async () => {
 		const sandbox = new Dotnet();
 		const code = 'let input = System.Console.ReadLine()';
 
@@ -1681,6 +1681,12 @@ export async function executeBrowserDotnetArtifact() {
 		await vi.dynamicImportSettled();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
 		sandbox.write('9\n');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		sandbox.write('10\n');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		sandbox.eof();
 		await expect(runPromise).resolves.toBe(true);
 
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -1689,7 +1695,7 @@ export async function executeBrowserDotnetArtifact() {
 				prepare: false,
 				code,
 				language: 'fsharp',
-				stdin: '9\n'
+				stdin: '9\n10\n'
 			})
 		);
 	});
@@ -1759,6 +1765,7 @@ export async function executeBrowserDotnetArtifact() {
 		await Promise.resolve();
 		expect(worker?.postMessage).toHaveBeenCalledTimes(2);
 		sandbox.write('fresh\n');
+		sandbox.eof();
 		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(3));
 		expect(worker?.postMessage.mock.calls[2]?.[0]).toEqual(
 			expect.objectContaining({ stdin: 'fresh\n' })
@@ -1823,6 +1830,7 @@ export async function executeBrowserDotnetArtifact() {
 		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const retry = sandbox.run(code, false);
+		sandbox.eof();
 		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
 		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
 			expect.objectContaining({ stdin: 'fresh after terminate\n' })
@@ -1848,6 +1856,7 @@ export async function executeBrowserDotnetArtifact() {
 		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const replacementWorker = workerInstances[1];
 		const retry = sandbox.run(code, false);
+		sandbox.eof();
 		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
 		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
 			expect.objectContaining({ stdin: 'fresh after waiter termination\n' })
@@ -1882,6 +1891,7 @@ export async function executeBrowserDotnetArtifact() {
 		expect(worker?.terminate).not.toHaveBeenCalled();
 
 		sandbox.write('input for active run\n');
+		sandbox.eof();
 		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
 		expect(worker?.postMessage.mock.calls[1]?.[0]).toEqual(
 			expect.objectContaining({ stdin: 'input for active run\n' })
@@ -1964,6 +1974,7 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 			await Promise.resolve();
 			expect(execute).toHaveBeenCalledOnce();
 			sandbox.write('fresh\n');
+			sandbox.eof();
 			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
 			expect(execute.mock.calls[1]?.[1]).toEqual(
 				expect.objectContaining({ stdin: 'fresh\n' })
@@ -1979,6 +1990,7 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 			expect(sandbox.pendingInput).toEqual(['fresh after main-thread termination\n']);
 
 			const retry = sandbox.run(code, false);
+			sandbox.eof();
 			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
 			expect(execute.mock.calls[2]?.[1]).toEqual(
 				expect.objectContaining({ stdin: 'fresh after main-thread termination\n' })
@@ -1998,6 +2010,7 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 			});
 			expect(execute).toHaveBeenCalledTimes(3);
 			sandbox.write('input for active main-thread run\n');
+			sandbox.eof();
 			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(4));
 			expect(execute.mock.calls[3]?.[1]).toEqual(
 				expect.objectContaining({ stdin: 'input for active main-thread run\n' })
@@ -3069,7 +3082,9 @@ export async function executeBrowserDotnetArtifact() {
 		expect(sandbox.pendingInput).toEqual(['replacement main-thread input\n']);
 		expect(execute).not.toHaveBeenCalled();
 
-		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		const retry = sandbox.run(code, false);
+		sandbox.eof();
+		await expect(retry).resolves.toBe(true);
 		expect(execute).toHaveBeenCalledOnce();
 		expect(execute.mock.calls[0]?.[1]).toEqual(
 			expect.objectContaining({ stdin: 'replacement main-thread input\n' })
