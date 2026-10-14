@@ -4,7 +4,11 @@ import {
 	snapshotDOuterAssetConfig,
 	type DOuterAssetConfig
 } from '$lib/playground/dOuterAssets';
-import { createRuntimeAssetsKey, verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import {
+	createRuntimeAssetsKey,
+	requestRuntimeWasmModule,
+	verifyRuntimeAssetIntegrity
+} from '@wasm-idle/core';
 
 declare var self: any;
 
@@ -30,6 +34,7 @@ let runtimePromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+let compilerModulePorts: Partial<Record<'ldc2' | 'lld', MessagePort>> | undefined;
 
 async function loadRuntime(config: DOuterAssetConfig) {
 	const snapshot = snapshotDOuterAssetConfig(config);
@@ -80,7 +85,13 @@ async function loadRuntime(config: DOuterAssetConfig) {
 			compiler: await factory({
 				runtimeBaseUrl: runtimeBaseUrl.href,
 				manifest,
-				verifyRuntimeAssetIntegrity
+				verifyRuntimeAssetIntegrity,
+				compileModule(kind: 'ldc2' | 'lld', bytes: Uint8Array, signal?: AbortSignal) {
+					const port = compilerModulePorts?.[kind];
+					return port
+						? requestRuntimeWasmModule(Uint8Array.from(bytes), port, { signal })
+						: WebAssembly.compile(Uint8Array.from(bytes).buffer);
+				}
 			}),
 			executeBrowserDArtifact: module.executeBrowserDArtifact
 		};
@@ -141,6 +152,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		stdinBufferD = new Int32Array(buffer);
+		compilerModulePorts = event.data.compilerModulePorts;
 		if (!runtimeConfig) throw new Error('D runtime has not been loaded');
 		const runtime = await loadRuntime(runtimeConfig);
 		const compileCacheKey = `${fileName}\n${code}`;

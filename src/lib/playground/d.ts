@@ -7,10 +7,12 @@ import {
 	BusyError,
 	CancelledError,
 	createRuntimeAssetsKey,
+	createRuntimeWasmModuleService,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
 	RuntimeConfigurationError,
+	RuntimeAssetCache,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -29,6 +31,8 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { WASM_D_COMPILER_PROFILE } from '$lib/playground/wasmDVersion';
+import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 
 type DOperation = {
 	token: symbol;
@@ -68,6 +72,8 @@ class D implements Sandbox {
 	pendingEof = false;
 	private activeOperation: DOperation | null = null;
 	private disposed = false;
+	private runtimeAssetCache = new RuntimeAssetCache();
+	private ownsRuntimeAssetCache = true;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('D sandbox disposed', {
 		phase: 'dispose',
@@ -410,7 +416,34 @@ class D implements Sandbox {
 		}
 	}
 
-	run(
+	async run(
+		code: string,
+		prepare: boolean,
+		log = true,
+		progress?: SandboxProgress,
+		args: string[] = [],
+		options: SandboxExecutionOptions = {}
+	): Promise<boolean | string> {
+		if (!this.worker && this.moduleUrl && this.outerIntegrity && !this.disposed) {
+			await this.load(
+				{
+					d: {
+						moduleUrl: this.moduleUrl,
+						manifestUrl: this.manifestUrl,
+						integrity: this.outerIntegrity
+					}
+				},
+				'',
+				log,
+				[],
+				options,
+				progress
+			);
+		}
+		return this.runLoaded(code, prepare, log, progress, args, options);
+	}
+
+	private runLoaded(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -512,6 +545,9 @@ class D implements Sandbox {
 				} catch {
 					// Handler cleanup must not replace the operation result.
 				}
+				// Only immutable compiler modules survive a run. Retire the worker, its
+				// Emscripten heaps, filesystem and compiled guest before the next run.
+				this.workerSession.reset();
 				return true;
 			};
 			const failRun = (error: unknown, disposeWorker = false) => {
@@ -595,15 +631,59 @@ class D implements Sandbox {
 			if (!ownsRun()) return;
 			this.begin = Date.now();
 			try {
-				worker.postMessage({
+				const modulePorts: Partial<Record<'ldc2' | 'lld', MessagePort>> = {};
+				const profile = WASM_D_COMPILER_PROFILE;
+				// Custom runtime bundles keep their independent compiler path. A worker
+				// cannot choose the host's receipt, loader profile or authorization key.
+				if (
+					typeof MessageChannel === 'function' &&
+					this.outerIntegrity?.['runtime/runtime-manifest.v1.json'].sha256 ===
+						profile.manifestSha256 &&
+					this.outerIntegrity?.['index.js'].sha256 ===
+						WASM_D_OUTER_ASSET_RECEIPTS['index.js'].sha256
+				) {
+					for (const kind of ['ldc2', 'lld'] as const) {
+						const service = createRuntimeWasmModuleService({
+							cache: this.runtimeAssetCache,
+							receipt: profile[kind],
+							identity: JSON.stringify([
+								'wasm-d-verified-compiler-v1',
+								this.activeDAssetsKey,
+								profile.version,
+								profile.manifestSha256,
+								kind,
+								...(kind === 'lld'
+									? [
+											profile.lldProfile,
+											profile.lldLoaderSha256,
+											profile.lldDataSha256
+										]
+									: [])
+							]),
+							compileKey:
+								kind === 'lld'
+									? 'emscripten-lld16-instantiate-v1'
+									: 'ldc2-wasi-preview1-v1',
+							maxAssetBytes: limits.maxAssetBytes,
+							signal
+						});
+						activeOperation.cleanups.push(() => service.close());
+						modulePorts[kind] = service.port;
+					}
+				}
+				const message = {
 					code,
 					prepare,
 					buffer: this.buffer,
 					args: programArgs,
 					stdin,
 					fileName: workspace.activePath,
-					log: _log
-				});
+					log: _log,
+					...(modulePorts.ldc2 ? { compilerModulePorts: modulePorts } : {})
+				};
+				const transfers = Object.values(modulePorts);
+				if (transfers.length) worker.postMessage(message, transfers);
+				else worker.postMessage(message);
 			} catch (error) {
 				failRun(error, true);
 			}
@@ -629,6 +709,18 @@ class D implements Sandbox {
 		this.exit = true;
 		this.workerSession.terminate(reason);
 		this.cleanupOperation(operation);
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (cache === this.runtimeAssetCache) return;
+		if (this.worker || this.activeOperation || this.disposed) {
+			throw new Error(
+				'Cannot replace the D runtime asset cache while its worker is active or disposed'
+			);
+		}
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+		this.runtimeAssetCache = cache;
+		this.ownsRuntimeAssetCache = false;
 	}
 
 	kill() {
@@ -665,6 +757,7 @@ class D implements Sandbox {
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
 		this.disposed = true;
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
 		this.disposePromise = Promise.resolve();
 
 		const activeOperation = this.activeOperation;
