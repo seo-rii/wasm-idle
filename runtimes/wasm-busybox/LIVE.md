@@ -5,6 +5,14 @@ from the container host. The producer's native and Node WASI gates must already
 pass. It exercises the real BusyBox binary through the isolated live adapter,
 first in Node Workers and then in Chromium Dedicated Workers.
 
+The committed [receipt](evidence/container-live-b1.json) records 17 passing
+checks in Node and the same 17 in Chromium 153.0.8010.12, against container
+commit `cdbba22066ea57e81bc86112d9b5402d5e5be3e5`. Both backends fetched the
+447,557-byte asset once and ended with zero owned Workers and processes.
+The BusyBox artifact SHA-256 is
+`547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`.
+The fixture and host module hashes remained unchanged throughout that run.
+
 ```sh
 node runtimes/wasm-busybox/scripts/test-live-container.mjs \
   --producer-work /path/to/verified/busybox-producer-output \
