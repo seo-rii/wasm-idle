@@ -84,11 +84,36 @@ const statementEndTokens = new Set([
 
 type LexState = { rawString: boolean; blockComment: boolean };
 
-// '{' is a brace that holds no statements: a composite literal or a struct/interface body.
-type Frame = '(' | '[' | '{' | 'block';
+// '{' is a composite literal and 'type' a struct/interface body; neither holds statements.
+type Frame = '(' | '[' | '{' | 'type' | 'block';
+
+function isIdentifier(token: string | undefined) {
+	return token !== undefined && /^[\p{L}_]/u.test(token) && !goKeywords.has(token);
+}
 
 function endsStatement(token: string) {
-	return statementEndTokens.has(token) || (/^[\p{L}_]/u.test(token) && !goKeywords.has(token));
+	return statementEndTokens.has(token) || isIdentifier(token);
+}
+
+// Inside an if/for/switch header Go reads `T{` as the block, but `[]T{`, `[N]*pkg.T{`,
+// `map[K]V{` and `struct{...}{` still open composite literals.
+function followsLiteralType(tokens: string[], braceIndex: number, closedFrame?: Frame) {
+	let index = braceIndex - 1;
+	if (tokens[index] === '}') return closedFrame === 'type';
+	if (!isIdentifier(tokens[index])) return false;
+	index -= 1;
+	if (tokens[index] === '.' && isIdentifier(tokens[index - 1])) index -= 2;
+	const pointer = tokens[index] === '*';
+	while (tokens[index] === '*') index -= 1;
+	if (tokens[index] !== ']') return false;
+	if (!pointer) return true;
+	// `a[i] * b {` multiplies; only `[]*T` and `map[K]*V` are element types.
+	let open = index - 1;
+	for (let depth = 1; open >= 0; open -= 1) {
+		if (tokens[open] === ']') depth += 1;
+		else if (tokens[open] === '[' && --depth === 0) break;
+	}
+	return open === index - 1 || tokens[open - 1] === 'map';
 }
 
 function lineTokens(line: string, state: LexState) {
@@ -236,6 +261,7 @@ function instrumentFunctionLines(source: string) {
 	// header still awaits its block.
 	let pendingFunctionDepths: number[] = [];
 	let headerDepth = -1;
+	let closedFrame: Frame | undefined;
 	let previousToken = ';';
 	let continuesStatement = false;
 	let followsLabel = false;
@@ -273,7 +299,7 @@ function instrumentFunctionLines(source: string) {
 			if (token === '(' || token === '[') {
 				frames.push(token);
 			} else if (token === ')' || token === ']' || token === '}') {
-				frames.pop();
+				closedFrame = frames.pop();
 				if (token === '}') braces -= 1;
 				pendingFunctionDepths = pendingFunctionDepths.filter(
 					(pending) => pending <= frames.length
@@ -286,16 +312,18 @@ function instrumentFunctionLines(source: string) {
 					pendingFunctionDepths = pendingFunctionDepths.filter(
 						(pending) => pending !== depth
 					);
+				} else if (previousToken === 'struct' || previousToken === 'interface') {
+					frame = 'type';
 				} else if (
-					previousToken !== 'struct' &&
-					previousToken !== 'interface' &&
-					(['else', 'for', 'switch', 'select'].includes(previousToken) ||
-						(headerDepth === depth && tokenIndex === tokens.length - 1) ||
-						([';', '{', ':'].includes(previousToken) &&
-							(frames.at(-1) ?? 'block') === 'block'))
+					['else', 'for', 'switch', 'select'].includes(previousToken) ||
+					(headerDepth === depth &&
+						tokenIndex === tokens.length - 1 &&
+						!followsLiteralType(tokens, tokenIndex, closedFrame)) ||
+					([';', '{', ':'].includes(previousToken) &&
+						(frames.at(-1) ?? 'block') === 'block')
 				) {
 					// Go ends an if/for/switch header at the `{` that closes its line; any other
-					// `{` after an operand (`P{`, `[]int{`, `struct {`) opens a literal or type body.
+					// `{` after an operand (`P{`, `[]int{`) opens a literal.
 					frame = 'block';
 					if (headerDepth === depth) headerDepth = -1;
 				}
@@ -327,7 +355,9 @@ function instrumentFunctionLines(source: string) {
 			}
 		}
 
-		if (functionName && braces > 0) {
+		// A signature line that ends inside a raw string or block comment has no place for the
+		// entry hook; leave that function uninstrumented rather than edit the literal.
+		if (functionName && braces > 0 && !lexState.rawString && !lexState.blockComment) {
 			const bodyIndent = `${indent}\t`;
 			instrumented.push(
 				`${bodyIndent}__wasmIdleDebugEnter(${JSON.stringify(functionName)}, ${lineNumber})`,

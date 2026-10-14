@@ -114,6 +114,45 @@ func main() {
 		expect(output).toContain('__wasmIdleDebugLine(15)');
 	});
 
+	it('keeps hooks out of multi-line composite literals in loop and switch headers', () => {
+		const output = instrumentGoDebugSource(`package main
+
+func main() {
+	for _, tc := range []struct {
+		name string
+	}{
+		{"a"},
+	} {
+		println(tc.name)
+	}
+	for _, v := range []int{
+		1,
+	} {
+		println(v)
+	}
+	for _, p := range []*P{
+		{X: 1},
+	} {
+		println(p.X)
+	}
+	a := []int{3}
+	switch a[0] * v {
+	case 3:
+		println(a)
+	}
+}`);
+
+		expect(output).toContain('__wasmIdleDebugLine(4)');
+		expect(output).not.toContain('__wasmIdleDebugLine(5)');
+		expect(output).not.toContain('__wasmIdleDebugLine(7)');
+		expect(output).toContain('__wasmIdleDebugLine(9)');
+		expect(output).not.toContain('__wasmIdleDebugLine(12)');
+		expect(output).toContain('__wasmIdleDebugLine(14)');
+		expect(output).not.toContain('__wasmIdleDebugLine(17)');
+		expect(output).toContain('__wasmIdleDebugLine(19)');
+		expect(output).toContain('__wasmIdleDebugLine(24)');
+	});
+
 	it('does not place hooks on lines that continue the previous statement', () => {
 		const output = instrumentGoDebugSource(`package main
 
@@ -162,5 +201,22 @@ func after() {
 		expect(output).toContain('__wasmIdleDebugLine(7)');
 		expect(output).toContain('__wasmIdleDebugEnter("after", 10)');
 		expect(output).toContain('__wasmIdleDebugLine(11)');
+	});
+
+	it('does not insert the entry hook into a raw string opened on the signature line', () => {
+		const output = instrumentGoDebugSource(`package main
+
+func usage() { print(\`Usage:
+  run {
+\`) }
+
+func main() {
+	usage()
+}`);
+
+		expect(output).toContain('func usage() { print(`Usage:\n  run {\n`) }');
+		expect(output).not.toContain('__wasmIdleDebugEnter("usage"');
+		expect(output).toContain('__wasmIdleDebugEnter("main", 7)');
+		expect(output).toContain('__wasmIdleDebugLine(8)');
 	});
 });
