@@ -18,8 +18,10 @@ describe('required CI workflow gates', () => {
 		const jobBlocks = jobs.split(/^(?= {4}[a-z-]+:$)/m).slice(1);
 
 		expect(workflow).toContain('\npermissions:\n    contents: read\n');
+		// Push runs must never share a group: a pending push run replaced by a newer one would
+		// drop the runtimes it changed from changed-runtimes, which diffs against `before`.
 		expect(workflow).toContain(
-			'    group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}'
+			"    group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
 		);
 		expect(workflow).toContain(
 			"    cancel-in-progress: ${{ github.event_name == 'pull_request' }}"

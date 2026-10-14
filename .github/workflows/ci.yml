@@ -12,8 +12,10 @@ on:
 permissions:
     contents: read
 
+# Only pull request runs share a group. changed-runtimes diffs each push against its own
+# `before` commit, so a push run replaced while pending would leave its runtimes untested.
 concurrency:
-    group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+    group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
