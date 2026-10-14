@@ -288,6 +288,20 @@ async function makeFixture() {
 	return { root, targetDir, versionModulePath, graphLockPath };
 }
 
+async function compressToolchainFixture(targetDir: string) {
+	const assets: Array<{ assetPath: string; logical: Buffer; storage: Buffer }> = [];
+	for (const fileName of ['tinygo-compiler.wasm', 'tinygo-package-graph.wasm', 'lld.wasm']) {
+		const assetPath = `tools/upstream/${fileName}`;
+		const logical = await readFile(path.join(targetDir, assetPath));
+		// Delivery receipts must describe these existing bytes, even at a different gzip level.
+		const storage = gzipSync(logical, { level: 1 });
+		await writeFixtureFile(targetDir, `${assetPath}.gz`, storage);
+		await rm(path.join(targetDir, assetPath));
+		assets.push({ assetPath, logical, storage });
+	}
+	return assets;
+}
+
 async function readProtectedFiles(targetDir: string) {
 	const relativePaths = [
 		'tools/upstream/lld.wasm',
@@ -341,6 +355,53 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(lstat(controls.syncLockPath)).rejects.toThrow();
 		await expect(lstat(controls.transactionMarkerPath)).rejects.toThrow();
 	});
+
+	it('refreshes a compressed-only toolchain while retaining its actual delivery receipts', async () => {
+		const fixture = await makeFixture();
+		const assets = await compressToolchainFixture(fixture.targetDir);
+		const result = await syncWasmTinyGoDist(fixture);
+		for (const { assetPath, logical, storage } of assets) {
+			expect(result.profile.assetReceipts[assetPath]).toEqual({
+				bytes: storage.byteLength,
+				sha256: sha256(storage),
+				uncompressedBytes: logical.byteLength,
+				uncompressedSha256: sha256(logical)
+			});
+			expect(await readFile(path.join(fixture.targetDir, `${assetPath}.gz`))).toEqual(
+				storage
+			);
+			await expect(lstat(path.join(fixture.targetDir, assetPath))).rejects.toMatchObject({
+				code: 'ENOENT'
+			});
+		}
+	});
+
+	it.each(['hash mismatch', 'logical size overflow'])(
+		'rejects compressed toolchain %s before publishing a new graph',
+		async (failure) => {
+			const fixture = await makeFixture();
+			const [compiler] = await compressToolchainFixture(fixture.targetDir);
+			const logical =
+				failure === 'hash mismatch'
+					? Buffer.from(compiler.logical)
+					: Buffer.concat([compiler.logical, Buffer.from([0])]);
+			if (failure === 'hash mismatch') logical[0] ^= 1;
+			await writeFixtureFile(
+				fixture.targetDir,
+				`${compiler.assetPath}.gz`,
+				gzipSync(logical)
+			);
+			const originalEntry = await readFile(path.join(fixture.targetDir, 'upstream.js'));
+			const originalVersion = await readFile(fixture.versionModulePath);
+			await expect(syncWasmTinyGoDist(fixture)).rejects.toThrow(
+				failure === 'hash mismatch' ? 'does not bind' : 'pinned logical byte bound'
+			);
+			expect(await readFile(path.join(fixture.targetDir, 'upstream.js'))).toEqual(
+				originalEntry
+			);
+			expect(await readFile(fixture.versionModulePath)).toEqual(originalVersion);
+		}
+	);
 
 	it('pins the checked-in executable graph receipts', async () => {
 		const repositoryRoot = path.resolve(import.meta.dirname, '..', '..');

@@ -619,17 +619,48 @@ async function createRuntimeProfile(runtimeDir) {
 	const assetReceipts = {};
 	for (const evidence of evidenceEntries) {
 		const assetPath = path.posix.join(manifestDirectory, evidence.path);
-		const bytes = await readRegularFileOnce(
-			path.join(runtimeDir, assetPath),
-			`wasm-tinygo toolchain asset ${assetPath}`
-		);
+		const logicalPath = path.join(runtimeDir, assetPath);
+		const rawMetadata = await lstat(logicalPath).catch((error) => {
+			if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+				return null;
+			throw error;
+		});
+		let storageBytes;
+		let bytes;
+		if (rawMetadata) {
+			bytes = await readRegularFileOnce(
+				logicalPath,
+				`wasm-tinygo toolchain asset ${assetPath}`
+			);
+		} else {
+			// Published bundles retain gzip transport files instead of raw Wasm duplicates.
+			storageBytes = await readRegularFileOnce(
+				`${logicalPath}.gz`,
+				`wasm-tinygo compressed toolchain asset ${assetPath}`
+			);
+			try {
+				bytes = gunzipSync(storageBytes, { maxOutputLength: Math.max(1, evidence.bytes) });
+			} catch (error) {
+				throw new Error(
+					`wasm-tinygo toolchain gzip ${assetPath} is invalid or exceeds its pinned logical byte bound`,
+					{ cause: error }
+				);
+			}
+		}
 		if (bytes.byteLength !== evidence.bytes || sha256(bytes) !== evidence.sha256) {
 			throw new Error(`wasm-tinygo upstream manifest does not bind ${assetPath}`);
 		}
 		if (Object.prototype.hasOwnProperty.call(assetReceipts, assetPath)) {
 			throw new Error(`wasm-tinygo upstream manifest repeats ${assetPath}`);
 		}
-		assetReceipts[assetPath] = makeAssetReceipt(assetPath, bytes);
+		assetReceipts[assetPath] = storageBytes
+			? {
+					bytes: storageBytes.byteLength,
+					sha256: sha256(storageBytes),
+					uncompressedBytes: bytes.byteLength,
+					uncompressedSha256: evidence.sha256
+				}
+			: makeAssetReceipt(assetPath, bytes);
 	}
 	const manifestReceipt = { bytes: manifestBytes.byteLength, sha256: sha256(manifestBytes) };
 	return Object.freeze({
