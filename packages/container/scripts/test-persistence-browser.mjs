@@ -4,10 +4,11 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const coreRoot = resolve(root, '../core/dist');
+const coreRoot = dirname(fileURLToPath(import.meta.resolve('@wasm-idle/core')));
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -198,12 +199,41 @@ try {
     try { await owner.flush(); } catch (error) { code = error.code; }
     const memoryFiles = owner.fs.readdir('/workspace').length;
     const failed = owner.inspect();
+    const { createWorkspaceBackup } = await import('/dist/workspace/index.js');
+    globalThis.unsavedBackup = await createWorkspaceBackup(owner.fs);
     await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'metadata-budget', maxMetadataBytes: 1024 });
     return { code, failed, memoryFiles, storedFiles: owner.fs.readdir('/workspace'), text: decode(owner.fs.readFile('/workspace/file')) };
   });
   assert.equal(budget.code, 'STORAGE'); assert.equal(budget.failed.dirty, true);
   assert.equal(budget.memoryFiles, 11); assert.deepEqual(budget.storedFiles, ['file']); assert.equal(budget.text, 'baseline');
   checks.push('PERSIST-02: metadata budget failure preserves the previous root and unsaved in-memory files');
+
+  const imported = await page.evaluate(async () => {
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'backup-restore' });
+    const { createWorkspaceBackup, restoreWorkspaceBackup } = await import('/dist/workspace/index.js');
+    owner.fs.writeFile('previous', encode('previous')); await owner.flush();
+    owner.fs.writeFile('/tmp/keep', encode('temporary'));
+    await (await caches.open('independent-runtime-cache')).put('/asset', new Response('verified asset'));
+    const before = owner.inspect().committedSequence;
+    const restored = await restoreWorkspaceBackup(owner.fs, unsavedBackup, { replace: true });
+    const dirty = owner.inspect();
+    const corrupt = unsavedBackup.slice(); corrupt[corrupt.length - 33] ^= 1;
+    let rejected;
+    try { await restoreWorkspaceBackup(owner.fs, corrupt, { replace: true }); } catch (error) { rejected = error.code; }
+    const preserved = owner.fs.readdir('/workspace').length;
+    const cache = await (await (await caches.open('independent-runtime-cache')).match('/asset')).text();
+    const temporary = decode(owner.fs.readFile('/tmp/keep'));
+    await owner.flush(); await owner.dispose();
+    const exportAfterDispose = (await createWorkspaceBackup(owner.fs)).length;
+    owner = await persistence.openPersistentWorkspace({ id: 'backup-restore' });
+    return { before, restored, dirty, rejected, preserved, cache, temporary, exportAfterDispose, files: owner.fs.readdir('/workspace'), baseline: decode(owner.fs.readFile('file')) };
+  });
+  assert.equal(imported.dirty.dirty, true); assert.equal(imported.dirty.committedSequence, imported.before);
+  assert.equal(imported.restored.entries, 12); assert.equal(imported.rejected, 'INTEGRITY'); assert.equal(imported.preserved, 11);
+  assert.equal(imported.cache, 'verified asset'); assert.equal(imported.temporary, 'temporary');
+  assert.ok(imported.exportAfterDispose > 44); assert.equal(imported.files.length, 11); assert.equal(imported.baseline, 'baseline');
+  checks.push('C18: failed-save backup restores all unsaved files, stays dirty until flush, and leaves runtime cache/tmp intact');
+  checks.push('C18: corrupt backup cannot replace files; explicit flush/reopen retains the complete restored workspace');
 
   const integration = await page.evaluate(async () => {
     await owner.dispose();
@@ -241,8 +271,11 @@ try {
   const implementation = await readFile(resolve(root, 'dist/fs/persistence/index.js'));
   const evidence = {
     schemaVersion: 1, browser: await browser.version(), platform: process.platform,
+    applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     userAgent: initial.userAgent, secureContext: initial.secure, isolatedProfileRequired: false,
     implementationSha256: createHash('sha256').update(implementation).digest('hex'),
+    backupImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/backup.js'))).digest('hex'),
+    filesystemImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/fs/memory.js'))).digest('hex'),
     results: checks, fixtureCount: checks.length
   };
   if (process.env.CONTAINER_PERSISTENCE_EVIDENCE) {

@@ -52,6 +52,36 @@ lifetime: container disposal preserves its VFS and does not dispose editor/watch
 objects still held by the application. Neither file bodies nor environment data
 are included in event notifications.
 
+## Explicit backup and replacement
+
+`createWorkspaceBackup(container.fs)` copies one published memory revision into a
+portable `Uint8Array`, including unsaved `/workspace` file bytes, directory/file
+metadata and literal symlink targets. It excludes `/tmp`, package mounts and runtime
+asset caches. It also works on the retained VFS after owner/container disposal or a
+failed durable save. The host chooses when to present a file download; no network
+upload or browser download is triggered by the SDK.
+
+`restoreWorkspaceBackup(container.fs, bytes, { replace: true })` explicitly replaces
+the whole published workspace. It checks the complete archive before taking an
+exclusive writer lease and atomically publishing the replacement. A running live
+process, snapshot writer or open host descriptor returns `EBUSY`. Existing editor
+buffers retain their unsaved content and detect the replacement on publication.
+Restoration allocates new inode identities and retains the target workspace mount
+root's identity/metadata; file and nested directory timestamps/modes are restored.
+The result reports the source and new generation. It does **not** call `flush()`;
+the host must show this replacement as unsaved until explicit durable publication.
+
+The version-1 format is eight magic bytes (`WIDLEWS1`), a little-endian uint32 UTF-8
+manifest length, JSON metadata, contiguous file bodies, and a 32-byte SHA-256 checksum
+of all preceding bytes. The checksum detects corruption; it does not authenticate
+the sender or make user programs trustworthy. The default limits are 96 MiB for the
+whole archive and 8 MiB for metadata. Filesystem byte, inode, path and depth quotas
+also apply before publication. Duplicate paths, escaping write paths, overlapping
+bodies, dangling body bytes and invalid UTF-8/metadata fail without partial changes.
+Imported symlinks are inert records: restoration never writes through them. Later
+access still obeys the requesting VFS capability, including symlinks outside it.
+No archive JavaScript, shell script or program is executed during restore.
+
 ## Qualification
 
 `node packages/container/scripts/test-workspace-browser.mjs` runs the shared
@@ -62,3 +92,10 @@ and complete process/watcher cleanup. Chromium 153/Linux passes under restrictiv
 CSP with cross-origin isolation; the source hashes and exact guest identity are in
 `test/fixtures/workspace-browser-evidence.json`. This qualifies the SDK binding,
 not a full editor application or actual shell integration.
+
+The persistence Chromium suite also covers exporting all unsaved files after a
+failed save, restoring into a separate owner without touching runtime caches/tmp,
+rejecting a corrupt replacement, and explicitly flushing/reopening the restored
+workspace. Its 12-case receipt is in
+`test/fixtures/workspace-backup-browser-evidence.json`; six focused backup unit
+cases exercise checksum-valid hostile manifests, atomicity, quotas and byte ownership.
