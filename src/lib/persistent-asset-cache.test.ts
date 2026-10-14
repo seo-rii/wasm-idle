@@ -302,7 +302,7 @@ describe('persistent runtime asset cache', () => {
 		controller.abort(reason);
 		await rejected;
 		const second = readPersistentRuntimeAsset({ identity: identity(bytes) });
-		await vi.advanceTimersByTimeAsync(3001);
+		await vi.advanceTimersByTimeAsync(30_001);
 		expect(await second).toBeUndefined();
 		expect(storage.cacheOpen).toHaveBeenCalledTimes(1);
 		release.resolve();
@@ -322,6 +322,22 @@ describe('persistent runtime asset cache', () => {
 			bytes: replacement.byteLength
 		});
 		expect([...storage.bodies.values()][0].size).toBe(1);
+	});
+
+	it('waits for another holder of the namespace lock instead of reporting a false miss', async () => {
+		const bytes = payload('queued');
+		await writePersistentRuntimeAsset({ identity: identity(bytes), bytes });
+		vi.useFakeTimers();
+		// Another tab or worker keeps the lock for longer than one operation's deadline.
+		const held = storage.lockRequest(
+			'wasm-idle-assets-v1:wasm-idle',
+			{ signal: new AbortController().signal },
+			() => new Promise<void>((resolve) => setTimeout(resolve, 5000))
+		);
+		const pending = readPersistentRuntimeAsset({ identity: identity(bytes) });
+		await vi.advanceTimersByTimeAsync(5001);
+		await held;
+		expect(await pending).toEqual(bytes);
 	});
 
 	it('persists generated artifacts for a new backend and isolates exact configuration keys', async () => {

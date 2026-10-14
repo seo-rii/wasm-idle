@@ -299,6 +299,9 @@ const DEFAULTS: Readonly<ResolvedRuntimeAssetCacheOptions> = Object.freeze({
 	version: RUNTIME_ASSET_LOCK_VERSION
 });
 const STORAGE_TIMEOUT_MS = 3000;
+// Queued work behind another tab or call is not a storage failure, but a holder whose native
+// mutation never settles must still turn into a cache miss rather than a hung load.
+const LOCK_TIMEOUT_MS = 30_000;
 let globalOptions: RuntimeAssetCacheOptions = {};
 
 /** Replace global defaults. Pass {} to reset, or false to disable all persistent access. */
@@ -530,10 +533,9 @@ async function withStorage<T>(
 	const lockAbort = new AbortController();
 	const abortLock = () => lockAbort.abort(signal?.reason);
 	signal?.addEventListener('abort', abortLock, { once: true });
-	// This deadline includes lock acquisition, storage opening, body reads and metadata work.
-	const timer = setTimeout(
-		() => lockAbort.abort(new Error('Asset cache operation timed out')),
-		STORAGE_TIMEOUT_MS
+	let timer = setTimeout(
+		() => lockAbort.abort(new Error('Asset cache lock timed out')),
+		LOCK_TIMEOUT_MS
 	);
 	try {
 		const pending = navigator.locks.request(
@@ -542,6 +544,13 @@ async function withStorage<T>(
 			async () => {
 				const signal = lockAbort.signal;
 				checkAbort(signal);
+				// Time queued behind earlier holders must not eat into this operation's deadline
+				// for storage opening, body reads and metadata work.
+				clearTimeout(timer);
+				timer = setTimeout(
+					() => lockAbort.abort(new Error('Asset cache operation timed out')),
+					STORAGE_TIMEOUT_MS
+				);
 				const db = await openDatabase(storageName(options), signal);
 				try {
 					checkAbort(signal);
@@ -577,7 +586,7 @@ async function withStorage<T>(
 			}
 		);
 		// Settle the caller even if a native mutation cannot stop. Its callback still owns the lock,
-		// and all subsequent mutations are fenced off. Queued callers time out to cache misses.
+		// and all subsequent mutations are fenced off. Queued callers miss after LOCK_TIMEOUT_MS.
 		return await waitForStorage(pending, lockAbort.signal);
 	} catch {
 		// Storage denial, quota exhaustion, unsupported APIs and lock timeouts are cache misses.
