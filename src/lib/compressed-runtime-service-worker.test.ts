@@ -226,6 +226,7 @@ describe('compressed runtime service worker', () => {
 			const response = await harness.request(modulePath);
 
 			expect(await response.text()).toBe('network module');
+			expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
 			expect(consoleError).toHaveBeenCalledOnce();
 		} finally {
 			consoleError.mockRestore();
@@ -245,6 +246,11 @@ describe('compressed runtime service worker', () => {
 			});
 
 			await expect(harness.request('offline.js')).rejects.toThrow('Failed to fetch');
+			expect(
+				harness.fetchMock.mock.calls.filter(
+					([input]) => input instanceof Request && input.url === `${scope}offline.js`
+				)
+			).toHaveLength(1);
 		} finally {
 			consoleError.mockRestore();
 		}

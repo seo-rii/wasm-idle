@@ -594,13 +594,19 @@ self.addEventListener('fetch', function (event) {
 				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
 				// Local runtime assets only answer for this origin and registration scope.
 				if (relativePathInScope(url) === null) return fetch(event.request);
-				return (
-					(await fetchDynamicModule(event.request, url)) ||
-					(await fetchRuntimeAssetAlias(event.request, url)) ||
-					(await fetchLayeredRuntimeAsset(event.request, url)) ||
-					(await fetchCompressedRuntimeAsset(event.request, url)) ||
-					fetch(event.request)
-				);
+				let localResponse = null;
+				try {
+					localResponse =
+						(await fetchDynamicModule(event.request, url)) ||
+						(await fetchRuntimeAssetAlias(event.request, url)) ||
+						(await fetchLayeredRuntimeAsset(event.request, url)) ||
+						(await fetchCompressedRuntimeAsset(event.request, url));
+				} catch (e) {
+					// A failed local lookup falls back to the network rather than becoming a
+					// network error; the fallback still receives the isolation headers below.
+					console.error(e);
+				}
+				return localResponse || fetch(event.request);
 			})
 			.then(function (response) {
 				// Receipt-verified runtime consumers require the browser's network Response URL.
@@ -616,8 +622,7 @@ self.addEventListener('fetch', function (event) {
 			})
 			.catch(function (e) {
 				console.error(e);
-				// Resolving undefined would turn every local failure into a network error.
-				return fetch(event.request);
+				throw e;
 			})
 	);
 });
