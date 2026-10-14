@@ -1025,8 +1025,9 @@
 	}
 
 	function handleLanguageChange(event: Event) {
-		// Initial storage/share restoration owns the workspace until it completes.
-		if (!workspaceInitialized) return;
+		// Initial storage/share restoration owns the workspace until it completes, and a run or
+		// debug session owns it until it settles.
+		if (!workspaceInitialized || runningMode) return;
 		const nextLanguage = normalizeRequestedLanguage(
 			(event.currentTarget as HTMLSelectElement).value
 		);
@@ -1049,7 +1050,7 @@
 	});
 
 	function openLanguageMenu() {
-		if (!workspaceInitialized) return;
+		if (!workspaceInitialized || runningMode) return;
 		languageQuery = '';
 		languageHighlight = Math.max(0, playgroundLanguages.indexOf(language));
 		languageMenuOpen = true;
@@ -1062,7 +1063,7 @@
 
 	function chooseLanguage(nextLanguage: PlaygroundLanguage) {
 		closeLanguageMenu(true);
-		if (workspaceInitialized) switchLanguage(nextLanguage);
+		if (workspaceInitialized && !runningMode) switchLanguage(nextLanguage);
 	}
 
 	function handleLanguageSearchKeydown(event: KeyboardEvent) {
@@ -1146,7 +1147,8 @@
 		if (!files.some((file) => file.path === filePath)) return;
 		activePath = filePath;
 		if (!openTabs.includes(filePath)) openTabs = [...openTabs, filePath];
-		if (compact) sidebarOpen = false;
+		// Below the desktop breakpoint the explorer overlays the editor (see the 960px media query).
+		if (!desktopExampleLayout) sidebarOpen = false;
 	}
 
 	function addWorkspaceFile(
@@ -1175,7 +1177,7 @@
 
 	function renameActiveFile() {
 		const file = activeFile;
-		if (!file) return;
+		if (!file || runningMode) return;
 		const requested = prompt('Rename file', file.path);
 		if (!requested) return;
 		let nextPath: string;
@@ -1205,7 +1207,7 @@
 
 	function deleteActiveFile() {
 		const file = activeFile;
-		if (!file) return;
+		if (!file || runningMode) return;
 		if (files.length === 1) {
 			saveStatus = 'Keep at least one file';
 			return;
@@ -1336,7 +1338,7 @@
 			ocamlBackend = value.ocamlBackend;
 		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
 			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
-		sidebarOpen = value?.sidebarOpen ?? !compact;
+		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
 		saveStatus = message;
 	}
 
@@ -1494,6 +1496,10 @@
 	}
 
 	async function importFiles(fileList: File[]) {
+		if (runningMode) {
+			saveStatus = 'Stop the running program before importing files';
+			return;
+		}
 		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
 		try {
 			const plan = await stageWorkspaceImport(fileList, {
@@ -1550,6 +1556,7 @@
 	}
 
 	function resetWorkspace() {
+		if (runningMode) return;
 		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
 		const nextWorkspace = createDefaultWorkspace(language);
 		languageWorkspaces = {
@@ -2374,6 +2381,7 @@
 			const code = readStoredValue('code');
 			const lang = readStoredValue('language');
 			const storedArgs = readStoredValue('argsInput');
+			const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 			const storedGoTarget = readStoredValue('goTarget');
 			const storedOcamlBackend = readStoredValue('ocamlBackend');
 			const storedOcamlWasmBinaryenMode = readStoredValue('ocamlWasmBinaryenMode');
@@ -2437,6 +2445,12 @@
 				requestedRustTargetTriple === 'wasm32-wasip3'
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
+			} else if (
+				storedRustTargetTriple === 'wasm32-wasip1' ||
+				storedRustTargetTriple === 'wasm32-wasip2' ||
+				storedRustTargetTriple === 'wasm32-wasip3'
+			) {
+				rustTargetTriple = storedRustTargetTriple;
 			}
 			if (requestedWorkspaceUrl) {
 				replaceState(requestedWorkspaceUrl, page.state);
@@ -2480,36 +2494,18 @@
 				);
 				if (!nextAvailableRustTargetTriples.length || cancelled) return;
 				availableRustTargetTriples = [...nextAvailableRustTargetTriples];
-				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 				const nextDefaultTargetTriple = nextAvailableRustTargetTriples.includes(
 					manifest.defaultTargetTriple as RustTargetTriple
 				)
 					? (manifest.defaultTargetTriple as RustTargetTriple)
 					: nextAvailableRustTargetTriples[0];
-				if (
-					storedRustTargetTriple &&
-					nextAvailableRustTargetTriples.includes(
-						storedRustTargetTriple as RustTargetTriple
-					)
-				) {
-					rustTargetTriple = storedRustTargetTriple as RustTargetTriple;
-					return;
-				}
+				// The restored or just-picked target owns the selection; only replace an unavailable one.
 				if (!nextAvailableRustTargetTriples.includes(rustTargetTriple)) {
 					rustTargetTriple = nextDefaultTargetTriple;
 				}
 			} catch {
 				if (cancelled) return;
 				availableRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2'];
-				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
-				if (
-					(storedRustTargetTriple === 'wasm32-wasip1' ||
-						storedRustTargetTriple === 'wasm32-wasip2') &&
-					availableRustTargetTriples.includes(storedRustTargetTriple)
-				) {
-					rustTargetTriple = storedRustTargetTriple;
-					return;
-				}
 				if (!availableRustTargetTriples.includes(rustTargetTriple)) {
 					rustTargetTriple = 'wasm32-wasip1';
 				}
@@ -2540,27 +2536,18 @@
 				);
 				if (!nextAvailableGoTargets.length || cancelled) return;
 				availableGoTargets = [...nextAvailableGoTargets];
-				const storedGoTarget = readStoredValue('goTarget');
 				const nextDefaultGoTarget = nextAvailableGoTargets.includes(
 					manifest.defaultTarget as GoTarget
 				)
 					? (manifest.defaultTarget as GoTarget)
 					: nextAvailableGoTargets[0];
-				if (storedGoTarget && nextAvailableGoTargets.includes(storedGoTarget as GoTarget)) {
-					goTarget = storedGoTarget as GoTarget;
-					return;
-				}
+				// The restored or just-picked target owns the selection; only replace an unavailable one.
 				if (!nextAvailableGoTargets.includes(goTarget)) {
 					goTarget = nextDefaultGoTarget;
 				}
 			} catch {
 				if (cancelled) return;
 				availableGoTargets = ['wasip1/wasm'];
-				const storedGoTarget = readStoredValue('goTarget');
-				if (storedGoTarget === 'wasip1/wasm') {
-					goTarget = storedGoTarget;
-					return;
-				}
 				if (!availableGoTargets.includes(goTarget)) {
 					goTarget = 'wasip1/wasm';
 				}
@@ -3461,7 +3448,7 @@
 						bind:this={languageTrigger}
 						class="select-chip language-trigger"
 						type="button"
-						disabled={!workspaceInitialized}
+						disabled={!workspaceInitialized || !!runningMode}
 						aria-haspopup="listbox"
 						aria-expanded={languageMenuOpen}
 						aria-label={`Language: ${languageLabels[language]}`}
@@ -3483,7 +3470,7 @@
 						tabindex="-1"
 						aria-hidden="true"
 						value={language}
-						disabled={!workspaceInitialized}
+						disabled={!workspaceInitialized || !!runningMode}
 						data-workspace-ready={workspaceInitialized}
 						onchange={handleLanguageChange}
 					>
@@ -3782,6 +3769,7 @@
 							aria-label="Upload files"
 							title="Upload files"
 							onclick={() => fileInput?.click()}
+							disabled={!!runningMode}
 						>
 							<span class="material-symbols-outlined" aria-hidden="true">upload</span>
 						</button>
@@ -3810,7 +3798,7 @@
 				<div class="workspace-sidebar__section">
 					<p class="section-label">Active file</p>
 					<div class="workspace-sidebar__actions">
-						<button onclick={renameActiveFile}>
+						<button onclick={renameActiveFile} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">edit</span>
 							<span>Rename</span>
 						</button>
@@ -3826,7 +3814,7 @@
 							>
 							<span>Download</span>
 						</button>
-						<button class="danger" onclick={deleteActiveFile}>
+						<button class="danger" onclick={deleteActiveFile} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">delete</span>
 							<span>Delete</span>
 						</button>
@@ -3839,7 +3827,7 @@
 							>
 							<span>ZIP</span>
 						</button>
-						<button onclick={resetWorkspace}>
+						<button onclick={resetWorkspace} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">history</span
 							>
 							<span>Reset</span>
@@ -4868,6 +4856,12 @@
 		color: var(--text);
 	}
 
+	.workspace-sidebar__tools button:disabled {
+		background: transparent;
+		color: var(--text-4);
+		cursor: not-allowed;
+	}
+
 	.workspace-sidebar__tools .material-symbols-outlined {
 		font-size: 19px;
 	}
@@ -4986,6 +4980,13 @@
 	.workspace-sidebar__actions button.danger:hover {
 		background: var(--danger-soft);
 		color: var(--danger);
+	}
+
+	.workspace-sidebar__actions button:disabled,
+	.workspace-sidebar__actions button.danger:disabled {
+		background: var(--fill);
+		color: var(--text-4);
+		cursor: not-allowed;
 	}
 
 	.workspace-sidebar__actions .material-symbols-outlined {
