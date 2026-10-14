@@ -34,7 +34,7 @@ pub fn proc_exec_v1(
         return Ok(Errno::Inval);
     }
     let args = wasi_try_mem_ok!(args.slice(&memory, args_len));
-    let args = wasi_try_mem_ok!(args.access()).to_vec();
+    let args = wasi_try_mem_ok!(args.read_to_vec());
     let args = match exec_frame::decode(&args) {
         Ok(args) => args,
         Err(_) => return Ok(Errno::Inval),
@@ -43,7 +43,7 @@ pub fn proc_exec_v1(
         None
     } else {
         let envs = wasi_try_mem_ok!(envs.slice(&memory, envs_len));
-        let envs = wasi_try_mem_ok!(envs.access()).to_vec();
+        let envs = wasi_try_mem_ok!(envs.read_to_vec());
         let envs = match exec_frame::decode(&envs) {
             Ok(envs) => envs,
             Err(_) => return Ok(Errno::Inval),

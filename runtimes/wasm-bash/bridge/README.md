@@ -160,6 +160,12 @@ makes no changes to the supplied checkout. The original four-patch
 `patches-apply-cleanly-not-built`. The five-patch
 [snapshot source receipt](evidence.snapshot-source-checks.json) separately records
 the current actual dry run and the compile probe as `not-run`.
+It predates the first genuine SDK Rust diagnostics. The distinct
+[memory-API correction source receipt](evidence.sdk-typefix-source-checks.json)
+records the later five-patch dry run after qualifying the Wasmer `Function`
+reference and using pinned `WasmSlice::read_to_vec()` for owned argv/environment
+bytes. The original frame ABI, limits and decoder remain unchanged. These local
+source/protocol checks do not establish a passing SDK/example typecheck.
 The report classifier passed 6 Node tests; the native C/Rust protocol passed 5 Rust tests
 (including frames emitted by the actual C encoder). These are bounded local checks only.
 
@@ -211,6 +217,15 @@ zero, but the offline check exited 101 before Rust typing because locked
 reaped. This records incomplete dependency preparation, not a snapshot type
 failure or a successful SDK compile. The original five-patch dry-run receipt
 remains unchanged and does not cover this later attempt.
+
+After complete locked prefetch, a subsequent supervised SDK check reached Rust
+typing and exited 101 with three prototype errors: one unqualified `Function`
+reference and two unsupported `WasmSliceAccess::to_vec()` calls. The source
+correction uses `wasmer::Function` and the pinned memory slice's fallible owned
+byte copy before dispatch. It adds no guest-memory view or lock to the command
+snapshot. The old failed source tree, log and process receipt remain separate;
+the corrected full SDK/example check is still pending. Absence of a snapshot
+API diagnostic in the failed run does not establish that the example passes.
 
 ## Remaining runtime gate
 
