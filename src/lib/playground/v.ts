@@ -1,4 +1,5 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 import {
 	resolveVBaseUrl,
 	resolveRuntimeAssetConfig,
@@ -62,6 +63,7 @@ class VLang implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	activeVBaseUrl = '';
 	private activeOperation: VOperation | null = null;
+	private runtimeAssetCache?: RuntimeAssetCache;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('V sandbox disposed', {
@@ -88,6 +90,14 @@ class VLang implements Sandbox {
 			this.pendingEof = false;
 		}
 	});
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.runtimeAssetCache === cache) return;
+		if (this.disposed || this.worker || this.activeOperation) {
+			throw new RuntimeConfigurationError('Cannot replace an active V compiler cache');
+		}
+		this.runtimeAssetCache = cache;
+	}
 
 	private beginOperation(phase: VOperation['phase']) {
 		if (this.disposed) {
@@ -339,7 +349,9 @@ class VLang implements Sandbox {
 							'clang',
 							clangAssets,
 							progress,
-							limits.maxAssetBytes
+							limits.maxAssetBytes,
+							false,
+							this.runtimeAssetCache
 						);
 					} catch (error) {
 						try {
@@ -495,10 +507,7 @@ class VLang implements Sandbox {
 			}
 			if (debug) {
 				return Promise.reject(
-					this.releaseBeforeSession(
-						activeOperation,
-						'V debugging is not supported yet.'
-					)
+					this.releaseBeforeSession(activeOperation, 'V debugging is not supported yet.')
 				);
 			}
 			signal = options.signal;

@@ -459,12 +459,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 35115,
-            "sha256": "6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b"
+            "bytes": 35204,
+            "sha256": "82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321"
           },
           "logical": {
-            "bytes": 35115,
-            "sha256": "6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b"
+            "bytes": 35204,
+            "sha256": "82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321"
           },
           "imports": [
             {
@@ -2013,12 +2013,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 35115,
-            "sha256": "6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b"
+            "bytes": 35204,
+            "sha256": "82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321"
           },
           "logical": {
-            "bytes": 35115,
-            "sha256": "6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b"
+            "bytes": 35204,
+            "sha256": "82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321"
           },
           "imports": [
             {

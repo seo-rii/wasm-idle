@@ -1,4 +1,5 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 import type { DebugCommand, DebugSessionEvent } from '$lib/playground/options';
 import {
 	resolveObjectiveCRuntimeAssetConfig,
@@ -21,6 +22,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import {
 	AssetTooLargeError,
+	RuntimeConfigurationError,
 	createRuntimeAssetsKey,
 	resolveExecutionLimits
 } from '@wasm-idle/core';
@@ -54,6 +56,7 @@ class ObjectiveC implements Sandbox {
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
 	activeObjectiveCAssetsKey = '';
+	private runtimeAssetCache?: RuntimeAssetCache;
 	private readonly workerSession = new WorkerSession({
 		label: 'Objective-C',
 		onDispose: (worker) => {
@@ -77,6 +80,16 @@ class ObjectiveC implements Sandbox {
 
 	constructor(language: ObjectiveCSandboxLanguage = 'OBJC') {
 		this.language = language;
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.runtimeAssetCache === cache) return;
+		if (this.worker) {
+			throw new RuntimeConfigurationError(
+				'Cannot replace an active Objective-C compiler cache'
+			);
+		}
+		this.runtimeAssetCache = cache;
 	}
 
 	load(
@@ -134,7 +147,9 @@ class ObjectiveC implements Sandbox {
 					'clang',
 					clangAssets,
 					progress,
-					limits.maxAssetBytes
+					limits.maxAssetBytes,
+					false,
+					this.runtimeAssetCache
 				);
 				this.activeObjectiveCAssetsKey = nextObjectiveCAssetsKey;
 				this.worker.onmessage = (event: MessageEvent<any>) => {

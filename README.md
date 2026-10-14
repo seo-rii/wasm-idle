@@ -1056,8 +1056,8 @@ The pack contains the same locked upstream files, not an import-based subset. Ea
 ### Retaining compiler caches across editor navigation
 
 Create one `createRuntimeSession(assets)` owner per browser application and use
-`session.createBinding()` for each editor or execution panel. C/C++ and Python
-keep immutable compiler/runtime modules outside their disposable execution Workers:
+`session.createBinding()` for each editor or execution panel. Clang consumers, Rust,
+TinyGo and Python share a bounded owner for verified assets and compiler modules:
 
 ```ts
 import { createRuntimeSession } from 'wasm-idle';
@@ -1071,12 +1071,14 @@ await panel.dispose(); // close this panel; retain the session's cache
 
 const nextPanel = session.createBinding(); // another problem, same language
 await nextPanel.load('PYTHON');
-await session.selectLanguage('CPP'); // release old-language panels and cache
+await session.selectLanguage('CPP'); // release old-language panels; retain verified assets
 await session.dispose(); // full, terminal release of this owner
 ```
 
-Selecting a language does not download assets. The owner retains only one language;
-selecting an unsupported/server-only language also releases the previous cache.
+Selecting a language does not download assets. Only the selected language keeps active
+execution leases; verified compiler assets survive language changes until LRU eviction
+or session disposal. Selecting an unsupported/server-only language releases active leases
+without clearing the session's verified assets.
 Executions never share mutable Wasm instances, user files or stdin. C/C++ additionally
 reuse compiled programs when source, workspace and compiler options match, while
 custom loaders and debugging retain the original execution path. Python still creates
@@ -1085,7 +1087,20 @@ a fresh interpreter after `clear()`; module reuse does not eliminate interpreter
 The asset cache is LRU-bounded to 64 entries and 256 MiB of logical asset bytes
 (not a measurement of the browser engine's compiled-code memory). C/C++ program
 artifacts are independently bounded to 8 entries and 32 MiB. `getCacheStats()` exposes
-cache counters for diagnostics. Other languages currently keep their existing lifecycle.
+cache counters for diagnostics. COBOL, Fortran, V and Objective-C/Objective-C++ connect
+their Clang asset bridges to this same owner. Rust and TinyGo use one-shot MessagePorts
+to request compiler modules from the session after checking the pinned artifact receipt.
+The host verifies the bytes again before returning a module, including on cache hits.
+Cache identities include artifact receipts, authorization profiles and compilation
+settings; TinyGo also separates the memory-cap transformation used for each toolchain.
+
+`@wasm-idle/core` exports `WorkerSession`, `RuntimeAssetCache` and the
+`createRuntimeWasmModuleService` / `serveRuntimeWasmModule` / `requestRuntimeWasmModule`
+helpers for hosts implementing the same ownership model. Cancelling one request closes
+its subscription without terminating another request that uses the same immutable
+module. Compiler instances, linear memory, files and compiler helper threads remain
+owned by individual jobs; this cache does not combine the LLVM binaries embedded in
+different toolchains.
 
 ### Optional idle runtime prewarming
 

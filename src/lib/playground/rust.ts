@@ -34,8 +34,11 @@ import {
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
+	createRuntimeAssetsKey,
+	RuntimeAssetCache,
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
+	serveRuntimeWasmModule,
 	type ResolvedRuntimeAssetCacheOptions,
 	TimeoutError
 } from '@wasm-idle/core';
@@ -95,6 +98,9 @@ class Rust implements Sandbox {
 	debugManifestUrl = '';
 	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	executableGraphFingerprint = '';
+	private runtimeAssetsKey = '';
+	private runtimeAssetCache = new RuntimeAssetCache();
+	private ownsRuntimeAssetCache = true;
 	private persistentCacheBaseline?: ResolvedRuntimeAssetCacheOptions;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
@@ -176,6 +182,7 @@ class Rust implements Sandbox {
 					_options.persistentCache
 				);
 				const nextCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+				const nextRuntimeAssetsKey = createRuntimeAssetsKey(runtimeAssets) ?? '';
 				const nextDebugModuleUrl = resolveRustDebugModuleUrl(runtimeAssets, currentUrl);
 				const debugRuntime = resolveDebugRuntimeUrls(runtimeAssets, currentUrl);
 				const nextDebugRuntimeBaseUrl = debugRuntime.baseUrl;
@@ -239,6 +246,7 @@ class Rust implements Sandbox {
 					this.compilerUrl !== nextCompilerUrl ||
 					this.debugModuleUrl !== nextDebugModuleUrl ||
 					this.assetPath !== nextAssetPath ||
+					this.runtimeAssetsKey !== nextRuntimeAssetsKey ||
 					this.executableGraphFingerprint !==
 						WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint;
 				if (!needsWorkerReset) {
@@ -370,6 +378,7 @@ class Rust implements Sandbox {
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				this.compilerUrl = nextCompilerUrl;
+				this.runtimeAssetsKey = nextRuntimeAssetsKey;
 				this.persistentCacheBaseline = persistentCache;
 				this.debugModuleUrl = nextDebugModuleUrl;
 				this.assetPath = nextAssetPath;
@@ -485,6 +494,19 @@ class Rust implements Sandbox {
 				| undefined;
 			let outputBytes = 0;
 			let diagnosticCount = 0;
+			let moduleBroker: MessageChannel | undefined;
+			const moduleServices = new Set<{ close(): void }>();
+			const closeCompilerModuleBroker = () => {
+				if (moduleBroker) {
+					moduleBroker.port1.onmessage = null;
+					moduleBroker.port1.onmessageerror = null;
+					moduleBroker.port1.close();
+					moduleBroker.port2.close();
+					moduleBroker = undefined;
+				}
+				for (const service of moduleServices) service.close();
+				moduleServices.clear();
+			};
 			const clearScheduledPhaseTimeout = () => {
 				if (phaseTimeout !== undefined) clearTimeout(phaseTimeout);
 				phaseTimeout = undefined;
@@ -557,6 +579,7 @@ class Rust implements Sandbox {
 				if (settled) return;
 				settled = true;
 				this.runActive = false;
+				closeCompilerModuleBroker();
 				clearPhaseTimeout();
 				if (this.activeDebugPhaseTimeout === debugPhaseTimeout) {
 					this.activeDebugPhaseTimeout = undefined;
@@ -568,6 +591,7 @@ class Rust implements Sandbox {
 				if (settled) return;
 				settled = true;
 				this.runActive = false;
+				closeCompilerModuleBroker();
 				clearPhaseTimeout();
 				if (this.activeDebugPhaseTimeout === debugPhaseTimeout) {
 					this.activeDebugPhaseTimeout = undefined;
@@ -681,6 +705,7 @@ class Rust implements Sandbox {
 				}
 				if (debugEvent) forwardDebugEvent(debugEvent);
 				if (lldbArtifact) {
+					closeCompilerModuleBroker();
 					startPhaseTimeout('run', limits.runTimeoutMs);
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
@@ -795,32 +820,100 @@ class Rust implements Sandbox {
 			this.worker.onmessage = handler;
 			this.begin = Date.now();
 			try {
-				this.worker.postMessage({
-					persistentCache,
-					code,
-					prepare,
-					buffer: this.buffer,
-					debugBuffer: this.debugBuffer,
-					stdin: options.stdin,
-					args: programArgs,
-					targetTriple,
-					log: _log,
-					debugMode,
-					debug: debugMode === 'trace',
-					breakpoints: [...(options.breakpoints || [])],
-					pauseOnEntry: !!options.pauseOnEntry,
-					limits: {
-						maxOutputBytes: limits.maxOutputBytes,
-						maxDiagnostics: limits.maxDiagnostics,
-						...(nonDebugResourceLimits
-							? {
-									maxAssetBytes: limits.maxAssetBytes,
-									maxWorkers: nonDebugResourceLimits.maxWorkers,
-									maxThreads: nonDebugResourceLimits.maxThreads
+				if (typeof MessageChannel === 'function' && typeof MessagePort === 'function') {
+					moduleBroker = new MessageChannel();
+					const isActiveModuleBroker = () =>
+						!settled && _uid === this.uid && this.workerSession.isActive(operation);
+					moduleBroker.port1.onmessageerror = () => {
+						if (isActiveModuleBroker()) {
+							this.workerSession.terminate(
+								new Error('Rust module broker message failed')
+							);
+						}
+					};
+					moduleBroker.port1.onmessage = (event: MessageEvent<unknown>) => {
+						const message = event.data as { type?: unknown; port?: unknown } | null;
+						if (!isActiveModuleBroker()) {
+							if (message?.port instanceof MessagePort) {
+								try {
+									message.port.close();
+								} catch {
+									// A retired endpoint cannot affect the current worker operation.
 								}
-							: {})
-					}
-				});
+							}
+							return;
+						}
+						if (!(message?.port instanceof MessagePort)) {
+							this.workerSession.terminate(
+								new Error('Invalid Rust module service request')
+							);
+							return;
+						}
+						if (message.type !== 'rustc-module-service') {
+							message.port.close();
+							this.workerSession.terminate(
+								new Error('Invalid Rust module service request')
+							);
+							return;
+						}
+						try {
+							const receipt =
+								WASM_RUST_RUNTIME_PROFILE.assetReceipts[
+									'wasm-rust/runtime/rustc/rustc.wasm.gz'
+								];
+							moduleServices.add(
+								serveRuntimeWasmModule(message.port, {
+									cache: this.runtimeAssetCache,
+									receipt: {
+										bytes: receipt.uncompressedBytes,
+										sha256: receipt.uncompressedSha256
+									},
+									identity: JSON.stringify([
+										this.runtimeAssetsKey,
+										this.compilerUrl,
+										WASM_RUST_RUNTIME_PROFILE.profileId,
+										this.executableGraphFingerprint
+									]),
+									compileKey: 'rustc-native-default-v1',
+									maxAssetBytes: limits.maxAssetBytes
+								})
+							);
+						} catch (error) {
+							message.port.close();
+							this.workerSession.terminate(error);
+						}
+					};
+				}
+				this.worker.postMessage(
+					{
+						persistentCache,
+						...(moduleBroker ? { rustcModuleBroker: moduleBroker.port2 } : {}),
+						code,
+						prepare,
+						buffer: this.buffer,
+						debugBuffer: this.debugBuffer,
+						stdin: options.stdin,
+						args: programArgs,
+						targetTriple,
+						log: _log,
+						debugMode,
+						debug: debugMode === 'trace',
+						breakpoints: [...(options.breakpoints || [])],
+						pauseOnEntry: !!options.pauseOnEntry,
+						limits: {
+							maxOutputBytes: limits.maxOutputBytes,
+							maxDiagnostics: limits.maxDiagnostics,
+							...(nonDebugResourceLimits
+								? {
+										maxAssetBytes: limits.maxAssetBytes,
+										maxWorkers: nonDebugResourceLimits.maxWorkers,
+										maxThreads: nonDebugResourceLimits.maxThreads
+									}
+								: {})
+						}
+					},
+					moduleBroker ? [moduleBroker.port2] : []
+				);
 			} catch (error) {
 				this.workerSession.terminate(error);
 			}
@@ -918,6 +1011,26 @@ class Rust implements Sandbox {
 
 	kill() {
 		return this.terminate();
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (cache === this.runtimeAssetCache) return;
+		if (this.worker || this.loadController || this.runActive) {
+			throw new Error(
+				'Cannot replace the Rust runtime asset cache while its worker is active'
+			);
+		}
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+		this.runtimeAssetCache = cache;
+		this.ownsRuntimeAssetCache = false;
+	}
+
+	async dispose() {
+		try {
+			await this.terminate();
+		} finally {
+			if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+		}
 	}
 
 	async terminate() {

@@ -1,7 +1,8 @@
 import type {
 	TinyGoUpstreamCompileRequest,
 	TinyGoUpstreamCompileResult,
-	TinyGoUpstreamToolchainAssets
+	TinyGoUpstreamToolchainAssets,
+	TinyGoToolchainModuleKind
 } from './upstream-runtime.ts';
 
 const WASM_PAGE_BYTES = 65_536;
@@ -22,6 +23,7 @@ export interface TinyGoDisposableCompileOptions {
 	maxWasmMemoryBytes?: number;
 	signal?: AbortSignal;
 	onPhase?: (phase: TinyGoWorkerPhase) => void;
+	modulePorts?: Readonly<Record<TinyGoToolchainModuleKind, MessagePort>>;
 }
 
 const DEFAULT_PHASE_TIMEOUT_MS: Record<TinyGoWorkerPhase, number> = {
@@ -289,13 +291,27 @@ export function compileTinyGoInDisposableWorker(
 			rootArchive: Uint8Array.from(assets.rootArchive),
 			lld: Uint8Array.from(assets.lld)
 		};
-		worker.postMessage({ type: 'compile', assets: copiedAssets, request, maxWasmMemoryBytes }, [
-			copiedAssets.producerReceipt.buffer,
-			copiedAssets.packageGraphReceipt.buffer,
-			copiedAssets.compiler.buffer,
-			copiedAssets.packageGraph.buffer,
-			copiedAssets.rootArchive.buffer,
-			copiedAssets.lld.buffer
-		]);
+		try {
+			worker.postMessage(
+				{
+					type: 'compile',
+					assets: copiedAssets,
+					request,
+					maxWasmMemoryBytes,
+					...(options.modulePorts ? { modulePorts: options.modulePorts } : {})
+				},
+				[
+					copiedAssets.producerReceipt.buffer,
+					copiedAssets.packageGraphReceipt.buffer,
+					copiedAssets.compiler.buffer,
+					copiedAssets.packageGraph.buffer,
+					copiedAssets.rootArchive.buffer,
+					copiedAssets.lld.buffer,
+					...(options.modulePorts ? Object.values(options.modulePorts) : [])
+				]
+			);
+		} catch (error) {
+			finish(() => reject(error));
+		}
 	});
 }

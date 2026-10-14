@@ -17,6 +17,7 @@ import {
 declare var self: any;
 
 type RustWorkerDebugMode = 'none' | 'trace' | 'lldb';
+type RustcModuleServiceFactory = () => { port: MessagePort; close(): void } | undefined;
 const lowercaseSha256Pattern = /^[0-9a-f]{64}$/u;
 
 interface RustCompilerModule {
@@ -25,7 +26,10 @@ interface RustCompilerModule {
 		graphFingerprint: string
 	) => void;
 	createRustCompiler?: (options: {
-		dependencies: { runtimeProfile: RustWorkerRuntimeProfile };
+		dependencies: {
+			runtimeProfile: RustWorkerRuntimeProfile;
+			createRustcModuleService?: RustcModuleServiceFactory;
+		};
 	}) => Promise<any>;
 	default?: RustCompilerModule['createRustCompiler'];
 	executeBrowserRustArtifact?: (
@@ -90,6 +94,7 @@ let activeExecution = false;
 let persistentCacheBaseline: ResolvedRuntimeAssetCacheOptions | undefined;
 let compilerPromise: Promise<{
 	compiler: any;
+	createCompiler: (createRustcModuleService: RustcModuleServiceFactory) => Promise<any>;
 	executeBrowserRustArtifact: NonNullable<RustCompilerModule['executeBrowserRustArtifact']>;
 }> | null = null;
 let compiledArtifact: any = null;
@@ -330,6 +335,10 @@ async function loadCompiler(
 			compiler: await factory({
 				dependencies: { runtimeProfile: bootstrap.profile }
 			}),
+			createCompiler: (createRustcModuleService: RustcModuleServiceFactory) =>
+				factory({
+					dependencies: { runtimeProfile: bootstrap.profile, createRustcModuleService }
+				}),
 			executeBrowserRustArtifact: module.executeBrowserRustArtifact
 		};
 	})();
@@ -562,8 +571,19 @@ self.onmessage = async (event: { data: any }) => {
 		pauseOnEntry = false,
 		limits: executionLimits
 	} = event.data;
+	const nextRustcModuleBroker: unknown = event.data.rustcModuleBroker;
+	let rustcModuleBroker: MessagePort | undefined;
 	let ownsExecution = false;
 	try {
+		if (nextRustcModuleBroker !== undefined) {
+			if (
+				typeof MessagePort === 'undefined' ||
+				!(nextRustcModuleBroker instanceof MessagePort)
+			) {
+				throw new Error('Rust module broker must be a private MessagePort');
+			}
+			rustcModuleBroker = nextRustcModuleBroker;
+		}
 		if (load) {
 			if (acceptedCompilerBootstrap) {
 				throw new Error('wasm-rust application worker accepts exactly one bootstrap');
@@ -659,7 +679,25 @@ self.onmessage = async (event: { data: any }) => {
 					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${compileCode.length}`
 				);
 			}
-			const result = await runtime.compiler.compile({
+			const moduleBroker = rustcModuleBroker;
+			const compiler = moduleBroker
+				? await runtime.createCompiler(() => {
+						if (!ownsExecution) throw new Error('Rust module service run expired');
+						const channel = new MessageChannel();
+						try {
+							moduleBroker.postMessage(
+								{ type: 'rustc-module-service', port: channel.port1 },
+								[channel.port1]
+							);
+						} catch (error) {
+							channel.port1.close();
+							channel.port2.close();
+							throw error;
+						}
+						return { port: channel.port2, close: () => channel.port2.close() };
+					})
+				: runtime.compiler;
+			const result = await compiler.compile({
 				...(assetCache ? { assetCache } : {}),
 				code: compileCode,
 				debugMode,
@@ -903,6 +941,10 @@ self.onmessage = async (event: { data: any }) => {
 					: `Rust worker error exceeded ${maxErrorBytes} bytes`
 		});
 	} finally {
-		if (ownsExecution) activeExecution = false;
+		if (ownsExecution) {
+			activeExecution = false;
+			ownsExecution = false;
+		}
+		rustcModuleBroker?.close();
 	}
 };

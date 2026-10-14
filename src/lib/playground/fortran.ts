@@ -1,4 +1,5 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 import {
 	resolveFortranRuntimeAssetConfig,
 	resolveRuntimeAssetConfig,
@@ -78,6 +79,7 @@ class Fortran implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	activeFortranAssetsKey = '';
 	private activeOperation: FortranOperation | null = null;
+	private runtimeAssetCache?: RuntimeAssetCache;
 	private preserveOperationOnWorkerDispose = false;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
@@ -128,6 +130,14 @@ class Fortran implements Sandbox {
 				phase: this.activeOperation.phase
 			});
 		}
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.runtimeAssetCache === cache) return;
+		if (this.disposed || this.worker || this.activeOperation) {
+			throw new RuntimeConfigurationError('Cannot replace an active Fortran compiler cache');
+		}
+		this.runtimeAssetCache = cache;
 	}
 
 	private beginOperation(phase: FortranOperation['phase']) {
@@ -335,7 +345,9 @@ class Fortran implements Sandbox {
 							'clang',
 							clangAssets,
 							progress,
-							limits.maxAssetBytes
+							limits.maxAssetBytes,
+							false,
+							this.runtimeAssetCache
 						);
 						assetBridge.setExecutionPersistentCache(options.persistentCache);
 					} catch (error) {
