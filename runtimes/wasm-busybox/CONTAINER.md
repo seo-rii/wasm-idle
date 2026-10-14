@@ -1,4 +1,4 @@
-# B0 container qualification
+# BusyBox batch container qualification
 
 This contract consumes a successful C12 producer directory. It runs the exact
 recorded BusyBox bytes through the actual container WASI Worker in Node and
@@ -35,7 +35,44 @@ cache reuse from HTTP caching. The persistent namespace is confined to this
 fresh local test origin. This runner never clears a user's workspace or cache.
 
 The qualified profile is **batch commands with a snapshot filesystem**. B0
-applets do not establish live file sharing, pipes, interactive stdin, BusyBox B1
-utilities, a shell, or job control. Those remain independent gates. The Node
+evidence alone does not establish BusyBox B1 utilities. Live file sharing,
+pipes, interactive stdin, shells and job control remain independent gates. The Node
 worker shim only adapts message transport; actual imports, memory validation,
 filesystem operations and execution use the package's WASI Worker.
+
+When the external producer receipt contains a passed B1 subset gate, this runner
+also verifies its `b1-smoke.json` and hash-pinned `b1-smoke/b1-cases.json`. It loads
+plain fixture data and the fixed local helper, never producer-selected JavaScript.
+The original B0 receipt remains a supported input and keeps its 20-case matrix.
+
+The B1 profile adds real `grep`, `mkdir`, `cp`, `mv`, and `rm` commands and aliases.
+Each matrix entry starts from the recorded file/directory/symlink tree and checks
+the resulting bytes, tree and exit against the producer's native reference.
+Intentional WASI profile rejections compare against their explicit expected
+failure. The receipt records the native upstream behavior separately for the
+grep NUL and ignored `-a`/`-I` options. These cases do not claim native equality.
+The complete matrix includes nonzero exits after partial changes, readonly
+package protection, cross-mount copy and a cross-mount move failure that retains
+both source and existing destination. A 200-entry recursive removal exercises
+directory iteration while entries disappear.
+
+The selected grep profile is text-only: NUL and `-a`/`-I` fail explicitly.
+Binary bytes remain qualified through `cat` and `cp`. `mkdir -m`, preserving or
+recursive copy modes and link-copy modes fail before destination changes;
+cross-mount `mv` does not copy/unlink. Ownership, permissions and timestamps
+are outside the qualified tree schema. Unlisted BusyBox applets/modes, live
+filesystem visibility, pipelines, interactive input and actual shells still
+require their own gates.
+
+Use `--node-only` for the initial Node probe before allocating Chromium. Its
+output is marked `node-complete-browser-pending`, so it cannot be mistaken for
+the complete browser qualification receipt. Failed Node/browser results are
+saved before assertions for diagnosing host incompatibilities.
+
+The recorded B1 Node candidate in `evidence/container-b1-node.json` passes all
+20 B0 and 108 B1 cases, plus mount protection and cleanup checks, using artifact
+`547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`.
+Its source identity was recorded after the unchanged Node run. It explicitly
+remains browser-pending: Chromium qualification has not run while the shared
+host is below the 2 GiB available-memory admission threshold. This record must
+not be used to promote the B1 browser support grade.

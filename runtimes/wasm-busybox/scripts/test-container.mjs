@@ -14,7 +14,7 @@ import { chromium } from 'playwright-core';
 const { values } = parseArgs({ options: {
   'producer-work': { type: 'string' }, 'producer-revision': { type: 'string' },
   'container-dist': { type: 'string' }, 'core-dist': { type: 'string' },
-  'output': { type: 'string' },
+  'output': { type: 'string' }, 'node-only': { type: 'boolean', default: false },
 } });
 for (const name of ['producer-work', 'producer-revision', 'container-dist', 'output']) {
   assert.ok(values[name], `Required: --${name}`);
@@ -24,6 +24,7 @@ const work = resolve(values['producer-work']);
 const containerDist = resolve(values['container-dist']);
 const coreDist = resolve(values['core-dist'] ?? resolve(containerDist, '../../core/dist'));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const fixtureBytes = await readFile(fileURLToPath(import.meta.url));
 const receiptBytes = await readFile(resolve(work, 'receipt.json'));
 const receipt = JSON.parse(receiptBytes);
 assert.equal(receipt.status, 'producer-smoke-passed');
@@ -33,8 +34,28 @@ assert.equal(receipt.processAbi.namespace, 'wasm_idle_process_v1');
 const artifact = await readFile(resolve(work, 'busybox.wasm'));
 assert.equal(sha(artifact), receipt.wasi.artifact.sha256);
 assert.equal(artifact.length, receipt.wasi.artifact.size);
-const applets = ['cat', 'echo', 'false', 'printf', 'pwd', 'true'];
+const b1 = receipt.b1SmokePassed === true;
+const applets = b1 ? ['cat', 'cp', 'echo', 'false', 'grep', 'mkdir', 'mv', 'printf', 'pwd', 'rm', 'true']
+  : ['cat', 'echo', 'false', 'printf', 'pwd', 'true'];
 assert.deepEqual(receipt.nodeWasiApplets, applets);
+let b1Config;
+const b1HelperPath = fileURLToPath(new URL('../test/container-b1.mjs', import.meta.url));
+const b1HelperBytes = b1 ? await readFile(b1HelperPath) : null;
+if (b1) {
+  const smoke = JSON.parse(await readFile(resolve(work, 'b1-smoke.json')));
+  assert.deepEqual(smoke, receipt.b1);
+  assert.equal(smoke.passed, true);
+  assert.deepEqual(smoke.artifact, receipt.wasi.artifact);
+  const bytes = await readFile(resolve(work, 'b1-smoke/b1-cases.json'));
+  assert.equal(sha(bytes), smoke.matrix.sha256);
+  const matrix = JSON.parse(bytes);
+  assert.equal(matrix.schemaVersion, 1);
+  assert.equal(matrix.profile, 'busybox-b1-subset');
+  assert.equal(matrix.cases.length, smoke.matrix.cases);
+  assert.equal(smoke.cases.length, matrix.cases.length * 2);
+  assert.ok(smoke.cases.every((test) => test.passed));
+  b1Config = { matrix, matrixSha256: sha(bytes), reference: smoke.cases };
+}
 async function hashModules(root) {
   const hashes = {};
   for (const file of (await readdir(root, { recursive: true })).filter((file) => file.endsWith('.js')).sort()) {
@@ -54,6 +75,10 @@ const server = createServer(async (request, response) => {
       response.setHeader('Content-Type', 'text/html');
       response.end('<!doctype html><meta charset="utf-8"><title>BusyBox container contract</title><script type="importmap">{"imports":{"@wasm-idle/core":"/core/index.js"}}</script>');
       return;
+    }
+    if (b1 && pathname === '/b1-exercise.mjs') {
+      response.setHeader('Content-Type', 'text/javascript');
+      response.end(b1HelperBytes); return;
     }
     if (pathname === '/stats') {
       response.setHeader('Content-Type', 'application/json');
@@ -86,7 +111,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 function fixture(mode) {
   const url = origin + bodyPath(mode);
   const identity = { sha256: sha(artifact), bytes: artifact.length, mediaType: 'application/wasm' };
-  const data = JSON.stringify({ schemaVersion: 1, distributionId: `busybox-b0-${sha(artifact)}`, packages: [{
+  const data = JSON.stringify({ schemaVersion: 1, distributionId: `busybox-${b1 ? 'b1' : 'b0'}-${sha(artifact)}`, packages: [{
     id: 'busybox', identity: `sha256:${sha(artifact)}`, dependencies: [], mount: '/opt/toolchains/busybox',
     producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: values['producer-revision'], receiptSha256: sha(receiptBytes) },
     capabilities: ['wasi-preview1'],
@@ -95,7 +120,8 @@ function fixture(mode) {
   }], commands: ['busybox', ...applets].map((name) => ({
     name, package: 'busybox', adapter: 'wasi-preview1', path: 'bin/busybox', argv0: name, prefixArgs: [],
   })) });
-  return { data, expectedSha256: sha(data), url, mode, stats: `${origin}/stats` };
+  return { data, expectedSha256: sha(data), url, mode, stats: `${origin}/stats`, applets, b1: b1Config,
+    b1Module: mode === 'node' ? pathToFileURL(b1HelperPath).href : '/b1-exercise.mjs' };
 }
 
 // This same function runs with real Node worker_threads and inside Chromium.
@@ -108,7 +134,7 @@ async function exercise(config) {
     expectedSha256: config.expectedSha256, adapterIds: ['wasi-preview1'], allowedAssetURLs: [config.url] });
   const manager = createContainerPackageManager({ distribution, capabilities: ['wasi-preview1'],
     persistentCache: config.mode === 'browser'
-      ? { enabled: true, namespace: 'busybox-container-b0', version: 'v1', storageReserveBytes: 0 }
+      ? { enabled: true, namespace: 'busybox-container-' + (config.b1 ? 'b1' : 'b0'), version: 'v1', storageReserveBytes: 0 }
       : false });
   let liveWorkers = 0;
   const adapter = createWasiAdapter({ workerFactory() {
@@ -126,7 +152,7 @@ async function exercise(config) {
   const hex = (value) => Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
   const cases = [];
   try {
-    const metadata = ['busybox', 'cat', 'echo', 'false', 'printf', 'pwd', 'true'].map((name) => manager.resolveCommand(name).name);
+    const metadata = ['busybox', ...config.applets].map((name) => manager.resolveCommand(name).name);
     const afterMetadata = await count();
     container.fs.mkdir('/workspace/a b');
     container.fs.writeFile('/workspace/a b/binary file.bin', bytes);
@@ -159,11 +185,13 @@ async function exercise(config) {
     const changed = encode('host edit remains in the common workspace\n');
     container.fs.writeFile('/workspace/a b/binary file.bin', changed);
     const refreshed = await container.run('/usr/bin/cat', ['binary file.bin'], { cwd: '/workspace/a b' });
+    const retainedFile = same(container.fs.readFile('/workspace/a b/binary file.bin'), changed);
+    const b1Result = config.b1 ? await (await import(config.b1Module)).exerciseBusyboxB1(container, config.b1) : undefined;
     const inspection = await container.inspect();
     return { before, afterMetadata, after: await count(), metadata, cases, readonlyCode,
       hostEditVisible: same(refreshed.stdout, changed) && refreshed.code === 0,
-      retainedFile: same(container.fs.readFile('/workspace/a b/binary file.bin'), changed),
-      liveWorkers, processCount: inspection.processes.length,
+      retainedFile,
+      b1: b1Result, liveWorkers, processCount: inspection.processes.length,
       memoryCacheEntries: manager.inspect().assets.cachedEntries,
       isolated: globalThis.crossOriginIsolated ?? false,
       userAgent: globalThis.navigator?.userAgent ?? null,
@@ -182,6 +210,14 @@ function validate(result, expectedBefore) {
   assert.equal(result.retainedFile, true);
   assert.equal(result.processCount, 0);
   assert.equal(result.liveWorkers, 0);
+  if (b1) {
+    assert.equal(result.b1.cases.length, b1Config.matrix.cases.length * 2);
+    assert.deepEqual(result.b1.cases.filter((test) => !test.passed), []);
+    assert.equal(result.b1.crossMountMove.passed, true);
+    assert.equal(result.b1.crossMountCopy.passed, true);
+    assert.deepEqual(result.b1.readonly.filter((test) => !test.passed), []);
+    assert.equal(result.b1.passed, true);
+  }
 }
 
 let browser;
@@ -199,7 +235,12 @@ try {
       worker.on('messageerror', (error) => wrapper.onmessageerror?.({ error }));
       return wrapper;
     } });
+  await mkdir(dirname(resolve(values.output)), { recursive: true });
+  await writeFile(resolve(values.output), JSON.stringify({ status: 'node-complete-browser-pending', artifact: receipt.wasi.artifact, node }, null, 2) + '\n');
   validate(node, 0);
+  if (values['node-only']) {
+    console.log(JSON.stringify({ passed: true, profile: 'node-only', b0Cases: node.cases.length, b1Cases: node.b1?.cases.length ?? 0, output: resolve(values.output) }));
+  } else {
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] });
   const page = await browser.newPage();
   const errors = [];
@@ -210,6 +251,7 @@ try {
     else await page.reload();
     const result = await page.evaluate(exercise, { ...fixture('browser'), containerModule: '/container/index.js',
       adapterModule: '/container/adapters/wasi/index.js', workerModule: '/container/adapters/wasi/worker.js' });
+    await writeFile(resolve(values.output), JSON.stringify({ status: 'browser-in-progress', artifact: receipt.wasi.artifact, node, browserRuns: [...browserRuns, result] }, null, 2) + '\n');
     validate(result, i);
     assert.equal(result.isolated, false, 'This fixture qualifies the non-isolated batch profile');
     assert.ok(result.cacheNames.length > 0);
@@ -218,6 +260,8 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(await hashModules(containerDist), initialContainerHashes, 'Container modules changed during the fixture');
   assert.deepEqual(await hashModules(coreDist), initialCoreHashes, 'Core modules changed during the fixture');
+  assert.equal(sha(await readFile(fileURLToPath(import.meta.url))), sha(fixtureBytes), 'Fixture changed during execution');
+  if (b1) assert.equal(sha(await readFile(b1HelperPath)), sha(b1HelperBytes), 'B1 helper changed during execution');
   const repository = resolve(containerDist, '../../..');
   const evidence = { schemaVersion: 1, fixture: 'BB-01', passed: true,
     generatedAt: new Date().toISOString(), producerRevision: values['producer-revision'],
@@ -225,16 +269,19 @@ try {
     artifact: receipt.wasi.artifact, imports: receipt.wasi.smoke.imports,
     applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim(),
     containerDistHashes: initialContainerHashes, coreDistHashes: initialCoreHashes,
-    fixtureSha256: sha(await readFile(fileURLToPath(import.meta.url))),
+    fixtureSha256: sha(fixtureBytes),
+    b1FixtureSha256: b1HelperBytes ? sha(b1HelperBytes) : undefined,
+    b1MatrixSha256: b1Config?.matrixSha256,
     browser: browser.version(), host: { platform: platform(), release: release(), arch: arch(), node: process.version },
-    profile: 'batch-snapshot', unsupported: ['live filesystem', 'pipes', 'shell', 'B1 applets', 'interactive stdin'],
+    profile: 'batch-snapshot', unsupported: ['live filesystem', 'pipes', 'shell', 'interactive stdin', ...(b1 ? ['unqualified BusyBox applets and modes'] : ['B1 applets'])],
     node, browserRuns, bodyRequests: requests,
-    cache: { pageReloaded: true, httpCache: 'no-store', namespace: 'busybox-container-b0', persistent: true } };
+    cache: { pageReloaded: true, httpCache: 'no-store', namespace: 'busybox-container-' + (b1 ? 'b1' : 'b0'), persistent: true } };
   const output = resolve(values.output);
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
-  console.log(JSON.stringify({ passed: true, nodeCases: 20, browserCases: 40, bodyRequests: requests,
+  console.log(JSON.stringify({ passed: true, nodeCases: 20 + (node.b1?.cases.length ?? 0), browserCases: browserRuns.reduce((n, run) => n + 20 + (run.b1?.cases.length ?? 0), 0), bodyRequests: requests,
     artifact: receipt.wasi.artifact, browser: browser.version(), output }, null, 2));
+  }
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
