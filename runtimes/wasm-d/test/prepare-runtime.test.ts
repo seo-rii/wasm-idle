@@ -1,105 +1,106 @@
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+	D_PRODUCER_ARTIFACTS,
+	prepareDProducerRuntime,
+	verifyDProducerArtifacts
+} from '../scripts/prepare-runtime.mjs';
+import { sha256, writeProducerReceipt } from './producer-fixture.js';
 
-const execFileAsync = promisify(execFile);
-const runtimeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tempDirs: string[] = [];
-
-const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-
-async function writeFixtureFile(root: string, relativePath: string, contents: string) {
-	const filePath = path.join(root, relativePath);
-	await mkdir(path.dirname(filePath), { recursive: true });
-	await writeFile(filePath, contents);
+async function fixture() {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-d-consumer-test-'));
+	tempDirs.push(root);
+	const sourceDir = path.join(root, 'source');
+	const targetDir = path.join(root, 'target');
+	for (const asset of D_PRODUCER_ARTIFACTS) {
+		const destination = path.join(sourceDir, asset);
+		await mkdir(path.dirname(destination), { recursive: true });
+		await writeFile(destination, asset.endsWith('.gz') ? gzipSync(asset) : Buffer.from(asset));
+	}
+	await mkdir(targetDir);
+	await writeFile(path.join(targetDir, 'preserved.txt'), 'previous runtime');
+	const lock = await writeProducerReceipt(sourceDir);
+	return { sourceDir, targetDir, lock };
 }
 
-async function writeTarZstdFixture(root: string, asset: string, entry: string) {
-	const sourceDir = path.join(root, `${asset}.source`);
-	await writeFixtureFile(sourceDir, entry, `${asset}\n`);
-	const archivePath = path.join(root, asset);
-	await mkdir(path.dirname(archivePath), { recursive: true });
-	await execFileAsync('tar', [
-		'--zstd',
-		'--sort=name',
-		'--mtime=@0',
-		'--owner=0',
-		'--group=0',
-		'--numeric-owner',
-		'-cf',
-		archivePath,
-		'-C',
-		sourceDir,
-		'.'
-	]);
-}
+afterEach(async () => {
+	await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
-describe('wasm-d runtime producer', () => {
-	afterEach(async () => {
-		await Promise.all(
-			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+describe('pinned wasm-llvm D artifact consumer', () => {
+	it('imports exactly the verified producer outputs and its source receipt', async () => {
+		const options = await fixture();
+		await writeFile(path.join(options.sourceDir, 'untrusted-extra.js'), 'ignored');
+		await prepareDProducerRuntime(options);
+		for (const asset of [...D_PRODUCER_ARTIFACTS, 'producer-receipt.json']) {
+			expect(await readFile(path.join(options.targetDir, asset))).toEqual(
+				await readFile(path.join(options.sourceDir, asset))
+			);
+		}
+		await expect(
+			readFile(path.join(options.targetDir, 'untrusted-extra.js'))
+		).rejects.toThrow();
+		await expect(readFile(path.join(options.targetDir, 'preserved.txt'))).rejects.toThrow();
+	});
+
+	it('rejects altered artifact bytes before replacing the installed runtime', async () => {
+		const options = await fixture();
+		await writeFile(path.join(options.sourceDir, 'bin/ldc2.wasm.gz'), gzipSync('tampered'));
+		await expect(prepareDProducerRuntime(options)).rejects.toThrow(
+			'artifact integrity mismatch'
+		);
+		expect(await readFile(path.join(options.targetDir, 'preserved.txt'), 'utf8')).toBe(
+			'previous runtime'
 		);
 	});
 
-	it('records the generated target manifest digest in its build receipt', async () => {
-		const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-d-producer-test-'));
-		tempDirs.push(tempRoot);
-		const sourceDir = path.join(tempRoot, 'source');
-		const targetDir = path.join(tempRoot, 'target');
+	it('rejects a self-receipted replacement even when its producer metadata still matches', async () => {
+		const options = await fixture();
+		await writeFile(path.join(options.sourceDir, 'bin/ldc2.wasm.gz'), gzipSync('replacement'));
+		await writeProducerReceipt(options.sourceDir);
+		await expect(prepareDProducerRuntime(options)).rejects.toThrow(
+			'receipt integrity mismatch'
+		);
+		expect(await readFile(path.join(options.targetDir, 'preserved.txt'), 'utf8')).toBe(
+			'previous runtime'
+		);
+	});
 
-		await writeFixtureFile(sourceDir, 'bin/ldc2.wasm', 'fixture ldc2');
-		await writeFixtureFile(sourceDir, 'bin/lld.js', 'export default () => ({});');
-		await writeFixtureFile(sourceDir, 'bin/lld.wasm', 'fixture lld wasm');
-		await writeFixtureFile(sourceDir, 'bin/lld.data', 'fixture lld data');
-		await writeTarZstdFixture(sourceDir, 'archives/config.tar.zst', 'ldc2.conf');
-		await writeTarZstdFixture(sourceDir, 'archives/imports.tar.zst', 'object.d');
-		await writeTarZstdFixture(sourceDir, 'archives/runtime-libraries.tar.zst', 'libphobos2.a');
-		await writeFixtureFile(
-			sourceDir,
-			'runtime-manifest.v1.json',
-			`${JSON.stringify({
-				manifestVersion: 1,
-				name: 'ldc-wasm',
-				version: 'test',
-				compiler: {
-					ldc2: { asset: 'bin/ldc2.wasm' },
-					config: { asset: 'archives/config.tar.zst' },
-					imports: { asset: 'archives/imports.tar.zst' },
-					runtimeLibraries: { asset: 'archives/runtime-libraries.tar.zst' },
-					linker: {
-						js: { asset: 'bin/lld.js' },
-						wasm: { asset: 'bin/lld.wasm' },
-						data: { asset: 'bin/lld.data' }
-					}
-				}
-			})}\n`
-		);
+	it('validates logical gzip digests and the exact artifact set', async () => {
+		const options = await fixture();
+		const receiptPath = path.join(options.sourceDir, 'producer-receipt.json');
+		const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+		receipt.artifacts[0].uncompressedSha256 = 'f'.repeat(64);
+		const changed = Buffer.from(JSON.stringify(receipt));
+		await writeFile(receiptPath, changed);
+		await expect(
+			verifyDProducerArtifacts(options.sourceDir, {
+				...options.lock,
+				receiptSha256: sha256(changed)
+			})
+		).rejects.toThrow('logical integrity mismatch');
+		receipt.artifacts[0].path = '../escape';
+		const escaped = Buffer.from(JSON.stringify(receipt));
+		await writeFile(receiptPath, escaped);
+		await expect(
+			verifyDProducerArtifacts(options.sourceDir, {
+				...options.lock,
+				receiptSha256: sha256(escaped)
+			})
+		).rejects.toThrow('exactly the required');
+	});
 
-		await execFileAsync(
-			'node',
-			['scripts/prepare-runtime.mjs', '--source', sourceDir, '--out', targetDir],
-			{
-				cwd: runtimeRoot,
-				env: { ...process.env, SOURCE_DATE_EPOCH: '0' }
-			}
+	it('requires an explicit producer directory and forbids in-place replacement', async () => {
+		await expect(prepareDProducerRuntime({ targetDir: '/unused' })).rejects.toThrow(
+			'WASM_LLVM_D_ARTIFACT_DIR'
 		);
-
-		const targetManifestBytes = await readFile(
-			path.join(targetDir, 'runtime-manifest.v1.json')
-		);
-		const sourceManifestBytes = await readFile(
-			path.join(sourceDir, 'runtime-manifest.v1.json')
-		);
-		const buildReceipt = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-build.json'), 'utf8')
-		);
-
-		expect(buildReceipt.manifestSha256).toBe(sha256(targetManifestBytes));
-		expect(buildReceipt.manifestSha256).not.toBe(sha256(sourceManifestBytes));
+		const options = await fixture();
+		await expect(
+			prepareDProducerRuntime({ ...options, targetDir: options.sourceDir })
+		).rejects.toThrow('must differ');
 	});
 });
