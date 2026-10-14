@@ -128,6 +128,24 @@ exit leaving live descendants is rejected. A completed successful build has
 `final.status` 0 and `receipt.json` with `complete: true`, verified input hashes,
 artifact hashes and static inventory. `guestQualified` remains false.
 
+Process discovery enumerates the `children` file of every Linux task, recursively,
+so a child spawned by a Cargo worker thread is included. A real thread-spawn
+regression verifies observation, kill and reap; the fixture fails against the
+earlier main-thread-only traversal. Task exit races are tolerated and PID/start
+ticks are rechecked before signaling.
+
+Cleanup requires the supervisor to remain alive through its bounded cleanup
+loop. If the supervisor itself is killed or runs out of memory, its final
+receipt may be absent; inspect its owned process generations separately.
+
+Previously sealed attempts keep their original process-owner bytes. Their
+sampled process/RSS observations may omit children created by worker threads;
+an `allReaped` result from that older traversal does not independently qualify
+that boundary. Do not edit the running recipe or upgrade historical evidence
+to the corrected owner. After an older attempt exits, inspect every owned task's
+descendants and record any supplementary cleanup separately before using its
+output or starting another build.
+
 ## Remaining gates
 
 Generated web glue is not the complete npm module graph. The SDK's original

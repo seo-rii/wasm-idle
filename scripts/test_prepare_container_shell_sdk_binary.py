@@ -121,6 +121,45 @@ except RuntimeError as error:(root/'error.txt').write_text(str(error))
         result = self.exercise("import os,time; child=os.fork(); os._exit(0) if child else None; os.setsid(); time.sleep(30)")
         self.assertEqual(result["exitCode"], 0)
 
+    def test_children_created_by_worker_threads_are_observed_and_reaped(self):
+        payload = """
+import json,os,subprocess,sys,threading
+sys.path.insert(0,sys.argv[1])
+import container_shell_sdk_build_guard as g
+g.enable_cleanup()
+ready,release=threading.Event(),threading.Event()
+children=[]
+def spawn_from_worker():
+    children.append(subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],
+        stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+        start_new_session=True))
+    ready.set()
+    release.wait(5)
+thread=threading.Thread(target=spawn_from_worker)
+thread.start()
+try:
+    assert ready.wait(5),'thread did not start its real child'
+    child=children[0]
+    observed=g.owned_processes()
+    assert any(value['pid']==child.pid for value in observed),'worker-thread child was omitted'
+    assert len({value['pid'] for value in observed})==len(observed),'duplicate process observation'
+    cleanup=g.cleanup(child)
+    assert cleanup['allReaped'] and not cleanup['remaining'] and not cleanup['errors']
+    assert any(value['pid']==child.pid for value in cleanup['signaled'])
+    assert any(value['pid']==child.pid for value in cleanup['reaped'])
+    print(json.dumps({'observed':observed,'cleanup':cleanup}))
+finally:
+    release.set()
+    for child in children:
+        if child.poll() is None:child.kill()
+        child.wait(timeout=3)
+    thread.join(timeout=3)
+"""
+        result = subprocess.run([sys.executable, "-c", payload, str(SCRIPTS)],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["cleanup"]["allReaped"])
+
     def test_actual_node_shared_memory_inspection_under_address_space_cap(self):
         node = os.environ.get("WASM_IDLE_SDK_INSPECTION_NODE", "node")
         with tempfile.TemporaryDirectory() as temporary:
