@@ -45,11 +45,12 @@ export function judgeShellProbe(results) {
 		stdout(find('G0-CWD'), '/workspace/sub\nexit=0\n'),
 		'Read the child cwd with wasix_32v1.getcwd after the real shell changes directory.'
 	);
+	// Exit zero alone is not evidence: the observed runtime reports 0 for a child exit 23.
 	check(
 		'tail-exec',
 		'G0-TAIL-EXEC',
-		completed(find('G0-TAIL-EXEC')),
-		'A script ending with an external command completes without a host timeout.'
+		stdout(find('G0-TAIL-EXEC'), 'arg=./probe.wasm\0arg=report\0arg=tail\0G0=space 한글\0'),
+		'A script ending with an external command completes without a host timeout and returns the guest output.'
 	);
 	const binary = [0, 255, 226, 130, 172, 10, 13, 97, 98];
 	const fd = find('G0-FD');

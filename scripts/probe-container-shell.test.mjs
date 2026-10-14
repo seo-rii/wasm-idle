@@ -27,6 +27,13 @@ test('exit zero cannot hide a lost empty argument', () => {
 	assert.equal(check([observed('G0-SHELL', prefix + 'arg=\0' + suffix)], 'argv-env'), 'passed');
 });
 
+test('a final external command needs its guest output, not only exit zero', () => {
+	assert.equal(check([observed('G0-TAIL-EXEC')], 'tail-exec'), 'failed');
+	assert.equal(check([{ id: 'G0-TAIL-EXEC', type: 'timeout' }], 'tail-exec'), 'failed');
+	const output = 'arg=./probe.wasm\0arg=report\0arg=tail\0G0=space 한글\0';
+	assert.equal(check([observed('G0-TAIL-EXEC', output)], 'tail-exec'), 'passed');
+});
+
 test('pipe stdout does not prove that a redirect reached the common mount', () => {
 	const binary = [0, 255, 226, 130, 172, 10, 13, 97, 98];
 	const result = observed('G0-FD', '', {
