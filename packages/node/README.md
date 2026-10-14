@@ -42,9 +42,10 @@ console.log(result.exitCode, result.stdout);
 ## API
 
 - `runWasmIdleInNode(options)` loads the sandbox, writes `stdin` followed by EOF when provided, and
-  runs `code`. It resolves to `{ ok, result, elapsedMs, error?, cleanupErrors? }`: a runtime failure
-  is written to `stderr` and returned with the original error in `error`. Errors from the loader
-  itself still reject.
+  runs `code`. It resolves to `{ ok, result, elapsedMs, error?, cleanupErrors? }`. `ok` is false
+  when `run()` returns `false` or when `load()` or `run()` throws. A thrown failure is written to
+  `stderr`; its message is returned in `result` and the original error in `error`. Errors from
+  the loader itself still reject.
 - `executeWasmIdleInNode(options)` calls the sandbox's structured `execute(request)` and resolves to
   its `ExecutionResult`. It rejects with the original error on failure, or with a
   `NodeExecutionCleanupError` (an `AggregateError` whose `cause` is the original error) when cleanup

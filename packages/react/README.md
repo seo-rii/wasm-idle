@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { useWasmIdlePlayground } from '@wasm-idle/react';
 import { loadSandbox } from './sandboxes'; // your SandboxLoader
 
-// Keep both hook arguments referentially stable: a new value replaces the binding.
+// Module-scope hook arguments keep the same binding across re-renders.
 const runtimeAssets = 'https://cdn.example.com/wasm-idle';
 
 export function RunPython({ code }: { code: string }) {
@@ -49,17 +49,17 @@ export function RunPython({ code }: { code: string }) {
 
 ## API
 
-- `useWasmIdlePlayground(runtimeAssets, loadSandbox)` returns a `PlaygroundBinding`. The binding is
-  memoized on both arguments; when either changes identity, or the component unmounts, the
-  previous binding and every sandbox it created are disposed.
+- `useWasmIdlePlayground(runtimeAssets, loadSandbox)` returns a `PlaygroundBinding`. When the hook
+  replaces the binding, or the component unmounts, the previous binding and every sandbox it
+  created are disposed.
 - `useWasmIdleHost(runtimeAssets, loadSandbox)` returns the same binding plus terminal state:
   `terminal` / `terminalRef` hold the current `TerminalControl`, `setTerminal()` registers one,
   `terminalProps` is the binding's `{ playground, runtimeAssets, trustProfile }` object, and
   `dispose()` destroys the terminal and then disposes the binding. The registered terminal is also
   destroyed on unmount.
 
-Define `runtimeAssets` (a root URL string or per-runtime configuration object) and `loadSandbox` at
-module scope or memoize them; an inline object literal creates a new binding on every render.
+`runtimeAssets` is a root URL string or a per-runtime configuration object. Define it and
+`loadSandbox` at module scope, or memoize them, so re-renders keep the same binding.
 
 See the [wasm-idle repository](https://github.com/seo-rii/wasm-idle) for the runtime asset
 configuration and the [runtime execution and cleanup contract](https://github.com/seo-rii/wasm-idle/blob/main/docs/runtime-execution-contract.md).
