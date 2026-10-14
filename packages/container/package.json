@@ -40,9 +40,11 @@
     "prepack": "pnpm run build && pnpm run verify:package-boundary",
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
     "test:browser": "pnpm run build && node scripts/test-browser.mjs",
-    "test:clang": "pnpm run build && node scripts/test-clang.mjs"
+    "test:clang": "pnpm run build && node scripts/test-clang.mjs",
+    "test:browser:clang": "node scripts/test-clang-browser.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
     "playwright-core": "^1.63.0"
   },
