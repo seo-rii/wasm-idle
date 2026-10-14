@@ -1172,6 +1172,32 @@ export class WorkerAssetBridge {
 			}
 		}
 		const loaded = await this.fetchAssetFromNetwork(context, url, asset, signal, maxAssetBytes);
+		if (receipt) {
+			// Verify even when storage is disabled, unavailable or skipped. A body that the browser
+			// HTTP-decoded and that lost its gzip header is checked against the logical receipt.
+			const decoded =
+				!!loaded.contentEncoding && !(loaded.bytes[0] === 0x1f && loaded.bytes[1] === 0x8b);
+			if (decoded && receipt.uncompressedSha256 !== undefined) {
+				await verifyRuntimeAssetIntegrity({
+					asset,
+					bytes: loaded.bytes,
+					expected: {
+						sha256: receipt.sha256,
+						uncompressedSha256: receipt.uncompressedSha256,
+						uncompressedBytes: receipt.uncompressedBytes
+					},
+					stage: 'uncompressed'
+				});
+			} else if (!decoded || !asset.endsWith('.gz')) {
+				// Unpaired receipts for other assets already describe their logical bytes.
+				await verifyRuntimeAssetIntegrity({
+					asset,
+					bytes: loaded.bytes,
+					expected: { sha256: receipt.sha256, bytes: receipt.bytes }
+				});
+			}
+			// A decoded .gz body with an unpaired receipt is left to runtime validation.
+		}
 		if (identity && !loaded.contentEncoding) {
 			// Only checksum-matching bytes are published. Existing runtime validation still runs.
 			await writePersistentRuntimeAsset({

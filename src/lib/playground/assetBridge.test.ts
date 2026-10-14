@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 
+import { AssetIntegrityError } from '@wasm-idle/core';
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';
 import { WorkerAssetBridge, boundedUtf8ByteLength } from '$lib/playground/assetBridge';
 import {
@@ -1570,6 +1571,138 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
 	});
+
+	it('accepts HTTP-encoded responses whose decoded body is still the pinned gzip payload', async () => {
+		const postMessage = vi.fn();
+		const runtimeBytes = new Uint8Array([1, 2, 3]);
+		const deliveryBytes = Uint8Array.from(gzipSync(runtimeBytes));
+		const asset = 'bin/memfs.wasm.gz';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				new Response(deliveryBytes, {
+					headers: { 'content-encoding': 'gzip', 'content-type': 'application/wasm' }
+				})
+			)
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			integrity: {
+				[asset]: {
+					bytes: deliveryBytes.byteLength,
+					sha256: createHash('sha256').update(deliveryBytes).digest('hex'),
+					uncompressedBytes: runtimeBytes.byteLength,
+					uncompressedSha256: createHash('sha256').update(runtimeBytes).digest('hex')
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 29, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		const response = postMessage.mock.calls[0]?.[0];
+		expect(response, response?.assetResponse?.error).toMatchObject({
+			assetResponse: { id: 29, ok: true }
+		});
+		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
+	});
+
+	it.each([
+		['disabled', false, undefined],
+		['unavailable', { enabled: true }, undefined],
+		['skipped for an HTTP-decoded body', { enabled: true }, 'gzip']
+	] as const)(
+		'verifies release-lock receipts when persistent storage is %s',
+		async (_label, persistentCache, contentEncoding) => {
+			const asset = 'pyodide.mjs';
+			const lockedBytes = new Uint8Array(
+				await readFile(resolve(process.cwd(), 'static/pyodide', asset))
+			);
+			const forgedBytes = Uint8Array.from(lockedBytes);
+			forgedBytes[0] ^= 1;
+			const fetchMock = vi.fn();
+			vi.stubGlobal('fetch', fetchMock);
+			const respond = (bytes: Uint8Array) =>
+				new Response(Uint8Array.from(bytes), {
+					headers: contentEncoding ? { 'content-encoding': contentEncoding } : undefined
+				});
+			const bridge = new WorkerAssetBridge(
+				{ postMessage: vi.fn() } as unknown as Worker,
+				'python',
+				{
+					baseUrl: 'https://assets.example.test/pyodide/',
+					assetPrefix: 'pyodide',
+					persistentCache,
+					useAssetBridge: true
+				}
+			);
+			const loadAsset = (
+				bridge as unknown as {
+					loadAsset(
+						assetName: string,
+						signal: AbortSignal
+					): Promise<{ bytes: Uint8Array }>;
+				}
+			).loadAsset.bind(bridge);
+
+			fetchMock.mockResolvedValueOnce(respond(forgedBytes));
+			const error = await loadAsset(asset, new AbortController().signal).catch(
+				(cause: unknown) => cause
+			);
+			expect(error).toBeInstanceOf(AssetIntegrityError);
+			expect((error as Error).message).toContain(
+				`Runtime asset ${asset} compressed SHA-256 mismatch`
+			);
+
+			fetchMock.mockResolvedValueOnce(respond(lockedBytes));
+			const loaded = await loadAsset(asset, new AbortController().signal);
+			expect(createHash('sha256').update(loaded.bytes).digest('hex')).toBe(
+				createHash('sha256').update(lockedBytes).digest('hex')
+			);
+		}
+	);
+
+	it.each([
+		['logical', new Uint8Array([1, 2, 3]), 'uncompressed'],
+		['gzip', Uint8Array.from(gzipSync(new Uint8Array([1, 2, 3]))), 'compressed']
+	] as const)(
+		'checks HTTP-decoded %s bodies against the matching release-lock gzip digest',
+		async (_label, body, stage) => {
+			const asset = 'clangd.wasm.gz';
+			vi.stubGlobal(
+				'fetch',
+				vi
+					.fn()
+					.mockResolvedValue(
+						new Response(body, { headers: { 'content-encoding': 'gzip' } })
+					)
+			);
+			const bridge = new WorkerAssetBridge(
+				{ postMessage: vi.fn() } as unknown as Worker,
+				'clangd',
+				{
+					baseUrl: 'https://assets.example.test/clangd/',
+					assetPrefix: 'clangd',
+					persistentCache: false,
+					useAssetBridge: true
+				}
+			);
+			const loadAsset = (
+				bridge as unknown as {
+					loadAsset(assetName: string, signal: AbortSignal): Promise<unknown>;
+				}
+			).loadAsset.bind(bridge);
+
+			const error = await loadAsset(asset, new AbortController().signal).catch(
+				(cause: unknown) => cause
+			);
+			expect(error).toBeInstanceOf(AssetIntegrityError);
+			expect((error as Error).message).toContain(`${asset} ${stage} size mismatch`);
+		}
+	);
 
 	it('rejects gzip delivery bytes whose compressed digest does not match', async () => {
 		const postMessage = vi.fn();
