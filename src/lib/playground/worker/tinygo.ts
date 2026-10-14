@@ -10,7 +10,6 @@ self.document = {
 };
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 const postExecutionReady = () =>
 	postMessage({
@@ -102,12 +101,14 @@ self.onmessage = async (event: { data: any }) => {
 		stdinChunkTinyGo = stdin === undefined ? new Uint8Array(0) : encoder.encode(stdin);
 		stdinChunkOffsetTinyGo = 0;
 
+		const stdoutDecoder = new TextDecoder();
+		const stderrDecoder = new TextDecoder();
 		const stdout = new ConsoleStdout((chunk) => {
-			const text = decoder.decode(chunk);
+			const text = stdoutDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });
 		});
 		const stderr = new ConsoleStdout((chunk) => {
-			const text = decoder.decode(chunk);
+			const text = stderrDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });
 		});
 		const wasiRuntime = new WASI(args, ['USER=jungol'], [new TinyGoStdin(), stdout, stderr]);
@@ -161,6 +162,11 @@ self.onmessage = async (event: { data: any }) => {
 				exitCode = error.code;
 			} else {
 				throw error;
+			}
+		} finally {
+			for (const decoder of [stdoutDecoder, stderrDecoder]) {
+				const text = decoder.decode();
+				if (text) postMessage({ output: text });
 			}
 		}
 

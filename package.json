@@ -11,8 +11,7 @@
 	},
 	"workspaces": [
 		"packages/*",
-		"runtimes/*",
-		"apps/*"
+		"runtimes/*"
 	],
 	"scripts": {
 		"dev": "pnpm run prepare:app && vite dev",
@@ -33,7 +32,6 @@
 		"prepare:app": "pnpm run build:publish-deps",
 		"preview": "vite preview",
 		"probe:go-browser": "node scripts/probe-go-browser.mjs",
-		"probe:ocaml-browser": "node scripts/probe-ocaml-browser.mjs",
 		"probe:rust-browser": "node scripts/probe-rust-browser.mjs",
 		"probe:tinygo-browser": "node scripts/probe-tinygo-browser.mjs",
 		"probe:tinygo-browser:static": "node scripts/probe-tinygo-browser.mjs",

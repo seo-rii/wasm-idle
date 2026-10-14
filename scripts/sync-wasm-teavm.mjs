@@ -631,25 +631,59 @@ export async function produceWasmTeaVmAssets(options) {
 		validateReceipt(jdkArchive, 'TeaVM JDK archive'),
 		'TeaVM JDK archive'
 	);
-	for (const [field, label] of [
-		['sourcePath', 'overlay source'],
-		['utilityPath', 'overlay utility']
+	if (
+		!Array.isArray(overlay.sources) ||
+		overlay.sources.length === 0 ||
+		!Array.isArray(overlay.classes) ||
+		overlay.classes.length === 0
+	) {
+		throw new Error('TeaVM producer lock is missing overlay sources or classes');
+	}
+	const overlaySources = overlay.sources.map((entry) =>
+		requireObject(entry, 'overlay source metadata')
+	);
+	const overlayClasses = overlay.classes.map((entry) =>
+		requireObject(entry, 'overlay class metadata')
+	);
+	for (const [entries, field] of [
+		[overlaySources, 'sourcePath'],
+		[overlaySources, 'upstreamSourceEntry'],
+		[overlayClasses, 'targetEntry']
 	]) {
-		if (typeof overlay[field] !== 'string') {
-			throw new Error(`TeaVM producer lock has invalid ${label} path`);
+		if (
+			entries.some((entry) => typeof entry[field] !== 'string') ||
+			new Set(entries.map((entry) => entry[field])).size !== entries.length
+		) {
+			throw new Error(`TeaVM producer lock has invalid or duplicate overlay ${field}`);
 		}
+	}
+	for (const entry of overlaySources) {
 		await verifyFileReceipt(
-			path.resolve(repoRoot, validateRelativePath(overlay[field], `TeaVM ${label} path`)),
-			validateReceipt(
-				{
-					bytes: overlay[`${field === 'sourcePath' ? 'source' : 'utility'}Bytes`],
-					sha256: overlay[`${field === 'sourcePath' ? 'source' : 'utility'}Sha256`]
-				},
-				`TeaVM ${label}`
+			path.resolve(
+				repoRoot,
+				validateRelativePath(entry.sourcePath, 'TeaVM overlay source path')
 			),
-			`TeaVM ${label}`
+			validateReceipt(
+				{ bytes: entry.sourceBytes, sha256: entry.sourceSha256 },
+				`TeaVM overlay source ${entry.sourcePath}`
+			),
+			`TeaVM overlay source ${entry.sourcePath}`
 		);
 	}
+	if (typeof overlay.utilityPath !== 'string') {
+		throw new Error('TeaVM producer lock has invalid overlay utility path');
+	}
+	await verifyFileReceipt(
+		path.resolve(
+			repoRoot,
+			validateRelativePath(overlay.utilityPath, 'TeaVM overlay utility path')
+		),
+		validateReceipt(
+			{ bytes: overlay.utilityBytes, sha256: overlay.utilitySha256 },
+			'TeaVM overlay utility'
+		),
+		'TeaVM overlay utility'
+	);
 	if (typeof verificationMetadata.path !== 'string') {
 		throw new Error('TeaVM producer lock has invalid Gradle verification-metadata path');
 	}
@@ -791,52 +825,61 @@ export async function produceWasmTeaVmAssets(options) {
 			validateReceipt(sourceArtifact, 'TeaVM classlib source JAR'),
 			'TeaVM classlib source JAR'
 		);
-		if (
-			typeof overlay.upstreamSourceEntry !== 'string' ||
-			typeof overlay.sourcePath !== 'string'
-		) {
-			throw new Error('TeaVM producer lock has invalid overlay source metadata');
-		}
 		const upstreamSourceRoot = path.join(temporaryRoot, 'upstream-overlay-source');
 		await mkdir(upstreamSourceRoot);
 		await run(
 			'unzip',
-			['-q', sourceJarPath, overlay.upstreamSourceEntry, '-d', upstreamSourceRoot],
+			[
+				'-q',
+				sourceJarPath,
+				...overlaySources.map((entry) => entry.upstreamSourceEntry),
+				'-d',
+				upstreamSourceRoot
+			],
 			{ cwd: temporaryRoot, env: buildEnvironment }
 		);
-		const upstreamSource = await verifyFileReceipt(
-			path.join(upstreamSourceRoot, ...overlay.upstreamSourceEntry.split('/')),
-			validateReceipt(
-				{
-					bytes: overlay.upstreamSourceBytes,
-					sha256: overlay.upstreamSourceSha256
-				},
-				'TeaVM upstream overlay source'
-			),
-			'TeaVM upstream overlay source'
-		);
-		const transform = requireObject(overlay.transform, 'overlay transform metadata');
-		if (
-			typeof transform.from !== 'string' ||
-			typeof transform.to !== 'string' ||
-			!Number.isSafeInteger(transform.expectedOccurrences) ||
-			transform.expectedOccurrences <= 0
-		) {
-			throw new Error('TeaVM producer lock has an invalid overlay transform');
-		}
-		const upstreamSourceText = upstreamSource.toString('utf8');
-		const occurrences = upstreamSourceText.split(transform.from).length - 1;
-		if (occurrences !== transform.expectedOccurrences) {
-			throw new Error(
-				`TeaVM overlay expected ${transform.expectedOccurrences} source occurrences, found ${occurrences}`
+		for (const entry of overlaySources) {
+			const upstreamSource = await verifyFileReceipt(
+				path.join(upstreamSourceRoot, ...entry.upstreamSourceEntry.split('/')),
+				validateReceipt(
+					{
+						bytes: entry.upstreamSourceBytes,
+						sha256: entry.upstreamSourceSha256
+					},
+					`TeaVM upstream overlay source ${entry.upstreamSourceEntry}`
+				),
+				`TeaVM upstream overlay source ${entry.upstreamSourceEntry}`
 			);
-		}
-		const transformedSource = Buffer.from(
-			upstreamSourceText.split(transform.from).join(transform.to)
-		);
-		const vendoredOverlaySource = await readFile(path.resolve(repoRoot, overlay.sourcePath));
-		if (!transformedSource.equals(vendoredOverlaySource)) {
-			throw new Error('TeaVM vendored overlay is not the locked two-call source transform');
+			if (!Array.isArray(entry.transforms) || entry.transforms.length === 0) {
+				throw new Error(`TeaVM overlay ${entry.sourcePath} has no source transforms`);
+			}
+			let sourceText = upstreamSource.toString('utf8');
+			for (const transform of entry.transforms) {
+				if (
+					!isObject(transform) ||
+					typeof transform.from !== 'string' ||
+					!transform.from ||
+					typeof transform.to !== 'string' ||
+					!Number.isSafeInteger(transform.expectedOccurrences) ||
+					transform.expectedOccurrences <= 0
+				) {
+					throw new Error('TeaVM producer lock has an invalid overlay transform');
+				}
+				const occurrences = sourceText.split(transform.from).length - 1;
+				if (occurrences !== transform.expectedOccurrences) {
+					throw new Error(
+						`TeaVM overlay ${entry.upstreamSourceEntry} expected ${transform.expectedOccurrences} source occurrences, found ${occurrences}`
+					);
+				}
+				sourceText = sourceText.split(transform.from).join(transform.to);
+			}
+			const transformedSource = Buffer.from(sourceText);
+			const vendoredOverlaySource = await readFile(path.resolve(repoRoot, entry.sourcePath));
+			if (!transformedSource.equals(vendoredOverlaySource)) {
+				throw new Error(
+					`TeaVM vendored overlay ${entry.sourcePath} is not the locked source transform`
+				);
+			}
 		}
 		const distributionZip = path.join(
 			buildRoot,
@@ -895,10 +938,9 @@ export async function produceWasmTeaVmAssets(options) {
 			);
 			classpath.push(jarPath);
 		}
-		const overlayClasses = path.join(temporaryRoot, 'overlay-classes');
+		const overlayClassRoot = path.join(temporaryRoot, 'overlay-classes');
 		const utilityClasses = path.join(temporaryRoot, 'utility-classes');
-		await Promise.all([mkdir(overlayClasses), mkdir(utilityClasses)]);
-		const overlaySourcePath = path.resolve(repoRoot, overlay.sourcePath);
+		await Promise.all([mkdir(overlayClassRoot), mkdir(utilityClasses)]);
 		const overlayUtilityPath = path.resolve(repoRoot, overlay.utilityPath);
 		await run(
 			path.join(javaHome, 'bin', 'javac'),
@@ -908,20 +950,42 @@ export async function produceWasmTeaVmAssets(options) {
 				'-cp',
 				classpath.join(path.delimiter),
 				'-d',
-				overlayClasses,
-				overlaySourcePath
+				overlayClassRoot,
+				...overlaySources.map((entry) => path.resolve(repoRoot, entry.sourcePath))
 			],
 			{ cwd: temporaryRoot, env: buildEnvironment }
 		);
-		const overlayClassPath = path.join(overlayClasses, ...overlay.targetEntry.split('/'));
-		await verifyFileReceipt(
-			overlayClassPath,
-			validateReceipt(
-				{ bytes: overlay.classBytes, sha256: overlay.classSha256 },
-				'TeaVM overlay class'
-			),
-			'TeaVM overlay class'
-		);
+		// Nested classes compile to separate entries; every emitted class must be replaced.
+		const compiledOverlayClasses = (await readdir(overlayClassRoot, { recursive: true }))
+			.filter((entry) => entry.endsWith('.class'))
+			.map((entry) => entry.split(path.sep).join('/'))
+			.sort();
+		if (
+			JSON.stringify(compiledOverlayClasses) !==
+			JSON.stringify(overlayClasses.map((entry) => entry.targetEntry).sort())
+		) {
+			throw new Error(
+				`TeaVM overlay classes do not match javac output: ${compiledOverlayClasses.join(', ')}`
+			);
+		}
+		const overlayReplacementArgs = [];
+		for (const entry of overlayClasses) {
+			const overlayClassPath = path.join(overlayClassRoot, ...entry.targetEntry.split('/'));
+			await verifyFileReceipt(
+				overlayClassPath,
+				validateReceipt(
+					{ bytes: entry.classBytes, sha256: entry.classSha256 },
+					`TeaVM overlay class ${entry.targetEntry}`
+				),
+				`TeaVM overlay class ${entry.targetEntry}`
+			);
+			overlayReplacementArgs.push(
+				entry.targetEntry,
+				overlayClassPath,
+				entry.canonicalClassSha256,
+				entry.classSha256
+			);
+		}
 		await run(
 			path.join(javaHome, 'bin', 'javac'),
 			['--release', '17', '-d', utilityClasses, overlayUtilityPath],
@@ -945,12 +1009,9 @@ export async function produceWasmTeaVmAssets(options) {
 				utilityClasses,
 				'ApplyRuntimeClasslibOverlay',
 				canonicalRuntimePath,
-				overlayClassPath,
 				patchedRuntimePath,
-				overlay.targetEntry,
-				overlay.canonicalClassSha256,
-				overlay.classSha256,
-				String(overlay.archiveEntryCount)
+				String(overlay.archiveEntryCount),
+				...overlayReplacementArgs
 			],
 			{ cwd: temporaryRoot, env: buildEnvironment }
 		);

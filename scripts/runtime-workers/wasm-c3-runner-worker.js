@@ -8,27 +8,31 @@ function c3Stdin(source, channel) {
 	if (!channel) return () => (offset < input.length ? input[offset++] : -1);
 	if (
 		channel.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel.protocolVersion !== 1 ||
+		channel.protocolVersion !== 2 ||
 		channel.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel.capacity) ||
 		channel.capacity <= 0 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== 16 + channel.capacity
 	)
 		throw new Error('Invalid C3 stdin ring');
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const bytes = new Uint8Array(channel.buffer, 16, channel.capacity);
 	return () => {
 		while (true) {
 			if (Atomics.load(control, 3)) throw new Error('C3 stdin cancelled');
-			const write = Atomics.load(control, 0);
-			const read = Atomics.load(control, 1);
-			const count = write - read;
-			if (count < 0 || count > bytes.length) throw new Error('Invalid C3 stdin counters');
+			const write = Atomics.load(control, 0) >>> 0;
+			const read = Atomics.load(control, 1) >>> 0;
+			const count = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || count > bytes.length)
+				throw new Error('Invalid C3 stdin counters');
 			if (count) {
 				const value = bytes[read % bytes.length];
-				Atomics.store(control, 1, read + 1);
+				Atomics.store(control, 1, (read + 1) % counterRange);
 				// Wake the producer once per batch, rather than posting one message per byte.
 				if (count === 1 || (read + 1) % 4096 === 0)
 					self.postMessage({ type: 'stdin-request' });

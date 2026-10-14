@@ -34,9 +34,13 @@ export function defineRuntimeWorkerLifetimePolicy(
 		case 'per-run':
 			return Object.freeze({ mode: 'per-run' });
 		case 'persistent':
-			if (!Number.isSafeInteger(policy.idleTimeoutMs) || policy.idleTimeoutMs <= 0) {
+			if (
+				!Number.isSafeInteger(policy.idleTimeoutMs) ||
+				policy.idleTimeoutMs <= 0 ||
+				policy.idleTimeoutMs > 2_147_483_647
+			) {
 				throw new TypeError(
-					`Persistent worker idle timeout must be a positive safe integer for runtime ${runtimeId}`
+					`Persistent worker idle timeout must be a positive safe integer no greater than 2147483647 ms for runtime ${runtimeId}`
 				);
 			}
 			if (typeof policy.evictOnMemoryPressure !== 'boolean') {
@@ -50,9 +54,13 @@ export function defineRuntimeWorkerLifetimePolicy(
 				evictOnMemoryPressure: policy.evictOnMemoryPressure
 			});
 		case 'pool':
-			if (!Number.isSafeInteger(policy.idleTimeoutMs) || policy.idleTimeoutMs <= 0) {
+			if (
+				!Number.isSafeInteger(policy.idleTimeoutMs) ||
+				policy.idleTimeoutMs <= 0 ||
+				policy.idleTimeoutMs > 2_147_483_647
+			) {
 				throw new TypeError(
-					`Worker pool idle timeout must be a positive safe integer for runtime ${runtimeId}`
+					`Worker pool idle timeout must be a positive safe integer no greater than 2147483647 ms for runtime ${runtimeId}`
 				);
 			}
 			if (!Number.isSafeInteger(policy.maxWorkers) || policy.maxWorkers < 2) {

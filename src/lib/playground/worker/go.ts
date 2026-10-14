@@ -286,6 +286,7 @@ self.onmessage = async (event: { data: any }) => {
 		breakpoints = [],
 		pauseOnEntry = false
 	} = event.data;
+	let abandonedJsWasmRun = false;
 	try {
 		if (load) {
 			compilerUrl = nextCompilerUrl;
@@ -441,8 +442,14 @@ self.onmessage = async (event: { data: any }) => {
 					}
 				}
 			});
+		} catch (error) {
+			// wasm_exec.js runs js/wasm programs on this worker's event loop, so a rejected
+			// run (such as an expired runtime deadline) may still be running here.
+			abandonedJsWasmRun = effectiveTarget === 'js/wasm';
+			throw error;
 		} finally {
-			restoreGoDebugHost?.();
+			// The abandoned program may still call the hook until the host discards this worker.
+			if (!abandonedJsWasmRun) restoreGoDebugHost?.();
 		}
 		if (log) {
 			console.log(
@@ -453,17 +460,17 @@ self.onmessage = async (event: { data: any }) => {
 			throw new Error('Go program did not return an execution result');
 		}
 		if (execution.exitCode !== 0) {
-			throw new Error(
-				execution.stderr
-					? `Go program exited with code ${execution.exitCode}\n${execution.stderr}`
-					: `Go program exited with code ${execution.exitCode}`
-			);
+			// stderr was already streamed to the terminal above.
+			throw new Error(`Go program exited with code ${execution.exitCode}`);
 		}
 		postMessage({ results: true });
 	} catch (error: any) {
 		if (log) {
 			console.error('[wasm-idle:go-worker] failed', error);
 		}
-		postMessage({ error: error?.message || String(error) });
+		postMessage({
+			error: error?.message || String(error),
+			...(abandonedJsWasmRun ? { fatal: true } : {})
+		});
 	}
 };

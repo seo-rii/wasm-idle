@@ -52,6 +52,11 @@ export function resolveExecutionLimits(limits: Partial<ExecutionLimits> = {}): E
 				`Execution limit ${name} must be a positive safe integer`
 			);
 		}
+		if (name.endsWith('TimeoutMs') && value > 2_147_483_647) {
+			throw new RuntimeConfigurationError(
+				`Execution limit ${name} must not exceed 2147483647 ms`
+			);
+		}
 	}
 	return resolved;
 }
@@ -110,12 +115,7 @@ export interface ExecutionDiagnostic {
 }
 
 export type ExecutionArtifactKind =
-	| 'file'
-	| 'image'
-	| 'audio'
-	| 'table'
-	| 'wasm-module'
-	| 'compiler-ir';
+	'file' | 'image' | 'audio' | 'table' | 'wasm-module' | 'compiler-ir';
 
 export interface ExecutionArtifact {
 	path: string;

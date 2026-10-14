@@ -1,5 +1,5 @@
 export const STATIC_STDIN_RING_PROTOCOL = 'wasm-idle-static-stdin-ring' as const;
-export const STATIC_STDIN_RING_PROTOCOL_VERSION = 1 as const;
+export const STATIC_STDIN_RING_PROTOCOL_VERSION = 2 as const;
 export const STATIC_STDIN_RING_CONTROL_SLOTS = 4 as const;
 export const STATIC_STDIN_RING_CONTROL_BYTES =
 	STATIC_STDIN_RING_CONTROL_SLOTS * Int32Array.BYTES_PER_ELEMENT;
@@ -44,6 +44,7 @@ export class StaticStdinRingHost {
 
 	private readonly control: Int32Array;
 	private readonly data: Uint8Array;
+	private readonly counterRange: number;
 	private readonly pending: Uint8Array[] = [];
 	private pendingBytes = 0;
 	private pendingOffset = 0;
@@ -64,6 +65,9 @@ export class StaticStdinRingHost {
 		if (maxBufferedBytes < capacity) {
 			throw new TypeError('Static stdin maximum buffered bytes must cover the ring capacity');
 		}
+		if (capacity > 2 ** 31) {
+			throw new TypeError('Static stdin ring capacity must not exceed 2^31 bytes');
+		}
 		if (typeof SharedArrayBuffer !== 'function') {
 			throw new TypeError('SharedArrayBuffer is required for streaming static stdin');
 		}
@@ -71,6 +75,9 @@ export class StaticStdinRingHost {
 		const buffer = new SharedArrayBuffer(STATIC_STDIN_RING_CONTROL_BYTES + capacity);
 		this.control = new Int32Array(buffer, 0, STATIC_STDIN_RING_CONTROL_SLOTS);
 		this.data = new Uint8Array(buffer, STATIC_STDIN_RING_CONTROL_BYTES, capacity);
+		// A capacity-aligned modulus preserves physical offsets at rollover for
+		// non-power-of-two rings too. At least two full rings fit in this range.
+		this.counterRange = Math.floor(2 ** 32 / capacity) * capacity;
 		this.maxBufferedBytes = maxBufferedBytes;
 		this.descriptor = Object.freeze({
 			protocol: STATIC_STDIN_RING_PROTOCOL,
@@ -133,10 +140,14 @@ export class StaticStdinRingHost {
 	}
 
 	private ringBytes() {
-		const write = Atomics.load(this.control, STATIC_STDIN_RING_WRITE_INDEX);
-		const read = Atomics.load(this.control, STATIC_STDIN_RING_READ_INDEX);
-		const used = write - read;
-		if (used < 0 || used > this.data.byteLength) {
+		const write = Atomics.load(this.control, STATIC_STDIN_RING_WRITE_INDEX) >>> 0;
+		const read = Atomics.load(this.control, STATIC_STDIN_RING_READ_INDEX) >>> 0;
+		const used = (write - read + this.counterRange) % this.counterRange;
+		if (
+			write >= this.counterRange ||
+			read >= this.counterRange ||
+			used > this.data.byteLength
+		) {
 			throw new Error('Static stdin ring counters are invalid');
 		}
 		return used;
@@ -144,10 +155,14 @@ export class StaticStdinRingHost {
 
 	private flush() {
 		if (this.cancelled) return;
-		let write = Atomics.load(this.control, STATIC_STDIN_RING_WRITE_INDEX);
-		const read = Atomics.load(this.control, STATIC_STDIN_RING_READ_INDEX);
-		const used = write - read;
-		if (used < 0 || used > this.data.byteLength) {
+		let write = Atomics.load(this.control, STATIC_STDIN_RING_WRITE_INDEX) >>> 0;
+		const read = Atomics.load(this.control, STATIC_STDIN_RING_READ_INDEX) >>> 0;
+		const used = (write - read + this.counterRange) % this.counterRange;
+		if (
+			write >= this.counterRange ||
+			read >= this.counterRange ||
+			used > this.data.byteLength
+		) {
 			throw new Error('Static stdin ring counters are invalid');
 		}
 
@@ -167,7 +182,7 @@ export class StaticStdinRingHost {
 				);
 			}
 
-			write += count;
+			write = (write + count) % this.counterRange;
 			available -= count;
 			this.pendingOffset += count;
 			this.pendingBytes -= count;

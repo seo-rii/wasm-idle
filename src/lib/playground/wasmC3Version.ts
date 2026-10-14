@@ -16,6 +16,6 @@ export const bundledC3Profile = {
 	}
 } as const;
 export const bundledC3WorkerReceipt = {
-	bytes: 14151,
-	sha256: '358ee8aabac7e05c9eff87fcf3335410cc189e50b7fe9fc70bd318d9a90b1d56'
+	bytes: 14449,
+	sha256: '9a693a7ba6396713466c6cd1bdb3788dea01927adabd834e41b38d5eae64715f'
 } as const;

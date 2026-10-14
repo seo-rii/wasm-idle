@@ -135,6 +135,7 @@ async function createServiceWorkerHarness(
 		}
 		return new Response('not found', { status: 404 });
 	});
+	const cachesOpen = vi.fn();
 	const workerSelf = {
 		addEventListener(type: string, listener: (event: any) => void) {
 			const registered = listeners.get(type) ?? [];
@@ -158,11 +159,12 @@ async function createServiceWorkerHarness(
 			Request,
 			Response,
 			URL,
-			caches: { open: vi.fn() },
+			caches: { open: cachesOpen },
 			console,
 			fetch: fetchMock,
 			setTimeout,
 			clearTimeout,
+			crypto,
 			self: workerSelf
 		}
 	);
@@ -170,6 +172,7 @@ async function createServiceWorkerHarness(
 	const fetchListener = listeners.get('fetch')?.[0];
 	if (!fetchListener) throw new Error('service worker did not register a fetch listener');
 	return {
+		cachesOpen,
 		fetchMock,
 		layerCacheState: layerCacheState as () => { bytes: number; entries: number },
 		setCompressedPayloads(nextPayloads: Record<string, Uint8Array>) {
@@ -196,6 +199,103 @@ async function createServiceWorkerHarness(
 }
 
 describe('compressed runtime service worker', () => {
+	it.each([
+		['opaqueredirect', `${scope}redirected`],
+		['opaque', 'https://cdn.example.net/no-cors.js']
+	] as const)('passes %s responses through unchanged', async (type, href) => {
+		const harness = await createServiceWorkerHarness({});
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		// Status 0 cannot be constructed in Node; shadow the getters like a browser response.
+		const response = new Response(null);
+		Object.defineProperties(response, { status: { value: 0 }, type: { value: type } });
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			input instanceof Request && input.url === href ? response : fetch(input, init)
+		);
+
+		expect(await harness.request(href)).toBe(response);
+	});
+
+	it('falls back to the network when local response synthesis throws', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const modulePath = '__wasm_idle_dynamic_modules__/generated.js';
+			const harness = await createServiceWorkerHarness({}, undefined, {
+				[modulePath]: new TextEncoder().encode('network module')
+			});
+			harness.cachesOpen.mockRejectedValue(new Error('Cache Storage unavailable'));
+
+			const response = await harness.request(modulePath);
+
+			expect(await response.text()).toBe('network module');
+			expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
+			expect(consoleError).toHaveBeenCalledOnce();
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+
+	it('rejects instead of resolving undefined when the network fails', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const harness = await createServiceWorkerHarness({});
+			const fetch = harness.fetchMock.getMockImplementation()!;
+			harness.fetchMock.mockImplementation(async (input, init) => {
+				if (input instanceof Request && input.url === `${scope}offline.js`) {
+					throw new TypeError('Failed to fetch');
+				}
+				return fetch(input, init);
+			});
+
+			await expect(harness.request('offline.js')).rejects.toThrow('Failed to fetch');
+			expect(
+				harness.fetchMock.mock.calls.filter(
+					([input]) => input instanceof Request && input.url === `${scope}offline.js`
+				)
+			).toHaveLength(1);
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+
+	it.each([
+		'https://cdn.example.net/wasm-idle/wasm-php/assets/php.wasm',
+		'https://cdn.example.net/wasm-idle/wasm-rust/runtime/layered.wasm',
+		'https://cdn.example.net/wasm-idle/wasm-tinygo/vendor/wasm-rust-runtime/layered.wasm',
+		'https://cdn.example.net/wasm-idle/__wasm_idle_dynamic_modules__/generated.js',
+		'https://example.com/wasm-php/assets/php.wasm',
+		'https://example.com/wasm-rust/runtime/layered.wasm'
+	])('sends out-of-scope %s straight to the network', async (href) => {
+		const harness = await createServiceWorkerHarness(
+			{ 'wasm-php/assets/php.wasm': new TextEncoder().encode('local compressed') },
+			{
+				assets: {
+					'wasm-rust/runtime/layered.wasm': {
+						layer: 'layers/local.gz',
+						offset: 0,
+						length: 5
+					}
+				},
+				layers: { 'layers/local.gz': { bytes: new TextEncoder().encode('local') } }
+			}
+		);
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			input instanceof Request && input.url === href
+				? new Response('network')
+				: fetch(input, init)
+		);
+
+		const response = await harness.request(href);
+
+		expect(await response.text()).toBe('network');
+		expect(
+			harness.fetchMock.mock.calls.map(([input]) =>
+				input instanceof Request ? input.url : String(input)
+			)
+		).toEqual([href]);
+		expect(harness.cachesOpen).not.toHaveBeenCalled();
+	});
+
 	it('preserves exact final URLs for pinned AWK v2 network responses', async () => {
 		const receipt = 'a'.repeat(64);
 		for (const assetName of [
@@ -437,7 +537,9 @@ describe('compressed runtime service worker', () => {
 			const first = harness.request('first/module.wasm');
 			await firstRequested;
 			const next = harness.request('next/module.wasm');
-			expect((await first).status).toBe(404);
+			const timedOut = await first;
+			expect(timedOut.status).toBe(504);
+			expect(timedOut.statusText).toBe('Runtime Layer Timeout');
 			const response = await next;
 			expect(response.status).toBe(200);
 			expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
@@ -519,7 +621,9 @@ describe('compressed runtime service worker', () => {
 				{},
 				{ layerBytes: 16, cacheBytes: 8 }
 			);
-			expect((await harness.request(assetPath)).status).toBe(404);
+			const response = await harness.request(assetPath);
+			expect(response.status).toBe(502);
+			expect(response.statusText).toBe('Runtime Layer Too Large');
 			expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
 		}
 	);
@@ -697,5 +801,61 @@ describe('compressed runtime service worker', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('content-type')).toBe('application/json');
 		expect(await response.text()).toBe('{"decoded":true}');
+	});
+
+	const staleLayerBytes = new TextEncoder().encode('layer bytes from deploy 1');
+	const longerStaleLayerBytes = new TextEncoder().encode('layer bytes from deploy 1 and more');
+	it.each([
+		[
+			'a stale layer with matching sizes',
+			'Runtime Layer Digest Mismatch',
+			() => new Response(new Uint8Array(gzipSync(staleLayerBytes)))
+		],
+		[
+			'a stale layer longer than its manifest',
+			'Runtime Layer Too Large',
+			() => new Response(new Uint8Array(gzipSync(longerStaleLayerBytes)))
+		],
+		[
+			'a content-decoded layer of the wrong length',
+			'Runtime Layer Length Mismatch',
+			() => new Response(longerStaleLayerBytes, { headers: { 'content-encoding': 'gzip' } })
+		]
+	])('rejects %s without serving or caching it', async (_name, statusText, staleLayer) => {
+		const assetPath = 'wasm-runtime/verified.wasm';
+		const layerPath = '_runtime-layers/verified.bin.gz';
+		const bytes = new TextEncoder().encode('layer bytes from deploy 2');
+		// The sizes match, so only the digest can tell the stale deploy apart.
+		expect(gzipSync(bytes).byteLength).toBe(gzipSync(staleLayerBytes).byteLength);
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: { [assetPath]: { layer: layerPath, offset: 0, length: bytes.byteLength } },
+				layers: { [layerPath]: { bytes } }
+			}
+		);
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			String(input).includes(`/${layerPath}?`) ? staleLayer() : fetch(input, init)
+		);
+
+		const rejected = await harness.request(assetPath);
+
+		expect(rejected.status).toBe(502);
+		expect(rejected.statusText).toBe(statusText);
+		expect(await rejected.text()).toBe(`${statusText}: ${layerPath}\n`);
+		expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
+
+		harness.fetchMock.mockImplementation(fetch);
+		const response = await harness.request(assetPath);
+
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe('layer bytes from deploy 2');
+		expect(harness.layerCacheState()).toEqual({ bytes: bytes.byteLength, entries: 1 });
+		expect(
+			harness.fetchMock.mock.calls
+				.map(([input]) => new URL(String(input)).pathname)
+				.filter((pathname) => pathname === new URL(layerPath, scope).pathname)
+		).toHaveLength(2);
 	});
 });

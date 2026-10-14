@@ -417,9 +417,14 @@ describe('Haskell worker', () => {
 				message: 'Bad helper'
 			})
 		});
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: 'src/Main.hs:2:1: error: Bad main\nlib/Helper.hs:3:2: warning: Bad helper'
-		});
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'src/Main.hs:2:1: error: Bad main\n' },
+			{ output: 'lib/Helper.hs:3:2: warning: Bad helper\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'compile failed' });
 	});
 
 	it('connects run stdin to the dyld browser host fd0 implementation', async () => {
@@ -663,9 +668,58 @@ describe('Haskell worker', () => {
 				message: 'Variable not in scope: nope'
 			}
 		});
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: 'main.hs:2:1: error: Variable not in scope: nope'
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'main.hs:2:1: error: Variable not in scope: nope\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'compile failed' });
+	});
+
+	it('reports a failed run without repeating already-streamed stderr', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) { this.options = options; }
+			}
+			export async function main(options) {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async () => {
+								options.rpc.options.stdout('before');
+								options.rpc.options.stderr('<interactive>: boom');
+								options.rpc.options.stderr('CallStack (from HasCallStack):');
+								throw new Error('ExitFailure 1');
+							};
+						}
+					}
+				};
+			}
+		`);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
 		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'main = putStrLn "before" >> error "boom"',
+				prepare: false,
+				activePath: 'main.hs'
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'before\n' },
+			{ output: '<interactive>: boom\n' },
+			{ output: 'CallStack (from HasCallStack):\n' }
+		]);
+		expect(messages.filter((message: any) => 'diagnostic' in message)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ error: 'ExitFailure 1' });
 	});
 
 	it('parses multiline GHC diagnostics without running the worker', async () => {

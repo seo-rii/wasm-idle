@@ -58,8 +58,8 @@ export const WASM_NIM_RUNTIME_PROFILE = {
 export const WASM_NIM_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_NIM_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 43945,
-		sha256: '5b320df97e0c100a45bbadf4fa486f45c1970e9b7df0a1c1e448408147e53a73'
+		bytes: 44332,
+		sha256: '7cf786f1baef3ff461d88d6edd0ebb67754f147eae98864460b7283d1ed7c976'
 	}
 });
 export const WASM_NIM_ASSET_VERSION = WASM_NIM_RUNTIME_PROFILE.manifestFingerprint;

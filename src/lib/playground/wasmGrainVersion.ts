@@ -20,6 +20,6 @@ export const bundledGrainProfile = {
 	}
 } as const;
 export const bundledGrainWorkerReceipt = {
-	bytes: 28127,
-	sha256: 'c36b478c25f000a9a9ecdb186490cf8fce07ece9b5ac271031aa2e97f75cabab'
+	bytes: 28417,
+	sha256: 'b3650e7f75f4eb21fec429f6cb43fb436e031583902f585ec9851881f021b464'
 } as const;

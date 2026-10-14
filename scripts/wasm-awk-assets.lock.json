@@ -17,8 +17,8 @@
 	},
 	"legacyWorker": {
 		"path": "runner-worker.js",
-		"bytes": 5138,
-		"sha256": "cb8a0beda1ca4483bfc7dc6e6b1fc89c3022719c9cfeaddc35a534f48e8e4b0b"
+		"bytes": 5525,
+		"sha256": "9ef8a63c16c16205b3dc61d756bb9683ee2b44c15759527c314dd489efacf2b3"
 	},
 	"assets": [
 		{

@@ -5,13 +5,20 @@ export interface SignalTimeoutOptions {
 	timeoutError: () => Error;
 }
 
+export function validateTimeoutMs(timeoutMs: number, operationName: string): void {
+	// Browsers and Node use signed 32-bit delays; larger values may fire immediately.
+	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
+		throw new TypeError(
+			`${operationName} timeout must be an integer between 1 and 2147483647 ms`
+		);
+	}
+}
+
 export async function runWithSignalAndTimeout<T>(
 	operation: (signal: AbortSignal) => Promise<T>,
 	options: SignalTimeoutOptions
 ): Promise<T> {
-	if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0) {
-		throw new TypeError(`${options.operationName} timeout must be a positive safe integer`);
-	}
+	validateTimeoutMs(options.timeoutMs, options.operationName);
 	if (options.signal?.aborted) {
 		throw options.signal.reason instanceof Error
 			? options.signal.reason

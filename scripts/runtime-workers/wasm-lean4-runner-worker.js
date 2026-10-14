@@ -10,10 +10,11 @@ function createSharedStdinReader(channel, flush = () => {}) {
 	if (
 		!channel ||
 		channel.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel.protocolVersion !== 1 ||
+		channel.protocolVersion !== 2 ||
 		channel.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel.capacity) ||
 		channel.capacity < 1 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== 16 + channel.capacity ||
@@ -22,20 +23,22 @@ function createSharedStdinReader(channel, flush = () => {}) {
 		throw new Error('Lean stdin requires the shared streaming stdin channel.');
 	}
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const bytes = new Uint8Array(channel.buffer, 16, channel.capacity);
 	const readByte = (blocking = true) => {
 		flush();
 		while (true) {
 			if (Atomics.load(control, 3) === 1)
 				throw new Error('Lean streaming stdin was cancelled.');
-			const write = Atomics.load(control, 0),
-				read = Atomics.load(control, 1);
-			const available = write - read;
-			if (available < 0 || available > channel.capacity)
+			const write = Atomics.load(control, 0) >>> 0,
+				read = Atomics.load(control, 1) >>> 0;
+			const available = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || available > channel.capacity)
 				throw new Error('Lean stdin ring is corrupt.');
 			if (available > 0) {
 				const value = bytes[read % channel.capacity];
-				Atomics.store(control, 1, read + 1);
+				Atomics.store(control, 1, (read + 1) % counterRange);
 				return value;
 			}
 			if (Atomics.load(control, 2) === 1) return null;

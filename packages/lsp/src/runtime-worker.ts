@@ -1,6 +1,7 @@
 import { loadLanguageToolAsset, type LanguageToolAssetRuntime } from './assets.js';
 import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import type { LanguageToolPersistentOptions } from './persistent-assets.js';
+import { validateTimeoutMs } from './lifecycle.js';
 
 export interface RuntimeWorkerDiagnosticRequest extends LanguageToolPersistentOptions {
 	runtime?: LanguageToolAssetRuntime;
@@ -22,6 +23,8 @@ export interface RuntimeWorkerDiagnosticResult {
 export async function runRuntimeWorkerDiagnostics(
 	request: RuntimeWorkerDiagnosticRequest
 ): Promise<RuntimeWorkerDiagnosticResult> {
+	const timeoutMs = request.timeoutMs ?? 5000;
+	validateTimeoutMs(timeoutMs, 'Runtime worker diagnostics');
 	const workerAsset = request.workerAsset ?? 'runner-worker.js';
 	let workerUrl = request.workerUrl || '';
 	let blobUrl = '';
@@ -81,7 +84,7 @@ export async function runRuntimeWorkerDiagnostics(
 					requireExactResponseUrl: true
 				},
 				() => undefined,
-				{ timeoutMs: request.timeoutMs ?? 5000 }
+				{ timeoutMs }
 			);
 			loadedBytes = loaded.bytes;
 		}
@@ -126,7 +129,7 @@ export async function runRuntimeWorkerDiagnostics(
 				// Preserve the diagnostic timeout.
 			}
 			reject(new Error(request.timeoutMessage));
-		}, request.timeoutMs ?? 5000);
+		}, timeoutMs);
 		worker.onerror = (event) => {
 			clearTimeout(timeout);
 			try {

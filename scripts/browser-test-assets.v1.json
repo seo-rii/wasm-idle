@@ -253,13 +253,6 @@
 			"sha256": "3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8"
 		},
 		{
-			"group": "c3",
-			"source": "wasm-c3/runner-worker.js",
-			"target": "wasm-c3/runner-worker.js",
-			"size": 14151,
-			"sha256": "358ee8aabac7e05c9eff87fcf3335410cc189e50b7fe9fc70bd318d9a90b1d56"
-		},
-		{
 			"group": "lfortran",
 			"source": "wasm-lfortran/lfortran.data.bin",
 			"target": "wasm-lfortran/lfortran.data.bin",
@@ -272,17 +265,11 @@
 			"target": "wasm-lfortran/producer-receipt.json",
 			"size": 6932,
 			"sha256": "11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"
-		},
-		{
-			"group": "lfortran",
-			"source": "wasm-lfortran/runner-worker.js",
-			"target": "wasm-lfortran/runner-worker.js",
-			"size": 11569,
-			"sha256": "e801cbf4dca7be9fc6fd1205dc4e6ab17af4530f42527dcc8e544eb8373a1469"
 		}
 	],
 	"groupBaseUrls": {
 		"c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
 		"lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/"
-	}
+	},
+	"generatedWorkers": ["c3", "lfortran"]
 }

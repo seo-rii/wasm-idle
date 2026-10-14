@@ -298,7 +298,7 @@ describe('GoAWK runner worker', () => {
 		const legacyManifest = JSON.parse(
 			await readFile(new URL('runtime-manifest.v1.json', staticRuntimeUrl), 'utf8')
 		);
-		expect(legacyManifest.fingerprint).toBe('b11561dac5f0cff1');
+		expect(legacyManifest.fingerprint).toBe('5a2dcd7136e56204');
 		const renderedSource = renderAwkRunnerWorker(Buffer.from(await readWorkerSource()), {
 			profileId: manifest.profileId,
 			goShimReceipt: manifest.assets.goShim,
@@ -474,7 +474,7 @@ describe('GoAWK runner worker', () => {
 		const messages = await runHarness({
 			stdinChannel: {
 				protocol: 'wasm-idle-static-stdin-ring',
-				protocolVersion: 1,
+				protocolVersion: 2,
 				buffer: new SharedArrayBuffer(32),
 				capacity: 16,
 				controlBytes: 8

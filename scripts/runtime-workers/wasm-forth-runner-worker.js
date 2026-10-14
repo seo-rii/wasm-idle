@@ -223,10 +223,11 @@ function createSharedKeyReader(channel) {
 	if (channel === undefined) return null;
 	if (
 		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel?.protocolVersion !== 1 ||
+		channel?.protocolVersion !== 2 ||
 		channel?.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel?.capacity) ||
 		channel.capacity <= 0 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
@@ -236,21 +237,23 @@ function createSharedKeyReader(channel) {
 	}
 
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
 	return () => {
 		while (true) {
 			if (Atomics.load(control, 3) === 1) {
 				throw new Error('WAForth streaming stdin was cancelled.');
 			}
-			const write = Atomics.load(control, 0);
-			const read = Atomics.load(control, 1);
-			const available = write - read;
-			if (available < 0 || available > bytes.byteLength) {
+			const write = Atomics.load(control, 0) >>> 0;
+			const read = Atomics.load(control, 1) >>> 0;
+			const available = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || available > bytes.byteLength) {
 				throw new Error('WAForth streaming stdin counters are invalid.');
 			}
 			if (available > 0) {
 				const value = bytes[read % bytes.byteLength];
-				Atomics.store(control, 1, read + 1);
+				Atomics.store(control, 1, (read + 1) % counterRange);
 				return value;
 			}
 			if (Atomics.load(control, 2) === 1) return -1;

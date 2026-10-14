@@ -49,7 +49,7 @@ export interface StaticWorkerDiagnosticsOptions<
 		message: Record<string, unknown>,
 		request: StaticWorkerDiagnosticRequest<TConfig>
 	) => readonly Transferable[];
-	diagnosticsFromResult: (result: TResult, document: LspDocument) => LspDiagnostic[];
+	diagnosticsFromResult: (result: TResult, document: LspDocument) => readonly LspDiagnostic[];
 	validateConfig?: (config: TConfig) => string | null | undefined;
 	cacheKeyParts?: (config: TConfig) => readonly string[];
 	activePathFromDocument?: (document: LspDocument) => string;
@@ -58,6 +58,16 @@ export interface StaticWorkerDiagnosticsOptions<
 const defaultActivePathFromDocument = (document: LspDocument, fallback: string) =>
 	document.uri.split('/').pop() || fallback;
 
+// Neither a runner nor a caller owns the diagnostic objects retained by the cache.
+const copyDiagnostics = (diagnostics: readonly LspDiagnostic[]): LspDiagnostic[] =>
+	diagnostics.map((diagnostic) => ({
+		...diagnostic,
+		range: {
+			start: { ...diagnostic.range.start },
+			end: { ...diagnostic.range.end }
+		}
+	}));
+
 export function createStaticWorkerDiagnostics<
 	TConfig extends StaticWorkerDiagnosticConfig,
 	TResult extends StaticWorkerDiagnosticResult = StaticWorkerDiagnosticResult
@@ -65,14 +75,14 @@ export function createStaticWorkerDiagnostics<
 	options: StaticWorkerDiagnosticsOptions<TConfig, TResult>
 ): Pick<WorkerLanguageService, 'initialize' | 'diagnostics'> {
 	let config: TConfig | null = null;
+	let generation = Symbol('initialization');
 	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	let lastDiagnostics: readonly LspDiagnostic[] = [];
 	let serializedDiagnostics: Promise<void> = Promise.resolve();
 	const latestRequestByDocument = new Map<string, symbol>();
 	const pendingDiagnosticsByKey = new Map<
 		string,
 		{
-			documentUri: string;
 			operation: Promise<LspDiagnostic[]>;
 			token: symbol;
 		}
@@ -107,9 +117,17 @@ export function createStaticWorkerDiagnostics<
 			if (errorMessage) throw new Error(errorMessage);
 			context.reportProgress(options.loadProgressStage);
 			config = nextConfig;
+			generation = Symbol('initialization');
+			lastKey = '';
+			lastDiagnostics = [];
+			latestRequestByDocument.clear();
+			pendingDiagnosticsByKey.clear();
+			// Keep the serialization chain: a previous generation may still own a worker.
 		},
 		async diagnostics(document: LspDocument, context: LspDocumentContext) {
 			if (!config) return [];
+			const requestGeneration = generation;
+			const previousToken = latestRequestByDocument.get(document.uri);
 			const token = Symbol(document.uri);
 			if (options.singleFlight) latestRequestByDocument.set(document.uri, token);
 			if (!document.text.trim()) {
@@ -122,37 +140,41 @@ export function createStaticWorkerDiagnostics<
 			const activePath =
 				options.activePathFromDocument?.(document) ||
 				defaultActivePathFromDocument(document, options.defaultActivePath);
-			const key = [
+			const key = JSON.stringify([
+				document.uri,
 				...(options.cacheKeyParts?.(requestConfig) || [
 					requestConfig.baseUrl || '',
 					requestConfig.workerUrl || ''
 				]),
 				activePath,
 				document.text
-			].join('\n');
+			]);
 			if (key === lastKey) {
 				if (options.singleFlight && latestRequestByDocument.get(document.uri) === token) {
 					latestRequestByDocument.delete(document.uri);
 				}
-				return lastDiagnostics;
+				return copyDiagnostics(lastDiagnostics);
 			}
 			const pendingDiagnostics = pendingDiagnosticsByKey.get(key);
-			if (pendingDiagnostics) {
-				if (options.singleFlight && pendingDiagnostics.documentUri === document.uri) {
+			if (
+				pendingDiagnostics &&
+				(!options.singleFlight || previousToken === pendingDiagnostics.token)
+			) {
+				// Share consecutive requests for the same document state, but never revive
+				// a superseded operation when an edit returns from A to B to A.
+				if (options.singleFlight) {
 					latestRequestByDocument.set(document.uri, pendingDiagnostics.token);
-				} else if (
-					options.singleFlight &&
-					latestRequestByDocument.get(document.uri) === token
-				) {
-					latestRequestByDocument.delete(document.uri);
 				}
-				return await pendingDiagnostics.operation;
+				return copyDiagnostics(await pendingDiagnostics.operation);
 			}
 			if (options.diagnosticsProgressStage) {
 				context.reportProgress(options.diagnosticsProgressStage);
 			}
 			const execute = async () => {
-				if (options.singleFlight && latestRequestByDocument.get(document.uri) !== token) {
+				if (
+					generation !== requestGeneration ||
+					(options.singleFlight && latestRequestByDocument.get(document.uri) !== token)
+				) {
 					return [];
 				}
 				const result = await runDiagnostics({
@@ -160,10 +182,15 @@ export function createStaticWorkerDiagnostics<
 					code: document.text,
 					activePath
 				});
-				if (options.singleFlight && latestRequestByDocument.get(document.uri) !== token) {
+				if (
+					generation !== requestGeneration ||
+					(options.singleFlight && latestRequestByDocument.get(document.uri) !== token)
+				) {
 					return [];
 				}
-				const diagnostics = options.diagnosticsFromResult(result, document);
+				const diagnostics = copyDiagnostics(
+					options.diagnosticsFromResult(result, document)
+				);
 				lastKey = key;
 				lastDiagnostics = diagnostics;
 				return diagnostics;
@@ -177,9 +204,9 @@ export function createStaticWorkerDiagnostics<
 					() => undefined
 				);
 			}
-			pendingDiagnosticsByKey.set(key, { documentUri: document.uri, operation, token });
+			pendingDiagnosticsByKey.set(key, { operation, token });
 			try {
-				return await operation;
+				return copyDiagnostics(await operation);
 			} finally {
 				if (pendingDiagnosticsByKey.get(key)?.operation === operation) {
 					pendingDiagnosticsByKey.delete(key);
