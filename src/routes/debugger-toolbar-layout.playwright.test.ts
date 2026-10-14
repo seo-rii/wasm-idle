@@ -82,7 +82,7 @@ describe('narrow paused debugger controls', () => {
 					(window as any).__wasmIdleDebug?.getEditorValue().includes('debug-layout')
 				);
 				await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
-				await page.getByRole('button', { name: /^bug_report\s+Debug$/ }).click();
+				await page.getByRole('button', { name: 'Debug', exact: true }).click();
 				await page.waitForFunction(
 					() => (window as any).__wasmIdleDebug?.getDebugState().paused,
 					undefined,
