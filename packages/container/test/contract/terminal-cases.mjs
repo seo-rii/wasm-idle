@@ -1,18 +1,22 @@
 import { createContainer } from '../../dist/container.js';
 import { createLiveWasiAdapter } from '../../dist/adapters/wasi-live/index.js';
 import { attachTerminal } from '../../dist/terminal/index.js';
-export const terminalCases = ['utf8', 'input-eof', 'blocked-input', 'blocked-output', 'terminate', 'render-error', 'exit-results'];
+export const terminalCases = ['utf8', 'input-eof', 'blocked-input', 'blocked-output', 'cooperative-output', 'terminate', 'render-error', 'cleanup-failure', 'exit-results'];
 const expect = (ok, message) => { if (!ok) throw new Error(message); };
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 export async function runTerminalCase(name, bytes, workerFactory) {
   const adapter = createLiveWasiAdapter({ workerFactory, pipeBytes: 17 });
   const container = createContainer({ adapters: [adapter], commands: { ui: { adapter: adapter.id, bytes } } });
-  let binding, process; const frames = [];
+  let binding, process, expectedCleanupFailure; const frames = [];
   const text = channel => frames.filter(frame => frame.channel === channel).map(frame => frame.text).join('');
   const ready = deferred(), render = frame => { frames.push(frame); if (text('stdout').includes('ready')) ready.resolve(); };
   const unlocked = () => expect(!process.stdin.locked && !process.stdout.locked && !process.stderr.locked, `${name}: leaked stream lock`);
   const attach = async (mode, options = {}) => {
     process = await container.spawn('ui', [mode]); binding = attachTerminal(process, { render, maxRenderBytes: 1, ...options });
+  };
+  const dispose = async () => {
+    try { await binding?.dispose(); }
+    catch (error) { if (!expectedCleanupFailure || error !== expectedCleanupFailure) throw error; }
   };
   try {
     if (name === 'utf8') {
@@ -28,9 +32,14 @@ export async function runTerminalCase(name, bytes, workerFactory) {
       await attach(name === 'terminate' ? 'loop' : 'input'); await ready.promise;
       if (name === 'terminate') await binding.terminate(); else await binding.dispose();
       expect((await binding.completed).reason === 'terminated', `${name}: command did not stop`);
-    } else if (name === 'blocked-output') {
+    } else if (name === 'blocked-output' || name === 'cooperative-output') {
       const entered = deferred(); let signal, calls = 0;
-      await attach('flood', { render(frame) { signal = frame.signal; calls++; entered.resolve(); return new Promise(() => {}); } });
+      await attach('flood', { render(frame) {
+        signal = frame.signal; calls++; entered.resolve();
+        return new Promise((_resolve, reject) => {
+          if (name === 'cooperative-output') signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      } });
       await entered.promise; await new Promise(resolve => setTimeout(resolve, 20)); await binding.dispose();
       expect(signal.aborted && calls === 1 && (await binding.completed).reason === 'terminated', 'output cancellation waited for renderer');
     } else if (name === 'render-error') {
@@ -38,6 +47,20 @@ export async function runTerminalCase(name, bytes, workerFactory) {
       await attach('flood', { render() { throw error; } });
       let caught; try { await binding.completed; } catch (failure) { caught = failure; }
       expect(caught === error && (await process.exited).reason === 'terminated', 'renderer failure lost its cause or guest');
+    } else if (name === 'cleanup-failure') {
+      const renderError = new Error('render fixture failure'), stopError = new Error('injected stop failure');
+      expectedCleanupFailure = stopError;
+      process = await container.spawn('ui', ['loop']);
+      // Real guest, fault-injected host completion contract. Stop the underlying
+      // Worker before reporting failure so the fixture itself cannot leak it.
+      const guest = process;
+      binding = attachTerminal({ ...guest, exited: new Promise(() => {}),
+        async terminate() { await guest.terminate(); throw stopError; }
+      }, { render() { throw renderError; } });
+      let caught; try { await binding.completed; } catch (failure) { caught = failure; }
+      expect(caught instanceof AggregateError && caught.errors.length === 2
+        && caught.errors[0] === renderError && caught.errors[1] === stopError, 'host failure stayed pending or lost its causes');
+      expect((await guest.exited).reason === 'terminated', 'fault-injection fixture leaked its real guest');
     } else if (name === 'exit-results') {
       for (const mode of ['exit', 'trap']) {
         await attach(mode); const result = await binding.completed;
@@ -45,10 +68,10 @@ export async function runTerminalCase(name, bytes, workerFactory) {
         unlocked();
       }
     } else throw new Error(`Unknown terminal case ${name}`);
-    unlocked(); await binding.dispose();
+    unlocked(); await dispose();
     expect((await container.inspect()).processes.length === 0, `${name}: process leaked`);
     // Every failure/cancellation path must allow a new real guest in the owner.
     expect((await container.run('ui', ['exit'])).code === 23, `${name}: restart failed`);
     return { name, frames: frames.length, processes: (await container.inspect()).processes.length };
-  } finally { await binding?.dispose(); await container.dispose(); }
+  } finally { try { await dispose(); } finally { await container.dispose(); } }
 }

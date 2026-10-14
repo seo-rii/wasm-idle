@@ -50,7 +50,7 @@ try {
     return { cases, createdWorkers, activeWorkers, isolated: crossOriginIsolated };
   }), new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('Terminal browser contract exceeded 90 seconds')), 90000); })]);
   clearTimeout(deadline);
-  assert.equal(result.cases.length, 7); assert.equal(result.createdWorkers, 15);
+  assert.equal(result.cases.length, 9); assert.equal(result.createdWorkers, 19);
   assert.equal(result.activeWorkers, 0); assert.equal(result.isolated, true); assert.deepEqual(faults, []);
   const sourceHashes = {};
   for (const file of (await readdir(resolve(root, 'src'), { recursive: true })).filter(file => file.endsWith('.ts')).sort()) sourceHashes[file] = createHash('sha256').update(await readFile(resolve(root, 'src', file))).digest('hex');

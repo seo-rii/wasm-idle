@@ -49,16 +49,25 @@ export function attachTerminal(process: ContainerProcess, options: TerminalOptio
   const writer = input;
   const controller = new AbortController();
   const stoppedError = new ContainerError('ABORTED', 'Terminal rendering stopped');
-  let interrupt!: (error: unknown) => void;
-  const interruption = new Promise<never>((_resolve, reject) => { interrupt = reject; });
-  void interruption.catch(() => {});
-  const interruptible = <T>(work: PromiseLike<T>) => Promise.race([work, interruption]);
   let stopped = false, inputClosed = false, exited = false, pendingInput = 0;
+  const pendingWaits = new Set<(error: unknown) => void>();
+  const interruptible = <T>(work: PromiseLike<T>): Promise<T> => new Promise((resolve, reject) => {
+    const stop = (error: unknown) => { pendingWaits.delete(stop); reject(error); };
+    // Remove settled waits immediately: racing every chunk against one pending
+    // lifetime promise would retain a reaction for each historical chunk.
+    Promise.resolve(work).then(value => { pendingWaits.delete(stop); resolve(value); }, stop);
+    if (stopped) stop(stoppedError); else pendingWaits.add(stop);
+  });
+  let rejectFailure!: (error: unknown) => void;
+  const failed = new Promise<never>((_resolve, reject) => { rejectFailure = reject; });
+  void failed.catch(() => {});
   let failure: { error: unknown } | undefined;
   let termination: Promise<void> | undefined, cleanup: Promise<void> | undefined, closingInput: Promise<void> | undefined;
   let renderTail: Promise<void> = Promise.resolve();
   const released = [false, false]; let inputReleased = false;
-  const fail = (error: unknown) => { failure ??= { error }; };
+  const fail = (error: unknown) => {
+    if (!failure) { failure = { error }; rejectFailure(error); }
+  };
   const terminate = () => {
     if (exited) return Promise.resolve();
     try { return termination ??= Promise.resolve(process.terminate()); }
@@ -72,20 +81,24 @@ export function attachTerminal(process: ContainerProcess, options: TerminalOptio
     let resolveCleanup!: () => void, rejectCleanup!: (error: unknown) => void;
     cleanup = new Promise<void>((resolve, reject) => { resolveCleanup = resolve; rejectCleanup = reject; });
     stopped = true; inputClosed = true;
-    controller.abort(); interrupt(stoppedError);
+    controller.abort(stoppedError);
+    for (const stop of pendingWaits) stop(stoppedError);
     // Stop the guest before waiting for a blocked input write or output reader.
     const terminated = stopProcess ? terminate() : Promise.resolve();
     void (async () => {
-      const results = await Promise.allSettled([
-        terminated, writer.abort(stoppedError),
-        ...readers.map((reader, index) => released[index] ? Promise.resolve() : reader.cancel(stoppedError))
-      ]);
-      for (let index = 0; index < readers.length; index++) releaseReader(index);
-      if (!inputReleased) { writer.releaseLock(); inputReleased = true; }
-      // Cancelling an already errored stream may reject. A failed process stop
-      // is different: surface it instead of claiming that disposal completed.
-      if (results[0]!.status === 'rejected') throw results[0]!.reason;
-    })().then(resolveCleanup, rejectCleanup);
+      try {
+        // A failed stop must not wait for a write that the guest may never read.
+        // Expected errors from cancelling closed/errored streams are collected;
+        // the termination rejection remains observable even with pending I/O.
+        await Promise.all([terminated, Promise.allSettled([
+          writer.abort(stoppedError),
+          ...readers.map((reader, index) => released[index] ? Promise.resolve() : reader.cancel(stoppedError))
+        ])]);
+      } finally {
+        for (let index = 0; index < readers.length; index++) releaseReader(index);
+        if (!inputReleased) { writer.releaseLock(); inputReleased = true; }
+      }
+    })().then(resolveCleanup, error => { fail(error); rejectCleanup(error); });
     return cleanup;
   };
   const present = async (channel: TerminalFrame['channel'], text: string) => {
@@ -120,13 +133,18 @@ export function attachTerminal(process: ContainerProcess, options: TerminalOptio
   const exit = process.exited.then(result => { exited = true; return result; });
   const completed = (async () => {
     try {
-      const [result] = await Promise.all([exit, Promise.all(drains)]);
+      // Host failure can leave process.exited pending. It is a terminal outcome
+      // for this binding even when the process could not be stopped.
+      const [result] = await Promise.race([Promise.all([exit, Promise.all(drains)]), failed]);
       await clean(false);
       if (failure) throw failure.error;
       return result;
     } catch (error) {
       fail(error);
-      try { await clean(true); } catch (cleanupError) { throw new AggregateError([failure!.error, cleanupError], 'Terminal execution and cleanup failed'); }
+      try { await clean(true); } catch (cleanupError) {
+        if (cleanupError === failure!.error) throw cleanupError;
+        throw new AggregateError([failure!.error, cleanupError], 'Terminal execution and cleanup failed');
+      }
       throw failure!.error;
     }
   })();
@@ -142,13 +160,13 @@ export function attachTerminal(process: ContainerProcess, options: TerminalOptio
       if (pendingInput + bytes.length > maxPendingInputBytes) throw new ContainerError('RESOURCE_LIMIT', 'Terminal input queue exceeds its byte limit');
       if (!bytes.length) return;
       const owned = Uint8Array.from(bytes); pendingInput += owned.length;
-      try { await writer.write(owned); } finally { pendingInput -= owned.length; }
+      try { await interruptible(writer.write(owned)); } finally { pendingInput -= owned.length; }
     },
     closeInput() {
       if (closingInput) return closingInput;
       if (inputClosed) return Promise.resolve();
       inputClosed = true;
-      return closingInput = writer.close();
+      return closingInput = interruptible(writer.close());
     },
     terminate,
     async dispose() {

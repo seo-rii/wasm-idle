@@ -43,6 +43,10 @@ writes (default 65536; allowed 1–1048576). Exceeding that limit rejects with
 idempotent and closes stdin after queued writes. Empty writes do not wait or close
 stdin. Input after explicit EOF rejects with `INVALID_ARGUMENT`; input after
 completion or disposal rejects with `DISPOSED`.
+Pending `write()`/`closeInput()` calls reject with `ABORTED` when the binding stops,
+including when the process stop fails and its underlying input remains blocked.
+Only current read/render/input waits retain cancellation callbacks; completed
+chunks do not accumulate callbacks over a long-running command.
 
 `completed` resolves with the original process result after guest cleanup, both
 output streams have drained, decoders have flushed, and all stream locks have been
@@ -50,6 +54,10 @@ released. Nonzero exits and runtime errors retain their process result. A render
 or stream failure stops the process and rejects `completed` with the original
 failure. Termination or stream cleanup cannot be guaranteed for an unrelated custom
 process implementation that does not fulfill the `ContainerProcess` contract.
+If its termination rejects while `exited` is still pending, `completed` rejects
+after releasing the binding's stream locks instead of waiting for that exit. A
+renderer failure plus a termination failure are retained in an `AggregateError`.
+This does not claim that the failed process stop reclaimed the guest itself.
 
 `terminate()` requests process termination and continues rendering buffered output.
 Its promise covers the process stop; await `completed` to wait for the remaining UI
@@ -59,6 +67,8 @@ arbitrary renderer promise that ignores cancellation. An already invoked rendere
 must check its signal before performing later UI work. The signal is also aborted
 when normal completion releases the binding. A slow renderer can delay `completed`
 until it finishes or the binding is disposed.
+Rejecting with the provided `signal.reason` is the cooperative cancellation path
+and does not turn successful disposal into a renderer failure.
 
 This is a presentation binding, not a PTY or a shell session. It does not provide
 `isatty`, termios, terminal resizing, job control, signal mapping, command parsing,
@@ -76,16 +86,18 @@ bytes, EOF, blocked stdin, blocked rendering, CPU-loop termination, renderer err
 nonzero exit and runtime traps. Every scenario verifies lock/process cleanup and
 starts another real guest in the same container. Protocol tests separately cover
 serialized renderer calls, input ownership and queue limits, transactional lock
-acquisition and disposal reentrancy.
+acquisition, disposal reentrancy, and rejected termination with pending input/exit.
+The shared fault-injection case runs a real guest and overrides only its host exit
+and termination contract to test error completion; it explicitly stops that guest.
 
-`pnpm --dir packages/container test:terminal` repeats the shared seven scenarios in
+`pnpm --dir packages/container test:terminal` repeats the shared nine scenarios in
 isolated Chromium under restrictive CSP. Its JSON evidence records the exact
 application commit, source and guest hashes, browser/OS, worker counts and results;
 CI writes this to `.codex/container-terminal.json`. These contracts qualify the SDK
 binding, not an application renderer, PTY or actual shell.
 
-The committed `test/fixtures/terminal-browser-evidence.json` records the first
-passing Chromium 153/Linux run: seven scenarios, fifteen Workers created and none
+The committed `test/fixtures/terminal-browser-evidence.json` records the reviewed
+Chromium 153/Linux run: nine scenarios, nineteen Workers created and none
 remaining, cross-origin isolation enabled, and no CSP or page errors. Its source
 hashes identify the tested implementation independently of later documentation
 or evidence commits.

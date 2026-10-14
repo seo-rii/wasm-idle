@@ -66,6 +66,48 @@ test('a renderer failure terminates the process and preserves its original error
   await assert.rejects(binding.completed, caught => caught === error);
   assert.equal(calls, 1); assert.equal(f.stops(), 1); unlocked(f.process);
 });
+test('a renderer cooperating with the abort reason keeps disposal successful', async () => {
+  const f = fixture(), entered = deferred(); let reason;
+  const binding = attachTerminal(f.process, { render({ signal }) {
+    entered.resolve();
+    return new Promise((_resolve, reject) => signal.addEventListener('abort', () => {
+      reason = signal.reason; reject(reason);
+    }, { once: true }));
+  } });
+  f.stdout(bytes('pending')); await entered.promise; await binding.dispose();
+  assert.equal(reason.code, 'ABORTED');
+  assert.equal((await binding.completed).reason, 'terminated'); unlocked(f.process);
+});
+test('a late renderer rejection after disposal is observed without changing completion', async () => {
+  const f = fixture(), entered = deferred(); let rejectRender;
+  const binding = attachTerminal(f.process, { render() {
+    entered.resolve(); return new Promise((_resolve, reject) => { rejectRender = reject; });
+  } });
+  f.stdout(bytes('pending')); await entered.promise; await binding.dispose();
+  assert.equal((await binding.completed).reason, 'terminated');
+  rejectRender(new Error('late render failure'));
+  await new Promise(resolve => setTimeout(resolve, 0)); unlocked(f.process);
+});
+test('renderer and stop failures settle completion despite pending exit and input', { timeout: 1000 }, async () => {
+  const entered = deferred(), f = fixture({ write() { entered.resolve(); return new Promise(() => {}); } });
+  const renderError = new Error('render failed'), stopError = new Error('stop failed');
+  f.process.terminate = async () => { throw stopError; };
+  const binding = attachTerminal(f.process, { render() { throw renderError; } });
+  const writing = assert.rejects(binding.write(bytes('blocked')), { code: 'ABORTED' }); await entered.promise;
+  const closing = assert.rejects(binding.closeInput(), { code: 'ABORTED' });
+  f.stdout(bytes('out'));
+  await assert.rejects(binding.completed, error => error instanceof AggregateError
+    && error.errors[0] === renderError && error.errors[1] === stopError && error.errors.length === 2);
+  await writing; await closing;
+  await assert.rejects(binding.dispose(), error => error === stopError); unlocked(f.process);
+});
+test('a disposal stop failure rejects completion without duplicating its cause', { timeout: 1000 }, async () => {
+  const f = fixture(), stopError = new Error('stop failed');
+  f.process.terminate = async () => { throw stopError; };
+  const binding = attachTerminal(f.process, { render() {} });
+  await assert.rejects(binding.dispose(), error => error === stopError);
+  await assert.rejects(binding.completed, error => error === stopError); unlocked(f.process);
+});
 test('invalid rendering limits fail before locking streams', () => {
   const f = fixture();
   for (const options of [{ maxRenderBytes: 0 }, { maxRenderBytes: 65537 }, { maxPendingInputBytes: 0 }, { maxPendingInputBytes: Infinity }]) {
