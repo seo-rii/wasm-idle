@@ -81,6 +81,17 @@ test('unknown, repeated, unsafe-path, overlapping and invalid resource options f
 	);
 });
 
+test('import allowlist is exactly the inventory of the pinned G0 Bash receipt', async () => {
+	const { baselineImportProfile: profile } = await readProducerLock();
+	const evidence = await readFile(
+		new URL(`../../../../${profile.evidencePath}`, import.meta.url)
+	);
+	assert.equal(sha256(evidence), profile.evidenceSha256, 'pinned G0 receipt identity');
+	const inventory = JSON.parse(evidence).runtimeInventory;
+	assert.equal(inventory.bashWasmSha256, profile.wasmSha256);
+	assert.deepEqual(profile.imports, inventory.bashImports);
+});
+
 test('changed shim/runtime dependencies are rejected before preparing output', async () => {
 	const lock = await readProducerLock();
 	lock.sdkPrerequisite.localFiles['execve.c'] = '0'.repeat(64);
