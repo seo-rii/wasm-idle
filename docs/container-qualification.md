@@ -162,9 +162,22 @@ The opt-in producer's small real LLVM Support ABI fixture passed five dispatch c
 real wasi-libc constructor fixture confirmed `getcwd`, relative reads, bad-cwd rejection and
 restart. Neither proves the full compiler. An initial exec-only private relink exceeded its
 2,700-second wall deadline. The exec+cwd successor exhausted its 10 GiB address-space cap under
-full LTO. A correctness-only retry uses O1/CGO1, one linker thread and a 16 GiB address-space
-bound, with sequential Clang/LLD links and a separately recorded consumer gate. Keep compiler PRs draft
-until that gate and required browser/header coverage have actual receipts.
+full LTO. The O1/CGO1 candidate with one linker thread and a 16 GiB address-space bound then
+hit its 7,200-second wall deadline without producing Clang or LLD. Killing the driver and
+linker together left only driver usage in `wait4`; that receipt does not measure the linker's
+final CPU time or peak RSS. A separate observation before exit recorded 756.2 linker CPU
+seconds after 7,080.9 elapsed seconds, which documents contention without proving completion.
+
+A distinct retry is prepared with the same compiler inputs and optimization settings, a
+14,400-second deadline per child, and inherited per-process CPU limits of 1,200 seconds soft
+and 1,260 hard. The producer's default deadline remains 2,700 seconds; its CLI now validates
+explicit extensions through 14,400. The external runner requires at least 8 GiB available
+memory and 4 GiB free disk before starting the producer and again before the CLI gate,
+and fails immediately if admission fails.
+CPU and address-space limits apply per process, not to aggregate process-tree resources.
+Clang/LLD links and the receipt-gated actual CLI checks run sequentially; failed preparation
+or build does not trigger an automatic retry. Keep compiler PRs draft until the actual CLI,
+browser and header-coverage gates have completed receipts.
 
 The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
 dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
