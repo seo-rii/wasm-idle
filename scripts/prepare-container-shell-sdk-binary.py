@@ -111,6 +111,10 @@ def prepare(arguments):
     for path in (cargo, rustc):
         if str(path) not in policy["sourcePins"]:
             raise ValueError("actual nightly executables must be pinned by the checked source policy")
+    # The pinned rustc launcher loads the driver/LLVM libraries, and this gate (unlike
+    # the type check) links with rust-lld. Record them so a later change is rejected.
+    compiler = [path for path in sorted((toolchain / "lib").iterdir()) if path.is_file() and not path.is_symlink()]
+    compiler = {str(path): identity(path) for path in (*compiler, toolchain / "lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld")}
     bindgen, node = arguments.bindgen.resolve(), arguments.node.resolve()
     for path, digest in ((bindgen, arguments.bindgen_sha256), (node, arguments.node_sha256)):
         if identity(path)["sha256"] != digest:
@@ -180,7 +184,7 @@ def prepare(arguments):
               "checkedTargetReusedForSamePhysicalCopy": arguments.reuse_checked_target,
               "cargoOutput": str(target / "wasm32-unknown-unknown" / ("release" if arguments.profile == "release" else "debug") / "wasmer_js.wasm"),
               "bindgenVersion": BINDGEN_VERSION, "stages": stages,
-              "inputPins": {str(bindgen): identity(bindgen), str(node): identity(node)},
+              "inputPins": {str(bindgen): identity(bindgen), str(node): identity(node), **compiler},
               "admission": {"minimumAvailableMemoryBytes": 8 * 1024**3, "minimumFreeDiskBytes": 8 * 1024**3},
               "limits": {"cpuSoftSeconds": 3000, "cpuHardSeconds": 3060, "addressSpaceBytes": 12 * 1024**3, "minimumRemainingDiskBytes": 2 * 1024**3},
               "supervisorLog": str(supervisor_log)}

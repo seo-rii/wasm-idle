@@ -17,6 +17,11 @@ common filesystem/fd routing, or supported shell adapter is provided here.
 Supply the successful type-check process receipt and the source policy with
 independently known SHA-256 values. The policy contains the complete prepared
 SDK/WASIX source inventory, both locks and the actual private nightly executables.
+Those executables are only the `cargo`/`rustc` launchers, so preparation also
+records the toolchain's driver/LLVM libraries and the `rust-lld` linker that this
+gate newly uses. These are self-computed identities, not independent digests.
+The `rust-src` standard library compiled by build-std is identified only by its
+pinned lock/manifest and the toolchain channel.
 Every input hash and the exact source-file inventories are rechecked before
 preparation, launch and after each build stage. Failed checks, force-cleaned
 successful checks, unlisted source files and changed inputs are rejected.

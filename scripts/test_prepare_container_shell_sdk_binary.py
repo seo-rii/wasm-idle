@@ -94,6 +94,38 @@ class AdmissionTests(unittest.TestCase):
     def test_pinned_sdk_cargo_configuration_is_accepted(self):
         self.assertEqual(builder.verify_source(self.policy), self.source.resolve())
 
+    @unittest.skipUnless(sys.platform == "linux", "Linux process owner")
+    def test_prepared_plan_pins_compiler_libraries_and_linker(self):
+        toolchain = self.root / "rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu"
+        linker = toolchain / "lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld"
+        linker.parent.mkdir(parents=True)
+        (toolchain / "bin").mkdir()
+        for path in (toolchain / "bin/cargo", toolchain / "bin/rustc", toolchain / "lib/librustc_driver-test.so", linker):
+            path.write_text(path.name + "\n")
+        for name in ("cargo", "rustc"):
+            self.policy["sourcePins"][str(toolchain / "bin" / name)] = builder.identity(toolchain / "bin" / name)
+        (self.source / "receipt.json").write_text(json.dumps({"sdkSourceRevision": builder.SDK_REVISION}))
+        self.policy["stage"]["environment"]["RUSTUP_HOME"] = str(self.root / "rustup")
+        self.policy["sourceCommit"] = "0" * 40
+        self.policy_path.write_text(json.dumps(self.policy))
+        bindgen, node = self.root / "wasm-bindgen", self.root / "node"
+        bindgen.write_text("#!/bin/sh\necho 'wasm-bindgen 0.2.101'\n")
+        bindgen.chmod(0o700)
+        node.write_text("node\n")
+        self.options.__dict__.update(
+            source_policy_sha256=builder.identity(self.policy_path)["sha256"],
+            bindgen=bindgen, bindgen_sha256=builder.identity(bindgen)["sha256"],
+            node=node, node_sha256=builder.identity(node)["sha256"],
+            log_directory=self.root / "logs", profile="release", reuse_checked_target=False)
+        with patch("builtins.print"):
+            builder.prepare(self.options)
+        recipe, _ = builder.checked_plan(self.options.output)
+        for path in (toolchain / "lib/librustc_driver-test.so", linker):
+            self.assertIn(str(path), recipe["inputPins"])
+        linker.write_text("replaced linker\n")
+        with self.assertRaisesRegex(ValueError, "pinned input changed"):
+            builder.checked_plan(self.options.output)
+
 
 @unittest.skipUnless(sys.platform == "linux", "Linux process ownership")
 class OwnershipTests(unittest.TestCase):
