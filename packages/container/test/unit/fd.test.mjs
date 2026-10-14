@@ -91,3 +91,13 @@ test('readable adapters reject chunk sizes that cannot make progress', async () 
   p.writer.close();
   assert.equal((await reader.read()).done, true);
 });
+
+test('dispose releases every descriptor when one endpoint fails to close', async () => {
+  const p = createPipe(4), table = new DescriptorTable();
+  const broken = { dup() { return this; }, close() { throw new Error('close failed'); } };
+  table.add(broken, 0); table.add(p.writer, 1); table.add(p.reader, 2);
+  assert.throws(() => table.dispose(), /close failed/);
+  assert.equal(table.size, 0);
+  await assert.rejects(p.reader.read(1), { code: 'EBADF' });
+  assert.throws(() => p.writer.close(), { code: 'EBADF' });
+});

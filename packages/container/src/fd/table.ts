@@ -35,8 +35,13 @@ export class DescriptorTable<T extends Descriptor> {
     this.#entries.delete(fd);
     endpoint.close();
   }
+  /** Release every descriptor even if one endpoint fails to close, then report the first failure. */
   dispose(): void {
-    for (const fd of [...this.#entries.keys()]) this.close(fd);
+    let failed = false, failure: unknown;
+    for (const fd of [...this.#entries.keys()]) {
+      try { this.close(fd); } catch (error) { if (!failed) { failed = true; failure = error; } }
+    }
+    if (failed) throw failure;
   }
   get size(): number { return this.#entries.size; }
 }
