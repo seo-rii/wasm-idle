@@ -366,19 +366,42 @@ under the proposed 12 GiB process address-space cap; they do not build the SDK.
 
 The parallel #192 producer preserves the original Bash, WASIX sysroot, WASI SDK
 and Binaryen pins, linking the actual C exec shim through the upstream build.
-Its eight argv/wrapper/import-profile guards and read-only plan pass. A separate
-Node/shared-Wasm preflight passes under the 8 GiB process address-space cap,
-with all processes reaped; that preflight receipt is likewise local and not yet
-archived on #192. Actual SDK and Bash builds remain pending; the
-bounded jobs are prepared to run sequentially without replacing existing
-artifacts or automatically retrying a failed attempt. Local module/Worker
-packaging and real shared fd/VFS/foreground cancellation are still required.
+The real producer now exits 0 in 587.243 seconds at source `74abe392`, producing
+1,811,021 Wasm bytes with SHA-256
+`96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d`.
+The original import allowlist plus the seven-i32 `exec_v1` import, shared bounded
+memory and Asyncify exports are verified; the WEBc and source-material pack also
+have recorded hashes. This is a producer/import gate, not actual Bash execution.
+
+The first #191 SDK attempt stops at its 3,600-second outer build deadline before
+producing runnable SDK Wasm or web glue. Its process receipt records Cargo exit
+-9, a subsequently reaped rustc exit 0 and no remaining processes or cleanup
+errors. The completed log ends during dependency compilation without a recorded
+Rust compilation error. Historical main-thread-only process/RSS observations
+remain incomplete; the failure is preserved, not counted as a successful build.
+A distinct manual follow-up reuses only the same physical source copy's checked
+target, with unchanged source/locks/release profile and a corrected process
+owner. It does not automatically retry or replace prior files. Local module/Worker
+packaging and real shared fd/VFS/foreground cancellation remain required.
+
+The manual follow-up now passes: actual SDK release build 100.969 seconds,
+matching bindgen 1.761 seconds and static inspection 0.255 seconds, with each
+stage exiting 0 and recording complete cleanup. The immutable original receipt
+on #191 has SHA-256 `a8ca2caa7f1e511a6bdb66ea6fc18ccd34911d78113da8a7cd73c521b2ba511a`.
+Raw Wasm is 10,091,403 bytes; bound Wasm is 9,044,795 bytes with SHA-256
+`01dae00296dd2257f1cd7ede3e4d1e42837d0c4432ce1f70b539c62a9b63b561`.
+The shared memory profiles are respectively 33/16,384 and 34/16,384 initial/maximum
+pages. This is warm target reuse for the same physical source, not clean-build
+timing or actual guest acceptance; the earlier timeout remains a separate failure.
 
 The [#193 layer](https://github.com/seo-rii/wasm-idle/pull/193), stacked on #191,
 prepares local module/Worker packaging from an independently pinned successful
 binary receipt. Seven tests with actual local esbuild cover graph closure,
 deterministic output and Module/Memory/URL argument policy; the small JS glue is
-a protocol fixture only. The real binary prerequisite has not yet passed. The
+a protocol fixture only. The real binary prerequisite now passes, and actual
+local packaging at helper `495b06c5` exits 0 in 1.257 seconds. Its original
+receipt on #193 has SHA-256 `86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34`;
+all five published entries match their recorded byte/hash identities. The
 original worker's dynamic SDK import remains a trusted immutable host module
 graph; actual nested Worker ownership and the original unbounded pre-init
 queue remain unresolved, alongside command registry/fd/VFS.
