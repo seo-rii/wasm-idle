@@ -23,7 +23,7 @@ const evidence = {
   corpus: { profileId: corpus.profileId, cases: corpus.cases.length, sources: Object.fromEntries(Object.entries(corpus.sources).map(([name, source]) => [name, { sha256: source.sha256, origin: source.origin }])) },
   startedWorkers: 0, liveWorkers: 0, headerCorpus: {}
 };
-let container, failure;
+let container, failure, compilerPassed = false;
 try {
   // Bundle from this physical checkout; do not execute another worktree's dist.
   const bundle = await build({
@@ -97,14 +97,29 @@ try {
         return result;
       }
     });
-    evidence.passed = true;
+    compilerPassed = true;
     evidence.qualification = 'Node Worker batch snapshot; bounded selected-target header compile corpus; no exhaustive/header-runtime/browser claim';
   }
 } catch (error) {
   failure = error; evidence.error = error instanceof Error ? error.message : String(error);
 } finally {
-  await container?.dispose();
-  if (container) evidence.inspection = await container.inspect();
+  const cleanupErrors = [];
+  if (container) {
+    try { await container.dispose(); }
+    catch (error) { cleanupErrors.push(error instanceof Error ? error.message : String(error)); }
+    try {
+      evidence.inspection = await container.inspect();
+      assert.equal(evidence.inspection.disposed, true, 'Container was not disposed');
+      assert.deepEqual(evidence.inspection.processes, [], 'Processes remain after disposal');
+    } catch (error) { cleanupErrors.push(error instanceof Error ? error.message : String(error)); }
+  }
+  if (evidence.liveWorkers !== 0) cleanupErrors.push(`${evidence.liveWorkers} Workers remain after cleanup`);
+  if (cleanupErrors.length) {
+    evidence.cleanupErrors = cleanupErrors;
+    failure ??= new Error(cleanupErrors.join('; '));
+    evidence.error ??= failure instanceof Error ? failure.message : String(failure);
+  }
+  evidence.passed = compilerPassed && !failure;
   if (!buildOnly && process.env.CONTAINER_EVIDENCE) {
     evidence.finishedAt = new Date().toISOString();
     const path = resolve(process.env.CONTAINER_EVIDENCE);
@@ -114,3 +129,4 @@ try {
   }
 }
 if (failure) throw failure;
+if (!buildOnly && !evidence.passed) throw new Error('Header corpus or cleanup did not qualify');
