@@ -87,7 +87,7 @@ workspace and native fork semantics remain outside the supported container profi
 ## Source-pinned B prototype
 
 The [bridge candidate](../../runtimes/wasm-bash/bridge/README.md) records the exact SDK and
-`wasmer-wasix@0.601.0` source pins, four separated patch boundaries and a bounded private exec
+`wasmer-wasix@0.601.0` source pins, five separated patch boundaries and a bounded private exec
 frame. The original runtime trace observes a real guest `proc_exit(23)` followed by a Bash
 `proc_join` receiving zero. Its legacy newline/CR argument serialization also loses empty
 arguments, and explicit environment handling merges instead of replacing state. These are
@@ -99,6 +99,14 @@ The next backend keeps the Supervisor as the sole live filesystem and pipe owner
 all need explicit integration. The small hook patch does not yet implement the JavaScript
 command registry, shared resources, cancellation or foreground shell recovery. The existing
 container WASI live adapter therefore does not qualify this shell path automatically.
+
+The fifth patch exposes owned immutable command metadata from the prepared child
+builder. Both exec branches prepare argv/environment before dispatch; spawn also
+applies child cwd and fd operations first. Its cwd comes from the child's WASIX
+filesystem lookup, independently of parent state and `PWD`. The external SDK
+compile probe checks public accessibility without returning an execution or
+successful task handle. This does not export mutable runtime state or establish
+common live filesystem/fd capabilities; actual Rust compilation is a distinct gate.
 
 Only protocol tests and source-patch application checks are included at this stage. SDK Rust
 typechecking and actual SDK/Bash rebuild remain pending under the current resource budget.

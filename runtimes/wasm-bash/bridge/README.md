@@ -52,6 +52,14 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    The selected `VirtualCommand::exec` receives the existing parent context and child
    `WasiEnv` builder, and returns the existing `TaskJoinHandle`. A trusted SDK integration
    must still implement the hook and its lifetime contract.
+5. `0005-owned-command-snapshot.patch`: allow an external SDK `VirtualCommand` to
+   call `host_command_snapshot()` on its prepared child `WasiEnv`. The returned
+   `HostCommandSnapshot` owns argv, raw `name=value` environment bytes and the cwd
+   from that child's WASIX filesystem directory lookup. Its fields are private;
+   read-only accessors retain no guest pointers, locks, mutable state or fd/FS
+   capabilities. Automatic Rust `Send + Sync` on owned values requires no unsafe
+   implementation or JS callback assertion. This metadata accessor does not
+   supply descriptor routing or the trusted JavaScript command registry.
 
 No speculative change to signal ordering is included. No libc API returns fake success,
 no stdout marker is interpreted as an exec request, and no shell string is parsed by host code.
@@ -86,6 +94,22 @@ The C encoder and pure Rust decoder tests verify only the protocol and local bou
 do not instantiate Wasmer, validate its Rust types, or prove the Asyncify integration.
 
 ## Supervisor, filesystem and fd ownership
+
+The snapshot is taken from the child in `VirtualCommand::exec`'s builder, after
+the runtime prepares it. Both ordinary exec and vfork exec call `_prepare_wasi`
+before `try_built_in`. `proc_spawn2` prepares argv/environment and applies fd
+operations, including `chdir`/`fchdir`, before that call. `proc_spawn` sets child
+cwd and stdio before dispatch. The parent context or a `PWD` environment entry
+cannot stand in for the prepared child's actual cwd. Calling the accessor on a
+concurrently running environment does not freeze its threads or establish an
+atomic transaction across those state locks.
+
+`host_command_compile_probe.rs` is an external SDK example for the public
+snapshot boundary. It reads the prepared builder and verifies that the owned
+value is automatically `Send + Sync + 'static`. Its `VirtualCommand::exec`
+returns `Unsupported` after the metadata check; it never starts a guest,
+registers a command, or returns a fabricated `TaskJoinHandle`. A successful
+compile of this probe establishes Rust accessibility and types only.
 
 The planned owner remains the container Supervisor. Each dedicated guest Worker uses its
 own bounded control channel and 64 KiB data SAB to synchronously request operations; the
@@ -131,15 +155,39 @@ The protocol test creates small native fixture binaries in a private temporary d
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, runs each independent patch with
 `patch --dry-run --fuzz=0`, and checks source identity again. It creates no source copy and
-makes no changes to the supplied checkout. The [checked-in receipt](evidence.source-checks.json) says `patches-apply-cleanly-not-built`.
+makes no changes to the supplied checkout. The original four-patch
+[checked-in receipt](evidence.source-checks.json) remains historical and says
+`patches-apply-cleanly-not-built`. The five-patch
+[snapshot source receipt](evidence.snapshot-source-checks.json) separately records
+the current actual dry run and the compile probe as `not-run`.
 The report classifier passed 6 Node tests; the native C/Rust protocol passed 5 Rust tests
 (including frames emitted by the actual C encoder). These are bounded local checks only.
 
 To prepare a fresh private source tree later, omit `--verify-only`/`--wasix-source` and use
 `--output /new/private/path`. The helper refuses an existing output directory, verifies the
 archives, extracts them, applies the patches, installs the new runtime sources and records
-the patch hashes. It does not build, download dependencies or modify an active checkout.
-This full preparation path has not been used for the checked-in evidence.
+the patch and compile-probe hashes. It installs the probe as the SDK example
+`container_command_snapshot_compile`. It does not build, download dependencies
+or modify an active checkout. The dry-run receipt is not full preparation or
+SDK compile evidence.
+
+After provisioning the pinned nightly, `rust-src` and locked dependencies, run
+the genuine checks from the prepared SDK directory. Use distinct physical
+target and intermediate directories for this particular source copy, and keep
+the SDK's atomics/build-std configuration intact:
+
+```sh
+CARGO_TARGET_DIR=/private/run/sdk-target \
+  CARGO_BUILD_BUILD_DIR=/private/run/sdk-intermediate \
+  CARGO_PROFILE_DEV_DEBUG=0 \
+  cargo +nightly-2025-07-05 check --locked --offline \
+    --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1
+```
+
+The example is an external crate target, so crate-private runtime state would
+cause a real Rust privacy failure. Missing dependencies or toolchain are not a
+passing compile check. Use a sequential bounded background process with private
+log/status files; full rebuild and real Bash/browser gates remain separate.
 
 ## Remaining runtime gate
 

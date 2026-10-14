@@ -39,15 +39,27 @@ const patches = [
 	'0001-preserve-exec-unwind.patch',
 	'0002-replace-explicit-environment.patch',
 	'0003-add-lossless-exec-frame.patch',
-	'0004-expose-host-command-hook.patch'
+	'0004-expose-host-command-hook.patch',
+	'0005-owned-command-snapshot.patch'
 ];
+const compileProbe = 'host_command_compile_probe.rs';
+const sdkExample = 'container_command_snapshot_compile';
 const verifySource = async (source, archive) => {
 	const seen = new Set();
 	for (const patch of patches) {
 		const text = await readFile(join(bridge, 'patches', patch), 'utf8');
-		for (const match of text.matchAll(/^--- a\/(.+)$/gm)) {
-			const file = match[1];
+		for (const match of text.matchAll(/^--- (a\/.+|\/dev\/null)\n\+\+\+ b\/(.+)$/gm)) {
+			const file = match[2];
 			assert(/^[a-zA-Z0-9_./-]+$/.test(file) && !file.split('/').includes('..'));
+			if (match[1] === '/dev/null') {
+				assert.equal(
+					await stat(join(source, file)).catch(() => null),
+					null,
+					`${file}: new source must not exist in the pristine checkout`
+				);
+				continue;
+			}
+			assert.equal(match[1], `a/${file}`, `${file}: patch source/destination identity`);
 			if (seen.has(file)) continue;
 			seen.add(file);
 			const expected = execFileSync('tar', [
@@ -78,6 +90,7 @@ if (verifyOnly) {
 	for (const name of ['exec_frame.rs', 'proc_exec_v1.rs', 'execve.c']) {
 		receipts[name] = sha256(await readFile(join(bridge, name)));
 	}
+	receipts[compileProbe] = sha256(await readFile(join(bridge, compileProbe)));
 	// Dry-run must preserve the supplied pristine checkout.
 	await verifySource(source, inputs[1].path);
 	console.log(
@@ -88,6 +101,11 @@ if (verifyOnly) {
 				sdkSourceRevision: '93b8b738ebd3ee57e118da0f0eb795b97d5b999e',
 				inputs: inputs.map(({ name, sha256, bytes }) => ({ name, sha256, bytes })),
 				patches: receipts,
+				compilerProbe: {
+					status: 'not-run',
+					sdkExample,
+					sourceSha256: receipts[compileProbe]
+				},
 				limitations: [
 					'No Wasmer typecheck, SDK rebuild or patched Bash/browser qualification',
 					'No JS Supervisor fd/VFS implementation or public package API'
@@ -124,6 +142,11 @@ if (verifyOnly) {
 		await cp(join(bridge, name), join(output, 'wasmer-wasix/src/syscalls/wasix', name));
 		receipts[name] = sha256(await readFile(join(bridge, name)));
 	}
+	await cp(
+		join(bridge, compileProbe),
+		join(output, 'wasmer-sdk/examples', `${sdkExample}.rs`)
+	);
+	receipts[compileProbe] = sha256(await readFile(join(bridge, compileProbe)));
 	const cargo = join(output, 'wasmer-sdk/Cargo.toml');
 	const manifest = await readFile(cargo, 'utf8');
 	assert.equal(manifest.split('[patch.crates-io]').length, 2);
@@ -147,6 +170,11 @@ if (verifyOnly) {
 		sdkSourceRevision: '93b8b738ebd3ee57e118da0f0eb795b97d5b999e',
 		inputs: inputs.map(({ name, sha256, bytes }) => ({ name, sha256, bytes })),
 		patches: receipts,
+		compilerProbe: {
+			status: 'not-run',
+			sdkExample,
+			sourceSha256: receipts[compileProbe]
+		},
 		limitations: [
 			'No SDK rebuild or patched Bash/browser qualification',
 			'No JS Supervisor fd/VFS implementation or public package API'

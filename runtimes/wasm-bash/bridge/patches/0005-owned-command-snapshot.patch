@@ -1,0 +1,101 @@
+--- a/src/state/mod.rs
++++ b/src/state/mod.rs
+@@ -16,6 +16,7 @@
+ #![allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
+ 
+ mod builder;
++mod command_snapshot;
+ mod env;
+ mod func_env;
+ mod handles;
+@@ -39,6 +40,7 @@
+ 
+ pub use self::{
+     builder::*,
++    command_snapshot::HostCommandSnapshot,
+     env::{WasiEnv, WasiEnvInit, WasiModuleInstanceHandles, WasiModuleTreeHandles},
+     func_env::WasiFunctionEnv,
+     types::*,
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -105,8 +105,8 @@
+     rewind::*,
+     runtime::{task_manager::VirtualTaskManager, PluggableRuntime, Runtime},
+     state::{
+-        WasiEnv, WasiEnvBuilder, WasiEnvInit, WasiFunctionEnv, WasiModuleInstanceHandles,
+-        WasiModuleTreeHandles, WasiStateCreationError, ALL_RIGHTS,
++        HostCommandSnapshot, WasiEnv, WasiEnvBuilder, WasiEnvInit, WasiFunctionEnv,
++        WasiModuleInstanceHandles, WasiModuleTreeHandles, WasiStateCreationError, ALL_RIGHTS,
+     },
+     syscalls::{journal::wait_for_snapshot, rewind, rewind_ext, types, unwind},
+     utils::is_wasix_module,
+--- a/src/state/env.rs
++++ b/src/state/env.rs
+@@ -216,6 +216,24 @@
+     /// Construct a new [`WasiEnvBuilder`] that allows customizing an environment.
+     pub fn builder(program_name: impl Into<String>) -> WasiEnvBuilder {
+         WasiEnvBuilder::new(program_name)
++    }
++
++    /// Copy argv, environment bytes and actual cwd from this prepared child.
++    ///
++    /// Host VirtualCommand implementations must call this on the child in their
++    /// builder, after _prepare_wasi and spawn fd operations, before scheduling
++    /// the child. Reading the parent context or PWD would not identify that child.
++    /// No guest pointers, locks, filesystem handles or fd capabilities escape.
++    /// This does not freeze concurrently running guest threads or implement
++    /// the Supervisor's live filesystem/descriptor routing.
++    pub fn host_command_snapshot(&self) -> Result<crate::HostCommandSnapshot, Errno> {
++        let argv = self.state.args.lock().map_err(|_| Errno::Io)?.clone();
++        let environment = self.state.envs.lock().map_err(|_| Errno::Io)?.clone();
++        let (_, cwd) = self
++            .state
++            .fs
++            .get_current_dir(&self.state.inodes, crate::VIRTUAL_ROOT_FD)?;
++        Ok(crate::HostCommandSnapshot::new(argv, environment, cwd))
+     }
+ 
+     /// Forking the WasiState is used when either fork or vfork is called
+--- /dev/null
++++ b/src/state/command_snapshot.rs
+@@ -0,0 +1,40 @@
++//! Owned metadata for a prepared host-command invocation. This is not an fd or FS capability.
++
++/// Immutable owned values copied from a prepared child [`crate::WasiEnv`].
++///
++/// No guest-memory views, state locks, filesystem handles or descriptor endpoints
++/// are retained. The cwd names the child's existing WASIX directory; it does not
++/// grant access to a container workspace or describe a live filesystem binding.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct HostCommandSnapshot {
++    argv: Vec<String>,
++    environment: Vec<Vec<u8>>,
++    cwd: String,
++}
++
++impl HostCommandSnapshot {
++    pub(super) fn new(argv: Vec<String>, environment: Vec<Vec<u8>>, cwd: String) -> Self {
++        Self {
++            argv,
++            environment,
++            cwd,
++        }
++    }
++
++    /// Original prepared argv, including argv0, empty strings and embedded LF/CR.
++    pub fn argv(&self) -> &[String] {
++        &self.argv
++    }
++
++    /// Original prepared name=value entries, without lossy UTF-8 conversion.
++    /// These are metadata bytes, not host environment variables.
++    pub fn environment(&self) -> &[Vec<u8>] {
++        &self.environment
++    }
++
++    /// The cwd read through the child's WASIX filesystem directory lookup.
++    /// This is independent of any PWD environment string.
++    pub fn cwd(&self) -> &str {
++        &self.cwd
++    }
++}
