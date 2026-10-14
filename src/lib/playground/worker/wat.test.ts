@@ -243,4 +243,49 @@ describe('WAT worker', () => {
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'error: bad wat' });
 	});
+
+	it('reports a nonzero exit without repeating already-streamed stderr', async () => {
+		const moduleUrl = await createMockWatRuntimeModule(`
+			export async function createWatCompiler() {
+				return {
+					async compile(options) {
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								fileName: options.fileName,
+								source: options.code
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserWatArtifact(_artifact, options = {}) {
+				options.stderr?.('unreachable\\n');
+				return { exitCode: 1, stdout: '', stderr: 'unreachable\\n' };
+			}
+
+			export default createWatCompiler;
+		`);
+
+		await import('./wat');
+		await (globalThis as any).self.onmessage({ data: { load: true, moduleUrl } });
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '(module (func (export "_start") unreachable))',
+				prepare: false,
+				stdin: '',
+				activePath: 'main.wat'
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'unreachable\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'WAT module exited with code 1' });
+	});
 });

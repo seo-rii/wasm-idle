@@ -326,11 +326,8 @@ self.onmessage = async (event: { data: any }) => {
 		if (response.text) postMessage({ output: response.text });
 		if (response.errors) postMessage({ output: response.errors });
 		if (response.exitCode !== 0) {
-			throw new Error(
-				response.errors
-					? `PHP program exited with code ${response.exitCode}\n${response.errors}`
-					: `PHP program exited with code ${response.exitCode}`
-			);
+			// response.errors was already posted as output above.
+			throw new Error(`PHP program exited with code ${response.exitCode}`);
 		}
 		if (log) {
 			console.log(`[wasm-idle:php-worker] run settled exitCode=${response.exitCode}`);

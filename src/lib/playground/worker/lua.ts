@@ -251,9 +251,8 @@ self.onmessage = async (event: { data: any }) => {
 			}
 		});
 		if (execution.exitCode !== 0) {
-			const stderr = fennelSource
-				? stripHostLuaTraceback(execution.stderr)
-				: execution.stderr;
+			// Lua stderr was already streamed above; Fennel stderr is only reported here.
+			const stderr = fennelSource ? stripHostLuaTraceback(execution.stderr) : '';
 			throw new Error(
 				stderr
 					? `${runtimeLabel} program exited with code ${execution.exitCode}\n${stderr}`
