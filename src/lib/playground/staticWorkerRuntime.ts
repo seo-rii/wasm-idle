@@ -302,12 +302,17 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				? (this.workerStartMaxAssetBytes ?? undefined)
 				: undefined;
 		if (currentLimit !== undefined && maxAssetBytes < currentLimit) {
-			this.disposeWorker(
-				new CancelledError(
-					`${this.config.displayName} worker reset for a lower runtime asset limit`,
-					{ phase: 'asset', runtimeId: this.config.languageId }
-				)
+			const reason = new CancelledError(
+				`${this.config.displayName} worker reset for a lower runtime asset limit`,
+				{ phase: 'asset', runtimeId: this.config.languageId }
 			);
+			// A run cannot settle once its worker is detached, so the reset ends it like an abort.
+			if (this.activeRun) {
+				this.rejectStdinWaiters(reason);
+				this.rejectRun(this.activeRun.id, reason);
+			} else {
+				this.disposeWorker(reason);
+			}
 		}
 	}
 
