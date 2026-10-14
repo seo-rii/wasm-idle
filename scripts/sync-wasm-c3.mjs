@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { withRuntimeWasmModuleClient } from './runtime-wasm-module-client.mjs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -23,9 +24,11 @@ export async function renderC3RunnerWorker(profile) {
 	if (worker.split('__WASM_IDLE_C3_PROFILE__').length !== 2)
 		throw new Error('C3 worker profile placeholder must occur exactly once');
 	return Buffer.from(
-		memory.replace(/^export /gm, '') +
-			'\n' +
-			worker.replace('__WASM_IDLE_C3_PROFILE__', JSON.stringify(profile))
+		await withRuntimeWasmModuleClient(
+			memory.replace(/^export /gm, '') +
+				'\n' +
+				worker.replace('__WASM_IDLE_C3_PROFILE__', JSON.stringify(profile))
+		)
 	);
 }
 

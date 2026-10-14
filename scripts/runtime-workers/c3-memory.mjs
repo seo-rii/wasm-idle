@@ -1,5 +1,6 @@
 const C3_WASM_PAGE_BYTES = 65536;
 
+/** @param {Uint8Array<ArrayBuffer>} bytes */
 export async function c3Digest(bytes) {
 	return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (value) =>
 		value.toString(16).padStart(2, '0')
@@ -7,7 +8,12 @@ export async function c3Digest(bytes) {
 }
 
 // Only lower the limit of one defined, unshared wasm32 memory. Instructions and data stay intact.
-export async function limitC3WasmMemory(bytes, maximumBytes) {
+/**
+ * @param {Uint8Array<ArrayBuffer>} bytes
+ * @param {number} maximumBytes
+ * @param {{verifyModules?: boolean}} [options]
+ */
+export async function limitC3WasmMemory(bytes, maximumBytes, { verifyModules = true } = {}) {
 	if (
 		!(bytes instanceof Uint8Array) ||
 		bytes.length < 8 ||
@@ -31,6 +37,7 @@ export async function limitC3WasmMemory(bytes, maximumBytes) {
 		}
 		throw new Error('Invalid Wasm integer');
 	};
+	/** @param {number} value */
 	const encode = (value) => {
 		const result = [];
 		do {
@@ -83,9 +90,11 @@ export async function limitC3WasmMemory(bytes, maximumBytes) {
 		offset = end;
 	}
 	if (!memory) throw new Error('C3 requires one defined Wasm memory');
-	const module = await WebAssembly.compile(bytes);
-	if (WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')) {
-		throw new Error('Imported C3 Wasm memories are unsupported');
+	if (verifyModules) {
+		const module = await WebAssembly.compile(bytes);
+		if (WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')) {
+			throw new Error('Imported C3 Wasm memories are unsupported');
+		}
 	}
 	const payload = [1, 1, ...encode(memory.minimum), ...encode(memory.maximum)];
 	const section = Uint8Array.from([5, ...encode(payload.length), ...payload]);
@@ -93,7 +102,7 @@ export async function limitC3WasmMemory(bytes, maximumBytes) {
 	limited.set(bytes.subarray(0, memory.start));
 	limited.set(section, memory.start);
 	limited.set(bytes.subarray(memory.end), memory.start + section.length);
-	await WebAssembly.compile(limited);
+	if (verifyModules) await WebAssembly.compile(limited);
 	return {
 		bytes: limited,
 		evidence: {
