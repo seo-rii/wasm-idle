@@ -609,7 +609,10 @@ export async function buildBashShim(options) {
 	}
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
+// Node resolves symlinks for import.meta.url but not argv[1]. Compare physical
+// paths so a symlinked checkout cannot turn the producer into a silent exit 0.
+const invokedPath = process.argv[1] && (await realpath(process.argv[1]).catch(() => null));
+if (invokedPath && invokedPath === (await realpath(THIS_FILE))) {
 	try {
 		console.log(
 			JSON.stringify(await buildBashShim(parseOptions(process.argv.slice(2))), null, 2)

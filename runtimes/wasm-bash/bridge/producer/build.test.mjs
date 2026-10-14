@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
 	buildBashShim,
 	compilerWrapper,
@@ -47,6 +48,18 @@ test('plan verifies pinned source dependencies, preserves all original archive p
 		before
 	);
 });
+
+test('CLI invoked through a symlinked checkout path still runs instead of exiting silently', async () =>
+	fixture(async (directory) => {
+		const alias = path.join(directory, 'producer-alias');
+		await symlink(path.dirname(fileURLToPath(import.meta.url)), alias);
+		const stdout = execFileSync(
+			process.execPath,
+			[path.join(alias, 'build.mjs'), '--plan', '--jobs', '1'],
+			{ encoding: 'utf8' }
+		);
+		assert.equal(JSON.parse(stdout).status, 'plan-only-no-download-no-build');
+	}));
 
 test('unknown, repeated, unsafe-path, overlapping and invalid resource options fail closed', () => {
 	for (const args of [
