@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { createJavaStdinBridge, prepareJavaRuntimeStdinInjection } from './javaRuntimeStdin';
 import { prepareJavaStdinInjection } from './javaStdin';
 
 const gunzipAsync = promisify(gunzip);
@@ -17,12 +18,14 @@ const readStaticAsset = async (relativePath: string) => {
 	);
 };
 
-function installJavaStdinWindow(readByte: () => number) {
+function installJavaStdinWindow(
+	stdin: (() => number) | { readByte(): number; readChunk(): Int8Array | null }
+) {
 	const runtimeGlobal = globalThis as Record<string, unknown>;
 	const hadWindow = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'window');
 	const previousWindow = runtimeGlobal.window;
 	runtimeGlobal.window = {
-		wasmIdleJavaStdin: { readByte }
+		wasmIdleJavaStdin: typeof stdin === 'function' ? { readByte: stdin } : stdin
 	};
 	return () => {
 		if (hadWindow) {
@@ -243,6 +246,141 @@ public class Main {
 
 		expect(outputs.join('')).toBe('49\n');
 	}, 60_000);
+
+	it('compiles and runs character stream and typed NIO buffer programs under Wasm GC', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		// Readers and Writers reach CharBuffer.allocate/wrap. The bundled runtime classlib must
+		// not retain their JS-only @JSByRef typed array paths.
+		const cases = [
+			{
+				name: 'BufferedReader with StringTokenizer',
+				code: `import java.io.*;
+import java.util.StringTokenizer;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        StringTokenizer st = new StringTokenizer(br.readLine());
+        int a = Integer.parseInt(st.nextToken());
+        int b = Integer.parseInt(st.nextToken());
+        System.out.println(a + b);
+    }
+}`,
+				stdin: '1 2\n',
+				expected: '3\n'
+			},
+			{
+				name: 'BufferedReader lines until EOF with UTF-8 input',
+				code: `import java.io.*;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br =
+            new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        String line;
+        while ((line = br.readLine()) != null) {
+            System.out.println(line.length() + ":" + line);
+        }
+    }
+}`,
+				stdin: '안녕 hi\nlast',
+				expected: '5:안녕 hi\n4:last\n'
+			},
+			{
+				name: 'StreamTokenizer over BufferedReader',
+				code: `import java.io.*;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        StreamTokenizer st =
+            new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));
+        int sum = 0;
+        while (st.nextToken() != StreamTokenizer.TT_EOF) sum += (int) st.nval;
+        System.out.println("sum=" + sum);
+    }
+}`,
+				stdin: '3 4\n5\n',
+				expected: 'sum=12\n'
+			},
+			{
+				name: 'typed NIO buffers',
+				code: `import java.nio.*;
+
+public class Main {
+    public static void main(String[] args) {
+        char[] chars = new char[2];
+        CharBuffer.wrap(new char[] { 'o', 'k' }).get(chars);
+        CharBuffer allocated = CharBuffer.allocate(2).put(chars);
+        allocated.flip();
+        System.out.println(allocated);
+        System.out.println(ShortBuffer.wrap(new short[] { 1 }).get(0)
+            + IntBuffer.allocate(1).put(0, 2).get(0)
+            + LongBuffer.wrap(new long[] { 3 }).get(0)
+            + FloatBuffer.allocate(1).put(0, 4.5f).get(0)
+            + DoubleBuffer.wrap(new double[] { 5.25 }).get(0));
+    }
+}`,
+				stdin: '',
+				expected: 'ok\n15.75\n'
+			}
+		];
+
+		for (const testCase of cases) {
+			const injection = prepareJavaRuntimeStdinInjection(testCase.code);
+			const compilerModule = await runtime.load(compilerWasm, {
+				stackDeobfuscator: { enabled: false }
+			});
+			const compiler = compilerModule.exports.createCompiler();
+			const diagnostics: string[] = [];
+
+			compiler.setSdk(sdk);
+			compiler.setTeaVMClasslib(runtimeClasslib);
+			compiler.onDiagnostic((diagnostic: { message?: string }) => {
+				diagnostics.push(String(diagnostic.message || ''));
+			});
+			compiler.addSourceFile('Main.java', injection.transformedCode);
+			if (injection.helperSourcePath && injection.helperSource) {
+				compiler.addSourceFile(injection.helperSourcePath, injection.helperSource);
+			}
+
+			expect(compiler.compile(), `${testCase.name}: ${diagnostics.join('\n')}`).toBe(true);
+			expect(
+				compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' }),
+				`${testCase.name}: ${diagnostics.join('\n')}`
+			).toBe(true);
+			expect(diagnostics, testCase.name).toEqual([]);
+
+			const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			const outputs: string[] = [];
+			const bridge = createJavaStdinBridge(testCase.stdin, true, () => null);
+			const restoreWindow = installJavaStdinWindow(bridge);
+
+			try {
+				const module = await runtime.load(wasm, {
+					installImports(imports: {
+						teavmConsole: {
+							putcharStdout: (code: number) => void;
+							putcharStderr: (code: number) => void;
+						};
+					}) {
+						imports.teavmConsole.putcharStdout = (charCode) =>
+							outputs.push(String.fromCharCode(charCode));
+						imports.teavmConsole.putcharStderr = (charCode) =>
+							outputs.push(String.fromCharCode(charCode));
+					},
+					stackDeobfuscator: { enabled: false }
+				});
+
+				module.exports.main([]);
+			} finally {
+				bridge.dispose();
+				restoreWindow();
+			}
+
+			expect(outputs.join(''), testCase.name).toBe(testCase.expected);
+		}
+	}, 120_000);
 
 	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();

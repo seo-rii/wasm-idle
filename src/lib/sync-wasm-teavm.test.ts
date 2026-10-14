@@ -132,18 +132,27 @@ async function createFixture() {
 			node: { version: process.versions.node, zlib: process.versions.zlib },
 			commands: ['clean :javac:downloadJDK', ':compiler:createDist'],
 			overlay: {
-				sourcePath: 'scripts/teavm/TByteBuffer.java',
-				sourceBytes: 1,
-				sourceSha256: '9'.repeat(64),
 				utilityPath: 'scripts/teavm/ApplyRuntimeClasslibOverlay.java',
 				utilityBytes: 1,
 				utilitySha256: 'a'.repeat(64),
 				release: 17,
-				targetEntry: 'org/teavm/classlib/java/nio/TByteBuffer.class',
-				classBytes: 1,
-				classSha256: 'b'.repeat(64),
 				canonicalRuntime: { bytes: 1, sha256: 'c'.repeat(64) },
-				classpath: []
+				classpath: [],
+				sources: [
+					{
+						sourcePath: 'scripts/teavm/TByteBuffer.java',
+						sourceBytes: 1,
+						sourceSha256: '9'.repeat(64),
+						transforms: [{ from: 'a', to: 'b', expectedOccurrences: 1 }]
+					}
+				],
+				classes: [
+					{
+						targetEntry: 'org/teavm/classlib/java/nio/TByteBuffer.class',
+						classBytes: 1,
+						classSha256: 'b'.repeat(64)
+					}
+				]
 			}
 		},
 		producer: {

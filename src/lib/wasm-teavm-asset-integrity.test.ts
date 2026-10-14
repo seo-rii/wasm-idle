@@ -46,9 +46,12 @@ interface TeaVmRuntimeManifest {
 		jdk: { version: string };
 		gradle: { version: string; verificationMetadata: { sha256: string } };
 		overlay: {
-			targetEntry: string;
 			archiveEntryCount: number;
-			transform: { from: string; to: string; expectedOccurrences: number };
+			sources: Array<{
+				upstreamSourceEntry: string;
+				transforms: Array<{ from: string; to: string; expectedOccurrences: number }>;
+			}>;
+			classes: Array<{ targetEntry: string }>;
 		};
 	};
 	producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
@@ -95,7 +98,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v1',
+			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v2',
 			provenanceLevel: 'source-build-and-compatibility-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',
@@ -111,15 +114,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 			build: {
 				jdk: { version: '25.0.3+9' },
 				gradle: { version: '9.1.0' },
-				overlay: {
-					targetEntry: 'org/teavm/classlib/java/nio/TByteBuffer.class',
-					archiveEntryCount: 2141,
-					transform: {
-						from: 'Int8Array.fromJavaArray',
-						to: 'Int8Array.copyFromJavaArray',
-						expectedOccurrences: 2
-					}
-				}
+				overlay: { archiveEntryCount: 2141 }
 			},
 			producer: {
 				files: [
@@ -128,6 +123,37 @@ describe('checked-in TeaVM runtime trust root', () => {
 				]
 			}
 		});
+		// Every typed NIO buffer factory must drop its JS-only @JSByRef view, or Wasm GC
+		// generation fails for programs that reach that buffer type (CharBuffer via Readers).
+		const nioBuffers = [
+			['Byte', 'Int8Array'],
+			['Char', 'Uint16Array'],
+			['Short', 'Int16Array'],
+			['Int', 'Int32Array'],
+			['Long', 'BigInt64Array'],
+			['Float', 'Float32Array'],
+			['Double', 'Float64Array']
+		];
+		expect(
+			manifest.build.overlay.sources.map(({ upstreamSourceEntry, transforms }) => ({
+				upstreamSourceEntry,
+				transforms
+			}))
+		).toEqual(
+			nioBuffers.map(([buffer, typedArray]) => ({
+				upstreamSourceEntry: `org/teavm/classlib/java/nio/T${buffer}Buffer.java`,
+				transforms: [
+					{
+						from: `${typedArray}.fromJavaArray`,
+						to: `${typedArray}.copyFromJavaArray`,
+						expectedOccurrences: 2
+					}
+				]
+			}))
+		);
+		expect(manifest.build.overlay.classes.map(({ targetEntry }) => targetEntry)).toEqual(
+			nioBuffers.map(([buffer]) => `org/teavm/classlib/java/nio/T${buffer}Buffer.class`)
+		);
 		expect(manifest.assets.map((file) => file.path)).toEqual(TEAVM_RUNTIME_ASSET_NAMES);
 
 		const logicalReceipts = Object.create(null) as Record<
@@ -182,12 +208,14 @@ describe('checked-in TeaVM runtime trust root', () => {
 			build: {
 				gradle: { verificationMetadata: { path: string; bytes: number; sha256: string } };
 				overlay: {
-					sourcePath: string;
-					sourceBytes: number;
-					sourceSha256: string;
 					utilityPath: string;
 					utilityBytes: number;
 					utilitySha256: string;
+					sources: Array<{
+						sourcePath: string;
+						sourceBytes: number;
+						sourceSha256: string;
+					}>;
 				};
 			};
 			producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
@@ -200,11 +228,13 @@ describe('checked-in TeaVM runtime trust root', () => {
 		const receipts = [
 			...lock.producer.files,
 			lock.build.gradle.verificationMetadata,
-			{
-				path: lock.build.overlay.sourcePath,
-				bytes: lock.build.overlay.sourceBytes,
-				sha256: lock.build.overlay.sourceSha256
-			},
+			...lock.build.overlay.sources.map(
+				({ sourcePath: path, sourceBytes, sourceSha256 }) => ({
+					path,
+					bytes: sourceBytes,
+					sha256: sourceSha256
+				})
+			),
 			{
 				path: lock.build.overlay.utilityPath,
 				bytes: lock.build.overlay.utilityBytes,
