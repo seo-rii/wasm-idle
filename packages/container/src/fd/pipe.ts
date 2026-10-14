@@ -101,9 +101,14 @@ export function pipeWritable(writer: PipeWriter) {
   return new WritableStream<Uint8Array>({
     start(controller) { controller.signal.addEventListener('abort', close, { once: true }); },
     async write(bytes) {
-      if (!(bytes instanceof Uint8Array)) throw new PipeError('EINVAL');
-      let offset = 0;
-      while (offset < bytes.length) offset += await writer.write(bytes.subarray(offset));
+      // A rejected sink write errors the stream without calling close/abort, and a later
+      // abort() on an errored stream never signals. Release the endpoint here, otherwise the
+      // reader would wait for this writer forever instead of observing EOF.
+      try {
+        if (!(bytes instanceof Uint8Array)) throw new PipeError('EINVAL');
+        let offset = 0;
+        while (offset < bytes.length) offset += await writer.write(bytes.subarray(offset));
+      } catch (error) { close(); throw error; }
     },
     close, abort: close
   }, { highWaterMark: 1 });

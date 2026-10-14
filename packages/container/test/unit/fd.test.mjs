@@ -70,3 +70,12 @@ test('writable abort wakes an in-flight write before the sink abort callback', a
   await new Promise((resolve) => setTimeout(resolve, 0));
   await writer.abort(); await rejected;
 });
+
+test('a failed stream write releases its pipe writer so the reader observes EOF', async () => {
+  const p = createPipe(4), writer = pipeWritable(p.writer).getWriter();
+  await writer.write(new Uint8Array([7]));
+  await assert.rejects(writer.write('not bytes'), { code: 'EINVAL' });
+  await writer.abort();
+  assert.deepEqual(await p.reader.read(4), new Uint8Array([7]));
+  assert.equal((await p.reader.read(4)).length, 0);
+});
