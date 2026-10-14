@@ -103,8 +103,10 @@ load callback still owns its network deadline and cancellation.
 CacheStorage writes/deletes cannot be cancelled. When one stalls, the caller still returns at
 the deadline, but the callback retains the namespace lock until that native mutation settles.
 No later mutation or metadata publication is allowed from that expired operation. Other tabs
-or calls fall back to cache misses after waiting 30 seconds for the lock. A subsequent writer
-removes orphaned bodies after the lock becomes available. This deliberately prevents an old
+or calls fall back to cache misses after waiting 30 seconds for the lock. Once a lock wait has
+expired, later calls in the same context wait at most three seconds until the lock is granted
+again, so a stalled holder does not add the full wait to both the read and the write of every
+load. A subsequent writer removes orphaned bodies after the lock becomes available. This deliberately prevents an old
 write from racing a new writer or version cleanup; it does not promise recovery of a browser
 storage API that never settles at all.
 

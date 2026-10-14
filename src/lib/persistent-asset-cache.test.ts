@@ -304,6 +304,14 @@ describe('persistent runtime asset cache', () => {
 		const second = readPersistentRuntimeAsset({ identity: identity(bytes) });
 		await vi.advanceTimersByTimeAsync(30_001);
 		expect(await second).toBeUndefined();
+		// Once a wait expired, later calls do not pay the full lock wait again for the same holder.
+		let thirdSettled = false;
+		const third = readPersistentRuntimeAsset({ identity: identity(bytes) }).finally(() => {
+			thirdSettled = true;
+		});
+		await vi.advanceTimersByTimeAsync(3001);
+		expect(thirdSettled).toBe(true);
+		expect(await third).toBeUndefined();
 		expect(storage.cacheOpen).toHaveBeenCalledTimes(1);
 		release.resolve();
 		const replacement = payload('new write');
@@ -322,6 +330,16 @@ describe('persistent runtime asset cache', () => {
 			bytes: replacement.byteLength
 		});
 		expect([...storage.bodies.values()][0].size).toBe(1);
+		// Acquiring the lock again restores the full wait for a busy holder.
+		const held = storage.lockRequest(
+			'wasm-idle-assets-v1:wasm-idle',
+			{ signal: new AbortController().signal },
+			() => new Promise<void>((resolve) => setTimeout(resolve, 5000))
+		);
+		const queued = readPersistentRuntimeAsset({ identity: identity(replacement) });
+		await vi.advanceTimersByTimeAsync(5001);
+		await held;
+		expect(await queued).toEqual(replacement);
 	});
 
 	it('waits for another holder of the namespace lock instead of reporting a false miss', async () => {
