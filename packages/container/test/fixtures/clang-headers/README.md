@@ -39,6 +39,9 @@ and `extc++.h` is 323 bytes with SHA-256
 These paths describe the existing files; the fixture does not move, duplicate,
 alias or rewrite headers. Compiler dependency evidence and header byte checks
 still apply to every required family in every original case.
+Before starting any compiler case, the runner checks that every required path
+is readable as a file in the actual mounted tree. This metadata preflight does
+not replace the later compiler dependency and byte-identity checks.
 
 The runner passes `-fno-exceptions` explicitly for every C++ case. The selected
 sysroot is the existing no-exception WASI profile; the adapter does not add or

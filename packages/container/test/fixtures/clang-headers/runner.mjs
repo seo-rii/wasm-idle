@@ -58,6 +58,16 @@ export async function runHeaderCorpus({ fs, runCommand, sysroot, cwd, sha256, ev
   evidence.cases = [];
   evidence.headers = [];
   const headers = new Map();
+  // Check fixture metadata against the actual readonly mount before any command
+  // runs. Compilation still must report every required path in its dependencies.
+  for (const fixture of corpus.cases) {
+    for (const required of fixture.requiredHeaders) {
+      try { fs.readFile(`${sysroot}/${required}`); }
+      catch (error) {
+        throw new Error(`${fixture.id}: required header unavailable before compilation: ${required}`, { cause: error });
+      }
+    }
+  }
   for (const [name, source] of Object.entries(corpus.sources)) {
     const bytes = encoder.encode(source.text);
     check(await sha256(bytes) === source.sha256, `Corpus source identity mismatch: ${name}`);
