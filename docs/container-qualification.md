@@ -10,8 +10,8 @@ been implemented; unpassed promotion gates remain explicit.
 | --- | --- | --- |
 | Scope and boundaries | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128) | main at implementation start |
 | Real Bash probe and backend decision | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133) | C-01, independent experiment |
-| Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks only, modified SDK execution pending |
-| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks pass; genuine SDK typing exposed prototype API errors, corrected source awaits fresh SDK/example typechecking; fd/FS bridge pending |
+| Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks and #189 SDK typechecking pass; modified SDK execution pending |
+| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending |
 | Package/API | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135) | C-01 |
 | VFS and writer leases | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136) | C-03 |
 | Byte pipes/fds | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137) | C-04 |
@@ -166,7 +166,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
-| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; #189 adds owned prepared-child metadata, with actual SDK types and common fd/FS routing still to qualify before C-15 |
+| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; #189 prepared-child metadata passes genuine SDK/example typechecking; linked SDK/glue, JS dispatch and common fd/FS routing still need actual guest acceptance before C-15 |
 | G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
@@ -288,8 +288,9 @@ argv, raw environment bytes and actual WASIX cwd. It exposes no mutable state or
 capability; the external SDK compile probe returns an explicit unsupported error if invoked.
 Five patch dry-runs and preparation guards pass. The exact nightly-2025-07-05, rust-src and
 wasm32 target are now installed in a private toolchain home, with exit 0 and complete process
-cleanup. Genuine patched SDK/example typechecking remains a separate pending gate, using
-fresh physical Cargo target and intermediate directories.
+cleanup. Genuine patched SDK/lib and external-example typechecking subsequently passed using
+fresh physical sources and unique Cargo target/intermediate directories, as recorded below.
+The example is a compile probe, not an executed guest or linked browser SDK.
 
 The first #188 actual Node attempt passed C compilation, then exposed fixture include
 flags that searched C headers before libc++ wrappers. Removing those overrides preserves
@@ -333,10 +334,23 @@ seconds, exposing an unqualified `Function` and two unsupported `WasmSliceAccess
 calls in the prototype. Source commit `de98d061435a308e8bbcd2ca195d29ac07401774` qualifies
 `wasmer::Function` and uses fallible, bounded `read_to_vec` ownership without changing the
 framed ABI, decoder or prepared-child snapshot contract. Five patch dry-runs and five C/Rust
-protocol cases pass after the correction. The next SDK/example typecheck uses a fresh
-physical source copy and unique Cargo target/intermediate directories; that gate
-remains pending. Source checks and dependency downloads do not qualify a modified runtime or
-actual Bash/common fd/filesystem integration.
+protocol cases pass after the correction. The corrected genuine SDK/lib and external-example
+typecheck now exits 0 in 412.428 seconds. It uses the pinned nightly-2025-07-05 and
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib --example
+container_command_snapshot_compile -j1` against a fresh physical source copy, with unique
+Cargo target and intermediate directories. Its external supervisor records all owned
+processes reaped, with no remaining processes or cleanup errors.
+
+The original process receipt has SHA-256
+`a906d32e8b063520dd7aba2b002b84ddc067a52482434ec78ebeb7ded4e0d6b8`; the completed log
+has SHA-256 `4419e76d277d33fe319931468bb911e44b210f6e6c6ad2490ae5ca3180d7ab84`.
+The #189 archive records source commit `de98d061435a308e8bbcd2ca195d29ac07401774` in
+`runtimes/wasm-bash/bridge/evidence.sdk-typecheck.json`, and preserves the original process
+receipt as `evidence.sdk-typecheck-process.json`. Previous failed typing, dependency and
+source-only receipts keep their original identities. This pass qualifies Rust typing,
+privacy and the exact pinned SDK API used by the external snapshot example. Actual Wasm SDK
+linking and generated JavaScript glue, JS registry dispatch, modified Bash execution,
+common fd/filesystem ownership and shell MVP acceptance remain separate gates.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
