@@ -7,6 +7,8 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
+if not __debug__:
+    raise SystemExit('verify.py checks with assert statements; run it without -O or PYTHONOPTIMIZE')
 
 
 def sha(path):
