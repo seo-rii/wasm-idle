@@ -206,7 +206,7 @@ def main():
     environment = build_environment()
     toolchain['implicitWasmOpt'] = implicit_wasm_opt(sdk, environment)
     for index, patch in enumerate(manifest['patches']):
-        applied = run_logged(['patch', '-p1', '--forward', '--batch', '-i', str(ROOT / patch['path'])],
+        applied = run_logged(['patch', '-p1', '--forward', '--batch', '--fuzz=0', '-i', str(ROOT / patch['path'])],
                              work / ('patch-' + str(index) + '.log'), environment, cwd=source_dir)
         if applied['exitCode'] != 0:
             raise RuntimeError('Pinned patch did not apply cleanly')
