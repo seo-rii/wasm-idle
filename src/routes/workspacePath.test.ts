@@ -82,4 +82,21 @@ describe('compiler diagnostic path resolution', () => {
 		);
 		expect(resolveCompilerDiagnosticPath('main.go', 'README.md', paths)).toBe('README.md');
 	});
+
+	it('ranks scratch paths by the number of matching trailing components', () => {
+		// A runtime that compiles nested/main.d as /work/main.d must not move markers to main.d.
+		expect(
+			resolveCompilerDiagnosticPath('/work/main.d', 'nested/main.d', [
+				'main.d',
+				'nested/main.d'
+			])
+		).toBe('nested/main.d');
+		// A more specific suffix outranks an entry that only shares the basename.
+		expect(
+			resolveCompilerDiagnosticPath('/build/lib/main.go', 'main.go', [
+				'main.go',
+				'lib/main.go'
+			])
+		).toBe('lib/main.go');
+	});
 });

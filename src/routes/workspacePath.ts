@@ -34,12 +34,27 @@ export function resolveCompilerDiagnosticPath(
 	}
 	const parts = path.split('/').filter((part) => part && part !== '.');
 	if (!parts.length) return entryPath;
-	// Compilers may report scratch copies (/tmp/Program.cs) or bare names (Helper.java).
-	const matches = workspacePaths.filter((candidate) => {
+	// Compilers may report scratch copies (/tmp/Program.cs, /work/main.d) or bare names
+	// (Helper.java). Files sharing the most trailing components win; the entry file breaks ties.
+	let bestLength = 0;
+	let matches: string[] = [];
+	for (const candidate of workspacePaths) {
 		const candidateParts = candidate.split('/');
-		const length = Math.min(parts.length, candidateParts.length);
-		return parts.slice(-length).join('/') === candidateParts.slice(-length).join('/');
-	});
+		let length = 0;
+		while (
+			length < parts.length &&
+			length < candidateParts.length &&
+			parts[parts.length - 1 - length] === candidateParts[candidateParts.length - 1 - length]
+		) {
+			length += 1;
+		}
+		if (!length || length < bestLength) continue;
+		if (length > bestLength) {
+			bestLength = length;
+			matches = [];
+		}
+		matches.push(candidate);
+	}
 	if (matches.includes(entryPath)) return entryPath;
 	return matches.length === 1 ? matches[0] : entryPath;
 }
