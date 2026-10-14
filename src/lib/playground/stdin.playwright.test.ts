@@ -414,6 +414,8 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 300_000
 	}
 ] as const;
+// These runtimes pass stdin to the program in one batch, so the program starts at EOF.
+const batchStdinBrowserLanguages = new Set<string>(['R', 'PHP']);
 const clangStdinBrowserCases = [
 	{
 		name: 'C',
@@ -509,6 +511,7 @@ describe('wasm-idle browser stdin connection', () => {
 						runTimeoutMs: Number(
 							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || defaultRunTimeoutMs
 						),
+						sendEof: batchStdinBrowserLanguages.has(language),
 						source,
 						stdinText
 					});
@@ -552,6 +555,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'CSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: csharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -582,6 +586,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'FSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: fsharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -1106,6 +1111,7 @@ int main() {
 					expectedOutput: 'main=73',
 					language: 'VBNET',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: vbnetStdinSource,
 					stdinText: '73\n'
 				});
