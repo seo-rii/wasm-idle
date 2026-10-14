@@ -11,7 +11,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Scope and boundaries | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128) | main at implementation start |
 | Real Bash probe and backend decision | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133) | C-01, independent experiment |
 | Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks only, modified SDK execution pending |
-| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks pass; genuine SDK/example typecheck and fd/FS bridge pending |
+| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks pass; genuine SDK typing exposed prototype API errors, corrected source awaits fresh SDK/example typechecking; fd/FS bridge pending |
 | Package/API | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135) | C-01 |
 | VFS and writer leases | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136) | C-03 |
 | Byte pipes/fds | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137) | C-04 |
@@ -19,10 +19,10 @@ been implemented; unpassed promotion gates remain explicit.
 | Pinned distribution index | [C-07 #139](https://github.com/seo-rii/wasm-idle/pull/139) | C-06 |
 | Verified asset loader | [C-08 #141](https://github.com/seo-rii/wasm-idle/pull/141) | C-07 |
 | Atomic lazy package mounts | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142) | C-08 |
-| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual Chromium batch C/C++ passes on the C-11 follow-up; full header-regression corpus pending |
-| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links, producer CLI and Chromium consumer pass; full header-regression corpus pending |
-| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache checks pass; full header-regression corpus pending |
-| Selected-target header compile corpus | [C-11 headers #188](https://github.com/seo-rii/wasm-idle/pull/188) (draft) | #159; exact established producer sources plus one resource fixture, 14 real compiler cases awaiting Node/Chromium receipts |
+| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual Chromium batch C/C++ and the concrete selected-target header corpus pass on C-11 follow-ups; experimental profile and release gates remain |
+| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links, producer CLI, Chromium consumer and selected header corpus pass; clean build and release gates remain |
+| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache and selected header checks pass; experimental snapshot profile remains |
+| Selected-target header compile corpus | [C-11 headers #188](https://github.com/seo-rii/wasm-idle/pull/188) | #159; 13 established producer cases plus one resource fixture pass in actual Node/Chromium, with original receipts archived; compile-only scope |
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
@@ -96,9 +96,10 @@ as needed; no PR is automatically merged.
   page-reloaded `--version` command requests no additional bodies with HTTP cache disabled.
   That reload does not repeat the full compilation suite. All 13 guest Workers across both
   pages are reclaimed, process lists are empty and restrictive CSP records no faults. This
-  qualifies the recorded batch snapshot profile; the full header-regression corpus, actual
-  shell/live compiler integration, clean producer build and release/performance gates remain
-  separate.
+  qualifies the recorded batch snapshot profile. The 14-case selected-target header corpus
+  also passes in Node and Chromium on #188, with object/dependency checks and 1,050 header-byte
+  identities verified per backend. Exhaustive header combinations, actual shell/live compiler
+  integration, clean producer build and release/performance gates remain separate.
 - C-17 added timestamp-preserving snapshots and explicit container/owner integration. Its
   focused filesystem/WASI suite passed 31 tests; 10 real Chromium persistence scenarios cover
   reload, bytes/inodes/timestamps/symlinks, a second-tab writer, cache deletion, interrupted blob
@@ -166,11 +167,11 @@ profile. Later documentation changes do not relabel these receipts as a differen
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; #189 adds owned prepared-child metadata, with actual SDK types and common fd/FS routing still to qualify before C-15 |
-| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance and Chromium batch C/C++ compile/link/artifacts pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 runs the established producer header corpus before command-alpha promotion |
+| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
-| C-19/20 | Local header smoke only; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
+| C-19/20 | Local Chromium component evidence, including the selected header corpus; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
 real wasi-libc constructor fixture confirmed `getcwd`, relative reads, bad-cwd rejection and
@@ -190,8 +191,9 @@ memory and 4 GiB free disk before starting the producer and again before the CLI
 and fails immediately if admission fails.
 CPU and address-space limits apply per process, not to aggregate process-tree resources.
 Clang/LLD links and the receipt-gated actual CLI checks run sequentially; failed preparation
-or build does not trigger an automatic retry. Keep compiler PRs draft until the actual CLI,
-browser and header-coverage gates have completed receipts.
+or build does not trigger an automatic retry. The actual CLI, browser and concrete selected
+header corpus now have completed receipts. Compiler PRs remain draft while the experimental
+profile and separate clean-build/release promotion gates are unresolved.
 
 The requested guarded retry subsequently completed both raw links: Clang in 578.152 seconds
 and LLD in 285.064 seconds. Its last verifier failed because it incorrectly required LLD
@@ -298,12 +300,43 @@ their original bytes, preserves all 14 source cases and the full sysroot, and pr
 required paths before compiler execution. Both failed receipts remain unchanged; they
 do not qualify the complete corpus or Chromium header profile.
 
+The completed #188 Node and Chromium runs now pass all 14 compile-only cases: the 13 existing
+producer cases and one additional Clang resource-header fixture. Each run verifies generated
+object bytes, dependency output and 1,050 distinct header-byte identities against the unchanged
+selected sysroot. C++ arguments explicitly include `-fno-exceptions`; the adapter inserts no
+flags. This closes the concrete selected corpus gate, without claiming exhaustive header
+combinations, every header family's linked runtime support or language conformance. The
+separate #159 receipt above records actual C/C++ linking and artifact execution.
+
+Both header receipts record application commit `b8edc146c4ba26905c9a0639726f24407825b3a3`
+and corpus SHA-256 `f8c5a9360642a7fd676ba10edbc8ac5a07fea9c4f9d75698b6aad32d7769bee2`.
+The original Node receipt has SHA-256
+`c69fa7bc702ba653e98e9919307de54cbbf120817181799cf7241d19f4a1329e`; the Chromium receipt
+has SHA-256 `c2c5de32cc85f53eb5dc051f599714e178ca8f0111593a0ae4083a159e3c4d6f`.
+They are archived unchanged on #188 under `packages/container/test/fixtures/clang-headers/`
+as `node-evidence.json` and `chromium-evidence.json`, alongside the separate process-supervisor
+receipts. Node 24.21.0 reclaims all 14 guest Workers. Chromium 153.0.8010.12 on Linux x64
+reclaims all 16 guest Workers: one version command plus 14 cold compile cases and one reloaded
+version command. Both pages end with empty process lists, zero live Workers and no CSP faults.
+There are no asset body requests at boot; cold execution requests Clang, LLD and the complete
+sysroot once each; the page reload adds zero requests with HTTP cache disabled. The reload
+does not recompile the corpus. Both external supervised processes exit 0 with every owned
+descendant reaped. The earlier failed Node receipts retain their original results and source
+identities.
+
 The first #189 offline SDK check exited 101 before Rust typing because a locked host
 dependency was missing after wasm-target-filtered fetch. Unfiltered locked fetch and
 fully offline fetch validation now pass for both SDK and pinned standard-library graphs,
 with both lockfile hashes unchanged. The separate preparation receipt records the original
-failure and full cleanup. Genuine SDK/example typing is still a distinct pending gate;
-successful dependency downloads do not qualify a modified runtime or actual Bash.
+failure and full cleanup. The subsequent genuine SDK typecheck exited 101 after 342.205
+seconds, exposing an unqualified `Function` and two unsupported `WasmSliceAccess.to_vec`
+calls in the prototype. Source commit `de98d061435a308e8bbcd2ca195d29ac07401774` qualifies
+`wasmer::Function` and uses fallible, bounded `read_to_vec` ownership without changing the
+framed ABI, decoder or prepared-child snapshot contract. Five patch dry-runs and five C/Rust
+protocol cases pass after the correction. The next SDK/example typecheck uses a fresh
+physical source copy and unique Cargo target/intermediate directories; that gate
+remains pending. Source checks and dependency downloads do not qualify a modified runtime or
+actual Bash/common fd/filesystem integration.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
