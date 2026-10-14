@@ -33,9 +33,9 @@ def checked(root):
 
 
 def execute(root, check_only=False):
-    guard.enable_cleanup()
     status = 3
     try:
+        guard.enable_cleanup()
         plan = checked(root)
         if not check_only and not (root / "started.json").is_file():
             raise ValueError("start only through --launch")
@@ -57,8 +57,8 @@ def execute(root, check_only=False):
             status = 128 + guard.STOP
     finally:
         (root / ("check.status" if check_only else "final.status")).write_text(str(status) + "\n")
-        guard.publish(root / "phase.json", {"phase": "check-complete" if check_only else "complete" if status == 0 else "failed",
-                                          "pid": os.getpid(), "finalStatus": status})
+        phase = ("check-" if check_only else "") + ("complete" if status == 0 else "failed")
+        guard.publish(root / "phase.json", {"phase": phase, "pid": os.getpid(), "finalStatus": status})
     return status
 
 
