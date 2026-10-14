@@ -2000,6 +2000,21 @@ describe('WorkerAssetBridge asset requests', () => {
 			'a fragment',
 			'https://assets.example.com/clang/tool.wasm#token',
 			'URL must not include a fragment'
+		],
+		[
+			'an encoded slash',
+			'https://assets.example.com/clang/..%2fprivate/tool.wasm',
+			'URL must not include encoded path separators'
+		],
+		[
+			'encoded dot segments and slash',
+			'https://assets.example.com/clang/%2e%2e%2Fprivate/tool.wasm',
+			'URL must not include encoded path separators'
+		],
+		[
+			'an encoded backslash',
+			'https://assets.example.com/clang/..%5Cprivate/tool.wasm',
+			'URL must not include encoded path separators'
 		]
 	])('rejects loader URLs containing %s before fetching', async (_kind, url, errorSuffix) => {
 		const postMessage = vi.fn();

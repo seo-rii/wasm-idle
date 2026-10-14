@@ -1432,6 +1432,11 @@ export class WorkerAssetBridge {
 		if (url.hash) {
 			throw new Error(`Runtime asset ${asset} URL must not include a fragment`);
 		}
+		// The prefix check below sees `/base/..%2fother` as inside `/base/`, but a server that
+		// decodes the separator before resolving dot segments serves `/other`.
+		if (/%2f|%5c/iu.test(url.pathname)) {
+			throw new Error(`Runtime asset ${asset} URL must not include encoded path separators`);
+		}
 		const allowed = [context.config.baseUrl, ...(context.config.allowedBaseUrls || [])].some(
 			(baseUrl) => {
 				let base: URL;
