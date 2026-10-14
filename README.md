@@ -477,14 +477,25 @@ cd wasm-idle
 pnpm run sync:wasm-julia
 ```
 
-Nim browser execution uses the `benagastov/Nim-WASM-Compiler` asset pipeline under
+Nim compiler preparation is owned by `wasm-llvm/producer/nim-browser`; the pinned
+`benagastov/Nim-WASM-Compiler` distribution is delivered under
 `static/wasm-nim/`: Nim 2.2.4 compiled to WebAssembly emits C, then bundled clang/lld WebAssembly
-assets link a runnable WASI module. Refresh the vendored worker/runtime assets with:
+assets link a runnable WASI module. Package the compiler artifacts with the producer,
+then publish the verified bundle and current consumer Worker:
 
 ```bash
-cd wasm-idle
-pnpm run sync:wasm-nim
+# In wasm-llvm: migrate existing verified assets or select a pinned upstream source.
+pnpm package:nim -- --from-runtime /path/to/wasm-idle/static/wasm-nim --out out/nim-browser
+# In wasm-idle:
+pnpm sync:wasm-nim /path/to/wasm-llvm/out/nim-browser
 ```
+
+D compiler source patches, porting probes and artifact packaging live in
+`wasm-llvm/producer/d-browser`. Import its verified output through
+`WASM_LLVM_D_ARTIFACT_DIR` when building `runtimes/wasm-d`; see [the D browser integration](docs/d-browser.md).
+C3 and LFortran continue using their existing `wasm-llvm` producers. Compiler preparation for
+these four paths belongs to the producer repository, while execution and cache ownership belong
+to `wasm-idle`.
 
 ## Rust browser integration
 
@@ -991,7 +1002,7 @@ The pack contains the same locked upstream files, not an import-based subset. Ea
 
 Create one `createRuntimeSession(assets)` owner per browser application and use
 `session.createBinding()` for each editor or execution panel. Clang consumers, Rust,
-TinyGo and Python share a bounded owner for verified assets and compiler modules:
+TinyGo, D, C3, Nim, LFortran and Python share a bounded owner for verified assets and compiler modules:
 
 ```ts
 import { createRuntimeSession } from 'wasm-idle';
@@ -1022,9 +1033,12 @@ The asset cache is LRU-bounded to 64 entries and 256 MiB of logical asset bytes
 (not a measurement of the browser engine's compiled-code memory). C/C++ program
 artifacts are independently bounded to 8 entries and 32 MiB. `getCacheStats()` exposes
 cache counters for diagnostics. COBOL, Fortran, V and Objective-C/Objective-C++ connect
-their Clang asset bridges to this same owner. Rust and TinyGo use one-shot MessagePorts
+their Clang asset bridges to this same owner. Rust, TinyGo, D, C3, Nim and LFortran use one-shot MessagePorts
 to request compiler modules from the session after checking the pinned artifact receipt.
 The host verifies the bytes again before returning a module, including on cache hits.
+Nim also passes verified Clang, LLD and MemFS modules to its nested compiler Worker.
+C3 partitions its transformed compiler by the configured memory cap; LFortran shares
+its compiler module while generating fresh dynamic side modules in each execution.
 Cache identities include artifact receipts, authorization profiles and compilation
 settings; TinyGo also separates the memory-cap transformation used for each toolchain.
 
