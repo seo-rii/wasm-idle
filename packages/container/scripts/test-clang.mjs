@@ -90,7 +90,7 @@ try {
       const stdio = await c.run('wasm-run', ['/workspace/a b/stdio.wasm'], { cwd: '/', timeoutMs: 10000 });
       assert.equal(stdio.code, 0); assert.equal(text(stdio.stdout), 'hello\n');
       write('/workspace/a b/templates.cpp', '#include <vector>\n#include <numeric>\n#include <map>\n#include <string>\n#include <cstdio>\nint main(){std::vector<int> v{1,2,3};std::map<std::string,int> m{{"sum",std::accumulate(v.begin(),v.end(),0)}};std::printf("sum=%d\\n",m.at("sum"));}\n');
-      await run([...defaults, '--driver-mode=g++', '-std=c++20', fixturePath('templates.cpp'), '-o', fixturePath('cpp.wasm')]);
+      await run([...defaults, '--driver-mode=g++', '-std=c++20', '-fno-exceptions', fixturePath('templates.cpp'), '-o', fixturePath('cpp.wasm')]);
       const cpp = await c.run('wasm-run', ['/workspace/a b/cpp.wasm'], { cwd: '/', timeoutMs: 10000 });
       assert.equal(cpp.code, 0); assert.equal(text(cpp.stdout), 'sum=6\n');
       results.push({ c: { code: stdio.code, stdout: text(stdio.stdout) }, cpp: { code: cpp.code, stdout: text(cpp.stdout) } });

@@ -266,6 +266,7 @@ globalThis.clangBrowserFixture = {
 					...defaults,
 					'--driver-mode=g++',
 					'-std=c++20',
+					'-fno-exceptions',
 					'templates.cpp',
 					'-o',
 					'cpp.wasm'

@@ -25,6 +25,12 @@ interpretation and diagnostics to Clang.
 Target, sysroot, resource directory and ABI defaults belong in an explicit pinned
 distribution profile; the host does not infer or silently replace user options.
 
+The selected C++20 fixture passes `-fno-exceptions` explicitly. The existing pinned
+sysroot does not link the exception allocation/throw symbols required by the same
+template fixture with exceptions enabled; those real linker diagnostics remain a
+recorded unsupported boundary. The adapter never inserts or ignores this flag,
+and the full selected-target headers and libraries are preserved.
+
 Both qualified modules retain `exec_v1`: LLD's optional error-handling script
 uses the same LLVM Support entry. The host supplies the import but rejects all
 LLD child requests with `-1`. Only top-level Clang may invoke the pinned linker;
