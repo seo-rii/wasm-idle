@@ -134,13 +134,14 @@ describe('checked-in TeaVM runtime trust root', () => {
 			['Float', 'Float32Array'],
 			['Double', 'Float64Array']
 		];
+		const consoleStream = 'org/teavm/classlib/impl/console/JsConsolePrintStream';
 		expect(
 			manifest.build.overlay.sources.map(({ upstreamSourceEntry, transforms }) => ({
 				upstreamSourceEntry,
 				transforms
 			}))
-		).toEqual(
-			nioBuffers.map(([buffer, typedArray]) => ({
+		).toEqual([
+			...nioBuffers.map(([buffer, typedArray]) => ({
 				upstreamSourceEntry: `org/teavm/classlib/java/nio/T${buffer}Buffer.java`,
 				transforms: [
 					{
@@ -149,11 +150,29 @@ describe('checked-in TeaVM runtime trust root', () => {
 						expectedOccurrences: 2
 					}
 				]
-			}))
-		);
-		expect(manifest.build.overlay.classes.map(({ targetEntry }) => targetEntry)).toEqual(
-			nioBuffers.map(([buffer]) => `org/teavm/classlib/java/nio/T${buffer}Buffer.class`)
-		);
+			})),
+			// Console byte writes must invoke the pending flush and advance the source offset.
+			{
+				upstreamSourceEntry: `${consoleStream}.java`,
+				transforms: [
+					{
+						from: '            flushAction = null;\n            flushAction.run();',
+						to: '            Runnable action = flushAction;\n            flushAction = null;\n            action.run();',
+						expectedOccurrences: 1
+					},
+					{
+						from: '                buffer.put(b, off, count);\n                len -= count;',
+						to: '                buffer.put(b, off, count);\n                off += count;\n                len -= count;',
+						expectedOccurrences: 1
+					}
+				]
+			}
+		]);
+		expect(manifest.build.overlay.classes.map(({ targetEntry }) => targetEntry)).toEqual([
+			...nioBuffers.map(([buffer]) => `org/teavm/classlib/java/nio/T${buffer}Buffer.class`),
+			`${consoleStream}.class`,
+			`${consoleStream}$ByteEncoder.class`
+		]);
 		expect(manifest.assets.map((file) => file.path)).toEqual(TEAVM_RUNTIME_ASSET_NAMES);
 
 		const logicalReceipts = Object.create(null) as Record<

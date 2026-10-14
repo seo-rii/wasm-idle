@@ -24,16 +24,20 @@ public class Main {
     }
 }`;
 
-const javaBufferedReaderStdinSource = `import java.io.*;
+const javaBufferedStdioSource = `import java.io.*;
 import java.util.StringTokenizer;
 
 public class Main {
     public static void main(String[] args) throws IOException {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(System.out));
         StringTokenizer st = new StringTokenizer(br.readLine());
         int a = Integer.parseInt(st.nextToken());
         int b = Integer.parseInt(st.nextToken());
-        System.out.println("main=" + (a + b));
+        bw.write("main=" + (a + b));
+        bw.newLine();
+        bw.flush();
+        bw.close();
     }
 }`;
 
@@ -315,9 +319,9 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 300_000
 	},
 	{
-		name: 'JAVA BufferedReader',
+		name: 'JAVA BufferedReader/BufferedWriter',
 		language: 'JAVA',
-		source: javaBufferedReaderStdinSource,
+		source: javaBufferedStdioSource,
 		stdinText: '68 5\n',
 		expectedOutput: 'main=73',
 		defaultRunTimeoutMs: 300_000

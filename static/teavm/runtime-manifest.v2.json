@@ -312,6 +312,26 @@
 							"expectedOccurrences": 2
 						}
 					]
+				},
+				{
+					"sourcePath": "scripts/teavm/JsConsolePrintStream.java",
+					"sourceBytes": 5110,
+					"sourceSha256": "048c788702e494a9693da9122805a86558d64ae527c4d103bc266577ae5bae86",
+					"upstreamSourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
+					"upstreamSourceBytes": 5042,
+					"upstreamSourceSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
+					"transforms": [
+						{
+							"from": "            flushAction = null;\n            flushAction.run();",
+							"to": "            Runnable action = flushAction;\n            flushAction = null;\n            action.run();",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "                buffer.put(b, off, count);\n                len -= count;",
+							"to": "                buffer.put(b, off, count);\n                off += count;\n                len -= count;",
+							"expectedOccurrences": 1
+						}
+					]
 				}
 			],
 			"classes": [
@@ -363,6 +383,20 @@
 					"canonicalClassSha256": "fe8e2a1368e6f72ef18ed8f89969f6d6e42396fdee23b85eccd2ff81f9c5861e",
 					"classBytes": 7073,
 					"classSha256": "80da642f1198977868d7fcc2cee694996d975f359bf9d614ead3a3bea83a3aaf"
+				},
+				{
+					"targetEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.class",
+					"canonicalClassBytes": 3722,
+					"canonicalClassSha256": "d71fb27e45d617e3a8b7a09cbc93beb27320741a346bb793545fd081c2f9477e",
+					"classBytes": 2854,
+					"classSha256": "b53824fa892785e70284ba50bb40cf9c0c2a6ae7b515875bea6506c0a050c162"
+				},
+				{
+					"targetEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream$ByteEncoder.class",
+					"canonicalClassBytes": 3634,
+					"canonicalClassSha256": "4f8db161a099a53146f1162de3939d9d1a1fcd58097a0fc0a78754cdd13f6fcf",
+					"classBytes": 3291,
+					"classSha256": "7b998cd8c4730eb1f3c68b4d41d43497adacbd746e2e58853f73bcca97a45954"
 				}
 			]
 		}
@@ -385,8 +419,8 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39467,
-			"sha256": "b7d993ead9b1ddbfba91eef662485ad625cd47963d695e00b66906cb81ae853d"
+			"bytes": 39496,
+			"sha256": "320e5719bcdafa147af73651e7173d22ce15c059a370ea03890b179ff9f05afa"
 		}
 	],
 	"assets": [
@@ -429,15 +463,15 @@
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2390114,
-			"sha256": "6e2e9d1a69695195a82af01faa6e3bbf87a5529808b09c354705d1d84a0c1ade",
+			"bytes": 2389701,
+			"sha256": "3a2245e2177dcf70bf8c61d48ef806b9e29375a552edb61be5c6ca3d7232819b",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2354826,
-				"sha256": "74af7e873441f2d8b5de4dd5c382361f04d16171ee2f226446db205e3460d72b"
+				"bytes": 2354686,
+				"sha256": "991fdd83b9fbd436a0facb88db60da049ee5679e5bf878cd17686b447c97a336"
 			}
 		}
 	],
-	"fingerprint": "6ec10f38a6f0e208d63d7d2688cf7b96dba44178d1dbab3f0073af99a68f296c"
+	"fingerprint": "796d325304dd5ab4c7ce696ebf6e38e3ad85de08d0cefe0762f6bd30e220f4ed"
 }

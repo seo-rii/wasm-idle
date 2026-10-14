@@ -7,7 +7,8 @@ This notice accompanies the browser TeaVM compiler and class-library assets gene
 Corresponding source references and byte receipts are recorded in
 `scripts/wasm-teavm-assets.lock.json`. The wasm-idle compatibility overlays are shipped as
 `scripts/teavm/TByteBuffer.java`, `TCharBuffer.java`, `TShortBuffer.java`, `TIntBuffer.java`,
-`TLongBuffer.java`, `TFloatBuffer.java`, and `TDoubleBuffer.java`. No warranty is provided.
+`TLongBuffer.java`, `TFloatBuffer.java`, `TDoubleBuffer.java`, and `JsConsolePrintStream.java`. No
+warranty is provided.
 
 ## TeaVM and teavm-javac
 

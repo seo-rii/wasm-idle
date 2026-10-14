@@ -304,6 +304,27 @@ public class Main {
 				expected: 'sum=12\n'
 			},
 			{
+				name: 'BufferedWriter and PrintWriter flushes',
+				code: `import java.io.*;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(System.out));
+        for (int i = 0; i < 20; i++) bw.write("line " + i + " 한글\\n");
+        bw.flush();
+        PrintWriter pw = new PrintWriter(System.out);
+        pw.println("pw");
+        pw.flush();
+        bw.write("end");
+        bw.newLine();
+        bw.flush();
+        bw.close();
+    }
+}`,
+				stdin: '',
+				expected: `${Array.from({ length: 20 }, (_, i) => `line ${i} 한글\n`).join('')}pw\nend\n`
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

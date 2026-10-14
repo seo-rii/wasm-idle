@@ -21,17 +21,25 @@ Gradle, dependency-verification, local-overlay, storage, and license metadata. A
 loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
 replacement receipt set.
 
-The runtime class library intentionally carries one wasm-idle compatibility overlay for the typed
-NIO buffer factories. Starting from the pinned TeaVM 0.13.1 source JAR, it changes exactly two
-`allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`, `TIntBuffer`,
-`TLongBuffer`, `TFloatBuffer`, and `TDoubleBuffer` from the typed array's `fromJavaArray` to
-`copyFromJavaArray`. Those calls sit in JavaScript-backend branches that never run under Wasm GC,
-but TeaVM 0.13.1 still rejects their `@JSByRef` parameters while generating Wasm GC code. Without
-the overlay, any program reaching `CharBuffer` (for example `InputStreamReader`, `BufferedReader`,
-`OutputStreamWriter`, `PrintWriter`, or `String.getBytes(Charset)`) fails before it runs. The
-producer verifies each original source entry, occurrence count, transformed source, JDK 25
-`javac --release 17` output, canonical 2,141-entry archive, and final byte receipts before
-publication. Do not broaden this overlay while performing a provenance-only refresh.
+The runtime class library intentionally carries one wasm-idle compatibility overlay for character
+and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
+exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
+`TIntBuffer`, `TLongBuffer`, `TFloatBuffer`, and `TDoubleBuffer` from the typed array's
+`fromJavaArray` to `copyFromJavaArray`. Those calls sit in JavaScript-backend branches that never
+run under Wasm GC, but TeaVM 0.13.1 still rejects their `@JSByRef` parameters while generating Wasm
+GC code. Without the overlay, any program reaching `CharBuffer` (for example `InputStreamReader`,
+`BufferedReader`, `OutputStreamWriter`, `PrintWriter`, or `String.getBytes(Charset)`) fails before
+it runs.
+
+It also repairs two defects in the Wasm GC `System.out`/`System.err` byte path,
+`JsConsolePrintStream`: `flush()` cleared its pending action before invoking it, trapping with a
+null dereference on the first flush after a byte write (for example `BufferedWriter.flush()`), and
+`write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes.
+
+The producer verifies each original source entry, transform occurrence count, transformed source,
+JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive, and
+final byte receipts before publication. Do not broaden this overlay while performing a
+provenance-only refresh.
 
 To reproduce and publish the generation, check out the revision above, download the exact JDK
 archive recorded in `scripts/wasm-teavm-assets.lock.json`, and run:
