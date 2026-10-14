@@ -92,6 +92,8 @@ export interface CompileRustDependencies {
 	loadManifest?: typeof loadRuntimeManifest;
 	runtimeProfile?: WasmRustRuntimeProfile;
 	createWorker?: (url: URL) => WorkerLike;
+	/** Creates a private module channel backed by the host's app-session cache. */
+	createRustcModuleService?: typeof createRustcModuleService;
 	linkBitcode?: typeof linkBitcodeWithLlvmWasm;
 	now?: () => number;
 	sleep?: (milliseconds: number) => Promise<void>;
@@ -359,7 +361,9 @@ export async function compileRust(
 			// Only the activated, receipt-verified topology gets a private module service.
 			const rustcReceiptPath = `wasm-rust/runtime/${manifest.compiler.rustcWasm}`;
 			const moduleService = executableGraph
-				? createRustcModuleService(manifest.assetReceipts?.[rustcReceiptPath])
+				? (dependencies.createRustcModuleService?.(
+						manifest.assetReceipts?.[rustcReceiptPath]
+					) ?? createRustcModuleService(manifest.assetReceipts?.[rustcReceiptPath]))
 				: undefined;
 			if (manifest.assetReceipts)
 				registerRuntimeManifestAssetReceipts(versionedRuntimeBaseUrl, manifest);

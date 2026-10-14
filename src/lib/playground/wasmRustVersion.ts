@@ -1,8 +1,8 @@
 export const WASM_RUST_RUNTIME_PROFILE = Object.freeze({
-	profileId: 'wasm-rust-292ad2fd5b130d101e8b8c853e702942649011d26ce42660babd35b2b61aff00',
+	profileId: 'wasm-rust-7f65a4c793bc46e94bc6844d93b94eb5499610932ca111f7079300a21a731105',
 	protocolVersion: 1,
 	manifestPath: 'runtime/runtime-manifest.v3.json',
-	manifestFingerprint: '292ad2fd5b130d101e8b8c853e702942649011d26ce42660babd35b2b61aff00',
+	manifestFingerprint: '7f65a4c793bc46e94bc6844d93b94eb5499610932ca111f7079300a21a731105',
 	manifestReceipt: {
 		bytes: 6185,
 		sha256: '30b210003632395a1effd19f7a46565d5f8c52a9d3a28a310fa24219f97a5a9a'
@@ -532,12 +532,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 35115,
-				sha256: '6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b'
+				bytes: 35204,
+				sha256: '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'
 			},
 			logical: {
-				bytes: 35115,
-				sha256: '6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b'
+				bytes: 35204,
+				sha256: '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'
 			},
 			imports: [
 				{
@@ -1590,7 +1590,7 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 			externals: []
 		}
 	},
-	fingerprint: '7d1b409ad0953dfe170cb7d34aeaf790ae82599cdd1520c22d777a35cab368a0'
+	fingerprint: '8216ff2b93e5d712c78033636c02aadfa8a1bbfd1de88c6bfa4995b4ea0b4870'
 } as const);
 
 export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;
