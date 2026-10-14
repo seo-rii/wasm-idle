@@ -2863,6 +2863,47 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('answers a load superseded by a rebind to the same worker', async () => {
+		const postMessage = vi.fn();
+		const worker = { postMessage } as unknown as Worker;
+		let resolveFirstLoad!: (value: Uint8Array) => void;
+		const loader = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise<Uint8Array>((resolve) => {
+						resolveFirstLoad = resolve;
+					})
+			)
+			.mockResolvedValue(new Uint8Array([4, 5, 6]));
+		const config = { baseUrl: '/clang/', loader, useAssetBridge: true };
+		const bridge = new WorkerAssetBridge(worker, 'clang', config);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 34, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		bridge.rebind(worker, config);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 34,
+				ok: false,
+				error: `Runtime asset ${asset} request was superseded by a rebind`
+			}
+		});
+		resolveFirstLoad(new Uint8Array([1, 2, 3]));
+		bridge.handleMessage({
+			data: { assetRequest: { id: 35, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+		expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
+			assetResponse: { id: 35, ok: true }
+		});
+	});
+
 	it('does not revive when rebind abort cleanup disposes the bridge', async () => {
 		const firstWorkerPostMessage = vi.fn();
 		const secondWorkerPostMessage = vi.fn();

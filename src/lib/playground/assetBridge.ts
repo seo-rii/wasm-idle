@@ -703,6 +703,21 @@ export class WorkerAssetBridge {
 				progress.activity(event.phase, event.asset);
 			}
 		};
+		// A rebind to the same worker aborts this load, but that worker still awaits a reply.
+		const replySuperseded = () => {
+			if (this.state !== 'active' || this.worker !== worker) return;
+			try {
+				worker.postMessage({
+					assetResponse: {
+						id: request.id,
+						ok: false,
+						error: `Runtime asset ${request.asset} request was superseded by a rebind`
+					}
+				});
+			} catch {
+				// The worker may already be terminated.
+			}
+		};
 		const loadContext = (report: (event: AssetPreparationProgress, key?: string) => void) => ({
 			...context,
 			progress: {
@@ -823,7 +838,8 @@ export class WorkerAssetBridge {
 						return module;
 					});
 				}
-				if (controller.signal.aborted || generation !== this.generation) return;
+				if (controller.signal.aborted || generation !== this.generation)
+					return replySuperseded();
 				worker.postMessage({ assetResponse: { id: request.id, ok: true, module } });
 				return;
 			}
@@ -831,7 +847,8 @@ export class WorkerAssetBridge {
 			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
 				this.pythonPackageAssets = readPythonPackageAssets(loaded.bytes);
 			}
-			if (controller.signal.aborted || generation !== this.generation) return;
+			if (controller.signal.aborted || generation !== this.generation)
+				return replySuperseded();
 			const buffer = transferBuffer(
 				loaded.bytes,
 				this.cache ? false : loaded.transferOwnership
@@ -848,7 +865,8 @@ export class WorkerAssetBridge {
 				[buffer]
 			);
 		} catch (error) {
-			if (controller.signal.aborted || generation !== this.generation) return;
+			if (controller.signal.aborted || generation !== this.generation)
+				return replySuperseded();
 			try {
 				worker.postMessage({
 					assetResponse: {
