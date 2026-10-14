@@ -967,7 +967,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 		stdlibUrl: 'https://cdn.example.com/wasm-zig/std.tar.gz'
 	},
 	lisp: {
-		moduleUrl: 'https://cdn.example.com/wasm-lisp/index.js'
+		moduleUrl: 'https://cdn.example.com/wasm-lisp/index.js',
+		manifestUrl: 'https://cdn.example.com/wasm-lisp/runtime-manifest.v2.json',
+		manifestFingerprint: '<runtime-manifest-fingerprint>'
 	},
 	haskell: {
 		moduleUrl: 'https://cdn.example.com/wasm-haskell/dyld.mjs',
@@ -976,7 +978,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	nim: {
 		baseUrl: 'https://cdn.example.com/wasm-nim/',
-		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js'
+		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js',
+		// Complete identity and receipt bundle for the served bytes; see below.
+		...nimTrustBundle
 	}
 };
 ```
@@ -984,12 +988,21 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 Static module overrides such as PHP's `moduleUrl` identify an entry module, not a self-contained
 file. Mirror its complete sibling asset tree at the same relative paths. Cross-origin asset hosts
 must provide compatible CORS and COEP/CORP headers and cannot rely on wasm-idle's same-origin gzip
-service worker.
+service worker. The checkout stores Zig's compiler only as `zig_small.wasm.gz`, so a
+`zig.compilerUrl` host must return the decompressed `zig_small.wasm` bytes, either as a
+decompressed file or as that `.gz` served with `Content-Encoding: gzip`; `std.tar.gz` is served as
+stored.
 
 Verified static runtimes such as Janet and Julia intentionally omit URL-only examples: a custom
 `baseUrl`, `manifestUrl`, or `workerUrl` must be accompanied by every identity and asset-receipt
 field declared by that runtime's asset config, including the matching `workerReceipt`. Partial
-trust bundles fail closed instead of borrowing receipts from bundled executable bytes.
+trust bundles fail closed instead of borrowing receipts from bundled executable bytes. In the Nim
+entry above, `nimTrustBundle` stands for `profileId`, `artifactRevision`, `nimRevision`,
+`llvmRevision`, `memfsRevision`, `emscriptenRevision`, `manifestFingerprint`, `manifestReceipt`,
+`nimJavaScriptReceipt`, `nimWasmReceipt`, `nimbaseReceipt`, `clangJavaScriptReceipt`,
+`clangWasmReceipt`, `lldWasmReceipt`, `memfsWasmReceipt`, `sysrootReceipt`, and `workerReceipt`. An
+explicit Nim `manifestUrl` must be `runtime-manifest.v2.json?v=<manifestFingerprint>` under
+`baseUrl`. A `rootUrl` mirror of the bundled Nim files needs no `nim` entry.
 
 The bundled C/C++ app uses receipt-pinned Clang language sysroots: C initially downloads only the
 C base, while C++ or a mixed/opaque-language build loads the C++ add-on before compiling or linking.
