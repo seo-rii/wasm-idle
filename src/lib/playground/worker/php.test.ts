@@ -173,7 +173,7 @@ describe('PHP worker', () => {
 		);
 	});
 
-	it('reports nonzero PHP exits as worker errors', async () => {
+	it('reports nonzero PHP exits as worker errors without repeating posted errors', async () => {
 		runResponses.push({
 			text: '',
 			errors: 'fatal demo error',
@@ -190,11 +190,12 @@ describe('PHP worker', () => {
 			}
 		});
 
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: expect.stringContaining('PHP program exited with code 1')
-		});
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: expect.stringContaining('fatal demo error')
-		});
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'fatal demo error' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'PHP program exited with code 1' });
 	});
 });

@@ -1,4 +1,10 @@
-import type { Sandbox, SandboxLoader, SandboxRuntimeAssets } from '@wasm-idle/core';
+import {
+	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
+	type PlaygroundBindingOptions,
+	type Sandbox,
+	type SandboxLoader,
+	type SandboxRuntimeAssets
+} from '@wasm-idle/core';
 import { effectScope, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +21,42 @@ describe('useWasmIdlePlayground', () => {
 		const binding = useWasmIdlePlayground(runtimeAssets, loadSandbox);
 
 		expect(binding.value.runtimeAssets).toBe(runtimeAssets);
+	});
+
+	it('passes binding options through and replaces the binding when they change', async () => {
+		const terminate = vi.fn();
+		const sandbox = {
+			constructor: Object,
+			eof: vi.fn(),
+			load: vi.fn(async () => undefined),
+			run: vi.fn(async () => true),
+			terminate,
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		const trustProfile = DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE;
+		const options = shallowRef<PlaygroundBindingOptions | undefined>({ trustProfile });
+		const binding = useWasmIdlePlayground('/runtime', async () => sandbox, options);
+		const first = binding.value;
+		await first.load('C');
+
+		expect(first.trustProfile?.profileId).toBe(trustProfile.profileId);
+
+		options.value = undefined;
+
+		expect(binding.value).not.toBe(first);
+		expect(binding.value.trustProfile).toBeUndefined();
+		await vi.waitFor(() => expect(terminate).toHaveBeenCalledTimes(1));
+		await binding.value.dispose();
+	});
+
+	it('passes binding options through useWasmIdleHost', async () => {
+		const trustProfile = DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE;
+
+		const host = useWasmIdleHost('/runtime', vi.fn() as SandboxLoader, { trustProfile });
+
+		expect(host.binding.value.trustProfile?.profileId).toBe(trustProfile.profileId);
+		expect(host.terminalProps.value.trustProfile).toBe(host.binding.value.trustProfile);
+		await host.dispose();
 	});
 
 	it('disposes the current binding and terminal through the host lifecycle', async () => {

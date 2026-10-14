@@ -569,7 +569,8 @@ self.onmessage = async (event: { data: any }) => {
 			for (const diagnostic of parseHaskellDiagnostics(stderrText)) {
 				postMessage({ diagnostic });
 			}
-			throw new Error(stderrText.trim() || formatError(error), { cause: error });
+			// The host stderr callback already streamed stderrText to the terminal.
+			throw new Error(formatError(error), { cause: error });
 		} finally {
 			activeStderrCollector = null;
 			activeDiagnosticPaths = null;

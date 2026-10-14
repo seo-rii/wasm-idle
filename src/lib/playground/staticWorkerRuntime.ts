@@ -182,6 +182,7 @@ type ActiveRun = {
 	reject: (reason: unknown) => void;
 	settledReported: boolean;
 	stdinRing?: StaticStdinRingHost;
+	stdinRingClosed?: boolean;
 	startExecutionDeadline?: () => void;
 	compilerModuleWorker?: Worker;
 };
@@ -403,12 +404,17 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				? (this.workerStartMaxAssetBytes ?? undefined)
 				: undefined;
 		if (currentLimit !== undefined && maxAssetBytes < currentLimit) {
-			this.disposeWorker(
-				new CancelledError(
-					`${this.config.displayName} worker reset for a lower runtime asset limit`,
-					{ phase: 'asset', runtimeId: this.config.languageId }
-				)
+			const reason = new CancelledError(
+				`${this.config.displayName} worker reset for a lower runtime asset limit`,
+				{ phase: 'asset', runtimeId: this.config.languageId }
 			);
+			// A run cannot settle once its worker is detached, so the reset ends it like an abort.
+			if (this.activeRun) {
+				this.rejectStdinWaiters(reason);
+				this.rejectRun(this.activeRun.id, reason);
+			} else {
+				this.disposeWorker(reason);
+			}
 		}
 	}
 
@@ -571,6 +577,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		if (this.disposed) return;
 		const activeRun = this.activeRun;
 		if (activeRun?.stdinRing) {
+			// The terminal keeps accepting input after EOF; late input must not fail the run.
+			if (activeRun.stdinRingClosed) return;
 			try {
 				activeRun.stdinRing.enqueue(input);
 			} catch (error) {
@@ -585,6 +593,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		if (this.disposed) return;
 		const activeRun = this.activeRun;
 		if (activeRun?.stdinRing) {
+			activeRun.stdinRingClosed = true;
 			try {
 				activeRun.stdinRing.close();
 			} catch (error) {
@@ -642,17 +651,18 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				'stdin-request',
 				`${this.config.displayName} runtime ready for input`
 			);
-			if (this.activeRun !== activeRun) {
-				throw new CancelledError(`${this.config.displayName} run terminated`, {
-					phase: 'execute',
-					runtimeId: this.config.languageId
-				});
-			}
 		}
 
-		while (!this.pendingEof) {
+		// A waiter woken after its run settled must not consume the next run's input.
+		while (this.activeRun === activeRun && !this.pendingEof) {
 			await new Promise<void>((resolve, reject) => {
 				this.stdinWaiters.push({ resolve, reject });
+			});
+		}
+		if (this.activeRun !== activeRun) {
+			throw new CancelledError(`${this.config.displayName} run terminated`, {
+				phase: 'execute',
+				runtimeId: this.config.languageId
 			});
 		}
 
@@ -1997,6 +2007,12 @@ self.postMessage = (message, transferOrOptions) => {
 		if (claimedRun !== activeRun) return;
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
+		this.rejectStdinWaiters(
+			new CancelledError(`${this.config.displayName} run ended`, {
+				phase: 'execute',
+				runtimeId: this.config.languageId
+			})
+		);
 		this.clearPendingStdin();
 		this.releaseWorkerLease(true);
 		this.cleanupRun(activeRun);
@@ -2021,6 +2037,7 @@ self.postMessage = (message, transferOrOptions) => {
 		}
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
+		this.rejectStdinWaiters(reason);
 		this.clearPendingStdin();
 		this.startupReject?.(reason);
 		this.disposeWorker();
@@ -2284,6 +2301,7 @@ self.postMessage = (message, transferOrOptions) => {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			let stdinRing: StaticStdinRingHost | undefined;
+			let stdinRingClosed = false;
 			if (this.stdinMode === 'streaming') {
 				try {
 					const maxBufferedBytes = Math.min(
@@ -2303,6 +2321,7 @@ self.postMessage = (message, transferOrOptions) => {
 					this.clearPendingStdin();
 					stdinRing.enqueue(initialInput);
 					if (initialEof) stdinRing.close();
+					stdinRingClosed = initialEof;
 				} catch (error) {
 					try {
 						stdinRing?.cancel();
@@ -2323,7 +2342,6 @@ self.postMessage = (message, transferOrOptions) => {
 					phase: 'execute',
 					runtimeId: this.config.languageId
 				});
-				this.rejectStdinWaiters(error);
 				this.rejectRun(id, error);
 			};
 			const cleanup = () => {
@@ -2341,7 +2359,7 @@ self.postMessage = (message, transferOrOptions) => {
 				resolve,
 				reject,
 				settledReported: false,
-				...(stdinRing ? { stdinRing } : {})
+				...(stdinRing ? { stdinRing, stdinRingClosed } : {})
 			};
 			this.activeReject = reject;
 			this.startingRunId = null;

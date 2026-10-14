@@ -3685,23 +3685,26 @@
 		if (!monacoApi || !editor) return;
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
+		// The page resolves each diagnostic to a workspace path; other files keep their own markers.
 		const markers = diagnosticMarkerLanguages.has(language)
-			? compilerDiagnostics.map((diagnostic) => ({
-					severity:
-						diagnostic.severity === 'warning'
-							? monacoApi.MarkerSeverity.Warning
-							: diagnostic.severity === 'other'
-								? monacoApi.MarkerSeverity.Info
-								: monacoApi.MarkerSeverity.Error,
-					message: diagnostic.message,
-					startLineNumber: Math.max(1, diagnostic.lineNumber || 1),
-					startColumn: Math.max(1, diagnostic.columnNumber || 1),
-					endLineNumber: Math.max(1, diagnostic.lineNumber || 1),
-					endColumn: Math.max(
-						1,
-						diagnostic.endColumnNumber || diagnostic.columnNumber || 2
-					)
-				}))
+			? compilerDiagnostics
+					.filter((diagnostic) => diagnostic.fileName === normalizedFilePath)
+					.map((diagnostic) => ({
+						severity:
+							diagnostic.severity === 'warning'
+								? monacoApi.MarkerSeverity.Warning
+								: diagnostic.severity === 'other'
+									? monacoApi.MarkerSeverity.Info
+									: monacoApi.MarkerSeverity.Error,
+						message: diagnostic.message,
+						startLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+						startColumn: Math.max(1, diagnostic.columnNumber || 1),
+						endLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+						endColumn: Math.max(
+							1,
+							diagnostic.endColumnNumber || diagnostic.columnNumber || 2
+						)
+					}))
 			: [];
 		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', markers);
 	});

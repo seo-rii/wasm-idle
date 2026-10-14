@@ -1,16 +1,19 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 interface PackageJson {
 	dependencies?: Record<string, string>;
 	devDependencies?: Record<string, string>;
+	engines?: Record<string, string>;
 	name?: string;
+	packageManager?: string;
 	peerDependencies?: Record<string, string>;
 	peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 	private?: boolean;
 	publishConfig?: { access?: string; tag?: string };
 	scripts?: Record<string, string>;
 	version?: string;
+	workspaces?: string[];
 }
 
 async function readRootPackage() {
@@ -292,5 +295,46 @@ describe('LLVM runtime package scripts', () => {
 			expect(verifier).toContain(`'${packagePath}'`);
 		}
 		expect(verifier).toContain("['wasm-idle', '.']");
+	});
+
+	it('points every node script at an existing file', async () => {
+		const pkg = await readRootPackage();
+		const targets: string[] = [];
+		const missing: string[] = [];
+
+		for (const [scriptName, command] of Object.entries(pkg.scripts || {})) {
+			for (const [, target] of command.matchAll(
+				/(?:^|[\s;&|(])node\s+(?:--?[\w-]+\s+)*([\w./-]+\.[cm]?js)(?=$|[\s;&|)])/g
+			)) {
+				targets.push(target);
+				await access(target).catch(() => missing.push(`${scriptName}: ${target}`));
+			}
+		}
+
+		expect(targets.length).toBeGreaterThan(0);
+		expect(missing).toEqual([]);
+	});
+
+	it('lists only existing workspace roots', async () => {
+		const pkg = await readRootPackage();
+		const pnpmWorkspace = await readFile('pnpm-workspace.yaml', 'utf8');
+		const pnpmPackages = Array.from(
+			pnpmWorkspace.matchAll(/^[ \t]+- '([^']+\/\*)'$/gm),
+			([, glob]) => glob
+		);
+
+		expect(pnpmPackages).toEqual(pkg.workspaces);
+		for (const glob of pkg.workspaces || []) {
+			await expect(access(glob.replace(/\/\*$/, '')), glob).resolves.toBeUndefined();
+		}
+	});
+
+	it('pins the same pnpm version for asdf, Corepack, and engines', async () => {
+		const pkg = await readRootPackage();
+		const toolVersions = await readFile('.tool-versions', 'utf8');
+		const pnpmVersion = toolVersions.match(/^pnpm (\S+)$/m)?.[1];
+
+		expect(pkg.packageManager).toBe(`pnpm@${pnpmVersion}`);
+		expect(pkg.engines?.pnpm).toBe(pnpmVersion);
 	});
 });

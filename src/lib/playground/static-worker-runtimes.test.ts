@@ -166,7 +166,8 @@ import {
 } from './staticStdinRing';
 import {
 	StaticWorkerRuntimeSandbox,
-	type StaticWorkerRuntimePreflightContext
+	type StaticWorkerRuntimePreflightContext,
+	type StaticWorkerRuntimeStdin
 } from './staticWorkerRuntime';
 import Tcl from './tcl';
 import { resolvePrologRuntimeAssetConfig } from './assets';
@@ -1414,7 +1415,11 @@ function createPersistentTestSandbox() {
 
 function createOwnedPreflightTestSandbox(
 	preflight: (context: StaticWorkerRuntimePreflightContext) => unknown | Promise<unknown>,
-	options: { readonly languageId?: string; readonly preflightKey?: string } = {}
+	options: {
+		readonly languageId?: string;
+		readonly preflightKey?: string;
+		readonly stdin?: StaticWorkerRuntimeStdin;
+	} = {}
 ) {
 	const languageId = options.languageId ?? 'OWNED_PREFLIGHT_TEST';
 	const preflightKey = options.preflightKey ?? 'owned-preflight-test-v1';
@@ -1422,7 +1427,7 @@ function createOwnedPreflightTestSandbox(
 		languageId,
 		displayName: languageId,
 		defaultActivePath: 'main.txt',
-		stdin: { mode: 'none' },
+		stdin: options.stdin ?? { mode: 'none' },
 		workerLifetime: { mode: 'per-run' },
 		runtimePreflightDelivery: 'transfer-owned',
 		resolveRuntimeAssets: () => ({
@@ -1800,6 +1805,90 @@ describe('static worker backed language sandboxes', () => {
 			expectTwoHopOwnedPreflightTransfer(workerInstances[1], expectedBuffers);
 		}
 	);
+
+	it('rejects a dispatched run when a lower asset limit makes load reset its worker', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const sandbox = createOwnedPreflightTestSandbox((context) =>
+			context.createOwnedDelivery(createOwnedPreflightTestPayload())
+		);
+		await sandbox.load('/owned-preflight-test');
+		const run = sandbox.run('run', false);
+		let settlement: unknown;
+		void run.then(
+			(result) => (settlement = { result }),
+			(error) => (settlement = { error })
+		);
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+
+		await sandbox.load('/owned-preflight-test', '', true, [], {
+			limits: { maxAssetBytes: 1_000_000 }
+		});
+
+		await vi.waitFor(() =>
+			expect(settlement).toEqual({
+				error: expect.objectContaining({
+					code: 'cancelled',
+					phase: 'asset',
+					message: 'OWNED_PREFLIGHT_TEST worker reset for a lower runtime asset limit'
+				})
+			})
+		);
+		expect(sandbox.exit).toBe(true);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+
+		onPostMessage = null;
+		await expect(sandbox.run('next', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].messages).toEqual([
+			expect.objectContaining({ code: 'next', maxAssetBytes: 128 * 1024 * 1024 })
+		]);
+		await sandbox.dispose();
+	});
+
+	it('rejects a run awaiting buffered stdin when a lower asset limit makes load reset its worker', async () => {
+		const sandbox = createOwnedPreflightTestSandbox(
+			(context) => context.createOwnedDelivery(createOwnedPreflightTestPayload()),
+			{ stdin: { mode: 'prebuffered', sourceHintPattern: /read/ } }
+		);
+		await sandbox.load('/owned-preflight-test');
+		const run = sandbox.run('read()', false);
+		let settlement: unknown;
+		void run.then(
+			(result) => (settlement = { result }),
+			(error) => (settlement = { error })
+		);
+		await vi.waitFor(() => expect(sandbox.stdinWaiters).toHaveLength(1));
+
+		await sandbox.load('/owned-preflight-test', '', true, [], {
+			limits: { maxAssetBytes: 1_000_000 }
+		});
+
+		await vi.waitFor(() =>
+			expect(settlement).toEqual({
+				error: expect.objectContaining({ code: 'cancelled', phase: 'asset' })
+			})
+		);
+		expect(sandbox.stdinWaiters).toHaveLength(0);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[0].messages).toHaveLength(0);
+
+		const next = sandbox.run('read()', false);
+		await vi.waitFor(() => expect(sandbox.stdinWaiters).toHaveLength(1));
+		sandbox.write('next input\n');
+		sandbox.eof();
+		await expect(next).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].messages).toEqual([
+			expect.objectContaining({ stdin: 'next input\n', stdinEof: true })
+		]);
+		await sandbox.dispose();
+	});
 
 	it('does not forward input when a static runtime declares no stdin capability', async () => {
 		const sandbox = new StaticWorkerRuntimeSandbox({

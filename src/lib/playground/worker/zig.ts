@@ -26,7 +26,6 @@ import { fetchRuntimeAssetBytes, resolveRuntimeAssetUrl } from './runtimeAssetFe
 declare var self: any;
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 128 * 1024 * 1024;
 const DEFAULT_ZIG_STDLIB_MAX_FILES = 4096;
 const DEFAULT_ZIP_FILE_BUFFER_BYTES = 64 * 1024;
@@ -576,11 +575,13 @@ async function compileZig({
 	);
 	const { root, entryPath } = buildWorkspaceRoot(code, activePath, workspaceFiles);
 	let compilerOutput = '';
+	const outputDecoder = new TextDecoder();
+	const errorDecoder = new TextDecoder();
 	const outputFd = new ConsoleStdout((chunk) => {
-		compilerOutput += decoder.decode(chunk, { stream: true });
+		compilerOutput += outputDecoder.decode(chunk, { stream: true });
 	});
 	const errorFd = new ConsoleStdout((chunk) => {
-		compilerOutput += decoder.decode(chunk, { stream: true });
+		compilerOutput += errorDecoder.decode(chunk, { stream: true });
 	});
 	const args = [
 		'zigc.wasm',
@@ -620,6 +621,7 @@ async function compileZig({
 	const exitCode = zigWasi.start(
 		instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
 	);
+	compilerOutput += outputDecoder.decode() + errorDecoder.decode();
 	if (compilerOutput) postMessage({ output: compilerOutput });
 	if (exitCode !== 0) {
 		throw new Error(compilerOutput || `Zig compilation failed with code ${exitCode}`);
@@ -649,12 +651,14 @@ async function runZigArtifact({
 }) {
 	stdinChunkZig = new Uint8Array(0);
 	stdinChunkOffsetZig = 0;
+	const stdoutDecoder = new TextDecoder();
+	const stderrDecoder = new TextDecoder();
 	const stdout = new ConsoleStdout((chunk) => {
-		const text = decoder.decode(chunk, { stream: true });
+		const text = stdoutDecoder.decode(chunk, { stream: true });
 		if (text) postMessage({ output: text });
 	});
 	const stderr = new ConsoleStdout((chunk) => {
-		const text = decoder.decode(chunk, { stream: true });
+		const text = stderrDecoder.decode(chunk, { stream: true });
 		if (text) postMessage({ output: text });
 	});
 	const zigWasi = new WASI(
@@ -677,9 +681,17 @@ async function runZigArtifact({
 			label: 'Zig program started'
 		}
 	});
-	const exitCode = zigWasi.start(
-		instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
-	);
+	let exitCode: number;
+	try {
+		exitCode = zigWasi.start(
+			instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
+		);
+	} finally {
+		for (const decoder of [stdoutDecoder, stderrDecoder]) {
+			const text = decoder.decode();
+			if (text) postMessage({ output: text });
+		}
+	}
 	if (log) {
 		console.log(`[wasm-idle:zig-worker] wasi run complete exitCode=${String(exitCode)}`);
 	}

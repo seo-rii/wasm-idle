@@ -1,6 +1,6 @@
 # Browser performance series: design and acceptance map
 
-This series separates host/runtime optimizations from compiler-producer experiments. Nine PRs exist, but a PR is not evidence that every planned optimization is implemented or faster. Draft status remains appropriate until its accepted scope, real-browser correctness and measured tradeoffs are reviewed. No merge or production rollout is implied by this document.
+This series separates host/runtime optimizations from compiler-producer experiments. Its nine PRs (#68 to #76) have been merged into main, but a merged PR is not evidence that every planned optimization is implemented or faster. The design documents listed in section 2 describe their evidence layers and remaining scope; this overview does not imply a production rollout.
 
 ## 1. Define what is slow
 
@@ -12,19 +12,19 @@ Use four explicit workload classes: empty-cache startup, persistent reload, same
 
 ## 2. Implementation map
 
-| Plan | PR | Mechanism | Important boundary |
-| --- | --- | --- | --- |
-| 1 | #68 | MemFS input cursor and lazy trace construction | No compiler binary or WASI layout change |
-| 2 | #70 | Native Python streams with bounded output batching | Explicit flush/input/pause ordering must remain correct |
-| 3 | #72 | Fixed Python helper, code objects and per-file import discovery | Reuse immutable work, not user globals or mutable filesystem state |
-| 4 | #69 | Lazy completion documentation and bounded Jedi analysis | Global workspace epoch invalidates imported-file dependencies |
-| 5 | #73 | Fixed Java InputStream with runtime blocks | Same artifact, fresh input; actual pinned TeaVM must compile the helper |
-| 6 | #75 | Linked bytes separate from browser Modules; normal export reduction | LLDB/WAMR and host ABI have distinct requirements |
-| 7 | #76 | Opt-in per-translation-unit object reuse | Every eligible hit still preprocesses; general preamble not implemented |
-| 8 | #71 | Cheaper continue events and bounded variable previews | Live breakpoints/stepping remain real; custom preview policy is explicit |
-| 9 | #74 | Artifact inventory, comparison and original-report adapter | Tooling is not a combined/PGO/Python producer build |
+| Plan | PR  | Mechanism                                                           | Important boundary                                                       |
+| ---- | --- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1    | #68 | MemFS input cursor and lazy trace construction                      | No compiler binary or WASI layout change                                 |
+| 2    | #70 | Native Python streams with bounded output batching                  | Explicit flush/input/pause ordering must remain correct                  |
+| 3    | #72 | Fixed Python helper, code objects and per-file import discovery     | Reuse immutable work, not user globals or mutable filesystem state       |
+| 4    | #69 | Lazy completion documentation and bounded Jedi analysis             | Global workspace epoch invalidates imported-file dependencies            |
+| 5    | #73 | Fixed Java InputStream with runtime blocks                          | Same artifact, fresh input; actual pinned TeaVM must compile the helper  |
+| 6    | #75 | Linked bytes separate from browser Modules; normal export reduction | LLDB/WAMR and host ABI have distinct requirements                        |
+| 7    | #76 | Opt-in per-translation-unit object reuse                            | Every eligible hit still preprocesses; general preamble not implemented  |
+| 8    | #71 | Cheaper continue events and bounded variable previews               | Live breakpoints/stepping remain real; custom preview policy is explicit |
+| 9    | #74 | Artifact inventory, comparison and original-report adapter          | Tooling is not a combined/PGO/Python producer build                      |
 
-Each implementation PR adds a dedicated design document under docs/performance: memfs-input-design.md, python-stdio-design.md, python-execution-design.md, python-lsp-design.md, java-runtime-stdin-design.md, clang-artifact-design.md, clang-object-cache-design.md and python-debug-design.md. They describe actual interfaces, ownership, invalidation, failure behavior, evidence layers and remaining scope. They reside on their respective PR branches until integration; this overview is not a claim that those branches are already merged.
+Each implementation PR added a dedicated design document in this directory: [memfs-input-design.md](memfs-input-design.md) (#68), [python-lsp-design.md](python-lsp-design.md) (#69), [python-stdio-design.md](python-stdio-design.md) (#70), [python-debug-design.md](python-debug-design.md) (#71), [python-execution-design.md](python-execution-design.md) (#72), [java-runtime-stdin-design.md](java-runtime-stdin-design.md) (#73), [clang-artifact-design.md](clang-artifact-design.md) (#75) and [clang-object-cache-design.md](clang-object-cache-design.md) (#76). They describe actual interfaces, ownership, invalidation, failure behavior, evidence layers and remaining scope. The #74 tooling is described in [runtime-experiments.md](runtime-experiments.md) and [clang-report-adapter.md](clang-report-adapter.md). CI and measurement follow-ups are in [lldb-memory-measurement.md](lldb-memory-measurement.md), [evidence-ci-followup.md](evidence-ci-followup.md), [python-lsp-ci-followup.md](python-lsp-ci-followup.md), [editor-ci-validation-followup.md](editor-ci-validation-followup.md) and [editor-readiness-ci-repair.md](editor-readiness-ci-repair.md).
 
 ## 3. Distinguish cache layers
 

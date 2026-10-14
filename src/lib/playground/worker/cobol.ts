@@ -85,7 +85,7 @@ self.onmessage = async (event: { data: any }) => {
 			await loadCobolRuntime(clangAssets, cobolBaseUrl, maxAssetBytes, log);
 			postMessage({ load: true });
 		} catch (error: any) {
-			postMessage({ error: error.message });
+			postMessage({ error: error?.message || String(error) });
 		}
 	} else if (typeof log === 'boolean' && !code) {
 		// The compiler receives the current logging preference for every compilation.
@@ -131,7 +131,7 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			postMessage({ results: true });
 		} catch (error: any) {
-			postMessage({ error: error.message });
+			postMessage({ error: error?.message || String(error) });
 		}
 	}
 };

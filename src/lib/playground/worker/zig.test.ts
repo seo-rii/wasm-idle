@@ -58,7 +58,9 @@ const shim = vi.hoisted(() => {
 		constructed: [] as { args: string[]; env: string[]; fds: any[] }[],
 		nextCompileExitCode: 0,
 		compileCount: 0,
-		runCount: 0
+		runCount: 0,
+		compileOutput: null as ((fds: any[]) => void) | null,
+		runOutput: null as ((fds: any[]) => void) | null
 	};
 
 	class Fd {}
@@ -114,12 +116,17 @@ const shim = vi.hoisted(() => {
 		start() {
 			if (this.args[0] === 'zigc.wasm') {
 				state.compileCount += 1;
-				this.fds[1].write(encoder.encode('compile log\n'));
+				if (state.compileOutput) state.compileOutput(this.fds);
+				else this.fds[1].write(encoder.encode('compile log\n'));
 				if (state.nextCompileExitCode !== 0) return state.nextCompileExitCode;
 				this.fds[3].dir.contents.set('output.wasm', new File(encoder.encode('wasm-out')));
 				return 0;
 			}
 			state.runCount += 1;
+			if (state.runOutput) {
+				state.runOutput(this.fds);
+				return 0;
+			}
 			const stdinChunk = this.fds[0].fd_read(1024).data;
 			if (stdinChunk.byteLength) this.fds[1].write(stdinChunk);
 			this.fds[1].write(encoder.encode('zig-worker\n'));
@@ -204,6 +211,8 @@ describe('Zig worker', () => {
 		shim.state.nextCompileExitCode = 0;
 		shim.state.compileCount = 0;
 		shim.state.runCount = 0;
+		shim.state.compileOutput = null;
+		shim.state.runOutput = null;
 	});
 
 	it('loads compiler assets, compiles Zig source, and runs the emitted WASI artifact', async () => {
@@ -357,6 +366,61 @@ describe('Zig worker', () => {
 				([message]: [any]) => message.progress?.kind === 'ready'
 			)
 		).toHaveLength(1);
+	});
+
+	it('decodes compiler and program UTF-8 per stream without leaking into the next run', async () => {
+		const stdoutBytes = encoder.encode('안녕\n');
+		const stderrBytes = encoder.encode('é\n');
+		const writeInterleaved = (fds: any[]) => {
+			fds[1].write(stdoutBytes.slice(0, 2));
+			fds[2].write(stderrBytes.slice(0, 1));
+			fds[1].write(stdoutBytes.slice(2));
+			fds[2].write(stderrBytes.slice(1));
+		};
+		shim.state.compileOutput = writeInterleaved;
+		shim.state.runOutput = (fds) => {
+			writeInterleaved(fds);
+			fds[1].write(encoder.encode('끝').slice(0, 1));
+		};
+
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
+				log: false
+			}
+		});
+		const request = {
+			code: 'pub fn main() void {}',
+			buffer: new SharedArrayBuffer(1024),
+			stdin: '',
+			activePath: 'main.zig',
+			targetTriple: 'wasm64-wasi',
+			log: false
+		};
+		const outputs = () =>
+			(globalThis as any).postMessage.mock.calls
+				.map(([message]: [any]) => message)
+				.filter((message: any) => 'output' in message);
+
+		await (globalThis as any).self.onmessage({ data: request });
+		expect(outputs()).toEqual([
+			{ output: '안녕\né\n' },
+			{ output: '안녕\n' },
+			{ output: 'é\n' },
+			{ output: '\uFFFD' }
+		]);
+
+		(globalThis as any).postMessage.mockClear();
+		shim.state.runOutput = (fds) => fds[1].write(encoder.encode('ok\n'));
+		await (globalThis as any).self.onmessage({ data: request });
+		expect(outputs()).toEqual([{ output: 'ok\n' }]);
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({ results: true });
+		expect(shim.state.compileCount).toBe(1);
 	});
 
 	it('posts a compile error when the Zig compiler exits non-zero', async () => {

@@ -76,6 +76,9 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
+		expect(source).toMatch(
+			/compilerDiagnostics\s+\.filter\(\(diagnostic\) => diagnostic\.fileName === normalizedFilePath\)\s+\.map\(/
+		);
 		expect(source).toMatch(/occurrencesHighlight: 'off'/);
 		expect(source).toMatch(
 			/const modelUriString = \$derived\(`file:\/\/\/workspace\/\$\{normalizedFilePath\}`\);/

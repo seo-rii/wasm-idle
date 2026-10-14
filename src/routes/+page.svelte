@@ -51,7 +51,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
-	import { normalizeWorkspacePath } from './workspacePath';
+	import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
 	import {
 		createSharedWorkspaceUrl,
 		WORKSPACE_STORAGE_KEY,
@@ -77,7 +77,6 @@
 		argsHelpLanguages,
 		argsLabels,
 		clangdLspLanguages,
-		compilerDiagnosticLanguages,
 		debugLspLanguages,
 		dotnetLspLanguages,
 		editorLanguages,
@@ -241,6 +240,8 @@
 	let restartDebugPending = $state(false);
 	let executionStopPending = $state(false);
 	let executionGeneration = 0;
+	// Compiler diagnostics resolve against the workspace their run compiled.
+	let compilerDiagnosticRun: { entryPath: string; workspacePaths: string[] } | null = null;
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
@@ -1010,6 +1011,8 @@
 		files = cloneFiles(nextWorkspace.files);
 		activePath = nextWorkspace.activePath;
 		openTabs = [...nextWorkspace.openTabs];
+		compilerDiagnostics = [];
+		compilerDiagnosticRun = null;
 	}
 
 	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
@@ -1826,7 +1829,19 @@
 	}
 
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
-		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
+		const run = compilerDiagnosticRun;
+		if (!run) return;
+		compilerDiagnostics = [
+			...compilerDiagnostics,
+			{
+				...diagnostic,
+				fileName: resolveCompilerDiagnosticPath(
+					diagnostic.fileName,
+					run.entryPath,
+					run.workspacePaths
+				)
+			}
+		];
 	}
 
 	function onDebugEvent(event: DebugSessionEvent) {
@@ -2205,6 +2220,10 @@
 				debug.reset();
 			}
 			compilerDiagnostics = [];
+			compilerDiagnosticRun = {
+				entryPath: activePath,
+				workspacePaths: files.map((file) => file.path)
+			};
 			const codeToRun = activeFile.content;
 			if (browser) {
 				saveWorkspace();
@@ -2744,7 +2763,6 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (!compilerDiagnosticLanguages.has(language)) compilerDiagnostics = [];
 	});
 </script>
 
@@ -2809,7 +2827,7 @@
 							onclick={() => inspectDebugVariable(variable)}
 							aria-label={`Inspect memory for ${variable.name}`}
 						>
-							<span class="material-symbols-outlined">memory</span>
+							<span class="material-symbols-outlined" aria-hidden="true">memory</span>
 						</button>
 					{/if}
 					{#if reference > 0}
@@ -2819,7 +2837,7 @@
 							disabled={children !== undefined || loadingChildren}
 							aria-label={`Load children for ${variable.name}`}
 						>
-							<span class="material-symbols-outlined">
+							<span class="material-symbols-outlined" aria-hidden="true">
 								{children === undefined ? 'chevron_right' : 'expand_more'}
 							</span>
 						</button>
@@ -2862,7 +2880,9 @@
 										: 'debug-status-pill--idle'
 							]}
 						>
-							<span class="material-symbols-outlined">{debugStatusIcon}</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>{debugStatusIcon}</span
+							>
 							<span>{debugStatusLabel}</span>
 						</div>
 						<div class="debug-hero__copy">
@@ -2881,7 +2901,9 @@
 							title="Continue"
 							aria-label="Continue"
 						>
-							<span class="material-symbols-outlined">play_arrow</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>play_arrow</span
+							>
 							<span class="debug-control__label">Continue</span>
 						</button>
 						<button
@@ -2891,7 +2913,7 @@
 							title="Pause"
 							aria-label="Pause"
 						>
-							<span class="material-symbols-outlined">pause</span>
+							<span class="material-symbols-outlined" aria-hidden="true">pause</span>
 						</button>
 						<span class="debug-controls__divider" aria-hidden="true"></span>
 						<button
@@ -2901,7 +2923,7 @@
 							title="Next Line"
 							aria-label="Next Line"
 						>
-							<span class="material-symbols-outlined">redo</span>
+							<span class="material-symbols-outlined" aria-hidden="true">redo</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2910,7 +2932,7 @@
 							title="Step Into"
 							aria-label="Step Into"
 						>
-							<span class="material-symbols-outlined">login</span>
+							<span class="material-symbols-outlined" aria-hidden="true">login</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2919,7 +2941,7 @@
 							title="Step Out"
 							aria-label="Step Out"
 						>
-							<span class="material-symbols-outlined">logout</span>
+							<span class="material-symbols-outlined" aria-hidden="true">logout</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2932,7 +2954,9 @@
 								? `Run to Cursor (L${debug.cursorLine})`
 								: 'Run to Cursor'}
 						>
-							<span class="material-symbols-outlined">play_circle</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>play_circle</span
+							>
 						</button>
 					</div>
 				</header>
@@ -2992,7 +3016,9 @@
 								<span class="visually-hidden">Toggle variables</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">data_object</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>data_object</span
+								>
 								<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
 							</div>
 							<span class="debug-count">
@@ -3076,7 +3102,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No locals yet</span>
 									</p>
 								{/if}
@@ -3098,7 +3126,9 @@
 								<span class="visually-hidden">Toggle watch</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">visibility</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>visibility</span
+								>
 								<h3>Watch</h3>
 							</div>
 							<span class="debug-count">{debug.watchExpressions.length}</span>
@@ -3117,7 +3147,9 @@
 										class="watch-add"
 										onclick={() => debug.addWatchExpression()}
 									>
-										<span class="material-symbols-outlined">add</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>add</span
+										>
 										<span>Add</span>
 									</button>
 								</div>
@@ -3139,8 +3171,9 @@
 														)}
 													aria-label={`Remove watch expression ${watch.expression}`}
 												>
-													<span class="material-symbols-outlined"
-														>close</span
+													<span
+														class="material-symbols-outlined"
+														aria-hidden="true">close</span
 													>
 												</button>
 											</li>
@@ -3148,7 +3181,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No watches yet</span>
 									</p>
 								{/if}
@@ -3170,7 +3205,9 @@
 								<span class="visually-hidden">Toggle call stack</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">layers</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>layers</span
+								>
 								<h3>Call Stack</h3>
 							</div>
 							<span class="debug-count">{debug.callStack.length}</span>
@@ -3213,7 +3250,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No frames yet</span>
 									</p>
 								{/if}
@@ -3236,7 +3275,9 @@
 									<span class="visually-hidden">Toggle memory</span>
 								</button>
 								<div class="debug-panel__title">
-									<span class="material-symbols-outlined">memory</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>memory</span
+									>
 									<h3>Memory</h3>
 								</div>
 								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
@@ -3555,7 +3596,7 @@
 				</div>
 				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
-						<span class="material-symbols-outlined">list_alt</span>
+						<span class="material-symbols-outlined" aria-hidden="true">list_alt</span>
 						<input
 							bind:value={argsInput}
 							placeholder="--name &quot;Hong Gil&quot; &quot;&quot;"
@@ -3572,7 +3613,8 @@
 				{/if}
 				{#if language === 'CPP'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">tune</span>
+						<span class="material-symbols-outlined" aria-hidden="true">tune</span>
+						<span class="visually-hidden">C++ standard</span>
 						<select id="cpp-version" bind:value={cppVersion}>
 							{#each knownCppVersions as version (version)}
 								<option value={version}>{cppVersionLabels[version]}</option>
@@ -3582,7 +3624,10 @@
 				{/if}
 				{#if language === 'RUST'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">Rust target</span>
 						<select id="rust-target-triple" bind:value={rustTargetTriple}>
 							{#each availableRustTargetTriples as targetTriple (targetTriple)}
 								<option value={targetTriple}>{targetTriple}</option>
@@ -3592,7 +3637,10 @@
 				{/if}
 				{#if language === 'GO'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">Go target</span>
 						<select id="go-target" bind:value={goTarget}>
 							{#each availableGoTargets as target (target)}
 								<option value={target}>{target}</option>
@@ -3602,7 +3650,10 @@
 				{/if}
 				{#if language === 'OCAML'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">OCaml backend</span>
 						<select id="ocaml-backend" bind:value={ocamlBackend}>
 							<option value="wasm">wasm_of_ocaml</option>
 							<option value="js">js_of_ocaml</option>
@@ -3610,7 +3661,8 @@
 					</label>
 					{#if ocamlBackend === 'wasm'}
 						<label class="select-chip">
-							<span class="material-symbols-outlined">memory</span>
+							<span class="material-symbols-outlined" aria-hidden="true">memory</span>
+							<span class="visually-hidden">Binaryen mode</span>
 							<select id="ocaml-binaryen-mode" bind:value={ocamlWasmBinaryenMode}>
 								<option value="fast">Binaryen fast</option>
 								<option value="full">Binaryen full</option>
@@ -3652,11 +3704,11 @@
 				</svg>
 			</a>
 			<button class="tool-button" onclick={() => saveWorkspace(true)} title="Save workspace">
-				<span class="material-symbols-outlined">save</span>
+				<span class="material-symbols-outlined" aria-hidden="true">save</span>
 				<span>Save</span>
 			</button>
 			<button class="tool-button" onclick={shareWorkspace} title="Copy share link">
-				<span class="material-symbols-outlined">share</span>
+				<span class="material-symbols-outlined" aria-hidden="true">share</span>
 				<span>Share</span>
 			</button>
 			{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
@@ -3677,7 +3729,7 @@
 				disabled={!terminal || !!runningMode || !executionAvailable}
 				title="Restart runtime"
 			>
-				<span class="material-symbols-outlined">restart_alt</span>
+				<span class="material-symbols-outlined" aria-hidden="true">restart_alt</span>
 				<span>Restart Runtime</span>
 			</button>
 			<span class="topbar__divider" aria-hidden="true"></span>
@@ -3689,7 +3741,8 @@
 						disabled={restartDebugPending || executionStopPending}
 						aria-label="Restart Debug"
 					>
-						<span class="material-symbols-outlined">restart_alt</span>
+						<span class="material-symbols-outlined" aria-hidden="true">restart_alt</span
+						>
 						<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
 					</button>
 					<button
@@ -3697,7 +3750,8 @@
 						onclick={stopExecution}
 						disabled={executionStopPending || restartDebugPending}
 					>
-						<span class="material-symbols-outlined">stop_circle</span>
+						<span class="material-symbols-outlined" aria-hidden="true">stop_circle</span
+						>
 						<span>Stop Debug</span>
 					</button>
 				{:else}
@@ -3710,7 +3764,7 @@
 							!debugTargetAvailable}
 						title={debugUnavailableReason}
 					>
-						<span class="material-symbols-outlined">bug_report</span>
+						<span class="material-symbols-outlined" aria-hidden="true">bug_report</span>
 						<span>Debug</span>
 					</button>
 				{/if}
@@ -3720,7 +3774,8 @@
 						onclick={stopExecution}
 						disabled={executionStopPending}
 					>
-						<span class="material-symbols-outlined">stop_circle</span>
+						<span class="material-symbols-outlined" aria-hidden="true">stop_circle</span
+						>
 						<span>Stop Running</span>
 					</button>
 				{:else}
@@ -3729,7 +3784,7 @@
 						onclick={() => exec(false)}
 						disabled={runningMode === 'debug' || !executionAvailable}
 					>
-						<span class="material-symbols-outlined">play_arrow</span>
+						<span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
 						<span>Run</span>
 					</button>
 				{/if}
@@ -3859,7 +3914,9 @@
 									aria-label={`Close ${tab}`}
 									onclick={(event) => closeTab(tab, event)}
 								>
-									<span class="material-symbols-outlined">close</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>close</span
+									>
 								</button>
 							{/if}
 						</div>
@@ -3966,12 +4023,14 @@
 					{/key}
 				</div>
 			</section>
+			<!-- A focusable separator is the WAI-ARIA window splitter widget, not static content. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div
 				class:panel-resizer--active={resizingPane}
 				class="panel-resizer"
-				role="slider"
+				role="separator"
 				aria-label="Resize example panes"
-				aria-orientation="horizontal"
+				aria-orientation="vertical"
 				aria-hidden={!desktopExampleLayout}
 				tabindex={desktopExampleLayout ? 0 : -1}
 				aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
@@ -4054,7 +4113,9 @@
 							title="Send EOF"
 							aria-label="Send EOF"
 						>
-							<span class="material-symbols-outlined">keyboard_tab_rtl</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>keyboard_tab_rtl</span
+							>
 						</button>
 					</div>
 				</header>
@@ -4063,7 +4124,9 @@
 						<div class="progress-shell" aria-live="polite">
 							<div class="progress-copy">
 								<div class="progress-copy__text">
-									<span class="material-symbols-outlined">hourglass_top</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>hourglass_top</span
+									>
 									<strong>{progressLabel}</strong>
 								</div>
 								{#if !progressIndeterminate}
@@ -4118,6 +4181,7 @@
 							</div>
 							<textarea
 								bind:value={stdinInput}
+								aria-label="Preloaded stdin"
 								placeholder="Input to pass before running"
 								spellcheck={false}></textarea>
 						</div>
@@ -4129,9 +4193,9 @@
 	</div>
 	<footer class="statusbar">
 		<div class="statusbar__group">
+			<!-- Not a live region: autosave flips this after every edit; failed saves raise an alert. -->
 			<span
 				class="save-state save-state--{workspaceSaveState.phase}"
-				role="status"
 				data-workspace-save-state={workspaceSaveState.phase}
 			>
 				<i aria-hidden="true"></i>

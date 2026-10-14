@@ -639,16 +639,13 @@ class Dotnet implements Sandbox {
 	) {
 		const hasExplicitStdin = !prepare && explicitStdin !== undefined;
 		if (runUid !== this.uid) return '';
-		if (
-			!prepare &&
-			!hasExplicitStdin &&
-			this.pendingInput.length === 0 &&
-			!this.pendingEof &&
-			readsConsoleStdin(code)
-		) {
+		if (!prepare && !hasExplicitStdin && !this.pendingEof && readsConsoleStdin(code)) {
 			reportWorkerInputReady(progress, `${this.languageLabel} runtime ready for input`);
-			if (runUid !== this.uid) return '';
-			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
+			// The program receives stdin as one string, so wait for EOF instead of
+			// starting with only the input written before the first chunk arrived.
+			while (runUid === this.uid && !this.pendingEof) {
+				await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
+			}
 		}
 		if (runUid !== this.uid) return '';
 		if (hasExplicitStdin) return explicitStdin;
