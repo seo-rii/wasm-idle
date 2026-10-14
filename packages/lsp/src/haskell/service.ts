@@ -224,9 +224,14 @@ export function parseHaskellDiagnostics(output: string): HaskellCompilerDiagnost
 	const diagnostics: HaskellCompilerDiagnostic[] = [];
 	const lines = output.split(/\r\n|\r|\n/u);
 	for (let index = 0; index < lines.length; index += 1) {
-		const match = /^(.*?):(\d+):(\d+):\s+(error|warning):\s*(.*)$/iu.exec(lines[index] || '');
+		// GHC locations are `l:c`, `l:c-c`, or `(l,c)-(l,c)`.
+		const match =
+			/^(.*?):(?:(\d+):(\d+)(?:-\d+)?|\((\d+),(\d+)\)-\(\d+,\d+\)):\s+(error|warning):\s*(.*)$/iu.exec(
+				lines[index] || ''
+			);
 		if (!match) continue;
-		let message = (match[5] || '').trim();
+		// GHC 9.6+ prefixes the message with tags such as `[GHC-88464] [-Wunused-top-binds]`.
+		let message = (match[7] || '').replace(/^(?:\[(?:GHC-\d+|-W[^\]]*)\]\s*)*/u, '').trim();
 		if (!message) {
 			for (const extraLine of lines.slice(index + 1)) {
 				const trimmed = extraLine.trim();
@@ -237,9 +242,9 @@ export function parseHaskellDiagnostics(output: string): HaskellCompilerDiagnost
 		}
 		diagnostics.push({
 			fileName: match[1] || null,
-			lineNumber: Math.max(1, Number(match[2] || 1)),
-			columnNumber: Math.max(1, Number(match[3] || 1)),
-			severity: match[4]?.toLowerCase() === 'warning' ? 'warning' : 'error',
+			lineNumber: Math.max(1, Number(match[2] || match[4] || 1)),
+			columnNumber: Math.max(1, Number(match[3] || match[5] || 1)),
+			severity: match[6]?.toLowerCase() === 'warning' ? 'warning' : 'error',
 			message: message || lines[index]
 		});
 	}
