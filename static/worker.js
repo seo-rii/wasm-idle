@@ -13,8 +13,8 @@ const exactResponseUrlAssetPaths = new Set([
 	'wasm-awk/runtime-manifest.v2.json',
 	'wasm-awk/wasm_exec.js',
 	'wasm-tinygo/assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin',
+	'wasm-tinygo/assets/upstream-compile-worker-6CYe8gHb.js',
 	'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
-	'wasm-tinygo/assets/upstream-compile-worker-CUrboB1_.js',
 	'wasm-tinygo/assets/upstream-compile-worker-CeYS3ydo.js',
 	'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
 	'wasm-tinygo/upstream.js'
@@ -29,7 +29,7 @@ const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/compiler-runtime.js.bin', '86f2b34128ce97c050f8c9245781b211e229073cef6a3ed4c6cfef92652902c7'],
 	['wasm-rust/compiler-support.js.bin', '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'],
 	['wasm-rust/compiler-worker.js.bin', '72cd8fe5c7999ffa6e144b3d6ea3691686843063dc8405274c2573f1ea8356a2'],
-	['wasm-rust/compiler.js.bin', '6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b'],
+	['wasm-rust/compiler.js.bin', '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'],
 	['wasm-rust/index.js.bin', 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'],
 	['wasm-rust/module-worker.js.bin', '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'],
 	['wasm-rust/retryable-failure-kind.js.bin', '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'],
