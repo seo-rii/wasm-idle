@@ -226,6 +226,10 @@ byte copy before dispatch. It adds no guest-memory view or lock to the command
 snapshot. The old failed source tree, log and process receipt remain separate;
 the corrected full SDK/example check is still pending. Absence of a snapshot
 API diagnostic in the failed run does not establish that the example passes.
+The separate [Rust typing failure receipt](evidence.sdk-typecheck-errors.json)
+records the exact source/toolchain, all three diagnostics, the 342.205-second
+execution and complete process cleanup. The corrected five-patch source checks
+are recorded in [their own receipt](evidence.sdk-typefix-source-checks.json).
 
 ## Remaining runtime gate
 
@@ -233,7 +237,8 @@ The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and buil
 Cargo lock contains 457 packages. The earlier source inspection lacked the required
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
-prefetch and genuine Wasmer/SDK Rust typing remain pending. Existing Bash source/sysroot
+prefetch and offline validation now pass; corrected Wasmer/SDK/example Rust typing
+remains pending in a fresh source tree with unique build outputs. Existing Bash source/sysroot
 artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
 and actual browser qualification still require a sequential resource budget. No memory
 or disk estimate is a measured producer requirement, and no previous or unrelated cache
