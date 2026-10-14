@@ -37,7 +37,10 @@ python3 runtimes/wasm-busybox/scripts/verify.py /path/to/the/completed/probe-dir
 
 Omit `--source-archive` to fetch the pinned official archive. The script verifies
 size/hash before extraction, limits entry count/bytes, and rejects unexpected
-archive members. Supply a new work directory on each run. It writes separate WASI
+archive members. Supply a new work directory on each run. Patch, configure, build
+and Node smoke commands receive only the caller's `PATH`, `HOME` and `TMPDIR` plus fixed
+locale/timestamp variables; caller `CFLAGS`, `LDFLAGS`, `MAKEFLAGS` and similar
+settings do not reach the build. It writes separate WASI
 and native configure/build logs with mode 0600, a generated configuration copy,
 and `receipt.json`. Long invocations should run in a persistent background process
 with a private outer log and exit-status file.
