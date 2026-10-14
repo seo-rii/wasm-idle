@@ -453,11 +453,8 @@ self.onmessage = async (event: { data: any }) => {
 			throw new Error('Go program did not return an execution result');
 		}
 		if (execution.exitCode !== 0) {
-			throw new Error(
-				execution.stderr
-					? `Go program exited with code ${execution.exitCode}\n${execution.stderr}`
-					: `Go program exited with code ${execution.exitCode}`
-			);
+			// stderr was already streamed to the terminal above.
+			throw new Error(`Go program exited with code ${execution.exitCode}`);
 		}
 		postMessage({ results: true });
 	} catch (error: any) {
