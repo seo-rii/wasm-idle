@@ -2,8 +2,10 @@
 
 wasm-idle can retain verified compiler, runtime, debugger and language-server downloads across
 page reloads. It stores binary bodies in **CacheStorage**, with SHA-256, version references and
-LRU metadata in **IndexedDB**. It does not use localStorage for binaries or store user programs,
-stdin, execution state, credentials or mutable Wasm instances.
+LRU metadata in **IndexedDB**. This cache does not use localStorage for binaries or store user
+programs, stdin, execution state, credentials or mutable Wasm instances. The Gleam runner keeps
+the modules it compiles from a user program in a separate CacheStorage cache; see
+[Storage outside this cache](#storage-outside-this-cache).
 
 This is separate from the in-memory compiler and compiled-program caches owned by
 `createRuntimeSession`. Session `clear()`, language changes and `dispose()` do not delete the
@@ -86,9 +88,13 @@ unverified bytes. Concurrent tabs coordinate storage updates using a namespace-s
 
 `loadPersistentRuntimeAsset`, `readPersistentRuntimeAsset`, and `writePersistentRuntimeAsset`
 snapshot and validate the receipt before asynchronous work. A malformed digest, byte count or
-identity rejects with `TypeError`, including when storage is disabled or unavailable. A valid
-receipt whose downloaded bytes do not match rejects with an integrity error. Disabling storage
-never disables verification in the load helper.
+identity rejects with `TypeError`, including when storage is disabled or unavailable.
+`loadPersistentRuntimeAsset` verifies downloaded bytes before returning them, even when storage
+is disabled or unavailable, and rejects with an integrity error on a mismatch.
+`writePersistentRuntimeAsset` verifies only bytes it is about to store: when storage is disabled
+or unavailable, or the body exceeds the byte budget, it returns `false` without checking them.
+A loader that downloads bytes itself and then calls the write helper must verify them separately,
+or use the load helper instead.
 
 Each storage attempt has a three-second deadline covering lock acquisition, database/cache
 opening, body reads, verification, metadata transactions and quota estimation. A storage timeout
@@ -158,6 +164,12 @@ compiler path, static-runtime preflights, LSP verified asset loaders, and LLDB/W
 this cache. Explicitly provided integrity receipts remain authoritative. Custom base URLs or
 custom loaders are not treated as a stock release merely because filenames match.
 
+The cache guarantees only that the bytes it stores and returns match their receipts. Checking an
+uncached network download is the loader's job: the load and pinned-fetch helpers always verify,
+while a loader that relies on `writePersistentRuntimeAsset` alone gets no check when storage is
+disabled, unavailable or skipped. The asset bridge does not store responses that arrive with
+`Content-Encoding`.
+
 TinyGo's exact profile-pinned gzip toolchain payloads, JSON manifests and root archive also use
 the cache. Its raw logical-URL probes and query variants retain their native fetch/fallback
 behavior. Lisp caches its raw manifest only with a byte-level `manifestReceipt`; a canonical
@@ -174,13 +186,27 @@ This is **not an all-language offline mode**. Native browser `import()`/`importS
 and URL-based Worker startup are not globally intercepted. Application bootstrap and native
 module loading can still require network access. Python LSP does not persist arbitrary custom
 lock files or wheels. Unpinned custom assets are not persisted. No service worker is registered
-or installed by this feature.
+or installed by this feature. The playground app registers its own service worker for
+cross-origin isolation and compressed runtime files; see
+[Deploying the playground](deployment.md#service-worker-fallback).
+
+## Storage outside this cache
+
+The Gleam runner (`scripts/runtime-workers/wasm-gleam-runner-worker.js`, published as
+`static/wasm-gleam/runner-worker.js`) compiles the user's program and workspace modules to
+JavaScript and writes the generated modules to the CacheStorage cache
+`wasm-idle-dynamic-modules-v1`, under `__wasm_idle_dynamic_modules__/<project>/` URLs beside the
+Gleam runtime directory. The playground service worker answers `import()` requests for those URLs
+from that cache. The runner deletes the entries when the run finishes, but a Worker that is
+terminated mid-run, for example by cancellation, can leave them in CacheStorage. This storage is
+not part of the persistent asset cache: it has no receipts, budget or namespace, and
+`configureRuntimeAssetCache(false)` and `clearRuntimeAssetCache()` do not affect it.
 
 ## Updating the release lock
 
 After changing verified static assets, run `pnpm run assets:lock` and review the generated lock
 along with the asset changes. `pnpm run check:assets-lock` detects version or content drift.
-Application preparation checks this lock; Pages builds regenerate it after preparing static
-assets, and npm release preparation regenerates it after version synchronization.
+`pnpm run page:build` regenerates and checks it after preparing static assets, and npm release
+preparation (`scripts/release-npm.mjs`) regenerates it after version synchronization.
 The generated source is shipped in `@wasm-idle/core`, not fetched from an
 untrusted remote manifest at runtime.
