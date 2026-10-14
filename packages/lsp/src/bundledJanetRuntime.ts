@@ -22,8 +22,8 @@ export const BUNDLED_JANET_RUNTIME_PROFILE = {
 export const BUNDLED_JANET_RUNTIME_BUNDLE = Object.freeze({
 	profile: BUNDLED_JANET_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 21743,
-		sha256: 'f2b134d4d3cdf493e2eaadf4d46101e6fb27e24654302ee97630d4e4717a0230'
+		bytes: 21839,
+		sha256: 'a970c9954dc65fce99806f344855ec8893bab9ed032dfa0012b264b6abedff81'
 	}
 });
 export const BUNDLED_JANET_MANIFEST_FINGERPRINT = BUNDLED_JANET_RUNTIME_PROFILE.manifestFingerprint;

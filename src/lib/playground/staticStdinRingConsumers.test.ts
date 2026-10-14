@@ -40,7 +40,13 @@ function workerFile(runtime: string) {
 
 // Execute the production function declarations, without loading a compiler or
 // duplicating the ring arithmetic in the test. Atomics.wait must never block the test process.
-function createReader(runtime: keyof typeof readers, channel: StaticStdinRingDescriptor) {
+function createReader(
+	runtime: keyof typeof readers,
+	channel: StaticStdinRingDescriptor,
+	wait: (control: Int32Array, index: number, value: number, timeout?: number) => string = () => {
+		throw new Error('Unexpected blocking stdin read');
+	}
+) {
 	const file = workerFile(runtime);
 	const source = ts.createSourceFile(
 		file,
@@ -67,9 +73,7 @@ function createReader(runtime: keyof typeof readers, channel: StaticStdinRingDes
 		Atomics: {
 			load: Atomics.load,
 			store: Atomics.store,
-			wait() {
-				throw new Error('Unexpected blocking stdin read');
-			}
+			wait
 		}
 	});
 	const takesSource = ['awk', 'awk-v1', 'c3', 'grain', 'julia', 'nim'].includes(runtime);
@@ -138,6 +142,31 @@ describe('static stdin consumer rollover contract', () => {
 								(start + expected.length) % counterRange
 							);
 						}
+				}
+			);
+
+			it.each(['close', 'cancel'] as const)(
+				'observes %s whose notification lands before Atomics.wait starts',
+				(operation) => {
+					const host = new StaticStdinRingHost({ capacity: 7, maxBufferedBytes: 32 });
+					const timeouts: (number | undefined)[] = [];
+					// The host changes only the closed/cancelled flags, so its notification finds
+					// no waiter and an untimed wait on the unchanged write index never returns.
+					const read = createReader(
+						runtime,
+						host.descriptor,
+						(control, index, value, timeout) => {
+							timeouts.push(timeout);
+							if (timeouts.length === 1) host[operation]();
+							if (Atomics.load(control, index) !== value) return 'not-equal';
+							if (!Number.isFinite(timeout))
+								throw new Error('Lost stdin wakeup blocks forever');
+							return 'timed-out';
+						}
+					);
+					if (operation === 'close') expect(read()).toHaveLength(0);
+					else expect(() => read()).toThrow(/cancel/i);
+					expect(timeouts.length).toBeGreaterThan(0);
 				}
 			);
 
