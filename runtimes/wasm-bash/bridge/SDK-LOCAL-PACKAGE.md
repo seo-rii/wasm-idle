@@ -26,6 +26,32 @@ establish synchronous initialization, arbitrary worker URLs or a sandbox.
 The real generated 0.2.101 initializer/`initSync` API and actual browser behavior
 must be verified after the binary build, rather than inferred from unit glue.
 
+## Actual local packaging evidence
+
+The real SDK binary/bindgen gate now passes in a separately recorded warm-target
+attempt. Packaging at helper commit `495b06c560a5d34baa8bd2a94ccaaad56497e729`
+uses its independently verified receipt, SHA-256
+`a8ca2caa7f1e511a6bdb66ea6fc18ccd34911d78113da8a7cd73c521b2ba511a`.
+The actual generated glue accepts the original index's positional Module/Memory
+call, with its deprecation warning; the module argument selects no URL/fetch path.
+The static local graph is bundled by pinned esbuild without downloads or guest
+instantiation. The process exits 0 in 1.257 seconds, with complete recorded
+cleanup and no signaled descendants.
+
+[Original package receipt](evidence.sdk-local-package.json) and
+[original process receipt](evidence.sdk-local-package-process.json) are preserved
+byte-for-byte. The package receipt is 2,604 bytes with SHA-256
+`86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34`;
+its identity is `sha256-2365c7209a552ad0de13c03374bcba0d9ee1296b2fe2b6ed7ede729c07fcdbb5`.
+All five published entry identities were rechecked against the actual bytes.
+The bound SDK Wasm remains 9,044,795 bytes with SHA-256
+`01dae00296dd2257f1cd7ede3e4d1e42837d0c4432ce1f70b539c62a9b63b561`;
+its shared memory profile is 34 initial and 16,384 maximum pages.
+
+This qualifies local packaging only. Actual browser initialization, real Bash
+execution, inherited fd/filesystem behavior, descendant ownership and complete
+dependency notices remain separate gates. The package stays `guestQualified: false`.
+
 ## Exact module graph and tools
 
 `package-container-shell-sdk.mjs` verifies the successful binary receipt,
