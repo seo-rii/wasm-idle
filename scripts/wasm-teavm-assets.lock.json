@@ -342,8 +342,8 @@
 				},
 				{
 					"sourcePath": "scripts/teavm/TFormatter.java",
-					"sourceBytes": 25493,
-					"sourceSha256": "710012269abc52925c3dce9315baa72b8d7558994644749442e437120878ab3c",
+					"sourceBytes": 25582,
+					"sourceSha256": "59673e6ff79b84755730661a6fe2cc5ca83210e6d665693785604ee671c55c98",
 					"upstreamSourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
 					"upstreamSourceBytes": 24170,
 					"upstreamSourceSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
@@ -361,6 +361,16 @@
 						{
 							"from": "        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
 							"to": "        private void formatLineSeparator() throws IOException {\n            if (flags != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags));\n            }\n            if (width != -1) {\n                throw new TIllegalFormatWidthException(width);\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            out.append(System.lineSeparator());\n        }\n\n        private void formatPercent() throws IOException {\n            if ((flags & ~TFormattableFlags.LEFT_JUSTIFY) != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags & ~TFormattableFlags.LEFT_JUSTIFY));\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width == -1) {\n                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));\n            }\n            formatGivenString(false, \"%\");\n        }\n\n        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "import java.math.BigDecimal;\n",
+							"to": "import java.math.BigDecimal;\nimport java.math.RoundingMode;\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "            format.setMinimumFractionDigits(precision);\n",
+							"to": "            format.setMinimumFractionDigits(precision);\n            format.setRoundingMode(RoundingMode.HALF_UP);\n",
 							"expectedOccurrences": 1
 						}
 					]
@@ -435,14 +445,14 @@
 					"canonicalClassBytes": 3594,
 					"canonicalClassSha256": "f5ea2dffc2dc8df5961102ff89fa66565830b1d17e95ae85e0a983d45964a727",
 					"classBytes": 2899,
-					"classSha256": "b89d5deaf8844a72f181d48b3e8491b3fd67d7951436a3f0b48886add84dc1ce"
+					"classSha256": "5bae6b47e4fce709e9f655dd27f3ce8cc4f8521a3b79d0261aa1e34555551d7c"
 				},
 				{
 					"targetEntry": "org/teavm/classlib/java/util/TFormatter$FormatWriter.class",
 					"canonicalClassBytes": 13376,
 					"canonicalClassSha256": "714ab8ce856032d688853f12ffd860c6c7970849b1eab05e5c142be970162985",
-					"classBytes": 12178,
-					"classSha256": "3bd5782462a853e635acc01c93b3c66264673df5dedd88802eaffa0d4148b223"
+					"classBytes": 12323,
+					"classSha256": "8be01c2606a2221b5af4a7a15059ab352815e78b4463c2b23be7c3690dd028ff"
 				}
 			],
 			"addedSources": [
@@ -524,13 +534,13 @@
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2388915,
-			"sha256": "d88345e735190830fe8c68906490d2416adb083bd26aeb8f68eb4b8349def06e",
+			"bytes": 2388980,
+			"sha256": "b2b7ce397700b65cab0beee8a365ef79fe8fb1ebfe7ccf19e189630cb3838bbe",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2353350,
-				"sha256": "d6d009c2c801376a2fdde7cb2403adf3cfb9a4b6223b81dd67ae84b496e36af3"
+				"bytes": 2353467,
+				"sha256": "6ac7125040dad57a4e86df8e67a4790a731cf25bb1ed8c23d6bd1ba8b71d9e56"
 			}
 		}
 	]

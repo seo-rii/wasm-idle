@@ -51,7 +51,9 @@ null dereference on the first flush after a byte write (for example `BufferedWri
 (TeaVM issue #1317): `%n` emits the line separator instead of throwing
 `UnknownFormatConversionException`, and `%%` no longer shifts later arguments. The overlay adds
 `TIllegalFormatWidthException`, which TeaVM 0.13.1 lacks, for the `%5n` case; the producer appends
-it to the archive and rejects an archive that already contains it.
+it to the archive and rejects an archive that already contains it. `%f` also rounds half up on the
+shortest decimal representation, as `java.util.Formatter` does, instead of `DecimalFormat`'s default
+half-even (TeaVM issue #1323): `"%.1f"` of `0.25` is `0.3` and `"%.2f"` of `1.005` is `1.01`.
 
 The producer verifies each original source entry, transform occurrence count, transformed source,
 JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive,

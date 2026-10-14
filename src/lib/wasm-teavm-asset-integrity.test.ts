@@ -155,10 +155,10 @@ describe('checked-in TeaVM runtime trust root', () => {
 		const consoleStream = 'org/teavm/classlib/impl/console/JsConsolePrintStream';
 		const formatter = 'org/teavm/classlib/java/util/TFormatter';
 		const formatterSource = manifest.build.overlay.sources.at(-1)!;
-		// %n and %% must not consume an argument (TeaVM #1317).
+		// %n and %% must not consume an argument (TeaVM #1317); %f rounds half up (TeaVM #1323).
 		expect(formatterSource.upstreamSourceEntry).toBe(`${formatter}.java`);
 		expect(formatterSource.transforms.map(({ to }) => to).join('\n')).toMatch(
-			/formatLineSeparator\(\)[\s\S]*formatPercent\(\)/
+			/formatLineSeparator\(\)[\s\S]*formatPercent\(\)[\s\S]*setRoundingMode\(RoundingMode\.HALF_UP\)/
 		);
 		expect(
 			manifest.build.overlay.sources

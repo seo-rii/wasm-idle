@@ -41,6 +41,17 @@ public class Main {
     }
 }`;
 
+const javaFormatterStdinSource = `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        int a = scanner.nextInt();
+        int b = scanner.nextInt();
+        System.out.printf("main=%.2f%n", (a + b) / 2.0 * 2);
+    }
+}`;
+
 const elixirStdinSource = `line = IO.gets("") || "0"
 {n, _} = Integer.parse(String.trim(line))
 IO.puts("main=#{n + 5}")`;
@@ -324,6 +335,14 @@ const sharedStdinBrowserCases = [
 		source: javaBufferedStdioSource,
 		stdinText: '68 5\n',
 		expectedOutput: 'main=73',
+		defaultRunTimeoutMs: 300_000
+	},
+	{
+		name: 'JAVA Formatter',
+		language: 'JAVA',
+		source: javaFormatterStdinSource,
+		stdinText: '68 5\n',
+		expectedOutput: 'main=73.00',
 		defaultRunTimeoutMs: 300_000
 	},
 	{

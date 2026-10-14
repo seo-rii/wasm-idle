@@ -387,6 +387,17 @@ public class Main {
 				expected: '9.0\n3.0\n1.50\n0.667|  -12.35|\n'
 			},
 			{
+				// %f rounds half up on the shortest decimal representation (TeaVM #1323)
+				name: 'Formatter half-up rounding',
+				code: `public class Main {
+    public static void main(String[] args) {
+        System.out.println(String.format("%.1f %.2f %.0f %.2f %.2f %8.2f|", 0.25, 0.125, 2.5, 1.005, 2.675, -12.345));
+    }
+}`,
+				stdin: '',
+				expected: '0.3 0.13 3 1.01 2.68   -12.35|\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 
