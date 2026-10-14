@@ -24,19 +24,23 @@ been implemented; unpassed promotion gates remain explicit.
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
-| BusyBox B1 container qualification | [C-13 follow-up #163](https://github.com/seo-rii/wasm-idle/pull/163) (draft) | C-13 plus C-12 B1 artifact and portable fd/directory fixes; Chromium gate pending |
+| BusyBox B1 container qualification | [C-13 follow-up #163](https://github.com/seo-rii/wasm-idle/pull/163) | C-13 plus C-12 B1 artifact and portable fd/directory fixes |
 | Explicit workspace persistence | [C-17 #145](https://github.com/seo-rii/wasm-idle/pull/145) | C-10; independent of live shell |
 | Host CI and qualification ledger | [C-19 groundwork #147](https://github.com/seo-rii/wasm-idle/pull/147) | C-17; production release still gated |
 | Live VFS ownership and additive mounts | [C-14a #148](https://github.com/seo-rii/wasm-idle/pull/148) | C-19 groundwork |
 | Isolated live WASI and explicit byte pipelines | [C-14b #150](https://github.com/seo-rii/wasm-idle/pull/150) | C-14a; actual shell backend remains separate |
 | Workspace events and staged editor buffers | [C-16a #155](https://github.com/seo-rii/wasm-idle/pull/155) | C-14b; SDK binding independent of shell/UI renderer |
+| Terminal byte-stream UI binding | [C-16b #170](https://github.com/seo-rii/wasm-idle/pull/170) | C-16a; real guest and host failure/cancellation fixtures |
+| Actual BusyBox live VFS and pipes | [C-14 follow-up #171](https://github.com/seo-rii/wasm-idle/pull/171) | C-14b plus the external pinned B1 artifact; no shell interpreter |
 | Portable workspace backup and atomic restore | [C-18a #157](https://github.com/seo-rii/wasm-idle/pull/157) | C-16a |
 | Save state and optional autosave | [C-18b #164](https://github.com/seo-rii/wasm-idle/pull/164) | C-18a; explicit persistence owner remains separate |
 
-The CI/documentation PR is based on C-17. It implements only the independently testable
+The initial CI/documentation PR is based on C-17; its [follow-up #167](https://github.com/seo-rii/wasm-idle/pull/167)
+is based on C-18b. They implement only the independently testable
 portion of C-19, without claiming production qualification. The subsequent C-14 stack adds
 live VFS ownership and an isolated WASI adapter; it does not supply the pending actual shell
-backend. Merge in dependency order and retarget/rebase the remaining stack
+backend. This ledger covers independent branches; a single PR does not include every listed
+component. Merge in dependency order and retarget/rebase the remaining stack
 as needed; no PR is automatically merged.
 
 ## Verified components
@@ -71,6 +75,13 @@ as needed; no PR is automatically merged.
   case exercises reentry against real OPFS/IndexedDB; the full contract job at `217c6a6b`
   [passed in CI](https://github.com/seo-rii/wasm-idle/actions/runs/38492801909), independently
   of the earlier 14-case local receipt.
+- C-16b adds an optional terminal rendering/input binding with per-channel streaming UTF-8,
+  bounded render/input admission and cooperative cancellation. Nineteen Node cases and nine
+  real-guest Chromium cases passed at the final source snapshot, including host fault injection
+  for failed termination and pending input. Nineteen Workers were reclaimed to zero; restrictive
+  CSP had no faults. An independent review and its original failure probes also passed after
+  fixes. The binding does not interpret shell syntax or supply ANSI handling, PTY, resize,
+  termios or job control. Its 73-file host-only package check passed without executable assets.
 - The C-10 source snapshot passed 68 container Node unit/contract tests, 9 focused LLVM tool-host
   protocol tests, and real Chromium batch/cache tests. The existing LLVM Clang regression suite
   passed 202 tests across 20 files. Protocol fixtures do not replace real Clang evidence.
@@ -102,13 +113,21 @@ as needed; no PR is automatically merged.
   `547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`;
   its source pack SHA-256 is
   `ca68639e0a6a159e55000594011e6b60f4850248e8edd5918d10b225e0afe818`.
-  Producer qualification executes 54 scenarios on native and WASI builds (108 runs), including
-  20 explicit rejection checks. The container Node suite passed 20 B0 and 108 B1 invocations,
+  Producer qualification executes 54 scenarios in both argv0 and multicall forms (108 WASI
+  checks: 88 native differential and 20 explicit profile rejections). The container Node
+  matrix passed 20 B0 and 108 B1 invocations, plus separate mount-edge checks,
   including recursive removal of 200 entries, binary copies, readonly/cross-mount rejection,
   one asset body request and zero retained Workers/processes. These are Node and producer
-  results; browser/live pipeline promotion uses separate receipts. The selected port rejects
-  unsupported grep binary modes and NUL text instead of truncating it, and does not claim full
-  GNU/POSIX utility semantics.
+  results. Its separate Chromium qualification passed 256 cold/reload matrix invocations plus
+  mount-edge checks with one
+  asset body request and zero retained Workers/processes. The live follow-up passed 17 Node
+  and 17 Chromium checks: `cat | grep`, early-reader broken pipe, 262,147 binary input bytes,
+  concurrent `cp` to a waiting `cat`, file/directory changes, blocked-read termination/restart
+  and complete cleanup. Each backend used one verified body request. These are explicit host
+  pipelines; the actual Bash interpreter, shell redirection and PTY are not involved.
+  The selected port rejects
+  grep `-a`/`-I` and encountered NUL bytes instead of truncating them; NUL-free non-UTF8 input
+  remains tested. This does not claim full GNU/POSIX utility semantics.
 
 Each PR retains its fixture commands, source/artifact hashes and recorded receipt. A receipt
 describes its exact source snapshot, not every descendant commit. CI emits fresh browser JSON
@@ -119,15 +138,24 @@ workflow explicitly includes only `.codex/container-*.json` and rejects missing 
 explains that setting. Verify the downloadable artifact as well as the workflow status. Local successes do
 not imply the GitHub workflow has already completed, or that another browser/version passed.
 
+The fix was verified by downloading all five JSON receipts from
+[run 38493461673](https://github.com/seo-rii/wasm-idle/actions/runs/38493461673): batch,
+isolated headers, live, persistence and workspace. The PR head is `795a6d12`; the tested
+application commit is its CI merge ref `292c217ac1974b22b379772d4bdc27e4d64e3836`.
+All 33 recorded TypeScript source hashes match the reviewed stack, as do the four compiled
+filesystem/persistence/backup/save implementation hashes. The receipts contain 34 live,
+15 persistence and 14 workspace checks, zero retained guest Workers, and the actual browser
+profile. Later documentation changes do not relabel these receipts as a different execution.
+
 ## Blocked or incomplete gates
 
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
 | G0-CLANG / CLI-01–03 | Existing raw Clang reports that WASI cannot spawn subprocesses. Preopens/PWD do not set wasi-libc's cwd. Full modified compiler qualification is pending | wasm-llvm #32 opt-in LLVM `ExecuteAndWait` bridge and real `chdir` startup; complete Clang/LLD relink and actual C/C++ CLI gate, then browser |
-| B1 / P3 | Selected B1 producer and 128 container Node invocations pass; browser/live qualification is separate | C-12/C-13 follow-ups: actual Chromium, then common live filesystem/pipeline fixtures; preserve explicit unsupported options |
+| B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
-| P5 / product beta | Persistence, editor/watch, backup/restore and save SDK bindings have component evidence; rendered integration, terminal qualification and orphan GC remain separate | C-16/18 follow-ups; product failure UI/lifecycle and full shell-based reload matrix |
+| P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
 | C-19/20 | Local header smoke only; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
