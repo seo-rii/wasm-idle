@@ -191,7 +191,8 @@ def main():
             raise RuntimeError('Toolchain tree hash mismatch: ' + relative)
         toolchain['trees'][relative] = actual
     work = args.work_dir.resolve()
-    if shutil.disk_usage(work.parent).free < 128 * 1024 * 1024:
+    # mkdir(parents=True) below may create missing parents; measure the nearest existing one.
+    if shutil.disk_usage(next(path for path in work.parents if path.exists())).free < 128 * 1024 * 1024:
         raise RuntimeError('At least 128 MiB free disk is required before starting; concurrent jobs can still exhaust it')
     work.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.chmod(work, 0o700)
