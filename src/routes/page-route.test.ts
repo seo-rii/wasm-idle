@@ -401,6 +401,25 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});
 
+	it('keeps compiler diagnostics on the workspace files of the run that produced them', () => {
+		const sliceFunction = (name: string) => {
+			const start = source.indexOf(`function ${name}(`);
+			return source.slice(start, source.indexOf('\n\t}\n', start));
+		};
+		expect(sliceFunction('onCompileDiagnostic')).toMatch(
+			/const run = compilerDiagnosticRun;\s+if \(!run\) return;[\s\S]*fileName: resolveCompilerDiagnosticPath\(\s*diagnostic\.fileName,\s*run\.entryPath,\s*run\.workspacePaths\s*\)/
+		);
+		expect(source).toMatch(
+			/compilerDiagnostics = \[\];\s+compilerDiagnosticRun = \{\s+entryPath: activePath,\s+workspacePaths: files\.map\(\(file\) => file\.path\)\s+\};\s+const codeToRun = activeFile\.content;/
+		);
+		// Language switches, imports, and resets replace the workspace the diagnostics refer to.
+		expect(sliceFunction('activateWorkspace')).toMatch(
+			/compilerDiagnostics = \[\];\s+compilerDiagnosticRun = null;/
+		);
+		expect(sliceFunction('switchLanguage')).toContain('activateWorkspace(');
+		expect(source).not.toContain('compilerDiagnosticLanguages.has(language)');
+	});
+
 	it('preloads stdin when SharedArrayBuffer is unavailable or a start-time stdin runtime is selected', () => {
 		expect(source).not.toMatch(/location\.reload\(\)/);
 		expect(source).toMatch(

@@ -178,6 +178,28 @@ func main() {
 		expect(values).toEqual([0.18, 0.63]);
 	});
 
+	it('attributes diagnostics for the compiled main.go to the active workspace file', async () => {
+		const sandbox = new Go();
+		const diagnostics: any[] = [];
+		sandbox.output = vi.fn();
+		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
+
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		await expect(
+			sandbox.run('package main\n', true, true, undefined, [], { activePath: 'cmd/hello.go' })
+		).resolves.toBe(true);
+
+		expect(diagnostics).toEqual([
+			{
+				fileName: 'cmd/hello.go',
+				lineNumber: 1,
+				columnNumber: 1,
+				severity: 'warning',
+				message: 'demo warning'
+			}
+		]);
+	});
+
 	it('resolves and forwards the configured manifest plus caller execution limits', async () => {
 		const sandbox = new Go();
 		sandbox.output = vi.fn();

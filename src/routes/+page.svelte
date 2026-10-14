@@ -51,7 +51,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
-	import { normalizeWorkspacePath } from './workspacePath';
+	import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
 	import {
 		createSharedWorkspaceUrl,
 		WORKSPACE_STORAGE_KEY,
@@ -77,7 +77,6 @@
 		argsHelpLanguages,
 		argsLabels,
 		clangdLspLanguages,
-		compilerDiagnosticLanguages,
 		debugLspLanguages,
 		dotnetLspLanguages,
 		editorLanguages,
@@ -241,6 +240,8 @@
 	let restartDebugPending = $state(false);
 	let executionStopPending = $state(false);
 	let executionGeneration = 0;
+	// Compiler diagnostics resolve against the workspace their run compiled.
+	let compilerDiagnosticRun: { entryPath: string; workspacePaths: string[] } | null = null;
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
@@ -1010,6 +1011,8 @@
 		files = cloneFiles(nextWorkspace.files);
 		activePath = nextWorkspace.activePath;
 		openTabs = [...nextWorkspace.openTabs];
+		compilerDiagnostics = [];
+		compilerDiagnosticRun = null;
 	}
 
 	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
@@ -1826,7 +1829,19 @@
 	}
 
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
-		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
+		const run = compilerDiagnosticRun;
+		if (!run) return;
+		compilerDiagnostics = [
+			...compilerDiagnostics,
+			{
+				...diagnostic,
+				fileName: resolveCompilerDiagnosticPath(
+					diagnostic.fileName,
+					run.entryPath,
+					run.workspacePaths
+				)
+			}
+		];
 	}
 
 	function onDebugEvent(event: DebugSessionEvent) {
@@ -2205,6 +2220,10 @@
 				debug.reset();
 			}
 			compilerDiagnostics = [];
+			compilerDiagnosticRun = {
+				entryPath: activePath,
+				workspacePaths: files.map((file) => file.path)
+			};
 			const codeToRun = activeFile.content;
 			if (browser) {
 				saveWorkspace();
@@ -2744,7 +2763,6 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (!compilerDiagnosticLanguages.has(language)) compilerDiagnostics = [];
 	});
 </script>
 

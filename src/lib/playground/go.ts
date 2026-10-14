@@ -389,7 +389,14 @@ class Go implements Sandbox {
 				}
 				reportWorkerProgress(_prog, progress);
 				if (output) this.output(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+				// The worker compiles only the active source, which the compiler names main.go.
+				if (diagnostic)
+					this.oncompilerdiagnostic?.(
+						options.activePath &&
+							/(?:^|[\\/])main\.go$/u.test(diagnostic.fileName ?? '')
+							? { ...diagnostic, fileName: options.activePath }
+							: diagnostic
+					);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
 					cleanup();
