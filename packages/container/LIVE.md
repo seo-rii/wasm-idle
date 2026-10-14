@@ -26,7 +26,9 @@ Each endpoint has a bounded ring, default 64 KiB (`pipeBytes`: 1..65536). Writes
 can be partial; zero-byte reads/writes do not wait. Every writer must close before
 the reader observes EOF after draining buffered bytes. Cancelling the output
 reader wakes guest writes with Preview1 `EPIPE` (64). It does not deliver SIGPIPE.
-Standard byte streams report unknown file type, not a terminal character device.
+A vectored read performs one bounded read and scatters its partial result. It does
+not wait on a later iovec after consuming available input. Standard byte streams
+report unknown file type, not a terminal character device.
 
 The existing input/output admission limits still apply cumulatively (default
 8 MiB input and combined stdout/stderr). `run` has its separate capture bound.

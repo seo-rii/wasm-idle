@@ -45,6 +45,11 @@ __attribute__((export_name("_start"))) void _start(void) {
   if (args_get(argv, argbytes)) proc_exit(93);
   const char *mode = argc > 1 ? argv[1] : "copy";
   if (equal(mode, "yes")) { for (;;) write_all(1, "y\n", 2); }
+  if (equal(mode, "readv")) {
+    iovec input[3] = {{buffer, 0}, {buffer, 1}, {buffer + 1, 1}}; u32 n = 0;
+    if (fd_read(0, input, 3, &n)) proc_exit(96);
+    write_all(1, buffer, n); return;
+  }
   if (equal(mode, "one")) { u32 n = read_some(0, buffer, 1); write_all(1, buffer, n); return; }
   if (equal(mode, "read")) { read_file(argc > 2 ? argv[2] : "visible"); return; }
   if (equal(mode, "visible") || equal(mode, "crash")) {

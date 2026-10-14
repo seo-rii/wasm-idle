@@ -110,3 +110,19 @@ test('pipeline preparation failure releases every reservation and already starte
     assert.equal((await c.run('tool')).code, 0);
   } finally { await c.dispose(); }
 });
+
+test('one fd_read scatters a partial stream read without waiting on another iovec', { timeout: 30000 }, async () => {
+  const c = make();
+  let timer;
+  try {
+    const p = await c.spawn('tool', ['readv']), writer = p.stdin.getWriter();
+    const output = drain(p.stdout);
+    await writer.write(new Uint8Array([65]));
+    const observed = await Promise.race([output, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('fd_read waited for EOF after already reading one byte')), 5000);
+    })]);
+    assert.deepEqual(observed, new Uint8Array([65]));
+    assert.equal((await p.exited).code, 0);
+    await writer.close(); writer.releaseLock();
+  } finally { clearTimeout(timer); await c.dispose(); }
+});

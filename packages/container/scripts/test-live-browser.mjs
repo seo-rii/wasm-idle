@@ -58,6 +58,16 @@ try {
       const flood = await c.run('tool', ['flood']);
       check('FD-03', flood.code === 0 && flood.stdout.length === 131073 && flood.stderr.length === 131073 && flood.stdout.every((n, i) => n === flood.stderr[i]));
       check('non-tty', (await c.run('tool', ['non-tty'])).code === 0);
+      const vectored = await c.spawn('tool', ['readv']), vectoredInput = vectored.stdin.getWriter();
+      const vectoredOutput = drain(vectored.stdout); let readDeadline;
+      try {
+        await vectoredInput.write(new Uint8Array([65]));
+        const output = await Promise.race([vectoredOutput, new Promise((_, reject) => {
+          readDeadline = setTimeout(() => reject(new Error('Vectored read waited for EOF after progress')), 5000);
+        })]);
+        check('FD-vectored-read-before-eof', decode(output) === 'A' && (await vectored.exited).code === 0);
+      } finally { clearTimeout(readDeadline); await vectoredInput.close(); vectoredInput.releaseLock(); }
+
       const first = await c.spawn('tool', ['visible']), reader = first.stdout.getReader(), writer = first.stdin.getWriter();
       check('output-before-input-eof', decode((await reader.read()).value) === 'ready');
       check('FS-07', decode((await c.run('tool', ['read'])).stdout) === 'before');

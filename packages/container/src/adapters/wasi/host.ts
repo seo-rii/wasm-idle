@@ -74,19 +74,24 @@ export function createWasiHost(options: HostOptions) {
   };
   const safeOffset = (value: bigint) => { const n = Number(value); if (!Number.isSafeInteger(n)) throw new WasiFault(28); return n; };
   const fdRead = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
-    span(result, 4); const buffers = iovecs(ptr, count); let total = 0;
+    span(result, 4); const buffers = iovecs(ptr, count);
     if (fd !== 0 || !standard.has(0)) handle(fd, 2n);
     if (fd === 0 && offset !== undefined) throw new WasiFault(70);
+    const length = buffers.reduce((total, buffer) => Math.min(1024 * 1024, total + buffer.length), 0);
+    if (!length) { put32(result, 0); return 0; }
+    // A stream read must return bytes already available without blocking again on
+    // the next iovec. Perform one bounded read, then scatter its partial result.
+    const bytes = fd === 0 ? stdio.read(length) : offset === undefined
+      ? options.fs.read(handle(fd, 2n).fd, length)
+      : options.fs.pread(handle(fd, 2n).fd, length, safeOffset(offset));
+    if (bytes.length > length) throw new WasiFault(29);
+    let copied = 0;
     for (const buffer of buffers) {
-      const length = Math.min(buffer.length, 1024 * 1024 - total);
-      if (!length) { if (total === 1024 * 1024) break; continue; }
-      let bytes: Uint8Array;
-      if (fd === 0) { bytes = stdio.read(length); }
-      else { const h = handle(fd, 2n); bytes = offset === undefined ? options.fs.read(h.fd, length) : options.fs.pread(h.fd, length, safeOffset(offset) + total); }
-      buffer.set(bytes); total += bytes.length;
-      if (bytes.length < length) break;
+      const n = Math.min(buffer.length, bytes.length - copied);
+      buffer.set(bytes.subarray(copied, copied + n)); copied += n;
+      if (copied === bytes.length) break;
     }
-    put32(result, total); return 0;
+    put32(result, copied); return 0;
   };
   const fdWrite = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count); let total = 0;
