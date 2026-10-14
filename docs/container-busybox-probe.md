@@ -1,9 +1,10 @@
-# G0-BUSYBOX: a bounded B0 port
+# G0-BUSYBOX: bounded B0 and B1 ports
 
 This probe keeps BusyBox's six selected applet implementations and its multicall
 dispatcher. It is a producer experiment for `cat`, `echo`, `false`, `printf`,
-`pwd` and `true`. It does not qualify B1 utilities, a shell, process spawning,
-terminal control, or live container filesystem sharing.
+`pwd` and `true`. The later B1 producer extends this baseline as described below. Neither
+producer qualification establishes a shell, process spawning, terminal control,
+or live container filesystem sharing.
 
 Source and build inputs are pinned in
 [`runtimes/wasm-busybox/manifest.json`](../runtimes/wasm-busybox/manifest.json).
@@ -35,7 +36,7 @@ The bounded port resolved these concrete build boundaries:
 | Initial cwd | A versioned `wasm_idle_process_v1.initial_cwd` import copies the trusted cwd into a bounded 4096-byte buffer. A constructor calls actual libc `chdir` before the upstream entry; invalid or inaccessible cwd exits 125. An environment variable is not used to imitate cwd. |
 
 The [patch ledger](../runtimes/wasm-busybox/patches/README.md) records one patch per
-cause. No applet body, shell parser, filesystem, process API or network API is
+cause. No applet, shell parser, filesystem, process API or network API is
 replaced with a mock. Adding more applets requires expanding this proven closure
 and rerunning their own runtime fixtures.
 
@@ -63,3 +64,47 @@ Primary references: [official source archives](https://busybox.net/downloads/),
 [BusyBox build/multicall/porting FAQ](https://busybox.net/FAQ.html),
 [BusyBox license notice](https://busybox.net/license.html), and
 [Node WASI API and security boundary](https://nodejs.org/api/wasi.html).
+
+## B1 subset
+
+The next producer uses the same pinned source/toolchain and process cwd ABI for
+real `grep`, `mkdir`, `cp`, `mv` and `rm`. Its four classified patches expand the
+build closure and reject unavailable metadata/copy semantics before file changes.
+They do not add successful libc stubs. The new import closure is still WASI
+Preview 1 plus `wasm_idle_process_v1.initial_cwd`; it adds directory traversal,
+create/remove/rename, symlink/readlink and fd flag operations.
+
+`grep` uses the upstream algorithm with the selected WASI libc regex engine.
+A native/WASI differential exposed the small upstream profile silently ignoring
+`-a/-I` and truncating NUL-containing input. This port rejects those options and
+NUL text input with exit 2. The full EXTRA_COMPAT path requires GNU regex APIs
+absent from the pinned WASI libc; no replacement regex engine is introduced.
+`mkdir -m` fails explicitly; creation modes belong to the host. `cp` qualifies
+regular files and symlinks, while `-p/-a/-r/-R/-l/-s` and special files are rejected.
+`mv` qualifies actual same-mount rename; EXDEV is reported without deleting an
+existing destination or source. Recursive `rm` retains real upstream directory
+iteration and unlink/rmdir calls.
+
+The B1 matrix compares bytes, exit status and final file/directory/symlink trees
+against the native build for each selected operation and both invocation forms.
+It checks nonzero exits with partial successful writes, unsupported options with
+an unchanged destination, paths with spaces and literal backslashes, 8 KiB read
+boundaries, NUL/0xff data, and removal of a 200-entry directory. Regex parse errors
+must report nonzero/stderr, but libc-specific wording is not required to match.
+File mode, uid/gid and timestamps are not part of this profile's tree comparison.
+The B0 byte/cwd/startup failure regressions remain mandatory. Downstream browser
+qualification consumes the exact artifact, receipt and hash-pinned data matrix;
+it must separately prove the container VFS and cache behavior.
+
+The [B1 receipt](../runtimes/wasm-busybox/evidence/b1-busybox.json) records 20 native
+B0 cases, 24 Node WASI B0/startup cases, and 108 B1 executions: 88 native
+differential cases and 20 explicit profile rejections. Six rejection cases also
+record the upstream native behavior. The resulting 447,557-byte artifact has
+SHA-256 `547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`.
+Its 2,580,335-byte source pack has SHA-256
+`ca68639e0a6a159e55000594011e6b60f4850248e8edd5918d10b225e0afe818`.
+[Verification evidence](../runtimes/wasm-busybox/evidence/b1-verification.json)
+records successful producer/source-pack verification and rejection of modified
+artifact bytes. A native build timeout remains in the receipt; the documented
+continuation verified the complete prepared source tree before finishing the
+same single-worker build and rerunning its tests.

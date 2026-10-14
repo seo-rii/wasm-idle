@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned upstream BusyBox B0 producer probe; failed WASI ports stay failed."""
+"""Pinned upstream BusyBox B0/B1 producer; failed runtime fixtures stay failed."""
 import argparse
 import hashlib
 import gzip
@@ -119,7 +119,9 @@ def source_pack(work, archive, source_dir):
     members = {'upstream/' + archive.name: archive, 'LICENSE': source_dir / 'LICENSE'}
     for target in ('wasi', 'native'):
         members['producer/config/generated-' + target + '.config'] = work / (target + '.config')
-    for relative in ['manifest.json', 'README.md', 'NOTICE', 'config/b0.config', 'scripts/probe.py', 'scripts/verify.py', 'test/smoke.mjs', 'patches/README.md']:
+    for relative in ['manifest.json', 'README.md', 'NOTICE', 'config/b0.config', 'config/b1.config',
+                     'scripts/probe.py', 'scripts/verify.py', 'test/smoke.mjs',
+                     'test/b1-smoke.mjs', 'test/b1-cases.mjs', 'patches/README.md']:
         members['producer/' + relative] = ROOT / relative
     for patch in sorted((ROOT / 'patches').glob('*.patch')):
         members['producer/patches/' + patch.name] = patch
@@ -141,10 +143,11 @@ def main():
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--work-dir', type=Path, required=True)
     parser.add_argument('--source-archive', type=Path)
+    parser.add_argument('--jobs', type=int, choices=(1, 2), default=1)
     args = parser.parse_args()
     manifest = json.loads((ROOT / 'manifest.json').read_text())
     source = manifest['source']
-    if digest(ROOT / 'config/b0.config') != manifest['config']['sha256']:
+    if digest(ROOT / manifest['config']['path']) != manifest['config']['sha256']:
         raise RuntimeError('Configuration fragment does not match its pin')
     for patch in manifest['patches']:
         if digest(ROOT / patch['path']) != patch['sha256']:
@@ -162,6 +165,8 @@ def main():
             raise RuntimeError('Toolchain tree hash mismatch: ' + relative)
         toolchain['trees'][relative] = actual
     work = args.work_dir.resolve()
+    if shutil.disk_usage(work.parent).free < 128 * 1024 * 1024:
+        raise RuntimeError('At least 128 MiB free disk is required before starting; concurrent jobs can still exhaust it')
     work.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.chmod(work, 0o700)
     if args.source_archive:
@@ -181,7 +186,7 @@ def main():
                    'KCONFIG_NOTIMESTAMP': '1'}
     environment.pop('KCONFIG_ALLCONFIG', None)
     for index, patch in enumerate(manifest['patches']):
-        applied = run_logged(['patch', '-p1', '--forward', '--batch', '-i', str(ROOT / patch['path'])],
+        applied = run_logged(['patch', '-p1', '--forward', '--batch', '--fuzz=0', '-i', str(ROOT / patch['path'])],
                              work / ('patch-' + str(index) + '.log'), environment, cwd=source_dir)
         if applied['exitCode'] != 0:
             raise RuntimeError('Pinned patch did not apply cleanly')
@@ -193,6 +198,8 @@ def main():
                'processAbi': manifest['processAbi'],
                'probeScriptSha256': digest(Path(__file__)),
                'smokeScriptSha256': digest(ROOT / 'test/smoke.mjs'),
+               'b1Scripts': {path: digest(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')},
+               'jobs': args.jobs,
                'host': {'system': platform.platform(), 'ccSha256': digest(Path(host_cc)),
                         'ccVersion': subprocess.check_output([host_cc, '--version'], text=True).splitlines()[0]},
                'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
@@ -213,7 +220,7 @@ def main():
         if configured['exitCode'] == 0:
             config = build / '.config'
             overrides = {}
-            for line in (ROOT / 'config/b0.config').read_text().splitlines():
+            for line in (ROOT / manifest['config']['path']).read_text().splitlines():
                 match = re.match(r'(?:# )?(CONFIG_[A-Z0-9_]+)(?:=| is not set)', line)
                 if match:
                     overrides[match.group(1)] = line
@@ -232,11 +239,11 @@ def main():
             selected = set(re.findall(r'^CONFIG_([A-Z0-9_]+)=y$', config.read_text(), re.MULTILINE))
             expected = {'BUSYBOX', *(name.upper() for name in manifest['requestedApplets'])}
             if not expected.issubset(selected) or selected.intersection({'ASH', 'SHELL_ASH', 'HUSH', 'SHELL_HUSH', 'FEATURE_SUID'}):
-                raise RuntimeError('Generated configuration did not retain the B0/no-shell profile')
+                raise RuntimeError('Generated configuration did not retain the selected applets/no-shell profile')
             result['selectedConfigFlags'] = sorted(selected)
             result['generatedConfigSha256'] = digest(config)
             shutil.copyfile(config, work / (target + '.config'))
-            result['build'] = run_logged([*common, '-j1', 'busybox'], work / (target + '-build.log'), environment)
+            result['build'] = run_logged([*common, '-j' + str(args.jobs), 'busybox'], work / (target + '-build.log'), environment)
             binary = build / 'busybox'
             if result['build']['exitCode'] == 0 and binary.is_file():
                 result['artifact'] = {'sha256': digest(binary), 'size': binary.stat().st_size}
@@ -258,6 +265,14 @@ def main():
     receipt['nativeSmokePassed'] = bool(native.get('smoke')) and all(case['passed'] for case in native['smoke'])
     receipt['wasiNodeSmokePassed'] = receipt['wasi'].get('smoke', {}).get('passed', False)
     if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed']:
+        receipt['b1Run'] = run_logged([
+            'node', str(ROOT / 'test/b1-smoke.mjs'), str(work / 'busybox.wasm'),
+            str(work / 'native-build/busybox'), str(work / 'b1-smoke'), str(work / 'b1-smoke.json')],
+            work / 'b1-smoke.log', environment)
+        if (work / 'b1-smoke.json').is_file():
+            receipt['b1'] = json.loads((work / 'b1-smoke.json').read_text())
+    receipt['b1SmokePassed'] = receipt.get('b1Run', {}).get('exitCode') == 0 and receipt.get('b1', {}).get('passed', False)
+    if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed'] and receipt['b1SmokePassed']:
         receipt['status'] = 'producer-smoke-passed'
         receipt['nodeWasiApplets'] = manifest['requestedApplets']
         receipt['sourcePack'] = source_pack(work, archive, source_dir)

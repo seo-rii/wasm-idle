@@ -1,0 +1,41 @@
+--- a/Makefile
++++ b/Makefile
+@@ -494,7 +494,7 @@
+ 		util-linux/volume_id/ \
+ 
+ ifeq ($(ARCH),wasm32)
+-libs-y := coreutils/ libbb/
++libs-y := coreutils/ coreutils/libcoreutils/ findutils/ libbb/
+ endif
+ 
+ endif # KBUILD_EXTMOD
+--- a/Makefile.flags
++++ b/Makefile.flags
+@@ -223,6 +223,6 @@
+ FLTFLAGS += -s 16000
+ 
+ ifeq ($(ARCH),wasm32)
+-CFLAGS += -DBB_WASI_B0
++CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1
+ CFLAGS_busybox += -Wl,--max-memory=67108864 -Wl,--undefined=__main_argc_argv
+ endif
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -12,7 +12,7 @@
+ 
+ lib-y += alloc_affinity.o
+ lib-y += appletlib.o
+-lib-y += ask_confirmation.o
++lib-y += common_bufsiz.o fclose_nonstdin.o wfopen.o ask_confirmation.o
+ lib-y += bb_askpass.o
+ lib-y += bb_bswap_64.o
+ lib-y += bb_do_delay.o
+@@ -213,3 +213,8 @@
+ ifeq ($(ARCH),wasm32)
+ lib-y := compare_string_array.o ptr_to_globals.o single_argv.o wfopen_input.o appletlib.o bb_cat.o bb_strtonum.o copyfd.o default_error_retval.o fflush_stdout_and_exit.o full_write.o get_last_path_component.o getopt32.o last_char_is.o llist.o messages.o perror_msg.o perror_nomsg.o perror_nomsg_and_die.o process_escape_sequence.o read.o safe_strncpy.o safe_write.o skip_whitespace.o verror_msg.o xatonum.o xfunc_die.o xfuncs.o xfuncs_printf.o xgetcwd.o
+ endif
++
++# B1 adds real grep and file utilities to the B0 closure.
++ifeq ($(ARCH),wasm32)
++lib-y += common_bufsiz.o fclose_nonstdin.o wfopen.o ask_confirmation.o concat_path_file.o concat_subpath_file.o copy_file.o get_line_from_file.o make_directory.o recursive_action.o remove_file.o xreadlink.o xregcomp.o xrealloc_vector.o
++endif
