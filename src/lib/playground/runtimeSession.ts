@@ -2,7 +2,8 @@ import {
 	createPlaygroundBinding,
 	normalizeLanguageId,
 	RuntimeConfigurationError,
-	type PlaygroundBindingOptions
+	type PlaygroundBindingOptions,
+	type RuntimeAssetCacheConsumer
 } from '@wasm-idle/core';
 import playground from './index';
 import type { PlaygroundBinding, Sandbox, SandboxRuntimeAssets } from './sandbox';
@@ -22,8 +23,8 @@ export interface PlaygroundRuntimeSession {
 }
 
 /**
- * A browser-owned language session. Panels own disposable execution leases, not the
- * compiler cache. A problem/editor change may release all leases without cooling it.
+ * A browser-owned runtime session. Panels own disposable execution leases, while
+ * verified compiler assets survive problem, editor and language changes.
  */
 export function createRuntimeSession(
 	runtimeAssets: SandboxRuntimeAssets,
@@ -33,8 +34,8 @@ export function createRuntimeSession(
 	let epoch = 0;
 	let disposed = false;
 	let disposal: Promise<void> | undefined;
-	let assetCache = new RuntimeAssetCache();
-	let artifactCache = new CompiledArtifactCache();
+	const assetCache = new RuntimeAssetCache();
+	const artifactCache = new CompiledArtifactCache();
 	const leases = new Set<{ epoch?: number; dispose(): Promise<void> }>();
 	let retiring: Promise<void> = Promise.resolve();
 	const stale = () =>
@@ -63,10 +64,7 @@ export function createRuntimeSession(
 			if (next === language) return await retiring;
 			language = next;
 			epoch++;
-			assetCache.dispose();
 			artifactCache.clear();
-			assetCache = new RuntimeAssetCache();
-			artifactCache = new CompiledArtifactCache();
 			await release([...leases].filter((lease) => lease.epoch !== undefined));
 		},
 		createBinding() {
@@ -94,9 +92,8 @@ export function createRuntimeSession(
 					lease.epoch = selectedEpoch;
 					const cache = assetCache;
 					const artifacts = artifactCache;
-					const sandbox = (await playground(target)) as Sandbox & {
-						setRuntimeAssetCache?: (cache: RuntimeAssetCache) => void;
-					};
+					const sandbox = (await playground(target)) as Sandbox &
+						Partial<RuntimeAssetCacheConsumer>;
 					if (closed || disposed || epoch !== selectedEpoch) {
 						if (sandbox.dispose) await sandbox.dispose();
 						else await sandbox.terminate();

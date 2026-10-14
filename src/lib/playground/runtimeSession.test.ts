@@ -90,20 +90,57 @@ describe('language runtime session ownership', () => {
 		expect(cache.stats().disposed).toBe(true);
 	});
 
-	it('disposes active leases and cached assets when the language actually changes', async () => {
+	it('retires execution leases but keeps immutable compiler assets across language changes', async () => {
 		const session = createRuntimeSession('https://assets.test');
 		const first = session.createBinding();
 		await first.load('C');
 		const cache = state.instances[0].cache!;
+		cache.set('verified Clang module', 'ready', 5);
 		await session.selectLanguage('C');
 		expect(state.instances[0].dispose).not.toHaveBeenCalled();
 		await session.selectLanguage('CPP');
 		expect(state.instances[0].dispose).toHaveBeenCalledOnce();
-		expect(cache.stats().disposed).toBe(true);
+		expect(cache.stats().disposed).toBe(false);
 		await expect(first.load('C')).rejects.toThrow(/disposed/);
 		await session.createBinding().load('CPP');
-		expect(state.instances[1].cache).not.toBe(cache);
+		expect(state.instances[1].cache).toBe(cache);
+		expect(cache.get('verified Clang module')).toBe('ready');
 		await session.dispose();
+		expect(cache.stats().disposed).toBe(true);
+	});
+
+	it('retains the same bounded asset owner when revisiting different compiler families', async () => {
+		const session = createRuntimeSession('https://assets.test');
+		const selected = ['C', 'CPP', 'COBOL', 'FORTRAN', 'V', 'OBJC', 'RUST', 'TINYGO', 'C'];
+		let cache: RuntimeAssetCache | undefined;
+		for (const language of selected) {
+			await session.createBinding().load(language);
+			const sandbox = state.instances.at(-1)!;
+			cache ??= sandbox.cache;
+			expect(sandbox.cache).toBe(cache);
+			cache!.set(`verified:${language}`, language, language.length);
+		}
+		expect(cache!.get('verified:RUST')).toBe('RUST');
+		expect(cache!.get('verified:TINYGO')).toBe('TINYGO');
+		for (const sandbox of state.instances.slice(0, -1)) {
+			expect(sandbox.dispose).toHaveBeenCalledOnce();
+		}
+		await session.dispose();
+		expect(cache!.stats().disposed).toBe(true);
+	});
+
+	it('keeps separate applications and asset authorization owners isolated', async () => {
+		const a = createRuntimeSession('https://first-assets.test');
+		const b = createRuntimeSession('https://second-assets.test');
+		await a.createBinding().load('C');
+		await b.createBinding().load('C');
+		const firstCache = state.instances[0].cache!;
+		const secondCache = state.instances[1].cache!;
+		firstCache.set('verified compiler', 'first app', 9);
+		expect(secondCache.get('verified compiler')).toBeUndefined();
+		await a.dispose();
+		expect(secondCache.stats().disposed).toBe(false);
+		await b.dispose();
 	});
 
 	it('switching to a server-only language still releases the old browser compiler', async () => {
