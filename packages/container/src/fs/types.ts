@@ -64,3 +64,19 @@ export interface FileSystemLease {
   /** Discard on cancellation or runtime failure. Idempotent. */
   discard(): void;
 }
+
+/** Change hints describe committed operations, not a replayable historical snapshot. */
+export interface FileSystemChange {
+  readonly generation: number;
+  readonly kind: 'create' | 'modify' | 'remove' | 'rename' | 'rescan';
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly inode?: number;
+}
+export interface FileSystemWatchOptions {
+  /** Existing directory, resolved once at subscription. Defaults to /workspace. */
+  readonly path?: string;
+  /** Buffered hints per watcher, 1..256 (default 32). Overflow emits one rescan hint. */
+  readonly maxQueuedEvents?: number;
+  readonly signal?: AbortSignal;
+}

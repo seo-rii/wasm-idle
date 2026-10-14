@@ -1,7 +1,8 @@
 import { FsError } from './errors.js';
+import { createFileSystemWatch } from './watch.js';
 import type {
   FileStat, FileSystemLease, FileSystemSnapshot, FileType, MemoryFileSystemOptions,
-  OpenOptions, PathOptions, SnapshotEntry,
+  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions,
 } from './types.js';
 
 interface Inode {
@@ -73,6 +74,7 @@ export class MemoryFileSystem {
   private revision = 0;
   private lease: symbol | undefined;
   private liveUsers = 0;
+  private watchers = new Set<{ root: string; push(change: FileSystemChange): void }>();
   readonly maxBytes: number;
   readonly maxInodes: number;
 
@@ -96,6 +98,48 @@ export class MemoryFileSystem {
   get generation(): number { return this.revision; }
   get byteLength(): number { return this.usedBytes; }
   get inodeCount(): number { return this.nodes.size; }
+  get watcherCount(): number { return this.watchers.size; }
+
+  watch(options: FileSystemWatchOptions = {}): ReadableStream<FileSystemChange> {
+    const capacity = options.maxQueuedEvents ?? 32;
+    if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > 256) throw new FsError('EINVAL', 'Watch queue must contain 1..256 events');
+    if (this.watchers.size >= 64) throw new FsError('ENOSPC', 'Filesystem watcher limit reached');
+    const resolved = this.resolve(options.path ?? '/workspace');
+    if (resolved.node.type !== 'directory') throw new FsError('ENOTDIR', 'Watch scope must be a directory');
+    const entry = { root: resolved.path, push: (_change: FileSystemChange) => {} };
+    const watch = createFileSystemWatch(entry.root, capacity, options.signal, () => { this.watchers.delete(entry); });
+    entry.push = watch.push;
+    if (!watch.closed) this.watchers.add(entry);
+    return watch.stream;
+  }
+
+  private notify(change: Omit<FileSystemChange, 'generation'>): void {
+    if (!this.watchers.size) return;
+    const event = Object.freeze({ ...change, generation: this.revision });
+    for (const watcher of this.watchers) {
+      if (event.kind === 'rescan' || within(watcher.root, event.path) && watcher.root !== event.path || event.previousPath && within(watcher.root, event.previousPath)) {
+        watcher.push(Object.freeze({ kind: 'rescan', path: watcher.root, generation: this.revision }));
+      } else if (within(event.path, watcher.root) || event.previousPath && within(event.previousPath, watcher.root)) watcher.push(event);
+    }
+  }
+
+  private nodePath(target: Inode): string | undefined {
+    const visit = (node: Inode, path: string): string | undefined => {
+      if (node === target) return path;
+      for (const [name, child] of node.children) {
+        const found = visit(child, `${path === '/' ? '' : path}/${name}`);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    return visit(this.root, '/');
+  }
+
+  private notifyFile(node: Inode): void {
+    if (!this.watchers.size) return;
+    const path = this.nodePath(node);
+    this.notify(path === undefined ? { kind: 'rescan', path: '/' } : { kind: 'modify', path, inode: node.inode });
+  }
 
   private allocate(type: FileType, mount: string, mode: number): Inode {
     if (this.nodes.size >= this.maxInodes) throw new FsError('ENOSPC', 'Filesystem inode quota exceeded');
@@ -274,6 +318,7 @@ export class MemoryFileSystem {
       this.usedBytes += copied.length;
       parent.node.children.set(parent.name, node);
       this.changed(parent.node, node);
+      this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
       return;
     }
     this.writable(node);
@@ -283,6 +328,7 @@ export class MemoryFileSystem {
     this.usedBytes += copied.length - node.data.length;
     node.data = copied;
     this.changed(node);
+    this.notifyFile(node);
   }
 
   mkdir(path: string, options: PathOptions & { recursive?: boolean; mode?: number } = {}): void {
@@ -305,8 +351,10 @@ export class MemoryFileSystem {
     const parent = this.parent(path, options);
     this.writable(parent.node);
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');
-    parent.node.children.set(parent.name, this.allocate('directory', parent.node.mount, options.mode ?? 0o755));
+    const node = this.allocate('directory', parent.node.mount, options.mode ?? 0o755);
+    parent.node.children.set(parent.name, node);
     this.changed(parent.node);
+    this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
 
   symlink(target: string, path: string, options: PathOptions = {}): void {
@@ -322,6 +370,7 @@ export class MemoryFileSystem {
     this.usedBytes += size;
     parent.node.children.set(parent.name, node);
     this.changed(parent.node);
+    this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
 
   unlink(path: string, options: PathOptions = {}): void {
@@ -335,6 +384,7 @@ export class MemoryFileSystem {
     node.linked = false;
     this.release(node);
     this.changed(parent.node);
+    this.notify({ kind: 'remove', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
 
   rmdir(path: string, options: PathOptions = {}): void {
@@ -349,6 +399,7 @@ export class MemoryFileSystem {
     node.linked = false;
     this.release(node);
     this.changed(parent.node);
+    this.notify({ kind: 'remove', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
 
   rename(from: string, to: string, options: PathOptions = {}): void {
@@ -381,6 +432,7 @@ export class MemoryFileSystem {
     source.node.children.delete(source.name);
     destination.node.children.set(destination.name, node);
     this.changed(source.node, destination.node, node);
+    this.notify({ kind: 'rename', path: `${destination.path === '/' ? '' : destination.path}/${destination.name}`, previousPath: sourcePath, inode: node.inode });
   }
 
   open(path: string, options: OpenOptions = {}): number {
@@ -430,16 +482,7 @@ export class MemoryFileSystem {
   getDirectoryPath(fd: number): string {
     const description = this.descriptor(fd);
     if (description.node.type !== 'directory') throw new FsError('ENOTDIR', 'Descriptor is not a directory');
-    const visit = (node: Inode, path: string): string | undefined => {
-      if (node === description.node) return path;
-      for (const [name, child] of node.children) {
-        if (child.type !== 'directory') continue;
-        const found = visit(child, `${path === '/' ? '' : path}/${name}`);
-        if (found !== undefined) return found;
-      }
-      return undefined;
-    };
-    const path = visit(this.root, '/');
+    const path = this.nodePath(description.node);
     if (path === undefined) throw new FsError('ENOENT', 'Directory descriptor has been unlinked');
     if (!within(path, description.root)) throw new FsError('EACCES', 'Directory moved outside its capability');
     return path;
@@ -494,9 +537,10 @@ export class MemoryFileSystem {
     this.file(node);
     if (bytes.length === 0) return 0;
     integer(offset + bytes.length, 'write end');
-    if (offset + bytes.length > node.data.length) this.resize(node, offset + bytes.length);
+    if (offset + bytes.length > node.data.length) this.resize(node, offset + bytes.length, false);
     node.data.set(bytes, offset);
     this.changed(node);
+    this.notifyFile(node);
     return bytes.length;
   }
 
@@ -510,7 +554,7 @@ export class MemoryFileSystem {
     return description.offset = next;
   }
 
-  private resize(node: Inode, length: number): void {
+  private resize(node: Inode, length: number, notify = true): void {
     integer(length, 'length');
     this.writable(node);
     this.file(node);
@@ -519,7 +563,7 @@ export class MemoryFileSystem {
     resized.set(node.data.subarray(0, length));
     this.usedBytes += length - node.data.length;
     node.data = resized;
-    this.changed(node);
+    if (notify) { this.changed(node); this.notifyFile(node); }
   }
 
   truncate(path: string, length = 0, options: PathOptions = {}): void { this.resize(this.resolve(path, options).node, length); }
@@ -564,6 +608,7 @@ export class MemoryFileSystem {
     this.usedBytes = candidate.usedBytes;
     this.nextInode = candidate.nextInode;
     this.revision++;
+    this.notify({ kind: 'rescan', path: '/' });
   }
 
   /** Decode a structured-clone snapshot only after validating the entire namespace. */
@@ -785,5 +830,6 @@ export class MemoryFileSystem {
     this.nodes = nodes; this.mounts = candidate.mounts;
     this.usedBytes = candidate.usedBytes + retainedBytes; this.nextInode = candidate.nextInode;
     this.revision++;
+    this.notify({ kind: 'rescan', path: '/' });
   }
 }
