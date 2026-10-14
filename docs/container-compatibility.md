@@ -5,7 +5,7 @@ capabilities. The existing playground's support is not evidence of container sup
 
 | Capability | Baseline evidence | Container status at C-01 |
 | --- | --- | --- |
-| Bash builtins | Real GNU Bash WEBc, WASIX SDK 0.10.0 | G0 external exec pending |
+| Bash builtins | Real GNU Bash WASIX WEBc run by `@wasmer/sdk` 0.10.0 | G0 external exec pending |
 | Bash external adapter | No public JavaScript command callback established | G0-SHELL/FD/FS/CANCEL pending |
 | C/C++ compilation | Existing LLVM high-level API; complete selected-target headers | Generic CLI/tool-host pending |
 | User WASI artifact | Existing browser WASI host | Common VFS/byte fd Worker profile pending |
