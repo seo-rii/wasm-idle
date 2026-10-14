@@ -26,3 +26,23 @@ test('path create and truncate require parent capabilities even with inherited w
   assert.equal(fs.readFile('/workspace/x')[0], 1);
   assert.throws(() => fs.stat('/workspace/y'));
 }));
+test('initial_cwd writes the exact NUL-terminated cwd and rejects short or out-of-bounds buffers', () => {
+  const fs = new MemoryFileSystem(); fs.mkdir('/workspace/한 글');
+  const memory = new WebAssembly.Memory({ initial: 1, maximum: 1 });
+  const host = createWasiHost({ fs, args: [], env: {}, cwd: '/workspace/한 글', stdin: new Uint8Array(), maxOutputBytes: 128 });
+  const expected = new TextEncoder().encode('/workspace/한 글\0');
+  try {
+    host.run({ exports: { memory, _start: () => {
+      const { initial_cwd } = host.processImports;
+      const view = new Uint8Array(memory.buffer);
+      view.fill(7, 0, 64);
+      assert.equal(initial_cwd(0, expected.length - 1), -1);
+      assert.deepEqual(view.subarray(0, 64), new Uint8Array(64).fill(7));
+      assert.equal(initial_cwd(65536 - expected.length + 1, expected.length), -1);
+      assert.equal(initial_cwd(-1, expected.length), -1);
+      assert.equal(initial_cwd(0, expected.length), expected.length);
+      assert.deepEqual(view.subarray(0, expected.length), expected);
+      assert.equal(view[expected.length], 7);
+    } } });
+  } finally { host.dispose(); }
+});
