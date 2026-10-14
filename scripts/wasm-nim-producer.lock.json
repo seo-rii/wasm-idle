@@ -1,0 +1,7 @@
+{
+  "producerId": "wasm-llvm/nim-browser",
+  "format": "wasm-llvm-nim-browser-artifacts-v1",
+  "manifestSha256": "f472c71416f1c57227274ecfe1743621bade4637786cacc413cbb99390f43dc1",
+  "sourceLockSha256": "4a0372bd7830ee54305211838c62dcb2539585451a44cff5c72005621d2e27d8",
+  "receiptSha256": "97dc1bd62623c4b0e17723297b28f0409368e6684d78e065df6feccc126b1913"
+}

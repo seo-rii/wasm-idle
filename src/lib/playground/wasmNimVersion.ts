@@ -5,10 +5,10 @@ export const WASM_NIM_RUNTIME_PROFILE = {
 	llvmRevision: '8e78cdb9caa80f75ed86d6632cb4e9310b22748c',
 	memfsRevision: '0399d5a9682b3cef71c653373e38890c63c4c365',
 	emscriptenRevision: 'unrecorded',
-	manifestFingerprint: 'ee0d08a6d723d4a1afe2ce909bfed2f4d01eb71ddd330898c85c543218b6d2cf',
+	manifestFingerprint: '0b31736fcfc4151d192dcc2cc2b95ae2470908b073964921be3ec4ade47fcec8',
 	manifestReceipt: {
 		bytes: 7002,
-		sha256: 'b9d11fcc43eab9764b5864c37952e932d2d08e33c33c18278ef4f312ba6c0089'
+		sha256: '8c4d82ed874f766d5c002708d3d7ef9634d86ee81165d3f5a3307c9223362916'
 	},
 	nimJavaScriptReceipt: {
 		bytes: 1873825,
@@ -27,8 +27,8 @@ export const WASM_NIM_RUNTIME_PROFILE = {
 		sha256: '28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d'
 	},
 	clangJavaScriptReceipt: {
-		bytes: 19511,
-		sha256: '06cd96ca1f66204a61133b2cabb0dd97132ddf65931f7fc1586fede9ee01754a'
+		bytes: 20120,
+		sha256: '10bc73c5119f2efdebd45ee361756a0d280b37ad64837b57d373f8243d2f627c'
 	},
 	clangWasmReceipt: {
 		bytes: 10620308,
@@ -58,8 +58,8 @@ export const WASM_NIM_RUNTIME_PROFILE = {
 export const WASM_NIM_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_NIM_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 44235,
-		sha256: 'b4b09d7d9252296a8b118dca3dc9f43f10f57da955081a9a294fe06279919ac2'
+		bytes: 47292,
+		sha256: '54094e89b6bff8cd1f543582b5c1e3ae59617363f6f346c98d1897c6c93b36cd'
 	}
 });
 export const WASM_NIM_ASSET_VERSION = WASM_NIM_RUNTIME_PROFILE.manifestFingerprint;

@@ -2,7 +2,7 @@
   "format": "wasm-nim-runtime-manifest-v2",
   "runtime": "benagastov-nim-wasm-compiler",
   "profileId": "nim-2.2.4-benagastov-ca3471ae",
-  "fingerprint": "ee0d08a6d723d4a1afe2ce909bfed2f4d01eb71ddd330898c85c543218b6d2cf",
+  "fingerprint": "0b31736fcfc4151d192dcc2cc2b95ae2470908b073964921be3ec4ade47fcec8",
   "licenseExpression": "MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party",
   "artifact": {
     "kind": "content-locked-git-archive-prebuilt",
@@ -75,8 +75,8 @@
   "metadata": {
     "path": "runtime-build.json",
     "mediaType": "application/json",
-    "size": 5168,
-    "sha256": "f734345d2908576beeafcb6fc9af6101431c125a4385792d7c58389b457bcdc3"
+    "size": 5542,
+    "sha256": "e46450ab27136fd58262159bfcd931d7732f741b4fe714df63047075657b217a"
   },
   "assets": [
     {
@@ -100,8 +100,8 @@
     {
       "path": "clang/clang.js",
       "mediaType": "text/javascript",
-      "size": 19511,
-      "sha256": "06cd96ca1f66204a61133b2cabb0dd97132ddf65931f7fc1586fede9ee01754a"
+      "size": 20120,
+      "sha256": "10bc73c5119f2efdebd45ee361756a0d280b37ad64837b57d373f8243d2f627c"
     },
     {
       "path": "clang/clang.wasm",
@@ -154,8 +154,8 @@
       "path": "clang/clang.js.bin",
       "logicalPath": "clang/clang.js",
       "encoding": "identity",
-      "size": 19511,
-      "sha256": "06cd96ca1f66204a61133b2cabb0dd97132ddf65931f7fc1586fede9ee01754a"
+      "size": 20120,
+      "sha256": "10bc73c5119f2efdebd45ee361756a0d280b37ad64837b57d373f8243d2f627c"
     },
     {
       "path": "clang/clang.wasm.gz.bin",

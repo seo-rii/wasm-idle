@@ -713,7 +713,7 @@ function restoreRuntimeGlobals(snapshot) {
 	}
 }
 
-function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) {
+function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000, compilerModule, compilerBytes) {
 	return new Promise((resolve, reject) => {
 		let settled = false;
 		let failed = false;
@@ -761,7 +761,15 @@ function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) 
 		};
 		self.addEventListener?.('unhandledrejection', onRejection);
 		try {
-			module.wasmBinary = exactArrayBuffer(verifiedRuntime.take('nim/nim.wasm'));
+			module.wasmBinary = exactArrayBuffer(compilerBytes ?? verifiedRuntime.take('nim/nim.wasm'));
+			if (compilerModule) {
+				module.instantiateWasm = (imports, receiveInstance) => {
+					WebAssembly.instantiate(compilerModule, imports)
+						.then((instance) => receiveInstance(instance, compilerModule))
+						.catch((error) => finish(error));
+					return {};
+				};
+			}
 			self.Nim = module;
 			self.Module = module;
 			importVerifiedRuntimeScript(verifiedRuntime.take('nim/nim-bundle.js'));
@@ -771,8 +779,8 @@ function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) 
 	});
 }
 
-async function loadNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs) {
-	return await installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs);
+async function loadNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs, compilerModule, compilerBytes) {
+	return await installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs, compilerModule, compilerBytes);
 }
 
 function withCapturedConsole(stdout, stderr, callback) {
@@ -907,9 +915,21 @@ static int wasm_idle_errno;
 	return `${header}\n${cleaned}\n`;
 }
 
-async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
+async function buildWasm({ verifiedRuntime, code, stdout, stderr, runtimeWasmModulePorts, compileTimeoutMs }) {
+	const shared = runtimeWasmModulePorts !== undefined;
+	if (shared && (
+		!hasExactKeys(runtimeWasmModulePorts, ['clang', 'lld', 'memfs', 'nim']) ||
+		typeof globalThis.__wasmIdleRequestRuntimeWasmModule !== 'function' ||
+		Object.values(runtimeWasmModulePorts).some((port) =>
+			!(port instanceof MessagePort)
+		)
+	)) throw new Error('Nim compiler module service is invalid.');
+	const nimBytes = verifiedRuntime.take('nim/nim.wasm');
+	const nimModule = shared
+		? await globalThis.__wasmIdleRequestRuntimeWasmModule(nimBytes.slice(), runtimeWasmModulePorts.nim, { timeoutMs: compileTimeoutMs })
+		: undefined;
 	postProgress(5, 'Loading Nim compiler');
-	const nim = await loadNimCompiler(verifiedRuntime, stdout, stderr);
+	const nim = await loadNimCompiler(verifiedRuntime, stdout, stderr, compileTimeoutMs, nimModule, nimBytes);
 	postProgress(20, 'Translating Nim to C');
 	const { cacheDir, cFiles } = compileNimToC(nim, code, stdout, stderr);
 	let nimbaseContent;
@@ -940,10 +960,16 @@ async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
 		throw new Error('Nim verified clang module evaluation is unavailable.');
 	}
 	const compilerAssets = {};
+	const compilerModules = shared ? {} : undefined;
 	for (const assetName of ['clang.wasm', 'lld.wasm', 'memfs.wasm', 'sysroot.tar']) {
-		compilerAssets[assetName] = exactArrayBuffer(
-			await verifiedRuntime.take(`clang/${assetName}`)
-		);
+		const bytes = verifiedRuntime.take(`clang/${assetName}`);
+		compilerAssets[assetName] = exactArrayBuffer(bytes);
+		if (shared && assetName.endsWith('.wasm')) {
+			const key = assetName.slice(0, -5);
+			compilerModules[assetName] = await globalThis.__wasmIdleRequestRuntimeWasmModule(
+				bytes.slice(), runtimeWasmModulePorts[key], { timeoutMs: compileTimeoutMs }
+			);
+		}
 	}
 	const clangModuleUrl = URL.createObjectURL(
 		new Blob([clangSourceBytes], { type: 'text/javascript' })
@@ -954,7 +980,7 @@ async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
 	try {
 		const clangModule = await import(clangModuleUrl);
 		console.log = (...args) => clangLogs.push(args.map(String).join(' '));
-		await clangModule.init({ assets: compilerAssets });
+		await clangModule.init({ assets: compilerAssets, ...(shared ? { modules: compilerModules } : {}) });
 		postProgress(50, 'Compiling and linking Nim output');
 		const result = await clangModule.compileEachLink(files, 'app.wasm');
 		if (result?.ok !== true) {
@@ -1283,7 +1309,9 @@ async function runVerifiedNim({
 	args,
 	activePath,
 	compilerStdout,
-	compilerStderr
+	compilerStderr,
+	runtimeWasmModulePorts,
+	compileTimeoutMs
 }) {
 	const snapshot = snapshotRuntimeGlobals();
 	let failure;
@@ -1294,7 +1322,9 @@ async function runVerifiedNim({
 			verifiedRuntime,
 			code,
 			stdout: compilerStdout,
-			stderr: compilerStderr
+			stderr: compilerStderr,
+			runtimeWasmModulePorts,
+			compileTimeoutMs
 		});
 		result = await createWasiRunner({
 			stdinReader,
@@ -1334,7 +1364,9 @@ self.onmessage = async (event) => {
 		stdinChannel,
 		args,
 		activePath = 'main.nim',
-		log
+		log,
+		runtimeWasmModulePorts,
+		executionLimits
 	} = event.data || {};
 	const compilerStdout = [];
 	const compilerStderr = [];
@@ -1358,7 +1390,9 @@ self.onmessage = async (event) => {
 			args: args || [],
 			activePath,
 			compilerStdout,
-			compilerStderr
+			compilerStderr,
+			runtimeWasmModulePorts,
+			compileTimeoutMs: executionLimits?.compileTimeoutMs
 		});
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);

@@ -816,7 +816,7 @@ const nimTestLogicalBytes: Readonly<Record<string, Uint8Array>> = Object.freeze(
 	'nim/nim.wasm': nimTestWasmBytes,
 	'nim/nimbase.h': new TextEncoder().encode('#define NIM_INTBITS 32\n'),
 	'clang/clang.js': new TextEncoder().encode(
-		'const fixture="payload:{port:c,assets:l} async function p({assets:l}) compile-each-link-done";\n'
+		'const fixture="payload:{port:c,assets:l.assets,modules:l.modules} async function p({assets:l,modules:c}) compile-each-link-done";\n'
 	),
 	'clang/clang.wasm': nimTestWasmBytes,
 	'clang/lld.wasm': nimTestWasmBytes,
