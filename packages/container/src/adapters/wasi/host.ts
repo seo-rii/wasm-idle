@@ -6,7 +6,7 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 10, EEXIST: 20, EFAULT: 21, EFBIG: 22, EINVAL: 28, EIO: 29, EISDIR: 31, ELOOP: 32, EMFILE: 33, ENOENT: 44, ENOMEM: 48, ENOSPC: 51, ENOSYS: 52, ENOTDIR: 54, ENOTEMPTY: 55, ENOTSUP: 58, EPERM: 63, EPIPE: 64, EROFS: 69, EXDEV: 75, ENOTCAPABLE: 76 };
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
-interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; }
+interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; entries?: readonly WasiDirectoryEntry[]; }
 export interface WasiPathReference { readonly directory: number; readonly path: string; readonly root: string; }
 export interface WasiDirectoryEntry { readonly name: string; readonly stat: FileStat; }
 /** Optional atomic path binding: a live host must resolve dirfds on its resource owner. */
@@ -213,8 +213,13 @@ export function createWasiHost(options: HostOptions) {
     fd_readdir: (fd, ptr, length, cookie, result) => {
       const h = handle(fd, 1n << 14n);
       span(result, 4); const destination = span(ptr, length); let written = 0;
-      const entries = paths.entries(h.fd), start = safeOffset(cookie);
+      const start = safeOffset(cookie);
       if (start < 0) return 28;
+      if (!destination.length) { put32(result, 0); return 0; }
+      // Cookies index one listing owned by this open directory, not a re-sorted
+      // namespace after each mutation. Explicit rewind refreshes that listing.
+      if (start === 0 || !h.entries) h.entries = paths.entries(h.fd);
+      const entries = h.entries;
       for (let i = start; i < entries.length && written < destination.length; i++) {
         const { name, stat: info } = entries[i]!, encoded = encoder.encode(name);
         const record = new Uint8Array(24 + encoded.length), v = new DataView(record.buffer);
