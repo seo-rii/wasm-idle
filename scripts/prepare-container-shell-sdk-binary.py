@@ -215,9 +215,9 @@ def admitted(root, recipe):
 
 def run(root):
     status = 3
-    guard.enable_cleanup()
     receipt = {"schemaVersion": 1, "complete": False, "guestQualified": False, "startedAtUnix": time.time()}
     try:
+        guard.enable_cleanup()
         recipe, policy = checked_plan(root)
         if not (root / "started.json").is_file():
             raise ValueError("start only through --launch")
