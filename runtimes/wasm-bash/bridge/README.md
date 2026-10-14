@@ -171,32 +171,58 @@ the patch and compile-probe hashes. It installs the probe as the SDK example
 or modify an active checkout. The dry-run receipt is not full preparation or
 SDK compile evidence.
 
-After provisioning the pinned nightly, `rust-src` and locked dependencies, run
-the genuine checks from the prepared SDK directory. Use distinct physical
-target and intermediate directories for this particular source copy, and keep
-the SDK's atomics/build-std configuration intact:
+After provisioning the pinned nightly and `rust-src`, prefetch all locked
+dependency targets for both the SDK and the pinned standard-library source
+workspace. Run from the prepared SDK directory, using the private toolchain
+home and distinct physical target/intermediate directories for this source
+copy. Keep the SDK's atomics/build-std configuration intact:
 
 ```sh
-CARGO_TARGET_DIR=/private/run/sdk-target \
-  CARGO_BUILD_BUILD_DIR=/private/run/sdk-intermediate \
-  CARGO_PROFILE_DEV_DEBUG=0 \
-  cargo +nightly-2025-07-05 check --locked --offline \
-    --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1
+export RUSTUP_HOME=/private/prerequisites/rustup
+export CARGO_TARGET_DIR=/private/run/sdk-target
+export CARGO_BUILD_BUILD_DIR=/private/run/sdk-intermediate
+export CARGO_PROFILE_DEV_DEBUG=0
+
+cargo +nightly-2025-07-05 fetch --locked
+cargo +nightly-2025-07-05 fetch --locked \
+  --manifest-path "$RUSTUP_HOME/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.toml"
+
+cargo +nightly-2025-07-05 check --locked --offline \
+  --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1
 ```
+
+Omit `--target` in both prefetch steps; retain it for the offline check. The
+exact pinned Cargo [fetch implementation](https://github.com/rust-lang/cargo/blob/930b4f62cfcd1f0eabdb30a56d91bf6844b739bf/src/cargo/ops/cargo_fetch.rs)
+filters explicit fetch targets, while its [check download filtering](https://github.com/rust-lang/cargo/blob/930b4f62cfcd1f0eabdb30a56d91bf6844b739bf/src/cargo/core/package.rs)
+also considers the host. The unfiltered fetch includes every platform in the
+locked graph even when SDK `build.target` is set. Preserve both lockfile hashes;
+do not update dependency versions or substitute a different nightly to fill a
+cache miss.
 
 The example is an external crate target, so crate-private runtime state would
 cause a real Rust privacy failure. Missing dependencies or toolchain are not a
 passing compile check. Use a sequential bounded background process with private
 log/status files; full rebuild and real Bash/browser gates remain separate.
 
+The separate [SDK preparation receipt](evidence.sdk-check-preparation.json)
+records the first supervised check attempt. Both wasm-targeted fetches exited
+zero, but the offline check exited 101 before Rust typing because locked
+`corosensei@0.3.0` had not been downloaded. All three owned process groups were
+reaped. This records incomplete dependency preparation, not a snapshot type
+failure or a successful SDK compile. The original five-patch dry-run receipt
+remains unchanged and does not cover this later attempt.
+
 ## Remaining runtime gate
 
 The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and build-std; its
-Cargo lock contains 457 packages. The required nightly was not installed in the inspected
-build environment. Existing Bash source/sysroot artifacts were not found in the producer's
-configured cache roots. Full SDK/Bash rebuild and Wasmer typechecking were deferred because
-of shared-host memory/IO load and limited private output space. No memory or disk estimate
-is a measured producer requirement, and no previous or unrelated cache was deleted.
+Cargo lock contains 457 packages. The earlier source inspection lacked the required
+nightly; the recorded preparation attempt used an isolated installation of the exact
+pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
+prefetch and genuine Wasmer/SDK Rust typing remain pending. Existing Bash source/sysroot
+artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
+and actual browser qualification still require a sequential resource budget. No memory
+or disk estimate is a measured producer requirement, and no previous or unrelated cache
+was deleted.
 
 Next, reserve a sequential build slot and private output budget, build the pinned SDK and
 real Bash with this shim, and verify actual imports and new artifact receipts. Then qualify

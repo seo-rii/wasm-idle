@@ -1,0 +1,153 @@
+{
+	"schemaVersion": 1,
+	"status": "dependency-preparation-incomplete-before-rust-typing",
+	"applicationCommit": "bd25e68cc542e51b2ee51e4895429513efbab5c9",
+	"sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+	"toolchain": {
+		"channel": "nightly-2025-07-05",
+		"privateRustupHome": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup",
+		"rustc": {
+			"release": "1.90.0-nightly",
+			"commit": "e3843659e9f65f589d184d1221ac6149d5fa07b5",
+			"commitDate": "2025-07-04",
+			"host": "x86_64-unknown-linux-gnu",
+			"llvmVersion": "20.1.7"
+		},
+		"cargo": {
+			"release": "1.90.0-nightly",
+			"commit": "930b4f62cfcd1f0eabdb30a56d91bf6844b739bf",
+			"commitDate": "2025-06-28",
+			"host": "x86_64-unknown-linux-gnu"
+		}
+	},
+	"sourcePreparationReceipt": {
+		"path": "/data/seorii-container-20261014/shell-sdk-snapshot-check-20261014-source/receipt.json",
+		"bytes": 1650,
+		"sha256": "4cca6994099825c89ed707cd557b35f00c420bd165947f1f92bc8df770df7357"
+	},
+	"historicalSnapshotSourceReceipt": {
+		"path": "/home/seorii/dev/hancomac/tmp/container-20261013/assets/runtimes/wasm-bash/bridge/evidence.snapshot-source-checks.json",
+		"bytes": 1758,
+		"sha256": "a41bb8d9fe4aff22aeaddf276f34ebf959cccaae83fa39b9768d4664b80087c9"
+	},
+	"lockfiles": {
+		"sdk": {
+			"path": "/data/seorii-container-20261014/shell-sdk-snapshot-check-20261014-source/wasmer-sdk/Cargo.lock",
+			"bytes": 114779,
+			"sha256": "234c4afcc75325358fb9fc7807b53b6b1e3db7526cf68c9954f191c7d548cd72"
+		},
+		"standardLibrary": {
+			"path": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.lock",
+			"bytes": 10886,
+			"sha256": "207129d8edc2cb762f8556dce440012854d28ca2d8774852fb00ee0a32191fc5"
+		}
+	},
+	"executionPolicy": {
+		"path": "/data/seorii-container-20261014/container-next-gates-20261014/policy.json",
+		"bytes": 175624,
+		"sha256": "229a60ff6d8476be596d4b2f38946d8a667abcfabf165eecf7164e2ac5663280"
+	},
+	"stages": [
+		{
+			"name": "sdk-fetch",
+			"argv": [
+				"/home/seorii/.cargo/bin/cargo",
+				"+nightly-2025-07-05",
+				"fetch",
+				"--locked",
+				"--target",
+				"wasm32-unknown-unknown"
+			],
+			"startedAtUtc": "2026-10-14T10:53:28.931566+00:00",
+			"exitCode": 0,
+			"wallSeconds": 11.02,
+			"cleanupAllReaped": true,
+			"processReceipt": {
+				"path": "/data/seorii-container-20261014/container-next-gates-20261014/sdk-fetch.process.json",
+				"bytes": 1241,
+				"sha256": "f3b746cd5602b2e4028a3be03648f7c50101b476e4bb0a51c41da3a69a85c3e6"
+			},
+			"log": {
+				"path": "/home/seorii/logs/container-next-gates-20261014-sdk-fetch.log",
+				"bytes": 8545,
+				"sha256": "6dc52cf4fe28e554e04202eb48692a190b80180e3aa60f7ac293ce1121dd6763"
+			}
+		},
+		{
+			"name": "sdk-std-fetch",
+			"argv": [
+				"/home/seorii/.cargo/bin/cargo",
+				"+nightly-2025-07-05",
+				"fetch",
+				"--locked",
+				"--manifest-path",
+				"/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.toml",
+				"--target",
+				"wasm32-unknown-unknown"
+			],
+			"startedAtUtc": "2026-10-14T10:53:40.343648+00:00",
+			"exitCode": 0,
+			"wallSeconds": 0.505,
+			"cleanupAllReaped": true,
+			"processReceipt": {
+				"path": "/data/seorii-container-20261014/container-next-gates-20261014/sdk-std-fetch.process.json",
+				"bytes": 1108,
+				"sha256": "1c68e03b4ece076d79ac0f223f86c752c7a3f2832688e269d209151161ebc0d7"
+			},
+			"log": {
+				"path": "/home/seorii/logs/container-next-gates-20261014-sdk-std-fetch.log",
+				"bytes": 102,
+				"sha256": "38e011cde45502aa4ce5de7ffdf3b54733145e940cd279c9113fb70218740440"
+			}
+		},
+		{
+			"name": "sdk-check",
+			"argv": [
+				"/home/seorii/.cargo/bin/cargo",
+				"+nightly-2025-07-05",
+				"check",
+				"--locked",
+				"--offline",
+				"--target",
+				"wasm32-unknown-unknown",
+				"--lib",
+				"--example",
+				"container_command_snapshot_compile",
+				"-j",
+				"1"
+			],
+			"startedAtUtc": "2026-10-14T10:53:41.137032+00:00",
+			"exitCode": 101,
+			"wallSeconds": 0.505,
+			"cleanupAllReaped": true,
+			"processReceipt": {
+				"path": "/data/seorii-container-20261014/container-next-gates-20261014/sdk-check.process.json",
+				"bytes": 1023,
+				"sha256": "c3523881b16700a3a73c499365560f0c13f35fa8f0c2873f2091bd1adec5db97"
+			},
+			"log": {
+				"path": "/home/seorii/logs/container-next-gates-20261014-sdk-check.log",
+				"bytes": 124,
+				"sha256": "025abb577a2fae11c5eb23e61b706c8eaefee741e2c42c859ae36c691d10d266"
+			}
+		}
+	],
+	"failure": {
+		"stage": "sdk-check",
+		"classification": "dependency-cache-miss",
+		"package": {
+			"name": "corosensei",
+			"version": "0.3.0",
+			"sha256": "878ba85678ef5d34ffe1b5da981b0828232b4c7f2726b20984f59c7e79f6d514"
+		},
+		"diagnostic": "attempting to make an HTTP request, but --offline was specified",
+		"rustTyping": "not-reached"
+	},
+	"qualification": {
+		"sdkTypecheckPassed": false,
+		"snapshotCompileProbePassed": false,
+		"actualPatchedSdkOrBashExecution": false,
+		"liveSupervisorFdOrFilesystemBinding": false
+	},
+	"nextPreparation": "Unfiltered cargo fetch --locked for both existing SDK and pinned rust-src standard-library manifests, followed by the same locked offline wasm32 SDK/example check in unique physical target/intermediate directories. No version updates."
+}
