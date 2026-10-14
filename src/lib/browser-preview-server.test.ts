@@ -237,6 +237,10 @@ describe('startBrowserPreviewServer', () => {
 	});
 
 	it('does not reclaim an old preparation lock while its owner process is alive', async () => {
+		// beforeEach restores the real spawn; a stolen lock must not start a real preview build.
+		vi.mocked(childProcess.spawn).mockImplementation(() => {
+			throw new Error('preparation scripts must not run while the lock owner is alive');
+		});
 		mkdirSync(path.dirname(PREPARATION_LOCK_DIR), { recursive: true });
 		mkdirSync(PREPARATION_LOCK_DIR);
 		try {
