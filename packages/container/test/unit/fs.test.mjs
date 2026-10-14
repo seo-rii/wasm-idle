@@ -6,6 +6,23 @@ const bytes = (text) => new TextEncoder().encode(text);
 const text = (value) => new TextDecoder().decode(value);
 const error = (code) => (value) => value instanceof FsError && value.code === code && value.errno === code;
 
+test('VFS owns Buffer inputs across create, overwrite, snapshot and readonly package admission', () => {
+  for (const kind of ['create', 'overwrite', 'snapshot', 'package']) {
+    let fs = new MemoryFileSystem(); const input = Buffer.from('old'); let path = '/workspace/a';
+    if (kind === 'overwrite') fs.writeFile(path, bytes('previous'));
+    if (kind === 'snapshot') {
+      fs.writeFile(path, bytes('placeholder')); const snapshot = fs.exportSnapshot();
+      const entries = snapshot.entries.map(entry => entry.path === path ? { ...entry, data: input } : entry);
+      fs = MemoryFileSystem.fromSnapshot({ ...snapshot, entries });
+    } else if (kind === 'package') {
+      fs.mountReadonly('/opt/toolchains/test', [{ path: 'a', type: 'file', mode: 0o444, data: input }]); path = '/opt/toolchains/test/a';
+    } else fs.writeFile(path, input);
+    const generation = fs.generation; input.fill(0); fs.readFile(path).fill(0);
+    const snapshot = fs.exportSnapshot(); snapshot.entries.find(entry => entry.path === path).data.fill(0);
+    assert.equal(text(fs.readFile(path)), 'old', kind); assert.equal(fs.generation, generation, kind);
+  }
+});
+
 test('FS-01: relative paths, real cwd, UTF-8, and backslash names', () => {
   const fs = new MemoryFileSystem();
   fs.mkdir('/workspace/project/src', { recursive: true });

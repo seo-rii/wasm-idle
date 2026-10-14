@@ -312,7 +312,7 @@ export class MemoryFileSystem {
       if (parent.node.children.has(parent.name)) throw error;
       if (path.endsWith('/')) throw new FsError('ENOTDIR', 'File path ends with a slash');
       if (this.usedBytes + bytes.length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
-      const copied = bytes.slice();
+      const copied = Uint8Array.from(bytes);
       node = this.allocate('file', parent.node.mount, options.mode ?? 0o644);
       node.data = copied;
       this.usedBytes += copied.length;
@@ -324,7 +324,7 @@ export class MemoryFileSystem {
     this.writable(node);
     this.file(node);
     if (this.usedBytes - node.data.length + bytes.length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
-    const copied = bytes.slice();
+    const copied = Uint8Array.from(bytes);
     this.usedBytes += copied.length - node.data.length;
     node.data = copied;
     this.changed(node);
@@ -675,7 +675,7 @@ export class MemoryFileSystem {
       node.inode = entry.inode;
       if (entry.mtimeMs !== undefined) node.mtimeMs = entry.mtimeMs;
       if (entry.ctimeMs !== undefined) node.ctimeMs = entry.ctimeMs;
-      node.data = entry.data?.slice() ?? new Uint8Array();
+      node.data = entry.data ? Uint8Array.from(entry.data) : new Uint8Array();
       node.target = entry.target ?? '';
       built.set(path, node);
       if (path === '/') fs.root = node;

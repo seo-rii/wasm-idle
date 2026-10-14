@@ -33,7 +33,7 @@ export function openWorkspaceEditor(fs: MemoryFileSystem, path: string, options:
     const info = fs.stat(canonical, { root: '/workspace' });
     if (info.type !== 'file') throw new FsError('EISDIR', 'Editor requires a regular file');
     if (info.size > max) throw new FsError('ENOSPC', 'File exceeds editor byte limit');
-    return { bytes: fs.readFile(canonical, { root: '/workspace' }), inode: info.inode, generation: fs.generation };
+    return { bytes: Uint8Array.from(fs.readFile(canonical, { root: '/workspace' })), inode: info.inode, generation: fs.generation };
   };
   let base = current(), buffer = base.bytes.slice(), state: WorkspaceEditorInspection['state'] = 'clean';
   const active = () => { if (state === 'disposed') throw new FsError('EBADF', 'Editor session is disposed'); };
@@ -43,7 +43,7 @@ export function openWorkspaceEditor(fs: MemoryFileSystem, path: string, options:
       active();
       if (!(bytes instanceof Uint8Array)) throw new FsError('EINVAL', 'Editor content requires bytes');
       if (bytes.length > max) throw new FsError('ENOSPC', 'Editor buffer exceeds its byte limit');
-      buffer = bytes.slice(); if (state !== 'conflict') state = equal(buffer, base.bytes) ? 'clean' : 'modified';
+      buffer = Uint8Array.from(bytes); if (state !== 'conflict') state = equal(buffer, base.bytes) ? 'clean' : 'modified';
     },
     inspect() { return Object.freeze({ path: canonical, inode: base.inode, baseGeneration: base.generation, workspaceGeneration: fs.generation, state }); },
     publish() {

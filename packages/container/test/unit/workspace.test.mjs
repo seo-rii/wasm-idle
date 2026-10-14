@@ -86,3 +86,10 @@ test('editor limits and workspace capability apply before reading or publishing 
   const editor = openWorkspaceEditor(fs, 'main.c', { maxFileBytes: 3 });
   assert.throws(() => editor.edit(bytes('four')), { code: 'ENOSPC' }); assert.equal(text(editor.read()), 'old'); editor.dispose();
 });
+test('editor owns Node Buffer input and output bytes despite Buffer.slice view semantics', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('main.c', bytes('old'));
+  const editor = openWorkspaceEditor(fs, 'main.c'), input = Buffer.from('new');
+  editor.edit(input); input.fill(0); assert.equal(text(editor.read()), 'new');
+  const output = editor.read(); output.fill(0); assert.equal(text(editor.read()), 'new');
+  editor.publish(); assert.equal(text(fs.readFile('main.c')), 'new'); editor.dispose();
+});
