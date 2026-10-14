@@ -377,7 +377,7 @@ self.onmessage = async (event: { data: any }) => {
 			await loadFortranRuntime(clangAssets, fortranAssets, log);
 			postMessage({ load: true });
 		} catch (error: any) {
-			postMessage({ error: error.message });
+			postMessage({ error: error?.message || String(error) });
 		}
 	} else if (typeof log === 'boolean' && !code) {
 		if (clang) clang.log = log;
@@ -413,7 +413,7 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			postMessage({ results: true });
 		} catch (error: any) {
-			postMessage({ error: error.message });
+			postMessage({ error: error?.message || String(error) });
 		}
 	}
 };
