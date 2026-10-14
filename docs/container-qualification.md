@@ -11,6 +11,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Scope and boundaries | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128) | main at implementation start |
 | Real Bash probe and backend decision | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133) | C-01, independent experiment |
 | Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks only, modified SDK execution pending |
+| Owned prepared-child command metadata | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft) | #149; five source patch checks pass; genuine SDK/example typecheck and fd/FS bridge pending |
 | Package/API | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135) | C-01 |
 | VFS and writer leases | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136) | C-03 |
 | Byte pipes/fds | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137) | C-04 |
@@ -21,6 +22,7 @@ been implemented; unpassed promotion gates remain explicit.
 | LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual Chromium batch C/C++ passes on the C-11 follow-up; full header-regression corpus pending |
 | Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links, producer CLI and Chromium consumer pass; full header-regression corpus pending |
 | Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache checks pass; full header-regression corpus pending |
+| Selected-target header compile corpus | [C-11 headers #188](https://github.com/seo-rii/wasm-idle/pull/188) (draft) | #159; exact established producer sources plus one resource fixture, 14 real compiler cases awaiting Node/Chromium receipts |
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
@@ -163,8 +165,8 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
-| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
-| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance and Chromium batch C/C++ compile/link/artifacts pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; qualify the full header-regression corpus and remaining CLI coverage before command-alpha promotion |
+| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; #189 adds owned prepared-child metadata, with actual SDK types and common fd/FS routing still to qualify before C-15 |
+| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance and Chromium batch C/C++ compile/link/artifacts pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 runs the established producer header corpus before command-alpha promotion |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
@@ -278,6 +280,14 @@ dispatch framing and Rust/C protocol checks pass, but no newly built SDK has pas
 argv/environment/fd/filesystem/cancel acceptance. That source patch is not a production shell
 backend. Harness preparation and the existing playground's successful Clang regression remain
 distinct from C-11's separately recorded execution of the modified compiler.
+
+The source-only #189 follow-up adds an immutable owned snapshot of the prepared child's
+argv, raw environment bytes and actual WASIX cwd. It exposes no mutable state or fd/FS
+capability; the external SDK compile probe returns an explicit unsupported error if invoked.
+Five patch dry-runs and preparation guards pass. The exact nightly-2025-07-05, rust-src and
+wasm32 target are now installed in a private toolchain home, with exit 0 and complete process
+cleanup. Genuine patched SDK/example typechecking remains a separate pending gate, using
+fresh physical Cargo target and intermediate directories.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
