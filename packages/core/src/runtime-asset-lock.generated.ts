@@ -866,7 +866,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"wasm-nim/nim/nim.wasm.gz.bin": {"sha256":"48f519c32c4f202c1685c0509ad593612e289845549e824fdf95823f36f18f67","bytes":1558514,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"40e8c62fb96ee786fcd91f0ee2306241adeaf38c148bc8ec9788e0cc5cb26567","uncompressedBytes":4812366},
 		"wasm-nim/nim/nimbase.h": {"sha256":"28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d","bytes":20734,"mediaType":"application/octet-stream"},
 		"wasm-nim/nim/nimbase.h.bin": {"sha256":"28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d","bytes":20734,"mediaType":"application/octet-stream"},
-		"wasm-nim/runner-worker.js": {"sha256":"54094e89b6bff8cd1f543582b5c1e3ae59617363f6f346c98d1897c6c93b36cd","bytes":47292,"mediaType":"text/javascript"},
+		"wasm-nim/runner-worker.js": {"sha256":"566b50f0b27a869a3b22ebe716c803ffee1b800cf63f126b6556f9985420ec3c","bytes":47300,"mediaType":"text/javascript"},
 		"wasm-nim/runtime-build.json": {"sha256":"e46450ab27136fd58262159bfcd931d7732f741b4fe714df63047075657b217a","bytes":5542,"mediaType":"application/json"},
 		"wasm-nim/runtime-manifest.v1.json": {"sha256":"dfcb63f5557893f6d7b08d5f7a550a7b92edba180a6926951f3270cb86459f20","bytes":672,"mediaType":"application/json"},
 		"wasm-nim/runtime-manifest.v2.json": {"sha256":"8c4d82ed874f766d5c002708d3d7ef9634d86ee81165d3f5a3307c9223362916","bytes":7002,"mediaType":"application/json"},

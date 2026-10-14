@@ -1366,7 +1366,7 @@ self.onmessage = async (event) => {
 		activePath = 'main.nim',
 		log,
 		runtimeWasmModulePorts,
-		executionLimits
+		limits: executionLimits
 	} = event.data || {};
 	const compilerStdout = [];
 	const compilerStderr = [];
