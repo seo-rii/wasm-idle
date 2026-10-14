@@ -83,3 +83,10 @@ The browser test starts a local Vite server and Chromium. It covers the normal
 language selector/editor/terminal path plus the consumer Sandbox's arrays,
 same-file module, changed input, EOF, upstream diagnostics, output and memory
 limits, deadline, cancellation, and a fresh invocation after cancellation.
+
+## Shared compiler modules
+
+`createRuntimeSession` supplies an application-owned compiler module cache. The host validates
+the pinned `lfortran.wasm` logical bytes on every request and reuses the immutable native module
+across fresh compiler Workers. Linear memory, virtual files and generated LLVM/Emscripten side
+modules remain private to each run. Standalone sandboxes retain independent compilation.
