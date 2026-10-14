@@ -230,7 +230,7 @@ globalThis.clangBrowserFixture = {
 				);
 				await command('multi-file-link', [
 					'--target=wasm32-wasi',
-					`--ld-path=${linkerPath}`,
+					`-fuse-ld=${linkerPath}`,
 					'-nostdlib',
 					'-Wl,--export=_start,--max-memory=67108864,--export-memory',
 					'main file.o',
@@ -241,7 +241,7 @@ globalThis.clangBrowserFixture = {
 				await artifact('multi-file-artifact', 'hello.wasm', 'hello\n');
 				const defaults = [
 					'--target=wasm32-wasi',
-					`--ld-path=${linkerPath}`,
+					`-fuse-ld=${linkerPath}`,
 					`--sysroot=${sysroot}`,
 					`-resource-dir=${sysroot}/lib/clang/22`,
 					'-Wl,--max-memory=67108864'

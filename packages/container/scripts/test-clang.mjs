@@ -78,13 +78,13 @@ try {
   await run([`@${fixturePath('compile.rsp')}`]);
   await run(['--container-deliberately-unsupported-option'], 1);
   if (process.env.CONTAINER_CLANG_BRIDGE === '1') {
-    await run(['--target=wasm32-wasi', `--ld-path=${linkerPath}`, '-nostdlib', '-Wl,--export=_start,--max-memory=67108864,--export-memory', fixturePath('main file.o'), fixturePath('helper.o'), '-o', fixturePath('hello.wasm')]);
+    await run(['--target=wasm32-wasi', `-fuse-ld=${linkerPath}`, '-nostdlib', '-Wl,--export=_start,--max-memory=67108864,--export-memory', fixturePath('main file.o'), fixturePath('helper.o'), '-o', fixturePath('hello.wasm')]);
     const result = await c.run('wasm-run', ['/workspace/a b/hello.wasm'], { cwd: '/', timeoutMs: 10000 });
     assert.equal(result.code, 0); assert.equal(text(result.stdout), 'hello\n');
     results.push({ artifact: digest(c.fs.readFile('/workspace/a b/hello.wasm')), code: result.code, stdout: text(result.stdout) });
     if (process.env.CONTAINER_SYSROOT) {
       const sysroot = '/opt/toolchains/fixture/sysroot';
-      const defaults = ['--target=wasm32-wasi', `--ld-path=${linkerPath}`, `--sysroot=${sysroot}`, `-resource-dir=${sysroot}/lib/clang/22`, '-Wl,--max-memory=67108864'];
+      const defaults = ['--target=wasm32-wasi', `-fuse-ld=${linkerPath}`, `--sysroot=${sysroot}`, `-resource-dir=${sysroot}/lib/clang/22`, '-Wl,--max-memory=67108864'];
       write('/workspace/a b/stdio.c', '#include <stdio.h>\nint main(void){puts("hello");return 0;}\n');
       await run([...defaults, fixturePath('stdio.c'), '-o', fixturePath('stdio.wasm')]);
       const stdio = await c.run('wasm-run', ['/workspace/a b/stdio.wasm'], { cwd: '/', timeoutMs: 10000 });
