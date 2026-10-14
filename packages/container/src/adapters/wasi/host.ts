@@ -175,7 +175,8 @@ export function createWasiHost(options: HostOptions) {
     },
     fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if ((base | h.rights) !== h.rights || (inherited | h.inherited) !== h.inherited) return 76; h.rights = base; h.inherited = inherited; return 0; },
     fd_fdstat_set_flags: (fd, flags) => {
-      if (standard.has(fd)) return 58;
+      // Standard streams report no flags; only that unchanged value is accepted.
+      if (standard.has(fd)) return flags === 0 ? 0 : 58;
       const h = handle(fd, 8n);
       // Files/directories complete synchronously; NONBLOCK does not change I/O.
       // APPEND is part of the open description and cannot be changed here yet.

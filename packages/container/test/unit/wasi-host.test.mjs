@@ -47,7 +47,7 @@ test('regular files and directories retain NONBLOCK without changing append or g
     assert.equal(w.fd_fdstat_set_flags(fd, 0), 76); assert.equal(flags(fd), 4);
     assert.equal(w.fd_close(fd), 0);
   }
-  for (const fd of [0, 1, 2]) assert.equal(w.fd_fdstat_set_flags(fd, 4), 58);
+  for (const fd of [0, 1, 2]) { assert.equal(w.fd_fdstat_set_flags(fd, 4), 58); assert.equal(w.fd_fdstat_set_flags(fd, 0), 0); }
 }));
 test('directory cookies survive entry removal and refresh only on rewind', () => hostTest((w, memory, fs) => {
   for (const name of ['a', 'b', 'c', 'd', 'e']) fs.writeFile(`/workspace/${name}`, new Uint8Array());
