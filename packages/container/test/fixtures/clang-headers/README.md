@@ -31,7 +31,10 @@ The runner passes `-fno-exceptions` explicitly for every C++ case. The selected
 sysroot is the existing no-exception WASI profile; the adapter does not add or
 remove flags. Every command uses `--target=wasm32-wasi`, the pinned sysroot and
 Clang resource tree, `-c`, and `-MD`. Output and dependency files live in the
-common workspace. Each case records argv, cwd, status, raw compiler diagnostics,
+common workspace. Header search uses the real driver's defaults for those two
+roots; the fixture does not inject `-I` or reorder system includes. libc++'s
+C-header wrappers must precede WASI C headers.
+Each case records argv, cwd, status, raw compiler diagnostics,
 source/object/dependency hashes and actual header paths. The final receipt lists
 the observed header union with byte identities and verifies that those bytes
 remain unchanged. The full sysroot is mounted read-only and is never pruned to

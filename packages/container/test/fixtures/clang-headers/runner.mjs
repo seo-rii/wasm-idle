@@ -64,10 +64,11 @@ export async function runHeaderCorpus({ fs, runCommand, sysroot, cwd, sha256, ev
     fs.writeFile(`${cwd}/${name}`, bytes);
   }
   for (const fixture of corpus.cases) {
+    // Preserve the driver's C++/resource/C include ordering. Explicit include
+    // overrides can bypass libc++'s C-header wrappers even with a correct sysroot.
     const args = [
       '--target=wasm32-wasi', `--sysroot=${sysroot}`, `-resource-dir=${sysroot}/lib/clang/22`,
-      '-I', `${sysroot}/include`, '-isystem', `${sysroot}/include/wasm32-wasi`,
-      ...(fixture.language === 'c++' ? ['--driver-mode=g++', '-isystem', `${sysroot}/include/c++/v1`, ...corpus.cppFlags] : []),
+      ...(fixture.language === 'c++' ? ['--driver-mode=g++', ...corpus.cppFlags] : []),
       `-std=${fixture.standard}`, '-x', fixture.language, '-c', fixture.source,
       '-MD', '-MF', `${fixture.id}.d`, '-MT', 'container-header-probe', '-o', `${fixture.id}.o`
     ];
