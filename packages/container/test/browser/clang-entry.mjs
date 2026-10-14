@@ -6,6 +6,7 @@ import {
 import { createClangAdapter } from '../../src/adapters/clang/index.ts';
 import { createWasiAdapter } from '../../src/adapters/wasi/index.ts';
 import untar from '../../../llvm-core/runtime/core/src/tar.ts';
+import { runHeaderCorpus } from '../fixtures/clang-headers/runner.mjs';
 
 const encoder = new TextEncoder(),
 	decoder = new TextDecoder();
@@ -187,9 +188,15 @@ globalThis.clangBrowserFixture = {
 	},
 	async run(full) {
 		let failure;
+		const headerCorpus = {};
 		try {
 			await command('version', ['--version']);
-			if (full) {
+			if (full && config.headerRegression) {
+				await runHeaderCorpus({
+					fs: container.fs, sysroot, cwd, sha256, evidence: headerCorpus,
+					runCommand: (id, args) => command(id, args)
+				});
+			} else if (full) {
 				write('/workspace/include/demo.h', '#define BASE 40\n');
 				write(
 					`${cwd}/helper.c`,
@@ -285,6 +292,7 @@ globalThis.clangBrowserFixture = {
 			error: failure?.message,
 			full,
 			results,
+			...(config.headerRegression ? { headerCorpus } : {}),
 			liveWorkers,
 			startedWorkers,
 			inspection,

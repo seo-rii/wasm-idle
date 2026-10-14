@@ -14,9 +14,10 @@ import { digest, loadClangBrowserInputs } from './clang-browser-inputs.mjs';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const repository = resolve(packageRoot, '../..');
 const buildOnly = process.argv.slice(2).includes('--build-only');
+const headerRegression = process.argv.slice(2).includes('--headers');
 assert(
-	process.argv.slice(2).every((value) => value === '--build-only'),
-	'Only --build-only is supported'
+	process.argv.slice(2).every((value) => value === '--build-only' || value === '--headers'),
+	'Only --build-only and --headers are supported'
 );
 const timeoutMs = Number(process.env.CONTAINER_CLANG_TIMEOUT_MS ?? 120000);
 assert(
@@ -33,6 +34,7 @@ const evidence = {
 	node: process.version,
 	os: { platform: platform(), release: release(), arch: arch() },
 	timeoutMs,
+	headerRegression,
 	applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
 		cwd: repository,
 		encoding: 'utf8'
@@ -91,6 +93,8 @@ try {
 	for (const path of Object.keys(bundle.metafile.inputs).sort()) {
 		evidence.sources[path] = digest(await readFile(resolve(repository, path)));
 	}
+	if (headerRegression)
+		evidence.corpusSha256 = digest(await readFile(resolve(packageRoot, 'test/fixtures/clang-headers/corpus.json')));
 	if (buildOnly) {
 		console.log(
 			JSON.stringify({
@@ -198,6 +202,7 @@ try {
 				manifest,
 				manifestSha256,
 				timeoutMs,
+				headerRegression,
 				producerSha256: inputs.producerSha256,
 				assetURLs: [...requests.keys()].map((path) => `${origin}${path}`),
 				clangSha256: inputs.assets.clang.metadata.logical.sha256,
@@ -282,8 +287,9 @@ try {
 			'CSP/module/Worker browser errors must fail qualification'
 		);
 		evidence.passed = true;
-		evidence.qualification =
-			'Chromium batch snapshot Clang C/C++ CLI; full pinned sysroot mounted; no shell/live/persistence/performance claim';
+		evidence.qualification = headerRegression
+			? 'Chromium batch snapshot; bounded selected-target header compile corpus; no exhaustive header/runtime/shell claim'
+			: 'Chromium batch snapshot Clang C/C++ CLI; full pinned sysroot mounted; no shell/live/persistence/performance claim';
 	}
 } catch (error) {
 	failure = error;

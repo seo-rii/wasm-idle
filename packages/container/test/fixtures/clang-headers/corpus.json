@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 1,
+  "profileId": "clang-selected-wasm32-wasi-headers-v1",
+  "sysrootSha256": "91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402",
+  "selectedSysroot": {
+    "entries": 2285,
+    "files": 2168,
+    "headerPolicy": "complete-selected-sdk-trees"
+  },
+  "cppFlags": [
+    "-fno-exceptions"
+  ],
+  "qualification": "14 bounded compile-only cases; existing producer corpus plus Clang resource headers; not exhaustive header combinations or linked runtime support",
+  "sources": {
+    "producer-stdio.c": {
+      "text": "#include <stdio.h>\nint main(void) { return puts(\"probe\"); }\n",
+      "sha256": "4a68fd0786b418c78b50dc5bd483fc6e5adc6f7dba0f518f85ba3d27ed1c5493",
+      "origin": {
+        "repository": "seo-rii/wasm-llvm",
+        "revision": "25ef7345eba86fce0352e7eb0a881e23ed0e684f",
+        "path": "producer/clang-browser/scripts/sysroot-pruning.mjs",
+        "entry": "SYSROOT_C_PROBE",
+        "fileSha256": "f1880337ed5adc100a5ad9108b1326140895b747168f06e1de16ce5768a80ee4"
+      }
+    },
+    "producer-aggregate.cpp": {
+      "text": "#if __cplusplus < 201103L\n#include <algorithm>\n#include <bitset>\n#include <deque>\n#include <functional>\n#include <iomanip>\n#include <iostream>\n#include <iterator>\n#include <limits>\n#include <list>\n#include <map>\n#include <memory>\n#include <numeric>\n#include <queue>\n#include <set>\n#include <sstream>\n#include <stack>\n#include <string>\n#include <utility>\n#include <vector>\nint main() { std::cout << std::vector<int>().size() << \"\\n\"; }\n#else\n#include <bits/stdc++.h>\n#include <bits/extc++.h>\n#include <ext/rope>\n#include <ext/pb_ds/assoc_container.hpp>\n#include <ext/pb_ds/tree_policy.hpp>\nusing namespace std;\nusing namespace __gnu_cxx;\nusing namespace __gnu_pbds;\nusing ordered_set = tree<int, null_type, less<int>, rb_tree_tag, tree_order_statistics_node_update>;\nint main() {\n  ordered_set values;\n  gp_hash_table<int, int> table;\n  crope text(\"abc\");\n  __gnu_pbds::priority_queue<int> heap;\n  cout << values.size() << table.size() << text.size() << heap.size() << \"\\n\";\n}\n#endif\n",
+      "sha256": "709af29358ce0d96288c9ffaad1c75716acd55a51c4dce2a725251562dcebea3",
+      "origin": {
+        "repository": "seo-rii/wasm-llvm",
+        "revision": "25ef7345eba86fce0352e7eb0a881e23ed0e684f",
+        "path": "producer/clang-browser/scripts/sysroot-pruning.mjs",
+        "entry": "SYSROOT_CPP_PROBE",
+        "fileSha256": "f1880337ed5adc100a5ad9108b1326140895b747168f06e1de16ce5768a80ee4"
+      }
+    },
+    "producer-public.c": {
+      "text": "\n#include <complex.h>\n#include <fenv.h>\n#include <inttypes.h>\n#include <tgmath.h>\n#include <threads.h>\n#include <uchar.h>\nint main(void) {\n  double complex value = 3.0 + 4.0 * I;\n  return (int)creal(value);\n}\n",
+      "sha256": "874f8f01e87905cf68b37e7ee41301aa253c6645293406a3bc8724f553244cd7",
+      "origin": {
+        "repository": "seo-rii/wasm-llvm",
+        "revision": "25ef7345eba86fce0352e7eb0a881e23ed0e684f",
+        "path": "test/clang-sysroot-pruning.test.mjs",
+        "entry": "publicCProbe",
+        "fileSha256": "790026a43ea4dac0cc6d39eb7a526ee76c1b2a60891f95b86f34a98e2b23b31b"
+      }
+    },
+    "producer-public.cpp": {
+      "text": "\n#include <any>\n#include <bit>\n#include <charconv>\n#include <chrono>\n#include <complex>\n#include <filesystem>\n#include <forward_list>\n#include <fstream>\n#include <memory_resource>\n#include <random>\n#include <ranges>\n#include <regex>\n#include <span>\n#include <valarray>\n#if __cplusplus >= 202302L\nstatic_assert(std::byteswap(0x12345678u) == 0x78563412u);\n#endif\nint main() {\n  std::complex<double> value(3, 4);\n  std::valarray<int> values{1, 2, 3};\n  std::forward_list<int> list{1, 2, 3};\n  char buffer[16];\n  auto result = std::to_chars(buffer, buffer + sizeof(buffer), 123);\n  return int(std::norm(value)) + values.sum() + list.front() + int(result.ptr - buffer);\n}\n",
+      "sha256": "77ffd4d7ce0f1e1281eb1b798d58e11ea32515396ab26d5f298928b3132c8b82",
+      "origin": {
+        "repository": "seo-rii/wasm-llvm",
+        "revision": "25ef7345eba86fce0352e7eb0a881e23ed0e684f",
+        "path": "test/clang-sysroot-pruning.test.mjs",
+        "entry": "publicCppProbe",
+        "fileSha256": "790026a43ea4dac0cc6d39eb7a526ee76c1b2a60891f95b86f34a98e2b23b31b"
+      }
+    },
+    "resource.c": {
+      "text": "#include <stddef.h>\n#include <stdint.h>\n#include <stdatomic.h>\nstruct sample { char label; uint32_t value; };\n_Static_assert(offsetof(struct sample, value) >= 1, \"stddef layout\");\nint header_resource_probe(uint32_t input) {\n  atomic_uint value = ATOMIC_VAR_INIT(input);\n  atomic_store_explicit(&value, input + 1, memory_order_relaxed);\n  return (int)atomic_load_explicit(&value, memory_order_relaxed);\n}\n",
+      "sha256": "17a93eea963150f24fe0e9cd3c4ec61cda2ef112c672a60b3013a530923d72e8",
+      "origin": {
+        "repository": "seo-rii/wasm-idle",
+        "kind": "new Clang resource-header fixture"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "producer-c-stdio",
+      "source": "producer-stdio.c",
+      "language": "c",
+      "standard": "gnu17",
+      "requiredHeaders": [
+        "include/wasm32-wasi/stdio.h"
+      ]
+    },
+    {
+      "id": "producer-gnu++98",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++98",
+      "requiredHeaders": [
+        "include/c++/v1/algorithm",
+        "include/c++/v1/bitset",
+        "include/c++/v1/deque",
+        "include/c++/v1/functional",
+        "include/c++/v1/iomanip",
+        "include/c++/v1/iostream",
+        "include/c++/v1/iterator",
+        "include/c++/v1/limits",
+        "include/c++/v1/list",
+        "include/c++/v1/map",
+        "include/c++/v1/memory",
+        "include/c++/v1/numeric",
+        "include/c++/v1/queue",
+        "include/c++/v1/set",
+        "include/c++/v1/sstream",
+        "include/c++/v1/stack",
+        "include/c++/v1/string",
+        "include/c++/v1/utility",
+        "include/c++/v1/vector"
+      ]
+    },
+    {
+      "id": "producer-gnu++03",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++03",
+      "requiredHeaders": [
+        "include/c++/v1/algorithm",
+        "include/c++/v1/bitset",
+        "include/c++/v1/deque",
+        "include/c++/v1/functional",
+        "include/c++/v1/iomanip",
+        "include/c++/v1/iostream",
+        "include/c++/v1/iterator",
+        "include/c++/v1/limits",
+        "include/c++/v1/list",
+        "include/c++/v1/map",
+        "include/c++/v1/memory",
+        "include/c++/v1/numeric",
+        "include/c++/v1/queue",
+        "include/c++/v1/set",
+        "include/c++/v1/sstream",
+        "include/c++/v1/stack",
+        "include/c++/v1/string",
+        "include/c++/v1/utility",
+        "include/c++/v1/vector"
+      ]
+    },
+    {
+      "id": "producer-gnu++11",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++11",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "producer-gnu++14",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++14",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "producer-gnu++17",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++17",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "producer-gnu++20",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++20",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "producer-gnu++23",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++23",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "producer-gnu++26",
+      "source": "producer-aggregate.cpp",
+      "language": "c++",
+      "standard": "gnu++26",
+      "requiredHeaders": [
+        "include/c++/v1/bits/stdc++.h",
+        "include/c++/v1/bits/extc++.h",
+        "include/c++/v1/ext/rope",
+        "include/c++/v1/ext/pb_ds/assoc_container.hpp",
+        "include/c++/v1/ext/pb_ds/tree_policy.hpp"
+      ]
+    },
+    {
+      "id": "public-c-gnu11",
+      "source": "producer-public.c",
+      "language": "c",
+      "standard": "gnu11",
+      "requiredHeaders": [
+        "include/wasm32-wasi/complex.h",
+        "include/wasm32-wasi/fenv.h",
+        "include/wasm32-wasi/inttypes.h",
+        "include/wasm32-wasi/tgmath.h",
+        "include/wasm32-wasi/threads.h",
+        "include/wasm32-wasi/uchar.h"
+      ]
+    },
+    {
+      "id": "public-gnu++20",
+      "source": "producer-public.cpp",
+      "language": "c++",
+      "standard": "gnu++20",
+      "requiredHeaders": [
+        "include/c++/v1/any",
+        "include/c++/v1/bit",
+        "include/c++/v1/charconv",
+        "include/c++/v1/chrono",
+        "include/c++/v1/complex",
+        "include/c++/v1/filesystem",
+        "include/c++/v1/forward_list",
+        "include/c++/v1/fstream",
+        "include/c++/v1/memory_resource",
+        "include/c++/v1/random",
+        "include/c++/v1/ranges",
+        "include/c++/v1/regex",
+        "include/c++/v1/span",
+        "include/c++/v1/valarray"
+      ]
+    },
+    {
+      "id": "public-gnu++23",
+      "source": "producer-public.cpp",
+      "language": "c++",
+      "standard": "gnu++23",
+      "requiredHeaders": [
+        "include/c++/v1/any",
+        "include/c++/v1/bit",
+        "include/c++/v1/charconv",
+        "include/c++/v1/chrono",
+        "include/c++/v1/complex",
+        "include/c++/v1/filesystem",
+        "include/c++/v1/forward_list",
+        "include/c++/v1/fstream",
+        "include/c++/v1/memory_resource",
+        "include/c++/v1/random",
+        "include/c++/v1/ranges",
+        "include/c++/v1/regex",
+        "include/c++/v1/span",
+        "include/c++/v1/valarray"
+      ]
+    },
+    {
+      "id": "public-gnu++26",
+      "source": "producer-public.cpp",
+      "language": "c++",
+      "standard": "gnu++26",
+      "requiredHeaders": [
+        "include/c++/v1/any",
+        "include/c++/v1/bit",
+        "include/c++/v1/charconv",
+        "include/c++/v1/chrono",
+        "include/c++/v1/complex",
+        "include/c++/v1/filesystem",
+        "include/c++/v1/forward_list",
+        "include/c++/v1/fstream",
+        "include/c++/v1/memory_resource",
+        "include/c++/v1/random",
+        "include/c++/v1/ranges",
+        "include/c++/v1/regex",
+        "include/c++/v1/span",
+        "include/c++/v1/valarray"
+      ]
+    },
+    {
+      "id": "resource-c-gnu11",
+      "source": "resource.c",
+      "language": "c",
+      "standard": "gnu11",
+      "requiredHeaders": [
+        "lib/clang/22/include/stddef.h",
+        "lib/clang/22/include/stdint.h",
+        "lib/clang/22/include/stdatomic.h"
+      ]
+    }
+  ]
+}

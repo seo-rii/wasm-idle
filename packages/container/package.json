@@ -41,7 +41,9 @@
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
     "test:browser": "pnpm run build && node scripts/test-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
-    "test:browser:clang": "node scripts/test-clang-browser.mjs"
+    "test:browser:clang": "node scripts/test-clang-browser.mjs",
+    "test:clang:headers": "node scripts/test-clang-headers.mjs",
+    "test:browser:clang:headers": "node scripts/test-clang-browser.mjs --headers"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
