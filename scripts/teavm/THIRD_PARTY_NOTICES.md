@@ -9,7 +9,8 @@ Corresponding source references and byte receipts are recorded in
 `scripts/teavm/TByteBuffer.java`, `TCharBuffer.java`, `TShortBuffer.java`, `TIntBuffer.java`,
 `TLongBuffer.java`, `TFloatBuffer.java`, `TDoubleBuffer.java`, `JsConsolePrintStream.java`, and
 `TFormatter.java`, which are modified TeaVM sources, and `TIllegalFormatWidthException.java`, which
-is a wasm-idle addition. No warranty is provided.
+is a wasm-idle addition. The teavm-javac compiler is built with the source patch
+`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`. No warranty is provided.
 
 ## TeaVM and teavm-javac
 

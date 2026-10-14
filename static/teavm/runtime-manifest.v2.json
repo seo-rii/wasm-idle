@@ -125,7 +125,15 @@
 				"sha256": "76b77c43f97a7c4cf60917e24c5e212faaf8ca664e433759ef98d12f268b6b49"
 			}
 		},
+		"sourcePatches": [
+			{
+				"path": "scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch",
+				"bytes": 4446,
+				"sha256": "0e52f4dd5c1e7392eb3acfbced274bd1e0134b71804125a4c31615815ebc53ca"
+			}
+		],
 		"commands": [
+			"git apply <source-patches>",
 			"./gradlew --no-daemon clean :javac:downloadJDK",
 			"./gradlew --no-daemon :compiler:createDist",
 			"javac --release 17 <locked-classpath> <overlay-sources>",
@@ -139,8 +147,8 @@
 			},
 			{
 				"path": "compiler.wasm",
-				"bytes": 4299273,
-				"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6"
+				"bytes": 4313700,
+				"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
@@ -458,8 +466,8 @@
 		"files": [
 			{
 				"path": "scripts/sync-wasm-teavm.mjs",
-				"bytes": 38115,
-				"sha256": "b0eebd6223fc4ce68b577d07010d4edb80c26bdf4efa897f4b1e85a7a04cc44d"
+				"bytes": 39219,
+				"sha256": "46a1c37d363ffb11b7a1cc8020c2091f7acf89b2720b1c96bc693567389efb3c"
 			},
 			{
 				"path": "scripts/sync-wasm-teavm.d.mts",
@@ -472,8 +480,8 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39621,
-			"sha256": "e7c7efaaa611149e4c3c2594e790b05adedbdde9f11ba03fcf3b74e29dbbf3b1"
+			"bytes": 39743,
+			"sha256": "4fbf5538136d5b9b95c5df0a994ab31b59efe703a81521303734645197b98441"
 		}
 	],
 	"assets": [
@@ -492,13 +500,13 @@
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4299273,
-			"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6",
+			"bytes": 4313700,
+			"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1678507,
-				"sha256": "5f46653e00fb5832e0bb2daba4fe49bf3e7bce369a3d16fcb30025fb7ed96bf2"
+				"bytes": 1683774,
+				"sha256": "94980cdb4eae7ba057845108c7f890b5115ea318f119119427c6c52b0605ba45"
 			}
 		},
 		{
@@ -526,5 +534,5 @@
 			}
 		}
 	],
-	"fingerprint": "6b900960fecfab8a80ae259b196a825895d99b688545559ad8ac619568aa53f3"
+	"fingerprint": "66d8bf2c68229de4c2a134a80ecb12f3fa8bd71150cd7e148ba9ac58409f6adc"
 }

@@ -711,6 +711,26 @@ export async function produceWasmTeaVmAssets(options) {
 		validateReceipt(verificationMetadata, 'TeaVM Gradle verification metadata'),
 		'TeaVM Gradle verification metadata'
 	);
+	// wasm-idle patches applied to the teavm-javac source before it is built.
+	if (build.sourcePatches !== undefined && !Array.isArray(build.sourcePatches)) {
+		throw new Error('TeaVM producer lock has invalid source patches');
+	}
+	const sourcePatchPaths = [];
+	for (const sourcePatch of build.sourcePatches ?? []) {
+		if (!isObject(sourcePatch) || typeof sourcePatch.path !== 'string') {
+			throw new Error('TeaVM producer lock has an invalid source patch');
+		}
+		const sourcePatchPath = path.resolve(
+			repoRoot,
+			validateRelativePath(sourcePatch.path, 'TeaVM source patch path')
+		);
+		await verifyFileReceipt(
+			sourcePatchPath,
+			validateReceipt(sourcePatch, `TeaVM source patch ${sourcePatch.path}`),
+			`TeaVM source patch ${sourcePatch.path}`
+		);
+		sourcePatchPaths.push(sourcePatchPath);
+	}
 	if (!Array.isArray(producer.files) || producer.files.length === 0) {
 		throw new Error('TeaVM producer lock is missing producer file receipts');
 	}
@@ -760,6 +780,13 @@ export async function produceWasmTeaVmAssets(options) {
 			cwd: temporaryRoot,
 			env: process.env
 		});
+		for (const sourcePatchPath of sourcePatchPaths) {
+			// The ceiling keeps git from treating an enclosing repository as the patch root.
+			await run('git', ['apply', '--verbose', sourcePatchPath], {
+				cwd: buildRoot,
+				env: { ...process.env, GIT_CEILING_DIRECTORIES: temporaryRoot }
+			});
+		}
 		await run('tar', ['-xzf', jdkArchivePath, '-C', jdkExtractRoot], {
 			cwd: temporaryRoot,
 			env: process.env

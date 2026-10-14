@@ -44,6 +44,7 @@ interface TeaVmRuntimeManifest {
 	};
 	build: {
 		jdk: { version: string };
+		sourcePatches: Array<{ path: string }>;
 		gradle: { version: string; verificationMetadata: { sha256: string } };
 		overlay: {
 			archiveEntryCount: number;
@@ -116,6 +117,10 @@ describe('checked-in TeaVM runtime trust root', () => {
 			build: {
 				jdk: { version: '25.0.3+9' },
 				gradle: { version: '9.1.0' },
+				// Apply @PluggableDependency plugins in the browser compiler (TeaVM #1322).
+				sourcePatches: [
+					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' }
+				],
 				overlay: {
 					archiveEntryCount: 2141,
 					addedSources: [
@@ -250,6 +255,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		) as {
 			build: {
 				gradle: { verificationMetadata: { path: string; bytes: number; sha256: string } };
+				sourcePatches: Array<{ path: string; bytes: number; sha256: string }>;
 				overlay: {
 					utilityPath: string;
 					utilityBytes: number;
@@ -276,6 +282,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		const receipts = [
 			...lock.producer.files,
 			lock.build.gradle.verificationMetadata,
+			...lock.build.sourcePatches,
 			...[...lock.build.overlay.sources, ...lock.build.overlay.addedSources].map(
 				({ sourcePath: path, sourceBytes, sourceSha256 }) => ({
 					path,

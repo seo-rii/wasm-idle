@@ -343,6 +343,50 @@ public class Main {
 					'7\n50% of x|% 5|    %|%    |\nrejected: java.util.IllegalFormatWidthException: Illegal width: 5\n'
 			},
 			{
+				// Dependency plugins must run in the browser compiler (TeaVM #1322): without them a clone()
+				// result loses its type, so virtual calls on it (including inside Formatter's %f) trap.
+				name: 'cloned objects and floating-point formatting',
+				code: `public class Main {
+    static abstract class Shape implements Cloneable {
+        abstract double area();
+
+        Shape copy() {
+            try {
+                return (Shape) super.clone();
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    static class Square extends Shape {
+        double side = 3;
+
+        double area() {
+            return side * side;
+        }
+    }
+
+    static class Circle extends Shape {
+        double r = 1;
+
+        double area() {
+            return 3 * r * r;
+        }
+    }
+
+    public static void main(String[] args) {
+        for (Shape shape : new Shape[] { new Square(), new Circle() }) {
+            System.out.println(shape.copy().area());
+        }
+        System.out.println(String.format("%.2f", 1.5));
+        System.out.printf("%.3f|%8.2f|%n", 2.0 / 3, -12.346);
+    }
+}`,
+				stdin: '',
+				expected: '9.0\n3.0\n1.50\n0.667|  -12.35|\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 
