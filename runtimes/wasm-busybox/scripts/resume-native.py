@@ -11,6 +11,9 @@ import tarfile
 
 import probe
 
+if not __debug__:
+    raise SystemExit('resume-native.py validates with assert statements; run it without -O or PYTHONOPTIMIZE')
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
