@@ -18,9 +18,9 @@ been implemented; unpassed promotion gates remain explicit.
 | Pinned distribution index | [C-07 #139](https://github.com/seo-rii/wasm-idle/pull/139) | C-06 |
 | Verified asset loader | [C-08 #141](https://github.com/seo-rii/wasm-idle/pull/141) | C-07 |
 | Atomic lazy package mounts | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142) | C-08 |
-| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; Chromium/full-header qualification pending |
-| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links and producer CLI pass; consumer gate pending |
-| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium compile checks pass, link/C/C++/cache gate pending |
+| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual Chromium batch C/C++ passes on the C-11 follow-up; full header-regression corpus pending |
+| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links, producer CLI and Chromium consumer pass; full header-regression corpus pending |
+| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium batch C/C++/artifact/cache checks pass; full header-regression corpus pending |
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
@@ -85,6 +85,18 @@ as needed; no PR is automatically merged.
 - The C-10 source snapshot passed 68 container Node unit/contract tests, 9 focused LLVM tool-host
   protocol tests, and real Chromium batch/cache tests. The existing LLVM Clang regression suite
   passed 202 tests across 20 files. Protocol fixtures do not replace real Clang evidence.
+- C-11 now executes the actual modified Clang and LLD in Chromium 153.0.8010.12 at
+  `fe5e3a85277e2dec02347d9d5362e5656ed3e5b7`. Nine cold compiler commands and three resulting
+  Wasm programs pass, including multi-object linking, C stdio with binary stdin/stdout/stderr,
+  and a C++20 vector/map/string template fixture with explicit `-fno-exceptions`. The complete
+  pinned sysroot is mounted unchanged (2,285 entries, 2,168 files). Command metadata requests
+  no compiler bodies; cold execution requests each Clang/LLD/sysroot body once, and a
+  page-reloaded `--version` command requests no additional bodies with HTTP cache disabled.
+  That reload does not repeat the full compilation suite. All 13 guest Workers across both
+  pages are reclaimed, process lists are empty and restrictive CSP records no faults. This
+  qualifies the recorded batch snapshot profile; the full header-regression corpus, actual
+  shell/live compiler integration, clean producer build and release/performance gates remain
+  separate.
 - C-17 added timestamp-preserving snapshots and explicit container/owner integration. Its
   focused filesystem/WASI suite passed 31 tests; 10 real Chromium persistence scenarios cover
   reload, bytes/inodes/timestamps/symlinks, a second-tab writer, cache deletion, interrupted blob
@@ -152,7 +164,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
-| G0-CLANG / CLI-01–03 | Modified raw links and eight actual Node WASI CLI commands pass, including two-source cc1/linker dispatch. Common VFS C stdio and explicit exception-free C++20 compile/link/artifact probes pass | #159 adds exact opted-in cc1 jobs and directory NONBLOCK support; repeat the pinned Chromium C/C++/full-sysroot/cache gate; full header-combination coverage remains separate |
+| G0-CLANG / CLI-01–03 | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance and Chromium batch C/C++ compile/link/artifacts pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; qualify the full header-regression corpus and remaining CLI coverage before command-alpha promotion |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
@@ -168,7 +180,7 @@ linker together left only driver usage in `wait4`; that receipt does not measure
 final CPU time or peak RSS. A separate observation before exit recorded 756.2 linker CPU
 seconds after 7,080.9 elapsed seconds, which documents contention without proving completion.
 
-A distinct retry is prepared with the same compiler inputs and optimization settings, a
+A distinct retry was prepared with the same compiler inputs and optimization settings, a
 14,400-second deadline per child, and inherited per-process CPU limits of 1,200 seconds soft
 and 1,260 hard. The producer's default deadline remains 2,700 seconds; its CLI now validates
 explicit extensions through 14,400. The external runner requires at least 8 GiB available
@@ -199,8 +211,9 @@ An initial isolated Chromium run passed compilation, preprocessing, assembly, re
 and diagnostic cases before rejecting inherited environment slices whose unused pointer was
 nonzero. The producer's empty SmallVector has inline storage, so the host now checks the
 zero count without reading that pointer. Ten focused LLVM host tests and an actual common-VFS
-driver/link/export probe pass after the correction. Chromium qualification is being repeated
-with the same compiler, linker and full sysroot. The immutable executable SHA-256 values are
+driver/link/export probe pass after the correction. The next Chromium attempt used
+the same compiler, linker and full sysroot; its original receipt remains a failed attempt,
+before the compiler-child dispatch correction. The immutable executable SHA-256 values are
 `e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3` (Clang) and
 `3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a` (LLD).
 
@@ -222,21 +235,49 @@ and rejecting unsupported flags. Four focused WASI fd tests pass. The unchanged 
 sysroot then compiles, links and runs the C++20 vector/map/string template fixture with
 explicit `-fno-exceptions`, yielding `sum=6`. Exception-enabled input retains its real
 missing exception-runtime linker diagnostics and remains outside this qualified profile.
-The adapter does not insert flags or prune headers. A fresh Chromium run will verify the
-same full closure, byte streams, actual command artifacts and cache-preserved reload.
+The adapter does not insert flags or prune headers. The later successful Chromium receipt
+below verifies the same full closure, byte streams and actual command artifacts; its reloaded
+page verifies cache reuse with `--version`.
 
 The Node Worker snapshot acceptance also passes the actual C stdio and exception-free
 C++20 compile/link/run workflows, with `hello` and `sum=6` outputs. Its original receipt
 and executed JavaScript host hashes are committed on #159. The npm dry-run packages
 contain 53 Container host/type/document files (183,211 unpacked bytes) and 126 LLVM Core
 files (896,259 bytes), with no executable assets; the root import performs zero fetches.
-These snapshots do not substitute for the pending actual Chromium reload gate.
+These Node snapshots remain separate from the actual Chromium receipt below.
+
+The actual Chromium batch snapshot receipt has SHA-256
+`b04774f0181150e46a4121dccbcf14ecb584bcf968133af585cbcae7e256fb9a` and is archived
+unchanged as `packages/container/test/fixtures/clang-browser-evidence.json` on #159. It
+records application commit `fe5e3a85277e2dec02347d9d5362e5656ed3e5b7`, Chromium
+153.0.8010.12, Linux x64, cross-origin isolation and restrictive CSP with no faults. It pins
+the producer requalification and eight-command CLI receipts above, the original executable
+and sysroot hashes, and the exact application source and generated Worker bundles.
+The browser process exits 0 and its external supervisor records all descendant processes
+reaped. Earlier failed browser receipts retain their original identities and results.
+
+The cold page passes nine compiler commands: version, relative `-c`, `-E`, `-S`, response-file
+compilation, a real diagnostic exit 1, multi-object linking, C stdio linking and explicit
+exception-free C++20 template linking. All three generated Wasm artifacts execute. C stdio
+preserves `[0, 255, 195, 169]` on stdin and on each separate output channel, with the expected
+`hello\n` prefix on stdout; the C++ artifact prints `sum=6\n`. The warm page remounts the
+verified full sysroot and runs only `--version`, so the receipt proves body-cache reuse,
+not a warm full C/C++ compile. Both pages finish with empty process lists and zero live
+guest Workers (12 started cold, one on reload).
+
+Before the cold command, all three asset request counts are zero. The cold page then requests
+Clang gzip (16,270,174 bytes), LLD gzip (8,178,107 bytes) and the complete sysroot tar
+(35,328,000 bytes) once each: 59,776,281 delivered body bytes total. The page reload adds no
+asset body requests, with `Cache-Control: no-store` and no retained in-memory asset entries.
+This is local batch-profile evidence, not a clean producer rebuild, full header-combination
+corpus, exception-enabled C++ qualification, live compiler binding, shell MVP, production
+release or performance benchmark. Compiler PRs remain draft pending the full promotion gates.
 
 The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
 dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
 argv/environment/fd/filesystem/cancel acceptance. That source patch is not a production shell
-backend. Likewise, C-11 browser harness preparation and the existing playground's successful
-Clang regression do not count as execution of the modified compiler.
+backend. Harness preparation and the existing playground's successful Clang regression remain
+distinct from C-11's separately recorded execution of the modified compiler.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
