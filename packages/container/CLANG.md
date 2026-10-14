@@ -54,8 +54,9 @@ The fixture `scripts/test-clang.mjs` takes `CONTAINER_CLANG_WASM` and
 `CONTAINER_CLANG_BRIDGE=1` to require actual driver-to-linker dispatch and artifact
 execution. It exercises `-c`, `-E`, `-S`, includes/defines, relative paths, spaces,
 response files and an invalid option with the real compiler. Tiny protocol tests
-do not qualify this CLI. Full C/C++ headers, browser execution and shell integration
-require their own recorded producer/browser receipts before release promotion.
+do not qualify this CLI. The producer's selected-header regression corpus requires
+its own recorded evidence before command-alpha promotion. Actual shell integration
+is a separate milestone.
 
 The opt-in `test:browser:clang` fixture bundles the current Container, Core and LLVM
 tool-host source with esbuild into three local modules. It therefore exercises
@@ -91,8 +92,9 @@ spaces and Korean; separated raw diagnostic bytes; multi-object driver/linker
 dispatch; C stdio and C++20 template/header compilation; and all three generated
 artifacts through the WASI adapter. Both tools start in the real non-root cwd with
 a deliberately incorrect `PWD`. The C artifact reads binary stdin and preserves
-NUL, non-UTF-8 and UTF-8 bytes on separate stdout/stderr streams. A fresh page then runs Clang again using the
-verified persistent cache. The server requires exactly one body request per
+NUL, non-UTF-8 and UTF-8 bytes on separate stdout/stderr streams. A fresh page then
+runs `clang --version` using the verified persistent cache; this reload check does
+not repeat the full compilation corpus. The server requires exactly one body request per
 pinned asset across both pages with HTTP caching disabled. Worker/process cleanup
 and browser/CSP errors are checked after execution.
 
@@ -101,5 +103,22 @@ command request. It preserves the complete pinned archive and mounts it readonly
 it does not add general archive extraction to runtime distributions. The fixture
 only promotes its measured Chromium batch snapshot profile when every gate passes.
 It does not qualify a real shell, live filesystem, persistence, performance, all
-header combinations, or another browser. Until an actual receipt is recorded,
-browser Clang qualification remains pending.
+header combinations, or another browser.
+
+The original [Chromium receipt](test/fixtures/clang-browser-evidence.json) records
+a passing run on Chromium 153.0.8010.12/Linux x64 at application commit
+`fe5e3a85277e2dec02347d9d5362e5656ed3e5b7`. Its SHA-256 is
+`b04774f0181150e46a4121dccbcf14ecb584bcf968133af585cbcae7e256fb9a`;
+all 65 recorded source hashes match that tested snapshot. The cold page completed
+nine compiler invocations and three actual WASI artifact runs, including C binary
+stdio and the explicit exception-free C++20 profile. All 13 guest Workers across
+the cold and reload pages were reclaimed, process inspection was empty, and no
+browser/CSP errors were recorded.
+
+Boot and command metadata lookup downloaded zero asset bodies. Cold execution
+downloaded Clang gzip (16,270,174 bytes), LLD gzip (8,178,107 bytes), and the full
+sysroot tar (35,328,000 bytes) once each. Reloading the page and running the version
+command added no body requests with HTTP caching disabled. The independent
+[process supervision record](test/fixtures/clang-browser-process-evidence.json)
+reports exit 0 and all owned OS descendants reaped. These receipts retain their
+original tested identity when later documentation or evidence commits are added.
