@@ -164,6 +164,7 @@ async function createServiceWorkerHarness(
 			fetch: fetchMock,
 			setTimeout,
 			clearTimeout,
+			crypto,
 			self: workerSelf
 		}
 	);
@@ -536,7 +537,9 @@ describe('compressed runtime service worker', () => {
 			const first = harness.request('first/module.wasm');
 			await firstRequested;
 			const next = harness.request('next/module.wasm');
-			expect((await first).status).toBe(404);
+			const timedOut = await first;
+			expect(timedOut.status).toBe(504);
+			expect(timedOut.statusText).toBe('Runtime Layer Timeout');
 			const response = await next;
 			expect(response.status).toBe(200);
 			expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
@@ -618,7 +621,9 @@ describe('compressed runtime service worker', () => {
 				{},
 				{ layerBytes: 16, cacheBytes: 8 }
 			);
-			expect((await harness.request(assetPath)).status).toBe(404);
+			const response = await harness.request(assetPath);
+			expect(response.status).toBe(502);
+			expect(response.statusText).toBe('Runtime Layer Too Large');
 			expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
 		}
 	);
@@ -796,5 +801,61 @@ describe('compressed runtime service worker', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('content-type')).toBe('application/json');
 		expect(await response.text()).toBe('{"decoded":true}');
+	});
+
+	const staleLayerBytes = new TextEncoder().encode('layer bytes from deploy 1');
+	const longerStaleLayerBytes = new TextEncoder().encode('layer bytes from deploy 1 and more');
+	it.each([
+		[
+			'a stale layer with matching sizes',
+			'Runtime Layer Digest Mismatch',
+			() => new Response(new Uint8Array(gzipSync(staleLayerBytes)))
+		],
+		[
+			'a stale layer longer than its manifest',
+			'Runtime Layer Too Large',
+			() => new Response(new Uint8Array(gzipSync(longerStaleLayerBytes)))
+		],
+		[
+			'a content-decoded layer of the wrong length',
+			'Runtime Layer Length Mismatch',
+			() => new Response(longerStaleLayerBytes, { headers: { 'content-encoding': 'gzip' } })
+		]
+	])('rejects %s without serving or caching it', async (_name, statusText, staleLayer) => {
+		const assetPath = 'wasm-runtime/verified.wasm';
+		const layerPath = '_runtime-layers/verified.bin.gz';
+		const bytes = new TextEncoder().encode('layer bytes from deploy 2');
+		// The sizes match, so only the digest can tell the stale deploy apart.
+		expect(gzipSync(bytes).byteLength).toBe(gzipSync(staleLayerBytes).byteLength);
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: { [assetPath]: { layer: layerPath, offset: 0, length: bytes.byteLength } },
+				layers: { [layerPath]: { bytes } }
+			}
+		);
+		const fetch = harness.fetchMock.getMockImplementation()!;
+		harness.fetchMock.mockImplementation(async (input, init) =>
+			String(input).includes(`/${layerPath}?`) ? staleLayer() : fetch(input, init)
+		);
+
+		const rejected = await harness.request(assetPath);
+
+		expect(rejected.status).toBe(502);
+		expect(rejected.statusText).toBe(statusText);
+		expect(await rejected.text()).toBe(`${statusText}: ${layerPath}\n`);
+		expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
+
+		harness.fetchMock.mockImplementation(fetch);
+		const response = await harness.request(assetPath);
+
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe('layer bytes from deploy 2');
+		expect(harness.layerCacheState()).toEqual({ bytes: bytes.byteLength, entries: 1 });
+		expect(
+			harness.fetchMock.mock.calls
+				.map(([input]) => new URL(String(input)).pathname)
+				.filter((pathname) => pathname === new URL(layerPath, scope).pathname)
+		).toHaveLength(2);
 	});
 });
