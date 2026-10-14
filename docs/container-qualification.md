@@ -34,15 +34,15 @@ as needed; no PR is automatically merged.
 
 ## Verified components
 
-- The C-14 worktree source snapshot passed 83 container Node unit/contract cases and real
+- The initial C-14 worktree source snapshot passed 83 container Node unit/contract cases and real
   isolated Chromium live execution, including two guest file sharing, partial binary I/O,
   byte pipelines, early reader exit, crash visibility, blocked-I/O/CPU cancellation and
   zero owned Workers after cleanup. Nonisolated startup rejects before allocating a Worker.
   The committed `packages/container/test/fixtures/live-browser-evidence.json` records the
   baseline commit plus exact source hashes, environment and checks. This does not qualify
-  actual Bash or BusyBox pipelines. The live guest SHA-256 is
-  `d40963aaabe8c64b32ab77d30dd9b26dfc6bd6699c92c5a4c4e4e36750ebeae0`.
-  C-14 npm dry-run pack contains 65 host/type/document files, 256,582 unpacked bytes;
+  actual Bash or BusyBox pipelines. The current live guest SHA-256, also recorded in that
+  receipt, is `f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf`.
+  The initial C-14 npm dry-run pack contained 65 host/type/document files, 256,582 unpacked bytes;
   binaries and test receipts are excluded and root import still performs zero fetches.
   Existing Chromium batch/cache and all 10 persistence regressions also passed after
   the live changes; cache reuse and explicit committed-root recovery remain intact.
