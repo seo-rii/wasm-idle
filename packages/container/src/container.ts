@@ -5,6 +5,7 @@ import type { CommandAdapter, CommandDefinition, PreparedRuntime, RuntimeLimits 
 import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult } from './types.js';
 
 import type { ContainerPackageManager } from './packages/manager.js';
+import type { DistributionCommand } from './packages/distribution.js';
 
 export interface ContainerOptions extends MemoryFileSystemOptions {
   readonly packages?: ContainerPackageManager;
@@ -36,6 +37,8 @@ export class Container {
   readonly fs: MemoryFileSystem;
   readonly packages?: ContainerPackageManager;
   #mountedPackages = new Set<string>();
+  /** Commands whose complete closure this container has already verified and mounted readonly. */
+  #mountedCommands = new Map<string, Readonly<{ command: DistributionCommand; executablePath: string }>>();
   #commands = new Map<string, CommandDefinition>();
   #adapters = new Map<string, CommandAdapter>();
   #processes = new Map<number, { command: string; lifecycle: ProcessLifecycle; stop: () => Promise<void> }>();
@@ -126,7 +129,13 @@ export class Container {
     try {
       lifecycle.transition('resolving'); controller.signal.throwIfAborted();
       lifecycle.transition('preparing');
-      if (packageCommand) {
+      const mounted = packageCommand && this.#mountedCommands.get(packageCommand.name);
+      if (mounted) {
+        // An earlier spawn verified this closure before publishing it. Readonly mounts are immutable,
+        // so a later run must not depend on the network, asset caches or a second closure copy.
+        definition = { adapter: mounted.command.adapter, argv0: mounted.command.argv0, bytes: this.fs.readFile(mounted.executablePath) };
+        executionArgs = Object.freeze([...mounted.command.prefixArgs, ...invocation.args]);
+      } else if (packageCommand) {
         const prepared = await this.packages!.prepareCommand(command, { signal: controller.signal });
         controller.signal.throwIfAborted();
         const missing = prepared.packages.filter((pkg) => !this.#mountedPackages.has(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`));
@@ -144,6 +153,7 @@ export class Container {
         });
         if (mounts.length) this.fs.mountReadonlyPackages(mounts);
         for (const pkg of missing) this.#mountedPackages.add(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`);
+        this.#mountedCommands.set(prepared.command.name, Object.freeze({ command: prepared.command, executablePath: prepared.executablePath }));
         definition = { adapter: prepared.command.adapter, argv0: prepared.command.argv0, bytes: prepared.executable };
         executionArgs = Object.freeze([...prepared.command.prefixArgs, ...invocation.args]);
       }

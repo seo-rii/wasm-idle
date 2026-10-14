@@ -55,7 +55,9 @@ and [compatibility ledger](../../docs/container-compatibility.md).
 A host may supply `packages: createContainerPackageManager(...)` using a validated pinned index.
 `container.packages.listCommands()` reads only metadata. `run(name, argv)` verifies the complete
 package closure before atomically mounting it readonly and acquiring a workspace lease. A
-successful mount is immutable and reused by identity; a failed closure publishes nothing.
+successful mount is immutable and reused by identity; a failed closure publishes nothing. Later
+runs of a command whose closure this container already mounted read the executable from that
+readonly mount instead of preparing the closure again, so they need no network or asset cache.
 The injecting host owns the package manager and may share it; container disposal cancels only
 its own consumers. Dispose the manager separately when all users have finished.
 
