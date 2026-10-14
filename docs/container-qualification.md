@@ -10,6 +10,7 @@ been implemented; unpassed promotion gates remain explicit.
 | --- | --- | --- |
 | Scope and boundaries | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128) | main at implementation start |
 | Real Bash probe and backend decision | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133) | C-01, independent experiment |
+| Pinned SDK bridge source experiment | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft) | C-02; source/protocol checks only, modified SDK execution pending |
 | Package/API | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135) | C-01 |
 | VFS and writer leases | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136) | C-03 |
 | Byte pipes/fds | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137) | C-04 |
@@ -19,12 +20,18 @@ been implemented; unpassed promotion gates remain explicit.
 | Atomic lazy package mounts | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142) | C-08 |
 | LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual producer qualification pending |
 | Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; full relink/CLI gate pending |
+| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; new compiler execution pending |
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
+| Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
+| BusyBox B1 container qualification | [C-13 follow-up #163](https://github.com/seo-rii/wasm-idle/pull/163) (draft) | C-13 plus C-12 B1 artifact and portable fd/directory fixes; Chromium gate pending |
 | Explicit workspace persistence | [C-17 #145](https://github.com/seo-rii/wasm-idle/pull/145) | C-10; independent of live shell |
 | Host CI and qualification ledger | [C-19 groundwork #147](https://github.com/seo-rii/wasm-idle/pull/147) | C-17; production release still gated |
 | Live VFS ownership and additive mounts | [C-14a #148](https://github.com/seo-rii/wasm-idle/pull/148) | C-19 groundwork |
-| Isolated live WASI and explicit byte pipelines | [C-14b branch](https://github.com/seo-rii/wasm-idle/tree/feat/container/c14-live-wasi) | C-14a; actual shell backend remains separate |
+| Isolated live WASI and explicit byte pipelines | [C-14b #150](https://github.com/seo-rii/wasm-idle/pull/150) | C-14a; actual shell backend remains separate |
+| Workspace events and staged editor buffers | [C-16a #155](https://github.com/seo-rii/wasm-idle/pull/155) | C-14b; SDK binding independent of shell/UI renderer |
+| Portable workspace backup and atomic restore | [C-18a #157](https://github.com/seo-rii/wasm-idle/pull/157) | C-16a |
+| Save state and optional autosave | [C-18b #164](https://github.com/seo-rii/wasm-idle/pull/164) | C-18a; explicit persistence owner remains separate |
 
 The CI/documentation PR is based on C-17. It implements only the independently testable
 portion of C-19, without claiming production qualification. The subsequent C-14 stack adds
@@ -34,18 +41,36 @@ as needed; no PR is automatically merged.
 
 ## Verified components
 
-- The C-14 worktree source snapshot passed 83 container Node unit/contract cases and real
-  isolated Chromium live execution, including two guest file sharing, partial binary I/O,
+- The C-14 source snapshot passed 103 container Node unit/contract cases and 34 real
+  isolated Chromium checks, including two guest file sharing, partial binary I/O,
   byte pipelines, early reader exit, crash visibility, blocked-I/O/CPU cancellation and
-  zero owned Workers after cleanup. Nonisolated startup rejects before allocating a Worker.
+  atomic dirfd operations during namespace replacement, paged directory deletion, and
+  29 owned Workers reclaimed to zero. A final stdin byte-ownership regression and 15 focused
+  checks passed before repeating all 34 browser checks. Nonisolated startup rejects before
+  allocating a Worker. GitHub CI at `cdbba220` also passed the container and existing runtime
+  regression jobs.
   The committed `packages/container/test/fixtures/live-browser-evidence.json` records the
   baseline commit plus exact source hashes, environment and checks. This does not qualify
   actual Bash or BusyBox pipelines. The live guest SHA-256 is
-  `d40963aaabe8c64b32ab77d30dd9b26dfc6bd6699c92c5a4c4e4e36750ebeae0`.
-  C-14 npm dry-run pack contains 65 host/type/document files, 256,582 unpacked bytes;
+  `f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf`.
+  C-14 npm dry-run pack contains 65 host/type/document files;
   binaries and test receipts are excluded and root import still performs zero fetches.
   Existing Chromium batch/cache and all 10 persistence regressions also passed after
   the live changes; cache reuse and explicit committed-root recovery remain intact.
+- C-16 uses bounded generation/rescan events and inode/content conflict checks for staged
+  editor buffers. Fourteen actual live/snapshot guest checks passed in Chromium with three
+  Workers reclaimed to zero. File writes, readonly/snapshot admission and editor buffers copy
+  Buffer inputs into owned bytes; 34 focused filesystem/editor tests cover that boundary.
+  The restacked `fdf56255` container CI passed these browser fixtures again.
+- C-18 backup validates bounded metadata, paths, body ranges and SHA-256 before one leased
+  workspace replacement. Seven focused tests cover hostile checksum-valid archives, quotas,
+  busy resources and caller Buffer mutation while verification awaits. The initial 12 real
+  Chromium persistence checks were extended to 14 with manual/default saving, opt-in autosave,
+  visible storage failures, explicit retry and retained unsaved data. Nine save-controller
+  scheduling/cleanup tests cover saved-state reentry and disposal races. The fifteenth browser
+  case exercises reentry against real OPFS/IndexedDB; the full contract job at `217c6a6b`
+  [passed in CI](https://github.com/seo-rii/wasm-idle/actions/runs/38492801909), independently
+  of the earlier 14-case local receipt.
 - The C-10 source snapshot passed 68 container Node unit/contract tests, 9 focused LLVM tool-host
   protocol tests, and real Chromium batch/cache tests. The existing LLVM Clang regression suite
   passed 202 tests across 20 files. Protocol fixtures do not replace real Clang evidence.
@@ -73,9 +98,25 @@ as needed; no PR is automatically merged.
   Twenty native and 24 producer Node-WASI checks passed. C-13 runs the same verified artifact
   in 20 container Node cases and 40 Chromium cases (cold/reload), including aliases, cwd,
   binary `cat`, stderr/nonzero exits, host edits between commands and one-body cache reuse.
+- The selected BusyBox B1 profile is 447,557 bytes, SHA-256
+  `547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`;
+  its source pack SHA-256 is
+  `ca68639e0a6a159e55000594011e6b60f4850248e8edd5918d10b225e0afe818`.
+  Producer qualification executes 54 scenarios on native and WASI builds (108 runs), including
+  20 explicit rejection checks. The container Node suite passed 20 B0 and 108 B1 invocations,
+  including recursive removal of 200 entries, binary copies, readonly/cross-mount rejection,
+  one asset body request and zero retained Workers/processes. These are Node and producer
+  results; browser/live pipeline promotion uses separate receipts. The selected port rejects
+  unsupported grep binary modes and NUL text instead of truncating it, and does not claim full
+  GNU/POSIX utility semantics.
 
-Each PR retains its fixture commands, source/artifact hashes and result receipt. CI uploads
-fresh browser JSON receipts with the tested commit and actual environment. Local successes do
+Each PR retains its fixture commands, source/artifact hashes and recorded receipt. A receipt
+describes its exact source snapshot, not every descendant commit. CI emits fresh browser JSON
+with the tested commit and environment. Earlier runs retained those JSONs in job logs but did
+not upload artifacts: `upload-artifact@v4` excludes hidden directories by default. The current
+workflow explicitly includes only `.codex/container-*.json` and rejects missing receipts;
+[the action's hidden-file contract](https://github.com/actions/upload-artifact/blob/v4/README.md#uploading-hidden-files)
+explains that setting. Verify the downloadable artifact as well as the workflow status. Local successes do
 not imply the GitHub workflow has already completed, or that another browser/version passed.
 
 ## Blocked or incomplete gates
@@ -84,9 +125,9 @@ not imply the GitHub workflow has already completed, or that another browser/ver
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
 | G0-CLANG / CLI-01–03 | Existing raw Clang reports that WASI cannot spawn subprocesses. Preopens/PWD do not set wasi-libc's cwd. Full modified compiler qualification is pending | wasm-llvm #32 opt-in LLVM `ExecuteAndWait` bridge and real `chdir` startup; complete Clang/LLD relink and actual C/C++ CLI gate, then browser |
-| B1 / P3 | Only six B0 applets have runtime evidence | Port and differentially test `grep`, `mkdir`, `cp/mv/rm` and required filesystem calls; do not infer support from multicall build success |
+| B1 / P3 | Selected B1 producer and 128 container Node invocations pass; browser/live qualification is separate | C-12/C-13 follow-ups: actual Chromium, then common live filesystem/pipeline fixtures; preserve explicit unsupported options |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
-| P5 / product beta | Persistence storage primitive passes targeted Chromium cases; editor/terminal/save/export UI and orphan GC absent | C-16/18; failure UI, lifecycle and actual crash/reload matrix |
+| P5 / product beta | Persistence, editor/watch, backup/restore and save SDK bindings have component evidence; rendered integration, terminal qualification and orphan GC remain separate | C-16/18 follow-ups; product failure UI/lifecycle and full shell-based reload matrix |
 | C-19/20 | Local header smoke only; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
@@ -96,6 +137,12 @@ restart. Neither proves the full compiler. An initial exec-only private relink e
 full LTO. A correctness-only retry uses O1/CGO1, one linker thread and a 16 GiB address-space
 bound, with sequential Clang/LLD links and a separately recorded consumer gate. Keep compiler PRs draft
 until that gate and required browser/header coverage have actual receipts.
+
+The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
+dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
+argv/environment/fd/filesystem/cancel acceptance. That source patch is not a production shell
+backend. Likewise, C-11 browser harness preparation and the existing playground's successful
+Clang regression do not count as execution of the modified compiler.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
