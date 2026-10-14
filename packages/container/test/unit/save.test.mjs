@@ -65,13 +65,49 @@ test('dispose cancels scheduling, preserves owner lifetime and releases exclusiv
   assert.throws(() => createWorkspaceSaveController(owner), { code: 'DISPOSED' });
 });
 test('dispose waits for in-flight work but rejects a newer requested revision instead of claiming it saved', { timeout: 60000 }, async () => {
-  const finish = deferred(), owner = makeOwner(async () => finish.promise), controller = createWorkspaceSaveController(owner);
-  const first = controller.save(); owner.fs.writeFile('a', bytes('newer')); const second = controller.save(); assert.equal(first, second);
+  const started = deferred(), finish = deferred(), owner = makeOwner(async () => { started.resolve(); await finish.promise; }), controller = createWorkspaceSaveController(owner);
+  const first = controller.save(); await started.promise; owner.fs.writeFile('a', bytes('newer')); const second = controller.save(); assert.equal(first, second);
   const rejected = assert.rejects(second, { code: 'DISPOSED' }), disposing = controller.dispose(); finish.resolve(); await rejected; await disposing;
   assert.equal(owner.calls, 1); assert.equal(owner.inspect().dirty, true); assert.equal(owner.fs.watcherCount, 0);
+});
+
+test('dispose before a scheduled save starts prevents storage work', { timeout: 60000 }, async () => {
+  const owner = makeOwner(), controller = createWorkspaceSaveController(owner);
+  const rejected = assert.rejects(controller.save(), { code: 'DISPOSED' });
+  await controller.dispose(); await rejected;
+  assert.equal(owner.calls, 0); assert.equal(owner.fs.watcherCount, 0);
 });
 test('autosave delay and wait limits reject before allocating a watch', () => {
   const owner = makeOwner();
   for (const options of [{ delayMs: 0 }, { delayMs: 20, maxWaitMs: 10 }, { autosave: 'true' }]) assert.throws(() => createWorkspaceSaveController(owner, options), { code: 'INVALID_ARGUMENT' });
   assert.equal(owner.fs.watcherCount, 0);
+});
+
+test('a saved-state observer immediately requesting a newer revision receives that revision', { timeout: 60000 }, async () => {
+  const finish = deferred(), owner = makeOwner(async () => finish.promise), controller = createWorkspaceSaveController(owner);
+  const reader = controller.updates.getReader();
+  await reader.read();
+  const first = controller.save();
+  await until(reader, value => value.workspace.state === 'saving');
+  let next, target;
+  const observed = reader.read().then(({ value }) => {
+    assert.equal(value.workspace.state, 'saved');
+    owner.fs.writeFile('newer', bytes('after saved notification')); target = owner.fs.generation;
+    next = controller.save();
+  });
+  finish.resolve(); await first; await observed;
+  const result = await next;
+  assert.ok(result.committedGeneration >= target); assert.equal(owner.inspect().dirty, false); assert.equal(owner.calls, 2);
+  await controller.dispose(); assert.equal(owner.fs.watcherCount, 0);
+});
+
+test('a synchronously rejected owner flush permits explicit retry', { timeout: 60000 }, async () => {
+  const owner = makeOwner(), flush = owner.flush.bind(owner);
+  let fail = true;
+  owner.flush = () => { if (fail) throw new PersistentWorkspaceError('STORAGE', 'unavailable'); return flush(); };
+  const controller = createWorkspaceSaveController(owner);
+  await assert.rejects(controller.save(), { code: 'STORAGE' });
+  assert.equal(controller.inspect().pausedAfterError, true);
+  fail = false; assert.equal((await controller.save()).state, 'saved');
+  assert.equal(controller.inspect().pausedAfterError, false); await controller.dispose();
 });

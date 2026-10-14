@@ -268,6 +268,33 @@ try {
   checks.push('C18: manual save is default; opt-in autosave commits real OPFS/IDB changes and pauses on storage failure');
   checks.push('C18: retry saves retained data; binding disposal releases watchers without flushing or disposing the owner');
 
+  const saveCompletion = await page.evaluate(async () => {
+    await owner.dispose(); let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    owner = await persistence.openPersistentWorkspace({ id: 'save-completion', fault: async point => {
+      if (point === 'before-root-publish') await gate;
+    } });
+    const { createWorkspaceSaveController } = await import('/dist/workspace/index.js');
+    const binding = createWorkspaceSaveController(owner), reader = binding.updates.getReader();
+    await reader.read();
+    const first = binding.save();
+    for (;;) { if ((await reader.read()).value.workspace.state === 'saving') break; }
+    let target, next;
+    const observed = reader.read().then(({ value }) => {
+      if (value.workspace.state !== 'saved') throw new Error('Expected completed save notification');
+      owner.fs.writeFile('after-notification', encode('new revision')); target = owner.fs.generation;
+      next = binding.save();
+    });
+    release(); await first; await observed; const result = await next;
+    await binding.dispose(); reader.releaseLock(); const watchers = owner.fs.watcherCount;
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'save-completion' });
+    return { target, result, watchers, text: decode(owner.fs.readFile('after-notification')) };
+  });
+  assert.ok(saveCompletion.result.committedGeneration >= saveCompletion.target);
+  assert.equal(saveCompletion.result.dirty, false); assert.equal(saveCompletion.watchers, 0);
+  assert.equal(saveCompletion.text, 'new revision');
+  checks.push('C18: saved-state consumer can immediately save a newer revision and reload its committed bytes');
+
   const integration = await page.evaluate(async () => {
     await owner.dispose();
     owner = await persistence.openPersistentWorkspace({ id: 'container-lifecycle', maxBytes: 1024 });

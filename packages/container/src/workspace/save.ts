@@ -56,23 +56,27 @@ export function createWorkspaceSaveController(owner: PersistentWorkspace, option
     const current = owner.inspect();
     if (!current.dirty) { firstDirty = undefined; return; }
     if (!autosave || paused || disposed || pending || current.state === 'disposed') return;
-    const now = Date.now(); firstDirty ??= now;
+    const now = performance.now(); firstDirty ??= now;
     timer = setTimeout(() => { timer = undefined; void save().catch(() => { /* Reflected in the bounded status stream; no automatic retry loop. */ }); }, Math.max(0, Math.min(delay, firstDirty + maximum - now)));
   };
   const save = (): Promise<PersistentWorkspaceInspection> => {
     active(); stopTimer(); goal = Math.max(goal, owner.fs.generation);
     if (pending) return pending;
     paused = false;
-    const operation = (async () => {
+    // Publish pending before any owner code can run. Clear it in the same task
+    // that finishes the goal, before a status consumer can request a new save.
+    const operation = Promise.resolve().then(async () => {
       try {
+        if (disposed) throw new PersistentWorkspaceError('DISPOSED', 'Save controller disposed before saving started');
         let result: PersistentWorkspaceInspection;
         do { const saving = owner.flush(); emit(); result = await saving; emit(); }
         while (!disposed && (result.committedGeneration ?? -1) < goal);
         if ((result.committedGeneration ?? -1) < goal) throw new PersistentWorkspaceError('DISPOSED', 'Save controller disposed before the requested revision committed');
         return result;
-      } catch (error) { paused = true; emit(); throw error; }
-    })();
-    pending = operation.finally(() => { pending = undefined; firstDirty = undefined; emit(); schedule(); });
+      } catch (error) { paused = true; throw error; }
+      finally { pending = undefined; firstDirty = undefined; emit(); schedule(); }
+    });
+    pending = operation;
     return pending;
   };
   const watching = (async () => {
