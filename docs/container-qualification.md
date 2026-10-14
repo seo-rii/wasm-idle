@@ -14,6 +14,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Owned prepared-child command metadata          | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft)      | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending     |
 | Pinned SDK Wasm/web-glue build gate            | [C-02 SDK build #191](https://github.com/seo-rii/wasm-idle/pull/191) (draft)     | #189; eight admission/cleanup/static-inspection guards pass; actual SDK build and guest qualification pending                                           |
 | Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; original source/toolchain pins and eight producer guards pass; actual build/import receipt and SDK execution pending                              |
+| Local SDK module/Worker packaging              | [C-02 SDK package #193](https://github.com/seo-rii/wasm-idle/pull/193) (draft)   | #191; seven graph/argument-policy guards with actual local esbuild pass; actual SDK binary receipt prerequisite pending                                 |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -359,6 +360,7 @@ The #191 follow-up prepares a sealed offline release build and matching
 The exact CLI was built separately with its shipped lock, exit 0 and complete
 owned-process cleanup; this qualifies only the native build tool. Its executable
 SHA-256 is `f78ceef06ed9356f42408f2b32d2f621dfa6fd09f192a41320355abf7f9562cc`.
+That tool receipt is a local operator record and is not yet archived on #191.
 The eight helper tests include a real small shared-memory Wasm static inspection
 under the proposed 12 GiB process address-space cap; they do not build the SDK.
 
@@ -366,7 +368,8 @@ The parallel #192 producer preserves the original Bash, WASIX sysroot, WASI SDK
 and Binaryen pins, linking the actual C exec shim through the upstream build.
 Its eight argv/wrapper/import-profile guards and read-only plan pass. A separate
 Node/shared-Wasm preflight passes under the 8 GiB process address-space cap,
-with all processes reaped. Actual SDK and Bash builds remain pending; the
+with all processes reaped; that preflight receipt is likewise local and not yet
+archived on #192. Actual SDK and Bash builds remain pending; the
 bounded jobs are prepared to run sequentially without replacing existing
 artifacts or automatically retrying a failed attempt. Local module/Worker
 packaging and real shared fd/VFS/foreground cancellation are still required.
