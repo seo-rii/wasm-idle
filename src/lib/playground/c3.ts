@@ -7,7 +7,7 @@ import {
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
-import { limitC3WasmMemory } from '../../../scripts/runtime-workers/c3-memory.mjs';
+import { limitC3WasmMemory } from './c3Memory.js';
 
 export const C3_DEFAULT_WASM_MEMORY_BYTES = 1024 ** 3;
 
