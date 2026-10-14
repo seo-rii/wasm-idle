@@ -13,18 +13,9 @@ export interface QuickJsAssetResolverOptions {
 	currentUrl?: string | URL;
 }
 
-export interface QuickJsHandleLike {
-	dispose?: () => void;
-}
-
-export interface QuickJsEvalResultLike {
-	value?: QuickJsHandleLike;
-	error?: QuickJsHandleLike;
-}
-
 export interface QuickJsModuleLike {
-	evalCode: (code: string, options?: unknown) => QuickJsEvalResultLike;
-	dump: (handle: QuickJsHandleLike) => unknown;
+	/** Returns the result as a native value and throws when the evaluated code throws. */
+	evalCode: (code: string, options?: unknown) => unknown;
 }
 
 export interface QuickJsPackageLike {
@@ -110,14 +101,5 @@ export async function evaluateQuickJs(
 				? createDeadlineInterrupt(Date.now() + options.timeoutMs)
 				: undefined)
 	};
-	const result = quickJs.evalCode(code, evalOptions);
-	try {
-		if (result.error) {
-			throw new Error(String(quickJs.dump(result.error)));
-		}
-		return { value: result.value ? quickJs.dump(result.value) : undefined };
-	} finally {
-		result.value?.dispose?.();
-		result.error?.dispose?.();
-	}
+	return { value: quickJs.evalCode(code, evalOptions) };
 }
