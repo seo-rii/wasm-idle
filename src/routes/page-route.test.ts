@@ -578,6 +578,110 @@ describe('example route debug actions', () => {
 		);
 	});
 
+	it('keeps restored or picked Rust and Go targets when their runtime manifests load', () => {
+		const manifestEffect = (language: string) => {
+			const start = source.indexOf(`if (!browser || language !== '${language}') return;`);
+			expect(start).toBeGreaterThan(-1);
+			return source.slice(start, source.indexOf('\n\t});\n', start));
+		};
+		const rustEffect = manifestEffect('RUST');
+		const goEffect = manifestEffect('GO');
+		// Legacy run-time keys must not override the workspace snapshot or a later pick.
+		expect(rustEffect).not.toContain('readStoredValue');
+		expect(goEffect).not.toContain('readStoredValue');
+		expect(rustEffect).toMatch(
+			/if \(!nextAvailableRustTargetTriples\.includes\(rustTargetTriple\)\) \{\s+rustTargetTriple = nextDefaultTargetTriple;\s+\}/
+		);
+		expect(rustEffect).toMatch(
+			/if \(!availableRustTargetTriples\.includes\(rustTargetTriple\)\) \{\s+rustTargetTriple = 'wasm32-wasip1';\s+\}/
+		);
+		expect(goEffect).toMatch(
+			/if \(!nextAvailableGoTargets\.includes\(goTarget\)\) \{\s+goTarget = nextDefaultGoTarget;\s+\}/
+		);
+		expect(goEffect).toMatch(
+			/if \(!availableGoTargets\.includes\(goTarget\)\) \{\s+goTarget = 'wasip1\/wasm';\s+\}/
+		);
+		// Without a stored workspace snapshot, the legacy key still seeds the Rust target.
+		expect(source).toMatch(
+			/const storedRustTargetTriple = readStoredValue\('rustTargetTriple'\);/
+		);
+		expect(source).toMatch(
+			/rustTargetTriple = requestedRustTargetTriple;\s+\} else if \(\s*storedRustTargetTriple === 'wasm32-wasip1' \|\|\s*storedRustTargetTriple === 'wasm32-wasip2' \|\|\s*storedRustTargetTriple === 'wasm32-wasip3'\s*\) \{\s+rustTargetTriple = storedRustTargetTriple;\s+\}/
+		);
+	});
+
+	it('locks language, rename, delete, reset, and import while a run or debug session is active', () => {
+		const sliceFunction = (name: string) => {
+			const start = source.indexOf(`function ${name}(`);
+			expect(start).toBeGreaterThan(-1);
+			return source.slice(start, source.indexOf('\n\t}\n', start));
+		};
+		expect(sliceFunction('handleLanguageChange')).toMatch(
+			/if \(!workspaceInitialized \|\| runningMode\) return;/
+		);
+		expect(sliceFunction('openLanguageMenu')).toMatch(
+			/if \(!workspaceInitialized \|\| runningMode\) return;/
+		);
+		expect(sliceFunction('chooseLanguage')).toMatch(
+			/if \(workspaceInitialized && !runningMode\) switchLanguage\(nextLanguage\);/
+		);
+		expect(sliceFunction('renameActiveFile')).toMatch(/if \(!file \|\| runningMode\) return;/);
+		expect(sliceFunction('deleteActiveFile')).toMatch(/if \(!file \|\| runningMode\) return;/);
+		expect(sliceFunction('resetWorkspace')).toMatch(
+			/^function resetWorkspace\(\) \{\s+if \(runningMode\) return;/
+		);
+		// Upload and drag-and-drop both import through importFiles.
+		expect(sliceFunction('importFiles')).toMatch(
+			/^function importFiles\(fileList: File\[\]\) \{\s+if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}/
+		);
+		// An import staged before Run must not replace the workspace once the run owns it.
+		expect(sliceFunction('importFiles')).toMatch(
+			/await stageWorkspaceImport\([\s\S]*?destination\.assertCurrent\(\);\s+(?:\/\/[^\n]+\n\s+)?if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}\s+let imported/
+		);
+		expect(source.match(/disabled=\{!workspaceInitialized \|\| !!runningMode\}/g)).toHaveLength(
+			2
+		);
+		expect(source).toMatch(
+			/aria-label="Upload files"[^>]*onclick=\{\(\) => fileInput\?\.click\(\)\}\s+disabled=\{!!runningMode\}/
+		);
+		for (const handler of ['renameActiveFile', 'deleteActiveFile', 'resetWorkspace']) {
+			expect(source).toMatch(
+				new RegExp(`onclick=\\{${handler}\\} disabled=\\{!!runningMode\\}`)
+			);
+		}
+	});
+
+	it('runs the active path and workspace captured before the LLDB preflight await', () => {
+		const execStart = source.indexOf('function exec(enableDebug = false)');
+		const execSource = source.slice(execStart, source.indexOf('\n\t}\n', execStart));
+		const snapshot = execSource.indexOf('const runActivePath = activePath;');
+		expect(snapshot).toBeGreaterThan(-1);
+		// Tab switches and new files change activePath while the run is pending.
+		expect(snapshot).toBeLessThan(execSource.indexOf('await import('));
+		expect(execSource).toMatch(
+			/const runWorkspaceFiles = files\.map\(\(file\) => \(\{\s+path: file\.path,\s+content: file\.path === runActivePath \? codeToRun : file\.content\s+\}\)\);/
+		);
+		const runCall = execSource.slice(execSource.indexOf('await executeTerminalRun('));
+		expect(runCall).toMatch(/activePath: runActivePath,\s+workspaceFiles: runWorkspaceFiles,/);
+		expect(runCall).toMatch(/runWorkspaceFiles\.some\(/);
+		expect(runCall).not.toMatch(/\bfiles\.(?:map|some)\(/);
+	});
+
+	it('closes the overlay explorer at the same 960px breakpoint the stylesheet uses', () => {
+		const selectFileStart = source.indexOf('function selectFile(');
+		const selectFileSource = source.slice(
+			selectFileStart,
+			source.indexOf('\n\t}\n', selectFileStart)
+		);
+		expect(source).toMatch(/const desktopExampleLayout = \$derived\(examplePaneWidth > 960\);/);
+		expect(source).toMatch(
+			/@media \(max-width: 960px\) \{[\s\S]*?\.workspace-sidebar \{\s+position: fixed;/
+		);
+		expect(selectFileSource).toMatch(/if \(!desktopExampleLayout\) sidebarOpen = false;/);
+		expect(selectFileSource).not.toContain('compact');
+		expect(source).toMatch(/sidebarOpen = value\?\.sidebarOpen \?\? desktopExampleLayout;/);
+	});
+
 	it('persists and forwards the selected C++ standard', () => {
 		expect(source).toMatch(/cppVersion = \$state<CppVersion>\('CPP20'\),/);
 		expect(source).toMatch(

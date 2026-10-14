@@ -46,9 +46,10 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		// Lifecycle contracts add 6,392 bytes to the measured 6,024,294-byte main install.
-		// A 16 KiB increment keeps 15,010 bytes of headroom with the same file/package caps.
-		budget: { maxBytes: 5.75 * MiB + 16 * 1024, maxFiles: 700, maxPackages: 6 },
+		// The 2026-10-14 review fixes brought the measured main install to about 6,061 KB. Shared
+		// verified compiler modules add 26,826 bytes (6,088,655 measured), so an 80 KiB increment keeps
+		// about 22 KiB of headroom with the same file/package caps.
+		budget: { maxBytes: 5.75 * MiB + 80 * 1024, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',

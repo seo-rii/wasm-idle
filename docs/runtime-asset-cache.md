@@ -83,8 +83,10 @@ the version that originally generated a body therefore preserves a newer version
 Storage belongs to the **application's origin**, not the asset CDN's origin. Two applications
 on different origins cannot share this cache. CacheStorage, IndexedDB and Web Locks must be
 available; blocked/private-mode storage, missing APIs, corruption and quota failures fall back
-to the normal verified download path. Integrity mismatches still fail rather than accepting
-unverified bytes. Concurrent tabs coordinate storage updates using a namespace-scoped lock.
+to the normal verified download path. A corrupt metadata record is dropped when it is next
+listed; it does not disable writes for the rest of the namespace. Integrity mismatches still fail
+rather than accepting unverified bytes. Concurrent tabs coordinate storage updates using a
+namespace-scoped lock.
 
 `loadPersistentRuntimeAsset`, `readPersistentRuntimeAsset`, and `writePersistentRuntimeAsset`
 snapshot and validate the receipt before asynchronous work. A malformed digest, byte count or
@@ -96,19 +98,23 @@ or unavailable, or the body exceeds the byte budget, it returns `false` without 
 A loader that downloads bytes itself and then calls the write helper must verify them separately,
 or use the load helper instead.
 
-Each storage attempt has a three-second deadline covering lock acquisition, database/cache
-opening, body reads, verification, metadata transactions and quota estimation. A storage timeout
-becomes a cache miss; caller cancellation rejects with the caller's reason. Body readers are
-cancelled without waiting indefinitely for their cancellation promise, and active IndexedDB
-transactions are aborted. The load callback still owns its network deadline and cancellation.
+Calls wait up to 30 seconds for the namespace lock, so a load queued behind another tab's or
+call's storage work does not miss and download again. Once the lock is held, each storage
+attempt has a three-second deadline covering database/cache opening, body reads, verification,
+metadata transactions and quota estimation. A lock or storage timeout becomes a cache miss;
+caller cancellation rejects with the caller's reason. Body readers are cancelled without waiting
+indefinitely for their cancellation promise, and active IndexedDB transactions are aborted. The
+load callback still owns its network deadline and cancellation.
 
 CacheStorage writes/deletes cannot be cancelled. When one stalls, the caller still returns at
 the deadline, but the callback retains the namespace lock until that native mutation settles.
 No later mutation or metadata publication is allowed from that expired operation. Other tabs
-or calls time out to cache misses while the lock is held. A subsequent writer removes orphaned
-bodies after the lock becomes available. This deliberately prevents an old write from racing a
-new writer or version cleanup; it does not promise recovery of a browser storage API that never
-settles at all.
+or calls fall back to cache misses after waiting 30 seconds for the lock. Once a lock wait has
+expired, later calls in the same context wait at most three seconds until the lock is granted
+again, so a stalled holder does not add the full wait to both the read and the write of every
+load. A subsequent writer removes orphaned bodies after the lock becomes available. This deliberately prevents an old
+write from racing a new writer or version cleanup; it does not promise recovery of a browser
+storage API that never settles at all.
 
 The browser may evict best-effort data. Persistence is an explicit host action, never an automatic
 permission request:

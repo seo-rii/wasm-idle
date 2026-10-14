@@ -92,10 +92,10 @@ describe('browser editor workspace readiness', () => {
 		// Root Vitest runs from the repository; avoid Vite rewriting an asset URL to HTTP.
 		const page = readFileSync('src/routes/+page.svelte', 'utf8');
 		const selector = page.match(/<select\s+id="language-select"[\s\S]*?>/)?.[0];
-		expect(selector).toContain('disabled={!workspaceInitialized}');
+		expect(selector).toContain('disabled={!workspaceInitialized || !!runningMode}');
 		expect(selector).toContain('data-workspace-ready={workspaceInitialized}');
 		expect(page).toMatch(
-			/function handleLanguageChange\(event: Event\) \{\s*\/\/[^\n]+\n\s*if \(!workspaceInitialized\) return;/
+			/function handleLanguageChange\(event: Event\) \{\s*(?:\/\/[^\n]+\n\s*)+if \(!workspaceInitialized \|\| runningMode\) return;/
 		);
 	});
 });
