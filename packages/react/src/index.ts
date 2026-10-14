@@ -75,12 +75,21 @@ export function useWasmIdleHost(
 		terminalRef.current = nextTerminal;
 		setTerminalState(nextTerminal);
 	}, []);
-	useEffect(
-		() => () => {
-			void disposeReactTerminalRef(terminalRef).catch(() => {});
-		},
-		[]
-	);
+	const mounted = useRef(false);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+			// Like the binding, wait out a synchronous StrictMode or Fast Refresh re-mount before
+			// destroying, and clear the state so the component never keeps a destroyed terminal.
+			void Promise.resolve()
+				.then(() => {
+					if (mounted.current) return;
+					return disposeReactTerminalRef(terminalRef, () => setTerminalState(undefined));
+				})
+				.catch(() => {});
+		};
+	}, []);
 	const dispose = useCallback(async () => {
 		const failures: unknown[] = [];
 		try {

@@ -195,6 +195,51 @@ describe('useWasmIdleHost', () => {
 		expect(host.binding.dispose).not.toHaveBeenCalled();
 	});
 
+	it('keeps a registered terminal alive when StrictMode replays effects', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const destroy = vi.fn(async () => undefined);
+		const terminal = { destroy } as never;
+		const rendered: ReactWasmIdleHost[] = [];
+		function TerminalHost() {
+			const host = useWasmIdleHost('/runtime', loadSandbox);
+			const { setTerminal } = host;
+			useEffect(() => setTerminal(terminal), [setTerminal]);
+			rendered.push(host);
+			return null;
+		}
+
+		await renderStrict(createElement(TerminalHost));
+
+		expect(destroy).not.toHaveBeenCalled();
+		expect(rendered.at(-1)!.terminal).toBe(terminal);
+		expect(rendered.at(-1)!.terminalRef.current).toBe(terminal);
+
+		await act(async () => root.unmount());
+
+		await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1));
+	});
+
+	it('destroys and clears the terminal when hidden by Activity', async () => {
+		const { loadSandbox } = createSandboxLoader();
+		const destroy = vi.fn(async () => undefined);
+		const rendered: ReactWasmIdleHost[] = [];
+		const renderHost = (mode: 'hidden' | 'visible') =>
+			renderStrict(
+				createElement(Activity, {
+					mode,
+					children: createElement(Host, { loadSandbox, rendered })
+				})
+			);
+
+		await renderHost('visible');
+		await act(async () => rendered.at(-1)!.setTerminal({ destroy } as never));
+		await renderHost('hidden');
+
+		await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1));
+		expect(rendered.at(-1)!.terminal).toBeUndefined();
+		expect(rendered.at(-1)!.terminalRef.current).toBeUndefined();
+	});
+
 	it('still disposes the binding when terminal destruction fails', async () => {
 		const { terminate, loadSandbox } = createSandboxLoader();
 		const terminalError = new Error('terminal destroy failed');
