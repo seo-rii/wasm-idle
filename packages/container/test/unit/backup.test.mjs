@@ -38,6 +38,12 @@ test('backup captures one owned revision before async hashing and restore snapsh
   const target = new MemoryFileSystem(), restoring = restoreWorkspaceBackup(target, archive, { replace: true }); archive.fill(0); await restoring;
   assert.equal(text(target.readFile('a')), 'old');
 });
+test('restore owns Node Buffer input even when the caller mutates its slice-backed memory', async () => {
+  const source = new MemoryFileSystem(); source.writeFile('a', bytes('old'));
+  const archive = Buffer.from(await createWorkspaceBackup(source)), target = new MemoryFileSystem();
+  const restoring = restoreWorkspaceBackup(target, archive, { replace: true }); archive.fill(0); await restoring;
+  assert.equal(text(target.readFile('a')), 'old');
+});
 test('checksum and encoded limits reject corrupt data without altering published files', async () => {
   const fs = new MemoryFileSystem(); fs.writeFile('a', bytes('current')); const original = await createWorkspaceBackup(fs), generation = fs.generation;
   const corrupt = original.slice(); corrupt[corrupt.length - 33] ^= 1;

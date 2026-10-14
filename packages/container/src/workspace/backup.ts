@@ -66,7 +66,7 @@ export async function restoreWorkspaceBackup(fs: MemoryFileSystem, input: Uint8A
   const budget = limits(options);
   if (!(input instanceof Uint8Array) || input.length < 44) invalid('Truncated workspace archive');
   if (input.length > budget.archive) throw new WorkspaceBackupError('LIMIT', 'Archive exceeds its byte limit');
-  const archive = input.slice();
+  const archive = Uint8Array.from(input);
   if (!magic.every((byte, index) => archive[index] === byte)) invalid('Unsupported workspace archive format');
   const metadataLength = new DataView(archive.buffer).getUint32(8, true), end = archive.length - 32;
   if (metadataLength > budget.metadata) throw new WorkspaceBackupError('LIMIT', 'Archive metadata exceeds its byte limit');
