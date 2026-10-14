@@ -22,6 +22,11 @@ normal driver option (for example `--ld-path=/opt/toolchains/<id>/bin/wasm-ld`).
 Target, sysroot, resource directory and ABI defaults belong in an explicit pinned
 distribution profile; the host does not infer or silently replace user options.
 
+Both qualified modules retain `exec_v1`: LLD's optional error-handling script
+uses the same LLVM Support entry. The host supplies the import but rejects all
+LLD child requests with `-1`. Only top-level Clang may invoke the pinned linker;
+error-handling scripts and recursive linker execution are unsupported.
+
 Non-root working directories require both modules to implement the
 `wasm_idle_process_v1.initial_cwd` startup contract and call real libc `chdir`.
 The old producer modules cannot satisfy that contract just by receiving PWD or a

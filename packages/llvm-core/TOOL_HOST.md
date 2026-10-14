@@ -54,8 +54,12 @@ or interpretation of diagnostic command text participates in dispatch.
 
 Every guest pointer/table is checked against the current exported memory buffer.
 Memory views are rebuilt after growth. Each table has at most 4096 entries, total
-decoded request/invocation text is at most one MiB, and execution depth is at most
-4 including the root. Arguments are copied into strings before child execution.
+decoded request/invocation text is at most one MiB. Only a top-level Clang invocation
+may dispatch its pinned linker, so execution depth is at most two including the
+root. Arguments are copied into strings before child execution. Both modules can
+import the same ABI; any linker request to start another child returns `-1`,
+whether LLD was invoked directly or by Clang. LLD's optional error-handling script
+is unsupported in this profile.
 Successful child exit codes 0 through `INT32_MAX` return exactly; -1 means packet
 rejection or child startup failure, and -2 means child runtime/cleanup failure.
 The caller must treat negative returns as host failure, not a guest exit status.

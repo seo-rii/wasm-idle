@@ -67,7 +67,6 @@ export interface LlvmToolHost {
 const tools = ['clang', 'wasm-ld'] as const;
 const MAX_ENTRIES = 4096;
 const MAX_TEXT_BYTES = 1024 * 1024;
-const MAX_DEPTH = 4;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const linkers = new Set(['wasm-ld', 'ld.lld', '/usr/bin/wasm-ld', '/usr/bin/ld.lld']);
@@ -158,7 +157,7 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 			if (Object.hasOwn(bindings.imports, 'wasm_idle_tool_host')) throw new LlvmToolHostError('STARTUP_FAILED', 'The tool host owns wasm_idle_tool_host imports');
 			const exec = (programPtr: number, programLen: number, argvPtr: number, argc: number, envPtr: number, envc: number, flags: number): number => {
 				try {
-					if (!instance || depth >= MAX_DEPTH || disposed) return -1;
+					if (!instance || invocation.executable !== 'clang' || depth !== 1 || disposed) return -1;
 					const memory = instance.exports.memory;
 					if (!(memory instanceof WebAssembly.Memory)) return -1;
 					const u32 = (value: number) => {

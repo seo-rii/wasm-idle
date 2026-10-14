@@ -32,12 +32,12 @@ scope.onmessage = async ({ data }) => {
           'wasm-ld': { bytes: linker, sha256: request.configuration.linkerSha256 }
         },
         linkerPaths: [request.configuration.linkerPath],
-        validateModule(executable, module) {
+        validateModule(_executable, module) {
           for (const entry of WebAssembly.Module.imports(module)) {
             if (entry.kind !== 'function' || !(
               entry.module === 'wasi_snapshot_preview1' && importNames.has(entry.name) ||
               entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd' ||
-              executable === 'clang' && entry.module === 'wasm_idle_tool_host' && entry.name === 'exec_v1'
+              entry.module === 'wasm_idle_tool_host' && entry.name === 'exec_v1'
             )) throw new Error(`Unsupported LLVM import: ${entry.module}.${entry.name}`);
           }
           const exports = WebAssembly.Module.exports(module);

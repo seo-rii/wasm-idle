@@ -134,14 +134,17 @@ describe('LLVM low-level tool host', () => {
 			expect(host.run(invocation()).code).toBe(0); expect(children).toBe(0); host.dispose();
 		}
 	});
-	it('refreshes guest views after memory.grow and bounds nested exec depth', async () => {
+	it('refreshes guest views after memory.grow and rejects child or directly invoked linker dispatch', async () => {
 		const contexts: LlvmToolBindingContext[] = [];
 		const host = await createLlvmToolHost({ tools: fixtures(moduleBytes({ packet: packet(), repeatAfterGrowth: true })), createBindings: bindings((context) => contexts.push(context)) });
 		expect(host.run(invocation()).code).toBe(37); expect(contexts.length).toBe(3); host.dispose();
 		const recursive = moduleBytes({ packet: packet() });
 		const depths: number[] = [];
 		const bounded = await createLlvmToolHost({ tools: fixtures(recursive, recursive), createBindings: (context) => ({ imports: {}, run(instance) { depths.push(context.depth); const code = (instance.exports._start as () => number)(); return { code: code === -1 ? 0 : code }; }, dispose() {} }) });
-		expect(bounded.run(invocation()).code).toBe(0); expect(depths).toEqual([1, 2, 3, 4]); bounded.dispose();
+		expect(bounded.run(invocation()).code).toBe(0); expect(depths).toEqual([1, 2]);
+		depths.length = 0;
+		expect(bounded.run(invocation({ executable: 'wasm-ld', argv: ['wasm-ld'] })).code).toBe(0);
+		expect(depths).toEqual([1]); bounded.dispose();
 	});
 	it('distinguishes child startup rejection from runtime/cleanup failure and disposes every binding', async () => {
 		for (const mode of ['startup', 'trap', 'dispose'] as const) {
