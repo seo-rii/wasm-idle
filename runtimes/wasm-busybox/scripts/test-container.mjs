@@ -241,6 +241,14 @@ try {
   if (values['node-only']) {
     console.log(JSON.stringify({ passed: true, profile: 'node-only', b0Cases: node.cases.length, b1Cases: node.b1?.cases.length ?? 0, output: resolve(values.output) }));
   } else {
+  if (process.env.BUSYBOX_MIN_AVAILABLE_KIB !== undefined) {
+    const minimum = Number(process.env.BUSYBOX_MIN_AVAILABLE_KIB);
+    assert.ok(Number.isSafeInteger(minimum) && minimum >= 0, 'Invalid browser memory admission threshold');
+    const memory = await readFile('/proc/meminfo', 'utf8');
+    const available = Number(/^MemAvailable:\s+(\d+)\s+kB$/mu.exec(memory)?.[1]);
+    assert.ok(Number.isSafeInteger(available) && available >= minimum,
+      `Browser memory admission pending: ${available} KiB available, ${minimum} KiB required`);
+  }
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] });
   const page = await browser.newPage();
   const errors = [];

@@ -69,6 +69,11 @@ output is marked `node-complete-browser-pending`, so it cannot be mistaken for
 the complete browser qualification receipt. Failed Node/browser results are
 saved before assertions for diagnosing host incompatibilities.
 
+On a shared Linux host, `BUSYBOX_MIN_AVAILABLE_KIB=2097152` optionally requires
+2 GiB of `MemAvailable` immediately before Chromium starts. If admission fails,
+the successful Node result remains browser-pending and the command exits with
+an error. The runner does not wait for memory or terminate another task.
+
 The recorded B1 Node candidate in `evidence/container-b1-node.json` passes all
 20 B0 and 108 B1 cases, plus mount protection and cleanup checks, using artifact
 `547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`.
