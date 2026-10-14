@@ -738,6 +738,31 @@ describe('persistent runtime asset cache', () => {
 		expect(storage.bodies.get('wasm-idle-assets-v1:wasm-idle')!.size).toBe(0);
 	});
 
+	it('drops one corrupt metadata record without disabling writes for the namespace', async () => {
+		const kept = payload('kept');
+		await writePersistentRuntimeAsset({ identity: identity(kept), bytes: kept });
+		const metadata = storage.databases.get('wasm-idle-assets-v1:wasm-idle')!;
+		const bodies = storage.bodies.get('wasm-idle-assets-v1:wasm-idle')!;
+		const corrupt = identity(payload('corrupt')).sha256;
+		metadata.set(corrupt, { sha256: corrupt, bytes: -1, lastUsed: 0, references: [] });
+		bodies.set(
+			`https://wasm-idle.invalid/.runtime-assets/wasm-idle/${corrupt}`,
+			new Response(payload('corrupt'))
+		);
+		const next = payload('next');
+		expect(await writePersistentRuntimeAsset({ identity: identity(next), bytes: next })).toBe(
+			true
+		);
+		expect(await createRuntimeGeneratedAssetCacheBackend().write('pch', payload('pch'))).toBe(
+			true
+		);
+		expect(metadata.has(corrupt)).toBe(false);
+		expect(bodies.size).toBe(3);
+		expect(await readPersistentRuntimeAsset({ identity: identity(kept) })).toEqual(kept);
+		expect(await readPersistentRuntimeAsset({ identity: identity(next) })).toEqual(next);
+		expect(await getRuntimeAssetCacheStats()).toMatchObject({ available: true, entries: 3 });
+	});
+
 	it('makes persistence requests only through the explicit management method', async () => {
 		expect(await requestRuntimeAssetCachePersistence()).toBe(true);
 		expect(storage.persist).toHaveBeenCalledTimes(1);

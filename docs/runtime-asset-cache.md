@@ -81,8 +81,10 @@ the version that originally generated a body therefore preserves a newer version
 Storage belongs to the **application's origin**, not the asset CDN's origin. Two applications
 on different origins cannot share this cache. CacheStorage, IndexedDB and Web Locks must be
 available; blocked/private-mode storage, missing APIs, corruption and quota failures fall back
-to the normal verified download path. Integrity mismatches still fail rather than accepting
-unverified bytes. Concurrent tabs coordinate storage updates using a namespace-scoped lock.
+to the normal verified download path. A corrupt metadata record is dropped when it is next
+listed; it does not disable writes for the rest of the namespace. Integrity mismatches still fail
+rather than accepting unverified bytes. Concurrent tabs coordinate storage updates using a
+namespace-scoped lock.
 
 `loadPersistentRuntimeAsset`, `readPersistentRuntimeAsset`, and `writePersistentRuntimeAsset`
 snapshot and validate the receipt before asynchronous work. A malformed digest, byte count or

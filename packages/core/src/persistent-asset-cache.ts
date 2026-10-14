@@ -636,8 +636,12 @@ function validRecord(value: AssetRecord): boolean {
 
 async function records(db: StorageDatabase): Promise<AssetRecord[]> {
 	const result = await transact<AssetRecord[]>(db, 'readonly', (store) => store.getAll());
-	if (!result.every(validRecord)) throw new Error('Invalid asset cache metadata');
-	return result;
+	// Drop corrupt records rather than failing every write, prune and stats call for the namespace.
+	// Orphan sweeps reclaim their bodies, and hits always re-verify the body digest.
+	for (const record of result)
+		if (!validRecord(record))
+			await transact(db, 'readwrite', (store) => store.delete(record.sha256));
+	return result.filter(validRecord);
 }
 
 async function removeRecord(
