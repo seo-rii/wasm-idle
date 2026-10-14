@@ -2,10 +2,12 @@
 
 import { EventEmitter } from 'node:events';
 import * as childProcess from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +19,9 @@ import {
 } from '../../scripts/browser-preview-server.mjs';
 
 const servers: http.Server[] = [];
+const PREPARATION_LOCK_DIR = fileURLToPath(
+	new URL('../../.svelte-kit/browser-preview-prep.lock', import.meta.url)
+);
 
 vi.mock('node:child_process', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('node:child_process')>();
@@ -229,6 +234,54 @@ describe('startBrowserPreviewServer', () => {
 				cwd: expect.stringContaining('/wasm-idle')
 			}
 		]);
+	});
+
+	it('does not reclaim an old preparation lock while its owner process is alive', async () => {
+		mkdirSync(path.dirname(PREPARATION_LOCK_DIR), { recursive: true });
+		mkdirSync(PREPARATION_LOCK_DIR);
+		try {
+			writeFileSync(path.join(PREPARATION_LOCK_DIR, 'owner'), String(process.pid));
+			utimesSync(PREPARATION_LOCK_DIR, 0, 0);
+
+			await expect(
+				runBrowserPreparationScripts(['build:preview'], { timeoutMs: 300 })
+			).rejects.toThrow('timed out waiting for filesystem lock after 300ms');
+			expect(childProcess.spawn).not.toHaveBeenCalled();
+			expect(readFileSync(path.join(PREPARATION_LOCK_DIR, 'owner'), 'utf8')).toBe(
+				String(process.pid)
+			);
+		} finally {
+			rmSync(PREPARATION_LOCK_DIR, { force: true, recursive: true });
+		}
+	});
+
+	it('reclaims a preparation lock as soon as its owner process has exited', async () => {
+		const deadOwner = childProcess.spawnSync(process.execPath, ['-e', '']);
+		vi.mocked(childProcess.spawn).mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), {
+				stdout: new EventEmitter(),
+				stderr: new EventEmitter(),
+				exitCode: null as number | null
+			});
+			queueMicrotask(() => {
+				child.exitCode = 0;
+				child.emit('exit', 0);
+			});
+			return child as any;
+		});
+		mkdirSync(path.dirname(PREPARATION_LOCK_DIR), { recursive: true });
+		mkdirSync(PREPARATION_LOCK_DIR);
+		try {
+			writeFileSync(path.join(PREPARATION_LOCK_DIR, 'owner'), String(deadOwner.pid));
+
+			await expect(
+				runBrowserPreparationScripts(['build:preview'], { timeoutMs: 600_000 })
+			).resolves.toBeUndefined();
+			expect(childProcess.spawn).toHaveBeenCalledTimes(1);
+			expect(existsSync(PREPARATION_LOCK_DIR)).toBe(false);
+		} finally {
+			rmSync(PREPARATION_LOCK_DIR, { force: true, recursive: true });
+		}
 	});
 
 	it('reuses an explicitly provided localhost browser url only when reuse mode is enabled', () => {
