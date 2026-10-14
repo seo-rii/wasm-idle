@@ -371,6 +371,15 @@ bounded jobs are prepared to run sequentially without replacing existing
 artifacts or automatically retrying a failed attempt. Local module/Worker
 packaging and real shared fd/VFS/foreground cancellation are still required.
 
+The [#193 layer](https://github.com/seo-rii/wasm-idle/pull/193), stacked on #191,
+prepares local module/Worker packaging from an independently pinned successful
+binary receipt. Seven tests with actual local esbuild cover graph closure,
+deterministic output and Module/Memory/URL argument policy; the small JS glue is
+a protocol fixture only. The real binary prerequisite has not yet passed. The
+original worker's dynamic SDK import remains a trusted immutable host module
+graph; actual nested Worker ownership and the original unbounded pre-init
+queue remain unresolved, alongside command registry/fd/VFS.
+
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
 It comes from the existing producer revision `25ef7345eba86fce0352e7eb0a881e23ed0e684f`;
