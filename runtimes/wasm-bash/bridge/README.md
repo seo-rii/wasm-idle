@@ -224,12 +224,29 @@ reference and two unsupported `WasmSliceAccess::to_vec()` calls. The source
 correction uses `wasmer::Function` and the pinned memory slice's fallible owned
 byte copy before dispatch. It adds no guest-memory view or lock to the command
 snapshot. The old failed source tree, log and process receipt remain separate;
-the corrected full SDK/example check is still pending. Absence of a snapshot
+the corrected full SDK/example check has a separate receipt below. Absence of a snapshot
 API diagnostic in the failed run does not establish that the example passes.
 The separate [Rust typing failure receipt](evidence.sdk-typecheck-errors.json)
 records the exact source/toolchain, all three diagnostics, the 342.205-second
 execution and complete process cleanup. The corrected five-patch source checks
 are recorded in [their own receipt](evidence.sdk-typefix-source-checks.json).
+
+The genuine corrected [SDK typecheck receipt](evidence.sdk-typecheck.json) passes
+the full patched runtime/SDK library and the external
+`container_command_snapshot_compile` example at source commit
+`de98d061435a308e8bbcd2ca195d29ac07401774`. The exact pinned nightly performs
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib
+--example container_command_snapshot_compile -j 1` in fresh physical sources and
+unique target/intermediate directories. All 580 source/toolchain/preparation
+identities stay unchanged. The [original supervision record](evidence.sdk-typecheck-process.json)
+reports exit 0 in 412.428 seconds and all owned processes reaped.
+
+This proves Rust typing and external access to owned prepared-child metadata,
+including the snapshot's automatic `Send + Sync` traits. `cargo check` produces
+metadata, not a runnable SDK Wasm/JavaScript distribution. It does not execute
+Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
+or browser cleanup. Earlier failure and source-only receipts retain their
+original results; no probe returns fabricated guest success.
 
 ## Remaining runtime gate
 
@@ -237,8 +254,8 @@ The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and buil
 Cargo lock contains 457 packages. The earlier source inspection lacked the required
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
-prefetch and offline validation now pass; corrected Wasmer/SDK/example Rust typing
-remains pending in a fresh source tree with unique build outputs. Existing Bash source/sysroot
+prefetch, offline validation and corrected Wasmer/SDK/example Rust typing now
+pass. Existing Bash source/sysroot
 artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
 and actual browser qualification still require a sequential resource budget. No memory
 or disk estimate is a measured producer requirement, and no previous or unrelated cache
