@@ -74,10 +74,12 @@ On a shared Linux host, `BUSYBOX_MIN_AVAILABLE_KIB=2097152` optionally requires
 the successful Node result remains browser-pending and the command exits with
 an error. The runner does not wait for memory or terminate another task.
 
-The recorded B1 Node candidate in `evidence/container-b1-node.json` passes all
-20 B0 and 108 B1 cases, plus mount protection and cleanup checks, using artifact
-`547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`.
-Its source identity was recorded after the unchanged Node run. It explicitly
-remains browser-pending: Chromium qualification has not run while the shared
-host is below the 2 GiB available-memory admission threshold. This record must
-not be used to promote the B1 browser support grade.
+The recorded B1 result in `evidence/container-b1.json` passes all 20 B0 and
+108 B1 cases in Node and twice in Chromium 153.0.8010.12 (cold and page reload),
+plus mount protection and cleanup checks. Artifact
+`547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade`
+is the exact 447,557-byte producer output. Node and Chromium each fetch one
+body, command metadata fetches none, and page reload reuses the verified cache.
+Every pass leaves zero owned processes and Workers. Module/fixture identities
+are checked before and after the full run; this qualifies the stated B1 batch
+subset without promoting live or shell support.
