@@ -30,6 +30,13 @@ uses the same LLVM Support entry. The host supplies the import but rejects all
 LLD child requests with `-1`. Only top-level Clang may invoke the pinned linker;
 error-handling scripts and recursive linker execution are unsupported.
 
+For compile-and-link jobs, the pinned driver disables in-process cc1 and requests
+its own multicall compiler. The adapter opts in to the exact empty-program argv
+form `['', 'clang', '-cc1' | '-cc1as', ...]` and executes the same verified module
+with unchanged arguments. Only the root driver may start these jobs or its pinned
+linker; children cannot recurse. Very long child jobs serialized only as `@rsp`
+remain unsupported; ordinary root response files are handled by Clang itself.
+
 Non-root working directories require both modules to implement the
 `wasm_idle_process_v1.initial_cwd` startup contract and call real libc `chdir`.
 The old producer modules cannot satisfy that contract just by receiving PWD or a

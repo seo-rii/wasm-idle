@@ -40,6 +40,8 @@ export interface CreateLlvmToolHostOptions {
 	readonly createBindings: (context: LlvmToolBindingContext) => LlvmToolBindings;
 	/** Additional exact filesystem names for the same pinned linker, chosen by trusted host code. */
 	readonly linkerPaths?: readonly string[];
+	/** Opt in to the pinned multicall producer's ['', 'clang', '-cc1'/'-cc1as', ...] child jobs. */
+	readonly allowClangCc1?: boolean;
 	/** Optional host profile admission before any instance can execute. */
 	readonly validateModule?: (executable: LlvmToolExecutable, module: WebAssembly.Module) => void;
 }
@@ -80,11 +82,11 @@ function safeText(value: unknown, label: string): string {
 	if (bytes.length > MAX_TEXT_BYTES || decoder.decode(bytes) !== value) invalid(`${label} must be valid UTF-8 text`);
 	return value;
 }
-function snapshotInvocation(value: LlvmToolInvocation): LlvmToolInvocation {
+function snapshotInvocation(value: LlvmToolInvocation, allowEmptyArgv0 = false): LlvmToolInvocation {
 	if (!value || !tools.includes(value.executable)) invalid('Unknown pinned LLVM executable');
 	if (!Array.isArray(value.argv) || value.argv.length < 1 || value.argv.length > MAX_ENTRIES) invalid('argv must contain 1..4096 arguments');
 	const argv = Object.freeze(value.argv.map((arg) => safeText(arg, 'argv')));
-	if (!argv[0]) invalid('argv[0] must not be empty');
+	if (!argv[0] && !allowEmptyArgv0) invalid('argv[0] must not be empty');
 	const cwd = safeText(value.cwd, 'cwd');
 	if (!cwd.startsWith('/') || encoder.encode(cwd).length > 4096) invalid('cwd must be a bounded absolute POSIX path');
 	if (!value.env || typeof value.env !== 'object' || Array.isArray(value.env)) invalid('env must be a record');
@@ -109,6 +111,8 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 	if (!options || typeof options.createBindings !== 'function') invalid('A synchronous bindings factory is required');
 	const createBindings = options.createBindings;
 	const validateModule = options.validateModule;
+	if (options.allowClangCc1 !== undefined && typeof options.allowClangCc1 !== 'boolean') invalid('allowClangCc1 must be boolean');
+	const allowClangCc1 = options.allowClangCc1 === true;
 	if (validateModule !== undefined && typeof validateModule !== 'function') invalid('validateModule must be a synchronous function');
 	if (options.linkerPaths !== undefined && (!Array.isArray(options.linkerPaths) || options.linkerPaths.length > 16)) invalid('Too many linker paths');
 	const allowedLinkers = new Set(linkers);
@@ -186,8 +190,12 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 					};
 					if (flags !== 0 && flags !== 1) return -1;
 					const program = text(programPtr, programLen);
-					if (!allowedLinkers.has(program)) return -1;
 					const argv = table(argvPtr, argc);
+					// The qualified fixture resolves no main-executable path. Its
+					// multicall driver requests these exact self jobs when it has more
+					// than one action. Preserve argv, including its empty first entry.
+					const compilerChild = allowClangCc1 && program === '' && argv[0] === '' && argv[1] === 'clang' && (argv[2] === '-cc1' || argv[2] === '-cc1as');
+					if (!compilerChild && !allowedLinkers.has(program)) return -1;
 					let env: Readonly<Record<string, string>>;
 					if (flags === 1) {
 						u32(envPtr); // An empty SmallVector may still have a non-null data pointer.
@@ -204,7 +212,7 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 						}
 						env = explicit;
 					}
-					const child = snapshotInvocation({ executable: 'wasm-ld', argv, cwd: invocation.cwd, env });
+					const child = snapshotInvocation({ executable: compilerChild ? 'clang' : 'wasm-ld', argv, cwd: invocation.cwd, env }, compilerChild);
 					try { return execute(child, depth + 1, trace); }
 					catch (error) { return error instanceof LlvmToolHostError && error.code === 'STARTUP_FAILED' ? -1 : -2; }
 				} catch { return -1; }

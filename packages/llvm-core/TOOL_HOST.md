@@ -66,6 +66,17 @@ Successful child exit codes 0 through `INT32_MAX` return exactly; -1 means packe
 rejection or child startup failure, and -2 means child runtime/cleanup failure.
 The caller must treat negative returns as host failure, not a guest exit status.
 
+The qualified multicall producer also requests `program: ''` with the exact argv
+prefix `['', 'clang', '-cc1', ...]` or `['', 'clang', '-cc1as', ...]` for a compile
+and link workflow. Trusted hosts may opt in with `allowClangCc1: true`; the same
+verified compiler module executes the original array, including its empty first
+argument. Public `run()` still requires a nonempty argv0. Other empty-program jobs,
+arbitrary compiler paths, generic driver recursion, and child response-file-only
+packets are unsupported and rejected before child bindings are created. Compiler
+children cannot dispatch further commands; maximum execution depth remains two.
+This opt-in does not admit nonempty compiler self paths or other multicall tool
+names; those need their own trusted registration and actual fixture qualification.
+
 The bridge must be called from the initialized command execution path, after
 instantiation exposes memory. An instantiation-time start function cannot invoke
 this bridge successfully. An unpatched module can still run commands such as

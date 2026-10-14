@@ -32,6 +32,7 @@ scope.onmessage = async ({ data }) => {
           'wasm-ld': { bytes: linker, sha256: request.configuration.linkerSha256 }
         },
         linkerPaths: [request.configuration.linkerPath],
+        allowClangCc1: true,
         validateModule(_executable, module) {
           for (const entry of WebAssembly.Module.imports(module)) {
             if (entry.kind !== 'function' || !(
