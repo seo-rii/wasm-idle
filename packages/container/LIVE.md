@@ -55,6 +55,12 @@ directory at the old path cannot redirect a pending operation to that replacemen
 Batch filesystem bindings use the same structural contract with local synchronous
 operations; they do not issue RPC or change snapshot visibility.
 
+Regular files and directories accept Preview1 `NONBLOCK` because their memory
+filesystem operations complete immediately. The flag is reported by
+`fd_fdstat_get` and can be changed with `fd_fdstat_set_flags` when the descriptor
+has that right. Changing `APPEND` after open, sync flags, and nonblocking standard
+streams remain unsupported and return `ENOTSUP`.
+
 The default per-call wait deadline is 120,000 ms, including idle stdin. Set
 `maxBlockedIoMs` explicitly (1..3,600,000) when a workflow needs a different bound.
 Deadline expiry is a runtime failure. `SpawnOptions.timeoutMs` remains the separate
