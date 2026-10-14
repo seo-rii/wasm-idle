@@ -81,6 +81,9 @@ export function createPipe(capacity = 64 * 1024) {
 }
 
 export function pipeReadable(reader: PipeReader, chunkBytes = 64 * 1024) {
+  // A zero-length read returns no bytes without reaching EOF; pulling with it would close
+  // the reader early and turn pending writes into EPIPE.
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 1) throw new PipeError('EINVAL', 'chunkBytes must be a positive integer');
   let closed = false;
   const close = () => { if (!closed) { closed = true; reader.close(); } };
   return new ReadableStream<Uint8Array>({

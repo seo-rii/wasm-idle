@@ -79,3 +79,15 @@ test('a failed stream write releases its pipe writer so the reader observes EOF'
   assert.deepEqual(await p.reader.read(4), new Uint8Array([7]));
   assert.equal((await p.reader.read(4)).length, 0);
 });
+
+test('readable adapters reject chunk sizes that cannot make progress', async () => {
+  const p = createPipe(4);
+  for (const chunkBytes of [0, -1, 1.5, Number.NaN]) {
+    assert.throws(() => pipeReadable(p.reader, chunkBytes), { code: 'EINVAL' });
+  }
+  assert.equal(await p.writer.write(new Uint8Array([1])), 1);
+  const reader = pipeReadable(p.reader, 1).getReader();
+  assert.deepEqual((await reader.read()).value, new Uint8Array([1]));
+  p.writer.close();
+  assert.equal((await reader.read()).done, true);
+});
