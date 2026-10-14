@@ -12,6 +12,47 @@ describe('required CI workflow gates', () => {
 		);
 		expect(workflow).toContain("WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'");
 	});
+	it('limits the token, cancels superseded pull request runs, and bounds every job', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const jobs = workflow.slice(workflow.indexOf('\njobs:\n'));
+		const jobBlocks = jobs.split(/^(?= {4}[a-z-]+:$)/m).slice(1);
+
+		expect(workflow).toContain('\npermissions:\n    contents: read\n');
+		expect(workflow).toContain(
+			'    group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}'
+		);
+		expect(workflow).toContain(
+			"    cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+		);
+		expect(jobBlocks.length).toBeGreaterThan(5);
+		for (const job of jobBlocks) {
+			expect(job, job.split('\n')[0]).toMatch(/^ {8}timeout-minutes: \d+$/m);
+		}
+	});
+	it('runs script, SDK wrapper, runtime package, and Go unit suites', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const jobStart = workflow.indexOf('    workspace-unit:');
+		const job = workflow.slice(jobStart, workflow.indexOf('    changed-runtimes:', jobStart));
+		const sync = job.indexOf('- run: pnpm exec svelte-kit sync');
+
+		expect(jobStart).toBeGreaterThanOrEqual(0);
+		expect(job).toContain('- run: node --test scripts/*.test.mjs');
+		for (const sdk of ['node', 'svelte', 'vue']) {
+			expect(
+				job.indexOf(`- run: pnpm exec vitest run --root packages/${sdk}`)
+			).toBeGreaterThan(sync);
+		}
+		for (const runtime of ['d', 'dotnet', 'lisp', 'lua', 'typescript', 'wat']) {
+			expect(job).toContain(`- run: pnpm --dir runtimes/wasm-${runtime} test`);
+		}
+		expect(job).toContain('pnpm --dir runtimes/wasm-rust exec vitest run');
+		expect(job).toContain('uses: actions/setup-go@');
+		for (const goModule of ['wasm-awk', 'wasm-tinygo']) {
+			expect(job).toContain(
+				`- run: go test ./...\n              working-directory: runtimes/${goModule}`
+			);
+		}
+	});
 	it('uses the required-browser reporter for the selected workspace family', async () => {
 		const config = await readFile('vitest.config.ts', 'utf8');
 		expect(config).toContain("process.env.WASM_IDLE_REQUIRE_BROWSER_TESTS === '1'");
