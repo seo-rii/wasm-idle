@@ -154,6 +154,18 @@ to the corrected owner. After an older attempt exits, inspect every owned task's
 descendants and record any supplementary cleanup separately before using its
 output or starting another build.
 
+The [successful SDK binary receipt](evidence.sdk-binary.json) now records the
+actual release Wasm, generated web glue and static inventory for prepared source
+`de98d061435a308e8bbcd2ca195d29ac07401774`, using helper commit
+`d801882b518211eb0563cdda9f3f4369a30f8e6a`. The receipt and three stage process
+records retain their original bytes; [archive metadata](evidence.sdk-binary-metadata.json)
+links their identities and verifies all 580 source pins, six additional tool/compiler
+library pins and six outputs. SDK build, bindgen and inspection exited zero in
+100.969, 1.761 and 0.255 seconds, with complete cleanup and no signals. This manual
+follow-up reused the checked target for the same physical source copy; its timing
+is not a clean rebuild measurement. `guestQualified` remains false, and local
+module/Worker packaging, real Bash and browser behavior remain separate gates.
+
 ## Remaining gates
 
 Generated web glue is not the complete npm module graph. The SDK's original
