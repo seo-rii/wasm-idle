@@ -41,8 +41,7 @@ def main():
     assert archive.stat().st_size == manifest['source']['size']
     cc = Path(shutil.which('cc'))
     assert probe.digest(cc) == receipt['host']['ccSha256']
-    environment = {**os.environ, 'LC_ALL': 'C', 'SOURCE_DATE_EPOCH': '1725494400', 'KCONFIG_NOTIMESTAMP': '1'}
-    environment.pop('KCONFIG_ALLCONFIG', None)
+    environment = probe.build_environment()
 
     # Preserve the failed attempt. Resume is one-shot and never hides that result.
     validation = work / 'native-resume-validation'

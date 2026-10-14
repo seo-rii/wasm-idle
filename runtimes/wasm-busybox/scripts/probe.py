@@ -40,6 +40,17 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+def build_environment():
+    """Pass only tool lookup and temporary-file locations to the pinned build.
+
+    BusyBox's Makefile/Kbuild read caller CFLAGS, LDFLAGS, CROSS_COMPILE, MAKEFLAGS
+    and similar variables. The receipt does not record them, so they stay out.
+    """
+    environment = {name: os.environ[name] for name in ('PATH', 'HOME', 'TMPDIR') if name in os.environ}
+    environment.update({'LC_ALL': 'C', 'SOURCE_DATE_EPOCH': '1725494400', 'KCONFIG_NOTIMESTAMP': '1'})
+    return environment
+
+
 def run_logged(command, path, environment, cwd=None, timeout=240):
     print('RUN', json.dumps([str(arg) for arg in command]), flush=True)
     with path.open('xb') as log:
@@ -182,9 +193,7 @@ def main():
         raise RuntimeError('Source archive size or hash mismatch')
     source_dir = work / source['directory']
     unpack(archive, source_dir, source)
-    environment = {**os.environ, 'LC_ALL': 'C', 'SOURCE_DATE_EPOCH': '1725494400',
-                   'KCONFIG_NOTIMESTAMP': '1'}
-    environment.pop('KCONFIG_ALLCONFIG', None)
+    environment = build_environment()
     for index, patch in enumerate(manifest['patches']):
         applied = run_logged(['patch', '-p1', '--forward', '--batch', '--fuzz=0', '-i', str(ROOT / patch['path'])],
                              work / ('patch-' + str(index) + '.log'), environment, cwd=source_dir)
