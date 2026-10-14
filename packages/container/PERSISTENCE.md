@@ -45,7 +45,11 @@ storage permission or claim indefinite retention.
 
 On reopen, root digests, structure, inode identities, namespace limits and every
 referenced blob are validated. An invalid latest root can fall back to the
-previous verified root, with `recovered: true`. If neither retained root validates,
+previous verified root, with `recovered: true`. Only evidence about the stored data
+selects that fallback: a digest, size, structure or limit mismatch, or a missing blob.
+Because the next flush retires every root except the loaded one, a storage access
+failure such as an unreadable blob instead fails opening with `STORAGE` and leaves both
+roots untouched for a retry. If neither retained root validates,
 opening fails with `CORRUPT` and leaves the stored data untouched. It never replaces
 a corrupt workspace with an empty one. Lowering memory or metadata limits can
 make a previously valid workspace unrecoverable under the new limits.

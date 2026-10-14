@@ -207,7 +207,12 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       try {
         const restored = await restore(record);
         if (!lastRoot) { fs = restored; lastRoot = record; committedGeneration = fs.generation; }
-      } catch { if (!lastRoot) recovered = true; }
+      } catch (error) {
+        // The next flush retires every root except the loaded one, so only evidence about the
+        // stored data may select an older root. Storage access failures abort and preserve both.
+        if (error instanceof RangeError || error instanceof DOMException && error.name !== 'NotFoundError' && error.name !== 'TypeMismatchError') throw error;
+        if (!lastRoot) recovered = true;
+      }
       // Only the latest valid root is loaded; earlier journal roots remain unmodified.
       if (lastRoot) break;
     }
