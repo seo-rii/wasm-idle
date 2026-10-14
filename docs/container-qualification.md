@@ -18,9 +18,9 @@ been implemented; unpassed promotion gates remain explicit.
 | Pinned distribution index | [C-07 #139](https://github.com/seo-rii/wasm-idle/pull/139) | C-06 |
 | Verified asset loader | [C-08 #141](https://github.com/seo-rii/wasm-idle/pull/141) | C-07 |
 | Atomic lazy package mounts | [C-09 #142](https://github.com/seo-rii/wasm-idle/pull/142) | C-08 |
-| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; actual producer qualification pending |
-| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; full relink/CLI gate pending |
-| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; new compiler execution pending |
+| LLVM tool-host and snapshot adapter | [C-10 #144](https://github.com/seo-rii/wasm-idle/pull/144) (draft) | C-09; Chromium/full-header qualification pending |
+| Opt-in LLVM driver/cwd producer ABI | [wasm-llvm C-11 #32](https://github.com/seo-rii/wasm-llvm/pull/32) (draft) | wasm-llvm main; real raw links and producer CLI pass; consumer gate pending |
+| Receipt-gated actual Clang browser fixture | [C-11 consumer #159](https://github.com/seo-rii/wasm-idle/pull/159) (draft) | C-10 plus completed producer/CLI receipts; Chromium compile checks pass, link/C/C++/cache gate pending |
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | Minimal BusyBox B1 producer | [C-12 follow-up #156](https://github.com/seo-rii/wasm-idle/pull/156) | C-12; selected profiles and native/WASI differential evidence |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
@@ -152,7 +152,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 | Gate | Observed boundary | Next experiment / owner |
 | --- | --- | --- |
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
-| G0-CLANG / CLI-01–03 | Existing raw Clang reports that WASI cannot spawn subprocesses. Preopens/PWD do not set wasi-libc's cwd. Full modified compiler qualification is pending | wasm-llvm #32 opt-in LLVM `ExecuteAndWait` bridge and real `chdir` startup; complete Clang/LLD relink and actual C/C++ CLI gate, then browser |
+| G0-CLANG / CLI-01–03 | Modified raw Clang/LLD links, exact producer ABI checks and seven actual Node WASI CLI cases pass; a real common VFS link/export probe also returns 42. Initial Chromium compile cases pass but its linker dispatch exposed an empty environment-slice contract mismatch | #159 fixes the zero-count slice handling; repeat the pinned Chromium C/C++/full-sysroot and cache gate; full header-combination coverage remains separate |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass | Keep support limited to the recorded applets/options; real shell acceptance is still separate |
 | P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate | Product failure UI/lifecycle and full shell-based reload matrix |
@@ -178,6 +178,31 @@ CPU and address-space limits apply per process, not to aggregate process-tree re
 Clang/LLD links and the receipt-gated actual CLI checks run sequentially; failed preparation
 or build does not trigger an automatic retry. Keep compiler PRs draft until the actual CLI,
 browser and header-coverage gates have completed receipts.
+
+The requested guarded retry subsequently completed both raw links: Clang in 578.152 seconds
+and LLD in 285.064 seconds. Its last verifier failed because it incorrectly required LLD
+to have no `exec_v1` import, despite the pinned LLD error-handler calling `ExecuteAndWait`.
+The failed receipt and source pack remain intact. The corrected verifier and a documented
+requalification helper checked the same independently pinned bytes and every original input
+without relinking, then published a separate complete producer receipt
+`6e610fe9bb6a12c794dd3b0e5110b25c76cd31eed11d9546224d9e3e7478df14`.
+
+The producer's actual Node WASI CLI receipt
+`99bef206dba7f50dd07f6e7885b0e8570b11aae381360148a98a8d2f4678d2f3` passes seven
+commands, response files, non-root Korean/spaced cwd, `-c/-E/-S`, diagnostics and a real
+two-object driver-to-LLD link. The produced freestanding Wasm export returns 42. The pinned
+WebAssembly driver selects an absolute linker with `-fuse-ld`; the fixture no longer assumes
+`--ld-path` controls that target. Both tools import the exact ABI, but only top-level Clang
+may dispatch the pinned linker; all LLD child requests are rejected.
+
+An initial isolated Chromium run passed compilation, preprocessing, assembly, response-file
+and diagnostic cases before rejecting inherited environment slices whose unused pointer was
+nonzero. The producer's empty SmallVector has inline storage, so the host now checks the
+zero count without reading that pointer. Ten focused LLVM host tests and an actual common-VFS
+driver/link/export probe pass after the correction. Chromium qualification is being repeated
+with the same compiler, linker and full sysroot. The immutable executable SHA-256 values are
+`e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3` (Clang) and
+`3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a` (LLD).
 
 The pinned WASIX SDK experiment preserves the original shell failure traces. Its source-only
 dispatch framing and Rust/C protocol checks pass, but no newly built SDK has passed Bash
