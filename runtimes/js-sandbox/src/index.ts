@@ -14,7 +14,7 @@ export interface QuickJsAssetResolverOptions {
 }
 
 export interface QuickJsModuleLike {
-	/** Returns the result as a native value and throws when the evaluated code throws. */
+	/** Returns the result as a native value and throws the dumped guest value when the code throws. */
 	evalCode: (code: string, options?: unknown) => unknown;
 }
 
@@ -101,5 +101,22 @@ export async function evaluateQuickJs(
 				? createDeadlineInterrupt(Date.now() + options.timeoutMs)
 				: undefined)
 	};
-	return { value: quickJs.evalCode(code, evalOptions) };
+	try {
+		return { value: quickJs.evalCode(code, evalOptions) };
+	} catch (thrown) {
+		if (thrown instanceof Error) throw thrown;
+		// QuickJS rethrows the guest's thrown value as dumped data: a `{ name, message, stack }`
+		// record for guest errors (including `interrupted` and `out of memory`), else the raw value.
+		const record =
+			thrown && typeof thrown === 'object' ? (thrown as Record<string, unknown>) : {};
+		const error = new Error(
+			typeof record.message === 'string' ? record.message : String(thrown),
+			{ cause: thrown }
+		);
+		if (typeof record.name === 'string') error.name = record.name;
+		if (typeof record.stack === 'string') {
+			error.stack = `${error.name}: ${error.message}\n${record.stack}`;
+		}
+		throw error;
+	}
 }

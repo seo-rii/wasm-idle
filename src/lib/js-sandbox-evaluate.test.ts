@@ -14,11 +14,34 @@ describe('evaluateQuickJs', () => {
 		});
 	});
 
-	it('rejects code that throws or exceeds its deadline inside QuickJS', async () => {
-		await expect(evaluateQuickJs('throw new Error("boom")')).rejects.toThrow('boom');
-		await expect(evaluateQuickJs('while (true) {}', { timeoutMs: 50 })).rejects.toThrow(
-			'interrupted'
+	it('rejects with Error instances when code throws or exceeds its deadline inside QuickJS', async () => {
+		await expect(evaluateQuickJs('throw new TypeError("boom")')).rejects.toSatisfy(
+			(error) =>
+				error instanceof Error &&
+				error.name === 'TypeError' &&
+				error.message === 'boom' &&
+				!!error.stack?.includes('eval.js')
 		);
+		await expect(evaluateQuickJs('throw 42')).rejects.toSatisfy(
+			(error) => error instanceof Error && error.message === '42' && error.cause === 42
+		);
+		await expect(evaluateQuickJs('while (true) {}', { timeoutMs: 50 })).rejects.toSatisfy(
+			(error) =>
+				error instanceof Error &&
+				error.name === 'InternalError' &&
+				error.message === 'interrupted'
+		);
+	});
+
+	it('rethrows host errors from the module evaluator unchanged', async () => {
+		const failure = new RangeError('host failure');
+		const quickJs: QuickJsModuleLike = {
+			evalCode: () => {
+				throw failure;
+			}
+		};
+
+		await expect(evaluateQuickJs('source', { quickJs })).rejects.toBe(failure);
 	});
 
 	it('passes sandbox limits to the module evaluator and returns its value', async () => {
