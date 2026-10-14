@@ -106,10 +106,21 @@ applies child cwd and fd operations first. Its cwd comes from the child's WASIX
 filesystem lookup, independently of parent state and `PWD`. The external SDK
 compile probe checks public accessibility without returning an execution or
 successful task handle. This does not export mutable runtime state or establish
-common live filesystem/fd capabilities; actual Rust compilation is a distinct gate.
+common live filesystem/fd capabilities.
 
-Only protocol tests and source-patch application checks are included at this stage. SDK Rust
-typechecking and actual SDK/Bash rebuild remain pending under the current resource budget.
-No producer lock or npm runtime dependency changes; no shell support promotion follows from
-patches applying cleanly. Repeat the original real Bash gates with rebuilt, pinned artifacts
-before accepting candidate B as a production backend.
+The genuine pinned SDK library and external command-snapshot example now pass
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib --example
+container_command_snapshot_compile -j 1` at source
+`de98d061435a308e8bbcd2ca195d29ac07401774`, with all owned processes reaped and
+all 580 recorded source/toolchain/preparation pins unchanged. The
+[immutable metadata receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck.json)
+and [original process receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck-process.json)
+preserve that evidence. Earlier genuine Rust API errors and dependency-cache
+failures remain recorded separately.
+
+This check produces Rust metadata, not runnable SDK Wasm/web glue or a shell
+backend. Actual SDK/Bash builds, local module/Worker packaging, the JavaScript
+command registry, common fd/VFS and browser acceptance remain pending. No
+producer lock or npm runtime dependency changes; no shell support promotion
+follows from this type check. Repeat the original real Bash gates with rebuilt,
+pinned artifacts before accepting candidate B as a production backend.
