@@ -102,15 +102,21 @@ function codeMightReadStdin(code: string) {
 function readInitialStdin(code: string, initialStdin: unknown, log = true) {
 	if (typeof initialStdin === 'string') return initialStdin;
 	if (!codeMightReadStdin(code)) return '';
-	const chunk = waitForBufferedStdin(stdinBufferR!, () => postMessage({ buffer: true }));
-	if (log) {
-		console.log(
-			chunk == null
-				? '[wasm-idle:r-stdin] read(bytes=0, eof=true)'
-				: `[wasm-idle:r-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
-		);
+	// R reads stdin from a file written before the program starts, so collect
+	// terminal input until EOF instead of dropping chunks typed after the first.
+	let input = '';
+	while (true) {
+		const chunk = waitForBufferedStdin(stdinBufferR!, () => postMessage({ buffer: true }));
+		if (log) {
+			console.log(
+				chunk == null
+					? '[wasm-idle:r-stdin] read(bytes=0, eof=true)'
+					: `[wasm-idle:r-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+			);
+		}
+		if (chunk == null) return input;
+		input += chunk;
 	}
-	return chunk || '';
 }
 
 function buildRunnerSource(activePath: string, args: string[]) {
