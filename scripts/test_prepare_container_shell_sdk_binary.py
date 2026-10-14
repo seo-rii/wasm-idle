@@ -29,10 +29,14 @@ class AdmissionTests(unittest.TestCase):
         for name in ("wasmer-sdk", "wasmer-wasix"):
             (self.source / name).mkdir(parents=True)
             (self.source / name / "source.rs").write_text("original source\n")
+        (self.source / "wasmer-sdk/.cargo").mkdir()
+        (self.source / "wasmer-sdk/.cargo/config.toml").write_text("[build]\ntarget = \"wasm32-unknown-unknown\"\n")
         argv = ["/trusted/cargo", "+nightly-2025-07-05", "check", "--locked", "--offline", "--target",
                 "wasm32-unknown-unknown", "--lib", "--example", "container_command_snapshot_compile", "-j", "1"]
         self.policy = {"preparedSource": str(self.source), "sourcePins": {
-            str(path): builder.identity(path) for path in self.source.rglob("*.rs")}, "stage": {"argv": argv}}
+            str(path): builder.identity(path) for path in self.source.rglob("*") if path.is_file()},
+            "stage": {"argv": argv, "producerWorktree": str(self.source / "wasmer-sdk"),
+                      "environment": {"CARGO_HOME": str(self.root / "cargo-home")}}}
         self.check = {"argv": argv, "exitCode": 0, "termination": "exited", "cleanup": {
             "allReaped": True, "signaled": [], "remaining": [], "errors": []}}
         self.policy_path, self.check_path = self.root / "policy.json", self.root / "check.json"
@@ -47,9 +51,9 @@ class AdmissionTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def rejected_without_tool_or_output(self):
+    def rejected_without_tool_or_output(self, reason=""):
         with patch.object(builder.subprocess, "check_output", side_effect=AssertionError("tool must not run")) as tool:
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, reason):
                 builder.prepare(self.options)
             tool.assert_not_called()
         self.assertFalse(self.options.output.exists())
@@ -77,6 +81,18 @@ class AdmissionTests(unittest.TestCase):
         self.check_path.write_text(json.dumps(self.check))
         self.options.typecheck_receipt_sha256 = builder.identity(self.check_path)["sha256"]
         self.rejected_without_tool_or_output()
+
+    def test_unpinned_cargo_configuration_before_tool_or_output(self):
+        # Cargo reads these locations, but neither is inside an inventoried source tree.
+        for directory in (self.source / ".cargo", self.root / "cargo-home"):
+            with self.subTest(directory=directory):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "config.toml").write_text("[build]\nrustflags = [\"-Cdebuginfo=2\"]\n")
+                self.rejected_without_tool_or_output("unpinned Cargo configuration")
+                (directory / "config.toml").unlink()
+
+    def test_pinned_sdk_cargo_configuration_is_accepted(self):
+        self.assertEqual(builder.verify_source(self.policy), self.source.resolve())
 
 
 @unittest.skipUnless(sys.platform == "linux", "Linux process ownership")

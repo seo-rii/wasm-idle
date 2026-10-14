@@ -20,6 +20,9 @@ SDK/WASIX source inventory, both locks and the actual private nightly executable
 Every input hash and the exact source-file inventories are rechecked before
 preparation, launch and after each build stage. Failed checks, force-cleaned
 successful checks, unlisted source files and changed inputs are rejected.
+Cargo also reads `.cargo/config(.toml)` from every ancestor of the SDK
+directory and from `CARGO_HOME`; any such file not pinned by the policy (only
+the SDK's own configuration is expected) is rejected at the same points.
 
 | Input                         | Required identity                                                                                                                       |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |

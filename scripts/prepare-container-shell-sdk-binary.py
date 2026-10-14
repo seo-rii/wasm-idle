@@ -62,6 +62,15 @@ def verify_source(policy):
         expected = {name for name in policy["sourcePins"] if name.startswith(str(root) + "/")}
         if actual != expected:
             raise ValueError(f"source inventory changed: {root}")
+    # Cargo also merges config files from every ancestor of its working directory
+    # and from CARGO_HOME, outside both inventories. Only pinned files may apply.
+    sdk = Path(policy["stage"]["producerWorktree"]).resolve()
+    cargo_home = Path(policy["stage"]["environment"]["CARGO_HOME"]).resolve()
+    for directory in (*(path / ".cargo" for path in (sdk, *sdk.parents)), cargo_home):
+        for name in ("config", "config.toml"):
+            path = directory / name
+            if (path.exists() or path.is_symlink()) and str(path) not in policy["sourcePins"]:
+                raise ValueError(f"unpinned Cargo configuration rejected: {path}")
     return prepared
 
 
