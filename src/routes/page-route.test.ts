@@ -571,6 +571,10 @@ describe('example route debug actions', () => {
 		expect(sliceFunction('importFiles')).toMatch(
 			/^function importFiles\(fileList: File\[\]\) \{\s+if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}/
 		);
+		// An import staged before Run must not replace the workspace once the run owns it.
+		expect(sliceFunction('importFiles')).toMatch(
+			/await stageWorkspaceImport\([\s\S]*?destination\.assertCurrent\(\);\s+(?:\/\/[^\n]+\n\s+)?if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}\s+let imported/
+		);
 		expect(source.match(/disabled=\{!workspaceInitialized \|\| !!runningMode\}/g)).toHaveLength(
 			2
 		);

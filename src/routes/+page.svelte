@@ -1507,6 +1507,11 @@
 				assertDestination: destination.assertCurrent
 			});
 			destination.assertCurrent();
+			// A run or debug session that started while the import was staged owns the workspace.
+			if (runningMode) {
+				saveStatus = 'Stop the running program before importing files';
+				return;
+			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
 				applySnapshot(plan.backup, 'Workspace backup restored');
