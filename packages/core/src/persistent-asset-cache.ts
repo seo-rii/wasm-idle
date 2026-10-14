@@ -299,6 +299,12 @@ const DEFAULTS: Readonly<ResolvedRuntimeAssetCacheOptions> = Object.freeze({
 	version: RUNTIME_ASSET_LOCK_VERSION
 });
 const STORAGE_TIMEOUT_MS = 3000;
+// Queued work behind another tab or call is not a storage failure, but a holder whose native
+// mutation never settles must still turn into a cache miss rather than a hung load.
+const LOCK_TIMEOUT_MS = 30_000;
+// Locks whose last wait expired. A load both reads and writes, so a holder that never releases
+// would otherwise cost every later call the full LOCK_TIMEOUT_MS. Acquiring the lock clears it.
+const stalledLocks = new Set<string>();
 let globalOptions: RuntimeAssetCacheOptions = {};
 
 /** Replace global defaults. Pass {} to reset, or false to disable all persistent access. */
@@ -530,18 +536,30 @@ async function withStorage<T>(
 	const lockAbort = new AbortController();
 	const abortLock = () => lockAbort.abort(signal?.reason);
 	signal?.addEventListener('abort', abortLock, { once: true });
-	// This deadline includes lock acquisition, storage opening, body reads and metadata work.
-	const timer = setTimeout(
-		() => lockAbort.abort(new Error('Asset cache operation timed out')),
-		STORAGE_TIMEOUT_MS
+	const lockName = storageName(options);
+	let timer = setTimeout(
+		() => {
+			stalledLocks.add(lockName);
+			lockAbort.abort(new Error('Asset cache lock timed out'));
+		},
+		stalledLocks.has(lockName) ? STORAGE_TIMEOUT_MS : LOCK_TIMEOUT_MS
 	);
 	try {
 		const pending = navigator.locks.request(
-			storageName(options),
+			lockName,
 			{ signal: lockAbort.signal },
 			async () => {
 				const signal = lockAbort.signal;
+				// Any grant proves the previous holder released the lock.
+				stalledLocks.delete(lockName);
 				checkAbort(signal);
+				// Time queued behind earlier holders must not eat into this operation's deadline
+				// for storage opening, body reads and metadata work.
+				clearTimeout(timer);
+				timer = setTimeout(
+					() => lockAbort.abort(new Error('Asset cache operation timed out')),
+					STORAGE_TIMEOUT_MS
+				);
 				const db = await openDatabase(storageName(options), signal);
 				try {
 					checkAbort(signal);
@@ -577,7 +595,8 @@ async function withStorage<T>(
 			}
 		);
 		// Settle the caller even if a native mutation cannot stop. Its callback still owns the lock,
-		// and all subsequent mutations are fenced off. Queued callers time out to cache misses.
+		// and all subsequent mutations are fenced off. Queued callers miss after LOCK_TIMEOUT_MS,
+		// and later callers after STORAGE_TIMEOUT_MS until the lock is granted again.
 		return await waitForStorage(pending, lockAbort.signal);
 	} catch {
 		// Storage denial, quota exhaustion, unsupported APIs and lock timeouts are cache misses.
@@ -636,8 +655,12 @@ function validRecord(value: AssetRecord): boolean {
 
 async function records(db: StorageDatabase): Promise<AssetRecord[]> {
 	const result = await transact<AssetRecord[]>(db, 'readonly', (store) => store.getAll());
-	if (!result.every(validRecord)) throw new Error('Invalid asset cache metadata');
-	return result;
+	// Drop corrupt records rather than failing every write, prune and stats call for the namespace.
+	// Orphan sweeps reclaim their bodies, and hits always re-verify the body digest.
+	for (const record of result)
+		if (!validRecord(record))
+			await transact(db, 'readwrite', (store) => store.delete(record.sha256));
+	return result.filter(validRecord);
 }
 
 async function removeRecord(
