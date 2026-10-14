@@ -82,6 +82,40 @@ Imported symlinks are inert records: restoration never writes through them. Late
 access still obeys the requesting VFS capability, including symlinks outside it.
 No archive JavaScript, shell script or program is executed during restore.
 
+## Save-state binding and optional autosave
+
+`createWorkspaceSaveController(persistentOwner)` exposes `inspect()` and a bounded
+latest-state `updates` stream for saved/saving/dirty/recovered/error UI. The nested
+`workspace` inspection reports both published and committed generations. Consuming
+updates never marks data saved. Only one save controller may own an owner at a time;
+all UI save requests should use its `save()` method so their status is observable.
+
+Manual saving is the default. A host may explicitly opt in using `{ autosave: true,
+delayMs: 1000, maxWaitMs: 5000 }` or `setAutosave(true)`. Changes are debounced with a
+maximum scheduling wait; browser suspension can delay timers, so neither value is
+a durability deadline. A save takes the current published revision, serializes
+requests and, if a newer manual request arrived while storage was pending, commits
+that requested revision before resolving. Edits after the final snapshot remain
+dirty. Status notifications contain at most one queued inspection and may coalesce
+intermediate transitions.
+
+A save error remains visible and pauses automatic retries. No workspace data is
+deleted. The host should offer retry (`save()` or explicit `setAutosave(true)`),
+backup download, and a visible unsaved/error state. New edits alone do not trigger
+an endless failing write loop. Unpublished editor buffers must be published or
+exported separately; autosave only sees the VFS. A conservative VFS-wide generation
+can schedule another save for temporary/package changes even though their bytes
+are not persisted.
+
+`dispose()` cancels timers/subscriptions and waits for storage already in progress.
+It starts no final save, deletes no files and does not release the separately owned
+persistence lock. A newer queued revision that cannot finish before disposal
+rejects rather than reporting the earlier root as fully saved. The host must stop
+its container processes, explicitly save/export as chosen by the user, dispose the
+binding, and finally dispose the persistence owner. Page teardown is not a reliable
+place to await these operations. Cancelling only the status reader does not turn
+off autosave; dispose the controller when removing the owning UI.
+
 ## Qualification
 
 `node packages/container/scripts/test-workspace-browser.mjs` runs the shared

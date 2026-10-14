@@ -235,6 +235,39 @@ try {
   checks.push('C18: failed-save backup restores all unsaved files, stays dirty until flush, and leaves runtime cache/tmp intact');
   checks.push('C18: corrupt backup cannot replace files; explicit flush/reopen retains the complete restored workspace');
 
+  const saveBinding = await page.evaluate(async () => {
+    await owner.dispose(); let fail = false, attempts = 0;
+    owner = await persistence.openPersistentWorkspace({ id: 'save-binding', fault(point) {
+      if (point === 'before-root-publish') { attempts++; if (fail) throw new Error('injected storage failure'); }
+    } });
+    const { createWorkspaceSaveController } = await import('/dist/workspace/index.js');
+    const binding = createWorkspaceSaveController(owner, { delayMs: 20, maxWaitMs: 100 }), reader = binding.updates.getReader();
+    const until = async predicate => { for (;;) { const { value, done } = await reader.read(); if (done) throw new Error('Save stream ended early'); if (predicate(value)) return value; } };
+    owner.fs.writeFile('a', encode('manual')); await new Promise(resolve => setTimeout(resolve, 40));
+    const initial = binding.inspect();
+    await binding.save(); const manual = owner.inspect();
+    binding.setAutosave(true); owner.fs.writeFile('a', encode('automatic'));
+    const automatic = await until(value => value.workspace.state === 'saved' && value.workspace.generation === owner.fs.generation);
+    fail = true; owner.fs.writeFile('a', encode('unsaved after failure'));
+    const failure = await until(value => value.pausedAfterError), failedAttempts = attempts;
+    owner.fs.writeFile('b', encode('still unsaved')); await new Promise(resolve => setTimeout(resolve, 60));
+    const didNotRetry = attempts === failedAttempts;
+    fail = false; await binding.save(); const recovered = binding.inspect();
+    owner.fs.writeFile('unflushed', encode('keep only in memory')); await binding.dispose(); reader.releaseLock();
+    const retained = { state: owner.inspect().state, watchers: owner.fs.watcherCount, file: decode(owner.fs.readFile('unflushed')) };
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'save-binding' });
+    const restored = { a: decode(owner.fs.readFile('a')), b: decode(owner.fs.readFile('b')), files: owner.fs.readdir('/workspace') };
+    return { initial, manual, automatic, failure, didNotRetry, recovered, retained, restored, attempts };
+  });
+  assert.equal(saveBinding.initial.workspace.committedGeneration, null); assert.equal(saveBinding.initial.autosave, false);
+  assert.equal(saveBinding.manual.state, 'saved'); assert.equal(saveBinding.automatic.workspace.dirty, false);
+  assert.equal(saveBinding.failure.workspace.state, 'error'); assert.equal(saveBinding.failure.workspace.dirty, true); assert.equal(saveBinding.didNotRetry, true);
+  assert.equal(saveBinding.recovered.workspace.state, 'saved'); assert.equal(saveBinding.recovered.pausedAfterError, false);
+  assert.deepEqual(saveBinding.retained, { state: 'dirty', watchers: 0, file: 'keep only in memory' });
+  assert.deepEqual(saveBinding.restored, { a: 'unsaved after failure', b: 'still unsaved', files: ['a', 'b'] }); assert.equal(saveBinding.attempts, 4);
+  checks.push('C18: manual save is default; opt-in autosave commits real OPFS/IDB changes and pauses on storage failure');
+  checks.push('C18: retry saves retained data; binding disposal releases watchers without flushing or disposing the owner');
+
   const integration = await page.evaluate(async () => {
     await owner.dispose();
     owner = await persistence.openPersistentWorkspace({ id: 'container-lifecycle', maxBytes: 1024 });
@@ -275,6 +308,7 @@ try {
     userAgent: initial.userAgent, secureContext: initial.secure, isolatedProfileRequired: false,
     implementationSha256: createHash('sha256').update(implementation).digest('hex'),
     backupImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/backup.js'))).digest('hex'),
+    saveBindingImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/save.js'))).digest('hex'),
     filesystemImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/fs/memory.js'))).digest('hex'),
     results: checks, fixtureCount: checks.length
   };
