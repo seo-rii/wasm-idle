@@ -1,4 +1,3 @@
-import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 /** Bundle the core client into integrity-pinned classic or module runtime Workers.
@@ -6,6 +5,7 @@ import { fileURLToPath } from 'node:url';
  * @returns {Promise<string>}
  */
 export async function withRuntimeWasmModuleClient(source) {
+	const { build } = await import('esbuild');
 	const result = await build({
 		stdin: {
 			contents:
