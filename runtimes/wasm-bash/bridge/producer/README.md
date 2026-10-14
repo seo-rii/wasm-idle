@@ -9,7 +9,51 @@ nor an import verifier result establishes a supported shell backend.
 The patched SDK library and external snapshot example have passed a real Rust
 typecheck, as recorded by the preceding source-bridge change. A built SDK binary,
 real guest exec/wait and common Supervisor fd/filesystem bindings remain separate
-gates. This producer has not yet built or executed a Bash artifact.
+gates. The producer has built a real Bash Wasm/WEBc candidate; guest execution is
+still pending.
+
+## Archived real build and read-only verification
+
+The original build ran at application commit
+`74abe3922c5a248b57ef0cb2d38d2d9a86fa1fc5` on 2026-10-14 and finished with
+`built-imports-verified-not-runtime-qualified`. The unchanged original
+[build receipt](evidence.bash-build.json) preserves all 13 commands, their successful
+exit codes, exact source/input identities and the module inventory. The unchanged
+[process receipt](evidence.bash-build-process.json) records exit 0, 587.243 seconds
+of wall time and complete descendant cleanup. Upstream `make shell` took 489.288
+seconds in that run. These are measurements from one local build.
+
+The archive was prepared from later application commit
+`f5844b5212621a949318638ec7263faba2c1f3dd`, recorded as
+`archiveBaseApplicationCommit` in the [recheck receipt](evidence.bash-build-recheck.json).
+That source includes the CLI symlink fix and pinned G0 allowlist test added after
+the build. The build receipt's `producerFiles` retains the original producer
+hashes; the archive base is not the source commit of the built candidate. The
+verifier and input lock remained byte-identical, and the recheck verified the
+original producer files against the tested commit and source-materials directory.
+
+All five complete input archives and all five artifact hashes were checked again
+locally. The actual 1,811,021-byte Wasm passed full module validation and the
+current verifier: 50 imports, 15 exports, exactly one
+`wasm_idle_shell_v1.exec_v1` with seven i32 parameters and one i32 result, and one
+shared wasm32 memory with initial 133 and maximum 65,536 pages. The 1,812,328-byte
+WEBc is packaging evidence; the 10,442,324-byte source-materials archive is still
+marked `completeReleaseSourcePack: false`. Binary files and archives remain
+outside Git. Neither these receipts nor the recheck executes a guest;
+`runtimeQualified` stays false.
+
+The reader verifies the pinned original receipt bytes, current source dependencies
+and lock without requiring the external artifacts. Supply both external paths to
+also hash the original inputs/artifacts and validate the actual Wasm inventory:
+
+```sh
+node runtimes/wasm-bash/bridge/producer/verify-evidence.mjs
+
+node --disable-wasm-trap-handler --wasm-num-compilation-tasks=1 \
+  runtimes/wasm-bash/bridge/producer/verify-evidence.mjs \
+  --artifact-root /private/original-bash-build \
+  --input-cache /private/inputs
+```
 
 ## Pinned inputs and build boundary
 
