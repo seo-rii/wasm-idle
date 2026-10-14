@@ -209,7 +209,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
 		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
-		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
+		expect(source).toMatch(
+			/<span class="material-symbols-outlined" aria-hidden="true"\s*>play_circle<\/span/
+		);
 	});
 
 	it('provides a bounded LLDB memory inspector with stale-request invalidation', () => {
@@ -1163,7 +1165,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/const terminalPanePixelWidth = \$derived\.by\(\(\) => \{/);
 		expect(source).toMatch(/\{#if debugLanguage && debug\.active\}/);
 		expect(source).toMatch(/class="panel-resizer"/);
-		expect(source).toMatch(/role="slider"/);
+		expect(source).toMatch(/role="separator"/);
 		expect(source).toMatch(/onpointerdown=\{\(event\) => \{/);
 		expect(source).toMatch(/onkeydown=\{\(event\) => \{/);
 		expect(source).toMatch(/height: 100dvh;/);
@@ -1173,7 +1175,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s
 		);
-		expect(source).toMatch(/role="slider"/);
+		// A focusable pane splitter is a separator whose orientation is the divider's own (vertical).
+		expect(source).toMatch(
+			/class="panel-resizer"\s+role="separator"\s+aria-label="Resize example panes"\s+aria-orientation="vertical"/
+		);
+		expect(source).toMatch(
+			/aria-valuenow=\{desktopExampleLayout\s+\? \(terminalPanePixelWidth \?\? undefined\)/
+		);
+		expect(source).not.toContain('role="slider"');
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
 		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
@@ -1191,6 +1200,44 @@ describe('example route debug actions', () => {
 	it('keys recursive call stack entries by index so duplicate frames still render', () => {
 		expect(source).toMatch(
 			/\{#each debug\.callStack as frame, index \(`\$\{frame\.functionName\}:\$\{frame\.line\}:\$\{index\}`\)\}/
+		);
+	});
+
+	it('keeps icon ligatures out of accessible names and labels every form control', () => {
+		const markup = source.slice(source.indexOf('</script>'), source.indexOf('<style'));
+		const iconTags = markup.match(/<span\b[^>]*\bmaterial-symbols-outlined\b[^>]*>/g) ?? [];
+		expect(iconTags.length).toBeGreaterThan(0);
+		// Otherwise buttons read as "save Save" and selects as "conversion_path".
+		expect(iconTags.filter((tag) => !tag.includes('aria-hidden="true"'))).toEqual([]);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">C\+\+ standard<\/span>\s+<select id="cpp-version"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Rust target<\/span>\s+<select id="rust-target-triple"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Go target<\/span>\s+<select id="go-target"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">OCaml backend<\/span>\s+<select id="ocaml-backend"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Binaryen mode<\/span>\s+<select id="ocaml-binaryen-mode"/
+		);
+		expect(markup).toMatch(
+			/<textarea\s+bind:value=\{stdinInput\}\s+aria-label="Preloaded stdin"/
+		);
+	});
+
+	it('does not announce the autosave indicator on every edit', () => {
+		const saveState = source.match(
+			/<span\s+class="save-state save-state--\{workspaceSaveState\.phase\}"[^>]*>/
+		)?.[0];
+		expect(saveState).toBeTruthy();
+		expect(saveState).not.toMatch(/role=|aria-live=/);
+		// Failed saves are still announced through the dedicated alert banner.
+		expect(source).toMatch(
+			/\{#if workspaceSaveState\.phase === 'error'\}\s+<div class="workspace-save-error" role="alert">/
 		);
 	});
 });
