@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "qualification": "Actual rendered GNU Bash/BusyBox/Clang snapshot-compiler profile, unchanged script with live utilities/artifact, common memory workspace and OPFS save/reload; local Chromium only, no PTY/production hosting/source-license review claim",
+  "originalRun": "/data/seorii-container-fixes-20261015/product-shell-final-20261015T145931Z",
+  "originalEvidence": {
+    "product-shell-browser-evidence.json": {
+      "bytes": 34968,
+      "sha256": "b21a4852e3eebf9ac098615e6f9525aff6d5707ed13aa04c4fccb6f4d8e2b534"
+    },
+    "product-shell-browser-process-evidence.json": {
+      "bytes": 1042,
+      "sha256": "815e59620ce0d9e7c01db25477f65d8c69dab443f77ca74fc59d6d638f703bf3"
+    }
+  },
+  "testedApplicationCommit": "cc0001ef4e8aeefc2f59d32c0a2b7c4f6160eaf6",
+  "sourceScope": "Exact compiled and builder source bytes are recorded in the browser receipt and rechecked after the run. Historical receipts remain unchanged. Later UI source changes require their own fixture regression and immutable release evidence; this receipt covers only its recorded source hashes.",
+  "checks": 6,
+  "runs": 3,
+  "processExitCode": 0,
+  "processCleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 3039088,
+        "exitCode": 0
+      },
+      {
+        "pid": 3039094,
+        "exitCode": 0
+      },
+      {
+        "pid": 3039121,
+        "exitCode": 0
+      },
+      {
+        "pid": 3039126,
+        "exitCode": 0
+      },
+      {
+        "pid": 3038989,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "log": "/home/seorii/logs/product-shell-ui-final-20261015T145931Z.log",
+  "tmpdir": "/data/cx-ui-0u1j6vti",
+  "previousUnqualifiedRuns": [
+    "/data/seorii-container-fixes-20261015/product-shell-final-20261015T143833Z",
+    "/data/seorii-container-fixes-20261015/product-shell-final-20261015T144751Z",
+    "/data/seorii-container-fixes-20261015/product-interrupt-readiness-20261015T145232Z"
+  ]
+}
