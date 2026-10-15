@@ -156,6 +156,71 @@ normalizes timestamps/ownership, and records the full parent archive identity in
 single build. Selecting source directories is separate from qualifying the
 producer's linked library closure.
 
+## Clang candidate and sysroot materials
+
+`scripts/prepare-container-clang-source-pack.py` assembles a selected Clang/LLD
+candidate's source materials from existing local Git objects. It does not rebuild
+LLVM, download tools or sources, or modify the cached source checkout. The caller
+provides an independently pinned JSON plan:
+
+```sh
+python3 scripts/prepare-container-clang-source-pack.py \
+  --plan /inputs/clang-source-plan.json \
+  --plan-sha256 "$CLANG_SOURCE_PLAN_SHA256" \
+  --output /outputs/clang-sources
+```
+
+The plan identifies `candidate`, `candidateReceiptSha256`, `llvm` with a local
+`repository` and exact `revision`, and `recipes`. Each recipe has an `id`, local
+Git `repository`, exact `revision`, and selected relative `paths`. Optional
+`materials` and `artifacts` contain `id`, local `path`, `bytes`, `sha256`, and a
+descriptive `role`. `remainingGaps` records unqualified source mapping and notices.
+Materials enter the small source archive; artifact bytes are checked and referenced
+without copying binaries into a source archive. Portable inventory entries omit
+the plan's local material paths. Original build receipts retain their recorded
+build paths for provenance.
+
+The candidate's complete `source-pack` directory must match its build receipt,
+and its actual Clang and LLD bytes must match the selected outputs. For the current
+candidate, the complete LLVM revision is
+`ca7933e47d3a3451d81e72ac174dcb5aa28b59d1`. Preserve its receipt-pinned
+`baseline-source.diff`, tool-host patch, cwd initializer, build and verification
+scripts. Producer revision `25ef7345eba86fce0352e7eb0a881e23ed0e684f` supplies
+the baseline recipe. The separate process-sysroot receipt identifies the exact
+derivation recipe, initializer and original/derived `crt1.o` bytes.
+
+The exporter reads every committed blob directly and checks its Git object hash
+while packaging. It preserves executable modes and symlink targets, rejects
+unexpanded Git submodules, and ignores the worktree and index. Git export
+attributes cannot omit or substitute source bytes. This matters for LLVM's test
+fixtures, which include export substitutions. Archives have deterministic entry
+order, timestamps and ownership. Sources are partitioned into `llvm/` and every
+other upstream project/root file; their union preserves the entire committed
+tree, including tests and notices. Each compressed archive is capped at 256 MiB.
+This partitioning does not remove any compiler or selected-target sysroot header.
+
+The output includes both upstream partitions, producer recipe archives,
+`materials.tar.gz`, `source-pack.json`, and `receipt.json`. Consumers need the
+complete archive list from the manifest. The small materials archive contains
+candidate patches, supplied provenance, recipe archives and separately identified
+LLVM notices. The receipt is written only after assembly finishes; an interrupted
+attempt's partial files do not constitute a completed pack.
+
+For the selected process profile, retain the original full sysroot identity
+`91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402` and the
+derived identity `b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f`.
+The derivation changes only `lib/wasm32-wasi/crt1.o`. Pinned WASI SDK 33 binary
+sysroot and compiler-runtime archives remain binary inputs; their hashes alone
+do not identify complete corresponding wasi-libc or runtime sources. Likewise,
+archiving LLVM plus patches does not prove the cached compiler objects were
+rebuilt from those sources. These limitations keep the source status incomplete.
+
+The focused checks use temporary local Git repositories and require no downloads:
+
+```sh
+python3 -B -m unittest discover -s scripts -p test_prepare_container_clang_source_pack.py
+```
+
 ## Release boundary
 
 The assembler always emits `sourceStatus: "incomplete"` and
