@@ -302,6 +302,13 @@ export class MemoryFileSystem {
       }
       return;
     }
+    const last = path.split('/').filter(Boolean).at(-1);
+    if (last === undefined || last === '.' || last === '..') {
+      // "/", "." and ".." name a directory that exists once it resolves (POSIX EEXIST).
+      checkPath(path);
+      this.resolve(path, options);
+      throw new FsError('EEXIST', 'Path already exists');
+    }
     const parent = this.parent(path, options);
     this.writable(parent.node);
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');

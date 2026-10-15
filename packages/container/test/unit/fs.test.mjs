@@ -457,3 +457,17 @@ test('snapshot and readonly validation preserve inode timestamps', () => {
   const result = structuredClone(lease.snapshot); result.entries.find((e) => e.path === '/').mtimeMs++;
   assert.throws(() => lease.commit(result), { code: 'EROFS' }); lease.discard();
 });
+
+test('mkdir of the root, "." or ".." reports EEXIST once the path resolves', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('/workspace/a', { recursive: true });
+  for (const [path, options] of [['/', {}], ['.', { cwd: '/workspace' }], ['/workspace/..', {}], ['a/.', { cwd: '/workspace' }], ['/workspace/a/../a/..', {}]])
+    assert.throws(() => fs.mkdir(path, options), error('EEXIST'), path);
+  assert.throws(() => fs.mkdir('/missing/..'), error('ENOENT'));
+  assert.throws(() => fs.mkdir('/workspace/missing/.'), error('ENOENT'));
+  fs.writeFile('/workspace/file', bytes('x'));
+  assert.throws(() => fs.mkdir('/workspace/file/.'), error('ENOTDIR'));
+  // Recursive creation through an absolute path still starts at the root.
+  fs.mkdir('/workspace/x/y', { recursive: true });
+  assert.equal(fs.stat('/workspace/x/y').type, 'directory');
+});
