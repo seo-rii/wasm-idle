@@ -38,15 +38,16 @@ use std::{
 use futures::{
     channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
     executor::LocalPool,
-    task::LocalSpawnExt,
-    StreamExt,
+    future::{pending as pending_future, LocalBoxFuture},
+    stream::FuturesUnordered,
+    FutureExt, StreamExt,
 };
 
 use js_sys::{Array, Function, Object, Promise, Reflect, Uint8Array};
-use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
-use wasm_bindgen_futures::JsFuture;
 use tokio::io::{AsyncRead, ReadBuf};
 use virtual_fs::FileSystem;
+use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen_futures::JsFuture;
 use wasmer::FunctionEnvMut;
 use wasmer_wasix::{
     os::{command::VirtualCommand, task::TaskJoinHandle},
@@ -60,7 +61,7 @@ use crate::{js_runtime::JsRuntime, tasks::ThreadPool, utils::Error};
 
 #[path = "host_command_pending.rs"]
 mod pending;
-use pending::PendingRequests;
+use pending::{DescriptorQueues, PendingRequests};
 
 const MAX_PATH_BYTES: usize = 4096;
 const MAX_COMMANDS: usize = 1024;
@@ -411,55 +412,145 @@ impl VirtualCommand for HostCommandBridge {
     }
 }
 
-/// The command's service thread: performs descriptor operations and the final
-/// completion of the child, all of which may wait for WASIX locks. Reads can
-/// wait for data, so each runs as its own task; writes and closes keep their
-/// order. A dropped request channel completes the child with the failure status.
-fn serve(process: HostCommandProcess, mut requests: UnboundedReceiver<ServiceRequest>, pool: Arc<ThreadPool>) {
+struct ServiceCompletion {
+    key: u64,
+    result: Result<ReplyValue, Errno>,
+    write_fd: Option<u32>,
+}
+
+enum ServiceEvent {
+    Request(Option<ServiceRequest>),
+    Completed(ServiceCompletion),
+}
+
+fn write_operation(
+    process: &HostCommandProcess,
+    fd: u32,
+    data: Vec<u8>,
+    key: u64,
+) -> LocalBoxFuture<'static, ServiceCompletion> {
+    let descriptor = process.descriptor(fd);
+    Box::pin(async move {
+        let result = match descriptor {
+            Ok(descriptor) => descriptor.write(&data).await.map(ReplyValue::Count),
+            Err(errno) => Err(errno),
+        };
+        ServiceCompletion {
+            key,
+            result,
+            write_fd: Some(fd),
+        }
+    })
+}
+
+/// I/O futures belong to the service, so Finish can drop them before filesystem
+/// cleanup. One write runs per fd; reads and control never wait behind that lane.
+fn serve(
+    process: HostCommandProcess,
+    mut requests: UnboundedReceiver<ServiceRequest>,
+    pool: Arc<ThreadPool>,
+) {
     let mut executor = LocalPool::new();
-    let spawner = executor.spawner();
     executor.run_until(async move {
-        let reply = |pool: &Arc<ThreadPool>, key: u64, result: Result<ReplyValue, Errno>| {
+        let reply = |key: u64, result: Result<ReplyValue, Errno>| {
             if let Err(error) = pool.host_command_reply(HostCommandReply { key, result }) {
-                tracing::warn!(error = &*error, key, "host command reply could not be delivered");
+                tracing::warn!(
+                    error = &*error,
+                    key,
+                    "host command reply could not be delivered"
+                );
             }
         };
-        while let Some(request) = requests.next().await {
-            match request {
-                ServiceRequest::Finish { status } => {
+        let mut operations: FuturesUnordered<LocalBoxFuture<'static, ServiceCompletion>> =
+            FuturesUnordered::new();
+        let mut writes: DescriptorQueues<(Vec<u8>, u64)> = DescriptorQueues::default();
+        loop {
+            let event = {
+                let request = requests.next().fuse();
+                let completion = async {
+                    if operations.is_empty() {
+                        pending_future().await
+                    } else {
+                        operations.next().await.expect("nonempty operations")
+                    }
+                }
+                .fuse();
+                futures::pin_mut!(request, completion);
+                futures::select_biased! {
+                    request = request => ServiceEvent::Request(request),
+                    completed = completion => ServiceEvent::Completed(completed),
+                }
+            };
+            match event {
+                ServiceEvent::Request(Some(ServiceRequest::Finish { status })) => {
+                    // Drop pending reads/writes and their held file guards before
+                    // close_all can acquire any of the same filesystem locks.
+                    drop(operations);
+                    drop(writes);
                     process.finish(ExitCode::from(status)).await;
                     return;
                 }
-                ServiceRequest::Read { fd, max, key } => {
+                ServiceEvent::Request(None) => {
+                    drop(operations);
+                    drop(writes);
+                    drop(process);
+                    return;
+                }
+                ServiceEvent::Request(Some(ServiceRequest::Read { fd, max, key })) => {
                     let descriptor = process.descriptor(fd);
-                    let task_pool = pool.clone();
-                    let task = async move {
+                    operations.push(Box::pin(async move {
                         let result = match descriptor {
                             Ok(descriptor) => descriptor.read(max).await.map(ReplyValue::Bytes),
                             Err(errno) => Err(errno),
                         };
-                        reply(&task_pool, key, result);
-                    };
-                    if spawner.spawn_local(task).is_err() {
-                        reply(&pool, key, Err(Errno::Io));
+                        ServiceCompletion {
+                            key,
+                            result,
+                            write_fd: None,
+                        }
+                    }));
+                }
+                ServiceEvent::Request(Some(ServiceRequest::Write { fd, data, key })) => {
+                    match writes.enqueue(fd, (data, key)) {
+                        Ok(Some((data, key))) => {
+                            operations.push(write_operation(&process, fd, data, key))
+                        }
+                        Ok(None) => {}
+                        Err((_, key)) => reply(
+                            key,
+                            Err(if writes.is_closed(fd) {
+                                Errno::Badf
+                            } else {
+                                Errno::Again
+                            }),
+                        ),
                     }
                 }
-                ServiceRequest::Write { fd, data, key } => {
-                    let result = match process.descriptor(fd) {
-                        Ok(descriptor) => descriptor.write(&data).await.map(ReplyValue::Count),
-                        Err(errno) => Err(errno),
-                    };
-                    reply(&pool, key, result);
-                }
-                ServiceRequest::Close { fd, key } => {
-                    let result = process.descriptor(fd).and_then(|descriptor| descriptor.close());
+                ServiceEvent::Request(Some(ServiceRequest::Close { fd, key })) => {
+                    for (_, pending_key) in writes.close(fd) {
+                        reply(pending_key, Err(Errno::Badf));
+                    }
+                    let result = process
+                        .descriptor(fd)
+                        .and_then(|descriptor| descriptor.close());
                     if key != 0 {
-                        reply(&pool, key, result.map(|()| ReplyValue::Unit));
+                        reply(key, result.map(|()| ReplyValue::Unit));
+                    }
+                }
+                ServiceEvent::Completed(ServiceCompletion {
+                    key,
+                    result,
+                    write_fd,
+                }) => {
+                    reply(key, result);
+                    if let Some(fd) = write_fd {
+                        if let Some((data, key)) = writes.complete(fd) {
+                            operations.push(write_operation(&process, fd, data, key));
+                        }
                     }
                 }
             }
         }
-        drop(process);
     });
 }
 
@@ -475,30 +566,50 @@ struct CommandLink {
     requests: UnboundedSender<ServiceRequest>,
     key: u64,
     finished: Cell<bool>,
+    closed: Cell<u8>,
 }
 
 impl CommandLink {
-    fn request(&self, make: impl FnOnce(u64) -> ServiceRequest) -> Promise {
+    fn request(&self, fd: u32, make: impl FnOnce(u64) -> ServiceRequest) -> Promise {
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
         let mut settlers = None;
         let promise = Promise::new(&mut |resolve, reject| settlers = Some((resolve, reject)));
         let (resolve, reject) = settlers.expect("Promise executor runs synchronously");
-        if self.finished.get() || self.requests.unbounded_send(make(key)).is_err() {
+        if self.finished.get() || fd >= 3 || self.closed.get() & (1 << fd) != 0 {
             let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
             return promise;
         }
-        PENDING.with(|pending| pending.borrow_mut().insert(self.key, key, (resolve, reject)));
+        let admission = PENDING.with(|pending| {
+            pending
+                .borrow_mut()
+                .try_insert(self.key, key, (resolve, reject))
+        });
+        if let Err((_, reject)) = admission {
+            let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Again));
+            return promise;
+        }
+        if self.requests.unbounded_send(make(key)).is_err() {
+            if let Some((_, reject)) = PENDING.with(|pending| pending.borrow_mut().remove(key)) {
+                let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
+            }
+        }
         promise
     }
 
     /// Revoke the handler's endpoints and complete the child on its service thread.
     fn finish(&self, status: i32) {
-        self.finished.set(true);
+        if self.finished.replace(true) {
+            return;
+        }
         let requests = PENDING.with(|pending| pending.borrow_mut().finish(self.key));
         for (_, reject) in requests {
             let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
         }
-        if self.requests.unbounded_send(ServiceRequest::Finish { status }).is_err() {
+        if self
+            .requests
+            .unbounded_send(ServiceRequest::Finish { status })
+            .is_err()
+        {
             tracing::warn!(status, "host command service already stopped");
         }
     }
@@ -522,6 +633,7 @@ pub(crate) fn start(dispatch: HostCommandDispatch) {
         requests,
         key: NEXT_KEY.fetch_add(1, Ordering::Relaxed),
         finished: Cell::new(false),
+        closed: Cell::new(0),
     });
     wasm_bindgen_futures::spawn_local(async move {
         let status = match handler {
@@ -542,8 +654,13 @@ pub(crate) fn complete(reply: HostCommandReply) {
         return;
     };
     let _ = match result {
-        Ok(ReplyValue::Bytes(bytes)) => resolve.call1(&JsValue::UNDEFINED, &Uint8Array::from(bytes.as_slice()).into()),
-        Ok(ReplyValue::Count(count)) => resolve.call1(&JsValue::UNDEFINED, &JsValue::from(count as u32)),
+        Ok(ReplyValue::Bytes(bytes)) => resolve.call1(
+            &JsValue::UNDEFINED,
+            &Uint8Array::from(bytes.as_slice()).into(),
+        ),
+        Ok(ReplyValue::Count(count)) => {
+            resolve.call1(&JsValue::UNDEFINED, &JsValue::from(count as u32))
+        }
         Ok(ReplyValue::Unit) => resolve.call1(&JsValue::UNDEFINED, &JsValue::UNDEFINED),
         Err(errno) => reject.call1(&JsValue::UNDEFINED, &errno_error(errno)),
     };
@@ -669,7 +786,7 @@ impl JsHostCommandDescriptor {
     /// request are never consumed from the child's descriptor.
     pub fn read(&self, max_bytes: u32) -> Promise {
         let fd = self.fd;
-        self.link.request(|key| ServiceRequest::Read {
+        self.link.request(fd, |key| ServiceRequest::Read {
             fd,
             max: max_bytes as usize,
             key,
@@ -680,17 +797,25 @@ impl JsHostCommandDescriptor {
     /// descriptor and resolve with the number accepted, which may be fewer.
     pub fn write(&self, bytes: Uint8Array) -> Promise {
         let length = bytes.length().min(HOST_COMMAND_IO_BYTES as u32);
-        let data = bytes.subarray(0, length).to_vec();
         let fd = self.fd;
-        self.link.request(|key| ServiceRequest::Write { fd, data, key })
+        self.link.request(fd, |key| ServiceRequest::Write {
+            fd,
+            // Copy only after admission; rejected requests retain no data.
+            data: bytes.subarray(0, length).to_vec(),
+            key,
+        })
     }
 
-    /// Close this descriptor in the child, as its own `fd_close` would. The
-    /// close runs after this command's earlier writes on its service thread;
-    /// like a close after process exit, its outcome is not reported.
+    /// Close this descriptor and cancel its unfinished I/O. Accepted bytes
+    /// remain, but queued writes are rejected. Its outcome is not reported.
     pub fn close(&self) {
-        if !self.link.finished.get() {
-            let _ = self.link.requests.unbounded_send(ServiceRequest::Close { fd: self.fd, key: 0 });
+        let mask = 1u8 << self.fd;
+        if !self.link.finished.get() && self.link.closed.get() & mask == 0 {
+            self.link.closed.set(self.link.closed.get() | mask);
+            let _ = self.link.requests.unbounded_send(ServiceRequest::Close {
+                fd: self.fd,
+                key: 0,
+            });
         }
     }
 }

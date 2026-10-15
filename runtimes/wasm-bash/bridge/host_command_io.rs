@@ -20,7 +20,7 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
 
-use futures::future::{select, Either};
+use futures::future::select;
 use virtual_fs::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, VirtualFile};
 use wasmer_wasix_types::wasi::{Errno, ExitCode, Fd as WasiFd, Fdflags, Rights, Signal};
 
@@ -43,6 +43,7 @@ struct Control {
     // Serializes this owner's operations on one shared file handle. Distinct
     // handles (for example separate stdin and stdout pipes) never wait on each other.
     files: Mutex<HashMap<usize, Arc<tokio::sync::Mutex<()>>>>,
+    closed: Mutex<HashMap<WasiFd, tokio::sync::watch::Sender<bool>>>,
 }
 
 impl Control {
@@ -50,6 +51,7 @@ impl Control {
         Control {
             revoked: tokio::sync::watch::Sender::new(false),
             files: Mutex::new(HashMap::new()),
+            closed: Mutex::new(HashMap::new()),
         }
     }
 
@@ -66,18 +68,46 @@ impl Control {
         Ok(files.entry(key).or_default().clone())
     }
 
-    async fn run<T>(&self, operation: impl Future<Output = Result<T, Errno>>) -> Result<T, Errno> {
-        let mut revoked = self.revoked.subscribe();
-        if *revoked.borrow_and_update() {
+    fn close_state(&self, fd: WasiFd) -> Result<tokio::sync::watch::Sender<bool>, Errno> {
+        let mut closed = self.closed.lock().map_err(|_| Errno::Io)?;
+        Ok(closed
+            .entry(fd)
+            .or_insert_with(|| tokio::sync::watch::Sender::new(false))
+            .clone())
+    }
+
+    fn close(&self, fd: WasiFd) -> Result<(), Errno> {
+        let closed = self.close_state(fd)?;
+        if *closed.borrow() {
             return Err(Errno::Badf);
         }
-        let cancelled = Box::pin(async move {
-            let _ = revoked.wait_for(|value| *value).await;
+        closed.send_replace(true);
+        Ok(())
+    }
+
+    async fn run<T>(
+        &self,
+        fd: WasiFd,
+        operation: impl Future<Output = Result<T, Errno>>,
+    ) -> Result<T, Errno> {
+        let local = self.close_state(fd)?;
+        let mut revoked = self.revoked.subscribe();
+        let mut closed = local.subscribe();
+        let mut cancelled = Box::pin(async move {
+            let global = Box::pin(revoked.wait_for(|value| *value));
+            let descriptor = Box::pin(closed.wait_for(|value| *value));
+            let _ = select(global, descriptor).await;
         });
-        match select(Box::pin(operation), cancelled).await {
-            Either::Left((result, _)) => result,
-            Either::Right(_) => Err(Errno::Badf),
-        }
+        let mut operation = Box::pin(operation);
+        futures::future::poll_fn(|cx| {
+            // Check cancellation before polling a now-writable endpoint. This
+            // prevents a ready write from winning a concurrent close/revoke.
+            if *self.revoked.borrow() || *local.borrow() || cancelled.as_mut().poll(cx).is_ready() {
+                return std::task::Poll::Ready(Err(Errno::Badf));
+            }
+            operation.as_mut().poll(cx)
+        })
+        .await
     }
 }
 
@@ -199,7 +229,8 @@ enum Endpoint {
 enum WriteTarget {
     /// A file handle, and whether it belongs to a live mount.
     File(FileHandle, bool),
-    Written(usize),
+    PipeTx(virtual_fs::PipeTx),
+    Duplex(virtual_fs::Pipe),
 }
 
 impl HostCommandDescriptor {
@@ -215,7 +246,7 @@ impl HostCommandDescriptor {
             return Err(Errno::Inval);
         }
         let max = max.min(HOST_COMMAND_IO_BYTES);
-        self.control.run(self.read_inner(max)).await
+        self.control.run(self.fd, self.read_inner(max)).await
     }
 
     async fn read_inner(&self, max: usize) -> Result<Vec<u8>, Errno> {
@@ -281,7 +312,7 @@ impl HostCommandDescriptor {
     pub async fn write(&self, data: &[u8]) -> Result<usize, Errno> {
         let data = &data[..data.len().min(HOST_COMMAND_IO_BYTES)];
         self.control
-            .run(async {
+            .run(self.fd, async {
                 if data.is_empty() {
                     self.state.fs.get_fd(self.fd)?;
                     return Ok(0);
@@ -301,8 +332,8 @@ impl HostCommandDescriptor {
             std::io::ErrorKind::BrokenPipe => Errno::Pipe,
             _ => map_io_err(err),
         };
-        // Pipe writes are nonblocking WASIX channel sends performed under the
-        // inode lock, exactly like fd_write. File writes continue below.
+        // Snapshot the endpoint under its inode lock, then release the lock
+        // before awaiting capacity. Cancellation can then revoke a full pipe.
         let target = {
             let mut guard = fd_entry.inode.write();
             match &mut *guard {
@@ -312,12 +343,8 @@ impl HostCommandDescriptor {
                     ..
                 } => WriteTarget::File(handle.clone(), crate::fs::is_live_path(path)),
                 Kind::File { handle: None, .. } => return Err(Errno::Inval),
-                Kind::PipeTx { tx } => {
-                    WriteTarget::Written(std::io::Write::write(tx, data).map_err(pipe_error)?)
-                }
-                Kind::DuplexPipe { pipe } => {
-                    WriteTarget::Written(std::io::Write::write(pipe, data).map_err(pipe_error)?)
-                }
+                Kind::PipeTx { tx } => WriteTarget::PipeTx(tx.clone()),
+                Kind::DuplexPipe { pipe } => WriteTarget::Duplex(pipe.clone()),
                 Kind::PipeRx { .. } => return Err(Errno::Badf),
                 Kind::Dir { .. } | Kind::Root { .. } => return Err(Errno::Isdir),
                 _ => return Err(Errno::Notsup),
@@ -325,12 +352,8 @@ impl HostCommandDescriptor {
         };
         let (handle, live) = match target {
             WriteTarget::File(handle, live) => (handle, live),
-            WriteTarget::Written(written) => {
-                if !is_stdio {
-                    fd_entry.inode.stat.write().unwrap().st_size += written as u64;
-                }
-                return Ok(written);
-            }
+            WriteTarget::PipeTx(mut tx) => return tx.write(data).await.map_err(pipe_error),
+            WriteTarget::Duplex(mut pipe) => return pipe.write(data).await.map_err(pipe_error),
         };
         let serial = self.control.file_lock(&handle)?;
         let _serial = serial.lock().await;
@@ -372,6 +395,7 @@ impl HostCommandDescriptor {
         if *self.control.revoked.borrow() {
             return Err(Errno::Badf);
         }
+        self.control.close(self.fd)?;
         self.state.fs.close_fd(self.fd)
     }
 }

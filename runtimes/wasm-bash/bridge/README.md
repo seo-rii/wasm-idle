@@ -101,6 +101,14 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
 13. `0013-serve-host-commands-off-the-scheduler.patch` plus `sdk_host_command.rs`: the SDK
     scheduler thread never touches WASIX state for a host command. A dedicated service
     thread performs descriptor operations and completion; see below.
+14. `0014-preserve-live-append.patch`: preserve atomic append for existing live files.
+15. `0015-dup2-onto-a-pipe.patch`: `fd_renumber` (wasix-libc `dup2`) flushes the target
+    descriptor before replacing it. When descriptor 1 or 2 is a pipe, as in a pipeline's
+    child, that flush reports `Inval` because the pipe is not a file, and `dup2` failed.
+    Bash saves and redirects descriptors this way for a brace group or subshell in a
+    pipeline (`{ cmd >&2; } | …`, `{ cmd > file; } | …`), so every such redirection failed
+    with `Invalid argument`. The flush result no longer fails the renumber; Linux `dup2`
+    does not flush at all.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -200,17 +208,19 @@ node scripts/test-container-shell-bridge.mjs
 node scripts/prepare-container-shell-bridge.mjs --verify-only \
   --sdk-archive /path/to/wasmer-sdk.tgz \
   --wasix-archive /path/to/wasmer-wasix.tgz \
+  --virtual-fs-archive /path/to/virtual-fs-0.601.0.crate \
   --wasix-source /path/to/pristine/wasmer-wasix-0.601.0 \
+  --virtual-fs-source /path/to/pristine/virtual-fs-0.601.0 \
   --sdk-source /path/to/pristine/wasmer-sdk-93b8b738ebd3ee57e118da0f0eb795b97d5b999e
 ```
 
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
-modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --forward --fuzz=0` against its own crate (0001–0007 WASIX, 0008 SDK), and checks
-source identity again. Reversed or already applied patches fail. `--sdk-source` is
-required since the SDK gained its own patch. It creates no source copy and
-makes no changes to the supplied checkout. The original four-patch
+modified source file with its verified archive, applies each crate's dependent patches
+in order with `--forward --fuzz=0 --no-backup-if-mismatch` on a temporary private
+copy, and checks source identity again. Reversed or already applied patches fail.
+The temporary copies are removed after verification; the supplied checkouts are unchanged.
+All three pinned archives and pristine source paths are required. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says
 `patches-apply-cleanly-not-built`. The five-patch
 [snapshot source receipt](evidence.snapshot-source-checks.json) separately records
@@ -708,15 +718,63 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - `HostCommandDescriptor.read` and `write` send a request to the service thread and
   return a promise. The service thread performs the operation, which may wait for locks,
   and returns the result in a new `SchedulerMessage` variant. Reads run as separate
-  tasks because they can wait for data; writes and closes keep their order.
-- `close()` stays synchronous and is ordered after earlier writes; like a close after
-  process exit, its outcome is not reported.
+  independently polled operations because reads and bounded writes may wait for data or
+  capacity. Writes to each descriptor keep FIFO order without blocking control requests.
+- `close()` stays synchronous, cancels that descriptor's unfinished and queued I/O, and
+  preserves bytes already accepted. Repeated close notifications are coalesced; its outcome
+  is not reported. Await each write before closing when all bytes must be delivered.
+- Admission allows at most 16 outstanding data requests per command, with writes limited
+  to 64 KiB each (at most 1 MiB of pending copied write bytes). Excess requests reject with
+  `EAGAIN` before copying data. Finish drops outstanding I/O before closing descriptors.
 - When the handler settles, its still-pending promises are rejected with `EBADF`, and the
   service thread completes the child exactly as before: it closes descriptors, publishes
   the status, then signals.
 - A request channel dropped without completion still completes the child with status 126.
 
 Each running host command occupies one pooled service Worker until it completes.
+
+## Bounded native pipe profile
+
+Patch 0016 adds [`Instance.waitForExit()`](STREAMING-EXIT.md) for caller-owned byte
+streams. It preserves the legacy capture API and never drains or closes a stream.
+Retain the stdin/stdout/stderr properties before consuming the instance with this method.
+Guest exits retain their original status. Runner setup failures and runtime traps reject
+the streaming completion promise; they cannot be mistaken for a guest exit 1. The
+legacy capture API keeps its historical code 1 projection for those failures.
+
+Patches 0017–0019 add a fixed 64 KiB byte queue for WASIX-created pipes and for the SDK's
+raw byte-stream command profile. The extra pinned producer input is `virtual-fs 0.601.0`
+(`8defc513ce70576bdbb4305ee67c0cba647af18c0995de8f1fa1271b724c9859`, 94,253 bytes).
+Source preparation requires `--virtual-fs-archive` and installs the patched dependency
+through a locked local Cargo path override; it never modifies the Cargo registry cache.
+
+The queue owns raw bytes. Large writes can return a partial count, zero-length I/O does
+not wait or consume data, and asynchronous writes wait when capacity is exhausted. The
+last writer close wakes readers, which drain remaining bytes before EOF. The last reader
+close wakes writers with a broken-pipe error. Endpoint clones keep their direction open.
+Readiness polling registers wakeups, and dropped endpoints leave only weak waiter entries.
+WASIX and host-command writers release the inode lock before awaiting a pipe. Synchronous
+writes to these bounded pipes return `WouldBlock` when full, so the JavaScript owner
+thread never waits synchronously for a consumer.
+
+`command.run({ rawStdin: true, ... })` selects live bounded stdin plus bounded stdout and
+stderr without a TTY, implicit echo or termios behavior. It rejects simultaneous
+prebuffered `stdin`. Closing the input stream releases its owned writer and delivers EOF.
+Noninteractive commands retain `StaticFile` prebuffered stdin and use bounded output.
+Patch 0020 marks an explicit `/tmp` mount in the runner options, preventing the
+default temporary directory from colliding with the host-owned workspace mount.
+The comparison follows Rust path components (including trailing separators),
+and leaves nested or relative paths distinct.
+Each direction has at most 64 KiB of queued native bytes; stream pulls and caller-supplied
+pending input chunks are separate allocations. Callers must drain stdout and stderr
+concurrently to let a producing command finish.
+
+Legacy SDK TTY echo and unrelated `Pipe::new()` consumers retain the upstream unbounded
+queue and are outside this profile. POSIX `PIPE_BUF` atomic-write guarantees and complete
+job control are not qualified by these changes. The native `bounded_pipe.rs` correctness
+tests exercise the actual installed queue, including capacity, partial/binary/zero I/O,
+EOF, broken pipe, clone lifetimes and wakeups. They do not substitute for the rebuilt
+SDK's actual Bash/browser acceptance gate.
 Outstanding descriptor requests are indexed by command and removed on completion.
 Terminal cleanup rejects only that command's outstanding promises; completed request
 IDs are not retained for the lifetime of a long-running stream. The native bridge test
@@ -736,3 +794,28 @@ binary receipt `947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6
 receipts are archived as `evidence.host-service-*.json` with a
 [recheck](evidence.host-service-sdk-binary-metadata.json). Local packaging produced receipt
 `ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85`.
+
+## Duplicating onto a pipe
+
+The shell acceptance probe's pipeline run reproduced the long-standing redirection failure
+inside piped groups with the #220 SDK: `{ printf 'group\n' >&2; } | cat`,
+`{ printf 'file\n' > group-file; } | cat` and `( printf 'sub\n' > sub-file ) | cat` each
+printed `Invalid argument` (twice, for the redirection and for restoring the saved
+descriptor), and no file was written. In a pipeline's child, descriptor 1 is the pipe.
+Bash saves it with `F_DUPFD` and redirects it with `dup2`, which wasix-libc implements
+with `fd_renumber`. `fd_renumber` flushes the target first; for descriptor 1 or 2 that
+flush expects a file, so a pipe there reported `NotAFile` (`Inval`) and the renumber
+failed. Patch 0015 no longer fails the renumber on that result. Historical receipts below
+used its previous name, `0014-dup2-onto-a-pipe.patch`.
+
+The gate on commit `7ab530473ff05377d3700656b9d044c723753025` passed in a fresh physical copy
+with 584 pins and a unique target: typecheck 287.298 s, release 514.598 s, bindgen 2.013 s
+and static inspection 0.256 s, each exiting 0 with every process reaped. The bound Wasm is
+9,213,387 bytes, SHA-256 `19064ffc36cd534986029c75bbd852a13a785a970fc3e2cea7c82e6831d82c50`;
+binary receipt `e2afce94a64e99658fc75090995753b6969aa57ffd04e0ce87ccf423843e88ad`. Stage
+receipts are archived as `evidence.pipe-dup2-*.json` with a
+[recheck](evidence.pipe-dup2-sdk-binary-metadata.json). Local packaging produced receipt
+`6caa501f847b306963536da9e25dbe4f1b52ace793bbf9c9102ecc62a044cb8e`.
+
+`PIPESTATUS` and `pipefail` are a separate matter: the pinned Bash is configured without
+job control, and its `nojobs.c` records no per-command pipeline statuses.

@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-three-crate-check-release-bindgen-inspect-package-passed",
+  "sourceCommit": "37775cd3cd21f73945826bfd0e995170a2dc2db7",
+  "patchRange": "0001 through 0020",
+  "runRoot": "/data/seorii-container-fixes-20261015/sdk-streaming-errors-20261015",
+  "binaryRunRoot": "/data/seorii-container-fixes-20261015/sdk-streaming-errors-20261015/sdk-startup-final-20261015T141040Z-release",
+  "packageRunRoot": "/data/seorii-container-fixes-20261015/sdk-streaming-errors-20261015/sdk-startup-final-20261015T141040Z-package",
+  "sourcePolicy": {
+    "bytes": 157245,
+    "sha256": "943e7e3fa194ea6a0450d0a4430bf39fc147309472d3455c63d7ad91698cb37b"
+  },
+  "sourcePreparation": {
+    "bytes": 5007,
+    "sha256": "cbadcf8eeed71ecb9495e6417de6520570e18391ebff413295de79f6a05e16a7"
+  },
+  "binaryReceipt": {
+    "path": "/data/seorii-container-fixes-20261015/sdk-streaming-errors-20261015/sdk-startup-final-20261015T141040Z-release/receipt.json",
+    "bytes": 362375,
+    "sha256": "a5b2e417d78986d88dceeef65e111060d38f32456f29f4d65fc57dc4179e704d"
+  },
+  "packageReceipt": {
+    "archive": "evidence.streaming-startup-sdk-package.json",
+    "bytes": 2605,
+    "sha256": "ee74bc0dab416b3e1365f5380c0ab31abb45337fcbd45fa6fdb815459226f228"
+  },
+  "sourceVerification": {
+    "checkedAtUtc": "2026-10-15T14:39:47.929313+00:00",
+    "pins": 625,
+    "sourceTrees": {
+      "wasmer-sdk": 203,
+      "wasmer-wasix": 377,
+      "virtual-fs": 38
+    },
+    "allRecordedHashesMatched": true,
+    "completeSourceInventoriesMatched": true
+  },
+  "stages": [
+    {
+      "stage": "check",
+      "archive": "evidence.streaming-startup-sdk-check-process.json",
+      "bytes": 660,
+      "sha256": "1d3b44b75f06624e2eec33df29e4d9d5098273ed988d83e22949edaad34806d0",
+      "wallSeconds": 323.397,
+      "exitCode": 0,
+      "allReaped": true
+    },
+    {
+      "stage": "release",
+      "archive": "evidence.streaming-startup-sdk-build-process.json",
+      "bytes": 698,
+      "sha256": "824daa73a2061db4d567d6803682941935cdb5e688a98a5037ae99ec075a519e",
+      "wallSeconds": 577.424,
+      "exitCode": 0,
+      "allReaped": true
+    },
+    {
+      "stage": "bindgen",
+      "archive": "evidence.streaming-startup-bindgen-process.json",
+      "bytes": 897,
+      "sha256": "3ee87512b81e2f53b984f1b7723fc2a356c1895e46b53909f23985abd08892c9",
+      "wallSeconds": 2.01,
+      "exitCode": 0,
+      "allReaped": true
+    },
+    {
+      "stage": "inspect",
+      "archive": "evidence.streaming-startup-inspect-process.json",
+      "bytes": 1137,
+      "sha256": "70fbb86e7a20c4489dbad19b21e024d0a99ed9f7acf04af200fcd1518ee03133",
+      "wallSeconds": 0.254,
+      "exitCode": 0,
+      "allReaped": true
+    },
+    {
+      "stage": "package-check",
+      "archive": "evidence.streaming-startup-package-check-process.json",
+      "bytes": 848,
+      "sha256": "c88d93289113bf4ef1a8331e28d21f678bae2ce24b5640ad912c4ac64f20eee5",
+      "wallSeconds": 0.756,
+      "exitCode": 0,
+      "allReaped": true
+    },
+    {
+      "stage": "package",
+      "archive": "evidence.streaming-startup-package-process.json",
+      "bytes": 833,
+      "sha256": "1d9c79da69d9d743d2f545e6964b59d1203f8bc928ce42519b8fc21dd0774937",
+      "wallSeconds": 1.507,
+      "exitCode": 0,
+      "allReaped": true
+    }
+  ],
+  "outputs": {
+    "artifacts/web/wasmer_js.d.ts": {
+      "bytes": 29712,
+      "sha256": "d0d93fd1134f56fac7573f085e7770640def6c3cdc36e401e025eae37cb302e2"
+    },
+    "artifacts/web/wasmer_js_bg.wasm.d.ts": {
+      "bytes": 10328,
+      "sha256": "9c79e57f89f0d0a9dbd4141d7e2d26ad6fbfca990b284f128e6c5d354a529aba"
+    },
+    "artifacts/web/wasmer_js_bg.wasm": {
+      "bytes": 9262448,
+      "sha256": "11063fe5d9d5d16880cb1027e50a07841271e78709788de5b65cc6b9100ea34a"
+    },
+    "artifacts/web/wasmer_js.js": {
+      "bytes": 112898,
+      "sha256": "7bbc45ada23978f11170b5c0a5eeaac305234e15e92406e4e790c4707dd33d44"
+    },
+    "artifacts/raw/wasmer_js.wasm": {
+      "bytes": 10324519,
+      "sha256": "ed0812bbef18872ce0270f3ea1b136b0bd96bfff73de961f0ffc7f015c69f64a"
+    },
+    "prepared-source.tar.gz": {
+      "bytes": 5820054,
+      "sha256": "d271d003a453870e4b64e533e838051c5fce549bcf5b7e272d167d540ac15fa7"
+    }
+  },
+  "memoryProfile": {
+    "shared": true,
+    "minimumPages": 35,
+    "maximumPages": 16384
+  },
+  "packageId": "sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107",
+  "buildContext": {
+    "freshPhysicalSource": true,
+    "uniqueTargetForThisPhysicalCopy": true,
+    "checkTargetDiscardedBeforeRelease": true,
+    "releaseUsesCleanTarget": true,
+    "automaticRetry": false,
+    "admission": {
+      "availableMemoryBytes": 15043072000,
+      "freeDiskBytes": 8627187712,
+      "loadAverage": [
+        2.0146484375,
+        2.916015625,
+        3.64990234375
+      ],
+      "checkedAtUnix": 1792074319.7434883
+    },
+    "minimumAdmission": {
+      "minimumAvailableMemoryBytes": 8589934592,
+      "minimumFreeDiskBytes": 8589934592
+    },
+    "retentionReceipts": {
+      "prior-completed-target-discarded.json": {
+        "bytes": 1747,
+        "sha256": "54111d89756dbfe48e4b927ef05e99dad698757ce53132c386b5748811ab7ce4"
+      },
+      "sdk-check-target-discarded.json": {
+        "bytes": 741,
+        "sha256": "619beb3c57619276c579faf0c8744c9693272c7e8aee77c30aaa273bac699f7d"
+      },
+      "obsolete-task-materials-discarded.json": {
+        "bytes": 4458,
+        "sha256": "67418712464d3c1dea6988d47ac94fd5c9bf712cebc14323e98314ab0fc4479e"
+      },
+      "artifact-hardlinks.json": {
+        "bytes": 9072,
+        "sha256": "ed886843f22884d800c28ed8b04796a37c049b63305a86c020c013e3a6b737e2"
+      },
+      "sdk-release-target-discarded.json": {
+        "bytes": 679,
+        "sha256": "36cdb694d05471862e85640b8eea81d4b5308211e7ba97113ac1effc38c71950"
+      }
+    }
+  },
+  "sourceMaterials": {
+    "archive": "evidence.streaming-startup-source-pack.json",
+    "bytes": 2613,
+    "sha256": "fab773390e6fc4e00c3c702ec9b26106ad22cf8f9543421d54204cd8b691fdfe"
+  },
+  "qualification": {
+    "scope": "Exact SDK/WASIX/virtual-fs sources, actual Rust check and clean release, web bindings, Wasm profile and static local host module package. Source materials are preserved and individually pinned. Browser execution is a separate gate.",
+    "guestQualified": false,
+    "remainingGates": [
+      "Actual public session and Bash/Clang browser acceptance",
+      "Production immutable hosting responses/CSP",
+      "Dependency notices and source-to-binary mapping review"
+    ]
+  }
+}

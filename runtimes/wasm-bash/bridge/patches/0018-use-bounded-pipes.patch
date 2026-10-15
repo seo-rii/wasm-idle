@@ -1,0 +1,228 @@
+--- a/src/syscalls/wasix/fd_pipe.rs
++++ b/src/syscalls/wasix/fd_pipe.rs
+@@ -56,7 +56,7 @@
+ ) -> Result<(WasiFd, WasiFd), Errno> {
+     let env = ctx.data();
+     let (memory, state, inodes) = unsafe { env.get_memory_and_wasi_state_and_inodes(&ctx, 0) };
+-    let (tx, rx) = Pipe::new().split();
++    let (tx, rx) = Pipe::bounded(64 * 1024).split();
+
+     // FIXME: since a hash of the inode name is used to calculate the inode number, this may
+     // or may not break journals that include pipes and are compacted.
+--- a/src/fs/inode_guard.rs
++++ b/src/fs/inode_guard.rs
+@@ -304,7 +304,7 @@
+                 InodeValFilePollGuardMode::PipeTx { tx } => {
+                     let mut guard = tx.write().unwrap();
+                     let tx = Pin::new(guard.as_mut());
+-                    tx.poll_write_ready()
++                    tx.poll_write_ready_with(cx)
+                 }
+                 InodeValFilePollGuardMode::DuplexPipe { pipe } => {
+                     let mut guard = pipe.write().unwrap();
+--- a/src/syscalls/wasi/fd_write.rs
++++ b/src/syscalls/wasi/fd_write.rs
+@@ -288,117 +288,53 @@
+                     return Ok(Err(Errno::Badf));
+                 }
+                 Kind::PipeTx { tx } => {
+-                    let mut written = 0usize;
+-
+-                    match &data {
+-                        FdWriteSource::Iovs { iovs, iovs_len } => {
+-                            let mut raise_sigpipe = false;
+-                            let iovs_arr = wasi_try_ok_ok!(iovs
+-                                .slice(&memory, *iovs_len)
+-                                .map_err(mem_error_to_wasi));
+-                            let iovs_arr =
+-                                wasi_try_ok_ok!(iovs_arr.access().map_err(mem_error_to_wasi));
+-                            for iovs in iovs_arr.iter() {
+-                                let buf = wasi_try_ok_ok!(WasmPtr::<u8, M>::new(iovs.buf)
+-                                    .slice(&memory, iovs.buf_len)
+-                                    .map_err(mem_error_to_wasi));
+-                                let buf = wasi_try_ok_ok!(buf.access().map_err(mem_error_to_wasi));
+-                                let write_result = std::io::Write::write(tx, buf.as_ref());
+-                                let local_written = match write_result {
+-                                    Ok(w) => w,
+-                                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+-                                        // Need to do this to avoid double borrow on ctx with iovs_arr
+-                                        raise_sigpipe = true;
+-                                        break;
+-                                    }
+-                                    Err(e) => return Ok(Err(map_io_err(e))),
+-                                };
+-
+-                                written += local_written;
+-                                if local_written != buf.len() {
+-                                    break;
+-                                }
+-                            }
+-
+-                            drop(iovs_arr);
+-
+-                            if raise_sigpipe {
+-                                env.process.signal_process(Signal::Sigpipe);
+-                                wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
+-                                return Ok(Err(Errno::Pipe));
+-                            }
+-                        }
+-                        FdWriteSource::Buffer(data) => {
+-                            match std::io::Write::write_all(tx, data) {
+-                                Ok(()) => (),
+-                                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+-                                    env.process.signal_process(Signal::Sigpipe);
+-                                    wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
+-                                    return Ok(Err(Errno::Pipe));
+-                                }
+-                                Err(e) => return Ok(Err(map_io_err(e))),
+-                            };
+-                            written += data.len();
+-                        }
+-                    }
+-
++                    // The queue may be full. Never retain an inode lock while
++                    // waiting for another process to consume its pipe.
++                    let mut endpoint = tx.clone();
++                    drop(guard);
++                    let work = write_pipe_data(&mut endpoint, &data, &memory);
++                    let result = if fd_flags.contains(Fdflags::NONBLOCK) {
++                        // This pinned __asyncify_light ignores its timeout.
++                        // Poll once so O_NONBLOCK cannot wait on a full queue.
++                        futures::FutureExt::now_or_never(work).unwrap_or(Err(Errno::Again))
++                    } else {
++                        __asyncify_light(env, None, work)?
++                    };
++                    let written = match result {
++                        Ok(written) => written,
++                        Err(Errno::Pipe) => {
++                            env.process.signal_process(Signal::Sigpipe);
++                            wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
++                            return Ok(Err(Errno::Pipe));
++                        }
++                        Err(Errno::Timedout) => return Ok(Err(Errno::Again)),
++                        Err(error) => return Ok(Err(error)),
++                    };
+                     (written, false, true)
+                 }
+                 Kind::DuplexPipe { pipe } => {
+-                    let mut written = 0usize;
+-
+-                    match &data {
+-                        FdWriteSource::Iovs { iovs, iovs_len } => {
+-                            let mut raise_sigpipe = false;
+-                            let iovs_arr = wasi_try_ok_ok!(iovs
+-                                .slice(&memory, *iovs_len)
+-                                .map_err(mem_error_to_wasi));
+-                            let iovs_arr =
+-                                wasi_try_ok_ok!(iovs_arr.access().map_err(mem_error_to_wasi));
+-                            for iovs in iovs_arr.iter() {
+-                                let buf = wasi_try_ok_ok!(WasmPtr::<u8, M>::new(iovs.buf)
+-                                    .slice(&memory, iovs.buf_len)
+-                                    .map_err(mem_error_to_wasi));
+-                                let buf = wasi_try_ok_ok!(buf.access().map_err(mem_error_to_wasi));
+-                                let write_result = std::io::Write::write(pipe, buf.as_ref());
+-                                let local_written = match write_result {
+-                                    Ok(w) => w,
+-                                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+-                                        // Need to do this to avoid double borrow on ctx with iovs_arr
+-                                        raise_sigpipe = true;
+-                                        break;
+-                                    }
+-                                    Err(e) => return Ok(Err(map_io_err(e))),
+-                                };
+-
+-                                written += local_written;
+-                                if local_written != buf.len() {
+-                                    break;
+-                                }
+-                            }
+-
+-                            drop(iovs_arr);
+-
+-                            if raise_sigpipe {
+-                                env.process.signal_process(Signal::Sigpipe);
+-                                wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
+-                                return Ok(Err(Errno::Pipe));
+-                            }
+-                        }
+-                        FdWriteSource::Buffer(data) => {
+-                            match std::io::Write::write_all(pipe, data) {
+-                                Ok(()) => (),
+-                                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+-                                    env.process.signal_process(Signal::Sigpipe);
+-                                    wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
+-                                    return Ok(Err(Errno::Pipe));
+-                                }
+-                                Err(e) => return Ok(Err(map_io_err(e))),
+-                            };
+-                            written += data.len();
+-                        }
+-                    }
+-
++                    // The queue may be full. Never retain an inode lock while
++                    // waiting for another process to consume its pipe.
++                    let mut endpoint = pipe.clone();
++                    drop(guard);
++                    let work = write_pipe_data(&mut endpoint, &data, &memory);
++                    let result = if fd_flags.contains(Fdflags::NONBLOCK) {
++                        // This pinned __asyncify_light ignores its timeout.
++                        // Poll once so O_NONBLOCK cannot wait on a full queue.
++                        futures::FutureExt::now_or_never(work).unwrap_or(Err(Errno::Again))
++                    } else {
++                        __asyncify_light(env, None, work)?
++                    };
++                    let written = match result {
++                        Ok(written) => written,
++                        Err(Errno::Pipe) => {
++                            env.process.signal_process(Signal::Sigpipe);
++                            wasi_try_ok_ok!(WasiEnv::process_signals_and_exit(ctx)?);
++                            return Ok(Err(Errno::Pipe));
++                        }
++                        Err(Errno::Timedout) => return Ok(Err(Errno::Again)),
++                        Err(error) => return Ok(Err(error)),
++                    };
+                     (written, false, true)
+                 }
+                 Kind::Dir { .. } | Kind::Root { .. } => {
+@@ -553,3 +483,41 @@
+
+     Ok(Ok(bytes_written))
+ }
++
++/// Preserve partial writes while awaiting capacity in a native bounded pipe.
++async fn write_pipe_data<M: MemorySize>(
++    endpoint: &mut (impl virtual_fs::AsyncWrite + Unpin),
++    data: &FdWriteSource<'_, M>,
++    memory: &wasmer::MemoryView<'_>,
++) -> Result<usize, Errno> {
++    use virtual_fs::AsyncWriteExt;
++    let pipe_error = |error: std::io::Error| match error.kind() {
++        std::io::ErrorKind::BrokenPipe => Errno::Pipe,
++        _ => map_io_err(error),
++    };
++    match data {
++        FdWriteSource::Iovs { iovs, iovs_len } => {
++            let array = iovs.slice(memory, *iovs_len).map_err(mem_error_to_wasi)?;
++            let array = array.access().map_err(mem_error_to_wasi)?;
++            let mut written = 0;
++            for iov in array.iter() {
++                let bytes = WasmPtr::<u8, M>::new(iov.buf)
++                    .slice(memory, iov.buf_len).map_err(mem_error_to_wasi)?;
++                let bytes = bytes.access().map_err(mem_error_to_wasi)?;
++                let count = match endpoint.write(bytes.as_ref()).await {
++                    Ok(count) => count,
++                    Err(_) if written > 0 => break,
++                    Err(error) => return Err(pipe_error(error)),
++                };
++                written += count;
++                // Returning after one nonempty iovec prevents a NONBLOCK
++                // timeout after earlier iovecs have already changed the pipe.
++                if written > 0 { break; }
++            }
++            Ok(written)
++        }
++        FdWriteSource::Buffer(bytes) => {
++            endpoint.write(bytes).await.map_err(pipe_error)
++        }
++    }
++}
