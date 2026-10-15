@@ -175,7 +175,8 @@ node scripts/prepare-container-shell-bridge.mjs --verify-only \
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --fuzz=0`, and checks source identity again. It creates no source copy and
+`patch --dry-run --forward --fuzz=0`, and checks source identity again. A reversed or already
+applied patch fails instead of being silently applied in reverse. It creates no source copy and
 makes no changes to the supplied checkout. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says
 `patches-apply-cleanly-not-built`. The five-patch
@@ -289,6 +290,23 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+## Original five-patch SDK build deadline
+
+The first real [SDK release-build receipt](evidence.sdk-build-timeout.json) records
+a failed 3,600-second attempt using the original helper commit
+`635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2`. The outer wall deadline killed
+Cargo, which exited -9 after 3,600.395 seconds; the supervisor's final status is 3. The [unchanged original process record](evidence.sdk-build-timeout-process.json)
+also records rustc child 4042242 subsequently reaped with exit 0 and no remaining
+entries or cleanup errors. That older guard's main-thread-only traversal could
+miss worker-thread children in process/RSS samples, so its `allReaped` result
+does not independently qualify every task-owned descendant. Separate read-only
+archival checks match all 580 source pins and report the known historical PIDs
+gone; they do not reconstruct missing observations. The completed log's inspected
+tail ends at `console_error_panic_hook` without a Rust compile error in that
+excerpt. No runnable SDK Wasm was produced. Web glue, static inventory, local
+module/Worker packaging, real Bash execution and browser gates remain unqualified;
+the source, locks and release profile retain their original identities.
+
 ## Six-patch SDK check and binary gate
 
 The fresh six-patch candidate at source commit
@@ -328,8 +346,9 @@ Cargo lock contains 457 packages. The earlier source inspection lacked the requi
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
 prefetch, offline validation, corrected Wasmer/SDK/example Rust typing and the six-patch
-SDK release/bindgen gate now pass. The separate real Bash producer and local host-module
-packaging have their own receipts. No memory or disk estimate is a measured producer
+SDK release/bindgen gate now pass. The separate [real Bash producer](producer/README.md) and local host-module
+packaging follow-ups retain their own receipts; they are independent of this
+SDK resolver build. No memory or disk estimate is a measured producer
 requirement, and no previous or unrelated cache was deleted.
 
 Actual guest qualification uses a separately pinned package and the same real Chromium
