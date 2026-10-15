@@ -497,6 +497,29 @@ public class Main {
 				expected: '[1, 2, 3]\n'
 			},
 			{
+				// A primitive array clone that does not escape its method trapped: int[] had no clone function.
+				name: 'primitive array clone',
+				code: `import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] dp = { 1, 2, 3 };
+        int[] next = dp.clone();
+        next[0] = 9;
+        long[] sums = { 4L };
+        long[] copy = sums.clone();
+        char[] word = "ab".toCharArray().clone();
+        int[][] grid = { { 1, 2 }, { 3, 4 } };
+        int[] row = grid[1].clone();
+        row[0] = 7;
+        System.out.println(dp[0] + " " + next[0] + " " + next.length + " " + copy[0] + " " + word[1]
+            + " " + grid[1][0] + " " + row[0] + " " + Arrays.toString(dp));
+    }
+}`,
+				stdin: '',
+				expected: '1 9 3 4 b 3 7 [1, 2, 3]\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

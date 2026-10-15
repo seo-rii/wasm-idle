@@ -55,6 +55,15 @@ annotation element, as in `@SuppressWarnings("unchecked")`. TeaVM's `SuppressWar
 `SuppressWarnings` with `value()` to teavm-javac's class-library emulation sources. It changes only
 `compile-classlib-teavm.bin` and must be applied after the `199bed0` backport.
 
+A fifth source patch, `scripts/teavm/patches/teavm-javac-array-clone.patch`, makes cloning primitive
+arrays work. TeaVM 0.13.1 dependency analysis only connects a cloned array to `Object.clone()` when
+the array variable escapes its method, and the Wasm GC backend installs a primitive array class's
+clone function only for types that reach `Object.clone()`; so `int[] b = a.clone();` followed by
+local use trapped with "dereferencing a null pointer". This is TeaVM behaviour, not specific to the
+browser compiler. The patch registers a listener that infers the static type of cloned arrays in
+reached methods and propagates primitive array types to `Object.clone()`. It changes only
+`compiler.wasm`.
+
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
 exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,

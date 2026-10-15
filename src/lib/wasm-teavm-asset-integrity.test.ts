@@ -125,7 +125,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 					// Link enum values() for Class.getEnumConstants (EnumDependencySupport).
 					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' },
 					// Annotation must not extend itself and SuppressWarnings needs value().
-					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' },
+					// Propagate cloned primitive array types to Object.clone().
+					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,
