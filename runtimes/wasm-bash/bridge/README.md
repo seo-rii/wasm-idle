@@ -1,6 +1,7 @@
 # Source-pinned shell bridge candidate
 
-This directory is an unbuilt porting prototype for the real Bash/WASIX backend. It does
+This directory contains a source-pinned experimental port for the real Bash/WASIX backend.
+The six-patch SDK now passes real typechecking and release/bindgen generation. It does
 not produce a supported SDK, replace the existing Bash distribution, or expose a public
 container adapter. The existing upstream Bash parser and evaluator remain the shell.
 See [ADR-002](../../../docs/adr/ADR-002-shell-backend.md) and the
@@ -288,22 +289,51 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+## Six-patch SDK check and binary gate
+
+The fresh six-patch candidate at source commit
+`7ceef67180e047d4703936482006a69b814662d2` now passes the real pinned SDK
+library and external `container_command_snapshot_compile` check. The
+[original typecheck process receipt](evidence.worker-imports-typecheck-process.json)
+records exit 0 in 373.991 seconds. The same physical source and its own checked
+target then produce the release SDK in 586.098 seconds, web glue with matching
+`wasm-bindgen 0.2.101` in 1.762 seconds and static inspection in 0.255 seconds.
+All four process receipts report normal exit 0, all owned processes reaped,
+and no cleanup signals, remaining descendants or cleanup errors.
+
+The [original binary receipt](evidence.worker-imports-sdk-binary.json) preserves
+its bytes and full import/export inventory once. The bound SDK is 9,071,791
+bytes with SHA-256
+`326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551`.
+The separate [archival verification](evidence.worker-imports-sdk-binary-metadata.json)
+rechecks all 581 source/toolchain pins, the complete 198-file SDK and 376-file
+WASIX inventories, six additional tool/compiler-library pins and all six outputs.
+The source/lockfiles, atomics/build-std configuration and original release profile
+remain unchanged. These sources and target were not copied from another build;
+release reuses this physical source's preceding check target, so its timing is
+not an independent clean-build benchmark.
+
+This establishes Rust typing, release Wasm generation and static validity of
+the corrected resolver. The actual guest still requires a separately packaged
+SDK/Worker graph and Chromium run. It does not prove Bash execution, the private
+import's runtime behavior, a trusted JS command registry, common live fd/VFS or
+shell cleanup. The earlier [failed Chromium evidence](https://github.com/seo-rii/wasm-idle/pull/195)
+and source-only preparation receipts retain their original results. No binary
+or source archive is checked into Git.
+
 ## Remaining runtime gate
 
 The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and build-std; its
 Cargo lock contains 457 packages. The earlier source inspection lacked the required
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
-prefetch, offline validation and corrected Wasmer/SDK/example Rust typing now
-pass. Existing Bash source/sysroot
-artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
-and actual browser qualification still require a sequential resource budget. No memory
-or disk estimate is a measured producer requirement, and no previous or unrelated cache
-was deleted.
+prefetch, offline validation, corrected Wasmer/SDK/example Rust typing and the six-patch
+SDK release/bindgen gate now pass. The separate real Bash producer and local host-module
+packaging have their own receipts. No memory or disk estimate is a measured producer
+requirement, and no previous or unrelated cache was deleted.
 
-Next, reserve a sequential build slot and private output budget, build the pinned SDK and
-real Bash with this shim, and verify actual imports and new artifact receipts. Then qualify
-argv/env/cwd/exit, FD/FS visibility and Worker cleanup using the same real browser fixtures.
+Actual guest qualification uses a separately pinned package and the same real Chromium
+fixtures; preserve the previous failure and each subsequent observation separately.
 Implement the trusted SDK command registry and Supervisor FS/fd bindings only behind that
 experimental profile. The first Clang-to-BusyBox pipeline, command-lazy verified loading,
 foreground cancellation and common live workspace remain required shell MVP gates.
