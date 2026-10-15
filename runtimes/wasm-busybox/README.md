@@ -19,7 +19,18 @@ file operations or grep regex engine.
 
 `manifest.json` records exact source/config hashes and fingerprints the existing
 local WASI SDK 33 toolchain, its selected WASI Preview 1 sysroot and Clang resource
-directory. The SDK fingerprint is a local build pin, not a claim that every
+directory. `bin/clang`, `wasm-ld` and the LLVM archive tools are small launchers
+over the SDK's shared `libclang-cpp` and `libLLVM` libraries, so those libraries and
+the automatically loaded `bin/clang.cfg`, which selects the sysroot, are pinned as
+well. `evidence/g0-busybox.json` predates these three pins; they were computed from
+the same local SDK installation, which still matches every earlier pin.
+When a link passes an optimization flag, clang's WebAssembly driver also runs a
+`wasm-opt` found in the SDK `bin` directory or `PATH`; BusyBox's `trylink` passes
+its compiler flags to the final link. That host tool is outside the SDK pin, so the
+receipt records its path, hash and `--version` output as `toolchain.implicitWasmOpt`
+(`null` when none is found). Matching artifact bytes also require the same
+`wasm-opt`. The G0 receipt predates this record.
+The SDK fingerprint is a local build pin, not a claim that every
 installation with the label `33` has identical bytes. The script refuses different
 bytes. To move to another toolchain, review and update its pin and rerun the probe.
 
@@ -34,7 +45,10 @@ python3 runtimes/wasm-busybox/scripts/verify.py /path/to/the/completed/probe-dir
 
 Omit `--source-archive` to fetch the pinned official archive. The script verifies
 size/hash before extraction, limits entry count/bytes, and rejects unexpected
-archive members. Supply a new work directory on each run. It writes separate WASI
+archive members. Supply a new work directory on each run. Patch, configure, build
+and Node smoke commands receive only the caller's `PATH`, `HOME` and `TMPDIR` plus fixed
+locale/timestamp variables; caller `CFLAGS`, `LDFLAGS`, `MAKEFLAGS` and similar
+settings do not reach the build. It writes separate WASI
 and native configure/build logs with mode 0600, a generated configuration copy,
 and `receipt.json`. Long invocations should run in a persistent background process
 with a private outer log and exit-status file.
