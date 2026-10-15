@@ -21,6 +21,10 @@ been implemented; unpassed promotion gates remain explicit.
 | Selected Bash libc startup cwd                 | [C-02 startup #198](https://github.com/seo-rii/wasm-idle/pull/198) (draft)      | #192; separately pinned constructor/second object, native guards and actual producer build/import verification pass; selected runtime evidence on #199 |
 | Startup cwd actual Bash execution              | [C-02 startup execution #199](https://github.com/seo-rii/wasm-idle/pull/199) (draft) | #197 plus #198 Bash bytes; unchanged ten real commands and 18/18 native WASIX checks pass, including relative redirect visibility; common Container bridge remains unqualified |
 | Forced Bash backend owner cleanup              | [C-02 owner cancellation #200](https://github.com/seo-rii/wasm-idle/pull/200) (draft) | #199; 19/19 actual Chromium checks across CPU loop, blocked stdin and pending Bash download pass with fresh-backend recovery; public Container cancellation and surviving-shell interrupts remain unqualified |
+| Trusted host-command registry and dispatch     | [C-02 dispatch #205](https://github.com/seo-rii/wasm-idle/pull/205) (draft)     | #196; patches 0007/0008, real eight-patch SDK typecheck/release/bindgen/package pass; actual Bash dispatch runs on #209 |
+| WASIX proc_join exit statuses                  | [C-02 join #208](https://github.com/seo-rii/wasm-idle/pull/208) (draft)         | #205; patches 0009 (statuses >= 79) and 0010 (WNOHANG); nine/ten-patch gates pass; intermittent first-command loss remains open |
+| Shell and live I/O stack integration           | [C-15 merge #203](https://github.com/seo-rii/wasm-idle/pull/203) (draft)        | Merge of #200 into #171 only; 104 container and 14 shell evaluator tests pass on the merge |
+| Real Bash host commands into the Supervisor    | [C-15 dispatch #209](https://github.com/seo-rii/wasm-idle/pull/209) (draft)     | #203 plus #205/#208 SDK packages; delegated live stdio and handler; 4 of 7 final Chromium runs pass 45/45, intermittent defects open |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -175,7 +179,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199, including empty arguments, exit status and relative redirect visibility, with all Workers retired; common Container bindings are not installed | C-02 JavaScript command registry, common live fd/VFS ownership and actual Clang/BusyBox shell acceptance before C-15; original Noexec and 17/18 failure receipts remain preserved |
+| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199. #205/#208/#209 add the trusted JavaScript host-command registry: real Bash dispatches registered paths to container live guests with its own descriptors 0–2 delegated; argv/env/cwd, binary pipes, shell redirections, exact stdin consumption, EPIPE, statuses (including >= 79 after #208), PATH lookup and tail exec pass in Chromium. 4 of 7 final runs pass all 45 checks | Intermittent first-command status 0 and a rare hang before dispatch; common live VFS (shell Directory and container VFS are still separate), descriptors beyond stdio, Worker retirement timing, and actual Clang/BusyBox shell acceptance before C-15 completes |
 | G0-CANCEL | #200 passes 19/19 checks for forced trusted host Worker-group cleanup during actual CPU loop, blocked stdin and partial Bash download, followed by same-page fresh-backend recovery; all observed Workers retire | Public Container cancellation, surviving-shell foreground interruption, POSIX signals and the Container asset-service cancellation contract remain separate; this experiment does not complete the whole G0-CANCEL gate |
 | G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
 | B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
@@ -527,3 +531,38 @@ The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
 It comes from the existing producer revision `25ef7345eba86fce0352e7eb0a881e23ed0e684f`;
 no headers were pruned to make a minimal example pass.
+
+The trusted host-command layer has its own evidence. [#205](https://github.com/seo-rii/wasm-idle/pull/205)
+adds bridge patches 0007/0008. A registered exact path takes the prepared child from the
+WASIX builder; the SDK moves it to its scheduler thread, where the JavaScript handler
+registered on that thread receives the owned snapshot and descriptors 0–2. No JavaScript
+value crosses threads. The eight-patch SDK passes the real gate from fresh source with all
+583 pins: typecheck 845.135 s, release 889.651 s, bindgen 2.013 s and inspection 0.255 s.
+Its binary receipt is `1e85d0d18925ab2817cb2acfa77f394ecbb2be3fa78d84f1d576ea2ca45696ac`.
+
+On [#209](https://github.com/seo-rii/wasm-idle/pull/209), on top of the merge-only
+[#203](https://github.com/seo-rii/wasm-idle/pull/203), live `spawn` accepts caller-owned
+stdio endpoints. The guest's own descriptor calls reach Bash's child descriptors through
+the Supervisor RPC, without a relay buffer. Actual Chromium runs then exposed two WASIX
+`proc_join` defects, fixed in [#208](https://github.com/seo-rii/wasm-idle/pull/208):
+statuses of 79 and above were reported as 79, and a nonblocking specific-pid join reported a
+running child as exited 0. The 0010 commit attributed the observed loss to Bash; the pinned
+Bash uses `nojobs.c` and `waitpid(-1)`, and the #208 README corrects that claim.
+
+The ten-patch SDK passes the same gate (binary receipt
+`2b4d95ca3294dd059548b3c351adbe09444d79eada3125505f7981ada828d8c3`, package
+`4b4de3258029c40f7c6db2feb1e342009ce647d683f4ecff87daf509d3b094bb`). Seven actual runs follow:
+- **Four runs pass all 45 checks.**
+- In every run, twenty consecutive statuses and statuses 126/134 are correct.
+- Three runs report one shell's first command as 0 while the Supervisor record holds 23.
+- Two of those runs also hang once before any dispatch.
+- One run has a Worker outlive the five-second retirement window.
+
+Bash maps an `ECHILD` from `waitpid(-1)` to status 0. A slow first command outlasts the
+WASIX 50 ms deep-sleep threshold of its join, so the deep-sleep resume path is a candidate;
+it is not yet traced.
+
+Separately, redirections inside forked Bash pipeline subshells fail with `Invalid
+argument`, and `PIPESTATUS` stays empty even for builtins. Every attempt's original
+receipts are archived on #209. The shell's WASIX `Directory` and the container VFS remain
+separate namespaces. `commonContainerFdVfsQualified` and `shellBackendReady` stay false.
