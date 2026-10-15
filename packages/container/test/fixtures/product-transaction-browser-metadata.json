@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "qualification": "Actual rendered WASI fixture UI with OPFS and real owner RPC. Two test-page pauses hold native File.arrayBuffer and stdin writer.write to qualify view controls across asynchronous operations; no shell or compiler qualification claimed.",
+  "originalRun": "/data/seorii-container-fixes-20261015/product-transaction-browser-20261015T151006Z",
+  "originalEvidence": {
+    "product-transaction-browser-evidence.json": {
+      "bytes": 14189,
+      "sha256": "10447b5869534a09d977f5dcd4349ecf2a83a4589d3ccd5244f05c2e6d7be183"
+    },
+    "product-transaction-browser-process-evidence.json": {
+      "bytes": 935,
+      "sha256": "a56049122847bd72ef8109a0b5f048af389841bf398b5ba3f4b7650ff61ab6af"
+    }
+  },
+  "testedApplicationCommit": "3fe2796ed0e19a4e00484fd72586526a9db9ea77",
+  "sourceScope": "Exact bundled working-tree hashes recorded and rechecked after the run; includes the uncommitted view transaction patch which is archived in this same commit. Historical product and real Bash receipts remain unchanged.",
+  "checks": 16,
+  "processExitCode": 0,
+  "processCleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 3189578,
+        "exitCode": 0
+      },
+      {
+        "pid": 3189583,
+        "exitCode": 0
+      },
+      {
+        "pid": 3189586,
+        "exitCode": 0
+      },
+      {
+        "pid": 3189587,
+        "exitCode": 0
+      },
+      {
+        "pid": 3189482,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "tmpdir": "/data/cx-ui-8ssj1py1",
+  "log": "/home/seorii/logs/product-transaction-browser-20261015T151006Z.log",
+  "interruptedPredecessor": "/data/seorii-container-fixes-20261015/product-transaction-browser-20261015T150524Z"
+}
