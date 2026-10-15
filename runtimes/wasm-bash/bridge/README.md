@@ -538,6 +538,17 @@ timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
 The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
 enabled for these runtimes.
 
+The fix was gated on commit `25e0c1f958d5a9c87b8fdf012e681652ca23a621` in a fresh physical
+copy with 583 pins and a unique target: typecheck 330.07 s, release 738.759 s, bindgen
+2.284 s and static inspection 0.282 s, each exiting 0 with every process reaped. The bound
+Wasm is 9,132,255 bytes, SHA-256
+`2ce591c515f353f91b7966da10a49f3b177c4d40d365a4be651ac69714e9825d`; binary receipt
+`ec389294c97172bb6457f0044bd781eab8e78fc9ca77998c79a994a54724ecc6`. Stage receipts are
+archived as `evidence.status-order-*.json` with a
+[recheck](evidence.status-order-sdk-binary-metadata.json). Local packaging produced receipt
+`1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`. Browser results with
+this package are recorded on the dispatch branch.
+
 ## Trusted host filesystem mounts
 
 Patches 0011 and 0012 let Bash use the common container filesystem instead of a private
@@ -575,6 +586,20 @@ covers the state WASIX caches itself:
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
 against other processes keep their existing WASIX behavior. These remain gaps.
+
+### Actual SDK gate
+
+Commit `b0e740d17d107516f98c42862a61f98046fcd8b4` (patches 0001–0012, including #208's
+status-order fix) was prepared into a fresh physical copy with 584 pins (SDK 200 and WASIX
+377 files) and a unique target: typecheck 517.947 s, release 647.743 s, bindgen 2.017 s and
+static inspection 0.255 s. Each stage exited 0 with every process reaped. The bound Wasm is
+9,187,858 bytes, SHA-256 `8385617d56ffcdf261bb5af83061233bd302004a64f5d729c62791f0993b5ca3`;
+binary receipt `7bbb04175c6d94337ea9c64d7f0290cfaba912a6f1e4b491cd160ce0589215e7`. Stage
+receipts are archived as `evidence.host-filesystem-*.json` with a
+[recheck](evidence.host-filesystem-sdk-binary-metadata.json). Local packaging produced
+receipt `bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e`. An earlier
+gate of the same patches on the pre-fix base passed and only produced a preliminary
+package; its browser runs are recorded as preliminary on the shell branch.
 
 ## Workspace WebAssembly executables
 
