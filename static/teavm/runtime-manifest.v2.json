@@ -155,6 +155,11 @@
 				"path": "scripts/teavm/patches/teavm-javac-reproducible-wasm.patch",
 				"bytes": 20783,
 				"sha256": "f81ab2a7a1c9687f46b9038277663c6f7782b27a593e99dcd537c0149aad9a4d"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-bootstrap-services.patch",
+				"bytes": 4439,
+				"sha256": "f7b58039291c1e0cd55433cde2ab8d465a9acd9ad4754ddfd8b9d7fb4a88b1a9"
 			}
 		],
 		"commands": [
@@ -172,8 +177,8 @@
 			},
 			{
 				"path": "compiler.wasm",
-				"bytes": 4321020,
-				"sha256": "41affa63133862c7a7b6895616302e8ced31310b08f560726d1410a7c5c9d5ba"
+				"bytes": 4334204,
+				"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
@@ -520,8 +525,8 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 40243,
-			"sha256": "9273d806ff4e29e71c11f4c11fa042fbf269bac462b00cb615ebeac701db2662"
+			"bytes": 40305,
+			"sha256": "955020fbac2bea987048469abe6d138528e042437a81406a3da5515294bd4336"
 		}
 	],
 	"assets": [
@@ -540,13 +545,13 @@
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4321020,
-			"sha256": "41affa63133862c7a7b6895616302e8ced31310b08f560726d1410a7c5c9d5ba",
+			"bytes": 4334204,
+			"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1685791,
-				"sha256": "32c1f18af3bcdbfbb30048fda1e3127834bd925f4a1147a90aa64635f2fd5539"
+				"bytes": 1691491,
+				"sha256": "a73734d930d0559518eb5751482d5256b64da12c7d46b71df4adcee54ba54ceb"
 			}
 		},
 		{
@@ -574,5 +579,5 @@
 			}
 		}
 	],
-	"fingerprint": "ac3d81cafe8ffc38a624b34979d7ec0d0a1c934fe8f8080b5a98704ef189afa8"
+	"fingerprint": "098e04ed24e5383558fb53a9d36eca809bd3924ed6858ae81440c40ba6ebc52d"
 }

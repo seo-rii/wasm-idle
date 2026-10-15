@@ -14,10 +14,11 @@ is a wasm-idle addition. The teavm-javac compiler is built with the source patch
 `scripts/teavm/patches/teavm-javac-stdlib-rename.patch` (upstream teavm-javac commit `199bed0`),
 `scripts/teavm/patches/teavm-javac-enum-constants.patch`,
 `scripts/teavm/patches/teavm-javac-annotation-classlib.patch`,
-`scripts/teavm/patches/teavm-javac-array-clone.patch`, and
+`scripts/teavm/patches/teavm-javac-array-clone.patch`,
 `scripts/teavm/patches/teavm-javac-reproducible-wasm.patch`, which also carries modified copies of
 the TeaVM 0.13.1 classes `org.teavm.dependency.TypeSet` and `org.teavm.model.classes.TagRegistry`
-used only by the build. No warranty is provided.
+used only by the build, and `scripts/teavm/patches/teavm-javac-bootstrap-services.patch`. No
+warranty is provided.
 
 ## TeaVM and teavm-javac
 
