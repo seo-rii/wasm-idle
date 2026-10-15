@@ -81,6 +81,18 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    `Runtime` implements `Runtime::host_command` from an exact-path registry and moves the
    owned child to the scheduler thread, where the JavaScript handler registered on that
    thread runs. This is the only SDK-side patch; `src-js` is unchanged.
+9. `0009-preserve-join-exit-status.patch`: `proc_join` stored a child's exit code through
+   `Errno`, whose conversion maps every value outside the errno range to `Unknown` (79).
+   The ABI field is a u16 that wasix-libc's `waitpid` reads as the raw status, so the
+   runtime now writes the raw exit status there. Statuses 0–78 are unchanged; 79–255
+   (for example 126, 127 and 128+n) are no longer reported to Bash as 79. It applies to
+   native children and host commands alike.
+10. `0010-keep-running-child-on-wnohang.patch`: a nonblocking `proc_join` for a specific
+    child that is still running removed that child from the parent and reported its pid
+    with no status, which wasix-libc `waitpid(pid, WNOHANG)` returns as an exit with
+    status 0. The child now stays joinable and the call reports pid 0, so `waitpid`
+    returns 0 as POSIX requires. Blocking joins and finished children are unchanged. The
+    pinned Bash does not use this call; see below.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -460,3 +472,93 @@ produced package receipt
 `83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55` (1.51 seconds).
 
 This is a build and static gate. Actual Bash dispatch is qualified separately in Chromium.
+
+### Exit statuses above the errno range
+
+The first actual Chromium dispatch run showed host-command statuses 126 and 134 arriving
+in Bash as 79. Bash's own native `cannot execute binary file` status 126 did too, so the
+loss is not specific to host commands. `JoinStatusUnion.exit_normal` is typed `Errno` in
+the pinned types crate; `From<ExitCode> for Errno` turns values that are not errno
+variants into `Errno::Unknown` (79). Patch 0009 writes the raw `u16` status into that
+union field after the normal `JoinStatus` write, which is exactly what libc's
+`W_EXITCODE(code.u.exit_normal, 0)` consumes. It applies independently with zero fuzz.
+
+The nine-patch SDK at source `4a9e7a9b77dac2551a31d74a8ee3b618af4d1816` passed the same
+fresh-source gate with 583 pins: typecheck 291.062 s, release 622.133 s, bindgen 2.019 s
+and static inspection 0.255 s, each exiting 0 with all owned processes reaped. The bound
+Wasm is 9,140,285 bytes, SHA-256
+`b4a6675fa70a7e7e5a0dbb858d2c8b23678e893a2d41163620140e6f1929bb08`; binary receipt
+`50a2f1c18574ea655543c7808b40541736083226b5d8abf40477a1bc5e7da720` and the stage receipts
+are archived unchanged as `evidence.exit-status-*.json` with a
+[post-run recheck](evidence.exit-status-sdk-binary-metadata.json). The unchanged local
+packaging step produced package receipt
+`21c82836f8cbce9a2d07133c35dca7c177944ebb9abf3ef2b25b74374803fbae` in 1.511 seconds.
+
+### Nonblocking join of a running child
+
+With patch 0009, two further actual runs each passed every status check except one
+intermittent loss: Bash once observed 0 for the first host command of a shell while the
+Supervisor completed it with 23, and twenty consecutive dispatches reproduced it on the
+first command only. Patch 0010 was written for one candidate path: in `proc_join`, the
+nonblocking path for a specific pid removes the child and writes its pid before checking
+completion, so `waitpid(pid, WNOHANG)` on a running child reports an exit with status 0.
+That is a real POSIX violation and the fix stands on its own, but it is **not** the cause
+of the observed loss: the pinned Bash is built with `nojobs.c`, whose `wait_for` and
+`reap_zombie_children` only call `waitpid(-1, ...)`. The 0010 commit message states the
+opposite; this section supersedes it. `nojobs.c` turns an `ECHILD` from `waitpid(-1, ...)`
+into status 0, so a join that briefly finds no children is the next candidate to trace.
+
+The ten-patch SDK at source `959ea103b2535aacb04c6c69b2441e65a0203a47` (after disabling
+patch backup files) passed the same fresh-source gate with 583 pins: typecheck 441.463 s,
+release 1,016.289 s, bindgen 3.28 s and static inspection 0.508 s on a loaded host, each
+exiting 0 with complete cleanup. The bound Wasm is 9,128,654 bytes, SHA-256
+`bc203bae677f9f658a2893d6bcc4336ff75a29cd1c82cef1ce54c28dd7e02dc1`; binary receipt
+`2b4d95ca3294dd059548b3c351adbe09444d79eada3125505f7981ada828d8c3` and stage receipts are
+archived as `evidence.wnohang-*.json` with a [recheck](evidence.wnohang-sdk-binary-metadata.json).
+Local packaging produced receipt
+`4b4de3258029c40f7c6db2feb1e342009ce647d683f4ecff87daf509d3b094bb`. An earlier attempt of
+this gate was stopped one minute into typechecking, before any output, because the
+prepared source contained `proc_join.rs.orig`; it is not counted as a build result.
+
+In seven actual Chromium runs of the dispatch probe with this package, all twenty
+consecutive host-command statuses arrived intact every time, and statuses 126 and 134
+remained correct. The first-command loss was not removed: in three of the seven runs the
+first command of one shell still reported 0 while its Supervisor record held 23, and two of
+those runs also hung once before any dispatch. A slow first command outlasts the WASIX
+50 ms deep-sleep threshold of Bash's `proc_join`, which makes the deep-sleep resume path a
+candidate; the cause is not yet traced and nothing here claims to fix it.
+
+### First-command status loss: SIGQUIT before the status
+
+A local diagnostic build traced the remaining loss. It applies the ten patches plus
+[`diagnostics/9999-host-status-diagnostics.patch`](diagnostics/9999-host-status-diagnostics.patch),
+which only adds `host_diag` debug records; it is not part of the patch set. The SDK logger
+forwards every thread's records to the owner, which captured them in Chromium. With that
+timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
+([receipt](diagnostics/status-trace-browser.json)). The records show:
+
+- **Bash uses a real fork.** It runs external commands with `proc_fork` and
+  `copy_memory = true`, not vfork. The forked child's guest thread therefore stays alive,
+  waiting in the non-vfork exec branch for the host command.
+- **The status is already 0 before the host command finishes.**
+  `HostCommandProcess::finish` copied `WasiEnv::on_exit` and called
+  `signal_process(SIGQUIT)` before `terminate(code)`. When the forked child's waiting
+  thread handled SIGQUIT first, its default disposition published status 0. The status is
+  set only once, so the trace records `process terminate code=23 already=Some(Some(0))`,
+  and Bash's `waitpid(-1)` then reports 0.
+
+`finish` now publishes the status first and signals afterwards. A native guest's
+`on_exit` runs on its only thread after `_start` returns, so it does not have this race.
+The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
+enabled for these runtimes.
+
+The fix was gated on commit `25e0c1f958d5a9c87b8fdf012e681652ca23a621` in a fresh physical
+copy with 583 pins and a unique target: typecheck 330.07 s, release 738.759 s, bindgen
+2.284 s and static inspection 0.282 s, each exiting 0 with every process reaped. The bound
+Wasm is 9,132,255 bytes, SHA-256
+`2ce591c515f353f91b7966da10a49f3b177c4d40d365a4be651ac69714e9825d`; binary receipt
+`ec389294c97172bb6457f0044bd781eab8e78fc9ca77998c79a994a54724ecc6`. Stage receipts are
+archived as `evidence.status-order-*.json` with a
+[recheck](evidence.status-order-sdk-binary-metadata.json). Local packaging produced receipt
+`1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`. Browser results with
+this package are recorded on the dispatch branch.

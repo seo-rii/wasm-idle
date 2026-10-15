@@ -43,7 +43,9 @@ const patches = [
 	'0004-expose-host-command-hook.patch',
 	'0005-owned-command-snapshot.patch',
 	'0006-register-worker-shell-import.patch',
-	'0007-delegate-host-command-descriptors.patch'
+	'0007-delegate-host-command-descriptors.patch',
+	'0009-preserve-join-exit-status.patch',
+	'0010-keep-running-child-on-wnohang.patch'
 ];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = ['0008-dispatch-trusted-host-commands.patch'];
@@ -157,10 +159,15 @@ if (verifyOnly) {
 	]) {
 		for (const name of names) {
 			const path = join(bridge, 'patches', name);
-			execFileSync('patch', ['--batch', '--forward', '--fuzz=0', '-p1', '-i', path], {
-				cwd: join(output, crate),
-				stdio: 'pipe'
-			});
+			// Sequential patches may apply at an offset; never leave *.orig backups.
+			execFileSync(
+				'patch',
+				['--batch', '--forward', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
+				{
+					cwd: join(output, crate),
+					stdio: 'pipe'
+				}
+			);
 			receipts[name] = sha256(await readFile(path));
 		}
 	}
