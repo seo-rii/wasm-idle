@@ -70,3 +70,34 @@ test('writable abort wakes an in-flight write before the sink abort callback', a
   await new Promise((resolve) => setTimeout(resolve, 0));
   await writer.abort(); await rejected;
 });
+
+test('a failed stream write releases its pipe writer so the reader observes EOF', async () => {
+  const p = createPipe(4), writer = pipeWritable(p.writer).getWriter();
+  await writer.write(new Uint8Array([7]));
+  await assert.rejects(writer.write('not bytes'), { code: 'EINVAL' });
+  await writer.abort();
+  assert.deepEqual(await p.reader.read(4), new Uint8Array([7]));
+  assert.equal((await p.reader.read(4)).length, 0);
+});
+
+test('readable adapters reject chunk sizes that cannot make progress', async () => {
+  const p = createPipe(4);
+  for (const chunkBytes of [0, -1, 1.5, Number.NaN]) {
+    assert.throws(() => pipeReadable(p.reader, chunkBytes), { code: 'EINVAL' });
+  }
+  assert.equal(await p.writer.write(new Uint8Array([1])), 1);
+  const reader = pipeReadable(p.reader, 1).getReader();
+  assert.deepEqual((await reader.read()).value, new Uint8Array([1]));
+  p.writer.close();
+  assert.equal((await reader.read()).done, true);
+});
+
+test('dispose releases every descriptor when one endpoint fails to close', async () => {
+  const p = createPipe(4), table = new DescriptorTable();
+  const broken = { dup() { return this; }, close() { throw new Error('close failed'); } };
+  table.add(broken, 0); table.add(p.writer, 1); table.add(p.reader, 2);
+  assert.throws(() => table.dispose(), /close failed/);
+  assert.equal(table.size, 0);
+  await assert.rejects(p.reader.read(1), { code: 'EBADF' });
+  assert.throws(() => p.writer.close(), { code: 'EBADF' });
+});

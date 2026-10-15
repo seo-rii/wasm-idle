@@ -81,6 +81,9 @@ export function createPipe(capacity = 64 * 1024) {
 }
 
 export function pipeReadable(reader: PipeReader, chunkBytes = 64 * 1024) {
+  // A zero-length read returns no bytes without reaching EOF; pulling with it would close
+  // the reader early and turn pending writes into EPIPE.
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 1) throw new PipeError('EINVAL', 'chunkBytes must be a positive integer');
   let closed = false;
   const close = () => { if (!closed) { closed = true; reader.close(); } };
   return new ReadableStream<Uint8Array>({
@@ -101,9 +104,14 @@ export function pipeWritable(writer: PipeWriter) {
   return new WritableStream<Uint8Array>({
     start(controller) { controller.signal.addEventListener('abort', close, { once: true }); },
     async write(bytes) {
-      if (!(bytes instanceof Uint8Array)) throw new PipeError('EINVAL');
-      let offset = 0;
-      while (offset < bytes.length) offset += await writer.write(bytes.subarray(offset));
+      // A rejected sink write errors the stream without calling close/abort, and a later
+      // abort() on an errored stream never signals. Release the endpoint here, otherwise the
+      // reader would wait for this writer forever instead of observing EOF.
+      try {
+        if (!(bytes instanceof Uint8Array)) throw new PipeError('EINVAL');
+        let offset = 0;
+        while (offset < bytes.length) offset += await writer.write(bytes.subarray(offset));
+      } catch (error) { close(); throw error; }
     },
     close, abort: close
   }, { highWaterMark: 1 });
