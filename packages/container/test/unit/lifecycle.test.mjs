@@ -31,3 +31,18 @@ test('invalid API inputs fail before startup', () => {
     () => snapshotInvocation('x', [], { timeoutMs: Infinity })
   ]) assert.throws(invoke, { code: 'INVALID_ARGUMENT' });
 });
+
+test('invalid trusted-adapter completion still terminates exactly once and releases the lease', async () => {
+  const { createContainer } = await import('../../dist/container.js');
+  const c = createContainer({
+    adapters: [{ id: 'protocol-test', filesystem: 'snapshot', async start({ snapshot }) {
+      return { async run() { return { code: -1, stdout: new Uint8Array(), stderr: new Uint8Array(), snapshot }; }, async dispose() {} };
+    } }], commands: { invalid: { adapter: 'protocol-test', bytes: new Uint8Array() } }
+  });
+  try {
+    const result = await c.run('invalid');
+    assert.equal(result.reason, 'runtime-error');
+    assert.equal((await c.inspect()).processes.length, 0);
+    c.fs.writeFile('/workspace/recovered', new Uint8Array([1]));
+  } finally { await c.dispose(); }
+});

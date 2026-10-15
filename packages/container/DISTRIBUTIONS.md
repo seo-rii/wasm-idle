@@ -88,3 +88,33 @@ copy. A separate bounded LRU retains verified logical bytes (64 MiB by default);
 that memory cache. Pending asset requests and consumer counts are bounded as well.
 `dispose()` is idempotent and aborts outstanding work. `clearMemoryCache()` touches only this
 loader's re-downloadable bytes, never workspace files or the shared persistent asset cache.
+
+`createContainerPackageManager({ distribution, capabilities, persistentCache })` supplies
+metadata-only `resolveCommand(name)` and `listCommands()`. The resolver accepts the exact bare
+name or `/usr/bin/<name>`; it does not parse shell strings or claim to implement a shell's PATH
+rules. The supervisor must expose command entries through a real executable-node/dispatch
+contract before advertising shell `stat/access/exec` support; the manager does not create
+empty executable placeholder files.
+
+`prepare(packageId, { signal })` returns a complete dependency-first `PreparedPackages`:
+`{ distributionId, distributionSha256, packages }`. Each package contains
+`{ id, identity, mount, files }`; a file contains its relative `path`, owned `bytes`,
+`executable` flag, `sha256` and `mediaType`. `prepareCommand()` additionally returns the
+frozen `command` metadata, an independently owned `executable` byte array and its absolute
+`executablePath`. Only the receiving adapter may instantiate those bytes; it must validate
+the actual Wasm/import/memory profile and must not re-fetch an executable by URL.
+
+The manager checks host capability IDs and reserves preparation count/file-byte budgets
+before downloading. Byte accounting covers prepared file copies and a command executable
+copy. This is an admission budget, not a browser JS heap/RSS hard limit; delivery buffers,
+decoding, the asset cache and engine memory have separate bounds. No partial package closure
+is returned on failure or cancellation. The caller must atomically mount the completed
+closure readonly, snapshot the incoming bytes, and make repeated mounting of the same
+`distributionSha256`/package identity/mount idempotent. A filesystem writer lease belongs
+after preparation, so downloads do not hold a workspace lock. The manager never reads,
+modifies, persists or deletes the user's workspace.
+
+Unit tests here cover index validation, pinned loader protocol failures, cancellation and
+staged results with byte fixtures. They do not qualify a Clang CLI, BusyBox, a shell, browser
+persistent-cache recovery, or atomic mounting in a specific filesystem; those require the
+corresponding adapter/browser integration fixtures.

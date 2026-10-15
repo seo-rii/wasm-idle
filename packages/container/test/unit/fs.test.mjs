@@ -384,3 +384,61 @@ test('snapshot commit rejects recycled identities, type/mount changes and readon
   }
   lease.discard();
 });
+
+test('readonly package closure publishes every mount in one generation with stable existing identities', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('user', bytes('workspace'));
+  const inode = fs.stat('user').inode; const generation = fs.generation;
+  fs.mountReadonlyPackages([
+    { path: '/opt/toolchains/one', entries: [{ path: 'a', type: 'file', mode: 0o444, data: bytes('one') }] },
+    { path: '/opt/toolchains/two', entries: [{ path: 'b', type: 'file', mode: 0o555, data: bytes('two') }] }
+  ]);
+  assert.equal(text(fs.readFile('/opt/toolchains/one/a')), 'one');
+  assert.equal(text(fs.readFile('/opt/toolchains/two/b')), 'two');
+  assert.equal(fs.generation, generation + 1); assert.equal(fs.stat('user').inode, inode);
+  assert.throws(() => fs.writeFile('/opt/toolchains/one/a', bytes('changed')), error('EROFS'));
+  assert.throws(() => fs.unlink('/opt/toolchains/two/b'), error('EROFS'));
+  const before = fs.exportSnapshot(); fs.mountReadonlyPackages([]); assert.deepEqual(fs.exportSnapshot(), before);
+});
+
+test('invalid second package leaves no first mount, namespace, allocation or generation changes', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('user', bytes('workspace'));
+  const before = fs.exportSnapshot();
+  const good = { path: '/opt/toolchains/one', entries: [{ path: 'a', type: 'file', mode: 0o444, data: bytes('one') }] };
+  for (const bad of [
+    { path: '/opt/toolchains/two', entries: [{ path: '../escape', type: 'file', mode: 0o444, data: bytes('bad') }] },
+    { path: '/opt/toolchains/two', entries: [{ path: 'link', type: 'symlink', mode: 0o777, target: '/workspace/user' }] },
+    { path: '/opt/toolchains/two', entries: [{ path: 'missing/child', type: 'file', mode: 0o444, data: bytes('bad') }] },
+    { path: '/opt/toolchains/one/nested', entries: [] }
+  ]) {
+    assert.throws(() => fs.mountReadonlyPackages([good, bad]), FsError);
+    assert.deepEqual(fs.exportSnapshot(), before);
+    assert.throws(() => fs.stat('/opt/toolchains'), error('ENOENT'));
+  }
+});
+
+test('combined readonly package quotas are checked before any package is published', () => {
+  const packages = [
+    { path: '/opt/one', entries: [{ path: 'a', type: 'file', mode: 0o444, data: bytes('one') }] },
+    { path: '/opt/two', entries: [{ path: 'b', type: 'file', mode: 0o444, data: bytes('two') }] }
+  ];
+  for (const options of [{ maxBytes: 5 }, { maxInodes: 13 }]) {
+    const fs = new MemoryFileSystem(options); const before = fs.exportSnapshot();
+    assert.throws(() => fs.mountReadonlyPackages(packages), error('ENOSPC'));
+    assert.deepEqual(fs.exportSnapshot(), before);
+  }
+});
+
+test('resolved create and relocated subtree respect absolute path budgets', () => {
+  const fs = new MemoryFileSystem();
+  const deep = '/workspace/' + Array(127).fill('d').join('/');
+  fs.mkdir(deep, { recursive: true });
+  const snapshot = fs.exportSnapshot();
+  assert.throws(() => fs.mkdir('extra', { cwd: deep }), { code: 'EINVAL' });
+  assert.deepEqual(fs.exportSnapshot(), snapshot);
+  fs.mkdir('/workspace/tree/child', { recursive: true });
+  const before = fs.exportSnapshot();
+  const parent = deep.slice(0, -2);
+  assert.throws(() => fs.rename('/workspace/tree', parent + '/tree'), { code: 'EINVAL' });
+  assert.deepEqual(fs.exportSnapshot(), before);
+  assert.doesNotThrow(() => MemoryFileSystem.fromSnapshot(fs.exportSnapshot()));
+});

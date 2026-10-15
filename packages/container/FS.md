@@ -47,6 +47,14 @@ overlap. Mount publication requires no host descriptors or active snapshot lease
 It validates the tree shape, not asset hashes; the package loader must verify bytes
 before calling it.
 
+`mountReadonlyPackages([{ path, entries }, ...])` stages a complete package
+dependency closure and publishes all mounts in one filesystem generation. Quotas,
+overlap, namespace shape and symlink boundaries apply to the whole staged tree.
+If any package fails, no mount, parent directory, inode allocation or generation
+change is published. An empty list is a no-op. `mountReadonly()` delegates to this
+operation with one package. Identity-based repeated-mount policy belongs to the
+supervisor; an already mounted path is still rejected by the filesystem API.
+
 `acquireSnapshot()` obtains a global writer lease and returns a structured-clone
 snapshot plus `commit(result)` and `discard()`. Acquire rejects open host
 descriptors; new descriptors and all mutations fail with `EBUSY` during the lease.

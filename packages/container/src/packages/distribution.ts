@@ -183,7 +183,8 @@ export function assertValidatedDistribution(value: ValidatedDistribution): void 
 
 /** Verifies a host pin before parsing. Validation/command lookup never fetch asset bodies. */
 export async function validateDistribution(options: ValidateDistributionOptions): Promise<ValidatedDistribution> {
-  options.signal?.throwIfAborted();
+  const signal = options.signal;
+  signal?.throwIfAborted();
   const limits = Object.freeze({ ...DEFAULT_DISTRIBUTION_LIMITS, ...options.limits });
   for (const [key, value] of Object.entries(limits)) {
     if (!(key in DEFAULT_DISTRIBUTION_LIMITS) || !Number.isSafeInteger(value) || value <= 0) invalid(`Invalid distribution limit ${key}`);
@@ -200,7 +201,7 @@ export async function validateDistribution(options: ValidateDistributionOptions)
   } catch (cause) {
     throw new ContainerError('INTEGRITY', 'Distribution does not match its application lock', { cause });
   }
-  options.signal?.throwIfAborted();
+  signal?.throwIfAborted();
   let parsed: unknown;
   try { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch (cause) { throw new ContainerError('INVALID_DISTRIBUTION', 'Distribution must be UTF-8 JSON', { cause }); }

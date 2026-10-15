@@ -165,6 +165,7 @@ export class MemoryFileSystem {
     const node = stack[stack.length - 1]!;
     if (path.endsWith('/') && node.type !== 'directory') throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     const result = absolute(names);
+    checkPath(result);
     if (!within(result, root)) throw new FsError('EACCES', 'Path escapes the directory capability');
     return { node, path: result };
   }
@@ -196,6 +197,7 @@ export class MemoryFileSystem {
     if (!name || name === '.' || name === '..') throw new FsError('EINVAL', 'Operation requires an ordinary final path component');
     const parent = this.resolve(parts.join('/') || (path.startsWith('/') ? '/' : '.'), options);
     if (parent.node.type !== 'directory') throw new FsError('ENOTDIR', 'Parent is not a directory');
+    checkPath(`${parent.path === '/' ? '' : parent.path}/${name}`);
     return { ...parent, name };
   }
 
@@ -354,6 +356,11 @@ export class MemoryFileSystem {
     if (!node) throw new FsError('ENOENT', 'Source does not exist');
     if (node.mount !== source.node.mount) throw new FsError('EBUSY', 'Cannot rename a mount root');
     if (source.node.mount !== destination.node.mount) throw new FsError('EXDEV', 'Cannot rename across mounts');
+    const pending = [{ node, path: `${destination.path === '/' ? '' : destination.path}/${destination.name}` }];
+    while (pending.length) {
+      const entry = pending.pop()!; checkPath(entry.path);
+      for (const [name, child] of entry.node.children) pending.push({ node: child, path: `${entry.path}/${name}` });
+    }
     this.writable(source.node);
     this.writable(destination.node);
     if (source.node === destination.node && source.name === destination.name) return;
@@ -681,49 +688,68 @@ export class MemoryFileSystem {
 
   /** Publish a complete readonly tree after namespace, quota and symlink validation. */
   mountReadonly(path: string, entries: readonly Omit<SnapshotEntry, 'inode'>[]): void {
+    this.mountReadonlyPackages([{ path, entries }]);
+  }
+
+  /** Stage a dependency closure and publish it as one filesystem generation, or nothing. */
+  mountReadonlyPackages(packages: readonly { readonly path: string; readonly entries: readonly Omit<SnapshotEntry, 'inode'>[] }[]): void {
+    if (!Array.isArray(packages)) throw new FsError('EINVAL', 'Packages must be an array');
+    if (packages.length === 0) return;
+    if (packages.length > this.maxInodes) throw new FsError('ENOSPC', 'Package count exceeds inode quota');
     if (this.lease || this.descriptors.size) throw new FsError('EBUSY', 'Mount changes require no active lease or descriptors');
-    checkPath(path);
-    if (!path.startsWith('/') || absolute(components(path)) !== path || components(path).some(part => part === '.' || part === '..') || path === '/') {
-      throw new FsError('EINVAL', 'Mount path must be canonical and absolute');
-    }
-    if ([...this.mounts.keys()].some(mount => mount !== '/' && (within(path, mount) || within(mount, path)))) {
-      throw new FsError('EBUSY', 'Cannot overlap an existing mount');
-    }
     const original = this.exportSnapshot();
+    const mounts = [...original.mounts];
     let nextInode = this.nextInode;
     const identity = () => {
       if (nextInode >= Number.MAX_SAFE_INTEGER) throw new FsError('ENOSPC', 'Filesystem inode identities exhausted');
       return nextInode++;
     };
     const records = new Map(original.entries.map(entry => [entry.path, entry]));
-    if ([...records.keys()].some(existing => within(existing, path) && existing !== path)) throw new FsError('EBUSY', 'Mount destination is not empty');
-    if (records.has(path) && records.get(path)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount destination is not a directory');
-    let prefix = '';
-    for (const part of components(path)) {
-      prefix += `/${part}`;
-      if (records.has(prefix) && records.get(prefix)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount parent is not a directory');
-      if (!records.has(prefix)) records.set(prefix, { inode: identity(), path: prefix, type: 'directory', mode: 0o755 });
-    }
-    const supplied = new Set<string>();
-    for (const entry of entries) {
-      checkPath(entry.path);
-      if (entry.path.startsWith('/') || components(entry.path).join('/') !== entry.path || components(entry.path).some(part => part === '.' || part === '..') || supplied.has(entry.path)) {
-        throw new FsError('EINVAL', 'Package entries need unique canonical relative paths');
+    for (const pkg of packages) {
+      if (!pkg || !Array.isArray(pkg.entries)) throw new FsError('EINVAL', 'Invalid readonly package');
+      const { path, entries } = pkg;
+      checkPath(path);
+      if (!path.startsWith('/') || absolute(components(path)) !== path || components(path).some(part => part === '.' || part === '..') || path === '/') {
+        throw new FsError('EINVAL', 'Mount path must be canonical and absolute');
       }
-      supplied.add(entry.path);
-      records.set(`${path}/${entry.path}`, { ...entry, inode: identity(), path: `${path}/${entry.path}` });
+      if (mounts.some(({ path: mount }) => mount !== '/' && (within(path, mount) || within(mount, path)))) {
+        throw new FsError('EBUSY', 'Cannot overlap an existing or staged mount');
+      }
+      if ([...records.keys()].some(existing => within(existing, path) && existing !== path)) throw new FsError('EBUSY', 'Mount destination is not empty');
+      if (records.has(path) && records.get(path)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount destination is not a directory');
+      let prefix = '';
+      for (const part of components(path)) {
+        prefix += `/${part}`;
+        if (records.has(prefix) && records.get(prefix)!.type !== 'directory') throw new FsError('ENOTDIR', 'Mount parent is not a directory');
+        if (!records.has(prefix)) records.set(prefix, { inode: identity(), path: prefix, type: 'directory', mode: 0o755 });
+        if (records.size > this.maxInodes) throw new FsError('ENOSPC', 'Package tree exceeds inode quota');
+      }
+      if (entries.length > this.maxInodes - records.size) throw new FsError('ENOSPC', 'Package tree exceeds inode quota');
+      const supplied = new Set<string>();
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') throw new FsError('EINVAL', 'Invalid readonly package entry');
+        checkPath(entry.path);
+        if (entry.path.startsWith('/') || components(entry.path).join('/') !== entry.path || components(entry.path).some(part => part === '.' || part === '..') || supplied.has(entry.path)) {
+          throw new FsError('EINVAL', 'Package entries need unique canonical relative paths');
+        }
+        supplied.add(entry.path);
+        records.set(`${path}/${entry.path}`, { ...entry, inode: identity(), path: `${path}/${entry.path}` });
+      }
+      mounts.push({ path, readonly: true });
     }
     const candidate = MemoryFileSystem.fromSnapshot({
       generation: this.revision + 1,
       nextInode,
-      mounts: [...original.mounts, { path, readonly: true }], entries: [...records.values()],
+      mounts, entries: [...records.values()],
     }, { maxBytes: this.maxBytes, maxInodes: this.maxInodes });
-    for (const entry of entries) {
-      if (entry.type !== 'symlink') continue;
-      try { candidate.resolve(`${path}/${entry.path}`, { root: path }); }
-      catch (error) {
-        // Dangling in-package links are legal; escapes and loops are not.
-        if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error;
+    for (const { path, entries } of packages) {
+      for (const entry of entries) {
+        if (entry.type !== 'symlink') continue;
+        try { candidate.resolve(`${path}/${entry.path}`, { root: path }); }
+        catch (error) {
+          // Dangling in-package links are legal; escapes and loops are not.
+          if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error;
+        }
       }
     }
     this.publish(candidate);
