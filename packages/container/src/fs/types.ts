@@ -1,6 +1,7 @@
-export type FileType = 'file' | 'directory' | 'symlink';
+export type FileType = 'file' | 'directory' | 'symlink' | 'character-device';
 
 export interface FileStat {
+  /** The immutable built-in /dev/null reserves inode 0; other identities are positive. */
   readonly inode: number;
   readonly type: FileType;
   readonly size: number;

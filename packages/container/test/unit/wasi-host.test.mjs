@@ -3,9 +3,9 @@ import test from 'node:test';
 import { MemoryFileSystem } from '../../dist/fs/index.js';
 import { createWasiHost } from '../../dist/adapters/wasi/host.js';
 
-function hostTest(run, fs = new MemoryFileSystem()) {
+function hostTest(run, fs = new MemoryFileSystem(), stdio) {
   const memory = new WebAssembly.Memory({ initial: 2, maximum: 2 });
-  const host = createWasiHost({ fs, args: [], env: {}, cwd: '/workspace', stdin: new Uint8Array(), maxOutputBytes: 128 });
+  const host = createWasiHost({ fs, args: [], env: {}, cwd: '/workspace', stdin: new Uint8Array(), maxOutputBytes: 128, stdio });
   try { host.run({ exports: { memory, _start: () => run(host.imports, memory, fs) } }); }
   finally { host.dispose(); }
 }
@@ -94,3 +94,44 @@ test('path_create_directory of the preopen itself reports EEXIST, as mkdir("/") 
   new Uint8Array(memory.buffer)[0] = 46;
   assert.equal(w.path_create_directory(3, 0, 1), 20);
 }));
+
+test('reopened regular files and null device reuse fd0/1/2 without routing into retired streams', () => {
+  for (const target of [0, 1, 2]) {
+    const closed = [], stdio = {
+      read() { throw new Error('Retired stdin was read'); }, write() { throw new Error('Retired output was written'); },
+      close(fd) { closed.push(fd); }, capture: () => ({ stdout: new Uint8Array(), stderr: new Uint8Array() })
+    };
+    hostTest((w, memory, fs) => {
+      const bytes = new Uint8Array(memory.buffer), view = new DataView(memory.buffer);
+      const text = (value, at = 0) => new TextEncoder().encodeInto(value, bytes.subarray(at)).written;
+      const open = (directory, path) => {
+        assert.equal(w.path_open(directory, 1, 0, text(path), 0, (1n << 30n) - 1n, 0n, 0, 100), 0);
+        assert.equal(view.getUint32(100, true), target);
+      };
+      fs.writeFile('/workspace/file', new Uint8Array([10, 11, 12]));
+      assert.equal(w.fd_close(target), 0); assert.equal(w.fd_close(target), 8);
+      assert.equal(w.fd_fdstat_get(target, 512), 8); assert.equal(w.fd_filestat_get(target, 512), 8);
+      open(3, 'file');
+      assert.equal(w.fd_fdstat_get(target, 512), 0); assert.equal(view.getUint8(512), 4);
+      view.setUint32(128, 256, true); view.setUint32(132, 2, true);
+      assert.equal(w.fd_read(target, 128, 1, 140), 0); assert.equal(view.getUint32(140, true), 2);
+      assert.deepEqual([...bytes.subarray(256, 258)], [10, 11]);
+      text('AB', 256); assert.equal(w.fd_pwrite(target, 128, 1, 0n, 140), 0);
+      assert.equal(w.fd_pread(target, 128, 1, 0n, 140), 0); assert.deepEqual([...bytes.subarray(256, 258)], [65, 66]);
+      text('CD', 256); assert.equal(w.fd_write(target, 128, 1, 140), 0);
+      assert.deepEqual([...fs.readFile('/workspace/file')], [65, 66, 67, 68]);
+      assert.equal(w.fd_tell(target, 144), 0); assert.equal(view.getBigUint64(144, true), 4n);
+      assert.equal(w.fd_close(target), 0); assert.deepEqual(closed, [target]);
+      open(4, 'dev/null');
+      assert.equal(w.fd_fdstat_get(target, 512), 0); assert.equal(view.getUint8(512), 2);
+      assert.equal(w.fd_filestat_get(target, 512), 0); assert.equal(view.getUint8(528), 2);
+      assert.equal(w.fd_read(target, 128, 1, 140), 0); assert.equal(view.getUint32(140, true), 0);
+      assert.equal(w.fd_pread(target, 128, 1, 10n, 140), 0); assert.equal(view.getUint32(140, true), 0);
+      assert.equal(w.fd_write(target, 128, 1, 140), 0); assert.equal(view.getUint32(140, true), 2);
+      assert.equal(w.fd_pwrite(target, 128, 1, 10n, 140), 0); assert.equal(view.getUint32(140, true), 2);
+      assert.equal(w.fd_seek(target, 999n, 0, 144), 0); assert.equal(view.getBigUint64(144, true), 0n);
+      assert.equal(w.fd_filestat_set_size(target, 0n), 28);
+      assert.equal(w.fd_close(target), 0); assert.equal(w.fd_close(target), 8); assert.deepEqual(closed, [target]);
+    }, new MemoryFileSystem(), stdio);
+  }
+});

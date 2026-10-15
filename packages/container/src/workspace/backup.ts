@@ -40,6 +40,7 @@ export async function createWorkspaceBackup(fs: MemoryFileSystem, options: Works
   let offset = 0;
   const visit = (path: string) => {
     const stat = fs.lstat(path, { root: '/workspace' });
+    if (stat.type === 'character-device') throw new WorkspaceBackupError('UNSUPPORTED', 'Devices are outside the workspace backup profile');
     const entry: RecordEntry = { path, type: stat.type, mode: stat.mode, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
     if (entry.type === 'file') {
       if (offset + stat.size + 44 > budget.archive) throw new WorkspaceBackupError('LIMIT', 'Workspace content exceeds backup limit');

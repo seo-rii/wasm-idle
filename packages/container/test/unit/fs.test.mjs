@@ -217,7 +217,7 @@ test('FD-01/02: zero I/O, short reads, binary data, sparse write and append', ()
 });
 
 test('quotas and malformed operations cannot truncate existing bytes', () => {
-  const fs = new MemoryFileSystem({ maxBytes: 4, maxInodes: 11 });
+  const fs = new MemoryFileSystem({ maxBytes: 4, maxInodes: new MemoryFileSystem().inodeCount + 1 });
   fs.writeFile('file', bytes('abcd'));
   const original = fs.readFile('file');
   assert.throws(() => fs.writeFile('file', bytes('overflow')), error('ENOSPC'));

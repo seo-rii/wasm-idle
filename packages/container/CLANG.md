@@ -190,12 +190,20 @@ left as data can still run through explicit `wasm-run` after normal ABI checks.
 /fresh/absolute/directory` runs the same fixture against actual pinned Clang/LLD
 and the full process sysroot. The configuration uses the existing producer,
 producer-smoke and process-sysroot receipt fields from shell acceptance; SDK/Bash
-assets are not loaded. The fixture covers native cc1/linker dispatch, generated
+assets are not loaded. The fixture covers version output with owned stdin EOF and
+with initially closed stdin, native cc1/linker dispatch, generated
 artifact execution, streamed stdin reading a changed header, cancellation after
 a file write becomes visible, and a concurrent same-byte output edit. It records
 the exact bundled source hashes, rechecks them after execution and accounts for
 all owned Workers. Neither tiny WASI tests nor a successful bundle build qualifies
 this compiler profile.
+
+The pinned Clang driver checks standard descriptors before processing arguments.
+For one closed descriptor it opens `/dev/null` and expects the lowest free fd to
+replace that descriptor. The live host preserves the initial `EBADF` state and
+performs this real device open; it does not silently substitute EOF for a closed
+channel. The upstream WASI fixup lacks `dup2`, so repairing several simultaneously
+closed standard descriptors is outside this producer's qualified CLI profile.
 
 The [live LLVM qualification records](test/fixtures/clang-live/README.md) record
 12 passing real-compiler checks in both Node Workers and Chromium, seven retired

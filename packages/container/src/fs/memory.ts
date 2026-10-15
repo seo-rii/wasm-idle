@@ -98,6 +98,9 @@ export class MemoryFileSystem {
       if (writable) this.mounts.set(path, false);
       parent.children.set(name, this.allocate('directory', writable ? path : parent.mount, 0o755));
     }
+    // A reserved identity keeps existing persisted workspace inode numbers stable
+    // when their readonly base namespace is recreated by a newer host.
+    this.walk('/dev', '/', true).node.children.set('null', this.allocate('character-device', '/', 0o666));
   }
 
   get generation(): number { return this.revision; }
@@ -156,7 +159,7 @@ export class MemoryFileSystem {
     if (this.nextInode >= Number.MAX_SAFE_INTEGER) throw new FsError('ENOSPC', 'Filesystem inode identities exhausted');
     checkMode(mode);
     const now = Date.now();
-    const inode = this.nextInode++;
+    const inode = type === 'character-device' ? 0 : this.nextInode++;
     const node: Inode = {
       inode, type, mode, mount, data: new Uint8Array(), target: '',
       children: new Map(), references: 0, linked: true, mtimeMs: now, ctimeMs: now,
@@ -345,6 +348,7 @@ export class MemoryFileSystem {
   readFile(path: string, options: PathOptions = {}): Uint8Array {
     const { node } = this.resolve(path, options);
     if (node.command) throw new FsError('ENOTSUP', 'Virtual command entries have no readable executable body');
+    if (node.type === 'character-device') return new Uint8Array();
     this.file(node);
     return node.data.slice();
   }
@@ -376,6 +380,7 @@ export class MemoryFileSystem {
       this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
       return;
     }
+    if (node.type === 'character-device') return;
     this.writable(node);
     this.file(node);
     if (this.usedBytes - node.data.length + bytes.length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
@@ -531,8 +536,8 @@ export class MemoryFileSystem {
     const { node } = resolved;
     if (node.command) throw new FsError('ENOTSUP', 'Virtual commands execute through the registered backend');
     if (options.directory && node.type !== 'directory') throw new FsError('ENOTDIR', 'A directory descriptor was requested');
-    if (write) { this.writable(node); this.file(node); }
-    if (options.truncate) this.resize(node, 0);
+    if (write && node.type !== 'character-device') { this.writable(node); this.file(node); }
+    if (options.truncate && node.type !== 'character-device') this.resize(node, 0);
     const fd = this.nextFd++;
     node.references++;
     this.descriptors.set(fd, { node, offset: 0, read, write, append: options.append ?? false, root, preserveSnapshot: options.snapshot === 'preserve' });
@@ -585,6 +590,7 @@ export class MemoryFileSystem {
     integer(offset, 'offset');
     const description = this.descriptor(fd);
     if (!description.read) throw new FsError('EBADF', 'Descriptor is not readable');
+    if (description.node.type === 'character-device') return new Uint8Array();
     this.file(description.node);
     return description.node.data.slice(offset, Math.min(description.node.data.length, offset + length));
   }
@@ -593,7 +599,7 @@ export class MemoryFileSystem {
     const description = this.descriptor(fd);
     const offset = description.append ? description.node.data.length : description.offset;
     const written = this.pwrite(fd, bytes, offset);
-    if (written !== 0) description.offset = offset + written;
+    if (written !== 0 && description.node.type !== 'character-device') description.offset = offset + written;
     return written;
   }
 
@@ -603,6 +609,7 @@ export class MemoryFileSystem {
     const description = this.descriptor(fd);
     if (!description.write) throw new FsError('EBADF', 'Descriptor is not writable');
     const { node } = description;
+    if (node.type === 'character-device') return bytes.length;
     this.writable(node);
     this.file(node);
     if (bytes.length === 0) return 0;
@@ -617,8 +624,9 @@ export class MemoryFileSystem {
   seek(fd: number, offset: number, whence: 'set' | 'cur' | 'end' = 'set'): number {
     if (!Number.isSafeInteger(offset)) throw new FsError('EINVAL', 'Offset must be a safe integer');
     const description = this.descriptor(fd);
-    this.file(description.node);
     if (!['set', 'cur', 'end'].includes(whence)) throw new FsError('EINVAL', 'Invalid seek origin');
+    if (description.node.type === 'character-device') return description.offset = 0;
+    this.file(description.node);
     const next = offset + (whence === 'cur' ? description.offset : whence === 'end' ? description.node.data.length : 0);
     integer(next, 'resulting offset');
     return description.offset = next;
@@ -626,8 +634,8 @@ export class MemoryFileSystem {
 
   private resize(node: Inode, length: number, notify = true): void {
     integer(length, 'length');
-    this.writable(node);
     this.file(node);
+    this.writable(node);
     if (this.usedBytes - node.data.length + length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
     const resized = new Uint8Array(length);
     resized.set(node.data.subarray(0, length));
@@ -715,7 +723,7 @@ export class MemoryFileSystem {
     for (const entry of snapshot.entries) {
       if (!entry || typeof entry !== 'object') throw new FsError('EINVAL', 'Invalid snapshot entry');
       integer(entry.inode, 'inode');
-      if (entry.inode < 1 || entry.inode >= snapshot.nextInode || identities.has(entry.inode)) {
+      if ((entry.inode === 0 && entry.type !== 'character-device') || entry.inode >= snapshot.nextInode || identities.has(entry.inode)) {
         throw new FsError('EINVAL', 'Snapshot inode identities must be unique and below nextInode');
       }
       identities.add(entry.inode);
@@ -727,7 +735,10 @@ export class MemoryFileSystem {
       checkMode(entry.mode);
       if (entry.mtimeMs !== undefined) integer(entry.mtimeMs, 'mtimeMs');
       if (entry.ctimeMs !== undefined) integer(entry.ctimeMs, 'ctimeMs');
-      if (!['file', 'directory', 'symlink'].includes(entry.type)) throw new FsError('EINVAL', 'Invalid snapshot entry type');
+      if (!['file', 'directory', 'symlink', 'character-device'].includes(entry.type)) throw new FsError('EINVAL', 'Invalid snapshot entry type');
+      if (entry.type === 'character-device' && (entry.path !== '/dev/null' || entry.inode !== 0 || entry.mode !== 0o666)) {
+        throw new FsError('EINVAL', 'Only the immutable /dev/null character device is supported');
+      }
       if (entry.command !== undefined && (entry.command !== true || entry.type !== 'file' || entry.mode !== 0o555 || entry.data?.length !== 0)) {
         throw new FsError('EINVAL', 'Invalid virtual command entry');
       }
@@ -764,7 +775,7 @@ export class MemoryFileSystem {
     const orderedMounts = [...mounts.keys()].sort((a, b) => b.length - a.length);
     for (const [path, entry] of [...records].sort(([a], [b]) => components(a).length - components(b).length)) {
       const mount = orderedMounts.find(candidate => within(path, candidate))!;
-      if (entry.command && !mounts.get(mount)) throw new FsError('EINVAL', 'Virtual commands require a readonly mount');
+      if ((entry.command || entry.type === 'character-device') && !mounts.get(mount)) throw new FsError('EINVAL', 'Virtual commands and devices require a readonly mount');
       const node = fs.allocate(entry.type, mount, entry.mode);
       node.command = entry.command;
       node.inode = entry.inode;

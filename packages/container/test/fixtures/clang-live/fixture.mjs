@@ -57,6 +57,15 @@ export async function runLiveClangFixture(input, factory, progress = () => {}) {
     c.fs.mountReadonly('/usr/share/wasm-sysroot', sysroot);
     check('full-selected-target-sysroot', sysroot.length === 2285 && sysroot.filter(item => item.type === 'file').length === 2168);
     c.fs.mkdir(options.cwd);
+    progress('version-with-eof-and-closed-stdin');
+    const version = await run(['--version']);
+    check('version-with-owned-input-eof', version.code === 0 && decode(version.stdout).includes('clang version 22.1.8'), capture(version));
+    const closedInput = await c.spawn('clang', [...profile, '--version'], { ...options, stdio: { stdin: null } });
+    const closedOut = drain(closedInput.stdout), closedErr = drain(closedInput.stderr);
+    const closedExit = await closedInput.exited;
+    const closedVersion = { ...closedExit, stdout: decode(await closedOut), stderr: decode(await closedErr) };
+    result.commands.push({ args: ['--version'], stdin: 'closed', ...closedVersion });
+    check('real-driver-reopens-closed-stdin-as-null', closedVersion.reason === 'exited' && closedVersion.code === 0 && closedVersion.stdout === decode(version.stdout), closedVersion);
     c.fs.writeFile(`${options.cwd}/main source.c`, encode('#include <stdio.h>\nint main(void){puts("hello live");return 0;}\n'));
     progress('compile-link');
     const compiled = await run(['main source.c', '-o', 'hello.wasm']);

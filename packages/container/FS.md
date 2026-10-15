@@ -34,10 +34,28 @@ copied so callers cannot mutate filesystem data behind its generation counter.
 Mode bits are stored as metadata and default to 0644 for files and 0755 for
 directories. Mount readonly policy, open access and directory capabilities are
 enforced. Unix user/group ownership, chmod, hardlinks, permission-based access
-checks, devices, sockets and arbitrary byte-string paths are unsupported. Execute
+checks, arbitrary devices, sockets and arbitrary byte-string paths are unsupported. Execute
 mode metadata alone does not dispatch a command or implement shell access checks.
 Timestamps reflect in-memory modifications and are not persisted timestamps.
 Filesystem string errors are translated separately by each guest ABI adapter.
+
+The built-in `/dev/null` is a character device with mode 0666 and reserved inode 0.
+Its name remains in the readonly root namespace: it cannot be removed, renamed,
+replaced or supplied by a package. Opening it still follows the caller's path
+capability. Reads return EOF, writes discard their bytes, and seek/tell return zero.
+These operations consume no workspace bytes and do not change file generations.
+Open access flags and duplicate/closed descriptor lifetimes remain enforced.
+`open` with truncate is accepted without changing the device; an explicit
+`truncate`/`ftruncate` returns `EINVAL`. Other devices are not implemented by this VFS.
+
+Snapshots preserve the device's type and identity and validate that inode 0 occurs
+only at `/dev/null`. A guest snapshot cannot modify or remove the readonly device.
+Historical full snapshots without it retain their historical namespace; persistent
+workspaces instead rebuild the current readonly base and save only `/workspace`.
+Reserving zero keeps all existing positive user inode identities unchanged on reload.
+Workspace backups exclude `/dev` and never import device nodes. WASI reports the
+character-device type; the optional WASIX SDK retains its own `/dev` implementation
+unless the host explicitly mounts a supported common device filesystem there.
 
 `mountReadonly(path, entries)` accepts an explicit directory/file/symlink tree with
 relative canonical entry paths. Directories must be present. It rejects duplicate
@@ -100,8 +118,9 @@ Commit validates the entire candidate, verifies the generation and mount table,
 and rejects changes to readonly entries or mount-root metadata before publishing.
 On rejection the original namespace is intact and the lease remains held until
 discard or a valid commit. Discard is idempotent. Successful publication increments
-the host generation once. Snapshots carry unique positive safe-integer inode IDs
-and a monotonic `nextInode` allocation mark. Restore preserves them, and commit
+the host generation once. Snapshots carry unique positive safe-integer inode IDs,
+plus reserved inode 0 for `/dev/null`, and a monotonic `nextInode` allocation mark.
+Restore preserves them, and commit
 matches identities rather than paths: renamed files/directories retain IDs, while
 replacement paths receive new IDs. Deleted identities are never recycled, even
 after a restore. Missing/duplicate IDs, a rewound allocation mark, reuse of retired

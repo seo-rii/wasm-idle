@@ -130,7 +130,7 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
     }
     let before: FileVersion | undefined;
     if (onFileChange && !flags.directory && (flags.create || flags.truncate)) {
-      try { before = fs.captureFileVersion(name, flags); }
+      try { if (fs.stat(name, flags).type === 'file') before = fs.captureFileVersion(name, flags); }
       catch (error) { if (!(error instanceof FsError) || !['ENOENT', 'EISDIR'].includes(error.code)) throw error; }
     }
     const opened = fs.open(name, flags), local = nextFd++;
@@ -207,22 +207,22 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.Read: return { bytes: fs.read(fd(a), length(b)) };
           case Operation.Pread: return { bytes: fs.pread(fd(a), length(b), number(c)) };
           case Operation.Write: {
-            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
+            const before = onFileChange && fs.fstat(fd(a)).type === 'file' ? fs.captureFileVersion(fd(a)) : undefined;
             value = fs.write(fd(a), bytes);
-            if (value) onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+            if (value && before) onFileChange!('write', fs.captureFileVersion(fd(a)), before); break;
           }
           case Operation.Pwrite: {
-            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
+            const before = onFileChange && fs.fstat(fd(a)).type === 'file' ? fs.captureFileVersion(fd(a)) : undefined;
             value = fs.pwrite(fd(a), bytes, number(b));
-            if (value) onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+            if (value && before) onFileChange!('write', fs.captureFileVersion(fd(a)), before); break;
           }
           case Operation.Seek:
             if (c !== 'set' && c !== 'cur' && c !== 'end') throw new FsError('EINVAL', 'Invalid seek origin');
             value = fs.seek(fd(a), number(b, true), c); break;
           case Operation.Tell: value = fs.tell(fd(a)); break;
           case Operation.Truncate: {
-            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
-            fs.ftruncate(fd(a), number(b)); onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+            const before = onFileChange && fs.fstat(fd(a)).type === 'file' ? fs.captureFileVersion(fd(a)) : undefined;
+            fs.ftruncate(fd(a), number(b)); if (before) onFileChange!('write', fs.captureFileVersion(fd(a)), before); break;
           }
           case Operation.Realpath: value = fs.realpath(path(a), options(b)); break;
           case Operation.Readdir: {
