@@ -84,3 +84,21 @@ test('guest receives configured filesystem quotas at its syscall boundary', asyn
     assert.equal(c.fs.stat('/workspace/partial').size, 0);
   } finally { await c.dispose(); }
 });
+
+test('legacy Preview1 modules without initial_cwd run only with an explicit root cwd', async () => {
+  // Real core Wasm: exported bounded memory and an empty _start, with no imports.
+  const name = (text) => [text.length, ...new TextEncoder().encode(text)];
+  const section = (id, bytes) => [id, bytes.length, ...bytes];
+  const legacy = Uint8Array.from([
+    0, 97, 115, 109, 1, 0, 0, 0,
+    ...section(1, [1, 0x60, 0, 0]), ...section(3, [1, 0]), ...section(5, [1, 1, 1, 1]),
+    ...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, 0]),
+    ...section(10, [1, 2, 0, 0x0b])
+  ]);
+  const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { legacy: { adapter: 'wasi-preview1', bytes: legacy } } });
+  try {
+    await assert.rejects(c.run('legacy'), { code: 'UNSUPPORTED_PROFILE', message: /initial_cwd/ });
+    c.fs.writeFile('/workspace/after-rejection', new Uint8Array());
+    assert.deepEqual(await c.run('legacy', [], { cwd: '/' }), { code: 0, reason: 'exited', stdout: new Uint8Array(), stderr: new Uint8Array() });
+  } finally { await c.dispose(); }
+});

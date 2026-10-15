@@ -442,3 +442,17 @@ test('resolved create and relocated subtree respect absolute path budgets', () =
   assert.deepEqual(fs.exportSnapshot(), before);
   assert.doesNotThrow(() => MemoryFileSystem.fromSnapshot(fs.exportSnapshot()));
 });
+
+test('snapshot and readonly validation preserve inode timestamps', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('file', bytes('data'));
+  const snapshot = fs.exportSnapshot();
+  const entry = snapshot.entries.find((e) => e.path === '/workspace/file');
+  entry.mtimeMs = 123; entry.ctimeMs = 456;
+  const restored = MemoryFileSystem.fromSnapshot(snapshot);
+  assert.equal(restored.stat('file').mtimeMs, 123); assert.equal(restored.stat('file').ctimeMs, 456);
+  assert.deepEqual(restored.exportSnapshot(), snapshot);
+  entry.mtimeMs = -1; assert.throws(() => MemoryFileSystem.fromSnapshot(snapshot), { code: 'EINVAL' });
+  const lease = restored.acquireSnapshot();
+  const result = structuredClone(lease.snapshot); result.entries.find((e) => e.path === '/').mtimeMs++;
+  assert.throws(() => lease.commit(result), { code: 'EROFS' }); lease.discard();
+});

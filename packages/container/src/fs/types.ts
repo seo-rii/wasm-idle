@@ -42,6 +42,9 @@ export interface SnapshotEntry {
   readonly path: string;
   readonly type: FileType;
   readonly mode: number;
+  /** Omitted only for host-created package entries or older snapshot inputs. */
+  readonly mtimeMs?: number;
+  readonly ctimeMs?: number;
   readonly data?: Uint8Array;
   readonly target?: string;
 }

@@ -18,6 +18,10 @@
     "./adapters/clang": {
       "types": "./dist/adapters/clang/index.d.ts",
       "import": "./dist/adapters/clang/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/fs/persistence/index.d.ts",
+      "import": "./dist/fs/persistence/index.js"
     }
   },
   "files": [
@@ -26,7 +30,8 @@
     "!dist/**/*.map",
     "FS.md",
     "DISTRIBUTIONS.md",
-    "CLANG.md"
+    "CLANG.md",
+    "PERSISTENCE.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -41,7 +46,8 @@
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
     "test:browser": "pnpm run build && node scripts/test-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
-    "test:browser:clang": "node scripts/test-clang-browser.mjs"
+    "test:browser:clang": "node scripts/test-clang-browser.mjs",
+    "test:persistence": "pnpm run build && node scripts/test-persistence-browser.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
