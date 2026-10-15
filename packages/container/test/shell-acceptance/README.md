@@ -1,6 +1,16 @@
 # Shell acceptance script
 
-The final SDK with patches 0001–0020 passes **72/72 checks across seven actual
+The current default snapshot profile passes **83/83 checks across all eight
+actual Chromium scenarios**, including the syntax scenario:
+[full eight-scenario receipt](./evidence/public-session-0020-full8.json),
+[process cleanup](./evidence/public-session-0020-full8-process.json) and
+[execution/source pins](./evidence/public-session-0020-full8-metadata.json).
+Guarded time was 80.093 seconds on the recorded machine. Every scenario reaches
+zero CDP Worker targets before the next starts; all owned OS descendants are
+reaped without forced signals. The new receipt preserves the earlier failed
+77/83 attempt and qualifies the explicit fixture-owner retirement change.
+
+The earlier SDK qualification with patches 0001–0020 passed **72/72 checks across seven actual
 Chromium scenarios** through the public session and shared workbench profile:
 [full receipt](./evidence/public-session-0020.json) and
 [process cleanup](./evidence/public-session-0020-process.json). Cold/warm execution,
