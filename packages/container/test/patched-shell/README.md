@@ -145,3 +145,11 @@ The [original browser receipt](evidence/worker-browser.json) and
 browser/OS and cleanup scope. The first Noexec failure remains separate. No
 assertion was removed to turn the missing file into a pass. Cancellation, public
 host-command dispatch and real Clang/BusyBox shell acceptance remain separate gates.
+
+The fixed `probe-container-shell-cwd-diagnostic.mjs` comparisons use the same
+SDK/Bash bytes: unchanged relative redirect, absolute `/workspace` redirect,
+an explicit initial `cd /workspace`, and a parent builtin's relative write.
+Use its `--check`/`--run` interface with a fresh output configuration. It records
+`fixtureSet: diagnostic-only`; exit0 means collection completed, and diagnostics
+always retain false guest/backend qualification. They do not replace the failing
+original contract fixture.
