@@ -22,6 +22,63 @@ mutable `latest` resolution are not. Keep complete selected-target C/C++ headers
 distribution. Source and notice packs remain a separate release requirement; splitting host
 code from GPL userland bytes does not itself settle the distribution's license obligations.
 
+## Prepare an immutable local distribution
+
+After building the three packages, run:
+
+```sh
+pnpm prepare:container-distribution --input /absolute/recipe.json --output /absolute/new-release
+pnpm verify:container-distribution --directory /absolute/new-release --expected-sha256 <returned-lock-digest>
+```
+
+The recipe has `schemaVersion: 1`, a canonical `baseURL` ending in `/`, `distribution`
+(the existing schema-1 index), the application's `adapterIds`, and `inputs` containing
+`{package, asset, path}` for every asset. Local paths resolve relative to the recipe.
+Every asset must already have independent producer delivery/logical identities. The
+preparer verifies both, replaces asset URLs with content-addressed object URLs, and uses
+the runtime's own graph/schema validator. It never resolves mutable releases or runs
+producer-supplied scripts. Files and gzip are supported; archive data is published as
+one logical file and needs an explicit validated extraction step in the application.
+
+Each package also requires one `provenance` record:
+
+```json
+{
+  "package": "tools",
+  "license": "MIT",
+  "sourceStatus": "incomplete",
+  "receipt": {"path": "receipt.json", "bytes": 123, "sha256": "<reviewed digest>"},
+  "sources": [{"path": "sources.tar.gz", "bytes": 123, "sha256": "<reviewed digest>"}],
+  "notices": [{"path": "NOTICE", "bytes": 123, "sha256": "<reviewed digest>"}]
+}
+```
+
+The receipt digest must equal the producer receipt in the distribution. Source and
+notice bodies are included and verified, but their contents still need producer-specific
+review. `sourceStatus: "reviewed-complete"` records the release owner's review; the tool
+never infers completeness or license compatibility from a digest. Incomplete source
+closure remains visible in verification output. The placeholder sizes/digests above are
+not a usable recipe.
+
+Optional `hostFiles` entries specify `{path, destination, bytes, sha256, mediaType}`.
+These are explicitly selected application modules, SDK glue, or Worker modules. Their
+relative module graph is preserved under a content-addressed `host/<tree-digest>/`
+directory. Applications import this trusted graph themselves; a distribution command
+still selects only a registered adapter ID and cannot supply an import URL.
+
+The output contains content-addressed objects, the immutable index, and
+`application-lock.json`. No timestamps or machine paths enter the lock. Existing output
+paths are refused. Failed preparation removes only its new output, and the lock is written
+after its complete closure. Retain the returned lock digest independently in application
+source or release configuration. Verification requires that digest, checks delivery and
+logical bytes again, rejects unlisted files and symlinks, and does no network access.
+
+This is **local byte-closure verification**. It does not run producer fixtures, verify
+real hosting responses, certify licenses, or publish anything. Upload the full immutable
+closure only through an explicitly authorized deployment, verify the actual response
+bytes/headers and clean-origin browser suite, then switch the application lock. Preserve
+the previous lock for rollback.
+
 ## Browser profiles and policy
 
 Batch commands use ordinary dedicated module Workers and prebuffered stdin. They do not require
