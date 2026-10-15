@@ -35,7 +35,7 @@ async function containerIdentity() {
 		sources[relative(containerRoot, path)] = identity(await readFile(path));
 	for (const path of await files(join(containerRoot, 'dist')))
 		if (path.endsWith('.js')) modules[relative(join(containerRoot, 'dist'), path)] = identity(await readFile(path));
-	for (const name of ['index.js', 'shell/host-command.js', 'adapters/wasi-live/index.js', 'adapters/wasi-live/worker.js'])
+	for (const name of ['container.js', 'shell/host-command.js', 'adapters/wasi-live/index.js', 'adapters/wasi-live/worker.js'])
 		assert(modules[name], `built container module required: ${name}`);
 	return { sources, modules };
 }
@@ -243,7 +243,8 @@ export async function runProbe(configuration, cases = fixtures) {
 							sdkMemory: new WebAssembly.Memory(memory), bashWasmSha256,
 							sdkUrl: location.origin + sdkBase + '/index.mjs',
 							sdkWorkerUrl: location.origin + sdkBase + '/worker.mjs',
-							containerUrl: location.origin + '/container/index.js',
+							containerUrl: location.origin + '/container/container.js',
+							hostCommandUrl: location.origin + '/container/shell/host-command.js',
 							liveAdapterUrl: location.origin + '/container/adapters/wasi-live/index.js' });
 					})().catch((error) => finish({ type: 'failure', backendCompleted: false, error: String(error) }));
 				}), { fixture, descriptions, sdkBase, probeWorkerUrl, memory: MEMORY,

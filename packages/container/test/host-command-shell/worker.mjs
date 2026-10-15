@@ -52,7 +52,10 @@ globalThis.onmessage = async ({ data }) => {
 			sdkUrl: data.sdkUrl, workerUrl: data.sdkWorkerUrl
 		});
 		postMessage({ type: 'sdkInitialized', trackedChildren: children.size });
-		const { createContainer, createHostCommandHandler } = await import(data.containerUrl);
+		// Direct modules: the package root also exports the verified asset loader,
+		// whose @wasm-idle/core dependency is not part of this probe.
+		const { createContainer } = await import(data.containerUrl);
+		const { createHostCommandHandler } = await import(data.hostCommandUrl);
 		const { createLiveWasiAdapter } = await import(data.liveAdapterUrl);
 		container = createContainer({
 			adapters: [createLiveWasiAdapter({ maxBlockedIoMs: 30000 })],
