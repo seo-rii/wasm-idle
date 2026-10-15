@@ -389,8 +389,9 @@ Cargo lock contains 457 packages. The earlier source inspection lacked the requi
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
 prefetch, offline validation, corrected Wasmer/SDK/example Rust typing and the six-patch
-SDK release/bindgen gate now pass. The separate real Bash producer and local host-module
-packaging have their own receipts. No memory or disk estimate is a measured producer
+SDK release/bindgen gate now pass. The separate [real Bash producer](producer/README.md) and local host-module
+packaging follow-ups retain their own receipts; they are independent of this
+SDK resolver build. No memory or disk estimate is a measured producer
 requirement, and no previous or unrelated cache was deleted.
 
 Actual guest qualification uses a separately pinned package and the same real Chromium
