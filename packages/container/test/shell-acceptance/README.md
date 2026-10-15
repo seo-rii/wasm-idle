@@ -45,7 +45,10 @@ imported patched SDK, one container Supervisor and one filesystem:
 Bash does its own parsing, lookup, fork/exec, pipe, redirections and waits. The public
 session uses raw stdin and `waitForExit()`; the test drains stdout and stderr concurrently
 under one 8 MiB capture bound. Its owned worker group and filesystem bindings are disposed
-before it reports completion. There is no
+before it reports completion. After the parent requests cleanup, the fixture owner
+acknowledges the awaited cleanup and closes its own dedicated realm; the parent
+also requests native termination. The CDP gate still requires every owner and
+nested Worker target to disappear before the next scenario. There is no
 shell parser, command-string interception or stdout protocol in JavaScript.
 
 ## Distribution profile

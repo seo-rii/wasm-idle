@@ -22,6 +22,10 @@ globalThis.onmessage = async ({ data }) => {
   if (data.type === 'cleanup') {
     try { postMessage({ type: 'ownerCleanup', ...await cleanup() }); }
     catch (error) { postMessage({ type: 'ownerCleanup', backendCompleted, cleanupError: String(error), remainingTrackedChildren: profile?.workers.inspect().active ?? null }); }
+    // This dedicated fixture realm has no further work after the complete
+    // cleanup acknowledgement. Retire it explicitly as well as letting the
+    // parent request native termination; child counters and CDP must reach 0.
+    globalThis.close();
     return;
   }
   if (data.type !== 'run' || running) return;
