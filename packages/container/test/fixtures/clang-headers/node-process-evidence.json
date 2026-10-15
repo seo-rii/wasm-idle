@@ -1,0 +1,53 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "--disable-wasm-trap-handler",
+    "--v8-pool-size=1",
+    "--wasm-num-compilation-tasks=1",
+    "packages/container/scripts/test-clang-headers.mjs"
+  ],
+  "startedAtUnix": 1791977484.2744753,
+  "exitCode": 0,
+  "pid": 2843629,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "remainingMayBeTruncated": false,
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2843639,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 146.819,
+  "observations": [
+    {
+      "pid": 2843629,
+      "startTicks": 17067683,
+      "state": "R",
+      "cpuSeconds": 204.63,
+      "virtualAddressSpaceBytes": 3452178432,
+      "residentSetBytes": 1260892160,
+      "sampledMaximumRssBytes": 1408753664,
+      "sampledMaximumVszBytes": 7751475200,
+      "sampledAtUnix": 1791977630.592942
+    },
+    {
+      "pid": 2843639,
+      "startTicks": 17067720,
+      "state": "S",
+      "cpuSeconds": 0.51,
+      "virtualAddressSpaceBytes": 1371099136,
+      "residentSetBytes": 30392320,
+      "sampledMaximumRssBytes": 52760576,
+      "sampledMaximumVszBytes": 1371099136,
+      "sampledAtUnix": 1791977630.5929449
+    }
+  ],
+  "observationScope": "separate sampled process values; no aggregate memory limit or final/peak linker claim"
+}
