@@ -125,19 +125,24 @@ export class MemoryFileSystem {
   }
 
   private nodePath(target: Inode): string | undefined {
+    // Live path syscalls resolve directory descriptors through this walk. Only
+    // directories are descended or named; other entries need an identity check.
     const visit = (node: Inode, path: string): string | undefined => {
-      if (node === target) return path;
       for (const [name, child] of node.children) {
-        const found = visit(child, `${path === '/' ? '' : path}/${name}`);
+        if (child !== target && child.type !== 'directory') continue;
+        const childPath = `${path === '/' ? '' : path}/${name}`;
+        if (child === target) return childPath;
+        const found = visit(child, childPath);
         if (found !== undefined) return found;
       }
       return undefined;
     };
-    return visit(this.root, '/');
+    return target === this.root ? '/' : visit(this.root, '/');
   }
 
   private notifyFile(node: Inode): void {
-    if (!this.watchers.size) return;
+    // An unlinked open file has no namespace path, so its writes change no view.
+    if (!this.watchers.size || !node.linked) return;
     const path = this.nodePath(node);
     this.notify(path === undefined ? { kind: 'rescan', path: '/' } : { kind: 'modify', path, inode: node.inode });
   }
