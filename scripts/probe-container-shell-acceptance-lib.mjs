@@ -60,6 +60,11 @@ export const CLANG_PROFILE = Object.freeze([
 // The sysroot is laid out for wasm32-wasi only, so the profile cannot select wasm32-wasip1.
 export const CLANG_TRIPLE_WARNING =
 	"clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n";
+// Preprocessing retains the complete pinned driver profile. The real driver
+// reports the two link-only defaults as unused; preserve these exact bytes.
+export const CLANG_PREPROCESS_WARNINGS = CLANG_TRIPLE_WARNING +
+	"clang: warning: -Wl,--max-memory=67108864: 'linker' input unused [-Wunused-command-line-argument]\n" +
+	"clang: warning: argument unused during compilation: '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld' [-Wunused-command-line-argument]\n";
 // The order Bash dispatches the script's commands; the pipeline's two children may swap.
 export const DISPATCHES = [
 	{ path: `${BIN}/mkdir`, cwd: '/workspace' },
@@ -485,7 +490,7 @@ export function judgeLiveShellAcceptance(receipt) {
 	const entry = receipt.runs?.find(run => run.run === 'live-io'), result = entry?.result, io = result?.liveIo;
 	const output = result?.result, processed = result?.files?.[LIVE_CLANG_FILES[1]];
 	check('live-io:actual-script-and-pipe-bytes', result?.type === 'result' && result.backendCompleted === true && output?.code === 0 &&
-		decode(output.stderr) === CLANG_TRIPLE_WARNING && decode(processed).trim() === 'after_editor' && same(output.stdout, processed),
+		decode(output.stderr) === CLANG_PREPROCESS_WARNINGS && decode(processed).trim() === 'after_editor' && same(output.stdout, processed),
 		{ type: result?.type, output, processed });
 	check('live-io:header-edit-during-compiler', io?.compilerRunningBeforeEdit === true &&
 		decode(io.headerBefore) === 'before_editor\n' && decode(io.headerAfter) === 'after_editor\n' &&

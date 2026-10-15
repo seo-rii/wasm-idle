@@ -3,7 +3,7 @@ import test from 'node:test';
 import { manifest, runProbe } from './probe-container-shell-acceptance.mjs';
 import { selectClangProfile } from '../examples/container/clang-profile.mjs';
 import {
-	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
+	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
 	SYNTAX_COMMANDS, SYNTAX_CONTENTS, SYNTAX_DIRECTORY, SYNTAX_ENVIRONMENT,
 	judgeShellAcceptance, judgeLiveShellAcceptance,
 	readPinnedProbeInputs
@@ -134,7 +134,7 @@ function liveReceipt() {
 		['mkdir', ['-p', '/workspace/live']], ['clang', ['-E', '-P', '-x', 'c', '-']], ['cat', []], ['cat', ['preprocessed.txt']], ['clang', ['--version']]
 	];
 	value.runs.push({ run: 'live-io', downloads: structuredClone(value.runs[1].downloads), result: {
-		type: 'result', backendCompleted: true, result: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: bytes(CLANG_TRIPLE_WARNING) },
+		type: 'result', backendCompleted: true, result: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: bytes(CLANG_PREPROCESS_WARNINGS) },
 		files: { '/workspace/live/live.h': bytes('after_editor\n'), '/workspace/live/preprocessed.txt': bytes('after_editor\n'),
 			'/workspace/live/version.txt': bytes('clang version 22\n'), '/workspace/live/version.err': [] },
 		liveIo: { compilerPid: 2, compilerRunningBeforeEdit: true, compilerRunningAfterUtility: true,
@@ -203,6 +203,13 @@ test('live gate rejects missing concurrency, stale pipe output and an unqualifie
 	value.clangFilesystem = 'snapshot';
 	assert.deepEqual(judgeLiveShellAcceptance(value).checks.filter(check => !check.passed).map(check => check.id),
 		['live:explicit-profile', 'live-io:actual-script-and-pipe-bytes', 'live-io:header-edit-during-compiler', 'live-io:concurrent-real-utility', 'live-io:closed-input-command']);
+});
+
+test('live preprocessing retains exact phase-specific diagnostics without filtering', () => {
+	for (const stderr of [CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS + CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS.replace("'linker' input", "'other' input")]) {
+		const value = liveReceipt(); value.runs[2].result.result.stderr = bytes(stderr);
+		assert.deepEqual(judgeLiveShellAcceptance(value).checks.filter(check => !check.passed).map(check => check.id), ['live-io:actual-script-and-pipe-bytes']);
+	}
 });
 
 test('the plan script is unchanged and an actual passing receipt passes without readiness claims', () => {

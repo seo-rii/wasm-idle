@@ -179,6 +179,10 @@ The utility must read the edited bytes while Clang is still running. Only then
 does the owner release Bash's input, allowing Clang to preprocess the new header.
 The pipeline file and final stdout must contain identical bytes. A following
 `clang --version 0<&-` preserves the shell's closed stdin and output redirections.
+Preprocessing preserves the complete driver profile and its exact stderr: the
+target warning followed by the unused linker-memory and linker-path warnings.
+The compile/link runs still require only the original target warning. The gate
+does not filter either phase's diagnostics or drop driver arguments.
 
 This receipt reports `scenario: "live-only"` and its independent
 `liveShellAcceptancePassed`/`liveCompilerFilesystemQualified` flags. It does not
