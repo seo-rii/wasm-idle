@@ -5,16 +5,16 @@ import path from 'node:path';
 import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-container-shell-lib.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
-// SDK with bridge patches 0001-0012 (host commands, proc_join and host filesystem mounts).
+// SDK with bridge patches 0001-0012 (host commands, proc_join, status order and host filesystem mounts).
 export const PACKAGE_RECEIPT = {
 	bytes: 2605,
-	sha256: 'b8b00edb4ca7d7f0d32256b3b4b7d1255c321ba97e90173f08e431a7e2fd4728'
+	sha256: 'bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e'
 };
 export const BINARY_RECEIPT_SHA256 =
-	'a468137a373b6235a704936aada1d504e68cba9bee41ab69d5be478ae4eb999b';
+	'7bbb04175c6d94337ea9c64d7f0290cfaba912a6f1e4b491cd160ce0589215e7';
 export const SDK_WASM = {
-	bytes: 9187678,
-	sha256: 'd2506ce01566d950eb3bb9caee5ab2500f66580627cc646b309c052051fab0f8'
+	bytes: 9187858,
+	sha256: '8385617d56ffcdf261bb5af83061233bd302004a64f5d729c62791f0993b5ca3'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 export const CASE_TIMEOUT_MS = 30000;

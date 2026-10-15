@@ -43,3 +43,7 @@ Use the same configuration shape and commands as the dispatch probe, with
 - **Preliminary package** ([receipt](evidence/preliminary-package.json), commit `368dc3c0`): 27 of 27 with
   directories created by the editor. This package was built from patches 0001–0012 before
   the host-command status-order fix, so it is not the final pin.
+
+The recorded commits `1457a6c7` and `368dc3c0` predate rebasing this branch onto #209's
+status-order commits. The container sources, probe, worker and fixtures are byte-identical
+in the rebased commits `fd8f317e` and `59fe968d`; only #209's own pins and evidence differ.
