@@ -21,11 +21,11 @@ provide an absolute configuration file containing:
 
 ```json
 {
-  "packageReceipt": "/private/sdk-local-package/receipt.json",
-  "packageReceiptSha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525",
-  "bashWebc": "/private/bash-build/candidate/bash-exec-shim.webc",
-  "clang": "/private/bash-build/work/wasi-sdk/bin/clang-16",
-  "output": "/private/new-patched-shell-probe"
+	"packageReceipt": "/private/sdk-local-package/receipt.json",
+	"packageReceiptSha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525",
+	"bashWebc": "/private/bash-build/candidate/bash-exec-shim.webc",
+	"clang": "/private/bash-build/work/wasi-sdk/bin/clang-16",
+	"output": "/private/new-patched-shell-probe"
 }
 ```
 
@@ -165,3 +165,38 @@ matches the pinned libc's separate legacy cwd used by relative `open`; only
 records binary/object identities and the startup-boundary inference. A selected
 Bash producer initialization fix and a rerun of the unchanged contract are next;
 these diagnostic scripts are not a production workaround or shell qualification.
+
+## Startup cwd candidate
+
+The current input pin selects the Bash startup constructor from
+[#198](https://github.com/seo-rii/wasm-idle/pull/198), built from application
+source `7d15375967ed557e724488e82bab75cb5c4b41cb`. The constructor reads the
+actual WASIX cwd and calls libc `chdir` before Bash main, synchronizing the
+pinned libc's legacy relative-open state. It does not modify the script, argv,
+environment or the ten original contract fixtures. The SDK package is unchanged.
+
+The new WEBc is 1,812,678 bytes with SHA-256
+`045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4`;
+the contained Bash Wasm has SHA-256
+`2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c`.
+The producer exits 0 in 129.466 seconds, verifies the imports and reaps all owned
+processes. The [new actual Chromium receipt](evidence/startup-cwd-browser.json)
+then completes all ten unchanged commands at application
+`7c7c32c3dc3c8f6842dd59bd677457e5e9613032`: **all 18 selected checks pass**.
+The relative redirect creates `/binary` in the host Directory with the exact
+nine bytes `[0, 255, 226, 130, 172, 10, 13, 97, 98]`. The SDK package, original
+fixture sources and command scripts match the earlier 17-of-18 run byte for byte.
+
+The [process receipt](evidence/startup-cwd-browser-process.json) records exit 0
+in 15.812 seconds with complete cleanup and no forced signals. All 60 observed
+Workers (50 nested) retire before host context close and remain absent afterward.
+[Metadata](evidence/startup-cwd-browser-metadata.json) records original receipt
+identities, browser/OS, all 14 private input rechecks and the earlier admission-only
+attempt: it exited before launching Chromium because memory headroom was below
+the unchanged 8 GiB threshold. The successful fresh attempt met that threshold.
+
+This qualifies the selected native WASIX observations only. Common Container
+fd/VFS, JavaScript command registry, cancellation/recovery and real Clang/BusyBox
+shell acceptance remain open. Both `shellBackendReady` and
+`commonContainerFdVfsQualified` stay false; historical failure receipts remain
+unchanged.
