@@ -12,8 +12,9 @@ Corresponding source references and byte receipts are recorded in
 is a wasm-idle addition. The teavm-javac compiler is built with the source patches
 `scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`,
 `scripts/teavm/patches/teavm-javac-stdlib-rename.patch` (upstream teavm-javac commit `199bed0`),
-`scripts/teavm/patches/teavm-javac-enum-constants.patch`, and
-`scripts/teavm/patches/teavm-javac-annotation-classlib.patch`. No warranty is provided.
+`scripts/teavm/patches/teavm-javac-enum-constants.patch`,
+`scripts/teavm/patches/teavm-javac-annotation-classlib.patch`, and
+`scripts/teavm/patches/teavm-javac-array-clone.patch`. No warranty is provided.
 
 ## TeaVM and teavm-javac
 
