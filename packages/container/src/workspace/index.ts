@@ -1,5 +1,8 @@
 import { FsError, type MemoryFileSystem } from '../fs/index.js';
 
+export { createWorkspaceBackup, restoreWorkspaceBackup, WorkspaceBackupError } from './backup.js';
+export type { WorkspaceBackupOptions, WorkspaceBackupErrorCode } from './backup.js';
+
 export interface WorkspaceEditorOptions {
   /** Largest file an editor session will copy. Defaults to 8 MiB. */
   readonly maxFileBytes?: number;

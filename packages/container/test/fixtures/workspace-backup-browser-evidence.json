@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "browser": "153.0.8010.12",
+  "platform": "linux",
+  "applicationCommit": "1f1ecc1b4ec3657c3b623515547ac6e2f7961c55",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "secureContext": true,
+  "isolatedProfileRequired": false,
+  "implementationSha256": "e9ad46201b83a4e00547a4a75e515e45cae3e8986bbbe13faec2c58ce57cb9ea",
+  "backupImplementationSha256": "d23233792e8fe770c04375c10eb8349fe77e226cad211fe2576426f1ab2b8b6a",
+  "filesystemImplementationSha256": "3dd32c4e9c2ecb9a9d751911daf5d41bb81d945e3440a3227f77dbced47ab314",
+  "results": [
+    "PERSIST-04: second tab cannot acquire the writer lock",
+    "PERSIST-01: reload restores binary data, symlinks, renamed inode IDs and only user files",
+    "PERSIST-03: CacheStorage deletion preserves workspace; dispose does not save dirty files",
+    "PERSIST-02: real page reload after blob close preserves previous root and leaves an unreferenced blob",
+    "PERSIST-02: a corrupt newest blob falls back to the previous verified committed root",
+    "PERSIST-02: post-publication fault reports failure and the already committed generation honestly",
+    "PERSIST-01: edits during flush remain dirty and concurrent publication is explicitly rejected",
+    "PERSIST-02: metadata budget failure preserves the previous root and unsaved in-memory files",
+    "C18: failed-save backup restores all unsaved files, stays dirty until flush, and leaves runtime cache/tmp intact",
+    "C18: corrupt backup cannot replace files; explicit flush/reopen retains the complete restored workspace",
+    "PERSIST-01: container guest writes, explicit flush, quotas and owner lifetime compose with persistence",
+    "PERSIST-02: unrecoverable storage is preserved, fails explicitly, and releases ownership"
+  ],
+  "fixtureCount": 12
+}
