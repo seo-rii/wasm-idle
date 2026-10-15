@@ -230,3 +230,32 @@ test('the archived nine-patch runs keep their separate intermittent failures', a
 	for (const name of ['exit-status-worker-retirement-process', 'exit-status-lost-zero-process'])
 		assert.equal((await archived(name)).exitCode, 1);
 });
+
+test('the seven archived ten-patch runs keep their recorded outcomes', async () => {
+	const expected = [
+		[45, []],
+		[38, ['HOST-PIPE-REDIRECT', 'HOST-PIPE-REDIRECT:dispatches', 'HOST-PIPE-REDIRECT:process-records', 'HOST-PIPE-REDIRECT:container-processes-retired', 'HOST-STATUS', 'HOST-PIPE-REDIRECT:shell-file', 'public-host-command-api']],
+		[45, []],
+		[45, []],
+		[45, []],
+		[40, ['HOST-STATUS', 'HOST-TAIL-EXEC', 'HOST-TAIL-EXEC:dispatches', 'HOST-TAIL-EXEC:container-processes-retired', 'public-host-command-api']],
+		[43, ['HOST-STATUS', 'owned-host-context-cleanup']]
+	];
+	for (const [index, [passed, failures]] of expected.entries()) {
+		const receipt = await archived(`ten-patch-run-${index + 1}`);
+		assert.equal(receipt.applicationCommit, '164aa02fa75a163d2d928214d5871f6e8df86763');
+		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [passed, 45]);
+		assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id), failures);
+		assert.equal(receipt.hostCommandDispatchPassed, failures.length === 0);
+		assert.equal((await archived(`ten-patch-run-${index + 1}-process`)).exitCode, failures.length ? 1 : 0);
+		const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+		// Every run preserved all twenty consecutive statuses and statuses above 78.
+		assert.equal(Buffer.from(byId['HOST-STATUS-REPEAT'].result.stdout).toString(), `${Array(20).fill(23).join(' ')} \n`);
+		assert.equal(Buffer.from(byId['HOST-FAILURE'].result.stdout).toString(), 'broken=126\nnative=126\nafter\n');
+		// A failed HOST-STATUS is always the first command's 0 with a Supervisor record of 23.
+		if (failures.includes('HOST-STATUS')) {
+			assert.equal(Buffer.from(byId['HOST-STATUS'].result.stdout).toString(), 'exit=0\ncrash=134\n');
+			assert.deepEqual(byId['HOST-STATUS'].records.map((record) => record.status), [23, 134]);
+		}
+	}
+});
