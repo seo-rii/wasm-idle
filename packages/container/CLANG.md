@@ -196,3 +196,9 @@ a file write becomes visible, and a concurrent same-byte output edit. It records
 the exact bundled source hashes, rechecks them after execution and accounts for
 all owned Workers. Neither tiny WASI tests nor a successful bundle build qualifies
 this compiler profile.
+
+The [live LLVM qualification records](test/fixtures/clang-live/README.md) record
+12 passing real-compiler checks in both Node Workers and Chromium, seven retired
+guest Workers in each, and 228 passing unit/contract tests at commit `66ac18fa`.
+That evidence is specific to this opt-in command profile; the separate snapshot
+Bash distribution retains its own manifest and qualification history.
