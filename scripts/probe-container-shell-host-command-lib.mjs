@@ -27,12 +27,13 @@ export const fixtures = [
 		script: 'cd sub && /opt/host/bin/probe roundtrip "space arg" "한글" ""; printf "status=%d\\n" "$?"',
 		readFiles: ['/sub/out.bin'], readContainerFiles: ['/workspace/sub/out.bin']
 	},
-	// Each status is read from `$?` where it is produced and saved with a file redirection;
-	// PIPESTATUS and `>&2` inside a pipeline subshell are recorded separately (BASH-* cases).
+	// This Bash build reports no PIPESTATUS and cannot redirect inside a forked pipeline
+	// subshell (BASH-* diagnostics). Bash observes the last pipeline member's status; every
+	// member's status is checked against the Supervisor's own process records.
 	{
-		id: 'HOST-PIPE-REDIRECT', dispatches: 3, stdin: binary,
-		script: '{ /opt/host/bin/tool; printf "%d" "$?" > first; } | /opt/host/bin/tool > binary; printf "last=%d\\n" "$?"; IFS= read -r first < first; printf "first=%s\\n" "$first"; /opt/host/bin/tool < binary',
-		readFiles: ['/binary'], expectedStdout: [...text('last=0\nfirst=0\n'), ...binary], expectedStderr: []
+		id: 'HOST-PIPE-REDIRECT', dispatches: 3, stdin: binary, expectedRecords: [0, 0, 0],
+		script: '/opt/host/bin/tool | /opt/host/bin/tool > binary; printf "last=%d\\n" "$?"; /opt/host/bin/tool < binary',
+		readFiles: ['/binary'], expectedStdout: [...text('last=0\n'), ...binary], expectedStderr: []
 	},
 	{
 		id: 'HOST-EXACT-CONSUMPTION', dispatches: 2,
@@ -45,9 +46,10 @@ export const fixtures = [
 		expectedStdout: text('exit=23\ncrash=134\n')
 	},
 	{
-		id: 'HOST-EPIPE', dispatches: 2,
-		script: '{ /opt/host/bin/tool yes; printf "%d" "$?" > writer; } | /opt/host/bin/tool one; printf "\\nreader=%d\\n" "$?"; IFS= read -r writer < writer; printf "writer=%s\\n" "$writer"',
-		expectedStdout: text('y\nreader=0\nwriter=64\n'), expectedStderr: []
+		// Records are in completion order: the reader exits first, then the writer sees EPIPE.
+		id: 'HOST-EPIPE', dispatches: 2, expectedRecords: [0, 64],
+		script: '/opt/host/bin/tool yes | /opt/host/bin/tool one; printf "\\nreader=%d\\n" "$?"',
+		expectedStdout: text('y\nreader=0\n'), expectedStderr: []
 	},
 	{
 		id: 'HOST-PATH-LOOKUP', dispatches: 1, stdin: text('abc'),
@@ -67,10 +69,10 @@ export const fixtures = [
 		id: 'BASH-PIPESTATUS', dispatches: 0, diagnostic: true,
 		script: 'true | false; printf "pipestatus=[%s]\\n" "${PIPESTATUS[*]}"'
 	},
-	// Recorded only: `>&2` inside a pipeline subshell printed Invalid argument errors.
+	// Recorded only: redirections inside a forked pipeline subshell failed with EINVAL.
 	{
 		id: 'BASH-SUBSHELL-DUP', dispatches: 0, diagnostic: true,
-		script: 'printf "top\\n" >&2; { printf "group\\n" >&2; } | true; printf "after\\n"'
+		script: 'printf "top\\n" >&2; { printf "group\\n" >&2; } | true; { printf file > group-file; } | true; printf "after\\n"'
 	}
 ];
 
@@ -130,6 +132,11 @@ export function judgeHostCommandProbe(results) {
 		check(`${fixture.id}:dispatches`, invocations.length === fixture.dispatches &&
 			invocations.every((invocation) => invocation.owner === 'sdk-scheduler-thread' &&
 				invocation.frozen === true), invocations.length);
+		if (fixture.expectedRecords) {
+			check(`${fixture.id}:process-records`, JSON.stringify((result?.records ?? []).map((record) => record.status)) ===
+				JSON.stringify(fixture.expectedRecords) && (result?.records ?? []).every((record) => record.result?.reason === 'exited'),
+			result?.records?.map((record) => [record.status, record.result?.reason]));
+		}
 		check(`${fixture.id}:container-processes-retired`, completed(result) &&
 			Array.isArray(result.containerProcesses) && result.containerProcesses.length === 0,
 		result?.containerProcesses?.length);

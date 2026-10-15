@@ -18,13 +18,19 @@ const special = {
 		files: { '/sub/out.bin': { error: 'entry not found' } },
 		containerFiles: { '/workspace/sub/out.bin': bytes('saved') }
 	},
-	'HOST-PIPE-REDIRECT': { invocations: [tool(), tool(), tool()], files: { '/binary': [0, 255, 226, 130, 172, 10, 13, 97, 98] } },
+	'HOST-PIPE-REDIRECT': {
+		invocations: [tool(), tool(), tool()], files: { '/binary': [0, 255, 226, 130, 172, 10, 13, 97, 98] },
+		records: [0, 0, 0].map((status) => ({ status, result: { code: status, reason: 'exited' } }))
+	},
 	'HOST-EXACT-CONSUMPTION': { invocations: [tool('one'), tool()] },
 	'HOST-STATUS': {
 		invocations: [probe('exit'), tool('crash')],
 		records: [{ status: 23, result: { code: 23, reason: 'exited' } }, { status: 134, result: { code: null, reason: 'runtime-error' } }]
 	},
-	'HOST-EPIPE': { invocations: [tool('yes'), tool('one')] },
+	'HOST-EPIPE': {
+		invocations: [tool('yes'), tool('one')],
+		records: [0, 64].map((status) => ({ status, result: { code: status, reason: 'exited' } }))
+	},
 	'HOST-PATH-LOOKUP': { invocations: [{ ...tool(), argv: ['tool'] }] },
 	'HOST-FAILURE': {
 		stdout: bytes('broken=126\nnative=126\nafter\n'),
@@ -65,11 +71,12 @@ test('actual dispatch evidence passes every check while common fd/VFS stays unqu
 	assert.deepEqual(judged.observations.bashSubshellDup, { stdout: 'after\n', stderr: 'top\n' });
 });
 
-test('a pipeline member status must be observed where it is produced', () => {
+test('every pipeline member status is checked against the Supervisor records', () => {
 	const results = observations();
-	results.find((result) => result.id === 'HOST-EPIPE').result.stdout = bytes('y\nreader=0\nwriter=0\n');
+	results.find((result) => result.id === 'HOST-EPIPE').records[1].status = 0;
+	results.find((result) => result.id === 'HOST-PIPE-REDIRECT').records.pop();
 	results.find((result) => result.id === 'HOST-PIPE-REDIRECT').result.stderr = bytes('bash: line 1: 2: Invalid argument\n');
-	assert.deepEqual(failed(results), ['HOST-PIPE-REDIRECT', 'HOST-EPIPE']);
+	assert.deepEqual(failed(results), ['HOST-PIPE-REDIRECT', 'HOST-PIPE-REDIRECT:process-records', 'HOST-EPIPE:process-records']);
 });
 
 test('missing or extra dispatches fail, including native fallback of an unregistered path', () => {
@@ -165,4 +172,18 @@ test('the archived pipeline-status rerun reproduces the errno-range status loss 
 	assert.equal(text('HOST-EPIPE', 'stdout'), 'y\nreader=0\n');
 	assert.equal(text('HOST-EPIPE', 'stderr'), 'bash: line 1: 2: Invalid argument\nbash: line 1: 6: Invalid argument\n');
 	assert.equal((await archived('pipeline-status-process')).exitCode, 1);
+});
+
+test('the archived subshell-redirect rerun shows redirection failing inside a forked pipeline subshell', async () => {
+	const receipt = await archived('subshell-redirect');
+	assert.equal(receipt.applicationCommit, '9b091e5a662e580c8e0fb9f9f5fc64c1a1baa098');
+	assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [35, 39]);
+	const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+	const text = (id, stream) => Buffer.from(byId[id].result[stream]).toString();
+	assert.equal(text('HOST-EPIPE', 'stderr'), 'bash: line 1: writer: Invalid argument\nbash: line 1: 7: Invalid argument\n');
+	assert.deepEqual(byId['HOST-EPIPE'].records.map((record) => record.status), [0, 64]);
+	assert.deepEqual(receipt.qualification.observations.bashSubshellDup, {
+		stdout: 'after\n', stderr: 'top\nbash: line 1: 2: Invalid argument\nbash: line 1: 6: Invalid argument\n'
+	});
+	assert.equal((await archived('subshell-redirect-process')).exitCode, 1);
 });
