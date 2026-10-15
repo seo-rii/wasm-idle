@@ -681,6 +681,38 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - A request channel dropped without completion still completes the child with status 126.
 
 Each running host command occupies one pooled service Worker until it completes.
+
+## Bounded native pipe profile
+
+Patches 0017–0019 add a fixed 64 KiB byte queue for WASIX-created pipes and for the SDK's
+raw byte-stream command profile. The extra pinned producer input is `virtual-fs 0.601.0`
+(`8defc513ce70576bdbb4305ee67c0cba647af18c0995de8f1fa1271b724c9859`, 94,253 bytes).
+Source preparation requires `--virtual-fs-archive` and installs the patched dependency
+through a locked local Cargo path override; it never modifies the Cargo registry cache.
+
+The queue owns raw bytes. Large writes can return a partial count, zero-length I/O does
+not wait or consume data, and asynchronous writes wait when capacity is exhausted. The
+last writer close wakes readers, which drain remaining bytes before EOF. The last reader
+close wakes writers with a broken-pipe error. Endpoint clones keep their direction open.
+Readiness polling registers wakeups, and dropped endpoints leave only weak waiter entries.
+WASIX and host-command writers release the inode lock before awaiting a pipe. Synchronous
+writes to these bounded pipes return `WouldBlock` when full, so the JavaScript owner
+thread never waits synchronously for a consumer.
+
+`command.run({ rawStdin: true, ... })` selects live bounded stdin plus bounded stdout and
+stderr without a TTY, implicit echo or termios behavior. It rejects simultaneous
+prebuffered `stdin`. Closing the input stream releases its owned writer and delivers EOF.
+Noninteractive commands retain `StaticFile` prebuffered stdin and use bounded output.
+Each direction has at most 64 KiB of queued native bytes; stream pulls and caller-supplied
+pending input chunks are separate allocations. Callers must drain stdout and stderr
+concurrently to let a producing command finish.
+
+Legacy SDK TTY echo and unrelated `Pipe::new()` consumers retain the upstream unbounded
+queue and are outside this profile. POSIX `PIPE_BUF` atomic-write guarantees and complete
+job control are not qualified by these changes. The native `bounded_pipe.rs` correctness
+tests exercise the actual installed queue, including capacity, partial/binary/zero I/O,
+EOF, broken pipe, clone lifetimes and wakeups. They do not substitute for the rebuilt
+SDK's actual Bash/browser acceptance gate.
 Outstanding descriptor requests are indexed by command and removed on completion.
 Terminal cleanup rejects only that command's outstanding promises; completed request
 IDs are not retained for the lifetime of a long-running stream. The native bridge test

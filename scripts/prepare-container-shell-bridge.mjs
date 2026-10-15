@@ -29,6 +29,12 @@ const inputs = [
 		path: option('--wasix-archive'),
 		sha256: 'a9a804fcfbdbbfe5b2d6fb30e741e22a21e88e964dedfea9e609f13a52823bfe',
 		bytes: 2831166
+	},
+	{
+		name: 'virtual-fs',
+		path: option('--virtual-fs-archive'),
+		sha256: '8defc513ce70576bdbb4305ee67c0cba647af18c0995de8f1fa1271b724c9859',
+		bytes: 94253
 	}
 ];
 const verifyOnly = process.argv.includes('--verify-only');
@@ -48,13 +54,16 @@ const patches = [
 	'0010-keep-running-child-on-wnohang.patch',
 	'0012-revalidate-live-mounts.patch',
 	'0014-preserve-live-append.patch',
-	'0015-dup2-onto-a-pipe.patch'
+	'0015-dup2-onto-a-pipe.patch',
+	'0018-use-bounded-pipes.patch'
 ];
+const virtualFsPatches = ['0017-bound-native-pipes.patch'];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = [
 	'0008-dispatch-trusted-host-commands.patch',
 	'0011-mount-host-filesystems.patch',
-	'0013-serve-host-commands-off-the-scheduler.patch'
+	'0013-serve-host-commands-off-the-scheduler.patch',
+	'0019-bound-raw-sdk-streams.patch'
 ];
 // Standalone new sources: [bridge file, crate, installed path].
 const installedSources = [
@@ -64,7 +73,8 @@ const installedSources = [
 	['sdk_host_command.rs', 'wasmer-sdk', 'src/host_command.rs'],
 	['sdk_host_command_pending.rs', 'wasmer-sdk', 'src/host_command_pending.rs'],
 	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs'],
-	['sdk_host_filesystem_lifetime.rs', 'wasmer-sdk', 'src/host_filesystem_lifetime.rs']
+	['sdk_host_filesystem_lifetime.rs', 'wasmer-sdk', 'src/host_filesystem_lifetime.rs'],
+	['bounded_pipe.rs', 'virtual-fs', 'src/bounded_pipe.rs']
 ];
 const compileProbe = 'host_command_compile_probe.rs';
 const sdkExample = 'container_command_snapshot_compile';
@@ -100,13 +110,16 @@ const sdkPrefix = 'wasmer-sdk-93b8b738ebd3ee57e118da0f0eb795b97d5b999e';
 if (verifyOnly) {
 	const source = option('--wasix-source');
 	const sdkSource = option('--sdk-source');
+	const virtualFsSource = option('--virtual-fs-source');
 	await verifySource(source, inputs[1].path, wasixPrefix, patches);
 	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
+	await verifySource(virtualFsSource, inputs[2].path, 'virtual-fs-0.601.0', virtualFsPatches);
 	const receipts = {};
 	// Each crate's patches apply independently to its pristine checkout.
 	for (const [names, cwd] of [
 		[patches, source],
-		[sdkPatches, sdkSource]
+		[sdkPatches, sdkSource],
+		[virtualFsPatches, virtualFsSource]
 	]) {
 		for (const name of names) {
 			const path = join(bridge, 'patches', name);
@@ -125,6 +138,7 @@ if (verifyOnly) {
 	// Dry-run must preserve the supplied pristine checkouts.
 	await verifySource(source, inputs[1].path, wasixPrefix, patches);
 	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
+	await verifySource(virtualFsSource, inputs[2].path, 'virtual-fs-0.601.0', virtualFsPatches);
 	console.log(
 		JSON.stringify(
 			{
@@ -164,7 +178,8 @@ if (verifyOnly) {
 	const receipts = {};
 	for (const [names, crate] of [
 		[patches, 'wasmer-wasix'],
-		[sdkPatches, 'wasmer-sdk']
+		[sdkPatches, 'wasmer-sdk'],
+		[virtualFsPatches, 'virtual-fs']
 	]) {
 		for (const name of names) {
 			const path = join(bridge, 'patches', name);
@@ -196,7 +211,7 @@ if (verifyOnly) {
 		cargo,
 		manifest.replace(
 			'[patch.crates-io]',
-			'[patch.crates-io]\nwasmer-wasix = { path = "../wasmer-wasix" }'
+			'[patch.crates-io]\nwasmer-wasix = { path = "../wasmer-wasix" }\nvirtual-fs = { path = "../virtual-fs" }'
 		)
 	);
 	// Only this crate's source identity changes. Keep every other locked version/checksum.
@@ -205,7 +220,13 @@ if (verifyOnly) {
 	const original =
 		'name = "wasmer-wasix"\nversion = "0.601.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "a9a804fcfbdbbfe5b2d6fb30e741e22a21e88e964dedfea9e609f13a52823bfe"';
 	assert.equal(lock.split(original).length, 2);
-	await writeFile(lockPath, lock.replace(original, 'name = "wasmer-wasix"\nversion = "0.601.0"'));
+	const virtualFsOriginal =
+		'name = "virtual-fs"\nversion = "0.601.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "8defc513ce70576bdbb4305ee67c0cba647af18c0995de8f1fa1271b724c9859"';
+	assert.equal(lock.split(virtualFsOriginal).length, 2);
+	await writeFile(lockPath, lock
+		.replace(original, 'name = "wasmer-wasix"\nversion = "0.601.0"')
+		.replace(virtualFsOriginal, 'name = "virtual-fs"\nversion = "0.601.0"'));
+
 	const receipt = {
 		schemaVersion: 1,
 		status: 'source-prepared-not-built',

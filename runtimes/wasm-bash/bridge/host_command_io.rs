@@ -199,7 +199,8 @@ enum Endpoint {
 enum WriteTarget {
     /// A file handle, and whether it belongs to a live mount.
     File(FileHandle, bool),
-    Written(usize),
+    PipeTx(virtual_fs::PipeTx),
+    Duplex(virtual_fs::Pipe),
 }
 
 impl HostCommandDescriptor {
@@ -301,8 +302,8 @@ impl HostCommandDescriptor {
             std::io::ErrorKind::BrokenPipe => Errno::Pipe,
             _ => map_io_err(err),
         };
-        // Pipe writes are nonblocking WASIX channel sends performed under the
-        // inode lock, exactly like fd_write. File writes continue below.
+        // Snapshot the endpoint under its inode lock, then release the lock
+        // before awaiting capacity. Cancellation can then revoke a full pipe.
         let target = {
             let mut guard = fd_entry.inode.write();
             match &mut *guard {
@@ -312,12 +313,8 @@ impl HostCommandDescriptor {
                     ..
                 } => WriteTarget::File(handle.clone(), crate::fs::is_live_path(path)),
                 Kind::File { handle: None, .. } => return Err(Errno::Inval),
-                Kind::PipeTx { tx } => {
-                    WriteTarget::Written(std::io::Write::write(tx, data).map_err(pipe_error)?)
-                }
-                Kind::DuplexPipe { pipe } => {
-                    WriteTarget::Written(std::io::Write::write(pipe, data).map_err(pipe_error)?)
-                }
+                Kind::PipeTx { tx } => WriteTarget::PipeTx(tx.clone()),
+                Kind::DuplexPipe { pipe } => WriteTarget::Duplex(pipe.clone()),
                 Kind::PipeRx { .. } => return Err(Errno::Badf),
                 Kind::Dir { .. } | Kind::Root { .. } => return Err(Errno::Isdir),
                 _ => return Err(Errno::Notsup),
@@ -325,12 +322,8 @@ impl HostCommandDescriptor {
         };
         let (handle, live) = match target {
             WriteTarget::File(handle, live) => (handle, live),
-            WriteTarget::Written(written) => {
-                if !is_stdio {
-                    fd_entry.inode.stat.write().unwrap().st_size += written as u64;
-                }
-                return Ok(written);
-            }
+            WriteTarget::PipeTx(mut tx) => return tx.write(data).await.map_err(pipe_error),
+            WriteTarget::Duplex(mut pipe) => return pipe.write(data).await.map_err(pipe_error),
         };
         let serial = self.control.file_lock(&handle)?;
         let _serial = serial.lock().await;
