@@ -130,6 +130,10 @@ Two route kinds reach commands that delegated live stdio cannot:
   descriptor fails (for example `EPIPE`), its remaining output is drained and dropped, and
   the command's own status is still returned. The adapter's writer lease applies while
   it runs: shell mutations of the workspace fail with `EBUSY` until it commits or discards.
+  Existing shell file handles survive that boundary, so stdout/stderr redirection and
+  append to the common workspace work with snapshot commands. A snapshot that removes
+  an inode still open in the shell fails with filesystem-conflict status 125; its entire
+  private change set is discarded.
 - **Module directories** (`moduleDirectories`) take normalized absolute directories that
   the shell runtime also registered with `registerHostCommandDirectory`. A normalized path
   strictly below one runs as `wasm-run <path> argv[1..]` with delegated stdio, so the
@@ -145,6 +149,14 @@ stopped by it unless `set -e` applies. A live guest's Worker is terminated; a sn
 adapter discards its private changes. This is owner-initiated cancellation, not a guest
 `kill` or signal delivery.
 
+Forwarded output remains part of the handler invocation after the snapshot guest
+has exited. Interrupt also cancels pending forwarding and returns 130 at that stage;
+already committed filesystem changes remain. Cancellation closes the forwarded
+child's stdout/stderr endpoints once, leaves the shell's stdin untouched, and observes
+late write failures without waiting for them. Normal completion leaves those endpoints
+owned by the shell. `container.disposalSignal` aborts when `dispose()` starts; handlers
+use it to stop forwarding with status 143 even when no guest process remains.
+
 `createShellFilesystem(fs, { root })` exposes part of the container VFS to a trusted
 shell runtime as a synchronous delegate, such as the patched SDK's
 `Directory.fromHostFileSystem`. Paths are absolute inside the mount, and the root
@@ -154,6 +166,8 @@ descriptors with explicit-offset reads/writes, append-mode writes at the live en
 other live guests and editors see each one immediately. A snapshot adapter's writer lease
 makes mutations fail with `EBUSY`. Single I/O is bounded (default 1 MiB), and so is the
 number of open handles (default 1,024).
+Shell handles opt in to the VFS's snapshot-preservation policy: commit preserves their
+inode identity, offsets and flags while retaining the restrictions described in `FS.md`.
 
 Validation uses real no-libc Wasm fixtures (`test/fixtures/live.c` and `path.c`), including
 two live guests sharing files, byte counts beyond the ring/RPC bounds, early reader

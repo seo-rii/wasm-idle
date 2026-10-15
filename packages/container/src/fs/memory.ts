@@ -25,6 +25,7 @@ interface Description {
   write: boolean;
   append: boolean;
   root: string;
+  preserveSnapshot: boolean;
 }
 
 interface Resolved { node: Inode; path: string; }
@@ -393,6 +394,7 @@ export class MemoryFileSystem {
 
   open(path: string, options: OpenOptions = {}): number {
     if (this.lease) throw new FsError('EBUSY', 'Host descriptors cannot open during a snapshot writer lease');
+    if (options.snapshot !== undefined && options.snapshot !== 'preserve') throw new FsError('EINVAL', 'Invalid snapshot descriptor policy');
     const read = options.read ?? !options.write;
     const write = options.write ?? false;
     if (!read && !write) throw new FsError('EINVAL', 'Open must request read or write access');
@@ -421,7 +423,7 @@ export class MemoryFileSystem {
     if (options.truncate) this.resize(node, 0);
     const fd = this.nextFd++;
     node.references++;
-    this.descriptors.set(fd, { node, offset: 0, read, write, append: options.append ?? false, root });
+    this.descriptors.set(fd, { node, offset: 0, read, write, append: options.append ?? false, root, preserveSnapshot: options.snapshot === 'preserve' });
     return fd;
   }
 
@@ -554,6 +556,21 @@ export class MemoryFileSystem {
 
   private publish(candidate: MemoryFileSystem): void {
     const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+    const nextNodes = new Map([...candidate.nodes].map(node => [node.inode, node]));
+    const descriptions = [...new Set(this.descriptors.values())];
+    for (const { node } of descriptions) {
+      // Private snapshots do not serialize unlinked inode contents. Keeping the
+      // old bytes after a guest modifies then unlinks that file would lose data.
+      if (node.linked && !nextNodes.has(node.inode)) throw new FsError('ECONFLICT', 'Snapshot removed an inode with an open host descriptor');
+    }
+    const retained = [...this.nodes].filter(node => !node.linked && node.references > 0);
+    const retainedBytes = retained.reduce((total, node) => total + node.data.length + encoder.encode(node.target).length, 0);
+    if (candidate.nodes.size + retained.length > this.maxInodes || candidate.usedBytes + retainedBytes > this.maxBytes) {
+      throw new FsError('ENOSPC', 'Snapshot exceeds quota including retained open files');
+    }
+    const rebound = descriptions.map(description => ({ description, node: nextNodes.get(description.node.inode) ?? description.node }));
+    for (const next of candidate.nodes) next.references = previous.get(next.inode)?.references ?? 0;
+    const nodes = new Set([...candidate.nodes, ...retained]);
     const adopt = (next: Inode): void => {
       const old = previous.get(next.inode);
       if (old?.type === next.type) {
@@ -566,10 +583,13 @@ export class MemoryFileSystem {
       for (const child of next.children.values()) adopt(child);
     };
     adopt(candidate.root);
+    // Every check and allocation above precedes publication. Rebinding retains
+    // shared offsets/flags for dup(), and existing unlinked handles stay private.
+    for (const { description, node } of rebound) description.node = node;
     this.root = candidate.root;
-    this.nodes = candidate.nodes;
+    this.nodes = nodes;
     this.mounts = candidate.mounts;
-    this.usedBytes = candidate.usedBytes;
+    this.usedBytes = candidate.usedBytes + retainedBytes;
     this.nextInode = candidate.nextInode;
     this.revision++;
   }
@@ -662,7 +682,9 @@ export class MemoryFileSystem {
   }
 
   acquireSnapshot(): FileSystemLease {
-    if (this.lease || this.descriptors.size || this.liveUsers) throw new FsError('EBUSY', 'Snapshot requires no live process, active lease or open host descriptors');
+    if (this.lease || this.liveUsers || [...this.descriptors.values()].some(description => !description.preserveSnapshot)) {
+      throw new FsError('EBUSY', 'Snapshot requires no live process, active lease or unpreserved host descriptor');
+    }
     const token = Symbol('filesystem-lease');
     const generation = this.revision;
     const snapshot = this.exportSnapshot();
@@ -681,7 +703,7 @@ export class MemoryFileSystem {
         const previous = new Map([...this.nodes].map(node => [node.inode, node]));
         for (const next of candidate.nodes) {
           const old = previous.get(next.inode);
-          if (!old && next.inode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot reused a retired inode identity');
+          if ((!old || !old.linked) && next.inode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot reused a retired inode identity');
           if (old && (old.type !== next.type || old.mount !== next.mount)) {
             throw new FsError('ECONFLICT', 'Snapshot cannot change an inode type or mount identity');
           }
@@ -700,8 +722,8 @@ export class MemoryFileSystem {
             throw new FsError('EROFS', 'Snapshot changed a readonly entry or mount root');
           }
         }
-        // All allocations and checks happen before publication. No host descriptors are
-        // admitted during the lease, so replacing private nodes cannot strand a handle.
+        // Existing opted-in descriptions follow their inode identity. No new
+        // descriptors or writes are admitted during the lease.
         this.publish(candidate);
         this.lease = undefined;
         finished = true;

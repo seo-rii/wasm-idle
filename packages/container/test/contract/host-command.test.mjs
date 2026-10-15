@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createContainer } from '../../dist/container.js';
 import { createLiveWasiAdapter } from '../../dist/adapters/wasi-live/index.js';
 import { createWasiAdapter } from '../../dist/adapters/wasi/index.js';
-import { createHostCommandHandler, HOST_COMMAND_STATUS } from '../../dist/index.js';
+import { createHostCommandHandler, createShellFilesystem, HOST_COMMAND_STATUS } from '../../dist/index.js';
+import { createPipe } from '../../dist/fd/pipe.js';
 import { workerFactory, command } from './node-worker.mjs';
 const live = new Uint8Array(readFileSync(new URL('../fixtures/live.wasm', import.meta.url)));
 const liveWorker = () => workerFactory('../../dist/adapters/wasi-live/worker.js');
@@ -222,6 +223,49 @@ test('modules below a registered directory run with wasm-run on the live artifac
   } finally { await c.dispose(); }
 });
 
+test('forwarded snapshot commands support common-workspace stdout/stderr redirection and append', { timeout: 30000 }, async () => {
+  const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { snap: { adapter: 'wasi-preview1', bytes: command } } });
+  const shell = createShellFilesystem(c.fs), outputs = [];
+  const redirect = (path, append = false) => {
+    const handle = shell.open(path, { read: false, write: true, create: true, exclusive: false, truncate: !append, append });
+    let offset = 0;
+    const output = {
+      async write(bytes) {
+        const n = append ? shell.append(handle, bytes) : shell.write(handle, offset, bytes);
+        offset += n; return n;
+      },
+      close() { shell.close(handle); }
+    };
+    outputs.push(output); return output;
+  };
+  try {
+    const records = [], handler = createHostCommandHandler(c, {
+      routes: { '/bin/snap': { command: 'snap', stdio: 'forwarded' }, '/bin/missing': { command: 'absent', stdio: 'forwarded' } },
+      onRecord: record => records.push(record)
+    });
+    const stdout = redirect('/build.log'), stderr = redirect('/diagnostics.log');
+    const invocation = { path: '/bin/snap', argv: ['snap', 'roundtrip'], env: [encode('MODE=test')], cwd: '/workspace', stdin: null, stdout, stderr };
+    assert.equal(await handler(invocation), 0);
+    assert.equal(decode(c.fs.readFile('/workspace/build.log')), 'snap\0roundtrip\0');
+    assert.equal(decode(c.fs.readFile('/workspace/diagnostics.log')), 'MODE=test\0');
+    assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved');
+    const appended = redirect('/build.log', true);
+    assert.equal(await handler({ ...invocation, stdout: appended, stderr: null }), 0);
+    assert.equal(decode(c.fs.readFile('/workspace/build.log')), 'snap\0roundtrip\0snap\0roundtrip\0');
+    assert.equal(await handler({ ...invocation, argv: ['snap', 'exit'] }), 23);
+    assert.equal(decode(c.fs.readFile('/workspace/partial')), 'saved', 'nonzero guest exit commits alongside preserved redirects');
+    assert.equal(await handler({ ...invocation, argv: ['snap', 'crash'] }), HOST_COMMAND_STATUS.runtimeError);
+    assert.throws(() => c.fs.readFile('/workspace/crash'), { code: 'ENOENT' }, 'private crash writes are discarded');
+    assert.equal(await handler({ ...invocation, path: '/bin/missing', argv: ['missing'] }), 127);
+    assert.match(decode(c.fs.readFile('/workspace/diagnostics.log')), /missing: Unknown command: absent\n$/);
+    assert.equal((await c.inspect()).processes.length, 0);
+    assert.deepEqual(records.slice(0, 4).map(record => record.result.reason), ['exited', 'exited', 'exited', 'runtime-error']);
+  } finally {
+    for (const output of outputs) output.close();
+    await c.dispose();
+  }
+});
+
 test('interrupt stops running and starting commands with status 130 and keeps the handler usable', { timeout: 30000 }, async () => {
   const c = createContainer({
     adapters: [createLiveWasiAdapter({ workerFactory: liveWorker }), createWasiAdapter({ workerFactory })], maxProcesses: 4,
@@ -262,5 +306,73 @@ test('interrupt stops running and starting commands with status 130 and keeps th
     assert(['ABORTED', undefined].includes(records[2].startError) && (records[2].startError || records[2].result?.reason === 'terminated'));
     assert.deepEqual([records[3].status, records[3].result?.reason], [0, 'exited']);
     assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
+
+for (const action of ['interrupt', 'dispose']) {
+  test(`${action} releases forwarded output after the snapshot process has exited`, { timeout: 30000 }, async () => {
+    const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { snap: { adapter: 'wasi-preview1', bytes: command } } });
+    const pipe = createPipe(1), records = [];
+    let writes = 0, closes = 0, rejected = 0, reached;
+    const blocked = new Promise(resolve => { reached = resolve; });
+    const output = {
+      write(bytes) {
+        if (++writes === 2) reached();
+        return pipe.writer.write(bytes).catch(error => { rejected++; throw error; });
+      },
+      close() { closes++; pipe.writer.close(); }
+    };
+    const input = reader(encode('unread'));
+    try {
+      const handler = createHostCommandHandler(c, {
+        routes: { '/bin/snap': { command: 'snap', stdio: 'forwarded' } }, onRecord: record => records.push(record)
+      });
+      const invocation = { path: '/bin/snap', argv: ['snap', 'roundtrip'], env: [], cwd: '/workspace', stdin: input, stdout: output, stderr: output };
+      const pending = handler(invocation);
+      await blocked;
+      assert.equal((await c.inspect()).processes.length, 0, 'the snapshot is committed before output forwarding');
+      if (action === 'interrupt') assert.equal(handler.interrupt(), 1);
+      else {
+        const disposal = c.dispose();
+        assert(c.disposalSignal.aborted, 'disposal is observable immediately');
+        assert.equal(c.dispose(), disposal, 'disposal remains idempotent');
+        await disposal;
+      }
+      assert.equal(await pending, action === 'interrupt' ? 130 : 143);
+      assert.equal(closes, 1, 'the same child stdout/stderr endpoint is closed once');
+      assert.equal(rejected, 1, 'closing the writer releases its blocked write');
+      assert.equal(writes, 2, 'no output is issued after cancellation');
+      assert.equal(input.closed, 0, 'the shell input remains owned and unconsumed');
+      assert.deepEqual(input.requests, []);
+      assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved', 'interrupt after commit does not roll back committed files');
+      assert.equal((await pipe.reader.read(1)).length, 1, 'already written bytes stay readable');
+      assert.equal((await pipe.reader.read(1)).length, 0, 'writer cancellation delivers EOF');
+      assert.equal(handler.interrupt(), 0);
+      assert.equal(records.length, 1, 'exactly one terminal record');
+      assert.equal(records[0].result.reason, 'exited', 'guest result remains distinguishable from forwarding cancellation');
+      if (action === 'interrupt') {
+        assert.equal(await handler({ ...invocation, stdout: writer(), stderr: writer() }), 0);
+      }
+    } finally { pipe.abort(); await c.dispose(); }
+  });
+}
+
+test('interrupt observes a late forwarded endpoint rejection without waiting for it', { timeout: 30000 }, async () => {
+  const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { snap: { adapter: 'wasi-preview1', bytes: command } } });
+  let entered, rejectWrite, closes = 0;
+  const blocked = new Promise(resolve => { entered = resolve; });
+  const output = {
+    write() { entered(); return new Promise((resolve, reject) => { rejectWrite = reject; }); },
+    close() { closes++; /* An external runtime may acknowledge close asynchronously. */ }
+  };
+  try {
+    const handler = createHostCommandHandler(c, { routes: { '/bin/snap': { command: 'snap', stdio: 'forwarded' } } });
+    const pending = handler({ path: '/bin/snap', argv: ['snap', 'roundtrip'], env: [], cwd: '/workspace', stdin: null, stdout: output, stderr: null });
+    await blocked;
+    handler.interrupt();
+    assert.equal(await pending, 130);
+    assert.equal(closes, 1);
+    rejectWrite(new Error('late child close acknowledgement'));
+    await new Promise(resolve => setImmediate(resolve));
   } finally { await c.dispose(); }
 });

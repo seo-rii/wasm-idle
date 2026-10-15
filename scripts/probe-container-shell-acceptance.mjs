@@ -62,7 +62,9 @@ export async function checkProbe(configuration) {
 	return { inputs, bundles: await bundles() };
 }
 
-function manifest(origin, inputs) {
+// `busyboxAsset` names the served BusyBox body; the failure run points it at corrupted bytes
+// while the manifest keeps the pinned digest.
+function manifest(origin, inputs, busyboxAsset = 'busybox') {
 	const busyboxIdentity = { ...identity(inputs.busybox), mediaType: 'application/wasm' };
 	const producer = inputs.clang.producer.source;
 	return JSON.stringify({
@@ -73,7 +75,7 @@ function manifest(origin, inputs) {
 				id: 'busybox', identity: `sha256:${busyboxIdentity.sha256}`, dependencies: [], mount: '/opt/toolchains/busybox',
 				producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: BUSYBOX_PRODUCER_REVISION, receiptSha256: inputs.busyboxReceiptSha256 },
 				capabilities: ['wasi-preview1'],
-				assets: [{ id: 'busybox', url: `${origin}/assets/busybox`, encoding: 'identity', delivery: busyboxIdentity, logical: busyboxIdentity }],
+				assets: [{ id: 'busybox', url: `${origin}/assets/${busyboxAsset}`, encoding: 'identity', delivery: busyboxIdentity, logical: busyboxIdentity }],
 				files: [{ path: 'bin/busybox', asset: 'busybox', executable: true }]
 			},
 			{
@@ -150,6 +152,10 @@ export async function runProbe(configuration) {
 			descriptions.push({ key, url, ...identity(bytes) });
 		}
 		served.set('/assets/busybox', { body: prepared.inputs.busybox, type: 'application/wasm' });
+		// The same length with one flipped byte: only the pinned digest can reject it.
+		const corrupted = Buffer.from(prepared.inputs.busybox);
+		corrupted[corrupted.length >> 1] ^= 0xff;
+		served.set('/assets/busybox-corrupt', { body: corrupted, type: 'application/wasm' });
 		for (const [name, asset] of Object.entries(prepared.inputs.clang.assets))
 			served.set(`/assets/${name}`, { body: asset.delivery, type: asset.metadata.delivery.mediaType });
 		for (const path of served.keys()) if (path.startsWith('/assets/')) downloads[path] = 0;
@@ -173,6 +179,8 @@ export async function runProbe(configuration) {
 		const origin = `http://127.0.0.1:${server.address().port}`;
 		const distribution = manifest(origin, prepared.inputs);
 		receipt.distributionSha256 = digest(Buffer.from(distribution));
+		const failureDistribution = manifest(origin, prepared.inputs, 'busybox-corrupt');
+		receipt.failureDistributionSha256 = digest(Buffer.from(failureDistribution));
 		const { chromium } = await import('playwright-core');
 		const { resolveChromiumExecutable } = await import('./rust-browser-probe-lib.mjs');
 		const executablePath = await resolveChromiumExecutable(configuration.chromium || '');
@@ -259,9 +267,12 @@ export async function runProbe(configuration) {
 					descriptions, sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
 					payload: {
 						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
-						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : READ_FILES,
-						manifest: distribution, manifestSha256: receipt.distributionSha256,
-						assetURLs: Object.keys(downloads).map((path) => origin + path), cacheNamespace: 'container-shell-acceptance',
+						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm'] : READ_FILES,
+						artifactPath: run === 'failure' ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
+						...(run === 'failure'
+							? { manifest: failureDistribution, manifestSha256: receipt.failureDistributionSha256, cacheNamespace: 'container-shell-acceptance-failure' }
+							: { manifest: distribution, manifestSha256: receipt.distributionSha256, cacheNamespace: 'container-shell-acceptance' }),
+						assetURLs: Object.keys(downloads).map((path) => origin + path),
 						clangSha256: prepared.inputs.clang.assets.clang.metadata.logical.sha256,
 						linkerSha256: prepared.inputs.clang.assets.lld.metadata.logical.sha256,
 						commandTimeoutMs: COMMAND_TIMEOUT_MS

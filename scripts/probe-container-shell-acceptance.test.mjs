@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance,
+	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance,
 	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -50,6 +50,20 @@ function interrupted() {
 		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function failing() {
+	return {
+		type: 'result', backendCompleted: true,
+		result: {
+			code: 0, stdout: bytes('mkdir=126\nretry=126\nbad=1\nno-artifact\nmissing=127\nhello\n'),
+			stderr: bytes('mkdir: Pinned asset digest mismatch\nmkdir: Pinned asset digest mismatch\n' + CLANG_TRIPLE_WARNING +
+				"bad.c:1:16: error: expected '}'\n1 error generated.\nbash: line 7: nosuch-command: command not found\n" + CLANG_TRIPLE_WARNING)
+		},
+		records: FAILURE_DISPATCHES.map(([path, status, reason]) => reason === 'INTEGRITY' ? { path, status, startError: reason } : { path, status, result: { reason } }),
+		files: { '/workspace/bad.wasm': { error: 'ENOENT' } },
+		artifact: { bytes: 1234, magic: [0, 97, 115, 109, 1, 0, 0, 0] }, containerProcesses: [],
+		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
@@ -57,7 +71,10 @@ function receipt() {
 		runs: [
 			{ run: 'cold', result: result('cold'), downloads: { start: counts(0), end: counts(1) } },
 			{ run: 'warm', result: result('warm'), downloads: { start: counts(1), end: counts(1) } },
-			{ run: 'interrupt', result: interrupted(), downloads: { start: counts(1), end: counts(1) } }
+			{ run: 'interrupt', result: interrupted(), downloads: { start: counts(1), end: counts(1) } },
+			{ run: 'failure', result: failing(), downloads: {
+				start: { ...counts(1), '/assets/busybox-corrupt': 0 }, end: { ...counts(1), '/assets/clang': 2, '/assets/lld': 2, '/assets/sysroot': 2, '/assets/busybox-corrupt': 2 }
+			} }
 		]
 	};
 }
@@ -133,6 +150,20 @@ test('an interrupt must stop the running command, keep Bash going and discard th
 	assert.deepEqual(failed(fresh), [], 'the interrupted compile may or may not have printed its warning');
 	fresh.runs[2].result.timeline.find((entry) => entry.type === 'interrupt').interrupted = 2;
 	assert.deepEqual(failed(fresh), ['interrupt:interrupted-while-running']);
+});
+
+test('a failure must stay contained: integrity, compile error and a missing command', () => {
+	const value = receipt(), run = value.runs[3].result;
+	// A cached corrupt body would be fetched once; a fallback to the real body would hide the failure.
+	value.runs[3].downloads.end['/assets/busybox-corrupt'] = 1;
+	value.runs[3].downloads.end['/assets/busybox'] = 2;
+	run.files['/workspace/bad.wasm'] = [0, 97, 115, 109];
+	run.records[0].startError = 'STARTUP_FAILED';
+	run.result.stderr = bytes('bad.c: error\n');
+	assert.deepEqual(failed(value), ['failure:diagnostics', 'failure:supervisor-statuses', 'failure:no-artifact-from-error', 'failure:integrity-not-cached']);
+	const fresh = receipt();
+	fresh.runs[3].result.result.stdout = bytes('mkdir=0\nretry=0\nbad=1\nno-artifact\nmissing=127\nhello\n');
+	assert.deepEqual(failed(fresh), ['failure:script']);
 });
 
 test('browser errors and Workers that outlive their owner fail', () => {
@@ -232,4 +263,18 @@ test('with a 50 ms compile interrupt, three consecutive runs pass cold, warm and
 		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total, receipt.shellAcceptancePassed], [38, 38, true]);
 		assert.equal((await archived(`interrupt-run-${index}-process`)).exitCode, 0);
 	}
+});
+
+test('the failure runs: integrity, compile error and missing command stay contained', async () => {
+	const runs = await Promise.all([1, 2, 3].map((index) => archived(`failure-run-${index}`)));
+	for (const receipt of runs) {
+		assert.equal(receipt.applicationCommit, 'd7ae6f8cca75e430a29b3179def468455861624f');
+		assert(receipt.qualification.checks.filter((check) => check.id.startsWith('failure:') && check.id !== 'failure:owned-workers-retired').every((check) => check.passed));
+		const failure = receipt.runs.find((run) => run.run === 'failure').result;
+		assert.equal(Buffer.from(failure.result.stdout).toString(), 'mkdir=126\nretry=126\nbad=1\nno-artifact\nmissing=127\nhello\n');
+	}
+	assert.deepEqual(runs.map((receipt) => receipt.qualification.passed), [47, 47, 46]);
+	// The third run missed only the owner Worker's five-second retirement window.
+	assert.deepEqual(runs[2].qualification.checks.filter((check) => !check.passed).map((check) => check.id), ['failure:owned-workers-retired']);
+	assert.equal(runs[2].workersAfterContextClose, 0);
 });

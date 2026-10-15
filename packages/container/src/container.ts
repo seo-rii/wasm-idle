@@ -67,6 +67,9 @@ export class Container {
   #nextPid = 1;
   #disposed = false;
   #disposal?: Promise<void>;
+  #disposalController = new AbortController();
+  /** Aborted when disposal starts, including after the last process has exited. */
+  get disposalSignal(): AbortSignal { return this.#disposalController.signal; }
   constructor(options: ContainerOptions = {}) {
     this.packages = options.packages;
     if (this.packages?.resolveCommand('wasm-run')) throw new ContainerError('INVALID_ARGUMENT', 'wasm-run is a reserved command');
@@ -324,6 +327,7 @@ export class Container {
     if (!this.#disposal) {
       this.#disposed = true;
       this.#disposal = Promise.all([...this.#processes.values()].map((p) => p.stop())).then(() => {});
+      this.#disposalController.abort(new ContainerError('DISPOSED', 'Container has been disposed'));
     }
     return this.#disposal;
   }

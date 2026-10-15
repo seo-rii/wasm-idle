@@ -59,13 +59,28 @@ operation with one package. Identity-based repeated-mount policy belongs to the
 supervisor; an already mounted path is still rejected by the filesystem API.
 
 `acquireSnapshot()` obtains a global writer lease and returns a structured-clone
-snapshot plus `commit(result)` and `discard()`. Acquire rejects live users and open host
-descriptors; new descriptors and all mutations fail with `EBUSY` during the lease.
+snapshot plus `commit(result)` and `discard()`. Acquire rejects live users and ordinary
+open host descriptors; new descriptors and all mutations fail with `EBUSY` during the lease.
 Read-only path queries remain available. A Worker can restore a private filesystem
 with `MemoryFileSystem.fromSnapshot(snapshot)`, run a guest, then call
 `exportSnapshot()` for its result. Regular guest exit, including nonzero exit, may
 commit; runtime crash, cancellation and timeout must discard. The adapter makes
 that exit-policy decision. This is snapshot visibility, not live filesystem access.
+
+Hosts may explicitly open a description with `{ snapshot: 'preserve' }`, as the shell
+filesystem does for redirection. Such handles do not block snapshot admission. Commit
+rebinds them by inode identity, preserving access/append flags and shared `dup()` offsets;
+reads see the previous revision until commit. Writes through those handles still fail
+with `EBUSY` during the lease. The snapshot guest's captured output is published only
+after commit or discard, so forwarding can write through the retained shell handles.
+
+A commit that removes a still-open linked inode fails with `ECONFLICT` and leaves the
+whole workspace and descriptions unchanged. Private snapshots do not carry the final
+contents of unlinked inodes, so accepting that change could silently lose data. Closing
+the last host handle before commit permits removal. Files already unlinked before the
+lease remain readable through their preserved handles and count against byte/inode
+quota; the snapshot cannot resurrect their identities. Crash/cancel discards private
+changes and leaves the retained handles usable.
 
 `acquireLive()` registers a live filesystem user and returns an idempotent
 `release()`. Multiple live users and editor operations share completed VFS
@@ -84,8 +99,8 @@ matches identities rather than paths: renamed files/directories retain IDs, whil
 replacement paths receive new IDs. Deleted identities are never recycled, even
 after a restore. Missing/duplicate IDs, a rewound allocation mark, reuse of retired
 IDs and changes to an existing inode's type or mount fail validation. Readonly
-mount input has no inode IDs; publication allocates those locally. No open host
-handles cross the snapshot boundary. Timestamps and generation
+mount input has no inode IDs; publication allocates those locally. Host handles stay
+with the Supervisor; snapshots serialize the linked namespace only. Timestamps and generation
 are memory observations, and neither export nor commit is a durable flush.
 
 The `fs.test.mjs` suite covers FS-01 through FS-06 and the regular-file portions of
