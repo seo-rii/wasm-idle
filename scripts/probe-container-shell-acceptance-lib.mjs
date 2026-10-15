@@ -88,8 +88,26 @@ export const INTERRUPT_DISPATCHES = [
 	[`${BIN}/mkdir`, 0], [`${BIN}/clang`, 0], ['/workspace/demo/spin.wasm', 130],
 	[`${BIN}/clang`, 130], [`${BIN}/clang`, 0], ['/workspace/demo/hello.wasm', 0]
 ];
-export const RUNS = ['cold', 'warm', 'interrupt'];
-export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT };
+// A fourth run with its own cache and a corrupted BusyBox body: an integrity failure, a
+// compile error and a missing command each fail alone, and the shell keeps working.
+export const FAILURE_SCRIPT = [
+	'set -u',
+	'mkdir -p /workspace/demo; printf \'mkdir=%d\\n\' "$?"',
+	'mkdir -p /workspace/demo; printf \'retry=%d\\n\' "$?"',
+	'cd /workspace',
+	"printf 'int main(void){' > bad.c",
+	'clang bad.c -o bad.wasm; printf \'bad=%d\\n\' "$?"',
+	'if [ -e bad.wasm ]; then echo artifact; else echo no-artifact; fi',
+	'nosuch-command; printf \'missing=%d\\n\' "$?"',
+	"printf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c",
+	'clang main.c -o hello.wasm && ./hello.wasm'
+].join('\n') + '\n';
+export const FAILURE_DISPATCHES = [
+	[`${BIN}/mkdir`, 126, 'INTEGRITY'], [`${BIN}/mkdir`, 126, 'INTEGRITY'], [`${BIN}/clang`, 1, 'exited'],
+	[`${BIN}/clang`, 0, 'exited'], ['/workspace/hello.wasm', 0, 'exited']
+];
+export const RUNS = ['cold', 'warm', 'interrupt', 'failure'];
+export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT };
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -256,12 +274,41 @@ function judgeInterrupt(result, checks) {
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
 }
 
+/** Integrity failure, compile error and missing command, each contained; the shell continues. */
+function judgeFailure(result, downloads, checks) {
+	const check = (id, passed, observed) => checks.push({ id: `failure:${id}`, passed: Boolean(passed), observed });
+	const completed = result?.type === 'result' && result.backendCompleted === true;
+	const output = result?.result, stderr = decode(output?.stderr);
+	const lines = stderr.split('\n').filter(Boolean);
+	check('script', completed && output.code === 0 &&
+		decode(output.stdout) === 'mkdir=126\nretry=126\nbad=1\nno-artifact\nmissing=127\nhello\n',
+	{ type: result?.type, code: output?.code, stdout: decode(output?.stdout), stderr, error: result?.error });
+	// Each integrity failure is one host diagnostic; the compiler's own diagnostics name bad.c.
+	check('diagnostics', lines.filter((line) => line.startsWith('mkdir: ')).length === 2 &&
+		lines.some((line) => /^bad\.c:1:\d+: error: /.test(line)) &&
+		lines.some((line) => /^bash: line \d+: nosuch-command: command not found$/.test(line)), lines);
+	const records = result?.records ?? [];
+	check('supervisor-statuses', JSON.stringify(records.map((record) => [record.path, record.status, record.startError ?? record.result?.reason])) ===
+		JSON.stringify(FAILURE_DISPATCHES), records.map(({ path, status, startError, result: value }) => [path, status, startError ?? value?.reason]));
+	check('no-artifact-from-error', result?.files?.['/workspace/bad.wasm']?.error === 'ENOENT', result?.files?.['/workspace/bad.wasm']);
+	check('later-artifact', same(result?.artifact?.magic?.slice(0, 4), [0, 97, 115, 109]), result?.artifact);
+	// A failed body is fetched again by the retry, never served from a cache.
+	const fetched = (name) => downloads.end[`/assets/${name}`] - downloads.start[`/assets/${name}`];
+	check('integrity-not-cached', fetched('busybox-corrupt') === 2 && fetched('busybox') === 0, downloads);
+	check('processes-retired', completed && Array.isArray(result.containerProcesses) && !result.containerProcesses.length,
+		result?.containerProcesses?.length);
+	check('browser-errors', !result?.events?.some((event) => event.type === 'threadError') &&
+		!result?.blockedRequests?.length && !result?.consoleErrors?.length, result?.consoleErrors);
+	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
+}
+
 export function judgeShellAcceptance(receipt) {
 	const checks = [];
 	const assetPaths = ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
 	for (const run of RUNS) {
 		const entry = receipt.runs?.find((candidate) => candidate.run === run);
 		if (run === 'interrupt') judgeInterrupt(entry?.result, checks);
+		else if (run === 'failure') judgeFailure(entry?.result, entry?.downloads ?? { start: {}, end: {} }, checks);
 		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
 	}
 	checks.push({ id: 'context-cleanup', passed: receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,

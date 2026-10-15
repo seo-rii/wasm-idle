@@ -171,7 +171,7 @@ globalThis.onmessage = async ({ data }) => {
 			catch (error) { files[path] = { error: String(error.code ?? error) }; }
 		}
 		const artifact = (() => {
-			try { const bytes = container.fs.readFile('/workspace/demo/hello.wasm'); return { bytes: bytes.length, magic: Array.from(bytes.subarray(0, 8)) }; }
+			try { const bytes = container.fs.readFile(data.artifactPath ?? '/workspace/demo/hello.wasm'); return { bytes: bytes.length, magic: Array.from(bytes.subarray(0, 8)) }; }
 			catch (error) { return { error: String(error.code ?? error) }; }
 		})();
 		const containerProcesses = (await container.inspect()).processes;

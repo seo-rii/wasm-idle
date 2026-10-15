@@ -129,6 +129,35 @@ must be 0, 0, 130, 130, 0, 0, each interrupt must land between its command's dis
 completion, the interrupted compile's output must not reach the workspace, and every
 process and Worker must retire.
 
+## Failure run
+
+A fourth run uses its own cache namespace and a distribution whose BusyBox asset URL
+serves the pinned bytes with one byte flipped; the manifest keeps the pinned digest:
+
+```sh
+set -u
+mkdir -p /workspace/demo; printf 'mkdir=%d\n' "$?"
+mkdir -p /workspace/demo; printf 'retry=%d\n' "$?"
+cd /workspace
+printf 'int main(void){' > bad.c
+clang bad.c -o bad.wasm; printf 'bad=%d\n' "$?"
+if [ -e bad.wasm ]; then echo artifact; else echo no-artifact; fi
+nosuch-command; printf 'missing=%d\n' "$?"
+printf '#include <stdio.h>\nint main(void){puts("hello");return 0;}\n' > main.c
+clang main.c -o hello.wasm && ./hello.wasm
+```
+
+It must print `mkdir=126`, `retry=126`, `bad=1`, `no-artifact`, `missing=127` and `hello`:
+
+- Each integrity failure is one `mkdir: …` diagnostic and a Supervisor record with
+  `startError: INTEGRITY`.
+- The retry fetches the corrupt body again; a failed body is never cached, and the real
+  body is never substituted.
+- The compile error keeps Clang's own diagnostics (`bad.c:1:…: error:`) and status 1, and
+  leaves no artifact.
+- Bash reports the missing command itself (127) without a dispatch.
+- The Clang package is unaffected, so the last line compiles and runs.
+
 ## Results
 
 Every attempt's original browser and process receipts are archived under
