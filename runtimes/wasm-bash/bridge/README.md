@@ -538,6 +538,17 @@ timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
 The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
 enabled for these runtimes.
 
+The fix was gated on commit `25e0c1f958d5a9c87b8fdf012e681652ca23a621` in a fresh physical
+copy with 583 pins and a unique target: typecheck 330.07 s, release 738.759 s, bindgen
+2.284 s and static inspection 0.282 s, each exiting 0 with every process reaped. The bound
+Wasm is 9,132,255 bytes, SHA-256
+`2ce591c515f353f91b7966da10a49f3b177c4d40d365a4be651ac69714e9825d`; binary receipt
+`ec389294c97172bb6457f0044bd781eab8e78fc9ca77998c79a994a54724ecc6`. Stage receipts are
+archived as `evidence.status-order-*.json` with a
+[recheck](evidence.status-order-sdk-binary-metadata.json). Local packaging produced receipt
+`1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`. Browser results with
+this package are recorded on the dispatch branch.
+
 ## Trusted host filesystem mounts
 
 Patches 0011 and 0012 let Bash use the common container filesystem instead of a private
