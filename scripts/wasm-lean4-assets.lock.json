@@ -6,14 +6,14 @@
 	"license": "Apache-2.0 AND MIT",
 	"producer": {
 		"repository": "https://github.com/seo-rii/wasm-llvm",
-		"revision": "5369745f777673710c25cd67c52310b004cfe41a",
+		"revision": "14ea5ecbc514b0c87338aebf8f2b567020be5750",
 		"path": "artifacts/lean-browser"
 	},
 	"assets": {
 		"producer-receipt.json": {
 			"upstream": "producer-receipt.json",
-			"bytes": 4596,
-			"sha256": "e60eb3fdcc108fa7c6127c5a8925ffb622706facb17bc4f84e9ed27f82495fa1"
+			"bytes": 9768,
+			"sha256": "335bd6e1720371fc161859cb7c2858600ec12314c30da1f0e5e503e324a96d42"
 		},
 		"lean.mjs": {
 			"upstream": "lean.mjs",

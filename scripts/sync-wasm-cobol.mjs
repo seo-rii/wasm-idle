@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { unzipSync } from 'fflate';
+import { readSingleZipEntry, requireTarFiles } from './llvm-contracts/archive.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -21,6 +21,26 @@ const DELIVERY_ASSETS = [
 		kind: 'tar'
 	}
 ];
+/** @type {Record<string, string[]>} */
+const REQUIRED_TAR_FILES = {
+	'rootfs.tar.zip': [
+		'include/gmp.h',
+		'include/libcob.h',
+		'include/libcob/common.h',
+		'lib/libcob.a',
+		'lib/libcobwasi.a',
+		'lib/libgmp.a',
+		'lib/libsetjmp.a',
+		'share/gnucobol/config/default.conf',
+		'share/gnucobol/copy/screenio.cpy'
+	],
+	'c-sysroot.tar.zip': [
+		'include/wasm32-wasi/stdio.h',
+		'lib/wasm32-wasi/crt1.o',
+		'lib/wasm32-wasi/libc.a',
+		'lib/clang/22/lib/wasi/libclang_rt.builtins-wasm32.a'
+	]
+};
 const DELIVERY_FILES = [
 	'runtime-manifest.v1.json',
 	...DELIVERY_ASSETS.map((asset) => asset.target),
@@ -44,13 +64,6 @@ async function readJson(filePath, label) {
 			`wasm-cobol ${label} is not valid JSON: ${error instanceof Error ? error.message : error}`
 		);
 	}
-}
-
-/** @param {string} filePath */
-async function sha256File(filePath) {
-	return createHash('sha256')
-		.update(await readFile(filePath))
-		.digest('hex');
 }
 
 /** @param {Uint8Array} contents */
@@ -139,44 +152,47 @@ async function validateSource(sourceDir) {
 		);
 	}
 
+	const payloads = new Map();
 	for (const filename of ARCHIVE_FILES) {
 		const filePath = path.join(sourceDir, filename);
-		const fileStats = await stat(filePath);
+		const bytes = await readFile(filePath);
 		const metadata = buildAssets.get(filename);
 		if (
-			typeof metadata.size !== 'number' ||
-			typeof metadata.sha256 !== 'string' ||
-			metadata.size !== fileStats.size ||
-			metadata.sha256 !== (await sha256File(filePath))
+			!Number.isSafeInteger(metadata.size) ||
+			metadata.size <= 0 ||
+			!/^[0-9a-f]{64}$/.test(metadata.sha256) ||
+			metadata.size !== bytes.length ||
+			metadata.sha256 !== sha256(bytes)
 		) {
 			throw new Error(
 				`wasm-cobol runtime asset ${filename} does not match runtime-build.json`
 			);
 		}
+		const asset = DELIVERY_ASSETS.find((asset) => asset.source === filename);
+		if (!asset) throw new Error(`Unsupported runtime archive ${filename}`);
+		const contents = readSingleZipEntry(
+			bytes,
+			asset.entry,
+			`wasm-cobol runtime asset ${filename}`
+		);
+		if (asset.kind === 'wasm' && !WebAssembly.validate(new Uint8Array(contents))) {
+			throw new Error(`wasm-cobol runtime asset ${filename} is not valid WebAssembly`);
+		}
+		if (asset.kind === 'tar') requireTarFiles(contents, REQUIRED_TAR_FILES[filename], filename);
+		payloads.set(filename, contents);
 	}
 
-	return { manifest, buildInfo };
+	return { manifest, buildInfo, payloads };
 }
 
-/** @param {string} sourceDir @param {string} targetDir */
-async function writeDeliveryBundle(sourceDir, targetDir) {
+/** @param {{ manifest: any; buildInfo: any; payloads: Map<string, Buffer> }} source @param {string} targetDir */
+async function writeDeliveryBundle(source, targetDir) {
+	const { manifest: sourceManifest, buildInfo: sourceBuildInfo, payloads } = source;
 	const deliveryAssets = [];
 	for (const asset of DELIVERY_ASSETS) {
-		let entries;
-		try {
-			entries = unzipSync(await readFile(path.join(sourceDir, asset.source)));
-		} catch (error) {
-			throw new Error(
-				`wasm-cobol runtime asset ${asset.source} could not be repackaged: ${error instanceof Error ? error.message : error}`
-			);
-		}
-		const files = Object.entries(entries).filter(([entryName]) => !entryName.endsWith('/'));
-		if (files.length !== 1 || files[0][0] !== asset.entry) {
-			throw new Error(
-				`wasm-cobol runtime asset ${asset.source} must contain only ${asset.entry}`
-			);
-		}
-		const compressed = gzipSync(files[0][1], { level: 9 });
+		const contents = payloads.get(asset.source);
+		if (!contents) throw new Error(`Missing validated archive ${asset.source}`);
+		const compressed = gzipSync(contents, { level: 9 });
 		await writeFile(path.join(targetDir, asset.target), compressed);
 		deliveryAssets.push({
 			asset: asset.target,
@@ -185,20 +201,12 @@ async function writeDeliveryBundle(sourceDir, targetDir) {
 		});
 	}
 
-	const sourceManifest = await readJson(
-		path.join(sourceDir, 'runtime-manifest.v1.json'),
-		'runtime manifest'
-	);
 	const deliveryManifest = JSON.parse(JSON.stringify(sourceManifest));
 	deliveryManifest.frontend.asset = DELIVERY_ASSETS[0].target;
 	deliveryManifest.rootfs.asset = DELIVERY_ASSETS[1].target;
 	deliveryManifest.cSysroot.asset = DELIVERY_ASSETS[2].target;
 	await writeJson(path.join(targetDir, 'runtime-manifest.v1.json'), deliveryManifest);
 
-	const sourceBuildInfo = await readJson(
-		path.join(sourceDir, 'runtime-build.json'),
-		'build metadata'
-	);
 	await writeJson(path.join(targetDir, 'runtime-build.json'), {
 		...sourceBuildInfo,
 		toolchain: {
@@ -213,8 +221,8 @@ async function writeDeliveryBundle(sourceDir, targetDir) {
 	});
 }
 
-/** @param {string} targetDir */
-async function validateDelivery(targetDir) {
+/** @param {string} targetDir @param {Map<string, Buffer>} payloads */
+async function validateDelivery(targetDir, payloads) {
 	for (const filename of DELIVERY_FILES) {
 		const fileStats = await stat(path.join(targetDir, filename)).catch(() => null);
 		if (!fileStats?.isFile()) {
@@ -263,22 +271,19 @@ async function validateDelivery(targetDir) {
 		) {
 			throw new Error(`wasm-cobol delivery asset ${asset.target} does not match metadata`);
 		}
+		const expected = payloads.get(asset.source);
+		if (!expected) throw new Error(`Missing validated archive ${asset.source}`);
 		let contents;
 		try {
-			contents = gunzipSync(compressed);
+			contents = gunzipSync(compressed, {
+				maxOutputLength: expected.length
+			});
 		} catch (error) {
 			throw new Error(
 				`wasm-cobol delivery asset ${asset.target} is not valid gzip: ${error instanceof Error ? error.message : error}`
 			);
 		}
-		if (
-			(asset.kind === 'wasm' &&
-				(contents.byteLength < 4 ||
-					contents.subarray(0, 4).toString('hex') !== '0061736d')) ||
-			(asset.kind === 'tar' &&
-				(contents.byteLength < 265 ||
-					!contents.subarray(257, 265).toString('ascii').startsWith('ustar')))
-		) {
+		if (!contents.equals(expected)) {
 			throw new Error(`wasm-cobol delivery asset ${asset.target} has invalid contents`);
 		}
 	}
@@ -291,7 +296,7 @@ export async function syncWasmCobolAssets({ sourceDir, targetDir = DEFAULT_TARGE
 	}
 	const resolvedSourceDir = path.resolve(sourceDir);
 	const resolvedTargetDir = path.resolve(targetDir);
-	await validateSource(resolvedSourceDir);
+	const source = await validateSource(resolvedSourceDir);
 
 	await mkdir(path.dirname(resolvedTargetDir), { recursive: true });
 	const suffix = `${process.pid}-${randomUUID()}`;
@@ -302,8 +307,8 @@ export async function syncWasmCobolAssets({ sourceDir, targetDir = DEFAULT_TARGE
 	let hadPrevious = false;
 	let installedNext = false;
 	try {
-		await writeDeliveryBundle(resolvedSourceDir, nextTarget);
-		await validateDelivery(nextTarget);
+		await writeDeliveryBundle(source, nextTarget);
+		await validateDelivery(nextTarget, source.payloads);
 
 		if (await stat(resolvedTargetDir).catch(() => null)) {
 			await rename(resolvedTargetDir, previousTarget);

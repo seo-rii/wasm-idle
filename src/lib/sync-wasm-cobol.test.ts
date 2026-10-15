@@ -21,12 +21,57 @@ function sha256(contents: Buffer) {
 	return createHash('sha256').update(contents).digest('hex');
 }
 
+function tar(files: Record<string, string>) {
+	const parts: Buffer[] = [];
+	for (const [name, contents] of Object.entries(files)) {
+		const bytes = Buffer.from(contents);
+		const header = Buffer.alloc(512);
+		header.write(name, 0, 100);
+		header.write('0000644\0', 100, 8);
+		header.write('0000000\0', 108, 8);
+		header.write('0000000\0', 116, 8);
+		header.write(`${bytes.length.toString(8).padStart(11, '0')}\0`, 124, 12);
+		header.write('00000000000\0', 136, 12);
+		header.fill(32, 148, 156);
+		header[156] = 48;
+		header.write('ustar\0', 257, 6);
+		header.write('00', 263, 2);
+		const checksum = header.reduce((sum, byte) => sum + byte, 0);
+		header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8);
+		parts.push(header, bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512));
+	}
+	return Buffer.concat([...parts, Buffer.alloc(1024)]);
+}
+
+async function replaceArchive(sourceDir: string, asset: string, bytes: Buffer) {
+	await writeFile(path.join(sourceDir, asset), bytes);
+	const file = path.join(sourceDir, 'runtime-build.json');
+	const build = JSON.parse(await readFile(file, 'utf8'));
+	const metadata = build.assets.find((entry: { asset: string }) => entry.asset === asset);
+	metadata.size = bytes.length;
+	metadata.sha256 = sha256(bytes);
+	build.toolchain.assets[asset] = metadata.sha256;
+	await writeFile(file, JSON.stringify(build));
+}
+
 async function writeFixture(sourceDir: string) {
-	const rootfsTar = Buffer.alloc(1024);
-	rootfsTar.write('./', 0, 100, 'utf8');
-	rootfsTar.write('ustar  \0', 257, 8, 'ascii');
-	const cSysrootTar = Buffer.from(rootfsTar);
-	cSysrootTar.write('lib/', 0, 100, 'utf8');
+	const rootfsTar = tar({
+		'include/gmp.h': '/* gmp */',
+		'include/libcob.h': '/* cob */',
+		'include/libcob/common.h': '/* common */',
+		'lib/libcob.a': '!<arch>\n',
+		'lib/libcobwasi.a': '!<arch>\n',
+		'lib/libgmp.a': '!<arch>\n',
+		'lib/libsetjmp.a': '!<arch>\n',
+		'share/gnucobol/config/default.conf': 'config',
+		'share/gnucobol/copy/screenio.cpy': 'copy'
+	});
+	const cSysrootTar = tar({
+		'include/wasm32-wasi/stdio.h': '/* stdio */',
+		'lib/wasm32-wasi/crt1.o': 'crt',
+		'lib/wasm32-wasi/libc.a': '!<arch>\n',
+		'lib/clang/22/lib/wasi/libclang_rt.builtins-wasm32.a': '!<arch>\n'
+	});
 	const archives = new Map([
 		['cobc.zip', Buffer.from(zipSync({ cobc: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0) }))],
 		['rootfs.tar.zip', Buffer.from(zipSync({ 'rootfs.tar': rootfsTar }))],
@@ -178,6 +223,51 @@ describe('syncWasmCobolAssets', () => {
 		);
 		await expect(readFile(path.join(targetDir, 'existing.txt'), 'utf8')).resolves.toBe(
 			'existing'
+		);
+	});
+	it.each([
+		['missing required header', tar({ 'include/gmp.h': 'gmp' })],
+		['empty required library', tar({ 'lib/libcob.a': '' })],
+		[
+			'invalid checksum',
+			(() => {
+				const bytes = tar({ 'include/gmp.h': 'gmp' });
+				bytes[0] ^= 1;
+				return bytes;
+			})()
+		]
+	] as const)(
+		'rejects %s with matching metadata and preserves existing delivery bytes',
+		async (_label, bytes) => {
+			const sourceDir = await makeTempDir();
+			const targetDir = path.join(await makeTempDir(), 'wasm-cobol');
+			await writeFixture(sourceDir);
+			await mkdir(targetDir);
+			await writeFile(path.join(targetDir, 'existing.txt'), 'existing');
+			await replaceArchive(
+				sourceDir,
+				'rootfs.tar.zip',
+				Buffer.from(zipSync({ 'rootfs.tar': bytes }))
+			);
+			await expect(syncWasmCobolAssets({ sourceDir, targetDir })).rejects.toThrow(
+				/TAR|rootfs.tar/
+			);
+			expect(await readdir(targetDir)).toEqual(['existing.txt']);
+			expect(await readFile(path.join(targetDir, 'existing.txt'), 'utf8')).toBe('existing');
+		}
+	);
+
+	it('rejects invalid compiler Wasm even when the archive hash matches', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = path.join(await makeTempDir(), 'wasm-cobol');
+		await writeFixture(sourceDir);
+		await replaceArchive(
+			sourceDir,
+			'cobc.zip',
+			Buffer.from(zipSync({ cobc: Uint8Array.of(0, 97, 115, 109, 255) }))
+		);
+		await expect(syncWasmCobolAssets({ sourceDir, targetDir })).rejects.toThrow(
+			'not valid WebAssembly'
 		);
 	});
 });
