@@ -43,7 +43,8 @@ const patches = [
 	'0004-expose-host-command-hook.patch',
 	'0005-owned-command-snapshot.patch',
 	'0006-register-worker-shell-import.patch',
-	'0007-delegate-host-command-descriptors.patch'
+	'0007-delegate-host-command-descriptors.patch',
+	'0009-preserve-join-exit-status.patch'
 ];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = ['0008-dispatch-trusted-host-commands.patch'];

@@ -81,6 +81,12 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    `Runtime` implements `Runtime::host_command` from an exact-path registry and moves the
    owned child to the scheduler thread, where the JavaScript handler registered on that
    thread runs. This is the only SDK-side patch; `src-js` is unchanged.
+9. `0009-preserve-join-exit-status.patch`: `proc_join` stored a child's exit code through
+   `Errno`, whose conversion maps every value outside the errno range to `Unknown` (79).
+   The ABI field is a u16 that wasix-libc's `waitpid` reads as the raw status, so the
+   runtime now writes the raw exit status there. Statuses 0–78 are unchanged; 79–255
+   (for example 126, 127 and 128+n) are no longer reported to Bash as 79. It applies to
+   native children and host commands alike.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -441,3 +447,13 @@ produced package receipt
 `83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55` (1.51 seconds).
 
 This is a build and static gate. Actual Bash dispatch is qualified separately in Chromium.
+
+### Exit statuses above the errno range
+
+The first actual Chromium dispatch run showed host-command statuses 126 and 134 arriving
+in Bash as 79. Bash's own native `cannot execute binary file` status 126 did too, so the
+loss is not specific to host commands. `JoinStatusUnion.exit_normal` is typed `Errno` in
+the pinned types crate; `From<ExitCode> for Errno` turns values that are not errno
+variants into `Errno::Unknown` (79). Patch 0009 writes the raw `u16` status into that
+union field after the normal `JoinStatus` write, which is exactly what libc's
+`W_EXITCODE(code.u.exit_normal, 0)` consumes. It applies independently with zero fuzz.
