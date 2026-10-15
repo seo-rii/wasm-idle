@@ -560,6 +560,42 @@ public class Main {
 				expected: 'solver 3 s/sv plain 1 0 false true 0\n'
 			},
 			{
+				// TeaVM 0.13.1 lacks these methods: print(float) and println(char[]) resolved to
+				// print(double) and println(Object), and %e was an unknown format conversion.
+				name: 'class library methods missing from TeaVM 0.13.1',
+				code: `import java.util.*;
+import java.util.stream.*;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.print(0.1f);
+        System.out.print(' ');
+        System.out.print(true);
+        System.out.print(' ');
+        System.out.println(new char[] { 'o', 'k' });
+        System.out.writeBytes("bytes\\n".getBytes());
+        Map<String, Integer> counts = new TreeMap<>();
+        for (String word : "b a b".split(" ")) {
+            counts.merge(word, 1, Integer::sum);
+        }
+        TreeMap<Integer, Long> parity = Stream.of(1, 2, 3, 4, 5)
+            .collect(Collectors.groupingBy(x -> x % 2, TreeMap::new, Collectors.counting()));
+        System.out.println(counts + " " + parity + " " + Long.max(3L, 5L) + " " + Long.sum(3L, 5L)
+            + " " + Double.sum(1.5, 2.0) + " " + Float.min(1.5f, 2.0f));
+        System.out.println(Math.multiplyHigh(Long.MAX_VALUE, 3L) + " " + Math.multiplyFull(100000, 100000)
+            + " " + Character.toString(0x1F600).length() + " " + Integer.toUnsignedLong(-1)
+            + " " + Integer.parseUnsignedInt("4294967295") + " " + Long.parseUnsignedLong("18446744073709551615"));
+        System.out.println(List.of(1, 2, 3).parallelStream().mapToInt(Integer::intValue).sum()
+            + " " + Stream.ofNullable(null).count() + " " + "a\\r\\nb\\nc".lines().collect(Collectors.toList())
+            + " " + "x".transform(s -> s + "y"));
+        System.out.println(String.format("%e|%.2e|%E|%+.1e|%010.2e|%.0e", 12345.678, 0.000123, 1.0, 99.95, -1.5, 2.5));
+    }
+}`,
+				stdin: '',
+				expected:
+					'0.1 true ok\nbytes\n{a=1, b=2} {0=2, 1=3} 5 8 3.5 1.5\n1 10000000000 2 4294967295 -1 -1\n6 0 [a, b, c] xy\n1.234568e+04|1.23e-04|1.000000E+00|+1.0e+02|-01.50e+00|3e+00\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 
@@ -636,7 +672,7 @@ public class Main {
 
 			expect(outputs.join(''), testCase.name).toBe(testCase.expected);
 		}
-	}, 120_000);
+	}, 180_000);
 
 	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();

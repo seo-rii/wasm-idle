@@ -84,6 +84,21 @@ pointer even in JVM-hosted TeaVM; the patch adds a listener that propagates `Str
 fields. Reflective field and method access stays unsupported, as in TeaVM's Wasm GC backend. It
 changes only `compiler.wasm`.
 
+An eighth source patch, `scripts/teavm/patches/teavm-javac-classlib-supplements.patch`, adds
+`java.*` methods that the TeaVM 0.13.1 class library lacks. Small supplement classes compiled once
+against that library carry the methods; teavm-javac copies them into the target classes both when it
+converts the javac SDK and when it packs the runtime class library, so the two always declare the
+same API, and the build fails if a supplement would replace an existing method. It adds
+`PrintStream.print(boolean)`, `print(float)`, `println(char[])` and `writeBytes(byte[])`; without the
+float and `char[]` overloads, javac picked `print(double)` and `println(Object)`, so
+`System.out.print(0.1f)` printed `0.10000000149011612` and `System.out.println(chars)` printed
+`[C@…`. It also adds `Integer.sum`, `toUnsignedLong` and `parseUnsignedInt`, `Long.sum`, `max`, `min`
+and `parseUnsignedLong`, `Double` and `Float` `sum`, `max` and `min`, `Math.multiplyHigh` and
+`multiplyFull`, `Character.toString(int)`, `Collection.parallelStream()` (sequential, like every
+TeaVM stream), `Stream.ofNullable`, and `String.lines()` and `transform`. `Long::sum` also makes
+`Collectors.counting()` work. It changes `compile-classlib-teavm.bin` and the canonical runtime class
+library, not `compiler.wasm`.
+
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
 exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
@@ -109,6 +124,9 @@ incomplete sequence pending until the rest arrives.
 it to the archive and rejects an archive that already contains it. `%f` also rounds half up on the
 shortest decimal representation, as `java.util.Formatter` does, instead of `DecimalFormat`'s default
 half-even (TeaVM issue #1323): `"%.1f"` of `0.25` is `0.3` and `"%.2f"` of `1.005` is `1.01`.
+`%e` and `%E`, which TeaVM 0.13.1 rejects as unknown conversions, format the same way in scientific
+notation with the `-`, `#`, `+`, space, `0` and `(` flags. They round the digits by hand because
+TeaVM 0.13.1's `BigDecimal.round` leaves a value unchanged when it would drop exactly one digit.
 
 The producer verifies each original source entry, transform occurrence count, transformed source,
 JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive,
