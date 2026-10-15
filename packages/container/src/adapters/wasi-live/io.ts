@@ -44,11 +44,16 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
   };
 }
 
-export function createRemoteStdio(call: RpcCall): WasiStdio {
+export function createRemoteStdio(call: RpcCall, initialOpen: readonly number[] = [0, 1, 2]): WasiStdio {
+  if (!Array.isArray(initialOpen) || initialOpen.length > 3 || new Set(initialOpen).size !== initialOpen.length ||
+      initialOpen.some(fd => !Number.isInteger(fd) || fd < 0 || fd > 2)) throw new FsError('EINVAL', 'Invalid initial stdio descriptors');
+  const open = new Set(initialOpen);
+  const check = (fd: number) => { if (!open.has(fd)) throw new FsError('EBADF', 'Standard descriptor is closed'); };
   return {
-    read: (length) => call(Operation.Stdin, [Math.min(length, RPC_BYTES)]).bytes!,
-    write: (fd, bytes) => call(Operation.Stdout, [fd], bytes.subarray(0, RPC_BYTES)).value as number,
-    close: (fd) => { call(Operation.StdioClose, [fd]); },
+    isOpen: fd => open.has(fd),
+    read: (length) => { check(0); return call(Operation.Stdin, [Math.min(length, RPC_BYTES)]).bytes!; },
+    write: (fd, bytes) => { check(fd); return call(Operation.Stdout, [fd], bytes.subarray(0, RPC_BYTES)).value as number; },
+    close: (fd) => { check(fd); open.delete(fd); call(Operation.StdioClose, [fd]); },
     capture: () => ({ stdout: new Uint8Array(), stderr: new Uint8Array() })
   };
 }
@@ -160,6 +165,8 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
   }, { highWaterMark: 1 });
   return {
     stdin, stdout, stderr,
+    /** Only an explicitly null delegated endpoint starts closed; stdin EOF stays open. */
+    openStdio: Object.freeze([0, 1, 2].filter(fd => !closedStdio.has(fd))),
     dispose() {
       if (disposed) return;
       disposed = true;

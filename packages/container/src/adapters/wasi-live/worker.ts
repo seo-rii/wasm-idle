@@ -4,7 +4,7 @@ import { createWasiHost } from '../wasi/host.js';
 import { checkMemoryProfile } from '../wasi/profile.js';
 import { createRemoteFileSystem, createRemoteStdio } from './io.js';
 
-type Request = Parameters<LiveCommandAdapter['start']>[0] & { buffer: SharedArrayBuffer; maxBlockedIoMs: number };
+type Request = Parameters<LiveCommandAdapter['start']>[0] & { buffer: SharedArrayBuffer; maxBlockedIoMs: number; openStdio: readonly number[] };
 let prepared: { request: Request; module: WebAssembly.Module; host: ReturnType<typeof createWasiHost> } | undefined;
 let preparing = false, ran = false;
 const scope = globalThis as unknown as { onmessage: (event: MessageEvent) => void; postMessage: (message: unknown) => void };
@@ -19,7 +19,7 @@ scope.onmessage = async ({ data }) => {
       checkMemoryProfile(request.command.bytes, request.limits.maxMemoryBytes);
       const module = await WebAssembly.compile(request.command.bytes as Uint8Array<ArrayBuffer>);
       const call = createRpcClient(request.buffer, generation, (notice) => scope.postMessage(notice), request.maxBlockedIoMs);
-      const host = createWasiHost({ ...request.invocation, args: [request.command.argv0 ?? request.invocation.command, ...request.invocation.args], fs: createRemoteFileSystem(call), stdio: createRemoteStdio(call), stdin: new Uint8Array(), maxOutputBytes: request.limits.maxOutputBytes });
+      const host = createWasiHost({ ...request.invocation, args: [request.command.argv0 ?? request.invocation.command, ...request.invocation.args], fs: createRemoteFileSystem(call), stdio: createRemoteStdio(call, request.openStdio), stdin: new Uint8Array(), maxOutputBytes: request.limits.maxOutputBytes });
       try {
         const imports = WebAssembly.Module.imports(module);
         for (const entry of imports) {
