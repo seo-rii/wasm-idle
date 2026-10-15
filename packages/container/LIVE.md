@@ -121,6 +121,16 @@ termination 143. A missing route or command is 127 and any other start failure i
 each with a one-line diagnostic on the delegated stderr. `onRecord` observes outcomes
 without argv, environment or byte contents. This is not a shell, PTY or signal mapping.
 
+`createShellFilesystem(fs, { root })` exposes part of the container VFS to a trusted
+shell runtime as a synchronous delegate, such as the patched SDK's
+`Directory.fromHostFileSystem`. Paths are absolute inside the mount, and the root
+capability confines `..` and symlinks to it. Handles are delegate-owned container
+descriptors with explicit-offset reads/writes, append-mode writes at the live end,
+`fstat`, `truncate` and `close`. Operations run directly on the VFS, like editor writes:
+other live guests and editors see each one immediately. A snapshot adapter's writer lease
+makes mutations fail with `EBUSY`. Single I/O is bounded (default 1 MiB), and so is the
+number of open handles (default 1,024).
+
 Validation uses real no-libc Wasm fixtures (`test/fixtures/live.c` and `path.c`), including
 two live guests sharing files, byte counts beyond the ring/RPC bounds, early reader
 exit, cancellation during read/write/CPU execution, crash visibility, and restart.
