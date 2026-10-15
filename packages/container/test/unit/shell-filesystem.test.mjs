@@ -87,6 +87,23 @@ test('a snapshot writer lease makes shell mutations fail with EBUSY', () => {
   shell.mkdir('/blocked');
 });
 
+test('shell handles survive snapshot publication while mutations stay blocked during the lease', () => {
+  const fs = new MemoryFileSystem(), shell = createShellFilesystem(fs);
+  const handle = shell.open('/log', flags({ write: true, create: true, append: true }));
+  shell.append(handle, encode('before'));
+  const lease = fs.acquireSnapshot(), guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('/workspace/log', encode('compiled'));
+  assert.throws(() => shell.write(handle, 0, encode('editor')), code('EBUSY'));
+  assert.throws(() => shell.append(handle, encode('editor')), code('EBUSY'));
+  assert.throws(() => shell.truncate(handle, 0), code('EBUSY'));
+  assert.equal(decode(shell.read(handle, 0, 32)), 'before');
+  lease.commit(guest.exportSnapshot());
+  assert.equal(decode(shell.read(handle, 0, 32)), 'compiled');
+  shell.append(handle, encode(' diagnostics'));
+  assert.equal(decode(fs.readFile('/workspace/log')), 'compiled diagnostics');
+  shell.close(handle);
+});
+
 test('bounded I/O and handle budgets are enforced', () => {
   const fs = new MemoryFileSystem(), shell = createShellFilesystem(fs, { maxIoBytes: 4, maxHandles: 2 });
   const a = shell.open('/a', flags({ write: true, create: true }));

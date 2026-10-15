@@ -26,6 +26,12 @@ export interface OpenOptions extends PathOptions {
   append?: boolean;
   directory?: boolean;
   mode?: number;
+  /**
+   * Opt in to retaining this open description across snapshot commits. Writes
+   * still fail during the lease; a commit removing its linked inode conflicts.
+   * Omit to keep the default exclusion of snapshots while the fd is open.
+   */
+  snapshot?: 'preserve';
 }
 
 export interface MemoryFileSystemOptions {

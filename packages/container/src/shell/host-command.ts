@@ -27,7 +27,9 @@ export interface HostCommandRoute {
    * `delegated` (default) hands the shell child's descriptors to a live adapter.
    * `forwarded` runs a snapshot adapter, such as Clang, on container streams:
    * stdin is empty, and stdout and stderr are copied to the shell child's
-   * descriptors as they arrive. The shell's stdin is never consumed.
+   * descriptors as they arrive. The shell's stdin is never consumed. Interrupt
+   * and container disposal close only these child output endpoints, so blocked
+   * forwarding can finish. Normal completion leaves them owned by the shell.
    */
   readonly stdio?: 'delegated' | 'forwarded';
 }
@@ -90,33 +92,52 @@ export function statusForResult(result: ProcessResult): number {
   }
 }
 
+/** Stop waiting on cancellation while still observing the external operation. */
+function waitFor<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => { signal.removeEventListener('abort', abort); reject(signal.reason); };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    // Observe both outcomes even if cancellation wins; a late endpoint rejection
+    // must not become an unhandled rejection after the shell handler has returned.
+    operation.then(
+      value => { signal.removeEventListener('abort', abort); resolve(value); },
+      error => { signal.removeEventListener('abort', abort); reject(error); }
+    );
+  });
+}
+
 /** Write all bytes, following partial writes. Returns false once the endpoint fails. */
-async function writeAll(endpoint: DelegatedWriter, bytes: Uint8Array): Promise<boolean> {
+async function writeAll(endpoint: DelegatedWriter, bytes: Uint8Array, signal: AbortSignal): Promise<boolean> {
   try {
     for (let offset = 0; offset < bytes.length;) {
-      const written = await endpoint.write(bytes.subarray(offset));
-      if (!Number.isSafeInteger(written) || written < 1) return false;
+      signal.throwIfAborted();
+      const written = await waitFor(endpoint.write(bytes.subarray(offset)), signal);
+      if (!Number.isSafeInteger(written) || written < 1 || written > bytes.length - offset) return false;
       offset += written;
     }
     return true;
   } catch { return false; /* The shell may already have closed it. */ }
 }
 
-async function diagnostic(stderr: DelegatedWriter | null, message: string): Promise<void> {
-  if (stderr) await writeAll(stderr, new TextEncoder().encode(message));
+async function diagnostic(stderr: DelegatedWriter | null, message: string, signal: AbortSignal): Promise<void> {
+  if (stderr) await writeAll(stderr, new TextEncoder().encode(message), signal);
 }
 
 /** Copy a container stream to a shell descriptor; keep draining after the descriptor fails. */
-async function forward(stream: ReadableStream<Uint8Array>, endpoint: DelegatedWriter | null): Promise<void> {
+async function forward(stream: ReadableStream<Uint8Array>, endpoint: DelegatedWriter | null, signal: AbortSignal): Promise<void> {
   const reader = stream.getReader();
+  const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', abort, { once: true });
+  if (signal.aborted) abort();
   let open = endpoint !== null;
   try {
-    for (;;) {
+    while (!signal.aborted) {
       const { value, done } = await reader.read();
       if (done) return;
-      if (open) open = await writeAll(endpoint!, value);
+      if (open) open = await writeAll(endpoint!, value, signal);
     }
-  } finally { reader.releaseLock(); }
+  } finally { signal.removeEventListener('abort', abort); reader.releaseLock(); }
 }
 
 const normalizedDirectory = (path: unknown): path is string => typeof path === 'string' && path.length > 1 &&
@@ -143,14 +164,26 @@ export function createHostCommandHandler(container: Container, options: HostComm
   const running = new Set<AbortController>();
   const handler = async (invocation: HostCommandInvocation): Promise<number> => {
     const route = routes.get(invocation.path) ?? moduleRoute(invocation.path), name = invocation.argv[0] || invocation.path;
-    if (!route) {
-      await diagnostic(invocation.stderr, `${name}: no container route\n`);
-      return record({ path: invocation.path, status: HOST_COMMAND_STATUS.notFound, startError: 'COMMAND_NOT_FOUND' });
-    }
-    const forwarded = route.stdio === 'forwarded';
+    const forwarded = route?.stdio === 'forwarded';
     const controller = new AbortController();
+    const disposed = () => controller.abort(container.disposalSignal.reason);
+    const abortStatus = () => controller.signal.reason instanceof ContainerError && controller.signal.reason.code === 'DISPOSED'
+      ? HOST_COMMAND_STATUS.terminated : HOST_COMMAND_STATUS.interrupted;
+    const closeOutputs = () => {
+      if (!forwarded) return;
+      for (const endpoint of new Set([invocation.stdout, invocation.stderr])) {
+        try { endpoint?.close(); } catch { /* A child may already have closed its descriptor. */ }
+      }
+    };
+    controller.signal.addEventListener('abort', closeOutputs, { once: true });
+    container.disposalSignal.addEventListener('abort', disposed, { once: true });
+    if (container.disposalSignal.aborted) disposed();
     running.add(controller);
     try {
+      if (!route) {
+        await diagnostic(invocation.stderr, `${name}: no container route\n`, controller.signal);
+        return record({ path: invocation.path, status: controller.signal.aborted ? abortStatus() : HOST_COMMAND_STATUS.notFound, startError: 'COMMAND_NOT_FOUND' });
+      }
       let process;
       try {
         process = await container.spawn(route.command, [...route.args!, ...invocation.argv.slice(1)], {
@@ -159,19 +192,21 @@ export function createHostCommandHandler(container: Container, options: HostComm
         });
       } catch (error) {
         const code = error instanceof ContainerError ? error.code : (error as { code?: unknown })?.code;
-        if (controller.signal.aborted) return record({ path: invocation.path, status: HOST_COMMAND_STATUS.interrupted, startError: 'ABORTED' });
-        await diagnostic(invocation.stderr, `${name}: ${error instanceof Error ? error.message : 'cannot start'}\n`);
-        return record({ path: invocation.path, status: code === 'COMMAND_NOT_FOUND' ? HOST_COMMAND_STATUS.notFound : HOST_COMMAND_STATUS.cannotExecute, startError: typeof code === 'string' ? code : 'STARTUP_FAILED' });
+        if (controller.signal.aborted) return record({ path: invocation.path, status: abortStatus(), startError: 'ABORTED' });
+        await diagnostic(invocation.stderr, `${name}: ${error instanceof Error ? error.message : 'cannot start'}\n`, controller.signal);
+        return record({ path: invocation.path, status: controller.signal.aborted ? abortStatus() : code === 'COMMAND_NOT_FOUND' ? HOST_COMMAND_STATUS.notFound : HOST_COMMAND_STATUS.cannotExecute, startError: typeof code === 'string' ? code : 'STARTUP_FAILED' });
       }
       if (forwarded) {
         await process.stdin.close().catch(() => {});
-        await Promise.all([forward(process.stdout, invocation.stdout), forward(process.stderr, invocation.stderr)]);
+        await Promise.all([forward(process.stdout, invocation.stdout, controller.signal), forward(process.stderr, invocation.stderr, controller.signal)]);
       }
       const result = await process.exited;
-      const status = controller.signal.aborted && result.reason === 'terminated' ? HOST_COMMAND_STATUS.interrupted : statusForResult(result);
+      const status = controller.signal.aborted ? abortStatus() : statusForResult(result);
       return record({ path: invocation.path, pid: process.pid, result, status });
     } finally {
       running.delete(controller);
+      controller.signal.removeEventListener('abort', closeOutputs);
+      container.disposalSignal.removeEventListener('abort', disposed);
     }
   };
   return Object.assign(handler, {
