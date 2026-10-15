@@ -175,7 +175,10 @@ describe('Rust sandbox', () => {
 			version: 'rust-policy-test'
 		});
 		expect(() =>
-			structuredClone(workerInstances[0].postMessage.mock.lastCall?.[0])
+			structuredClone({
+				...workerInstances[0].postMessage.mock.lastCall?.[0],
+				rustcModuleBroker: undefined
+			})
 		).not.toThrow();
 		await sandbox.clear();
 	});
@@ -354,7 +357,8 @@ describe('Rust sandbox', () => {
 				code,
 				args: [],
 				log: true
-			})
+			}),
+			[expect.any(MessagePort)]
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			3,
@@ -364,7 +368,8 @@ describe('Rust sandbox', () => {
 				args: ['one', 'two'],
 				targetTriple: 'wasm32-wasip2',
 				log: true
-			})
+			}),
+			[expect.any(MessagePort)]
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			4,
@@ -374,7 +379,8 @@ describe('Rust sandbox', () => {
 				args: ['three'],
 				targetTriple: 'wasm32-wasip3',
 				log: true
-			})
+			}),
+			[expect.any(MessagePort)]
 		);
 		expect(outputs).toContain('hi\n');
 		expect(diagnostics).toEqual([
@@ -407,7 +413,8 @@ describe('Rust sandbox', () => {
 					maxWorkers: 3,
 					maxThreads: 7
 				})
-			})
+			}),
+			[expect.any(MessagePort)]
 		);
 	});
 

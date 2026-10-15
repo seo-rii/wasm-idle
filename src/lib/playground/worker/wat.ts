@@ -225,11 +225,8 @@ self.onmessage = async (event: { data: any }) => {
 			}
 		});
 		if (execution.exitCode !== 0) {
-			throw new Error(
-				execution.stderr
-					? `WAT module exited with code ${execution.exitCode}\n${execution.stderr}`
-					: `WAT module exited with code ${execution.exitCode}`
-			);
+			// stderr was already streamed to the terminal above.
+			throw new Error(`WAT module exited with code ${execution.exitCode}`);
 		}
 		postMessage({ results: true });
 	} catch (error: any) {

@@ -24,6 +24,34 @@ public class Main {
     }
 }`;
 
+const javaBufferedStdioSource = `import java.io.*;
+import java.util.StringTokenizer;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(System.out));
+        StringTokenizer st = new StringTokenizer(br.readLine());
+        int a = Integer.parseInt(st.nextToken());
+        int b = Integer.parseInt(st.nextToken());
+        bw.write("main=" + (a + b));
+        bw.newLine();
+        bw.flush();
+        bw.close();
+    }
+}`;
+
+const javaFormatterStdinSource = `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        int a = scanner.nextInt();
+        int b = scanner.nextInt();
+        System.out.printf("main=%.2f%n", (a + b) / 2.0 * 2);
+    }
+}`;
+
 const elixirStdinSource = `line = IO.gets("") || "0"
 {n, _} = Integer.parse(String.trim(line))
 IO.puts("main=#{n + 5}")`;
@@ -302,6 +330,22 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 300_000
 	},
 	{
+		name: 'JAVA BufferedReader/BufferedWriter',
+		language: 'JAVA',
+		source: javaBufferedStdioSource,
+		stdinText: '68 5\n',
+		expectedOutput: 'main=73',
+		defaultRunTimeoutMs: 300_000
+	},
+	{
+		name: 'JAVA Formatter',
+		language: 'JAVA',
+		source: javaFormatterStdinSource,
+		stdinText: '68 5\n',
+		expectedOutput: 'main=73.00',
+		defaultRunTimeoutMs: 300_000
+	},
+	{
 		language: 'ELIXIR',
 		source: elixirStdinSource,
 		stdinText: '68\n',
@@ -414,6 +458,8 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 300_000
 	}
 ] as const;
+// These runtimes pass stdin to the program in one batch, so the program starts at EOF.
+const batchStdinBrowserLanguages = new Set<string>(['R', 'PHP']);
 const clangStdinBrowserCases = [
 	{
 		name: 'C',
@@ -486,10 +532,11 @@ describe('wasm-idle browser stdin connection', () => {
 		expectedOutput,
 		language,
 		source,
-		stdinText
+		stdinText,
+		...label
 	} of sharedStdinBrowserCases)
 		it(
-			`passes ${language} input and output through its real browser runtime path`,
+			`passes ${'name' in label ? label.name : language} input and output through its real browser runtime path`,
 			{
 				skip: skipSharedStdinBrowserCase(language),
 				meta: {
@@ -509,6 +556,7 @@ describe('wasm-idle browser stdin connection', () => {
 						runTimeoutMs: Number(
 							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || defaultRunTimeoutMs
 						),
+						sendEof: batchStdinBrowserLanguages.has(language),
 						source,
 						stdinText
 					});
@@ -552,6 +600,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'CSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: csharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -582,6 +631,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'FSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: fsharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -1106,6 +1156,7 @@ int main() {
 					expectedOutput: 'main=73',
 					language: 'VBNET',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
+					sendEof: true,
 					source: vbnetStdinSource,
 					stdinText: '73\n'
 				});

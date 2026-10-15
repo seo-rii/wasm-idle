@@ -249,15 +249,21 @@ function codeMightReadStdin(code: string) {
 function readInitialStdin(code: string, initialStdin: unknown, log = true) {
 	if (typeof initialStdin === 'string') return initialStdin;
 	if (!codeMightReadStdin(code)) return '';
-	const chunk = waitForBufferedStdin(stdinBufferPhp!, () => postMessage({ buffer: true }));
-	if (log) {
-		console.log(
-			chunk == null
-				? '[wasm-idle:php-stdin] read(bytes=0, eof=true)'
-				: `[wasm-idle:php-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
-		);
+	// PHP receives stdin as one request body before the program starts, so collect
+	// terminal input until EOF instead of dropping chunks typed after the first.
+	let input = '';
+	while (true) {
+		const chunk = waitForBufferedStdin(stdinBufferPhp!, () => postMessage({ buffer: true }));
+		if (log) {
+			console.log(
+				chunk == null
+					? '[wasm-idle:php-stdin] read(bytes=0, eof=true)'
+					: `[wasm-idle:php-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+			);
+		}
+		if (chunk == null) return input;
+		input += chunk;
 	}
-	return chunk || '';
 }
 
 self.onmessage = async (event: { data: any }) => {
@@ -326,11 +332,8 @@ self.onmessage = async (event: { data: any }) => {
 		if (response.text) postMessage({ output: response.text });
 		if (response.errors) postMessage({ output: response.errors });
 		if (response.exitCode !== 0) {
-			throw new Error(
-				response.errors
-					? `PHP program exited with code ${response.exitCode}\n${response.errors}`
-					: `PHP program exited with code ${response.exitCode}`
-			);
+			// response.errors was already posted as output above.
+			throw new Error(`PHP program exited with code ${response.exitCode}`);
 		}
 		if (log) {
 			console.log(`[wasm-idle:php-worker] run settled exitCode=${response.exitCode}`);

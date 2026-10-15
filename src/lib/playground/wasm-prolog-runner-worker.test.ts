@@ -444,7 +444,7 @@ describe('SWI-Prolog runner worker', () => {
 				const legacy = await readFile(
 					new URL(storageReceipt.path.slice(0, -4), staticRuntimeUrl)
 				);
-				expect(legacy).toEqual(stored);
+				expect(legacy.equals(stored)).toBe(true);
 			}
 			expect(stored.byteLength).toBe(storageReceipt.size);
 			expect(sha256(stored)).toBe(storageReceipt.sha256);
@@ -853,7 +853,7 @@ describe('SWI-Prolog runner worker', () => {
 				stdin: undefined,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					buffer: new SharedArrayBuffer(32),
 					capacity: 16,
 					controlBytes: 8

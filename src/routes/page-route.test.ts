@@ -1,8 +1,9 @@
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
+import { runInNewContext } from 'node:vm';
 import { compile } from 'svelte/compiler';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
 	argsHelpLanguages,
@@ -29,8 +30,49 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 describe('example route debug actions', () => {
 	it('reloads once the Pages isolation service worker is ready', () => {
 		expect(layoutSource).toMatch(/await navigator\.serviceWorker\.ready;/);
-		expect(layoutSource).toMatch(/if \(!crossOriginIsolated\) window\.location\.reload\(\);/);
 		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
+		const isolationGuard = layoutSource.match(
+			/await navigator\.serviceWorker\.ready;([\s\S]*?)\} catch \(err\) \{/
+		)?.[1];
+		expect(isolationGuard).toBeTruthy();
+		const stored = new Map<string, string>();
+		const storage = {
+			getItem: (key: string) => stored.get(key) ?? null,
+			removeItem: (key: string) => void stored.delete(key),
+			setItem: (key: string, value: string) => void stored.set(key, value)
+		};
+		const load = (crossOriginIsolated: boolean, sessionStorage: object = storage) => {
+			const reload = vi.fn();
+			runInNewContext(isolationGuard!, {
+				crossOriginIsolated,
+				sessionStorage,
+				window: { location: { reload } }
+			});
+			return reload.mock.calls.length;
+		};
+
+		expect(load(false)).toBe(1);
+		// Isolation stayed unreachable after the reload: keep the page up in degraded mode.
+		expect(load(false)).toBe(0);
+		expect(load(false)).toBe(0);
+		// Reaching isolation re-arms the guard for a later non-isolated load (e.g. a hard reload).
+		expect(load(true)).toBe(0);
+		expect(stored.size).toBe(0);
+		expect(load(false)).toBe(1);
+		// Without usable storage the guard cannot hold, so never reload.
+		const unavailable = {
+			getItem() {
+				throw new Error('SecurityError');
+			}
+		};
+		expect(load(false, unavailable)).toBe(0);
+		const full = {
+			getItem: () => null,
+			setItem() {
+				throw new Error('QuotaExceededError');
+			}
+		};
+		expect(load(false, full)).toBe(0);
 	});
 
 	it('renders unmeasured activity without fabricating a completion position', () => {
@@ -209,7 +251,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
 		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
-		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
+		expect(source).toMatch(
+			/<span class="material-symbols-outlined" aria-hidden="true"\s*>play_circle<\/span/
+		);
 	});
 
 	it('provides a bounded LLDB memory inspector with stale-request invalidation', () => {
@@ -355,6 +399,25 @@ describe('example route debug actions', () => {
 			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
+	});
+
+	it('keeps compiler diagnostics on the workspace files of the run that produced them', () => {
+		const sliceFunction = (name: string) => {
+			const start = source.indexOf(`function ${name}(`);
+			return source.slice(start, source.indexOf('\n\t}\n', start));
+		};
+		expect(sliceFunction('onCompileDiagnostic')).toMatch(
+			/const run = compilerDiagnosticRun;\s+if \(!run\) return;[\s\S]*fileName: resolveCompilerDiagnosticPath\(\s*diagnostic\.fileName,\s*run\.entryPath,\s*run\.workspacePaths\s*\)/
+		);
+		expect(source).toMatch(
+			/compilerDiagnostics = \[\];\s+compilerDiagnosticRun = \{\s+entryPath: activePath,\s+workspacePaths: files\.map\(\(file\) => file\.path\)\s+\};\s+const codeToRun = activeFile\.content;/
+		);
+		// Language switches, imports, and resets replace the workspace the diagnostics refer to.
+		expect(sliceFunction('activateWorkspace')).toMatch(
+			/compilerDiagnostics = \[\];\s+compilerDiagnosticRun = null;/
+		);
+		expect(sliceFunction('switchLanguage')).toContain('activateWorkspace(');
+		expect(source).not.toContain('compilerDiagnosticLanguages.has(language)');
 	});
 
 	it('preloads stdin when SharedArrayBuffer is unavailable or a start-time stdin runtime is selected', () => {
@@ -513,6 +576,110 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
 		);
+	});
+
+	it('keeps restored or picked Rust and Go targets when their runtime manifests load', () => {
+		const manifestEffect = (language: string) => {
+			const start = source.indexOf(`if (!browser || language !== '${language}') return;`);
+			expect(start).toBeGreaterThan(-1);
+			return source.slice(start, source.indexOf('\n\t});\n', start));
+		};
+		const rustEffect = manifestEffect('RUST');
+		const goEffect = manifestEffect('GO');
+		// Legacy run-time keys must not override the workspace snapshot or a later pick.
+		expect(rustEffect).not.toContain('readStoredValue');
+		expect(goEffect).not.toContain('readStoredValue');
+		expect(rustEffect).toMatch(
+			/if \(!nextAvailableRustTargetTriples\.includes\(rustTargetTriple\)\) \{\s+rustTargetTriple = nextDefaultTargetTriple;\s+\}/
+		);
+		expect(rustEffect).toMatch(
+			/if \(!availableRustTargetTriples\.includes\(rustTargetTriple\)\) \{\s+rustTargetTriple = 'wasm32-wasip1';\s+\}/
+		);
+		expect(goEffect).toMatch(
+			/if \(!nextAvailableGoTargets\.includes\(goTarget\)\) \{\s+goTarget = nextDefaultGoTarget;\s+\}/
+		);
+		expect(goEffect).toMatch(
+			/if \(!availableGoTargets\.includes\(goTarget\)\) \{\s+goTarget = 'wasip1\/wasm';\s+\}/
+		);
+		// Without a stored workspace snapshot, the legacy key still seeds the Rust target.
+		expect(source).toMatch(
+			/const storedRustTargetTriple = readStoredValue\('rustTargetTriple'\);/
+		);
+		expect(source).toMatch(
+			/rustTargetTriple = requestedRustTargetTriple;\s+\} else if \(\s*storedRustTargetTriple === 'wasm32-wasip1' \|\|\s*storedRustTargetTriple === 'wasm32-wasip2' \|\|\s*storedRustTargetTriple === 'wasm32-wasip3'\s*\) \{\s+rustTargetTriple = storedRustTargetTriple;\s+\}/
+		);
+	});
+
+	it('locks language, rename, delete, reset, and import while a run or debug session is active', () => {
+		const sliceFunction = (name: string) => {
+			const start = source.indexOf(`function ${name}(`);
+			expect(start).toBeGreaterThan(-1);
+			return source.slice(start, source.indexOf('\n\t}\n', start));
+		};
+		expect(sliceFunction('handleLanguageChange')).toMatch(
+			/if \(!workspaceInitialized \|\| runningMode\) return;/
+		);
+		expect(sliceFunction('openLanguageMenu')).toMatch(
+			/if \(!workspaceInitialized \|\| runningMode\) return;/
+		);
+		expect(sliceFunction('chooseLanguage')).toMatch(
+			/if \(workspaceInitialized && !runningMode\) switchLanguage\(nextLanguage\);/
+		);
+		expect(sliceFunction('renameActiveFile')).toMatch(/if \(!file \|\| runningMode\) return;/);
+		expect(sliceFunction('deleteActiveFile')).toMatch(/if \(!file \|\| runningMode\) return;/);
+		expect(sliceFunction('resetWorkspace')).toMatch(
+			/^function resetWorkspace\(\) \{\s+if \(runningMode\) return;/
+		);
+		// Upload and drag-and-drop both import through importFiles.
+		expect(sliceFunction('importFiles')).toMatch(
+			/^function importFiles\(fileList: File\[\]\) \{\s+if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}/
+		);
+		// An import staged before Run must not replace the workspace once the run owns it.
+		expect(sliceFunction('importFiles')).toMatch(
+			/await stageWorkspaceImport\([\s\S]*?destination\.assertCurrent\(\);\s+(?:\/\/[^\n]+\n\s+)?if \(runningMode\) \{\s+saveStatus = 'Stop the running program before importing files';\s+return;\s+\}\s+let imported/
+		);
+		expect(source.match(/disabled=\{!workspaceInitialized \|\| !!runningMode\}/g)).toHaveLength(
+			2
+		);
+		expect(source).toMatch(
+			/aria-label="Upload files"[^>]*onclick=\{\(\) => fileInput\?\.click\(\)\}\s+disabled=\{!!runningMode\}/
+		);
+		for (const handler of ['renameActiveFile', 'deleteActiveFile', 'resetWorkspace']) {
+			expect(source).toMatch(
+				new RegExp(`onclick=\\{${handler}\\} disabled=\\{!!runningMode\\}`)
+			);
+		}
+	});
+
+	it('runs the active path and workspace captured before the LLDB preflight await', () => {
+		const execStart = source.indexOf('function exec(enableDebug = false)');
+		const execSource = source.slice(execStart, source.indexOf('\n\t}\n', execStart));
+		const snapshot = execSource.indexOf('const runActivePath = activePath;');
+		expect(snapshot).toBeGreaterThan(-1);
+		// Tab switches and new files change activePath while the run is pending.
+		expect(snapshot).toBeLessThan(execSource.indexOf('await import('));
+		expect(execSource).toMatch(
+			/const runWorkspaceFiles = files\.map\(\(file\) => \(\{\s+path: file\.path,\s+content: file\.path === runActivePath \? codeToRun : file\.content\s+\}\)\);/
+		);
+		const runCall = execSource.slice(execSource.indexOf('await executeTerminalRun('));
+		expect(runCall).toMatch(/activePath: runActivePath,\s+workspaceFiles: runWorkspaceFiles,/);
+		expect(runCall).toMatch(/runWorkspaceFiles\.some\(/);
+		expect(runCall).not.toMatch(/\bfiles\.(?:map|some)\(/);
+	});
+
+	it('closes the overlay explorer at the same 960px breakpoint the stylesheet uses', () => {
+		const selectFileStart = source.indexOf('function selectFile(');
+		const selectFileSource = source.slice(
+			selectFileStart,
+			source.indexOf('\n\t}\n', selectFileStart)
+		);
+		expect(source).toMatch(/const desktopExampleLayout = \$derived\(examplePaneWidth > 960\);/);
+		expect(source).toMatch(
+			/@media \(max-width: 960px\) \{[\s\S]*?\.workspace-sidebar \{\s+position: fixed;/
+		);
+		expect(selectFileSource).toMatch(/if \(!desktopExampleLayout\) sidebarOpen = false;/);
+		expect(selectFileSource).not.toContain('compact');
+		expect(source).toMatch(/sidebarOpen = value\?\.sidebarOpen \?\? desktopExampleLayout;/);
 	});
 
 	it('persists and forwards the selected C++ standard', () => {
@@ -1163,7 +1330,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/const terminalPanePixelWidth = \$derived\.by\(\(\) => \{/);
 		expect(source).toMatch(/\{#if debugLanguage && debug\.active\}/);
 		expect(source).toMatch(/class="panel-resizer"/);
-		expect(source).toMatch(/role="slider"/);
+		expect(source).toMatch(/role="separator"/);
 		expect(source).toMatch(/onpointerdown=\{\(event\) => \{/);
 		expect(source).toMatch(/onkeydown=\{\(event\) => \{/);
 		expect(source).toMatch(/height: 100dvh;/);
@@ -1173,7 +1340,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s
 		);
-		expect(source).toMatch(/role="slider"/);
+		// A focusable pane splitter is a separator whose orientation is the divider's own (vertical).
+		expect(source).toMatch(
+			/class="panel-resizer"\s+role="separator"\s+aria-label="Resize example panes"\s+aria-orientation="vertical"/
+		);
+		expect(source).toMatch(
+			/aria-valuenow=\{desktopExampleLayout\s+\? \(terminalPanePixelWidth \?\? undefined\)/
+		);
+		expect(source).not.toContain('role="slider"');
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
 		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
@@ -1191,6 +1365,44 @@ describe('example route debug actions', () => {
 	it('keys recursive call stack entries by index so duplicate frames still render', () => {
 		expect(source).toMatch(
 			/\{#each debug\.callStack as frame, index \(`\$\{frame\.functionName\}:\$\{frame\.line\}:\$\{index\}`\)\}/
+		);
+	});
+
+	it('keeps icon ligatures out of accessible names and labels every form control', () => {
+		const markup = source.slice(source.indexOf('</script>'), source.indexOf('<style'));
+		const iconTags = markup.match(/<span\b[^>]*\bmaterial-symbols-outlined\b[^>]*>/g) ?? [];
+		expect(iconTags.length).toBeGreaterThan(0);
+		// Otherwise buttons read as "save Save" and selects as "conversion_path".
+		expect(iconTags.filter((tag) => !tag.includes('aria-hidden="true"'))).toEqual([]);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">C\+\+ standard<\/span>\s+<select id="cpp-version"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Rust target<\/span>\s+<select id="rust-target-triple"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Go target<\/span>\s+<select id="go-target"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">OCaml backend<\/span>\s+<select id="ocaml-backend"/
+		);
+		expect(markup).toMatch(
+			/<span class="visually-hidden">Binaryen mode<\/span>\s+<select id="ocaml-binaryen-mode"/
+		);
+		expect(markup).toMatch(
+			/<textarea\s+bind:value=\{stdinInput\}\s+aria-label="Preloaded stdin"/
+		);
+	});
+
+	it('does not announce the autosave indicator on every edit', () => {
+		const saveState = source.match(
+			/<span\s+class="save-state save-state--\{workspaceSaveState\.phase\}"[^>]*>/
+		)?.[0];
+		expect(saveState).toBeTruthy();
+		expect(saveState).not.toMatch(/role=|aria-live=/);
+		// Failed saves are still announced through the dedicated alert banner.
+		expect(source).toMatch(
+			/\{#if workspaceSaveState\.phase === 'error'\}\s+<div class="workspace-save-error" role="alert">/
 		);
 	});
 });

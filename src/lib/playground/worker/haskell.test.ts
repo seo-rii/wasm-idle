@@ -417,8 +417,71 @@ describe('Haskell worker', () => {
 				message: 'Bad helper'
 			})
 		});
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'src/Main.hs:2:1: error: Bad main\n' },
+			{ output: 'lib/Helper.hs:3:2: warning: Bad helper\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'compile failed' });
+	});
+
+	it('maps GHC 9.6+ span diagnostics back to workspace paths', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) { this.options = options; }
+			}
+			export async function main(options) {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async () => {
+								const stderr = options.rpc.options.stderr;
+								stderr('/tmp/Main.hs:3:8-11: error: [GHC-88464]');
+								stderr('    Variable not in scope: nope :: IO ()');
+								stderr('/tmp/wasm-idle-workspace/lib/Helper.hs:(2,1)-(3,9): warning: [GHC-62161] [-Wincomplete-patterns]');
+								stderr('    Pattern match(es) are non-exhaustive');
+								throw new Error('compile failed');
+							};
+						}
+					}
+				};
+			}
+		`);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'main = nope',
+				prepare: false,
+				activePath: 'src/Main.hs',
+				workspaceFiles: [
+					{ path: 'lib/Helper.hs', content: 'module Helper where\nhelper 0 = 1' }
+				]
+			}
+		});
+
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: 'src/Main.hs:2:1: error: Bad main\nlib/Helper.hs:3:2: warning: Bad helper'
+			diagnostic: {
+				fileName: 'src/Main.hs',
+				lineNumber: 3,
+				columnNumber: 8,
+				severity: 'error',
+				message: 'Variable not in scope: nope :: IO ()'
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			diagnostic: {
+				fileName: 'lib/Helper.hs',
+				lineNumber: 2,
+				columnNumber: 1,
+				severity: 'warning',
+				message: 'Pattern match(es) are non-exhaustive'
+			}
 		});
 	});
 
@@ -663,9 +726,58 @@ describe('Haskell worker', () => {
 				message: 'Variable not in scope: nope'
 			}
 		});
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: 'main.hs:2:1: error: Variable not in scope: nope'
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'main.hs:2:1: error: Variable not in scope: nope\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'compile failed' });
+	});
+
+	it('reports a failed run without repeating already-streamed stderr', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) { this.options = options; }
+			}
+			export async function main(options) {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async () => {
+								options.rpc.options.stdout('before');
+								options.rpc.options.stderr('<interactive>: boom');
+								options.rpc.options.stderr('CallStack (from HasCallStack):');
+								throw new Error('ExitFailure 1');
+							};
+						}
+					}
+				};
+			}
+		`);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
 		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'main = putStrLn "before" >> error "boom"',
+				prepare: false,
+				activePath: 'main.hs'
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'before\n' },
+			{ output: '<interactive>: boom\n' },
+			{ output: 'CallStack (from HasCallStack):\n' }
+		]);
+		expect(messages.filter((message: any) => 'diagnostic' in message)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ error: 'ExitFailure 1' });
 	});
 
 	it('parses multiline GHC diagnostics without running the worker', async () => {
@@ -684,6 +796,83 @@ describe('Haskell worker', () => {
 				columnNumber: 7,
 				severity: 'warning',
 				message: "Defined but not used: 'value'"
+			}
+		]);
+	});
+
+	it('parses GHC 9.6+ diagnostics with error codes, flag tags, and spans', async () => {
+		const { parseHaskellDiagnostics } = await import('./haskell');
+
+		expect(
+			parseHaskellDiagnostics(`main.hs:3:8: error: [GHC-88464]
+    Variable not in scope: nope :: IO ()
+  |
+3 | main = nope
+  |        ^^^^
+
+main.hs:5:15-21: error: [GHC-83865]
+    • Couldn't match type ‘[Char]’ with ‘Int’
+      Expected: Int
+        Actual: String
+    • In the first argument of ‘print’, namely ‘("hello" :: Int)’
+      In the expression: print ("hello" :: Int)
+  |
+5 | other = print ("hello" :: Int)
+  |               ^^^^^^^
+
+main.hs:(7,1)-(8,15): warning: [GHC-62161] [-Wincomplete-patterns]
+    Pattern match(es) are non-exhaustive
+    In an equation for ‘classify’:
+        Patterns of type ‘Int’ not matched: p where p is not one of {0}
+  |
+7 | classify 0 = "zero"
+  | ^^^^^^^^^^^^^^^^^^^...
+
+main.hs:10:1: error: [GHC-40910] [-Wunused-top-binds, Werror=unused-top-binds]
+    Defined but not used: ‘unused’
+   |
+10 | unused = 1
+   | ^^^^^^
+
+main.hs:12:7: error: [GHC-58481] parse error on input ‘=’
+   |
+12 | broken = = 1
+   |          ^`)
+		).toEqual([
+			{
+				fileName: 'main.hs',
+				lineNumber: 3,
+				columnNumber: 8,
+				severity: 'error',
+				message: 'Variable not in scope: nope :: IO ()'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 5,
+				columnNumber: 15,
+				severity: 'error',
+				message: "• Couldn't match type ‘[Char]’ with ‘Int’"
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 7,
+				columnNumber: 1,
+				severity: 'warning',
+				message: 'Pattern match(es) are non-exhaustive'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 10,
+				columnNumber: 1,
+				severity: 'error',
+				message: 'Defined but not used: ‘unused’'
+			},
+			{
+				fileName: 'main.hs',
+				lineNumber: 12,
+				columnNumber: 7,
+				severity: 'error',
+				message: 'parse error on input ‘=’'
 			}
 		]);
 	});

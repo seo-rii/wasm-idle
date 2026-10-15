@@ -118,6 +118,30 @@ test('host pipeline compiles a multi-module JavaScript fixture', async () => {
 	);
 });
 
+test('host pipeline compiles workspace sources in ocamlc dependency order', async () => {
+	const result = await compileOnHost(
+		{
+			files: {
+				'app.ml': 'let () = print_endline (Util.greet "workspace")\n',
+				'util.ml': 'let greet name = "hello " ^ name\n',
+				'util.mli': 'val greet : string -> string\n',
+				'README.md': '# notes\n'
+			},
+			entry: 'app.ml',
+			target: 'js'
+		},
+		{
+			switchPrefix
+		}
+	);
+
+	assert.equal(result.success, true, result.stderr);
+	assert.ok(
+		result.artifacts.some((artifact) => artifact.path.endsWith('/app.js')),
+		'expected a JavaScript artifact for the workspace entrypoint'
+	);
+});
+
 test('host pipeline surfaces diagnostics for compile failures', async () => {
 	const source = await readFile(
 		path.join(projectRoot, 'fixtures', 'diagnostics', 'type_error.ml'),

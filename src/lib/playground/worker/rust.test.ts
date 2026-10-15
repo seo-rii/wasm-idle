@@ -2,6 +2,9 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Resolve the shared dependency graph during collection, before per-case worker setup.
+import '@wasm-idle/core';
+
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 import {
 	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
@@ -91,7 +94,7 @@ function compilerBootstrap(compilerUrl: string) {
 }
 
 describe('Rust worker', () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.resetModules();
 		mockCompilerModules.clear();
 		nextMockCompilerId = 0;
@@ -122,6 +125,63 @@ describe('Rust worker', () => {
 			if (!moduleUrl) throw new Error(`Unexpected Rust compiler module URL: ${url}`);
 			return import(/* @vite-ignore */ moduleUrl);
 		};
+		// Prepare this fresh worker realm before a functional case starts its wall clock.
+		await import('./rust');
+	});
+
+	it('creates a fresh private host channel for each run and retires its callback between runs', async () => {
+		(globalThis as any).__moduleServiceFactories = [];
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler(options) {
+				globalThis.__moduleServiceFactory = options.dependencies.createRustcModuleService;
+				if (globalThis.__moduleServiceFactory) globalThis.__moduleServiceFactories.push(globalThis.__moduleServiceFactory);
+				return { async compile() {
+					const previous = globalThis.__moduleServiceFactories.at(-2);
+					if (previous) {
+						try { previous(); globalThis.__previousModuleServiceExpired = false; }
+						catch (error) { globalThis.__previousModuleServiceExpired = error.message.includes('run expired'); }
+					}
+					const service = globalThis.__moduleServiceFactory();
+					globalThis.__lastModuleServicePort = service.port;
+					service.close();
+					return { success: true, artifact: { wasm: new Uint8Array([0,97,115,109]), targetTriple: 'wasm32-wasip1', format: 'core-wasm' } };
+				} };
+			}
+			export async function executeBrowserRustArtifact() { return { exitCode: 0, stdout: '', stderr: '' }; }
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({ data: compilerBootstrap(compilerModuleUrl) });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+		const ports: MessagePort[] = [];
+		for (const code of ['fn main() {}', 'fn main() { }']) {
+			const broker = new MessageChannel();
+			const requested = new Promise<MessageEvent<any>>((resolve) => {
+				broker.port1.onmessage = resolve;
+			});
+			await (globalThis as any).self.onmessage({
+				data: {
+					code,
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					limits: nonDebugExecutionLimits,
+					rustcModuleBroker: broker.port2
+				}
+			});
+			expect((globalThis as any).postMessage).not.toHaveBeenCalledWith(
+				expect.objectContaining({ error: expect.any(String) })
+			);
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+			const request = await requested;
+			expect(request.data.type).toBe('rustc-module-service');
+			expect(request.data.port).toBeInstanceOf(MessagePort);
+			expect(request.data.receipt).toBeUndefined();
+			ports.push((globalThis as any).__lastModuleServicePort);
+			expect(() => (globalThis as any).__moduleServiceFactory()).toThrow('run expired');
+			request.data.port.close();
+			broker.port1.close();
+		}
+		expect(ports[0]).not.toBe(ports[1]);
+		expect((globalThis as any).__previousModuleServiceExpired).toBe(true);
 	});
 
 	it('gives the producer an immutable per-run cache backend and respects one-call false', async () => {

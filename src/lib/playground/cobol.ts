@@ -1,4 +1,5 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 import {
 	resolveCobolBaseUrl,
 	resolveRuntimeAssetConfig,
@@ -62,6 +63,7 @@ class Cobol implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	activeCobolBaseUrl = '';
 	private activeOperation: CobolOperation | null = null;
+	private runtimeAssetCache?: RuntimeAssetCache;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('COBOL sandbox disposed', {
@@ -88,6 +90,14 @@ class Cobol implements Sandbox {
 			this.pendingEof = false;
 		}
 	});
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.runtimeAssetCache === cache) return;
+		if (this.disposed || this.worker || this.activeOperation) {
+			throw new RuntimeConfigurationError('Cannot replace an active COBOL compiler cache');
+		}
+		this.runtimeAssetCache = cache;
+	}
 
 	private beginOperation(phase: CobolOperation['phase']) {
 		if (this.disposed) {
@@ -339,7 +349,9 @@ class Cobol implements Sandbox {
 							'clang',
 							clangAssets,
 							progress,
-							limits.maxAssetBytes
+							limits.maxAssetBytes,
+							false,
+							this.runtimeAssetCache
 						);
 					} catch (error) {
 						try {

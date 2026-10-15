@@ -1,6 +1,7 @@
 import {
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
+	OutputLimitError,
 	type Sandbox,
 	type SandboxExecutionOptions,
 	type SandboxProgress,
@@ -21,6 +22,10 @@ import type {
 } from '@wasm-idle/llvm-core/clang';
 import type { CompilerDiagnostic } from '@wasm-idle/llvm-core/clang';
 import { CompiledArtifactCache, clangCompileKey } from './compiledArtifactCache';
+import { CLANG_STDIN_DATA, CLANG_STDIN_EOF, CLANG_STDIN_HEADER_BYTES } from './clangWorkerProtocol';
+
+const MAX_BUFFERED_INPUT_BYTES = 128 * 1024;
+const MAX_HEADER_BUILD_TIMEOUT_MS = 30_000;
 
 type WorkerFactories = { compile(): Worker | Promise<Worker>; execute(): Worker | Promise<Worker> };
 const workers: WorkerFactories = {
@@ -58,56 +63,106 @@ export function createCachedClangSandbox(
 	let inputBuffer: SharedArrayBuffer | undefined;
 	let inputRequested = false;
 	let pendingEof = false;
+	let loadedMaxInputBytes = MAX_BUFFERED_INPUT_BYTES;
+	let maxBufferedInputBytes = loadedMaxInputBytes;
+	let pendingInputBytes = 0;
+	let loadedHeaderTimeoutMs = MAX_HEADER_BUILD_TIMEOUT_MS;
+	let headerTimeoutMs = loadedHeaderTimeoutMs;
+	let loadedMaxWorkers = 1;
+	let maxWorkers = loadedMaxWorkers;
 	const pendingInput: Uint8Array[] = [];
 	const encoder = new TextEncoder();
-	// Built in the background by the compile worker after a <bits/stdc++.h> source; it outlives
-	// runs and cancellations and is discarded only with the sandbox.
+	// Header builds survive ordinary cancellation, within their own deadline and Worker budget.
 	let precompiledHeader: BrowserClangPrecompiledHeader | undefined;
 	let headerWorker: { worker: Worker; dispose(): void } | undefined;
 
+	function disposeWorker(worker: Worker, bridge?: WorkerAssetBridge) {
+		worker.onmessage = null;
+		worker.onerror = null;
+		worker.onmessageerror = null;
+		try {
+			bridge?.dispose();
+		} catch {
+			// Cleanup must preserve the primary result and still attempt Worker termination.
+		}
+		try {
+			worker.terminate();
+		} catch {
+			// Preserve the primary result even if a custom Worker fails to terminate.
+		}
+	}
+
 	function adoptHeaderWorker(worker: Worker, bridge?: WorkerAssetBridge) {
 		headerWorker?.dispose();
+		let settled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
 		const dispose = () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
 			if (headerWorker?.worker === worker) headerWorker = undefined;
-			bridge?.dispose();
-			worker.onmessage = null;
-			worker.onerror = null;
-			worker.onmessageerror = null;
-			worker.terminate();
+			disposeWorker(worker, bridge);
 		};
 		headerWorker = { worker, dispose };
+		timeout = setTimeout(dispose, headerTimeoutMs);
 		worker.onerror = dispose;
 		worker.onmessageerror = dispose;
 		worker.onmessage = (event) => {
-			if (bridge?.handleMessage(event)) return;
-			if (event.data?.type !== 'precompiled-header') return;
-			if (event.data.header) precompiledHeader = event.data.header;
-			dispose();
+			if (settled || disposed || headerWorker?.worker !== worker) return;
+			try {
+				if (bridge?.handleMessage(event)) return;
+				if (event.data?.type === 'error' && event.data.code === 'output-limit') {
+					dispose();
+					return;
+				}
+				if (event.data?.type !== 'precompiled-header') return;
+				if (event.data.header) precompiledHeader = event.data.header;
+				dispose();
+			} catch {
+				dispose();
+			}
 		};
 	}
 
 	function resetInput() {
 		pendingInput.length = 0;
+		pendingInputBytes = 0;
 		pendingEof = false;
 		inputRequested = false;
 		inputBuffer = undefined;
+		maxBufferedInputBytes = loadedMaxInputBytes;
+	}
+
+	function bufferedInputBytes() {
+		const control = inputBuffer && new Int32Array(inputBuffer, 0, 2);
+		// DATA remains owned by the consumer until it requests its next chunk.
+		const publishedBytes =
+			control && Atomics.load(control, 0) === CLANG_STDIN_DATA ? Atomics.load(control, 1) : 0;
+		return pendingInputBytes + publishedBytes;
+	}
+
+	function assertInputCapacity(actual: number, limit = maxBufferedInputBytes) {
+		if (actual > limit) {
+			throw new RangeError(`C/C++ stdin buffered bytes exceed ${limit}`);
+		}
 	}
 
 	function flushInput() {
 		if (!inputRequested || !inputBuffer) return;
 		const control = new Int32Array(inputBuffer, 0, 2);
-		const payload = new Uint8Array(inputBuffer, 8);
+		const payload = new Uint8Array(inputBuffer, CLANG_STDIN_HEADER_BYTES);
 		const next = pendingInput[0];
 		if (next) {
 			const length = Math.min(next.byteLength, payload.byteLength);
 			payload.set(next.subarray(0, length));
 			if (length === next.byteLength) pendingInput.shift();
-			else pendingInput[0] = next.subarray(length);
+			else pendingInput[0] = next.slice(length);
+			pendingInputBytes -= length;
 			Atomics.store(control, 1, length);
-			Atomics.store(control, 0, 1);
+			Atomics.store(control, 0, CLANG_STDIN_DATA);
 		} else if (pendingEof) {
 			Atomics.store(control, 1, 0);
-			Atomics.store(control, 0, 2);
+			Atomics.store(control, 0, CLANG_STDIN_EOF);
 		} else return;
 		inputRequested = false;
 		Atomics.notify(control, 0);
@@ -129,9 +184,11 @@ export function createCachedClangSandbox(
 		signal?: AbortSignal,
 		executionAssetConfig = assetConfig
 	) {
+		// The background compiler and the next foreground Worker share one budget.
+		if (headerWorker && maxWorkers < 2) headerWorker.dispose();
 		const worker = await factory();
 		if (token !== generation || signal?.aborted) {
-			worker.terminate();
+			disposeWorker(worker);
 			throw signal?.reason ?? new Error('Process terminated');
 		}
 		return new Promise<T>((resolve, reject) => {
@@ -148,7 +205,7 @@ export function createCachedClangSandbox(
 						runtimeCache
 					);
 			} catch (error) {
-				worker.terminate();
+				disposeWorker(worker);
 				reject(error);
 				return;
 			}
@@ -164,14 +221,8 @@ export function createCachedClangSandbox(
 				activeWorker = undefined;
 				cancelWorker = undefined;
 				signal?.removeEventListener('abort', abort);
-				worker.onmessage = null;
-				worker.onerror = null;
-				worker.onmessageerror = null;
 				if (keepForHeader) adoptHeaderWorker(worker, bridge);
-				else {
-					bridge?.dispose();
-					worker.terminate();
-				}
+				else disposeWorker(worker, bridge);
 				if (error) reject(error);
 				else resolve(value!);
 			};
@@ -203,6 +254,16 @@ export function createCachedClangSandbox(
 						});
 						flushInput();
 					} else if (data.type === 'compiled' || data.type === 'error') {
+						if (data.type === 'error' && data.code === 'output-limit') {
+							finish(
+								new OutputLimitError(data.error, {
+									limit: data.limit,
+									actual: data.actual,
+									phase: 'compile'
+								})
+							);
+							return;
+						}
 						for (const diagnostic of data.diagnostics ?? []) {
 							legacy.oncompilerdiagnostic?.({ ...diagnostic });
 						}
@@ -271,6 +332,16 @@ export function createCachedClangSandbox(
 			runtimeBaseUrl = assetConfig.baseUrl;
 			maxAssetBytes = resolveExecutionLimits(options.limits).maxAssetBytes;
 			maxWasmMemoryBytes = resolveExecutionLimits(options.limits).maxWasmMemoryBytes;
+			loadedMaxInputBytes = Math.min(
+				MAX_BUFFERED_INPUT_BYTES,
+				resolveExecutionLimits(options.limits).maxWorkspaceBytes
+			);
+			maxBufferedInputBytes = loadedMaxInputBytes;
+			loadedHeaderTimeoutMs = Math.min(
+				MAX_HEADER_BUILD_TIMEOUT_MS,
+				resolveExecutionLimits(options.limits).compileTimeoutMs
+			);
+			loadedMaxWorkers = resolveExecutionLimits(options.limits).maxWorkers;
 			languageSysroots = config?.clang?.bundledLanguageSysroots === true;
 		},
 		async run(
@@ -311,6 +382,14 @@ export function createCachedClangSandbox(
 			};
 			options.signal?.throwIfAborted();
 			const token = ++generation;
+			headerTimeoutMs = Math.min(
+				loadedHeaderTimeoutMs,
+				resolveExecutionLimits(options.limits).compileTimeoutMs
+			);
+			maxWorkers = Math.min(
+				loadedMaxWorkers,
+				resolveExecutionLimits(options.limits).maxWorkers
+			);
 			// Reactive UI arrays/records are Proxies and cannot cross postMessage.
 			// Snapshot known fields before awaiting compilation, so the cache key,
 			// compiler and executor also observe the same input values.
@@ -339,12 +418,28 @@ export function createCachedClangSandbox(
 					? undefined
 					: Object.fromEntries(Object.entries(options.env));
 			const stdin = options.stdin;
+			const inputLimit = Math.min(
+				loadedMaxInputBytes,
+				resolveExecutionLimits(options.limits).maxWorkspaceBytes
+			);
+			if (!prepare && typeof stdin === 'string') {
+				// A string stdin is a complete input stream and replaces any queued writes.
+				// Check UTF-16 length first to avoid encoding an arbitrarily large write.
+				assertInputCapacity(stdin.length, inputLimit);
+				assertInputCapacity(encoder.encode(stdin).byteLength, inputLimit);
+				resetInput();
+				pendingEof = true;
+			} else {
+				assertInputCapacity(bufferedInputBytes(), inputLimit);
+			}
 			const limit = Math.min(
 				maxAssetBytes,
 				resolveExecutionLimits(options.limits).maxAssetBytes
 			);
 			const key = clangCompileKey(runtimeBaseUrl, limit, request, languageSysroots);
 			let artifact = cache.get(key);
+			// Per-run backpressure starts only after admission and ends with this run.
+			maxBufferedInputBytes = inputLimit;
 			running = true;
 			try {
 				if (artifact) {
@@ -361,6 +456,7 @@ export function createCachedClangSandbox(
 							request,
 							runtimeBaseUrl,
 							maxAssetBytes: limit,
+							maxOutputBytes: resolveExecutionLimits(options.limits).maxOutputBytes,
 							languageSysroots,
 							log,
 							persistentCache: executionAssetConfig.persistentCache,
@@ -386,7 +482,9 @@ export function createCachedClangSandbox(
 				}
 				progress?.set?.(1);
 				if (prepare) return true;
-				inputBuffer = new SharedArrayBuffer(65536 + 8);
+				inputBuffer = new SharedArrayBuffer(
+					Math.min(65536, maxBufferedInputBytes) + CLANG_STDIN_HEADER_BYTES
+				);
 				return await workerOperation<boolean>(
 					() => factories.execute(),
 					{
@@ -408,13 +506,23 @@ export function createCachedClangSandbox(
 			} finally {
 				if (token === generation) {
 					running = false;
+					maxBufferedInputBytes = loadedMaxInputBytes;
 					if (!prepare) resetInput();
 				}
 			}
 		},
 		write(input: string) {
+			if (disposed) throw new Error('C/C++ sandbox was disposed');
 			if (!cached) return legacy.write?.(input);
-			if (input) pendingInput.push(encoder.encode(input));
+			if (pendingEof) throw new Error('C/C++ stdin is closed');
+			if (input) {
+				const buffered = bufferedInputBytes();
+				assertInputCapacity(buffered + input.length);
+				const bytes = encoder.encode(input);
+				assertInputCapacity(buffered + bytes.byteLength);
+				pendingInput.push(bytes);
+				pendingInputBytes += bytes.byteLength;
+			}
 			flushInput();
 		},
 		eof() {

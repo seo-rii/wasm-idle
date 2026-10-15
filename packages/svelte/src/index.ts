@@ -1,6 +1,7 @@
 import {
 	createPlaygroundBinding,
 	type PlaygroundBinding,
+	type PlaygroundBindingOptions,
 	type SandboxLoader,
 	type SandboxRuntimeAssets,
 	type TerminalControl
@@ -15,7 +16,7 @@ export interface SvelteWasmIdleHost {
 	dispose: () => Promise<void>;
 }
 
-export interface SvelteWasmIdleHostOptions {
+export interface SvelteWasmIdleHostOptions extends PlaygroundBindingOptions {
 	registerDispose?: (cleanup: () => void) => void;
 }
 
@@ -24,15 +25,29 @@ export function createSvelteWasmIdleHost(
 	loadSandbox: SandboxLoader,
 	options: SvelteWasmIdleHostOptions = {}
 ): SvelteWasmIdleHost {
-	const binding = createPlaygroundBinding(runtimeAssets, loadSandbox);
+	const { registerDispose, ...bindingOptions } = options;
+	const binding = createPlaygroundBinding(runtimeAssets, loadSandbox, bindingOptions);
 	const terminal = writable<TerminalControl | undefined>(undefined);
 	let currentTerminal: TerminalControl | undefined;
 	const dispose = async () => {
 		const terminalToDispose = currentTerminal;
 		currentTerminal = undefined;
 		terminal.set(undefined);
-		if (terminalToDispose) await terminalToDispose.destroy();
-		await binding.dispose();
+		const failures: unknown[] = [];
+		try {
+			if (terminalToDispose) await terminalToDispose.destroy();
+		} catch (error) {
+			failures.push(error);
+		}
+		try {
+			await binding.dispose();
+		} catch (error) {
+			failures.push(error);
+		}
+		if (failures.length === 1) throw failures[0];
+		if (failures.length > 1) {
+			throw new AggregateError(failures, 'Failed to dispose the Svelte wasm-idle host');
+		}
 	};
 	const host: SvelteWasmIdleHost = {
 		binding,
@@ -44,7 +59,7 @@ export function createSvelteWasmIdleHost(
 		},
 		dispose
 	};
-	options.registerDispose?.(() => {
+	registerDispose?.(() => {
 		void dispose().catch(() => {});
 	});
 	return host;
@@ -52,12 +67,14 @@ export function createSvelteWasmIdleHost(
 
 export function createSveltePlaygroundBinding(
 	runtimeAssets: SandboxRuntimeAssets,
-	loadSandbox: SandboxLoader
+	loadSandbox: SandboxLoader,
+	options?: PlaygroundBindingOptions
 ): PlaygroundBinding {
-	return createPlaygroundBinding(runtimeAssets, loadSandbox);
+	return createPlaygroundBinding(runtimeAssets, loadSandbox, options);
 }
 export type {
 	PlaygroundBinding,
+	PlaygroundBindingOptions,
 	SandboxLoader,
 	SandboxRuntimeAssets,
 	TerminalControl

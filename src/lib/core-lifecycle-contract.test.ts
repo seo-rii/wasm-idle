@@ -1,5 +1,10 @@
 import { RuntimeConfigurationError, createPlaygroundBinding, type Sandbox } from '@wasm-idle/core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => {
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 function sandboxWithLifecycle(overrides: Partial<Sandbox> = {}): Sandbox {
 	return {
@@ -14,6 +19,111 @@ function sandboxWithLifecycle(overrides: Partial<Sandbox> = {}): Sandbox {
 }
 
 describe('playground binding lifecycle', () => {
+	it('bounds disposal even if the adapter never completes cleanup', async () => {
+		vi.useFakeTimers();
+		const dispose = vi.fn(() => new Promise<void>(() => undefined));
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			sandboxWithLifecycle({ dispose })
+		);
+		const sandbox = await binding.load('C');
+		const pending = sandbox.dispose!();
+		const rejection = expect(pending).rejects.toMatchObject({
+			code: 'timeout',
+			phase: 'dispose',
+			timeoutMs: 1_000
+		});
+		await vi.advanceTimersByTimeAsync(1_000);
+		await rejection;
+		expect(sandbox.dispose!()).toBe(pending);
+		await expect(sandbox.run('', false)).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			phase: 'dispose'
+		});
+		await expect(binding.dispose()).resolves.toBeUndefined();
+		expect(dispose).toHaveBeenCalledOnce();
+	});
+
+	it('does not retain failed individual disposals in binding ownership', async () => {
+		const failure = new Error('dispose failed');
+		const dispose = vi.fn(async () => {
+			throw failure;
+		});
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			sandboxWithLifecycle({ dispose })
+		);
+		for (let index = 0; index < 100; index += 1) {
+			const sandbox = await binding.load('C');
+			await expect(sandbox.dispose?.()).rejects.toBe(failure);
+		}
+		// A retained failed disposal promise would make this reject again.
+		await expect(binding.dispose()).resolves.toBeUndefined();
+		expect(dispose).toHaveBeenCalledTimes(100);
+	});
+
+	it('allows prewarming again after the final consumer releases its language', async () => {
+		let idle!: () => void;
+		vi.stubGlobal('window', {
+			requestIdleCallback: (fn: () => void) => {
+				idle = fn;
+				return 1;
+			},
+			cancelIdleCallback: vi.fn()
+		});
+		vi.stubGlobal('document', { visibilityState: 'visible' });
+		vi.stubGlobal('navigator', {});
+		const loader = vi.fn(async () => sandboxWithLifecycle());
+		const binding = createPlaygroundBinding('/runtime', loader, { prewarm: true });
+		const first = await binding.load('C');
+		const second = await binding.load('C');
+		await first.dispose?.();
+		expect(await binding.prewarm?.('C')).toBe(false);
+		await second.dispose?.();
+		const warm = binding.prewarm!('C');
+		idle();
+		expect(await warm).toBe(true);
+		expect(loader).toHaveBeenCalledTimes(3);
+		await binding.dispose();
+	});
+
+	it('waits for all owned cleanup attempts before reporting their failures', async () => {
+		let finishSecond!: () => void;
+		const firstError = new Error('first dispose');
+		const secondError = new Error('second dispose');
+		const entries = [
+			sandboxWithLifecycle({
+				dispose: () => {
+					throw firstError;
+				}
+			}),
+			sandboxWithLifecycle({
+				dispose: async () => {
+					await new Promise<void>((resolve) => {
+						finishSecond = resolve;
+					});
+					throw secondError;
+				}
+			})
+		];
+		const binding = createPlaygroundBinding('/runtime', async () => entries.shift()!);
+		await binding.load('C');
+		await binding.load('CPP');
+		let settled = false;
+		const disposed = binding.dispose();
+		void disposed.then(
+			() => {
+				settled = true;
+			},
+			() => {
+				settled = true;
+			}
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		finishSecond();
+		await expect(disposed).rejects.toMatchObject({ errors: [firstError, secondError] });
+	});
+
 	it('disposes every owned sandbox exactly once', async () => {
 		const firstDispose = vi.fn(async () => undefined);
 		const secondTerminate = vi.fn();

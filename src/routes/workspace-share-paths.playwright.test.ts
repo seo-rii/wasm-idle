@@ -2,6 +2,7 @@
 
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { WORKSPACE_BACKUP_FORMAT } from './workspaceBackup';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import {
 	runWithBrowserProbeSessionLock,
@@ -104,4 +105,78 @@ describe('strict shared workspace paths', () => {
 			).toBe('int retained_local = 17;');
 		});
 	});
+});
+
+describe('binary workspace JSON boundary', () => {
+	it.each([
+		{ source: 'share', content: 'data:application/octet-stream;base64,A' },
+		{ source: 'backup', content: 'not a data URL' }
+	])(
+		'refuses malformed binary $source input and preserves local work',
+		browserOptions,
+		async ({ source, content }) => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const local = {
+					version: 6,
+					language: 'CPP',
+					activePath: 'prior.cpp',
+					files: [{ path: 'prior.cpp', content: 'int retained_binary_boundary = 19;' }],
+					lspEnabled: false,
+					sidebarOpen: true
+				};
+				await context.addInitScript(
+					(value) =>
+						localStorage.setItem(
+							'wasm-idle:example-workspace:v3',
+							JSON.stringify(value)
+						),
+					local
+				);
+				const invalid = {
+					version: 6,
+					language: 'CPP',
+					activePath: 'payload.bin',
+					files: [{ path: 'payload.bin', content, encoding: 'data-url' }]
+				};
+				const url = new URL(browserUrl);
+				if (source === 'share') {
+					url.hash =
+						'workspace=' + Buffer.from(JSON.stringify(invalid)).toString('base64url');
+				}
+				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.waitForFunction(
+					() =>
+						(window as any).__wasmIdleDebug?.getEditorValue() ===
+						'int retained_binary_boundary = 19;'
+				);
+				if (source === 'backup') {
+					await page.locator('[data-workspace-save-state="saved"]').waitFor();
+					const before = await page.evaluate(() =>
+						localStorage.getItem('wasm-idle:example-workspace:v3')
+					);
+					await page.locator('input[type="file"]').setInputFiles({
+						name: 'malformed-workspace.json',
+						mimeType: 'application/json',
+						buffer: Buffer.from(
+							JSON.stringify({ format: WORKSPACE_BACKUP_FORMAT, snapshot: invalid })
+						)
+					});
+					await page.getByText(/^Import failed:.*files\[\]\.content/u).waitFor();
+					expect(await page.locator('input[type="file"]').inputValue()).toBe('');
+					expect(
+						await page.evaluate(() =>
+							localStorage.getItem('wasm-idle:example-workspace:v3')
+						)
+					).toBe(before);
+				}
+				expect(
+					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+				).toBe(local.files[0].content);
+				expect(await page.locator('button[title="payload.bin"]').count()).toBe(0);
+				expect(new URL(page.url()).searchParams.has('workspace')).toBe(false);
+				expect(await page.getByText('Internal Error', { exact: true }).count()).toBe(0);
+			});
+		}
+	);
 });

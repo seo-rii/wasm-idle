@@ -548,6 +548,30 @@ describe('getCppLanguageServer', () => {
 		});
 	});
 
+	it.each([0, -1, 0.5, NaN, Infinity, 2 ** 31, Number.MAX_SAFE_INTEGER])(
+		'rejects an invalid request timeout before loading assets or starting a worker: %s',
+		async (requestTimeoutMs) => {
+			const loader = vi.fn(({ asset }: { asset: string }) =>
+				asset === 'clangd.js' ? jsBytes : deliveryBytes
+			);
+			const createWorker = vi.fn(() => new mockState.FakeWorker() as unknown as Worker);
+
+			await expect(
+				getCppLanguageServer({
+					cpp: { baseUrl: 'https://static.example.com/clangd/', loader },
+					requestTimeoutMs,
+					createWorker
+				})
+			).rejects.toThrow(
+				'Clangd request timeout must be an integer between 1 and 2147483647 ms'
+			);
+
+			expect(loader).not.toHaveBeenCalled();
+			expect(createWorker).not.toHaveBeenCalled();
+			expect(mockState.workers).toHaveLength(0);
+		}
+	);
+
 	it('propagates caller cancellation into asset preflight', async () => {
 		const controller = new AbortController();
 		const loader = vi.fn();

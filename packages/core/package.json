@@ -9,6 +9,11 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./runtime-wasm-module-service": {
+			"types": "./dist/runtime-wasm-module-service.d.ts",
+			"import": "./dist/runtime-wasm-module-service.js",
+			"default": "./dist/runtime-wasm-module-service.js"
 		}
 	},
 	"files": [

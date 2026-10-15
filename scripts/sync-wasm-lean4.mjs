@@ -13,8 +13,227 @@ const WORKER_URL = new URL('./runtime-workers/wasm-lean4-runner-worker.js', impo
 const PLACEHOLDER = '__WASM_IDLE_LEAN4_ASSET_LOCK__';
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_ATTEMPTS = 3;
+const MAX_ASSET_BYTES = 24_000_000;
+const MAX_WASM_BYTES = 512 * 1024 * 1024;
+const MAX_CHUNK_BYTES = 48 * 1024 * 1024;
+const REQUIRED_ASSETS = [
+	'producer-receipt.json',
+	'lean.mjs',
+	'lean.wasm.gz.bin',
+	'lean-init.index.json'
+];
+const LIBRARY_EXTENSIONS = ['.olean', '.olean.server', '.olean.private', '.ir', '.ir.sig'];
+const SHA256 = /^[0-9a-f]{64}$/;
+/** @param {any} value @param {number} max */
+const validSize = (value, max) => Number.isSafeInteger(value) && value > 0 && value <= max;
+/** @param {any} asset @param {number} max */
+const validDigest = (asset, max) =>
+	validSize(asset?.bytes, max) && typeof asset.sha256 === 'string' && SHA256.test(asset.sha256);
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/** Reject an incomplete or unsafe lock before reading local paths or downloading files. @param {any} lock */
+export function validateLean4Lock(lock) {
+	if (lock.schemaVersion !== 1 || !lock.assets || !lock.notices)
+		throw new Error('Unsupported Lean 4 asset lock.');
+	for (const name of REQUIRED_ASSETS)
+		if (!Object.hasOwn(lock.assets, name))
+			throw new Error(`Lean 4 lock is missing required asset ${name}.`);
+	for (const name of ['LICENSE', 'LICENSE.libuv'])
+		if (!Object.hasOwn(lock.notices, name))
+			throw new Error(`Lean 4 lock is missing required notice ${name}.`);
+	if (
+		Object.keys(lock.notices).some((name) => !['LICENSE', 'LICENSE.libuv'].includes(name)) ||
+		Object.keys(lock.assets).some((name) => ['LICENSE', 'LICENSE.libuv'].includes(name))
+	)
+		throw new Error('Lean 4 runtime and notice asset sets must be disjoint.');
+	for (const [name, asset] of Object.entries({ ...lock.assets, ...lock.notices })) {
+		const chunk = /^lean-init-\d{2,}\.pack\.gz\.bin$/.test(name);
+		if (
+			(!REQUIRED_ASSETS.includes(name) &&
+				!['LICENSE', 'LICENSE.libuv'].includes(name) &&
+				!chunk) ||
+			!validDigest(asset, MAX_ASSET_BYTES) ||
+			asset.upstream !== name.replace(/\.gz\.bin$/, '.gz')
+		)
+			throw new Error(`Invalid Lean 4 asset lock entry ${name}.`);
+		if (chunk || name === 'lean.wasm.gz.bin') {
+			if (
+				asset.encoding !== 'gzip' ||
+				asset.logicalName !== asset.upstream.replace(/\.gz$/, '') ||
+				!validDigest(asset.uncompressed, chunk ? MAX_CHUNK_BYTES : MAX_WASM_BYTES)
+			)
+				throw new Error(`Invalid Lean 4 decoded receipt ${name}.`);
+		} else if (asset.encoding || asset.uncompressed || asset.logicalName) {
+			throw new Error(`Unexpected Lean 4 encoding for ${name}.`);
+		}
+	}
+}
+
+/** Verify the producer contract as well as the independently reviewed asset identities.
+ * @param {any} lock @param {Map<string, Uint8Array>} verified
+ */
+export function verifyLean4Release(lock, verified) {
+	validateLean4Lock(lock);
+	/** @param {string} name */
+	const bytesFor = (name) => {
+		const bytes = verified.get(name);
+		if (!bytes) throw new Error(`Lean 4 verified asset ${name} is missing.`);
+		return bytes;
+	};
+	const receipt = JSON.parse(Buffer.from(bytesFor('producer-receipt.json')).toString('utf8'));
+	if (
+		receipt.schemaVersion !== 1 ||
+		receipt.producerId !== 'wasm-llvm/lean-browser' ||
+		receipt.sources?.lean4?.commit !== lock.source ||
+		receipt.sources?.lean4?.version !== lock.version ||
+		receipt.acceptance?.node?.program?.exitCode !== 0 ||
+		receipt.acceptance?.node?.program?.stdout !== 'Hello, 안녕!\nsum = 40\n' ||
+		receipt.acceptance?.node?.diagnostic?.exitCode !== 1
+	)
+		throw new Error('Lean 4 producer receipt does not match the reviewed release.');
+	const declared = Object.entries({ ...lock.assets, ...lock.notices }).filter(
+		([name]) => name !== 'producer-receipt.json'
+	);
+	if (
+		!receipt.assets ||
+		JSON.stringify(Object.keys(receipt.assets).sort()) !==
+			JSON.stringify(declared.map(([, asset]) => asset.upstream).sort())
+	)
+		throw new Error('Lean 4 producer receipt has a different required asset set.');
+	for (const [, asset] of declared) {
+		const entry = receipt.assets[asset.upstream];
+		if (
+			entry?.bytes !== asset.bytes ||
+			entry?.sha256 !== asset.sha256 ||
+			(asset.upstream === 'lean.wasm.gz' &&
+				JSON.stringify(entry.uncompressed) !== JSON.stringify(asset.uncompressed))
+		)
+			throw new Error(`Lean 4 producer receipt differs from the lock for ${asset.upstream}.`);
+	}
+	if (receipt.requalification) {
+		const { kind, compilerRebuilt, originalReceipt, originalReceiptSha256 } =
+			receipt.requalification;
+		if (
+			kind !== 'same-byte-repackage' ||
+			compilerRebuilt !== false ||
+			!originalReceipt ||
+			sha256(Buffer.from(`${JSON.stringify(originalReceipt, null, '\t')}\n`)) !==
+				originalReceiptSha256
+		)
+			throw new Error('Invalid Lean 4 same-byte requalification provenance.');
+		for (const field of [
+			'assets',
+			'sources',
+			'bootstrap',
+			'patches',
+			'manifestSha256',
+			'runtime'
+		])
+			if (JSON.stringify(originalReceipt[field]) !== JSON.stringify(receipt[field]))
+				throw new Error(`Lean 4 requalification changed original ${field}.`);
+		const recipes = new Set([
+			...Object.keys(originalReceipt.recipe ?? {}),
+			...Object.keys(receipt.recipe ?? {})
+		]);
+		for (const name of recipes)
+			if (
+				!['scripts/package.mjs', 'scripts/publish-directory.mjs'].includes(name) &&
+				originalReceipt.recipe?.[name] !== receipt.recipe?.[name]
+			)
+				throw new Error(`Lean 4 requalification changed build recipe ${name}.`);
+	}
+	const index = JSON.parse(Buffer.from(bytesFor('lean-init.index.json')).toString('utf8'));
+	if (
+		index.schemaVersion !== 1 ||
+		index.root !== '/lean/lib/lean' ||
+		!validSize(index.totalBytes, Number.MAX_SAFE_INTEGER) ||
+		!validSize(index.modules, Number.MAX_SAFE_INTEGER) ||
+		index.modules !== receipt.library ||
+		!SHA256.test(index.sha256) ||
+		!Array.isArray(index.chunks) ||
+		!index.chunks.length ||
+		!Array.isArray(index.files)
+	)
+		throw new Error('Invalid Lean 4 library index.');
+	let offset = 0;
+	const chunkNames = new Set();
+	for (const chunk of index.chunks) {
+		const asset = lock.assets[`${chunk.path}.bin`];
+		if (
+			typeof chunk.path !== 'string' ||
+			!/^lean-init-\d{2,}\.pack\.gz$/.test(chunk.path) ||
+			chunkNames.has(chunk.path) ||
+			!asset ||
+			chunk.offset !== offset ||
+			!validSize(chunk.uncompressedBytes, MAX_CHUNK_BYTES) ||
+			!Number.isSafeInteger(offset + chunk.uncompressedBytes) ||
+			offset + chunk.uncompressedBytes > index.totalBytes ||
+			chunk.bytes !== asset.bytes ||
+			chunk.sha256 !== asset.sha256 ||
+			chunk.uncompressedBytes !== asset.uncompressed.bytes ||
+			chunk.uncompressedSha256 !== asset.uncompressed.sha256
+		)
+			throw new Error(`Invalid Lean 4 library chunk ${chunk.path}.`);
+		chunkNames.add(chunk.path);
+		offset += chunk.uncompressedBytes;
+	}
+	if (
+		offset !== index.totalBytes ||
+		Object.keys(lock.assets).some(
+			(name) => name.endsWith('.pack.gz.bin') && !chunkNames.has(name.slice(0, -4))
+		)
+	)
+		throw new Error('Lean 4 library chunks do not cover the locked pack.');
+	offset = 0;
+	const paths = new Set();
+	for (const file of index.files) {
+		if (
+			typeof file.path !== 'string' ||
+			!/^Init(\/[A-Za-z0-9_]+)*\.(olean(\.server|\.private)?|ir(\.sig)?)$/.test(file.path) ||
+			paths.has(file.path) ||
+			file.offset !== offset ||
+			!validSize(file.bytes, index.totalBytes) ||
+			!Number.isSafeInteger(offset + file.bytes) ||
+			offset + file.bytes > index.totalBytes
+		)
+			throw new Error(`Invalid Lean 4 library entry ${file.path}.`);
+		paths.add(file.path);
+		offset += file.bytes;
+	}
+	const modules = [...paths].filter((name) => name.endsWith('.olean'));
+	if (offset !== index.totalBytes || modules.length !== index.modules || !paths.has('Init.olean'))
+		throw new Error('Lean 4 library files do not cover the declared modules and pack.');
+	for (const name of modules)
+		for (const extension of LIBRARY_EXTENSIONS)
+			if (!paths.has(name.replace(/\.olean$/, extension)))
+				throw new Error(`Lean 4 module ${name} is missing ${extension}.`);
+	const wasmAsset = lock.assets['lean.wasm.gz.bin'];
+	const wasm = gunzipSync(bytesFor('lean.wasm.gz.bin'), {
+		maxOutputLength: wasmAsset.uncompressed.bytes
+	});
+	if (
+		wasm.length !== wasmAsset.uncompressed.bytes ||
+		sha256(wasm) !== wasmAsset.uncompressed.sha256 ||
+		!WebAssembly.validate(wasm)
+	)
+		throw new Error('Lean 4 runtime decodes to unreviewed or invalid WebAssembly.');
+	const packDigest = createHash('sha256');
+	// Verify one bounded chunk at a time, in index order rather than object-key order.
+	for (const chunk of index.chunks) {
+		const decoded = gunzipSync(bytesFor(`${chunk.path}.bin`), {
+			maxOutputLength: chunk.uncompressedBytes
+		});
+		if (
+			decoded.length !== chunk.uncompressedBytes ||
+			sha256(decoded) !== chunk.uncompressedSha256
+		)
+			throw new Error(`Lean 4 ${chunk.path} decodes to unreviewed bytes.`);
+		packDigest.update(decoded);
+	}
+	if (packDigest.digest('hex') !== index.sha256)
+		throw new Error('Lean 4 library pack digest mismatch.');
+}
 
 /** @param {any} lock */
 export function releaseBaseUrl(lock) {
@@ -55,6 +274,7 @@ export async function syncWasmLean4Assets({
 	fetchImpl = globalThis.fetch
 } = {}) {
 	const lock = JSON.parse(await readFile(LOCK_URL, 'utf8'));
+	validateLean4Lock(lock);
 	const baseUrl = releaseBaseUrl(lock);
 	/** @type {Map<string, Uint8Array>} */
 	const verified = new Map();
@@ -64,27 +284,9 @@ export async function syncWasmLean4Assets({
 			: await download(new URL(receipt.upstream, baseUrl).href, receipt.bytes, fetchImpl);
 		if (bytes.length !== receipt.bytes || sha256(bytes) !== receipt.sha256)
 			throw new Error(`Lean 4 ${receipt.upstream} does not match the reviewed lock.`);
-		if (receipt.encoding === 'gzip') {
-			const decoded = gunzipSync(bytes);
-			if (
-				decoded.length !== receipt.uncompressed.bytes ||
-				sha256(decoded) !== receipt.uncompressed.sha256
-			)
-				throw new Error(`Lean 4 ${receipt.upstream} decodes to unreviewed bytes.`);
-		}
 		verified.set(name, bytes);
 	}
-	const receiptBytes = verified.get('producer-receipt.json');
-	if (!receiptBytes) throw new Error('Lean 4 lock must include producer-receipt.json.');
-	const receipt = JSON.parse(Buffer.from(receiptBytes).toString('utf8'));
-	if (
-		receipt.producerId !== 'wasm-llvm/lean-browser' ||
-		receipt.sources?.lean4?.commit !== lock.source ||
-		receipt.sources?.lean4?.version !== lock.version ||
-		receipt.acceptance?.node?.program?.exitCode !== 0
-	) {
-		throw new Error('Lean 4 producer receipt does not match the reviewed release.');
-	}
+	verifyLean4Release(lock, verified);
 	const workerSource = await readFile(WORKER_URL, 'utf8');
 	if (workerSource.split(PLACEHOLDER).length !== 2)
 		throw new Error('Lean 4 worker must contain exactly one asset-lock placeholder.');

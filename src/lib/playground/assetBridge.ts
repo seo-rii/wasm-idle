@@ -55,6 +55,8 @@ type LoadedAsset = {
 	contentEncoding?: string;
 	mimeType?: string;
 	transferOwnership?: boolean;
+	/** Publishes network bytes to persistent storage after runtime validation accepts them. */
+	persist?: () => Promise<unknown>;
 };
 
 type AssetBridgeState = 'active' | 'rebinding' | 'disposed';
@@ -703,6 +705,21 @@ export class WorkerAssetBridge {
 				progress.activity(event.phase, event.asset);
 			}
 		};
+		// A rebind to the same worker aborts this load, but that worker still awaits a reply.
+		const replySuperseded = () => {
+			if (this.state !== 'active' || this.worker !== worker) return;
+			try {
+				worker.postMessage({
+					assetResponse: {
+						id: request.id,
+						ok: false,
+						error: `Runtime asset ${request.asset} request was superseded by a rebind`
+					}
+				});
+			} catch {
+				// The worker may already be terminated.
+			}
+		};
 		const loadContext = (report: (event: AssetPreparationProgress, key?: string) => void) => ({
 			...context,
 			progress: {
@@ -823,7 +840,8 @@ export class WorkerAssetBridge {
 						return module;
 					});
 				}
-				if (controller.signal.aborted || generation !== this.generation) return;
+				if (controller.signal.aborted || generation !== this.generation)
+					return replySuperseded();
 				worker.postMessage({ assetResponse: { id: request.id, ok: true, module } });
 				return;
 			}
@@ -831,7 +849,8 @@ export class WorkerAssetBridge {
 			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
 				this.pythonPackageAssets = readPythonPackageAssets(loaded.bytes);
 			}
-			if (controller.signal.aborted || generation !== this.generation) return;
+			if (controller.signal.aborted || generation !== this.generation)
+				return replySuperseded();
 			const buffer = transferBuffer(
 				loaded.bytes,
 				this.cache ? false : loaded.transferOwnership
@@ -848,7 +867,8 @@ export class WorkerAssetBridge {
 				[buffer]
 			);
 		} catch (error) {
-			if (controller.signal.aborted || generation !== this.generation) return;
+			if (controller.signal.aborted || generation !== this.generation)
+				return replySuperseded();
 			try {
 				worker.postMessage({
 					assetResponse: {
@@ -931,6 +951,7 @@ export class WorkerAssetBridge {
 		if (signal.aborted) throw runtimeAssetAbortReason(signal);
 		if (this.runtime === 'python' && asset === 'pyodide-lock.json')
 			readPythonPackageAssets(runtimeBytes);
+		await loaded.persist?.();
 		return {
 			bytes: runtimeBytes,
 			mimeType: loaded.mimeType,
@@ -1155,7 +1176,8 @@ export class WorkerAssetBridge {
 						'bridge-v1',
 						context.config.baseUrl,
 						allowedBaseUrlsKey(context.config),
-						maxAssetBytes
+						maxAssetBytes,
+						expected?.mediaType
 					])
 				}
 			: undefined;
@@ -1168,18 +1190,50 @@ export class WorkerAssetBridge {
 			if (bytes) {
 				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
 				context.progress.update(asset, bytes.byteLength, bytes.byteLength);
-				return { bytes, mimeType: receipt?.mediaType, transferOwnership: true };
+				// A hit was validated against this same expected MIME type before it was stored.
+				return {
+					bytes,
+					mimeType: expected?.mediaType ?? receipt?.mediaType,
+					transferOwnership: true
+				};
 			}
 		}
 		const loaded = await this.fetchAssetFromNetwork(context, url, asset, signal, maxAssetBytes);
+		if (receipt) {
+			// Verify even when storage is disabled, unavailable or skipped. A body that the browser
+			// HTTP-decoded and that lost its gzip header is checked against the logical receipt.
+			const decoded =
+				!!loaded.contentEncoding && !(loaded.bytes[0] === 0x1f && loaded.bytes[1] === 0x8b);
+			if (decoded && receipt.uncompressedSha256 !== undefined) {
+				await verifyRuntimeAssetIntegrity({
+					asset,
+					bytes: loaded.bytes,
+					expected: {
+						sha256: receipt.sha256,
+						uncompressedSha256: receipt.uncompressedSha256,
+						uncompressedBytes: receipt.uncompressedBytes
+					},
+					stage: 'uncompressed'
+				});
+			} else if (!decoded || !asset.endsWith('.gz')) {
+				// Unpaired receipts for other assets already describe their logical bytes.
+				await verifyRuntimeAssetIntegrity({
+					asset,
+					bytes: loaded.bytes,
+					expected: { sha256: receipt.sha256, bytes: receipt.bytes }
+				});
+			}
+			// A decoded .gz body with an unpaired receipt is left to runtime validation.
+		}
 		if (identity && !loaded.contentEncoding) {
-			// Only checksum-matching bytes are published. Existing runtime validation still runs.
-			await writePersistentRuntimeAsset({
-				identity,
-				cache: persistentCache,
-				signal,
-				bytes: loaded.bytes
-			});
+			// A hit skips the response MIME check, so publish only bytes that passed it.
+			loaded.persist = () =>
+				writePersistentRuntimeAsset({
+					identity,
+					cache: persistentCache,
+					signal,
+					bytes: loaded.bytes
+				});
 		}
 		return loaded;
 	}
@@ -1413,6 +1467,11 @@ export class WorkerAssetBridge {
 		}
 		if (url.hash) {
 			throw new Error(`Runtime asset ${asset} URL must not include a fragment`);
+		}
+		// The prefix check below sees `/base/..%2fother` as inside `/base/`, but a server that
+		// decodes the separator before resolving dot segments serves `/other`.
+		if (/%2f|%5c/iu.test(url.pathname)) {
+			throw new Error(`Runtime asset ${asset} URL must not include encoded path separators`);
 		}
 		const allowed = [context.config.baseUrl, ...(context.config.allowedBaseUrls || [])].some(
 			(baseUrl) => {

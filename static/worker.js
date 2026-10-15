@@ -13,8 +13,8 @@ const exactResponseUrlAssetPaths = new Set([
 	'wasm-awk/runtime-manifest.v2.json',
 	'wasm-awk/wasm_exec.js',
 	'wasm-tinygo/assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin',
+	'wasm-tinygo/assets/upstream-compile-worker-6CYe8gHb.js',
 	'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
-	'wasm-tinygo/assets/upstream-compile-worker-CUrboB1_.js',
 	'wasm-tinygo/assets/upstream-compile-worker-CeYS3ydo.js',
 	'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
 	'wasm-tinygo/upstream.js'
@@ -29,7 +29,7 @@ const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/compiler-runtime.js.bin', '86f2b34128ce97c050f8c9245781b211e229073cef6a3ed4c6cfef92652902c7'],
 	['wasm-rust/compiler-support.js.bin', '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'],
 	['wasm-rust/compiler-worker.js.bin', '72cd8fe5c7999ffa6e144b3d6ea3691686843063dc8405274c2573f1ea8356a2'],
-	['wasm-rust/compiler.js.bin', '6fd676dfda595610d41e44e80f90f9330aee5326d5daf42cb935a28b48dffc2b'],
+	['wasm-rust/compiler.js.bin', '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'],
 	['wasm-rust/index.js.bin', 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'],
 	['wasm-rust/module-worker.js.bin', '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'],
 	['wasm-rust/retryable-failure-kind.js.bin', '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'],
@@ -121,11 +121,11 @@ function shouldPreserveExactResponseUrl(request, url) {
 }
 
 function relativePathInScope(url) {
-	const scopePath = new URL(self.registration.scope).pathname;
-	if (url.pathname.startsWith(scopePath)) {
-		return url.pathname.slice(scopePath.length);
+	const scopeUrl = new URL(self.registration.scope);
+	if (url.origin !== scopeUrl.origin || !url.pathname.startsWith(scopeUrl.pathname)) {
+		return null;
 	}
-	return url.pathname.replace(/^\/+/, '');
+	return url.pathname.slice(scopeUrl.pathname.length);
 }
 
 async function compressedRuntimeAssetManifest(forceRefresh = false) {
@@ -194,16 +194,26 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 					const layer = manifest.layers[entry.layer];
 					let layerPath = entry.layer;
 					let layerVersion = null;
+					let layerLength = null;
+					let layerCompressedLength = null;
 					if (typeof layer === 'string') {
 						layerPath = layer;
 					} else if (layer && typeof layer === 'object') {
 						if (typeof layer.path === 'string') layerPath = layer.path;
 						if (/^[0-9a-f]{64}$/u.test(layer.sha256)) layerVersion = layer.sha256;
+						if (Number.isSafeInteger(layer.length) && layer.length >= 0) {
+							layerLength = layer.length;
+						}
+						if (Number.isSafeInteger(layer.compressedLength) && layer.compressedLength >= 0) {
+							layerCompressedLength = layer.compressedLength;
+						}
 					}
 					if (!layerPath || !layerVersion) continue;
 					assets.set(logicalPath, {
 						layerPath,
 						layerVersion,
+						layerLength,
+						layerCompressedLength,
 						offset: entry.offset,
 						length: entry.length
 					});
@@ -287,7 +297,17 @@ function removeCachedLayer(key, entry) {
 	decompressedLayerCacheBytes -= entry.bytes;
 }
 
-async function readLayerBytes(body, signal) {
+// Layer failures answer with this status instead of falling through to the logical path,
+// which is not deployed once its bytes live in a layer.
+class RuntimeLayerError extends Error {
+	constructor(status, statusText) {
+		super(statusText);
+		this.status = status;
+		this.statusText = statusText;
+	}
+}
+
+async function readLayerBytes(body, signal, maxBytes) {
 	const reader = body.getReader();
 	const chunks = [];
 	let total = 0;
@@ -303,8 +323,8 @@ async function readLayerBytes(body, signal) {
 			signal.throwIfAborted();
 			if (done) break;
 			total += value.byteLength;
-			if (total > maxDecompressedLayerBytes) {
-				throw new Error('decompressed layer exceeds byte limit');
+			if (total > maxBytes) {
+				throw new RuntimeLayerError(502, 'Runtime Layer Too Large');
 			}
 			chunks.push(value);
 		}
@@ -325,12 +345,12 @@ async function readLayerBytes(body, signal) {
 	}
 }
 
-async function fetchLayerBytes(request, cacheKey) {
+async function fetchLayerBytes(request, cacheKey, asset) {
 	const controller = new AbortController();
 	let timeout;
 	const deadline = new Promise((_, reject) => {
 		timeout = setTimeout(() => {
-			const error = new Error('runtime layer load timed out');
+			const error = new RuntimeLayerError(504, 'Runtime Layer Timeout');
 			controller.abort(error);
 			reject(error);
 		}, layerLoadTimeoutMs);
@@ -356,10 +376,27 @@ async function fetchLayerBytes(request, cacheKey) {
 			void response.body?.cancel().catch(() => {});
 			throw new Error('layer fetch failed');
 		}
-		const body = hasGzipContentEncoding(response)
-			? response.body
-			: response.body.pipeThrough(new DecompressionStream('gzip'));
-		return await readLayerBytes(body, controller.signal);
+		let body = response.body;
+		// The manifest digest covers the gzip bytes. When fetch has already content-decoded the
+		// body those bytes are gone, so only the decoded length can be checked.
+		if (!hasGzipContentEncoding(response)) {
+			const compressedBytes = await readLayerBytes(
+				body,
+				controller.signal,
+				asset.layerCompressedLength ?? maxDecompressedLayerBytes
+			);
+			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', compressedBytes));
+			const digestHex = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+			if (digestHex !== asset.layerVersion) {
+				throw new RuntimeLayerError(502, 'Runtime Layer Digest Mismatch');
+			}
+			body = new Response(compressedBytes).body.pipeThrough(new DecompressionStream('gzip'));
+		}
+		const bytes = await readLayerBytes(body, controller.signal, maxDecompressedLayerBytes);
+		if (asset.layerLength !== null && bytes.byteLength !== asset.layerLength) {
+			throw new RuntimeLayerError(502, 'Runtime Layer Length Mismatch');
+		}
+		return bytes;
 	})();
 	try {
 		return await Promise.race([loading, deadline]);
@@ -368,8 +405,8 @@ async function fetchLayerBytes(request, cacheKey) {
 	}
 }
 
-function decompressedLayer(request, layerPath, layerVersion) {
-	const cacheKey = layerCacheKey(layerPath, layerVersion);
+function decompressedLayer(request, asset) {
+	const cacheKey = layerCacheKey(asset.layerPath, asset.layerVersion);
 	const cached = decompressedLayerPromises.get(cacheKey);
 	if (cached) {
 		decompressedLayerPromises.delete(cacheKey);
@@ -383,7 +420,7 @@ function decompressedLayer(request, layerPath, layerVersion) {
 			removeCachedLayer(cacheKey, entry);
 			return null;
 		}
-		const bytes = await fetchLayerBytes(request, cacheKey);
+		const bytes = await fetchLayerBytes(request, cacheKey, asset);
 		if (decompressedLayerPromises.get(cacheKey) === entry && currentLayerKeys.has(cacheKey)) {
 			if (bytes.byteLength === 0 || bytes.byteLength > maxDecompressedLayerCacheBytes) {
 				removeCachedLayer(cacheKey, entry);
@@ -399,9 +436,10 @@ function decompressedLayer(request, layerPath, layerVersion) {
 			}
 		}
 		return bytes;
-	}).catch(() => {
+	}).catch((error) => {
+		// Rejected layers are never retained, so the next request fetches the layer again.
 		removeCachedLayer(cacheKey, entry);
-		return null;
+		return error instanceof RuntimeLayerError ? error : null;
 	});
 	layerDecompressionQueue = entry.promise.then(() => undefined);
 	decompressedLayerPromises.set(cacheKey, entry);
@@ -478,7 +516,14 @@ async function fetchLayeredRuntimeAsset(request, url) {
 		return new Response(null, { status, statusText, headers });
 	}
 
-	const layerBytes = await decompressedLayer(request, asset.layerPath, asset.layerVersion);
+	const layerBytes = await decompressedLayer(request, asset);
+	if (layerBytes instanceof RuntimeLayerError) {
+		return new Response(`${layerBytes.statusText}: ${asset.layerPath}\n`, {
+			status: layerBytes.status,
+			statusText: layerBytes.statusText,
+			headers: { 'content-type': 'text/plain; charset=utf-8' }
+		});
+	}
 	if (!layerBytes || asset.offset + asset.length > layerBytes.byteLength) return null;
 	const body = layerBytes.slice(asset.offset + rangeStart, asset.offset + rangeEnd + 1);
 	return new Response(body, { status, statusText, headers });
@@ -568,6 +613,9 @@ async function fetchDynamicModule(request, url) {
 }
 
 function withIsolationHeaders(response) {
+	// Opaque, opaqueredirect, and error responses have status 0, which the Response
+	// constructor rejects; they must reach the page unchanged.
+	if (response.status === 0) return response;
 	const newHeaders = new Headers(response.headers);
 	newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
 	newHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
@@ -589,13 +637,21 @@ self.addEventListener('fetch', function (event) {
 		Promise.resolve()
 			.then(async function () {
 				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
-				return (
-					(await fetchDynamicModule(event.request, url)) ||
-					(await fetchRuntimeAssetAlias(event.request, url)) ||
-					(await fetchLayeredRuntimeAsset(event.request, url)) ||
-					(await fetchCompressedRuntimeAsset(event.request, url)) ||
-					fetch(event.request)
-				);
+				// Local runtime assets only answer for this origin and registration scope.
+				if (relativePathInScope(url) === null) return fetch(event.request);
+				let localResponse = null;
+				try {
+					localResponse =
+						(await fetchDynamicModule(event.request, url)) ||
+						(await fetchRuntimeAssetAlias(event.request, url)) ||
+						(await fetchLayeredRuntimeAsset(event.request, url)) ||
+						(await fetchCompressedRuntimeAsset(event.request, url));
+				} catch (e) {
+					// A failed local lookup falls back to the network rather than becoming a
+					// network error; the fallback still receives the isolation headers below.
+					console.error(e);
+				}
+				return localResponse || fetch(event.request);
 			})
 			.then(function (response) {
 				// Receipt-verified runtime consumers require the browser's network Response URL.
@@ -611,6 +667,7 @@ self.addEventListener('fetch', function (event) {
 			})
 			.catch(function (e) {
 				console.error(e);
+				throw e;
 			})
 	);
 });

@@ -39,31 +39,34 @@ function grainStdin(source, channel) {
 	}
 	if (
 		channel.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel.protocolVersion !== 1 ||
+		channel.protocolVersion !== 2 ||
 		channel.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel.capacity) ||
 		channel.capacity <= 0 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== 16 + channel.capacity
 	)
 		throw new Error('Invalid Grain stdin ring');
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const ring = new Uint8Array(channel.buffer, 16, channel.capacity);
 	return (maxLength) => {
 		while (true) {
 			if (Atomics.load(control, 3)) throw new Error('Grain stdin cancelled');
-			const write = Atomics.load(control, 0);
-			const read = Atomics.load(control, 1);
-			const available = write - read;
-			if (available < 0 || available > ring.length)
+			const write = Atomics.load(control, 0) >>> 0;
+			const read = Atomics.load(control, 1) >>> 0;
+			const available = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || available > ring.length)
 				throw new Error('Invalid Grain stdin counters');
 			if (available) {
 				const count = Math.min(maxLength, available);
 				const chunk = new Uint8Array(count);
 				for (let index = 0; index < count; index++)
 					chunk[index] = ring[(read + index) % ring.length];
-				Atomics.store(control, 1, read + count);
+				Atomics.store(control, 1, (read + count) % counterRange);
 				self.postMessage({ type: 'stdin-request' });
 				return chunk;
 			}

@@ -79,7 +79,7 @@ describe('optional workspace banner layout', () => {
 						}
 					})
 				);
-				await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
 				const input = page.getByRole('textbox', { name: 'Share URL', exact: true });
 				await input.waitFor();
 				const rows = await page.evaluate(() => {

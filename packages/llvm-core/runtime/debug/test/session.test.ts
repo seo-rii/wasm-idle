@@ -13,6 +13,7 @@ import type {
 	DebugWorkerInboundMessage,
 	DebugWorkerOutboundMessage,
 	RuntimeManifestV2,
+	SharedByteQueueDescriptor,
 	WorkerLike
 } from '../src/types.js';
 
@@ -332,6 +333,58 @@ class FakeWorker implements WorkerLike {
 }
 
 describe('BrowserLldbSession', () => {
+	it('keeps replacement session buffers isolated from delayed previous-session cleanup', async () => {
+		const sessions: BrowserLldbSession[] = [];
+		const queues: SharedByteQueueDescriptor[][] = [];
+		try {
+			for (let index = 0; index < 2; index += 1) {
+				const workers: FakeWorker[] = [];
+				const session = new BrowserLldbSession({
+					manifest,
+					runtimeBaseUrl: 'https://cdn.example/debug/',
+					module: validWasmModule.slice(),
+					sources: [],
+					workerFactory: (kind) => {
+						const worker = new FakeWorker(kind, []);
+						workers.push(worker);
+						return worker;
+					},
+					fetchImpl: async () => new Response('debug-asset'),
+					requestTimeoutMs: 1_000,
+					readyTimeoutMs: 1_000
+				});
+				sessions.push(session);
+				await session.initialize();
+				const messages = workers.flatMap((worker) => worker.received);
+				const target = messages.find((message) => message.type === 'initialize-target');
+				const lldb = messages.find((message) => message.type === 'initialize-lldb');
+				if (!target || !lldb) throw new Error('session workers were not initialized');
+				queues.push([
+					lldb.dapInput,
+					lldb.dapOutput,
+					target.rspInput,
+					target.rspOutput,
+					target.stdin,
+					target.stdout,
+					target.stderr
+				]);
+				if (index === 0) await session.dispose();
+			}
+			expect(
+				new Set(queues.flat().flatMap(({ control, data }) => [control, data])).size
+			).toBe(28);
+			const replacementHeaders = queues[1].map(({ control }) =>
+				Array.from(new Int32Array(control))
+			);
+			for (const descriptor of queues[0]) new SharedByteQueue(descriptor).close();
+			expect(queues[1].map(({ control }) => Array.from(new Int32Array(control)))).toEqual(
+				replacementHeaders
+			);
+		} finally {
+			await Promise.all(sessions.map((session) => session.dispose()));
+		}
+	});
+
 	it.each([
 		['null body', null],
 		['array body', []],

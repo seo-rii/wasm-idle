@@ -5,7 +5,7 @@ import {
 	requireAllowedAssetUrl,
 	type ResolvedLanguageToolAssetConfig
 } from '../assets.js';
-import { waitForLanguageServerStartup } from '../lifecycle.js';
+import { validateTimeoutMs, waitForLanguageServerStartup } from '../lifecycle.js';
 import { resolveCppLanguageServerRuntimeAssetConfig } from '../runtime.js';
 import type {
 	EditorLanguageServerHandle,
@@ -284,6 +284,8 @@ export async function createClangdLanguageServer(
 	}
 > {
 	const hostOptions = isClangdLanguageServerOptions(options) ? options : undefined;
+	const requestTimeoutMs = hostOptions?.requestTimeoutMs ?? 8_000;
+	validateTimeoutMs(requestTimeoutMs, 'Clangd request');
 	const current = hostOptions?.currentUrl ?? currentUrl();
 	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, current);
 	const debug = (() => {
@@ -320,7 +322,7 @@ export async function createClangdLanguageServer(
 	const writer = new BrowserMessageWriter(worker);
 	const policy = createClangdRequestPolicy(
 		{ reader, writer },
-		{ requestTimeoutMs: hostOptions?.requestTimeoutMs, onDelay: hostOptions?.onRequestDelay }
+		{ requestTimeoutMs, onDelay: hostOptions?.onRequestDelay }
 	);
 	policy.trace.push(...startupTrace);
 	const workspaceFiles = new ClangdWorkspaceFileRegistry();

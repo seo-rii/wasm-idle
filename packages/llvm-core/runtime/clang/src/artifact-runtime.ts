@@ -111,7 +111,7 @@ export default class ArtifactRuntime extends Runtime {
 		this.usedPrecompiledHeader = false;
 		void this.getModule(this.assetUrls.lld).catch(() => undefined);
 		const common = { compileArgs, cppVersion, cVersion, debugMode, precompiledHeader,
-			persistentCache: options.persistentCache };
+			persistentCache: options.persistentCache, onBufferedOutput: options.onBufferedOutput };
 		const objects: string[] = [];
 		if (units.length === 1) {
 			await this.compile({ ...common, input, code, obj, language, workspaceFiles: files });

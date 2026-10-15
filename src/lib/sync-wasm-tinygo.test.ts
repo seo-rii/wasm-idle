@@ -288,6 +288,20 @@ async function makeFixture() {
 	return { root, targetDir, versionModulePath, graphLockPath };
 }
 
+async function compressToolchainFixture(targetDir: string) {
+	const assets: Array<{ assetPath: string; logical: Buffer; storage: Buffer }> = [];
+	for (const fileName of ['tinygo-compiler.wasm', 'tinygo-package-graph.wasm', 'lld.wasm']) {
+		const assetPath = `tools/upstream/${fileName}`;
+		const logical = await readFile(path.join(targetDir, assetPath));
+		// Delivery receipts must describe these existing bytes, even at a different gzip level.
+		const storage = gzipSync(logical, { level: 1 });
+		await writeFixtureFile(targetDir, `${assetPath}.gz`, storage);
+		await rm(path.join(targetDir, assetPath));
+		assets.push({ assetPath, logical, storage });
+	}
+	return assets;
+}
+
 async function readProtectedFiles(targetDir: string) {
 	const relativePaths = [
 		'tools/upstream/lld.wasm',
@@ -342,6 +356,53 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(lstat(controls.transactionMarkerPath)).rejects.toThrow();
 	});
 
+	it('refreshes a compressed-only toolchain while retaining its actual delivery receipts', async () => {
+		const fixture = await makeFixture();
+		const assets = await compressToolchainFixture(fixture.targetDir);
+		const result = await syncWasmTinyGoDist(fixture);
+		for (const { assetPath, logical, storage } of assets) {
+			expect(result.profile.assetReceipts[assetPath]).toEqual({
+				bytes: storage.byteLength,
+				sha256: sha256(storage),
+				uncompressedBytes: logical.byteLength,
+				uncompressedSha256: sha256(logical)
+			});
+			expect(await readFile(path.join(fixture.targetDir, `${assetPath}.gz`))).toEqual(
+				storage
+			);
+			await expect(lstat(path.join(fixture.targetDir, assetPath))).rejects.toMatchObject({
+				code: 'ENOENT'
+			});
+		}
+	});
+
+	it.each(['hash mismatch', 'logical size overflow'])(
+		'rejects compressed toolchain %s before publishing a new graph',
+		async (failure) => {
+			const fixture = await makeFixture();
+			const [compiler] = await compressToolchainFixture(fixture.targetDir);
+			const logical =
+				failure === 'hash mismatch'
+					? Buffer.from(compiler.logical)
+					: Buffer.concat([compiler.logical, Buffer.from([0])]);
+			if (failure === 'hash mismatch') logical[0] ^= 1;
+			await writeFixtureFile(
+				fixture.targetDir,
+				`${compiler.assetPath}.gz`,
+				gzipSync(logical)
+			);
+			const originalEntry = await readFile(path.join(fixture.targetDir, 'upstream.js'));
+			const originalVersion = await readFile(fixture.versionModulePath);
+			await expect(syncWasmTinyGoDist(fixture)).rejects.toThrow(
+				failure === 'hash mismatch' ? 'does not bind' : 'pinned logical byte bound'
+			);
+			expect(await readFile(path.join(fixture.targetDir, 'upstream.js'))).toEqual(
+				originalEntry
+			);
+			expect(await readFile(fixture.versionModulePath)).toEqual(originalVersion);
+		}
+	);
+
 	it('pins the checked-in executable graph receipts', async () => {
 		const repositoryRoot = path.resolve(import.meta.dirname, '..', '..');
 		const lock = parseTinyGoExecutableGraphLock(
@@ -351,7 +412,7 @@ describe('syncWasmTinyGoDist', () => {
 			'wasm-idle:tinygo-executable-graph:v1\n'
 		);
 		expect(computeTinyGoExecutableGraphFingerprint(lock)).toBe(
-			'8ecbffd4b4e44ff67288d8c46328a1b06d0a0ac76d7a50a9e458603b68d0d795'
+			'8b2e87ec50b586591903adcff8c547b37c3b23d4e12f97d8266035cefdeebac4'
 		);
 		expect(
 			[...lock.modules.values()].map(({ path: modulePath, bytes, sha256: digest }) => ({
@@ -366,14 +427,14 @@ describe('syncWasmTinyGoDist', () => {
 				digest: 'e497b67a6bcbee29639792a3d58ecacb22781287f7fe155bfdf079e6ca159dff'
 			},
 			{
+				modulePath: 'assets/upstream-compile-worker-6CYe8gHb.js',
+				bytes: 105574,
+				digest: '30c6b0d3f0968222e0d78f7ec54300838eca0326558e448bc48ab213e35aae2f'
+			},
+			{
 				modulePath: 'assets/upstream-compile-worker-CFw6Ych6.js',
 				bytes: 558,
 				digest: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209'
-			},
-			{
-				modulePath: 'assets/upstream-compile-worker-CUrboB1_.js',
-				bytes: 103559,
-				digest: '42337c2f06d04b51d79f0ec66ae685f0cfb2a78718b0636df980dc92dd1db9d5'
 			},
 			{
 				modulePath: 'assets/upstream-compile-worker-CeYS3ydo.js',
@@ -387,8 +448,8 @@ describe('syncWasmTinyGoDist', () => {
 			},
 			{
 				modulePath: 'upstream.js',
-				bytes: 126073,
-				digest: '136a957aa940c3e2b8c7a925eb538f3fce81f699aa9113e1fd93ce0b35c879aa'
+				bytes: 126235,
+				digest: 'b780e6d7492c60f9c7481eda0b3ef45be15887ee367b8728532e824a4592e3b1'
 			}
 		]);
 	});

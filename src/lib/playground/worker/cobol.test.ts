@@ -108,4 +108,29 @@ describe('COBOL worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'stdin=73\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('posts non-Error load and execution failures as error text', async () => {
+		mocks.createCobolCompiler.mockRejectedValueOnce('COBOL runtime fetch failed');
+		await import('./cobol');
+		const load = { load: true, log: false, cobolBaseUrl: '/wasm-cobol/', maxAssetBytes: 4096 };
+		await (globalThis as any).self.onmessage({ data: load });
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'COBOL runtime fetch failed'
+		});
+
+		await (globalThis as any).self.onmessage({ data: load });
+		const trap = new WebAssembly.Exception(new WebAssembly.Tag({ parameters: [] }), []);
+		mocks.executeBrowserCobolArtifact.mockRejectedValueOnce(trap);
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'identification division.\nprogram-id. main.\nprocedure division.\nstop run.',
+				buffer: new SharedArrayBuffer(1024),
+				prepare: false,
+				log: false
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: '[object WebAssembly.Exception]'
+		});
+	});
 });

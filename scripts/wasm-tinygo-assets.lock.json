@@ -11,15 +11,9 @@
       "uncompressedSha256": "59aad93503b5fd539993f2f5571c11dce9ddb4c5d10b681abc8e5dc124aed526"
     },
     {
-      "path": "assets/upstream-compile-worker-CFw6Ych6.js",
-      "bytes": 558,
-      "sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
-      "imports": []
-    },
-    {
-      "path": "assets/upstream-compile-worker-CUrboB1_.js",
-      "bytes": 103559,
-      "sha256": "42337c2f06d04b51d79f0ec66ae685f0cfb2a78718b0636df980dc92dd1db9d5",
+      "path": "assets/upstream-compile-worker-6CYe8gHb.js",
+      "bytes": 105574,
+      "sha256": "30c6b0d3f0968222e0d78f7ec54300838eca0326558e448bc48ab213e35aae2f",
       "imports": [
         {
           "specifier": "./upstream-compile-worker-CeYS3ydo.js",
@@ -27,6 +21,12 @@
           "kind": "dynamic"
         }
       ]
+    },
+    {
+      "path": "assets/upstream-compile-worker-CFw6Ych6.js",
+      "bytes": 558,
+      "sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
+      "imports": []
     },
     {
       "path": "assets/upstream-compile-worker-CeYS3ydo.js",
@@ -64,12 +64,12 @@
     },
     {
       "path": "upstream.js",
-      "bytes": 126073,
-      "sha256": "136a957aa940c3e2b8c7a925eb538f3fce81f699aa9113e1fd93ce0b35c879aa",
+      "bytes": 126235,
+      "sha256": "b780e6d7492c60f9c7481eda0b3ef45be15887ee367b8728532e824a4592e3b1",
       "imports": [
         {
-          "specifier": "assets/upstream-compile-worker-CUrboB1_.js",
-          "target": "assets/upstream-compile-worker-CUrboB1_.js",
+          "specifier": "assets/upstream-compile-worker-6CYe8gHb.js",
+          "target": "assets/upstream-compile-worker-6CYe8gHb.js",
           "kind": "worker"
         }
       ]

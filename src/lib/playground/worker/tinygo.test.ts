@@ -10,7 +10,8 @@ const wasiState = vi.hoisted(() => ({
 	lastEnv: [] as string[],
 	lastFds: [] as any[],
 	initializeCalls: 0,
-	instReady: false
+	instReady: false,
+	startImpl: null as ((fds: any[]) => number) | null
 }));
 
 vi.mock('@bjorn3/browser_wasi_shim', () => {
@@ -35,6 +36,7 @@ vi.mock('@bjorn3/browser_wasi_shim', () => {
 
 		start() {
 			wasiState.instReady = true;
+			if (wasiState.startImpl) return wasiState.startImpl(wasiState.lastFds);
 			const stdinChunk = wasiState.lastFds[0].fd_read(1024).data;
 			if (stdinChunk.byteLength) {
 				wasiState.lastFds[1].write(stdinChunk);
@@ -100,6 +102,7 @@ describe('TinyGo worker', () => {
 		wasiState.lastFds = [];
 		wasiState.initializeCalls = 0;
 		wasiState.instReady = false;
+		wasiState.startImpl = null;
 	});
 
 	it('loads and executes a TinyGo wasm artifact through the WASI shim', async () => {
@@ -159,6 +162,39 @@ describe('TinyGo worker', () => {
 				wasi_unstable: {}
 			}
 		);
+	});
+
+	it('decodes UTF-8 split across writes per stream and flushes it at exit', async () => {
+		const stdoutBytes = encoder.encode('안녕\n');
+		const stderrBytes = encoder.encode('é\n');
+		wasiState.startImpl = (fds) => {
+			fds[1].write(stdoutBytes.slice(0, 2));
+			fds[2].write(stderrBytes.slice(0, 1));
+			fds[1].write(stdoutBytes.slice(2));
+			fds[2].write(stderrBytes.slice(1));
+			fds[1].write(encoder.encode('끝').slice(0, 1));
+			return 0;
+		};
+
+		await import('./tinygo');
+		await (globalThis as any).self.onmessage({
+			data: {
+				artifact: new Uint8Array([0, 97, 115, 109]),
+				buffer: new ArrayBuffer(0),
+				stdin: '',
+				log: false
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: '안녕\n' },
+			{ output: 'é\n' },
+			{ output: '\uFFFD' }
+		]);
+		expect(messages.at(-1)).toEqual({ results: true });
 	});
 
 	it('reads explicit stdin without requesting or requiring a shared buffer', async () => {

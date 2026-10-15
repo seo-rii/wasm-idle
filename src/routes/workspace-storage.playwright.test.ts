@@ -92,7 +92,7 @@ describe('workspace storage browser integration', () => {
 				await page.evaluate(() =>
 					(window as any).__wasmIdleDebug.setEditorValue('int manual_shared_work = 5;')
 				);
-				await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
 				const shareInput = page.getByRole('textbox', { name: 'Share URL', exact: true });
 				await shareInput.waitFor();
 				expect(await page.getByText(/Share URL copied/).count()).toBe(0);
@@ -161,7 +161,7 @@ describe('workspace storage browser integration', () => {
 				expect(editableUrl.searchParams.has('lang')).toBe(false);
 				expect(editableUrl.searchParams.has('code')).toBe(false);
 				expect(editableUrl.searchParams.has('code64')).toBe(false);
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const storageKey = `wasm-idle:example-workspace:v3:${editableUrl.searchParams.get('workspace')}`;
 				expect(
@@ -184,7 +184,7 @@ describe('workspace storage browser integration', () => {
 				await page.evaluate(() =>
 					(window as any).__wasmIdleDebug.setEditorValue('print("edited_workspace")')
 				);
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
@@ -193,7 +193,7 @@ describe('workspace storage browser integration', () => {
 						(window as any).__wasmIdleDebug.getEditorValue() ===
 						'print("edited_workspace")'
 				);
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
 					await page.evaluate(
@@ -295,7 +295,7 @@ describe('workspace storage browser integration', () => {
 					(window as any).__wasmIdleDebug.setEditorValue('int recovered_new_work = 42;')
 				);
 				await page.waitForTimeout(700);
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				expect(
 					await page.evaluate(() =>
 						localStorage.getItem('wasm-idle:example-workspace:v3')
@@ -386,7 +386,7 @@ describe('workspace storage browser integration', () => {
 						.locator('.file-tab')
 						.count()
 				).toBe(2);
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
 					await page.evaluate(
@@ -422,11 +422,11 @@ describe('workspace storage browser integration', () => {
 				}, stored);
 				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				await page.locator('#language-select').selectOption('PYTHON');
 				await page.locator('#language-select').selectOption('CPP');
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const saved = await page.evaluate(
 					() => JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!).files
@@ -439,7 +439,7 @@ describe('workspace storage browser integration', () => {
 						throw new DOMException('Quota full', 'QuotaExceededError');
 					};
 				});
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
 				const [backupDownload] = await Promise.all([
 					page.waitForEvent('download'),
@@ -490,7 +490,7 @@ describe('workspace storage browser integration', () => {
 					await sharedPage
 						.locator('#language-select[data-workspace-ready="true"]')
 						.waitFor();
-					await sharedPage.getByRole('button', { name: /^save\s+Save$/ }).click();
+					await sharedPage.getByRole('button', { name: 'Save', exact: true }).click();
 					await sharedPage.locator('[data-workspace-save-state="saved"]').waitFor();
 					const workspaceId = new URL(sharedPage.url()).searchParams.get('workspace');
 					expect(workspaceId).toBeTruthy();
@@ -558,7 +558,7 @@ describe('workspace storage browser integration', () => {
 			await page.evaluate(() =>
 				(window as any).__wasmIdleDebug.setEditorValue('int shared_edited = 222;')
 			);
-			await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+			await page.getByRole('button', { name: 'Save', exact: true }).click();
 			await page.locator('[data-workspace-save-state="saved"]').waitFor();
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
@@ -566,7 +566,7 @@ describe('workspace storage browser integration', () => {
 				await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 			).toBe('int shared_edited = 222;');
 			await context.grantPermissions(['clipboard-write', 'clipboard-read']);
-			await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+			await page.getByRole('button', { name: 'Share', exact: true }).click();
 			await page.getByText('Share URL copied', { exact: true }).waitFor();
 			expect(new URL(await page.evaluate(() => navigator.clipboard.readText())).hash).toMatch(
 				/^#workspace=/
@@ -575,7 +575,7 @@ describe('workspace storage browser integration', () => {
 			await page.evaluate(() =>
 				(window as any).__wasmIdleDebug.setEditorValue('int shared_newer = 333;')
 			);
-			await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+			await page.getByRole('button', { name: 'Save', exact: true }).click();
 			await page.locator('[data-workspace-save-state="saved"]').waitFor();
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
@@ -591,8 +591,24 @@ describe('workspace storage browser integration', () => {
 		async () => {
 			expect.hasAssertions();
 			await withWorkspacePage(async (page, context, browserUrl) => {
+				// The imported plain-text file tests storage recovery, independently of LSP.
+				await context.addInitScript((code) => {
+					if (localStorage.getItem('wasm-idle:example-workspace:v3') !== null) return;
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'CPP',
+							activePath: 'main.cpp',
+							files: [{ path: 'main.cpp', content: code }],
+							openTabs: ['main.cpp'],
+							lspEnabled: false
+						})
+					);
+				}, editorDefaults.cpp);
 				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const previous = await page.evaluate(() =>
 					localStorage.getItem('wasm-idle:example-workspace:v3')
@@ -617,7 +633,7 @@ describe('workspace storage browser integration', () => {
 				).toBe(previous);
 				// Sharing must serialize current edits even while local writes fail.
 				await context.grantPermissions(['clipboard-write', 'clipboard-read']);
-				await page.getByRole('button', { name: /^share\s+Share$/ }).click();
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
 				await page.getByText('Share URL copied', { exact: true }).waitFor();
 				const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
 				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
@@ -640,9 +656,18 @@ describe('workspace storage browser integration', () => {
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
 				});
-				await page.evaluate(() => {
-					Storage.prototype.setItem = (window as any).__originalSetItem;
-				});
+				// Keep autosave failing until the actual Retry click is delivered.
+				await page
+					.getByRole('button', { name: 'Retry save', exact: true })
+					.evaluate((button) => {
+						button.addEventListener(
+							'click',
+							() => {
+								Storage.prototype.setItem = (window as any).__originalSetItem;
+							},
+							{ capture: true, once: true }
+						);
+					});
 				await page.getByRole('button', { name: 'Retry save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
@@ -676,22 +701,23 @@ describe('workspace storage browser integration', () => {
 				await context.addInitScript((snapshot) => {
 					localStorage.setItem('wasm-idle:example-workspace:v3', snapshot);
 				}, previous);
-				const manifest = JSON.parse(
-					await readFile(
-						new URL(
-							'../../.svelte-kit/output/client/.vite/manifest.json',
-							import.meta.url
-						),
-						'utf8'
-					)
-				) as Record<string, { file: string }>;
-				const monacoModule = Object.entries(manifest).find(([path]) =>
+				const manifestText = await readFile(
+					new URL('../../.svelte-kit/output/client/.vite/manifest.json', import.meta.url),
+					'utf8'
+				).catch((error) => {
+					if (error.code !== 'ENOENT') throw error;
+					return null;
+				});
+				const manifest = manifestText
+					? (JSON.parse(manifestText) as Record<string, { file: string }>)
+					: null;
+				const monacoModule = Object.entries(manifest || {}).find(([path]) =>
 					path.endsWith('/@seorii/monaco/dist/index.js')
 				)?.[1].file;
-				if (!monacoModule)
+				if (manifest && !monacoModule)
 					throw new Error('Built Monaco module is missing from the manifest');
 				const isMonacoModule = (url: URL) =>
-					url.pathname.endsWith(`/${monacoModule}`) ||
+					(monacoModule !== undefined && url.pathname.endsWith(`/${monacoModule}`)) ||
 					decodeURIComponent(url.pathname).endsWith('/@seorii/monaco/dist/index.js');
 				let releaseModule!: () => void;
 				const released = new Promise<void>((resolve) => (releaseModule = resolve));
@@ -713,7 +739,7 @@ describe('workspace storage browser integration', () => {
 					expect(
 						await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 					).toBe('');
-					await page.getByRole('button', { name: /^save\s+Save$/ }).click();
+					await page.getByRole('button', { name: 'Save', exact: true }).click();
 					const afterUnload = await page.evaluate(() => {
 						window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
 						return localStorage.getItem('wasm-idle:example-workspace:v3');

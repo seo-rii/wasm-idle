@@ -3,7 +3,7 @@
 `LEAN4` runs programs with the real upstream Lean 4.34.1 (`leanprover/lean4@5045d005`) frontend
 and IR interpreter: each run is `lean -j1 --run Main.lean [args...]`. The compiler is built for
 wasm32 Emscripten (with pthreads) by
-[`wasm-llvm/producer/lean-browser`](https://github.com/seo-rii/wasm-llvm/tree/5369745f777673710c25cd67c52310b004cfe41a/producer/lean-browser),
+[`wasm-llvm/producer/lean-browser`](https://github.com/seo-rii/wasm-llvm/tree/14ea5ecbc514b0c87338aebf8f2b567020be5750/producer/lean-browser),
 which also compiles the `Init` library with that wasm32 build (`.olean` files are pointer-size
 specific). Lean is Apache-2.0; the statically linked libuv is MIT.
 
@@ -20,10 +20,18 @@ pnpm run test:browser:lean4
 `sync:wasm-lean4` downloads every file from
 `https://raw.githubusercontent.com/seo-rii/wasm-llvm/<revision>/artifacts/lean-browser/` with the
 revision pinned in `scripts/wasm-lean4-assets.lock.json`. It checks each size and SHA-256 hash,
-and the decoded hash of each gzip file, before replacing `static/wasm-lean4/` (ignored by Git).
+and the decoded hash of each gzip file with a bounded output size, before replacing
+`static/wasm-lean4/` (ignored by Git). The sync also requires the runtime independently of the
+producer receipt and validates the exact receipt asset set, library chunk/file ranges, complete
+module parts, and combined library digest.
 `--source /path/to/wasm-llvm/artifacts/lean-browser` reads a local checkout instead. The generated
 `src/lib/playground/wasmLean4Version.ts` binds the lock and the consumer Worker hash; a different
 release requires a reviewed lock update. `page:build` runs the sync.
+
+The pinned release includes the stricter validation from wasm-llvm PR #43. Its receipt records
+`same-byte-repackage` and retains the original receipt: the compiler and all eleven runtime,
+library, and notice files are byte-identical to the previous release. This update requalifies
+those files without claiming a new compiler build.
 
 | Static file                                     |        Bytes |     Decoded |
 | ----------------------------------------------- | -----------: | ----------: |

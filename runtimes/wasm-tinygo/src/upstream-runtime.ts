@@ -133,6 +133,13 @@ export interface TinyGoUpstreamToolchainAssets {
 	lld: Uint8Array;
 }
 
+export type TinyGoToolchainModuleKind = 'compiler' | 'packageGraph' | 'lld';
+
+export type TinyGoToolchainModuleCompiler = (
+	bytes: Uint8Array,
+	kind: TinyGoToolchainModuleKind
+) => Promise<WebAssembly.Module>;
+
 export interface PreparedTinyGoUpstreamToolchain {
 	compiler: WebAssembly.Module;
 	packageGraph: WebAssembly.Module;
@@ -423,13 +430,17 @@ function assertWasm(bytes: Uint8Array, label: string) {
 	}
 }
 
-async function compileWasiModule(bytes: Uint8Array, label: string) {
+async function compileWasiModule(
+	bytes: Uint8Array,
+	label: string,
+	compile?: (bytes: Uint8Array<ArrayBuffer>) => Promise<WebAssembly.Module>
+) {
 	assertWasm(bytes, label);
 	const compileBytes =
 		bytes.buffer instanceof ArrayBuffer
 			? (bytes as Uint8Array<ArrayBuffer>)
 			: Uint8Array.from(bytes);
-	const module = await WebAssembly.compile(compileBytes);
+	const module = compile ? await compile(compileBytes) : await WebAssembly.compile(compileBytes);
 	const unsupported = WebAssembly.Module.imports(module).filter(
 		(entry) => entry.module !== 'wasi_snapshot_preview1'
 	);
@@ -555,7 +566,13 @@ async function verifyRuntimeClosureAssets(
 
 export async function prepareTinyGoUpstreamToolchain(
 	assets: TinyGoUpstreamToolchainAssets,
-	options: { maxRootBytes?: number; maxRootFiles?: number; maxWasmMemoryBytes?: number } = {}
+	options: {
+		maxRootBytes?: number;
+		maxRootFiles?: number;
+		maxWasmMemoryBytes?: number;
+		/** A trusted host compiles the original verified bytes and enforces the memory cap. */
+		compileModule?: TinyGoToolchainModuleCompiler;
+	} = {}
 ): Promise<PreparedTinyGoUpstreamToolchain> {
 	const verified = await verifyTinyGoUpstreamAssetSet(assets);
 	const root = await extractTinyGoRootArchive(assets.rootArchive, {
@@ -590,7 +607,7 @@ export async function prepareTinyGoUpstreamToolchain(
 	);
 	await verifyRuntimeClosureAssets(root, runtime);
 	const compilerBytes =
-		options.maxWasmMemoryBytes === undefined
+		options.compileModule || options.maxWasmMemoryBytes === undefined
 			? assets.compiler
 			: capTinyGoWasmMemory(
 					assets.compiler,
@@ -598,7 +615,7 @@ export async function prepareTinyGoUpstreamToolchain(
 					'upstream TinyGo compiler'
 				);
 	const packageGraphBytes =
-		options.maxWasmMemoryBytes === undefined
+		options.compileModule || options.maxWasmMemoryBytes === undefined
 			? assets.packageGraph
 			: capTinyGoWasmMemory(
 					assets.packageGraph,
@@ -606,13 +623,27 @@ export async function prepareTinyGoUpstreamToolchain(
 					'upstream Go package-graph provider'
 				);
 	const lldBytes =
-		options.maxWasmMemoryBytes === undefined
+		options.compileModule || options.maxWasmMemoryBytes === undefined
 			? assets.lld
 			: capTinyGoWasmMemory(assets.lld, options.maxWasmMemoryBytes, 'raw WASI LLD');
 	const [compiler, packageGraph, lld] = await Promise.all([
-		compileWasiModule(compilerBytes, 'upstream TinyGo compiler'),
-		compileWasiModule(packageGraphBytes, 'upstream Go package-graph provider'),
-		compileWasiModule(lldBytes, 'raw WASI LLD')
+		compileWasiModule(
+			compilerBytes,
+			'upstream TinyGo compiler',
+			options.compileModule ? (bytes) => options.compileModule!(bytes, 'compiler') : undefined
+		),
+		compileWasiModule(
+			packageGraphBytes,
+			'upstream Go package-graph provider',
+			options.compileModule
+				? (bytes) => options.compileModule!(bytes, 'packageGraph')
+				: undefined
+		),
+		compileWasiModule(
+			lldBytes,
+			'raw WASI LLD',
+			options.compileModule ? (bytes) => options.compileModule!(bytes, 'lld') : undefined
+		)
 	]);
 	return {
 		compiler,

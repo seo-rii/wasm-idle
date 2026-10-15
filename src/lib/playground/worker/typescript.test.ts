@@ -522,4 +522,58 @@ describe('TypeScript worker', () => {
 		expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
 		expect((globalThis as any).__factoryCalls).toBe(11);
 	});
+
+	it('reports a nonzero exit without repeating already-streamed stderr', async () => {
+		const { moduleUrl, moduleReceipt } = registerMockTypeScriptRuntimeModule(`
+			export async function createTypeScriptCompiler() {
+				return {
+					async compile(options) {
+						return {
+							success: true,
+							artifact: {
+								javascript: options.code,
+								language: options.language,
+								fileName: options.fileName
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserTypeScriptArtifact(_artifact, options = {}) {
+				options.stderr?.('Error: boom\\n');
+				return { exitCode: 1, stdout: '', stderr: 'Error: boom\\n' };
+			}
+
+			export default createTypeScriptCompiler;
+		`);
+
+		await import('./typescript');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl,
+				moduleReceipt,
+				maxAssetBytes: moduleReceipt.bytes
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'throw new Error("boom")',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				stdin: '',
+				language: 'typescript',
+				activePath: 'main.ts'
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'Error: boom\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'TypeScript program exited with code 1' });
+	});
 });

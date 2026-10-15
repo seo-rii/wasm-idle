@@ -7,14 +7,14 @@ export const WASM_LEAN4_PROFILE = {
 	license: 'Apache-2.0 AND MIT',
 	producer: {
 		repository: 'https://github.com/seo-rii/wasm-llvm',
-		revision: '5369745f777673710c25cd67c52310b004cfe41a',
+		revision: '14ea5ecbc514b0c87338aebf8f2b567020be5750',
 		path: 'artifacts/lean-browser'
 	},
 	assets: {
 		'producer-receipt.json': {
 			upstream: 'producer-receipt.json',
-			bytes: 4596,
-			sha256: 'e60eb3fdcc108fa7c6127c5a8925ffb622706facb17bc4f84e9ed27f82495fa1'
+			bytes: 9768,
+			sha256: '335bd6e1720371fc161859cb7c2858600ec12314c30da1f0e5e503e324a96d42'
 		},
 		'lean.mjs': {
 			upstream: 'lean.mjs',
@@ -105,7 +105,7 @@ export const WASM_LEAN4_PROFILE = {
 		}
 	},
 	workerReceipt: {
-		bytes: 15759,
-		sha256: '469ef5ec7accf4c221d06134ccd4989f14e9229c61dd35c386617a015aec6f03'
+		bytes: 16049,
+		sha256: '3611a263c4304246c9ee2967c07be2a1c70764a39d642db87ba0b86bfbe9d519'
 	}
 } as const;

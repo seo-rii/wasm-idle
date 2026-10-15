@@ -51,7 +51,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
-	import { normalizeWorkspacePath } from './workspacePath';
+	import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
 	import {
 		createSharedWorkspaceUrl,
 		WORKSPACE_STORAGE_KEY,
@@ -63,6 +63,7 @@
 	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
+	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
 	import { stageWorkspaceImport } from './workspaceImport';
 	import {
 		captureWorkspaceImportDestination,
@@ -76,7 +77,6 @@
 		argsHelpLanguages,
 		argsLabels,
 		clangdLspLanguages,
-		compilerDiagnosticLanguages,
 		debugLspLanguages,
 		dotnetLspLanguages,
 		editorLanguages,
@@ -95,13 +95,6 @@
 		workspaceFileFromBytes,
 		type WorkspaceFile
 	} from './workspaceCodec';
-	type WorkspaceArchiveRequest =
-		{ type: 'create'; files: WorkspaceFile[] } | { type: 'extract'; archive: ArrayBuffer };
-	type WorkspaceArchiveResponse =
-		| { type: 'created'; archive: ArrayBuffer }
-		| { type: 'extracted'; files: WorkspaceFile[] }
-		| { type: 'error'; message: string };
-
 	type LanguageWorkspace = {
 		activePath: string;
 		files: WorkspaceFile[];
@@ -247,6 +240,8 @@
 	let restartDebugPending = $state(false);
 	let executionStopPending = $state(false);
 	let executionGeneration = 0;
+	// Compiler diagnostics resolve against the workspace their run compiled.
+	let compilerDiagnosticRun: { entryPath: string; workspacePaths: string[] } | null = null;
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
@@ -1016,6 +1011,8 @@
 		files = cloneFiles(nextWorkspace.files);
 		activePath = nextWorkspace.activePath;
 		openTabs = [...nextWorkspace.openTabs];
+		compilerDiagnostics = [];
+		compilerDiagnosticRun = null;
 	}
 
 	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
@@ -1031,8 +1028,9 @@
 	}
 
 	function handleLanguageChange(event: Event) {
-		// Initial storage/share restoration owns the workspace until it completes.
-		if (!workspaceInitialized) return;
+		// Initial storage/share restoration owns the workspace until it completes, and a run or
+		// debug session owns it until it settles.
+		if (!workspaceInitialized || runningMode) return;
 		const nextLanguage = normalizeRequestedLanguage(
 			(event.currentTarget as HTMLSelectElement).value
 		);
@@ -1055,7 +1053,7 @@
 	});
 
 	function openLanguageMenu() {
-		if (!workspaceInitialized) return;
+		if (!workspaceInitialized || runningMode) return;
 		languageQuery = '';
 		languageHighlight = Math.max(0, playgroundLanguages.indexOf(language));
 		languageMenuOpen = true;
@@ -1068,7 +1066,7 @@
 
 	function chooseLanguage(nextLanguage: PlaygroundLanguage) {
 		closeLanguageMenu(true);
-		if (workspaceInitialized) switchLanguage(nextLanguage);
+		if (workspaceInitialized && !runningMode) switchLanguage(nextLanguage);
 	}
 
 	function handleLanguageSearchKeydown(event: KeyboardEvent) {
@@ -1152,7 +1150,8 @@
 		if (!files.some((file) => file.path === filePath)) return;
 		activePath = filePath;
 		if (!openTabs.includes(filePath)) openTabs = [...openTabs, filePath];
-		if (compact) sidebarOpen = false;
+		// Below the desktop breakpoint the explorer overlays the editor (see the 960px media query).
+		if (!desktopExampleLayout) sidebarOpen = false;
 	}
 
 	function addWorkspaceFile(
@@ -1181,7 +1180,7 @@
 
 	function renameActiveFile() {
 		const file = activeFile;
-		if (!file) return;
+		if (!file || runningMode) return;
 		const requested = prompt('Rename file', file.path);
 		if (!requested) return;
 		let nextPath: string;
@@ -1211,7 +1210,7 @@
 
 	function deleteActiveFile() {
 		const file = activeFile;
-		if (!file) return;
+		if (!file || runningMode) return;
 		if (files.length === 1) {
 			saveStatus = 'Keep at least one file';
 			return;
@@ -1342,7 +1341,7 @@
 			ocamlBackend = value.ocamlBackend;
 		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
 			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
-		sidebarOpen = value?.sidebarOpen ?? !compact;
+		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
 		saveStatus = message;
 	}
 
@@ -1449,18 +1448,7 @@
 		const { default: WorkspaceArchiveWorker } =
 			await import('./workspaceArchive.worker?worker');
 		const worker = new WorkspaceArchiveWorker();
-		try {
-			return await new Promise<WorkspaceArchiveResponse>((resolve, reject) => {
-				worker.onmessage = ({ data }: MessageEvent<WorkspaceArchiveResponse>) => {
-					if (data.type === 'error') reject(new Error(data.message));
-					else resolve(data);
-				};
-				worker.onerror = (event) => reject(new Error(event.message || 'ZIP worker failed'));
-				worker.postMessage(request, transfer);
-			});
-		} finally {
-			worker.terminate();
-		}
+		return await requestWorkspaceArchive(worker, request, transfer);
 	}
 
 	async function downloadZip() {
@@ -1511,6 +1499,10 @@
 	}
 
 	async function importFiles(fileList: File[]) {
+		if (runningMode) {
+			saveStatus = 'Stop the running program before importing files';
+			return;
+		}
 		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
 		try {
 			const plan = await stageWorkspaceImport(fileList, {
@@ -1518,6 +1510,11 @@
 				assertDestination: destination.assertCurrent
 			});
 			destination.assertCurrent();
+			// A run or debug session that started while the import was staged owns the workspace.
+			if (runningMode) {
+				saveStatus = 'Stop the running program before importing files';
+				return;
+			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
 				applySnapshot(plan.backup, 'Workspace backup restored');
@@ -1567,6 +1564,7 @@
 	}
 
 	function resetWorkspace() {
+		if (runningMode) return;
 		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
 		const nextWorkspace = createDefaultWorkspace(language);
 		languageWorkspaces = {
@@ -1843,7 +1841,19 @@
 	}
 
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
-		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
+		const run = compilerDiagnosticRun;
+		if (!run) return;
+		compilerDiagnostics = [
+			...compilerDiagnostics,
+			{
+				...diagnostic,
+				fileName: resolveCompilerDiagnosticPath(
+					diagnostic.fileName,
+					run.entryPath,
+					run.workspacePaths
+				)
+			}
+		];
 	}
 
 	function onDebugEvent(event: DebugSessionEvent) {
@@ -2222,7 +2232,17 @@
 				debug.reset();
 			}
 			compilerDiagnostics = [];
+			compilerDiagnosticRun = {
+				entryPath: activePath,
+				workspacePaths: files.map((file) => file.path)
+			};
 			const codeToRun = activeFile.content;
+			// Tab switches and new files stay available during the LLDB check below; run what Run saw.
+			const runActivePath = activePath;
+			const runWorkspaceFiles = files.map((file) => ({
+				path: file.path,
+				content: file.path === runActivePath ? codeToRun : file.content
+			}));
 			if (browser) {
 				saveWorkspace();
 				try {
@@ -2305,15 +2325,12 @@
 						interactive: enableDebug,
 						breakpoints: [...debug.effectiveBreakpoints],
 						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
-							files.some(
+							runWorkspaceFiles.some(
 								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
 							)
 						),
-						activePath,
-						workspaceFiles: files.map((file) => ({
-							path: file.path,
-							content: file.path === activePath ? codeToRun : file.content
-						})),
+						activePath: runActivePath,
+						workspaceFiles: runWorkspaceFiles,
 						pauseOnEntry: enableDebug,
 						...languageExecutionOptions,
 						signal: abortController.signal,
@@ -2391,6 +2408,7 @@
 			const code = readStoredValue('code');
 			const lang = readStoredValue('language');
 			const storedArgs = readStoredValue('argsInput');
+			const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 			const storedGoTarget = readStoredValue('goTarget');
 			const storedOcamlBackend = readStoredValue('ocamlBackend');
 			const storedOcamlWasmBinaryenMode = readStoredValue('ocamlWasmBinaryenMode');
@@ -2454,6 +2472,12 @@
 				requestedRustTargetTriple === 'wasm32-wasip3'
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
+			} else if (
+				storedRustTargetTriple === 'wasm32-wasip1' ||
+				storedRustTargetTriple === 'wasm32-wasip2' ||
+				storedRustTargetTriple === 'wasm32-wasip3'
+			) {
+				rustTargetTriple = storedRustTargetTriple;
 			}
 			if (requestedWorkspaceUrl) {
 				replaceState(requestedWorkspaceUrl, page.state);
@@ -2497,36 +2521,18 @@
 				);
 				if (!nextAvailableRustTargetTriples.length || cancelled) return;
 				availableRustTargetTriples = [...nextAvailableRustTargetTriples];
-				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 				const nextDefaultTargetTriple = nextAvailableRustTargetTriples.includes(
 					manifest.defaultTargetTriple as RustTargetTriple
 				)
 					? (manifest.defaultTargetTriple as RustTargetTriple)
 					: nextAvailableRustTargetTriples[0];
-				if (
-					storedRustTargetTriple &&
-					nextAvailableRustTargetTriples.includes(
-						storedRustTargetTriple as RustTargetTriple
-					)
-				) {
-					rustTargetTriple = storedRustTargetTriple as RustTargetTriple;
-					return;
-				}
+				// The restored or just-picked target owns the selection; only replace an unavailable one.
 				if (!nextAvailableRustTargetTriples.includes(rustTargetTriple)) {
 					rustTargetTriple = nextDefaultTargetTriple;
 				}
 			} catch {
 				if (cancelled) return;
 				availableRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2'];
-				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
-				if (
-					(storedRustTargetTriple === 'wasm32-wasip1' ||
-						storedRustTargetTriple === 'wasm32-wasip2') &&
-					availableRustTargetTriples.includes(storedRustTargetTriple)
-				) {
-					rustTargetTriple = storedRustTargetTriple;
-					return;
-				}
 				if (!availableRustTargetTriples.includes(rustTargetTriple)) {
 					rustTargetTriple = 'wasm32-wasip1';
 				}
@@ -2557,27 +2563,18 @@
 				);
 				if (!nextAvailableGoTargets.length || cancelled) return;
 				availableGoTargets = [...nextAvailableGoTargets];
-				const storedGoTarget = readStoredValue('goTarget');
 				const nextDefaultGoTarget = nextAvailableGoTargets.includes(
 					manifest.defaultTarget as GoTarget
 				)
 					? (manifest.defaultTarget as GoTarget)
 					: nextAvailableGoTargets[0];
-				if (storedGoTarget && nextAvailableGoTargets.includes(storedGoTarget as GoTarget)) {
-					goTarget = storedGoTarget as GoTarget;
-					return;
-				}
+				// The restored or just-picked target owns the selection; only replace an unavailable one.
 				if (!nextAvailableGoTargets.includes(goTarget)) {
 					goTarget = nextDefaultGoTarget;
 				}
 			} catch {
 				if (cancelled) return;
 				availableGoTargets = ['wasip1/wasm'];
-				const storedGoTarget = readStoredValue('goTarget');
-				if (storedGoTarget === 'wasip1/wasm') {
-					goTarget = storedGoTarget;
-					return;
-				}
 				if (!availableGoTargets.includes(goTarget)) {
 					goTarget = 'wasip1/wasm';
 				}
@@ -2761,7 +2758,6 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (!compilerDiagnosticLanguages.has(language)) compilerDiagnostics = [];
 	});
 </script>
 
@@ -2826,7 +2822,7 @@
 							onclick={() => inspectDebugVariable(variable)}
 							aria-label={`Inspect memory for ${variable.name}`}
 						>
-							<span class="material-symbols-outlined">memory</span>
+							<span class="material-symbols-outlined" aria-hidden="true">memory</span>
 						</button>
 					{/if}
 					{#if reference > 0}
@@ -2836,7 +2832,7 @@
 							disabled={children !== undefined || loadingChildren}
 							aria-label={`Load children for ${variable.name}`}
 						>
-							<span class="material-symbols-outlined">
+							<span class="material-symbols-outlined" aria-hidden="true">
 								{children === undefined ? 'chevron_right' : 'expand_more'}
 							</span>
 						</button>
@@ -2879,7 +2875,9 @@
 										: 'debug-status-pill--idle'
 							]}
 						>
-							<span class="material-symbols-outlined">{debugStatusIcon}</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>{debugStatusIcon}</span
+							>
 							<span>{debugStatusLabel}</span>
 						</div>
 						<div class="debug-hero__copy">
@@ -2898,7 +2896,9 @@
 							title="Continue"
 							aria-label="Continue"
 						>
-							<span class="material-symbols-outlined">play_arrow</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>play_arrow</span
+							>
 							<span class="debug-control__label">Continue</span>
 						</button>
 						<button
@@ -2908,7 +2908,7 @@
 							title="Pause"
 							aria-label="Pause"
 						>
-							<span class="material-symbols-outlined">pause</span>
+							<span class="material-symbols-outlined" aria-hidden="true">pause</span>
 						</button>
 						<span class="debug-controls__divider" aria-hidden="true"></span>
 						<button
@@ -2918,7 +2918,7 @@
 							title="Next Line"
 							aria-label="Next Line"
 						>
-							<span class="material-symbols-outlined">redo</span>
+							<span class="material-symbols-outlined" aria-hidden="true">redo</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2927,7 +2927,7 @@
 							title="Step Into"
 							aria-label="Step Into"
 						>
-							<span class="material-symbols-outlined">login</span>
+							<span class="material-symbols-outlined" aria-hidden="true">login</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2936,7 +2936,7 @@
 							title="Step Out"
 							aria-label="Step Out"
 						>
-							<span class="material-symbols-outlined">logout</span>
+							<span class="material-symbols-outlined" aria-hidden="true">logout</span>
 						</button>
 						<button
 							class="action-button debug-control"
@@ -2949,7 +2949,9 @@
 								? `Run to Cursor (L${debug.cursorLine})`
 								: 'Run to Cursor'}
 						>
-							<span class="material-symbols-outlined">play_circle</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>play_circle</span
+							>
 						</button>
 					</div>
 				</header>
@@ -3009,7 +3011,9 @@
 								<span class="visually-hidden">Toggle variables</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">data_object</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>data_object</span
+								>
 								<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
 							</div>
 							<span class="debug-count">
@@ -3093,7 +3097,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No locals yet</span>
 									</p>
 								{/if}
@@ -3115,7 +3121,9 @@
 								<span class="visually-hidden">Toggle watch</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">visibility</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>visibility</span
+								>
 								<h3>Watch</h3>
 							</div>
 							<span class="debug-count">{debug.watchExpressions.length}</span>
@@ -3134,7 +3142,9 @@
 										class="watch-add"
 										onclick={() => debug.addWatchExpression()}
 									>
-										<span class="material-symbols-outlined">add</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>add</span
+										>
 										<span>Add</span>
 									</button>
 								</div>
@@ -3156,8 +3166,9 @@
 														)}
 													aria-label={`Remove watch expression ${watch.expression}`}
 												>
-													<span class="material-symbols-outlined"
-														>close</span
+													<span
+														class="material-symbols-outlined"
+														aria-hidden="true">close</span
 													>
 												</button>
 											</li>
@@ -3165,7 +3176,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No watches yet</span>
 									</p>
 								{/if}
@@ -3187,7 +3200,9 @@
 								<span class="visually-hidden">Toggle call stack</span>
 							</button>
 							<div class="debug-panel__title">
-								<span class="material-symbols-outlined">layers</span>
+								<span class="material-symbols-outlined" aria-hidden="true"
+									>layers</span
+								>
 								<h3>Call Stack</h3>
 							</div>
 							<span class="debug-count">{debug.callStack.length}</span>
@@ -3230,7 +3245,9 @@
 									</ul>
 								{:else}
 									<p class="empty">
-										<span class="material-symbols-outlined">info</span>
+										<span class="material-symbols-outlined" aria-hidden="true"
+											>info</span
+										>
 										<span>No frames yet</span>
 									</p>
 								{/if}
@@ -3253,7 +3270,9 @@
 									<span class="visually-hidden">Toggle memory</span>
 								</button>
 								<div class="debug-panel__title">
-									<span class="material-symbols-outlined">memory</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>memory</span
+									>
 									<h3>Memory</h3>
 								</div>
 								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
@@ -3478,7 +3497,7 @@
 						bind:this={languageTrigger}
 						class="select-chip language-trigger"
 						type="button"
-						disabled={!workspaceInitialized}
+						disabled={!workspaceInitialized || !!runningMode}
 						aria-haspopup="listbox"
 						aria-expanded={languageMenuOpen}
 						aria-label={`Language: ${languageLabels[language]}`}
@@ -3500,7 +3519,7 @@
 						tabindex="-1"
 						aria-hidden="true"
 						value={language}
-						disabled={!workspaceInitialized}
+						disabled={!workspaceInitialized || !!runningMode}
 						data-workspace-ready={workspaceInitialized}
 						onchange={handleLanguageChange}
 					>
@@ -3572,7 +3591,7 @@
 				</div>
 				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
-						<span class="material-symbols-outlined">list_alt</span>
+						<span class="material-symbols-outlined" aria-hidden="true">list_alt</span>
 						<input
 							bind:value={argsInput}
 							placeholder="--name &quot;Hong Gil&quot; &quot;&quot;"
@@ -3589,7 +3608,8 @@
 				{/if}
 				{#if language === 'CPP'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">tune</span>
+						<span class="material-symbols-outlined" aria-hidden="true">tune</span>
+						<span class="visually-hidden">C++ standard</span>
 						<select id="cpp-version" bind:value={cppVersion}>
 							{#each knownCppVersions as version (version)}
 								<option value={version}>{cppVersionLabels[version]}</option>
@@ -3599,7 +3619,10 @@
 				{/if}
 				{#if language === 'RUST'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">Rust target</span>
 						<select id="rust-target-triple" bind:value={rustTargetTriple}>
 							{#each availableRustTargetTriples as targetTriple (targetTriple)}
 								<option value={targetTriple}>{targetTriple}</option>
@@ -3609,7 +3632,10 @@
 				{/if}
 				{#if language === 'GO'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">Go target</span>
 						<select id="go-target" bind:value={goTarget}>
 							{#each availableGoTargets as target (target)}
 								<option value={target}>{target}</option>
@@ -3619,7 +3645,10 @@
 				{/if}
 				{#if language === 'OCAML'}
 					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
+						<span class="material-symbols-outlined" aria-hidden="true"
+							>conversion_path</span
+						>
+						<span class="visually-hidden">OCaml backend</span>
 						<select id="ocaml-backend" bind:value={ocamlBackend}>
 							<option value="wasm">wasm_of_ocaml</option>
 							<option value="js">js_of_ocaml</option>
@@ -3627,7 +3656,8 @@
 					</label>
 					{#if ocamlBackend === 'wasm'}
 						<label class="select-chip">
-							<span class="material-symbols-outlined">memory</span>
+							<span class="material-symbols-outlined" aria-hidden="true">memory</span>
+							<span class="visually-hidden">Binaryen mode</span>
 							<select id="ocaml-binaryen-mode" bind:value={ocamlWasmBinaryenMode}>
 								<option value="fast">Binaryen fast</option>
 								<option value="full">Binaryen full</option>
@@ -3669,11 +3699,11 @@
 				</svg>
 			</a>
 			<button class="tool-button" onclick={() => saveWorkspace(true)} title="Save workspace">
-				<span class="material-symbols-outlined">save</span>
+				<span class="material-symbols-outlined" aria-hidden="true">save</span>
 				<span>Save</span>
 			</button>
 			<button class="tool-button" onclick={shareWorkspace} title="Copy share link">
-				<span class="material-symbols-outlined">share</span>
+				<span class="material-symbols-outlined" aria-hidden="true">share</span>
 				<span>Share</span>
 			</button>
 			{#if currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY}
@@ -3694,7 +3724,7 @@
 				disabled={!terminal || !!runningMode || !executionAvailable}
 				title="Restart runtime"
 			>
-				<span class="material-symbols-outlined">restart_alt</span>
+				<span class="material-symbols-outlined" aria-hidden="true">restart_alt</span>
 				<span>Restart Runtime</span>
 			</button>
 			<span class="topbar__divider" aria-hidden="true"></span>
@@ -3706,7 +3736,8 @@
 						disabled={restartDebugPending || executionStopPending}
 						aria-label="Restart Debug"
 					>
-						<span class="material-symbols-outlined">restart_alt</span>
+						<span class="material-symbols-outlined" aria-hidden="true">restart_alt</span
+						>
 						<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
 					</button>
 					<button
@@ -3714,7 +3745,8 @@
 						onclick={stopExecution}
 						disabled={executionStopPending || restartDebugPending}
 					>
-						<span class="material-symbols-outlined">stop_circle</span>
+						<span class="material-symbols-outlined" aria-hidden="true">stop_circle</span
+						>
 						<span>Stop Debug</span>
 					</button>
 				{:else}
@@ -3727,7 +3759,7 @@
 							!debugTargetAvailable}
 						title={debugUnavailableReason}
 					>
-						<span class="material-symbols-outlined">bug_report</span>
+						<span class="material-symbols-outlined" aria-hidden="true">bug_report</span>
 						<span>Debug</span>
 					</button>
 				{/if}
@@ -3737,7 +3769,8 @@
 						onclick={stopExecution}
 						disabled={executionStopPending}
 					>
-						<span class="material-symbols-outlined">stop_circle</span>
+						<span class="material-symbols-outlined" aria-hidden="true">stop_circle</span
+						>
 						<span>Stop Running</span>
 					</button>
 				{:else}
@@ -3746,7 +3779,7 @@
 						onclick={() => exec(false)}
 						disabled={runningMode === 'debug' || !executionAvailable}
 					>
-						<span class="material-symbols-outlined">play_arrow</span>
+						<span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
 						<span>Run</span>
 					</button>
 				{/if}
@@ -3799,6 +3832,7 @@
 							aria-label="Upload files"
 							title="Upload files"
 							onclick={() => fileInput?.click()}
+							disabled={!!runningMode}
 						>
 							<span class="material-symbols-outlined" aria-hidden="true">upload</span>
 						</button>
@@ -3827,7 +3861,7 @@
 				<div class="workspace-sidebar__section">
 					<p class="section-label">Active file</p>
 					<div class="workspace-sidebar__actions">
-						<button onclick={renameActiveFile}>
+						<button onclick={renameActiveFile} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">edit</span>
 							<span>Rename</span>
 						</button>
@@ -3843,7 +3877,7 @@
 							>
 							<span>Download</span>
 						</button>
-						<button class="danger" onclick={deleteActiveFile}>
+						<button class="danger" onclick={deleteActiveFile} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">delete</span>
 							<span>Delete</span>
 						</button>
@@ -3856,7 +3890,7 @@
 							>
 							<span>ZIP</span>
 						</button>
-						<button onclick={resetWorkspace}>
+						<button onclick={resetWorkspace} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">history</span
 							>
 							<span>Reset</span>
@@ -3876,7 +3910,9 @@
 									aria-label={`Close ${tab}`}
 									onclick={(event) => closeTab(tab, event)}
 								>
-									<span class="material-symbols-outlined">close</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>close</span
+									>
 								</button>
 							{/if}
 						</div>
@@ -3983,12 +4019,14 @@
 					{/key}
 				</div>
 			</section>
+			<!-- A focusable separator is the WAI-ARIA window splitter widget, not static content. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div
 				class:panel-resizer--active={resizingPane}
 				class="panel-resizer"
-				role="slider"
+				role="separator"
 				aria-label="Resize example panes"
-				aria-orientation="horizontal"
+				aria-orientation="vertical"
 				aria-hidden={!desktopExampleLayout}
 				tabindex={desktopExampleLayout ? 0 : -1}
 				aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
@@ -4071,7 +4109,9 @@
 							title="Send EOF"
 							aria-label="Send EOF"
 						>
-							<span class="material-symbols-outlined">keyboard_tab_rtl</span>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>keyboard_tab_rtl</span
+							>
 						</button>
 					</div>
 				</header>
@@ -4080,7 +4120,9 @@
 						<div class="progress-shell" aria-live="polite">
 							<div class="progress-copy">
 								<div class="progress-copy__text">
-									<span class="material-symbols-outlined">hourglass_top</span>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>hourglass_top</span
+									>
 									<strong>{progressLabel}</strong>
 								</div>
 								{#if !progressIndeterminate}
@@ -4135,6 +4177,7 @@
 							</div>
 							<textarea
 								bind:value={stdinInput}
+								aria-label="Preloaded stdin"
 								placeholder="Input to pass before running"
 								spellcheck={false}></textarea>
 						</div>
@@ -4146,9 +4189,9 @@
 	</div>
 	<footer class="statusbar">
 		<div class="statusbar__group">
+			<!-- Not a live region: autosave flips this after every edit; failed saves raise an alert. -->
 			<span
 				class="save-state save-state--{workspaceSaveState.phase}"
-				role="status"
 				data-workspace-save-state={workspaceSaveState.phase}
 			>
 				<i aria-hidden="true"></i>
@@ -4885,6 +4928,12 @@
 		color: var(--text);
 	}
 
+	.workspace-sidebar__tools button:disabled {
+		background: transparent;
+		color: var(--text-4);
+		cursor: not-allowed;
+	}
+
 	.workspace-sidebar__tools .material-symbols-outlined {
 		font-size: 19px;
 	}
@@ -5003,6 +5052,13 @@
 	.workspace-sidebar__actions button.danger:hover {
 		background: var(--danger-soft);
 		color: var(--danger);
+	}
+
+	.workspace-sidebar__actions button:disabled,
+	.workspace-sidebar__actions button.danger:disabled {
+		background: var(--fill);
+		color: var(--text-4);
+		cursor: not-allowed;
 	}
 
 	.workspace-sidebar__actions .material-symbols-outlined {

@@ -25,6 +25,33 @@ Verified downloads can be retained across reloads using a version-pinned, capaci
 CacheStorage/IndexedDB cache. See [persistent asset cache configuration and coverage](docs/runtime-asset-cache.md)
 for global/per-call opt-out, cleanup and prefetch APIs.
 
+## Getting started
+
+You need Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`, and pnpm 12.9.1. These come from the root
+`package.json` `engines` and `packageManager` fields, and `.npmrc` sets `engine-strict=true`.
+`.tool-versions` pins Node.js 24.20.0 for asdf/mise.
+
+```bash
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` builds the public workspace packages, then starts Vite with the cross-origin isolation
+headers that `SharedArrayBuffer` requires. The app is served under the `/wasm-idle` base path, for
+example `http://localhost:5173/wasm-idle/`.
+
+Most runtime assets are checked in under `static/`. Some compiler payloads are gitignored and must
+be prepared locally before those languages can run:
+
+- `pnpm run prepare:test-assets` downloads the pinned Clang (with its matching clangd), OCaml,
+  C3, LFortran, Lean 4, and Common Lisp payloads. Pass group names, for example
+  `-- clang ocaml`, to prepare only some of them.
+- `pnpm run prepare:wasm-debug-release` adds the LLDB debug runtime. Without it, C, C++, and
+  `wasm32-wasip1` Rust debug sessions use the trace fallback.
+
+Other runtimes are refreshed from their producers with the `sync:*` scripts described under
+[Monorepo layout](#monorepo-layout).
+
 ## Language support policy
 
 wasm-idle language support must run user code through the real language implementation in the
@@ -218,6 +245,7 @@ multi-module guests, and Rust WASI Preview 2/3 debugging remain outside the supp
 
 ```sh
 cd ../wasm-llvm
+WASM_LLVM_CLANG_ARTIFACT_DIR=/path/to/verified-clang-artifacts \
 WASM_LLVM_LLDB_ARTIFACT_DIR=/path/to/lldb-artifacts \
 WASM_LLVM_WAMR_ARTIFACT_DIR=/path/to/wamr-artifacts \
 pnpm prepare:clang-release
@@ -227,8 +255,15 @@ WASM_RUST_PRODUCER_OUTPUT_ROOT=/path/to/rust-producer-output \
 pnpm --dir runtimes/wasm-rust build:producer
 pnpm sync:wasm-rust
 pnpm sync:wasm-debug ../wasm-llvm/out/clang-browser
-WASM_IDLE_BROWSER_SERVER_MODE=dev pnpm test:browser:debug:lldb
+pnpm test:browser:debug:lldb
 ```
+
+The Clang artifact directory must contain the verified build receipt and its matching raw-input
+identities. The producer rejects historical artifacts without that evidence when assembling a new
+release. For the already reviewed bundled debugger, use `pnpm prepare:wasm-debug-release` in
+`wasm-idle` to install the immutable release selected by the tracked profile.
+The browser command uses the qualified preview path; development-server LLDB qualification is
+tracked separately.
 
 The synchronized manifest rejects missing hashes, incompatible Clang/LLDB revisions, and stale
 worker sidecars. The strict browser test covers real C, C++, and Rust breakpoint, step, output, and
@@ -353,19 +388,25 @@ toolchains can be consumed from pinned external runtime repositories:
 - `packages/react`: React hooks around `@wasm-idle/core`.
 - `packages/vue`: Vue composables around `@wasm-idle/core`.
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
-- `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
-  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `wasm-tcl`, `wasm-awk`,
-  `wasm-forth`, `wasm-j`, `wasm-bqn`, `wasm-janet`,
-  `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, and `js-sandbox`.
+- `runtimes/*`: imported runtime/compiler packages `wasm-rust`, `wasm-of-js-of-ocaml`, `wasm-go`,
+  `wasm-d`, `wasm-dotnet`, `wasm-typescript`, `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`,
+  `wasm-awk`, `wasm-bash`, `wasm-clojurescript`, `pyodide`, `teavm`, `ruby`, `r`, and
+  `js-sandbox`. `wasm-pascal` holds the pas2js compiler wrapper sources and is not a workspace
+  package.
+- `runtimes/esolangs`: pinned upstream interpreter sources and licenses for the esoteric
+  languages. `pnpm build:esolangs` and the Aheui, APECode, and GolfScript sync scripts turn them
+  into `static/wasm-<language>/` assets.
 - `runtimes/wasm-tinygo`: the public `TINYGO` browser compiler consumer plus an explicitly labeled
   legacy AST-to-C development harness. Static releases publish only the receipt-verified upstream
   consumer and its source-pinned toolchain assets.
+- `runtimes/wasm-kotlin` and `runtimes/wasm-scala`: internal compiler candidates. They are not
+  registered playground languages or workspace packages.
 - `producers/wasm-php`: standalone, locked producer for the checked-in PHP 8.4 page asset. It is
   outside the root workspace and is never published as an npm package.
-- `static/wasm-zig`, `static/wasm-haskell`, `static/wasm-julia`, and `static/wasm-nim`: bundled browser runtime and
-  compiler assets synced from
-  upstream asset builds rather than local workspace packages.
+- `static/wasm-zig`, `static/wasm-haskell`, `static/wasm-julia`, `static/wasm-nim`,
+  `static/wasm-tcl`, `static/wasm-forth`, `static/wasm-j`, `static/wasm-bqn`, and
+  `static/wasm-janet`: bundled browser runtime and compiler assets synced from upstream asset
+  builds rather than local workspace packages.
 
 Deployment builds retain both legacy `.gz` and canonical `.gz.bin` URLs by default.
 After building and compressing the page, `pnpm run compact:build-runtimes` reports
@@ -388,9 +429,24 @@ pnpm sync:runtime list
 pnpm sync:runtimes
 ```
 
-The runtime sync scripts default to `runtimes/<name>/dist`; optional source and target arguments are
-for alternate build directories inside the current checkout. PHP is the exception:
-`sync:wasm-php` consumes `producers/wasm-php/dist` or `WASM_IDLE_WASM_PHP_DIST`.
+`pnpm sync:runtime list` prints every runtime the wrapper knows. It marks `manual` runtimes, which
+`pnpm sync:runtimes` skips unless `--include-manual` is passed, and `source-required` runtimes,
+which need an explicit source directory and never run from `sync:runtimes`.
+
+Default sources differ by runtime:
+
+- Runtimes with sources under `runtimes/`, such as `wasm-go`, `wasm-d`, `wasm-dotnet`,
+  `wasm-lua`, `wasm-wat`, `wasm-typescript`, `wasm-lisp`, `wasm-awk`, `wasm-pascal`, and
+  `wasm-bash`, read `runtimes/<name>/dist`.
+- Some read an installed npm package, such as `webr` or `swipl-wasm`.
+- Some download a pinned upstream release, such as Tcl, Perl, and Octave.
+- Julia and Nim re-verify the checked-in assets and download their pinned release only when those
+  assets are missing.
+- J, BQN, and Janet prefer a sibling checkout and otherwise reuse the checked-in assets.
+- Rust, TinyGo, and ClojureScript re-verify and redeploy the checked-in `static/` snapshot.
+
+The optional `[sourceDir] [targetDir]` arguments override these defaults. `sync:wasm-php` is not
+part of the wrapper; it consumes `producers/wasm-php/dist` or `WASM_IDLE_WASM_PHP_DIST`.
 
 Published packages are built in workspace dependency order. Before publishing, run:
 
@@ -415,7 +471,7 @@ opaque, receipt-pinned storage paths; these files are deployed page assets, not 
 contents.
 
 PHP is built independently under `producers/wasm-php`, with its own lockfile and exact
-`@php-wasm/web-8-4@3.1.34` and `@php-wasm/universal@3.1.34` dependencies. Refresh the checked-in
+`@php-wasm/web-8-4@3.1.57` and `@php-wasm/universal@3.1.57` dependencies. Refresh the checked-in
 page asset only when changing that producer:
 
 ```bash
@@ -627,7 +683,8 @@ are bounded and verified against the exact expanded size and SHA-256.
 
 The preparer rejects source or target paths outside their configured roots, checks each redirect
 before following it, writes atomically, and reuses only matching files. With no group argument,
-it prepares both the Clang delivery bundle and the complete OCaml browser compiler graph.
+it prepares the Clang delivery bundle with its matching clangd assets, the complete OCaml browser
+compiler graph, and the C3, LFortran, Lean 4, and Common Lisp payloads.
 `WASM_IDLE_TEST_ASSET_BASE_URL` can select a compatible mirror with the same receipt-verified bytes.
 For protected local browser tests, provide `WASM_IDLE_TEST_BYPASS_COOKIE` through the environment
 in `dev_bypass_waf=<value>` form; the browser cookie jar scopes it to the test origin. Asset
@@ -786,8 +843,8 @@ and other workspace `.sql` files run first. Preloaded stdin is exposed as the se
 `/dev/blob` (`COPY t FROM '/dev/blob'` or `pg_read_file('/dev/blob')`). Override the module with
 `PUBLIC_WASM_POSTGRESQL_MODULE_URL` or `runtimeAssets.postgresql.moduleUrl`.
 PHP dynamically imports the checked-in `static/wasm-php/runtime.mjs` output from the standalone
-`producers/wasm-php` build. That producer pins `@php-wasm/web-8-4@3.1.34` and
-`@php-wasm/universal@3.1.34`. It always creates PHP 8.4; there is no version field or
+`producers/wasm-php` build. That producer pins `@php-wasm/web-8-4@3.1.57` and
+`@php-wasm/universal@3.1.57`. It always creates PHP 8.4; there is no version field or
 environment-based version selector. Override only the module location with
 `PUBLIC_WASM_PHP_MODULE_URL` or `runtimeAssets.php.moduleUrl`. A custom host must serve the entry's
 sibling chunks and assets with compatible CORS and cross-origin isolation headers; a cross-origin
@@ -855,6 +912,9 @@ the Rust worker:
 
 - `wasm32-wasip1` runs as preview1 core wasm through `@bjorn3/browser_wasi_shim`
 - `wasm32-wasip2` runs as a preview2 component through `preview2-shim` plus transpiled `jco` output
+- `wasm32-wasip3` also returns a component and runs on the same preview2 path. This works only
+  while emitted components keep transitional WASIp2 imports; preview3 imports are rejected until a
+  browser preview3 shim exists
 
 C-family compilation remains hosted by `@wasm-idle/llvm-core`, while Rust delegates artifact
 execution to `wasm-rust` so the selected target and returned artifact format stay aligned.
@@ -917,7 +977,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 		stdlibUrl: 'https://cdn.example.com/wasm-zig/std.tar.gz'
 	},
 	lisp: {
-		moduleUrl: 'https://cdn.example.com/wasm-lisp/index.js'
+		moduleUrl: 'https://cdn.example.com/wasm-lisp/index.js',
+		manifestUrl: 'https://cdn.example.com/wasm-lisp/runtime-manifest.v2.json',
+		manifestFingerprint: '<runtime-manifest-fingerprint>'
 	},
 	haskell: {
 		moduleUrl: 'https://cdn.example.com/wasm-haskell/dyld.mjs',
@@ -926,7 +988,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	nim: {
 		baseUrl: 'https://cdn.example.com/wasm-nim/',
-		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js'
+		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js',
+		// Complete identity and receipt bundle for the served bytes; see below.
+		...nimTrustBundle
 	}
 };
 ```
@@ -934,12 +998,22 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 Static module overrides such as PHP's `moduleUrl` identify an entry module, not a self-contained
 file. Mirror its complete sibling asset tree at the same relative paths. Cross-origin asset hosts
 must provide compatible CORS and COEP/CORP headers and cannot rely on wasm-idle's same-origin gzip
-service worker.
+service worker. The checkout stores several files from the example above only as `.gz`, for
+example `wasm-zig/zig_small.wasm.gz`, `wasm-wat/index.js.gz`, `wasm-lisp/index.js.gz`, and
+`wasm-haskell/bsdtar.wasm.gz`. A host for those URLs must return the decompressed bytes, either as
+a decompressed file or as that `.gz` served with `Content-Encoding: gzip`; Zig's `std.tar.gz` is
+served as stored.
 
 Verified static runtimes such as Janet and Julia intentionally omit URL-only examples: a custom
 `baseUrl`, `manifestUrl`, or `workerUrl` must be accompanied by every identity and asset-receipt
 field declared by that runtime's asset config, including the matching `workerReceipt`. Partial
-trust bundles fail closed instead of borrowing receipts from bundled executable bytes.
+trust bundles fail closed instead of borrowing receipts from bundled executable bytes. In the Nim
+entry above, `nimTrustBundle` stands for `profileId`, `artifactRevision`, `nimRevision`,
+`llvmRevision`, `memfsRevision`, `emscriptenRevision`, `manifestFingerprint`, `manifestReceipt`,
+`nimJavaScriptReceipt`, `nimWasmReceipt`, `nimbaseReceipt`, `clangJavaScriptReceipt`,
+`clangWasmReceipt`, `lldWasmReceipt`, `memfsWasmReceipt`, `sysrootReceipt`, and `workerReceipt`. An
+explicit Nim `manifestUrl` must be `runtime-manifest.v2.json?v=<manifestFingerprint>` under
+`baseUrl`. A `rootUrl` mirror of the bundled Nim files needs no `nim` entry.
 
 The bundled C/C++ app uses receipt-pinned Clang language sysroots: C initially downloads only the
 C base, while C++ or a mixed/opaque-language build loads the C++ add-on before compiling or linking.
@@ -990,8 +1064,8 @@ The pack contains the same locked upstream files, not an import-based subset. Ea
 ### Retaining compiler caches across editor navigation
 
 Create one `createRuntimeSession(assets)` owner per browser application and use
-`session.createBinding()` for each editor or execution panel. C/C++ and Python
-keep immutable compiler/runtime modules outside their disposable execution Workers:
+`session.createBinding()` for each editor or execution panel. Clang consumers, Rust,
+TinyGo and Python share a bounded owner for verified assets and compiler modules:
 
 ```ts
 import { createRuntimeSession } from 'wasm-idle';
@@ -1005,12 +1079,14 @@ await panel.dispose(); // close this panel; retain the session's cache
 
 const nextPanel = session.createBinding(); // another problem, same language
 await nextPanel.load('PYTHON');
-await session.selectLanguage('CPP'); // release old-language panels and cache
+await session.selectLanguage('CPP'); // release old-language panels; retain verified assets
 await session.dispose(); // full, terminal release of this owner
 ```
 
-Selecting a language does not download assets. The owner retains only one language;
-selecting an unsupported/server-only language also releases the previous cache.
+Selecting a language does not download assets. Only the selected language keeps active
+execution leases; verified compiler assets survive language changes until LRU eviction
+or session disposal. Selecting an unsupported/server-only language releases active leases
+without clearing the session's verified assets.
 Executions never share mutable Wasm instances, user files or stdin. C/C++ additionally
 reuse compiled programs when source, workspace and compiler options match, while
 custom loaders and debugging retain the original execution path. Python still creates
@@ -1019,7 +1095,20 @@ a fresh interpreter after `clear()`; module reuse does not eliminate interpreter
 The asset cache is LRU-bounded to 64 entries and 256 MiB of logical asset bytes
 (not a measurement of the browser engine's compiled-code memory). C/C++ program
 artifacts are independently bounded to 8 entries and 32 MiB. `getCacheStats()` exposes
-cache counters for diagnostics. Other languages currently keep their existing lifecycle.
+cache counters for diagnostics. COBOL, Fortran, V and Objective-C/Objective-C++ connect
+their Clang asset bridges to this same owner. Rust and TinyGo use one-shot MessagePorts
+to request compiler modules from the session after checking the pinned artifact receipt.
+The host verifies the bytes again before returning a module, including on cache hits.
+Cache identities include artifact receipts, authorization profiles and compilation
+settings; TinyGo also separates the memory-cap transformation used for each toolchain.
+
+`@wasm-idle/core` exports `WorkerSession`, `RuntimeAssetCache` and the
+`createRuntimeWasmModuleService` / `serveRuntimeWasmModule` / `requestRuntimeWasmModule`
+helpers for hosts implementing the same ownership model. Cancelling one request closes
+its subscription without terminating another request that uses the same immutable
+module. Compiler instances, linear memory, files and compiler helper threads remain
+owned by individual jobs; this cache does not combine the LLVM binaries embedded in
+different toolchains.
 
 ### Optional idle runtime prewarming
 

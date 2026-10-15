@@ -355,7 +355,9 @@ describe('WebPerl runner worker', { timeout: 60_000 }, () => {
 				uncompressedSha256: logicalReceipt.sha256
 			});
 			const legacyPath = storageReceipt.path.replace(/\.bin$/u, '');
-			expect(await readFile(new URL(legacyPath, staticRuntimeUrl))).toEqual(stored);
+			expect((await readFile(new URL(legacyPath, staticRuntimeUrl))).equals(stored)).toBe(
+				true
+			);
 		}
 	});
 
@@ -625,7 +627,7 @@ describe('WebPerl runner worker', { timeout: 60_000 }, () => {
 				stdin: undefined,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
-					protocolVersion: 1,
+					protocolVersion: 2,
 					controlBytes: 16,
 					capacity: 32,
 					buffer: new SharedArrayBuffer(24)

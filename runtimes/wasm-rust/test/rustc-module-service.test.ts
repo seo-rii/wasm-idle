@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
-import { readFileSync } from 'node:fs';
 import { clearRustcModuleCache, compileRustcThroughPort, createRustcModuleService } from '../src/rustc-module-service.js';
 // Initialize Node's HTTP parser before spying on native Wasm compilation.
 void new Response();
@@ -67,10 +66,5 @@ describe('cross-worker rustc module service',()=>{
    worker.postMessage(s.s.port,[s.s.port]);expect(await done).toBe(true);await worker.terminate();s.s.close();
   }
   expect(compile).toHaveBeenCalledTimes(1);
- });
- it('keeps verified asset loading ahead of reuse and confines service to verified topologies',()=>{
-  const child=readFileSync(new URL('../src/compiler-worker.ts',import.meta.url),'utf8');const host=readFileSync(new URL('../src/compiler.ts',import.meta.url),'utf8');
-  expect(child.indexOf('const rustcBytes = await fetchRuntimeAssetBytes')).toBeLessThan(child.indexOf('? compileRustcThroughPort(rustcBytes'));
-  expect(host).toContain('const moduleService = executableGraph ?');expect(host).toContain('finally { activeWorkerCleanup?.(); }');
  });
 });

@@ -2,6 +2,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$lib/playground/fennelBootstrap', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/playground/fennelBootstrap')>()),
+	loadFennelCompilerSource: vi.fn(async () => '-- fennel compiler')
+}));
+
 async function createMockLuaRuntimeModule(source: string) {
 	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
 }
@@ -187,5 +192,89 @@ describe('Lua worker', () => {
 			}
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'error: bad lua' });
+	});
+
+	it('reports a nonzero Lua exit without repeating already-streamed stderr', async () => {
+		const moduleUrl = await createMockLuaRuntimeModule(`
+			export async function createLuaCompiler() {
+				return {
+					async compile(options) {
+						return {
+							success: true,
+							artifact: { fileName: options.fileName, source: options.code }
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserLuaArtifact(_artifact, options = {}) {
+				options.stderr?.('main.lua:1: boom\\n');
+				return { exitCode: 1, stdout: '', stderr: 'main.lua:1: boom\\n' };
+			}
+
+			export default createLuaCompiler;
+		`);
+
+		await import('./lua');
+		await (globalThis as any).self.onmessage({ data: { load: true, moduleUrl } });
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'error("boom")',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				stdin: ''
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([
+			{ output: 'main.lua:1: boom\n' }
+		]);
+		expect(messages.at(-1)).toEqual({ error: 'Lua program exited with code 1' });
+	});
+
+	it('keeps unstreamed Fennel stderr in the nonzero exit error', async () => {
+		const moduleUrl = await createMockLuaRuntimeModule(`
+			export async function createLuaCompiler() {
+				return { async compile() { throw new Error('Fennel must not use the Lua compiler'); } };
+			}
+
+			export async function executeBrowserLuaArtifact(_artifact, options = {}) {
+				if (!options.stderr) return { exitCode: 0, stdout: '', stderr: '' };
+				const stderr = 'main.fnl:2: boom\\nstack traceback:\\n\\t[C]: in ?\\n';
+				options.stderr(stderr);
+				return { exitCode: 1, stdout: '', stderr };
+			}
+
+			export default createLuaCompiler;
+		`);
+
+		await import('./lua');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl,
+				fennelCompiler: { url: 'https://runtime.example/fennel.lua' }
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '(error "boom")',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				stdin: '',
+				activePath: 'main.fnl'
+			}
+		});
+
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'output' in message)).toEqual([]);
+		expect(messages.at(-1)).toEqual({
+			error: 'Fennel program exited with code 1\nmain.fnl:2: boom'
+		});
 	});
 });

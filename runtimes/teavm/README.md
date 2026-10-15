@@ -21,11 +21,43 @@ Gradle, dependency-verification, local-overlay, storage, and license metadata. A
 loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
 replacement receipt set.
 
-The runtime class library intentionally carries one wasm-idle compatibility overlay. It starts
-from the pinned TeaVM 0.13.1 source JAR and changes exactly two `TByteBuffer` calls from
-`Int8Array.fromJavaArray` to `Int8Array.copyFromJavaArray`. The producer verifies the original
-source entry, occurrence count, transformed source, JDK 25 `javac --release 17` output, canonical
-2,141-entry archive, and final byte receipts before publication. Do not broaden this overlay while
+The compiler is built from that revision with one source patch,
+`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch` (TeaVM issue #1322). TeaVM skips
+`@PluggableDependency` dependency plugins when TeaVM itself is compiled by TeaVM, as it is in the
+browser compiler, so `Object.clone()` results lost their types: `String.format("%.2f", x)` and
+virtual calls on other cloned objects trapped with "dereferencing a null pointer". The patch
+registers a dependency listener that applies the declared plugins. Enum reflection
+(`Enum.valueOf`, `EnumSet`, `EnumMap`) is still broken in this TeaVM 0.13.1 generation because its
+Wasm GC backend resolves enum constants through a different path. Only `compiler.wasm` changes;
+the producer applies the patch with `git apply` before the Gradle build, and `upstreamOutputs`
+records the receipts of that patched build.
+
+The runtime class library intentionally carries one wasm-idle compatibility overlay for character
+and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
+exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
+`TIntBuffer`, `TLongBuffer`, `TFloatBuffer`, and `TDoubleBuffer` from the typed array's
+`fromJavaArray` to `copyFromJavaArray`. Those calls sit in JavaScript-backend branches that never
+run under Wasm GC, but TeaVM 0.13.1 still rejects their `@JSByRef` parameters while generating Wasm
+GC code. Without the overlay, any program reaching `CharBuffer` (for example `InputStreamReader`,
+`BufferedReader`, `OutputStreamWriter`, `PrintWriter`, or `String.getBytes(Charset)`) fails before
+it runs.
+
+It also repairs two defects in the Wasm GC `System.out`/`System.err` byte path,
+`JsConsolePrintStream`: `flush()` cleared its pending action before invoking it, trapping with a
+null dereference on the first flush after a byte write (for example `BufferedWriter.flush()`), and
+`write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes.
+
+`TFormatter` handles `%n` and `%%` without consuming an argument, as `java.util.Formatter` does
+(TeaVM issue #1317): `%n` emits the line separator instead of throwing
+`UnknownFormatConversionException`, and `%%` no longer shifts later arguments. The overlay adds
+`TIllegalFormatWidthException`, which TeaVM 0.13.1 lacks, for the `%5n` case; the producer appends
+it to the archive and rejects an archive that already contains it. `%f` also rounds half up on the
+shortest decimal representation, as `java.util.Formatter` does, instead of `DecimalFormat`'s default
+half-even (TeaVM issue #1323): `"%.1f"` of `0.25` is `0.3` and `"%.2f"` of `1.005` is `1.01`.
+
+The producer verifies each original source entry, transform occurrence count, transformed source,
+JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive,
+appended entries, and final byte receipts before publication. Do not broaden this overlay while
 performing a provenance-only refresh.
 
 To reproduce and publish the generation, check out the revision above, download the exact JDK

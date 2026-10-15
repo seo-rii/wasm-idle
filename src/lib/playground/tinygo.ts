@@ -39,8 +39,10 @@ import {
 	WorkspaceValidationError,
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
+	createRuntimeWasmModuleService,
 	fetchPinnedRuntimeAsset,
 	validateExecutionWorkspace,
+	type RuntimeAssetCache,
 	type ExecutionLimits,
 	type ResolvedRuntimeAssetCacheOptions
 } from '@wasm-idle/core';
@@ -88,6 +90,11 @@ type TinyGoRuntimeDiagnostic = {
 };
 
 type TinyGoRuntimeModule = {
+	capTinyGoWasmMemory?: (
+		bytes: Uint8Array<ArrayBuffer>,
+		maxBytes: number,
+		label: string
+	) => Uint8Array<ArrayBuffer>;
 	loadTinyGoUpstreamToolchainAssets?: (options: {
 		assetBaseUrl: string;
 		profile: TinyGoUpstreamRuntimeProfile;
@@ -103,6 +110,7 @@ type TinyGoRuntimeModule = {
 		options: {
 			signal?: AbortSignal;
 			maxWasmMemoryBytes?: number;
+			modulePorts?: Readonly<Record<'compiler' | 'packageGraph' | 'lld', MessagePort>>;
 			onPhase?: (phase: string) => void;
 		}
 	) => Promise<{ wasm: Uint8Array }>;
@@ -273,6 +281,7 @@ class TinyGo implements Sandbox {
 	private runtimeProgressOwner: TinyGoRuntimeProgressOwner | null = null;
 	private activeOperation: TinyGoOperation | null = null;
 	private disposed = false;
+	private runtimeAssetCache: RuntimeAssetCache | undefined;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('TinyGo sandbox disposed', {
 		phase: 'dispose',
@@ -293,6 +302,24 @@ class TinyGo implements Sandbox {
 			phase: 'dispose',
 			runtimeId: 'TINYGO'
 		});
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (cache === this.runtimeAssetCache) return;
+		if (this.disposed) throw this.disposedConfigurationError();
+		if (
+			this.worker ||
+			this.runtime ||
+			this.runtimePromise ||
+			this.loadPromise ||
+			this.activeOperation
+		) {
+			throw new RuntimeConfigurationError(
+				'Cannot replace TinyGo runtime asset cache after startup has begun',
+				{ runtimeId: 'TINYGO', phase: 'startup' }
+			);
+		}
+		this.runtimeAssetCache = cache;
 	}
 
 	load(
@@ -1017,6 +1044,16 @@ class TinyGo implements Sandbox {
 					let assetsPromise: Promise<unknown> | null = null;
 					const loadUpstreamAssets = runtimeModule.loadTinyGoUpstreamToolchainAssets;
 					const compileUpstream = runtimeModule.compileTinyGoInDisposableWorker;
+					const moduleCache = this.runtimeAssetCache;
+					const moduleIdentity = moduleCache
+						? JSON.stringify([
+								moduleUrl,
+								runtimeProfile.profileId,
+								runtimeProfile.manifestFingerprint,
+								this.executableGraphFingerprint,
+								moduleCache.identity(assetLoader)
+							])
+						: '';
 					const appendLog = (line: string) => {
 						activityLog += `[${new Date().toTimeString().slice(0, 8)}] ${line}\n`;
 						commonOptions.onLogAppended({ line });
@@ -1069,15 +1106,78 @@ class TinyGo implements Sandbox {
 								compileFiles['go.mod'] =
 									'module wasm-idle.local/main\n\ngo 1.24.0\n';
 							}
-							const result = await compileUpstream(
-								assets,
-								{ workspaceFiles: compileFiles, package: '.' },
-								{
-									signal: controller.signal,
-									maxWasmMemoryBytes: wasmMemoryLimit,
-									onPhase: (phase) => appendLog(`upstream TinyGo phase: ${phase}`)
+							const compileMemoryLimit = wasmMemoryLimit;
+							const services: ReturnType<typeof createRuntimeWasmModuleService>[] =
+								[];
+							let result: { wasm: Uint8Array };
+							try {
+								let modulePorts:
+									| Record<'compiler' | 'packageGraph' | 'lld', MessagePort>
+									| undefined;
+								if (moduleCache) {
+									const capMemory = runtimeModule.capTinyGoWasmMemory;
+									if (typeof capMemory !== 'function') {
+										throw new RuntimeConfigurationError(
+											'TinyGo runtime must provide its reviewed memory-cap transformation',
+											{ runtimeId: 'TINYGO', phase: 'compile' }
+										);
+									}
+									modulePorts = {} as typeof modulePorts;
+									for (const [kind, assetPath, label] of [
+										[
+											'compiler',
+											'tools/upstream/tinygo-compiler.wasm',
+											'upstream TinyGo compiler'
+										],
+										[
+											'packageGraph',
+											'tools/upstream/tinygo-package-graph.wasm',
+											'upstream Go package-graph provider'
+										],
+										['lld', 'tools/upstream/lld.wasm', 'raw WASI LLD']
+									] as const) {
+										const pinned = runtimeProfile.assetReceipts[assetPath];
+										const bytes = pinned?.uncompressedBytes ?? pinned?.bytes;
+										const sha256 = pinned?.uncompressedSha256 ?? pinned?.sha256;
+										if (
+											typeof bytes !== 'number' ||
+											typeof sha256 !== 'string'
+										) {
+											throw new RuntimeConfigurationError(
+												`TinyGo ${kind} module requires a complete pinned logical receipt`,
+												{ runtimeId: 'TINYGO', phase: 'asset' }
+											);
+										}
+										const service = createRuntimeWasmModuleService({
+											cache: moduleCache,
+											receipt: { bytes, sha256 },
+											identity: `${moduleIdentity}:${kind}`,
+											compileKey: `tinygo-wasi-memory-cap-v1:${compileMemoryLimit}`,
+											maxAssetBytes: assetLimit,
+											signal: controller.signal,
+											compile: (bytes) =>
+												WebAssembly.compile(
+													capMemory(bytes, compileMemoryLimit, label)
+												)
+										});
+										services.push(service);
+										modulePorts![kind] = service.port;
+									}
 								}
-							);
+								result = await compileUpstream(
+									assets,
+									{ workspaceFiles: compileFiles, package: '.' },
+									{
+										signal: controller.signal,
+										maxWasmMemoryBytes: compileMemoryLimit,
+										...(modulePorts ? { modulePorts } : {}),
+										onPhase: (phase) =>
+											appendLog(`upstream TinyGo phase: ${phase}`)
+									}
+								);
+							} finally {
+								for (const service of services) service.close();
+							}
 							artifact = {
 								path: '/work/program.wasm',
 								bytes: Uint8Array.from(result.wasm),

@@ -26,8 +26,8 @@ export const WASM_PASCAL_RUNTIME_PROFILE = {
 export const WASM_PASCAL_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_PASCAL_RUNTIME_PROFILE,
 	workerReceipt: {
-		bytes: 20309,
-		sha256: '1067c3d36b7cf7d56b2679b43a18105dfac7c4a6f234f68e5bce11e15dc3ff12'
+		bytes: 20695,
+		sha256: '438ecf7b8132ced1add0468713c3a56edc3f3b79ab532e4fc84557c204703f9e'
 	}
 });
 export const WASM_PASCAL_ASSET_VERSION = WASM_PASCAL_RUNTIME_PROFILE.manifestFingerprint;
