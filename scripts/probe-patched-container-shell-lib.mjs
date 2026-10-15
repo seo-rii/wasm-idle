@@ -16,11 +16,11 @@ export const SDK_WASM = {
 	sha256: '326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551'
 };
 export const BASH_WEBC = {
-	bytes: 1812328,
-	sha256: '67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9'
+	bytes: 1812678,
+	sha256: '045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4'
 };
 export const BASH_WASM_SHA256 =
-	'96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d';
+	'2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c';
 export const CLANG = {
 	bytes: 69953408,
 	sha256: '2a66c90ef9669c9ead423f539907481b39dd8af68cef5dd064fbdb1028ac8620'

@@ -165,3 +165,21 @@ matches the pinned libc's separate legacy cwd used by relative `open`; only
 records binary/object identities and the startup-boundary inference. A selected
 Bash producer initialization fix and a rerun of the unchanged contract are next;
 these diagnostic scripts are not a production workaround or shell qualification.
+
+## Startup cwd candidate
+
+The current input pin selects the Bash startup constructor from
+[#198](https://github.com/seo-rii/wasm-idle/pull/198), built from application
+source `7d15375967ed557e724488e82bab75cb5c4b41cb`. The constructor reads the
+actual WASIX cwd and calls libc `chdir` before Bash main, synchronizing the
+pinned libc's legacy relative-open state. It does not modify the script, argv,
+environment or the ten original contract fixtures. The SDK package is unchanged.
+
+The new WEBc is 1,812,678 bytes with SHA-256
+`045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4`;
+the contained Bash Wasm has SHA-256
+`2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c`.
+The producer exits 0 in 129.466 seconds, verifies the imports and reaps all owned
+processes. This is build evidence only. A separate actual Chromium run must
+establish whether the unchanged relative redirect publishes the host file;
+the earlier 17-of-18 receipt and diagnostic observations remain unchanged.
