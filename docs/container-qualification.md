@@ -16,7 +16,8 @@ been implemented; unpassed promotion gates remain explicit.
 | Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; real source-pinned Bash build/import receipt passes; actual SDK/Bash execution pending |
 | Local SDK module/Worker packaging              | [C-02 SDK package #193](https://github.com/seo-rii/wasm-idle/pull/193) (draft)   | #191; actual pinned-esbuild package passes; first actual guest acceptance fails on #195 |
 | Rebuilt SDK/Bash Chromium probe                | [C-02 browser #195](https://github.com/seo-rii/wasm-idle/pull/195) (draft)      | #193 plus #192; ten SDK initializers return but guest instantiation fails with Noexec(45); raw failures preserved |
-| Actual SDK Worker import resolver              | [C-02 resolver #196](https://github.com/seo-rii/wasm-idle/pull/196) (draft)     | #189; fixes the resolver omitted from the first build; six-patch source checks pass, new build/browser gates remain |
+| Actual SDK Worker import resolver              | [C-02 resolver #196](https://github.com/seo-rii/wasm-idle/pull/196) (draft)     | #189; actual fresh-source SDK check/release/bindgen passes; original receipts and complete pin rechecks archived |
+| Fixed SDK actual Bash execution                | [C-02 execution #197](https://github.com/seo-rii/wasm-idle/pull/197) (draft)    | #195 plus rebuilt #196 assets; ten real commands complete, 17/18 selected checks pass; startup cwd/redirect boundary remains |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -426,6 +427,34 @@ owned OS processes are reaped without forced signals. That cleanup result does n
 guest execution, foreground cancellation or common Container fd/VFS ownership. Metadata
 corrects the initial URL-based nested count using recorded parent edges (30 of 40 targets);
 the raw receipt retains its original diagnostic fields.
+
+The actual resolver fix on #196 now passes fresh-source SDK/example typechecking in
+373.991 seconds, release generation in 586.098 seconds, matching bindgen in 1.762 seconds
+and static inspection in 0.255 seconds. All stages exit 0 with complete cleanup. Original
+receipts recheck all 581 source/tool pins, complete SDK/WASIX inventories and six outputs.
+The bound Wasm is 9,071,791 bytes, SHA-256
+`326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551`.
+Local packaging of those bytes also passes and retains the original host/Worker semantics.
+
+The [#197 actual execution](https://github.com/seo-rii/wasm-idle/pull/197) now completes all
+ten real Bash commands with code 0 on Chromium 153.0.8010.12/Linux. Seventeen of 18 selected
+checks pass: empty/LF/CR/UTF-8 argv, replaced and explicitly empty environment, actual cwd,
+raw stderr, status 23, tail exec, binary pipes and separate parent/guest/host file sharing.
+The remaining `redirect-mount` check fails because the pipeline's relative output file is
+absent from the host workspace even though stdout bytes are correct. Overall acceptance
+remains false (outer process exit 1). All 60 observed Workers and owned OS processes retire.
+Original browser receipt SHA-256:
+`25f8bb75efda9ce61128809fb922a5e31f539f22c2a86e931dad3671905f7bbd`.
+
+Four separate actual cwd comparisons complete collection in 7.133 seconds. Both an absolute
+`/workspace` redirect and an explicit initial `cd /workspace` publish the exact binary file;
+unchanged relative redirection and a parent builtin's relative write do not. The actual cwd
+guest still reports `/workspace`. This matches the pinned libc's separate legacy cwd used
+by relative `open`, which `getcwd` does not update and `chdir` synchronizes. Startup
+synchronization is the next selected Bash producer fix. Diagnostics always retain false
+guest/shell qualification; they do not change or replace the original failing contract.
+Common Container fd/VFS, JavaScript command registry, foreground cancellation and actual
+Clang/BusyBox shell acceptance remain open.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
