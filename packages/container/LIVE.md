@@ -121,6 +121,22 @@ termination 143. A missing route or command is 127 and any other start failure i
 each with a one-line diagnostic on the delegated stderr. `onRecord` observes outcomes
 without argv, environment or byte contents. This is not a shell, PTY or signal mapping.
 
+Two route kinds reach commands that delegated live stdio cannot:
+
+- **Forwarded routes** (`stdio: 'forwarded'`) run a snapshot adapter such as Clang on
+  container streams. The command's stdin is empty; the shell's stdin is never read.
+  stdout and stderr are copied to the shell child's descriptors as chunks arrive,
+  following partial writes. Ordering between the two channels is only arrival order. If a
+  descriptor fails (for example `EPIPE`), its remaining output is drained and dropped, and
+  the command's own status is still returned. The adapter's writer lease applies while
+  it runs: shell mutations of the workspace fail with `EBUSY` until it commits or discards.
+- **Module directories** (`moduleDirectories`) take normalized absolute directories that
+  the shell runtime also registered with `registerHostCommandDirectory`. A normalized path
+  strictly below one runs as `wasm-run <path> argv[1..]` with delegated stdio, so the
+  container's `artifactAdapter` must be a live adapter. argv0 is therefore the absolute
+  path, not the shell's spelling. The module is read from the container VFS and passes the
+  adapter's import-profile checks. An exact route takes precedence.
+
 `createShellFilesystem(fs, { root })` exposes part of the container VFS to a trusted
 shell runtime as a synchronous delegate, such as the patched SDK's
 `Directory.fromHostFileSystem`. Paths are absolute inside the mount, and the root

@@ -23,6 +23,13 @@ export interface HostCommandRoute {
   readonly command: string;
   /** Inserted before the shell's `argv[1..]`; the container supplies argv0. */
   readonly args?: readonly string[];
+  /**
+   * `delegated` (default) hands the shell child's descriptors to a live adapter.
+   * `forwarded` runs a snapshot adapter, such as Clang, on container streams:
+   * stdin is empty, and stdout and stderr are copied to the shell child's
+   * descriptors as they arrive. The shell's stdin is never consumed.
+   */
+  readonly stdio?: 'delegated' | 'forwarded';
 }
 export interface HostCommandRecord {
   readonly path: string;
@@ -34,6 +41,12 @@ export interface HostCommandRecord {
 }
 export interface HostCommandHandlerOptions {
   readonly routes: Readonly<Record<string, HostCommandRoute>>;
+  /**
+   * Normalized absolute directories, registered with the shell runtime's
+   * `registerHostCommandDirectory`, whose WebAssembly modules run as
+   * `wasm-run <path> argv[1..]` with delegated stdio. An exact route wins.
+   */
+  readonly moduleDirectories?: readonly string[];
   readonly timeoutMs?: number;
   /** Observes every invocation outcome. No argv, environment or stdio bytes are reported. */
   readonly onRecord?: (record: HostCommandRecord) => void;
@@ -67,17 +80,37 @@ export function statusForResult(result: ProcessResult): number {
   }
 }
 
-async function diagnostic(stderr: DelegatedWriter | null, message: string): Promise<void> {
-  if (!stderr) return;
-  const bytes = new TextEncoder().encode(message);
+/** Write all bytes, following partial writes. Returns false once the endpoint fails. */
+async function writeAll(endpoint: DelegatedWriter, bytes: Uint8Array): Promise<boolean> {
   try {
     for (let offset = 0; offset < bytes.length;) {
-      const written = await stderr.write(bytes.subarray(offset));
-      if (!Number.isSafeInteger(written) || written < 1) return;
+      const written = await endpoint.write(bytes.subarray(offset));
+      if (!Number.isSafeInteger(written) || written < 1) return false;
       offset += written;
     }
-  } catch { /* The shell may already have closed its stderr. */ }
+    return true;
+  } catch { return false; /* The shell may already have closed it. */ }
 }
+
+async function diagnostic(stderr: DelegatedWriter | null, message: string): Promise<void> {
+  if (stderr) await writeAll(stderr, new TextEncoder().encode(message));
+}
+
+/** Copy a container stream to a shell descriptor; keep draining after the descriptor fails. */
+async function forward(stream: ReadableStream<Uint8Array>, endpoint: DelegatedWriter | null): Promise<void> {
+  const reader = stream.getReader();
+  let open = endpoint !== null;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      if (open) open = await writeAll(endpoint!, value);
+    }
+  } finally { reader.releaseLock(); }
+}
+
+const normalizedDirectory = (path: unknown): path is string => typeof path === 'string' && path.length > 1 &&
+  path.startsWith('/') && !path.includes('\0') && path.slice(1).split('/').every((part) => part && part !== '.' && part !== '..');
 
 /**
  * Run each routed shell host command as one container process whose stdio is
@@ -87,26 +120,37 @@ async function diagnostic(stderr: DelegatedWriter | null, message: string): Prom
 export function createHostCommandHandler(container: Container, options: HostCommandHandlerOptions): (invocation: HostCommandInvocation) => Promise<number> {
   const routes = new Map<string, HostCommandRoute>();
   for (const [path, route] of Object.entries(options.routes)) {
-    if (!path.startsWith('/') || !route || typeof route.command !== 'string' || route.args !== undefined && !Array.isArray(route.args)) throw new ContainerError('INVALID_ARGUMENT', `Invalid host command route: ${path}`);
-    routes.set(path, Object.freeze({ command: route.command, args: Object.freeze([...(route.args ?? [])]) }));
+    if (!path.startsWith('/') || !route || typeof route.command !== 'string' || route.args !== undefined && !Array.isArray(route.args) ||
+        route.stdio !== undefined && route.stdio !== 'delegated' && route.stdio !== 'forwarded') throw new ContainerError('INVALID_ARGUMENT', `Invalid host command route: ${path}`);
+    routes.set(path, Object.freeze({ command: route.command, args: Object.freeze([...(route.args ?? [])]), stdio: route.stdio ?? 'delegated' }));
   }
+  const directories = [...(options.moduleDirectories ?? [])];
+  if (!directories.every(normalizedDirectory)) throw new ContainerError('INVALID_ARGUMENT', 'Module directories must be normalized absolute paths');
+  const moduleRoute = (path: string): HostCommandRoute | undefined =>
+    normalizedDirectory(path) && directories.some((directory) => path.startsWith(directory + '/'))
+      ? { command: 'wasm-run', args: [path], stdio: 'delegated' } : undefined;
   const record = (value: HostCommandRecord) => { options.onRecord?.(Object.freeze(value)); return value.status; };
   return async (invocation) => {
-    const route = routes.get(invocation.path), name = invocation.argv[0] || invocation.path;
+    const route = routes.get(invocation.path) ?? moduleRoute(invocation.path), name = invocation.argv[0] || invocation.path;
     if (!route) {
       await diagnostic(invocation.stderr, `${name}: no container route\n`);
       return record({ path: invocation.path, status: HOST_COMMAND_STATUS.notFound, startError: 'COMMAND_NOT_FOUND' });
     }
+    const forwarded = route.stdio === 'forwarded';
     let process;
     try {
       process = await container.spawn(route.command, [...route.args!, ...invocation.argv.slice(1)], {
         cwd: invocation.cwd, env: decodeEnvironment(invocation.env), timeoutMs: options.timeoutMs,
-        stdio: { stdin: invocation.stdin, stdout: invocation.stdout, stderr: invocation.stderr }
+        ...(forwarded ? {} : { stdio: { stdin: invocation.stdin, stdout: invocation.stdout, stderr: invocation.stderr } })
       });
     } catch (error) {
       const code = error instanceof ContainerError ? error.code : (error as { code?: unknown })?.code;
       await diagnostic(invocation.stderr, `${name}: ${error instanceof Error ? error.message : 'cannot start'}\n`);
       return record({ path: invocation.path, status: code === 'COMMAND_NOT_FOUND' ? HOST_COMMAND_STATUS.notFound : HOST_COMMAND_STATUS.cannotExecute, startError: typeof code === 'string' ? code : 'STARTUP_FAILED' });
+    }
+    if (forwarded) {
+      await process.stdin.close().catch(() => {});
+      await Promise.all([forward(process.stdout, invocation.stdout), forward(process.stderr, invocation.stderr)]);
     }
     const result = await process.exited;
     return record({ path: invocation.path, pid: process.pid, result, status: statusForResult(result) });

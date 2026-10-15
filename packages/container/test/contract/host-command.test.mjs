@@ -157,3 +157,67 @@ test('host command start failures keep the shell alive with a status and diagnos
     assert.equal((await c.inspect()).processes.length, 0);
   } finally { await c.dispose(); }
 });
+
+test('forwarded routes run snapshot commands with empty stdin and copied output', { timeout: 30000 }, async () => {
+  const c = createContainer({
+    adapters: [createWasiAdapter({ workerFactory })], maxProcesses: 4,
+    commands: { snap: { adapter: 'wasi-preview1', bytes: command } }
+  });
+  try {
+    const handler = createHostCommandHandler(c, { routes: { '/usr/bin/snap': { command: 'snap', stdio: 'forwarded' } } });
+    const base = { path: '/usr/bin/snap', cwd: '/workspace', env: [encode('A=1')] };
+    const stdin = reader(encode('shell input')), stdout = writer(), stderr = writer();
+    assert.equal(await handler({ ...base, argv: ['snap', 'roundtrip'], stdin, stdout, stderr }), 0);
+    assert.deepEqual(decode(stdout.bytes).split('\0'), ['snap', 'roundtrip', '']);
+    assert.equal(decode(stderr.bytes), 'A=1\0');
+    assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved', 'the snapshot commits into the workspace');
+    const echo = writer();
+    assert.equal(await handler({ ...base, argv: ['snap'], stdin, stdout: echo, stderr: writer() }), 0);
+    assert.equal(echo.bytes.length, 0, 'stdin is empty');
+    assert.deepEqual(stdin.requests, [], "the shell's stdin is never read");
+    const partial = writer({ limit: 1000 }), partialErr = writer({ limit: 999 });
+    assert.equal(await handler({ ...base, argv: ['snap', 'flood'], stdin: null, stdout: partial, stderr: partialErr }), 0);
+    assert.equal(partial.bytes.length, 65536); assert.equal(partialErr.bytes.length, 65536);
+    const closed = writer({ failure: Object.assign(new Error('closed reader'), { code: 'EPIPE' }) });
+    assert.equal(await handler({ ...base, argv: ['snap', 'flood'], stdin: null, stdout: closed, stderr: null }), 0, 'output is drained after the descriptor fails');
+    assert.equal(closed.requests.length, 1);
+    assert.equal(await handler({ ...base, argv: ['snap', 'exit'], stdin: null, stdout: writer(), stderr: writer() }), 23);
+    assert.equal(decode(c.fs.readFile('/workspace/partial')), 'saved');
+    assert.throws(() => createHostCommandHandler(c, { routes: { '/usr/bin/snap': { command: 'snap', stdio: 'pty' } } }), { code: 'INVALID_ARGUMENT' });
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
+
+test('modules below a registered directory run with wasm-run on the live artifact adapter', { timeout: 30000 }, async () => {
+  const c = createContainer({
+    adapters: [createLiveWasiAdapter({ workerFactory: liveWorker })], artifactAdapter: 'wasi-preview1-live', maxProcesses: 4,
+    commands: { tool: { adapter: 'wasi-preview1-live', bytes: live } }
+  });
+  const records = [];
+  try {
+    c.fs.mkdir('/workspace/demo/bin', { recursive: true });
+    c.fs.writeFile('/workspace/demo/bin/probe.wasm', command);
+    const handler = createHostCommandHandler(c, {
+      routes: { '/workspace/demo/bin/exact.wasm': { command: 'tool', args: ['one'] } },
+      moduleDirectories: ['/workspace'], onRecord: (record) => records.push(record)
+    });
+    const base = { cwd: '/workspace/demo', env: [], stdin: null };
+    const stdout = writer();
+    assert.equal(await handler({ ...base, path: '/workspace/demo/bin/probe.wasm', argv: ['./bin/probe.wasm', 'roundtrip', 'x'], stdout, stderr: writer() }), 0);
+    assert.deepEqual(decode(stdout.bytes).split('\0'), ['/workspace/demo/bin/probe.wasm', 'roundtrip', 'x', '']);
+    assert.equal(decode(c.fs.readFile('/workspace/demo/out.bin')), 'saved', 'the module runs in the shell cwd');
+    const exact = writer();
+    assert.equal(await handler({ ...base, path: '/workspace/demo/bin/exact.wasm', argv: ['exact'], stdin: reader(encode('ab')), stdout: exact, stderr: writer() }), 0);
+    assert.equal(decode(exact.bytes), 'a', 'an exact route wins over the directory');
+    for (const path of ['/workspace/demo/./bin/probe.wasm', '/workspacex/probe.wasm', '/workspace'])
+      assert.equal(await handler({ ...base, path, argv: ['x'], stdout: writer(), stderr: writer() }), 127, path);
+    const absent = writer();
+    assert.equal(await handler({ ...base, path: '/workspace/demo/bin/absent.wasm', argv: ['absent'], stdout: writer(), stderr: absent }), 126);
+    assert.match(decode(absent.bytes), /^absent: /);
+    assert.deepEqual(records.map((record) => [record.status, record.startError ?? record.result?.reason]),
+      [[0, 'exited'], [0, 'exited'], [127, 'COMMAND_NOT_FOUND'], [127, 'COMMAND_NOT_FOUND'], [127, 'COMMAND_NOT_FOUND'], [126, 'ENOENT']]);
+    for (const moduleDirectories of [['/'], ['relative'], ['/workspace/'], ['/a/../b'], [42]])
+      assert.throws(() => createHostCommandHandler(c, { routes: {}, moduleDirectories }), { code: 'INVALID_ARGUMENT' });
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
