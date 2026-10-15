@@ -653,3 +653,18 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - A request channel dropped without completion still completes the child with status 126.
 
 Each running host command occupies one pooled service Worker until it completes.
+
+### Actual SDK gate
+
+The first gate of commit `9e2566476bc453a6ede731bc2f987493ffaf0c84` failed typechecking after
+308 s with one error (`E0382`: the read task moved the pool that the spawn-failure reply
+still used); its process and failure receipts are archived as
+`evidence.host-service-first-typecheck-*.json`. Commit
+`3ba1d35161722887ed21620039ca89d105c5499b` fixes it and passes in a fresh physical copy with
+584 pins and a unique target: typecheck 377.317 s, release 726.224 s, bindgen 2.012 s and
+static inspection 0.255 s, each exiting 0 with every process reaped. The bound Wasm is
+9,215,380 bytes, SHA-256 `9fb4a0aced4526547a061599f3ad8522e22cef766f33a73e5566de85687661af`;
+binary receipt `947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6`. Stage
+receipts are archived as `evidence.host-service-*.json` with a
+[recheck](evidence.host-service-sdk-binary-metadata.json). Local packaging produced receipt
+`ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85`.
