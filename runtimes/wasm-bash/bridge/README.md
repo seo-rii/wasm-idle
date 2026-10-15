@@ -217,8 +217,8 @@ node scripts/prepare-container-shell-bridge.mjs --verify-only \
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, applies each crate's dependent patches
-in order with `--forward --fuzz=0` on a temporary private copy, and checks source identity again.
-Already-applied or reversed patches fail instead of being silently applied in reverse.
+in order with `--forward --fuzz=0 --no-backup-if-mismatch` on a temporary private
+copy, and checks source identity again. Reversed or already applied patches fail.
 The temporary copies are removed after verification; the supplied checkouts are unchanged.
 All three pinned archives and pristine source paths are required. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says

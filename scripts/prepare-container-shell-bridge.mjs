@@ -120,6 +120,7 @@ if (verifyOnly) {
 	await verifySource(virtualFsSource, inputs[2].path, 'virtual-fs-0.601.0', virtualFsPatches);
 	const receipts = {};
 	// Check dependent patches in order on private copies, preserving the caller's sources.
+	// --forward rejects reversed/already-applied patches instead of silently undoing them.
 	for (const [names, cwd] of [
 		[patches, source],
 		[sdkPatches, sdkSource],
