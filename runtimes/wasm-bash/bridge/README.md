@@ -411,3 +411,33 @@ Out of scope: guest signals to a running host command, foreground interruption w
 surviving shell, PTY semantics, descriptors other than 0–2, and any filesystem sharing
 with the Container VFS. A host command keeps running if its parent shell exits; it is
 cancelled only by the trusted owner or forced owner cleanup.
+
+### Actual SDK gate
+
+Source commit `b2c6c07f37a7d22e97f0e19addc349dc020cfb53` was prepared into a fresh physical
+copy and pinned with all 583 source, toolchain and preparation identities (SDK 199 and
+WASIX 377 files). The unchanged pinned nightly, locks, atomics/build-std configuration and
+release profile were used, with a unique target and intermediate directory:
+
+| Stage | Command | Wall seconds |
+| --- | --- | --- |
+| Typecheck | `cargo check --locked --offline --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1` | 845.135 |
+| Release | unchanged release profile, reusing this copy's checked target | 889.651 |
+| Bindgen | `wasm-bindgen 0.2.101 --target web --weak-refs --no-demangle` | 2.013 |
+| Static inspection | one shared bounded memory, import/export inventory | 0.255 |
+
+Every stage exited 0 with all owned processes reaped and no cleanup signal or error. The
+host was heavily shared during the run, so these times are not a benchmark. The bound
+Wasm is 9,139,276 bytes, SHA-256
+`57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367`; its shared memory
+grows from 34 to 35 initial pages (maximum 16,384). The generated declarations export
+`Runtime.registerHostCommand`, `Runtime.unregisterHostCommand`, `HostCommandDescriptor`,
+`HostCommandInvocation` and `HostCommandHandler`. The original binary receipt (SHA-256
+`1e85d0d18925ab2817cb2acfa77f394ecbb2be3fa78d84f1d576ea2ca45696ac`), the preparation
+receipt and the four stage receipts are archived unchanged as `evidence.host-command-*.json`.
+[Metadata](evidence.host-command-sdk-binary-metadata.json) records the post-run recheck of
+every pin and output. Unchanged local packaging with the corrected all-thread guard then
+produced package receipt
+`83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55` (1.51 seconds).
+
+This is a build and static gate. Actual Bash dispatch is qualified separately in Chromium.
