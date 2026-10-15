@@ -32,10 +32,18 @@ const BIN = '/usr/local/bin', SYSROOT = '/usr/share/wasm-sysroot', TOOLCHAIN = '
 const BUSYBOX = ['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm'];
 let running = false, backendCompleted = false, sequence = 0;
 const timeline = [];
-const mark = (entry) => timeline.push({ seq: sequence++, atMs: Math.round(performance.now()), ...entry });
+// Each mark is also posted at once, so a run that never completes still shows how far it got.
+const mark = (entry) => {
+	const value = { seq: sequence++, atMs: Math.round(performance.now()), ...entry };
+	timeline.push(value);
+	postMessage({ type: 'mark', ...value });
+};
+// A blocked owner event loop shows up as missing heartbeats.
+let heartbeat;
 
 globalThis.onmessage = async ({ data }) => {
 	if (data.type === 'cleanup') {
+		clearInterval(heartbeat);
 		const requestedWorkerTerminations = children.size;
 		for (const child of [...children]) child.terminate();
 		postMessage({ type: 'ownerCleanup', backendCompleted, requestedWorkerTerminations, remainingTrackedChildren: children.size });
@@ -43,6 +51,7 @@ globalThis.onmessage = async ({ data }) => {
 	}
 	if (data.type !== 'run' || running) return;
 	running = true;
+	heartbeat = setInterval(() => postMessage({ type: 'heartbeat', atMs: Math.round(performance.now()) }), 5000);
 	let container, manager;
 	try {
 		if (!crossOriginIsolated) throw new Error('Cross-origin isolation is required');
