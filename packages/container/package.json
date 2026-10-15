@@ -1,0 +1,34 @@
+{
+  "name": "@wasm-idle/container",
+  "version": "0.1.0-alpha.0",
+  "description": "Experimental browser command containers with explicit resource and asset contracts",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test test/unit/*.test.mjs",
+    "verify:package-boundary": "node scripts/verify-package-boundary.mjs",
+    "prepack": "pnpm run build && pnpm run verify:package-boundary"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
