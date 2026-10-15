@@ -575,3 +575,33 @@ covers the state WASIX caches itself:
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
 against other processes keep their existing WASIX behavior. These remain gaps.
+
+## Workspace WebAssembly executables
+
+A shell runs programs it just built, such as `./hello.wasm`, from the workspace. With only
+exact registrations, WASIX would execute such a file natively inside the Bash runtime,
+outside the Supervisor's process table and import-profile checks.
+`Runtime.registerHostCommandDirectory(directory, handler)` routes those modules to a trusted
+handler instead. It takes the same handler and thread rule as `registerHostCommand`, and
+needs no patch: it is part of the SDK's `host_command.rs`.
+
+```js
+runtime.registerHostCommandDirectory('/workspace', (invocation) => runModule(invocation));
+```
+
+Lookup on the guest's thread:
+
+1. An exact registration wins.
+2. Otherwise the longest registered directory strictly containing the path is selected.
+   Only a normalized absolute path can match. WASIX turns `./name` into one by prefixing
+   the cwd; relative names with `..` keep the ordinary resolver.
+3. Before the child is taken, the first four bytes are read through the guest's own
+   filesystem. Only the Wasm magic `\0asm` is routed. Any other file (a script, text,
+   a missing or unreadable file) returns "not found" to WASIX, which then uses its ordinary
+   resolver, so Bash keeps its usual `ENOEXEC`/script or `ENOENT` behavior.
+
+`invocation.path` is the matched absolute path and `invocation.argv` the guest's argv
+unchanged. The handler, not WASIX, decides how to run the module; in the container it is
+`wasm-run` on the live artifact adapter, whose import-profile check applies. Reading the
+magic is a four-byte read, not an execution. The file can change between that read and the
+handler's own read; the handler validates what it reads.
