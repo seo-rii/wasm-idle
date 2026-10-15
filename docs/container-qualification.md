@@ -15,8 +15,10 @@ The follow-up stack is #223 (bounded SDK streams and startup errors), #224 (pipe
 fixtures), #225 (combined base), #226 (resource contracts), #227 (immutable distribution
 and archive validation), #228 (workbench and owned sessions), #229 (source materials and
 canonical LLVM multicall execution), #230 (shared real Bash profile), and #231
-(immutable workbench hosting). SDK and host
-branches remain separate until a consumer pins the rebuilt package.
+(immutable workbench hosting), #232 (rebuilt SDK and actual workbench qualification),
+#233 (view transaction fixes), and #234 (recorded performance baseline). The product
+integration also merges the exact SDK source from #223; all 119 source/evidence blobs
+match that branch while preserving host-side build documentation.
 
 The reviewed integration passes 215 container unit/contract tests, 207 existing Clang
 tests, 11 distribution/server tests, 18 source-material tests, and the host-only npm
@@ -48,6 +50,21 @@ retain the exact tested sources. Later view changes, the optional live compiler 
 immutable hosting each retain their own evidence. The three-sample
 [snapshot baseline](./container-benchmarks.md) additionally passes all 216 acceptance
 checks with zero warm asset body downloads; timings are observations on a shared host.
+
+The independent syntax-only gate passes 12/12 actual Bash/BusyBox checks for quoting,
+empty/Korean arguments, exported fixture environment values, cwd, conditional commands,
+command substitution and redirection ordering. It never downloads Clang, LLD or the
+sysroot. Its [receipt](../packages/container/test/shell-acceptance/evidence/syntax-0020.json)
+does not relabel the earlier seven-scenario receipt or count an unrun combined gate.
+
+The immutable local release separately passes all six actual workbench checks across
+three runs under the restrictive CSP and isolation headers. Its independent lock is
+`e7392ffb2ec6af345f848ae675d2eecf890e2536cffa9cf9ce051d40801c201b`;
+33 verified files occupy 596,775,617 bytes, including host modules, runtime assets and
+source/notice materials. All six asset bodies are served once across the reloads and
+all Workers/OS descendants are reclaimed. See the
+[immutable hosting evidence](../examples/container/IMMUTABLE.md). This is local
+qualification; `deployed: false` and `sourceClosureReviewed: false` remain explicit.
 
 Source packs preserve exact material identities while explicitly
 recording incomplete runtime source/notice correspondence. Production responses,
