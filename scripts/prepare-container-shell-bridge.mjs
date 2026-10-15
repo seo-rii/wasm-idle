@@ -65,7 +65,8 @@ const sdkPatches = [
 	'0011-mount-host-filesystems.patch',
 	'0013-serve-host-commands-off-the-scheduler.patch',
 	'0016-streaming-instance-exit.patch',
-	'0019-bound-raw-sdk-streams.patch'
+	'0019-bound-raw-sdk-streams.patch',
+	'0020-honor-explicit-tmp-mount.patch'
 ];
 // Standalone new sources: [bridge file, crate, installed path].
 const installedSources = [

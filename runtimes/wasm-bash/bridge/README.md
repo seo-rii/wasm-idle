@@ -717,6 +717,10 @@ thread never waits synchronously for a consumer.
 stderr without a TTY, implicit echo or termios behavior. It rejects simultaneous
 prebuffered `stdin`. Closing the input stream releases its owned writer and delivers EOF.
 Noninteractive commands retain `StaticFile` prebuffered stdin and use bounded output.
+Patch 0020 marks an explicit `/tmp` mount in the runner options, preventing the
+default temporary directory from colliding with the host-owned workspace mount.
+The comparison follows Rust path components (including trailing separators),
+and leaves nested or relative paths distinct.
 Each direction has at most 64 KiB of queued native bytes; stream pulls and caller-supplied
 pending input chunks are separate allocations. Callers must drain stdout and stderr
 concurrently to let a producing command finish.
