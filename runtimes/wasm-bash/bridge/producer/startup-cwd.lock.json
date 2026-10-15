@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "profile": "bash-wasix-startup-cwd-v1",
+  "constructorPriority": 65535,
+  "pinnedPreopenConstructorPriority": 51,
+  "failureExitCode": 125,
+  "source": {
+    "path": "startup_cwd.c",
+    "bytes": 1253,
+    "sha256": "dd86c46ce5e835ff5bdd67b32eb0e9ca330fe5e4b66f2f2706ccd9448d2dd3f0"
+  },
+  "sysrootFiles": {
+    "lib/wasm32-wasi/libc.a": {
+      "bytes": 1672622,
+      "sha256": "00196f7b61519380e3b6c7cc84d1fb7772f2d73e581ddee9cbed37d9555e4585"
+    },
+    "lib/wasm32-wasi/crt1-command.o": {
+      "bytes": 574,
+      "sha256": "fc6b75a476c6b920e4e32775a6f2ba4c2bfb32306aea688054ba6c241da14f54"
+    }
+  },
+  "qualification": "Selected Bash producer initialization only; rebuilt guest/browser acceptance remains required"
+}
