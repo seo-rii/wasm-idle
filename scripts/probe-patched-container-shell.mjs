@@ -255,12 +255,15 @@ export async function runProbe(configuration) {
 				hostContextClosed = true;
 			}
 			const afterContext = await retire();
+			const createdTargetIds = new Set(observation.created.map(({ targetId }) => targetId));
 			receipt.results.push({ id: fixture.id, script: fixture.script, ...result,
 				elapsedMs: Date.now() - started, consoleErrors, warnings, blockedRequests,
 				initialWorkerTargets: initialWorkers.length,
 				createdWorkerTargets: observation.created,
-				createdNestedWorkerTargets: observation.created.filter(({ url }) =>
-					url !== origin + probeWorkerUrl).length,
+				// Creation events can have empty URLs; parent identity still distinguishes
+				// SDK descendants from the probe Worker created by the page.
+				createdNestedWorkerTargets: observation.created.filter(({ parentId }) =>
+					createdTargetIds.has(parentId)).length,
 				peakLiveWorkerTargets: observation.peakLive,
 				hostContextClosed, workersAfterContextClose: afterContext.length,
 				remainingTargetsAfterContextClose: afterContext });
