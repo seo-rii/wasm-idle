@@ -1,0 +1,64 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { fixtures, judgeShellFilesystemProbe, readPinnedProbeInputs } from './probe-container-shell-filesystem-lib.mjs';
+
+const bytes = (value) => [...new TextEncoder().encode(value)];
+function observations() {
+	return fixtures.map((fixture) => ({
+		id: fixture.id, type: 'result', backendCompleted: true,
+		result: { code: 0, stdout: fixture.expectedStdout, stderr: [] },
+		invocations: Array.from({ length: fixture.dispatches }, () => ({
+			path: '/opt/host/bin/tool', argv: ['tool'], cwd: fixture.cwd ?? '/workspace', owner: 'sdk-scheduler-thread'
+		})),
+		containerFiles: structuredClone(fixture.containerFiles ?? {}), containerProcesses: [],
+		events: [{ type: 'sdkInitialized' }, { type: 'started' }],
+		publicApi: { runtime: ['registerHostCommand'], directory: ['fromHostFileSystem'] },
+		consoleErrors: [], blockedRequests: [],
+		initialWorkerTargets: 0, remainingWorkerTargets: 0, workersAfterContextClose: 0
+	}));
+}
+const failed = (results) => judgeShellFilesystemProbe(results).checks.filter((check) => !check.passed).map((check) => check.id);
+
+test('common filesystem evidence passes while descriptors beyond stdio stay unqualified', () => {
+	const judged = judgeShellFilesystemProbe(observations());
+	assert.deepEqual(failed(observations()), []);
+	assert.equal(judged.commonShellFilesystemPassed, true);
+	assert.equal(judged.commonContainerFdVfsQualified, false);
+	assert.equal(judged.shellBackendReady, false);
+});
+
+test('stale WASIX cache observations fail', () => {
+	const results = observations();
+	// An unrevalidated cached inode still reports the removed file.
+	results.find((result) => result.id === 'FS-EXTERNAL-ENTRIES').result.stdout = bytes('present\na-gone\nb-present\nt-dir\n');
+	// Appending at the cached size overwrites bytes another process wrote.
+	results.find((result) => result.id === 'FS-LIVE-APPEND').result.stdout = bytes('1X345\nabsent\npresent\nnewmore\n');
+	assert.deepEqual(failed(results), ['FS-EXTERNAL-ENTRIES', 'FS-LIVE-APPEND']);
+});
+
+test('separate namespaces, a wrong cwd or a missing guest file fail', () => {
+	const results = observations();
+	delete results.find((result) => result.id === 'FS-GUEST-TO-SHELL').containerFiles['/workspace/out.bin'];
+	results.find((result) => result.id === 'FS-SHELL-TO-GUEST').invocations[0].cwd = '/workspace';
+	results.find((result) => result.id === 'FS-PIPELINE-RESULT').containerFiles['/workspace/demo/result.txt'] = bytes('');
+	assert.deepEqual(failed(results), [
+		'FS-SHELL-TO-GUEST:shared-cwd', 'FS-GUEST-TO-SHELL:container-file:/workspace/out.bin',
+		'FS-PIPELINE-RESULT:container-file:/workspace/demo/result.txt'
+	]);
+});
+
+test('timeouts, retained processes, console errors and leaked Workers fail', () => {
+	const results = observations();
+	Object.assign(results[0], { type: 'timeout', backendCompleted: false });
+	results[1].containerProcesses = [{ pid: 1 }];
+	results[2].consoleErrors = ['boom'];
+	results[3].remainingWorkerTargets = 1;
+	assert.deepEqual(failed(results), [
+		'FS-SHELL-TO-GUEST', 'FS-SHELL-TO-GUEST:container-processes-retired',
+		'FS-GUEST-TO-SHELL:container-processes-retired', 'browser-errors', 'owned-host-context-cleanup'
+	]);
+});
+
+test('pinned inputs reject a wrong package receipt digest before reading files', async () => {
+	await assert.rejects(readPinnedProbeInputs({ packageReceipt: '/nonexistent', packageReceiptSha256: '0'.repeat(64) }));
+});
