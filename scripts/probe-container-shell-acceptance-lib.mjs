@@ -80,7 +80,9 @@ export const INTERRUPT_SCRIPT = [
 ].join('\n') + '\n';
 export const INTERRUPTS = [
 	{ path: '/workspace/demo/spin.wasm', occurrence: 1, delayMs: 1000 },
-	{ path: `${BIN}/clang`, occurrence: 2, delayMs: 1000 }
+	// The snapshot adapter reports running only after its Worker is ready; the compile itself
+	// then takes about a second, so a one-second delay can arrive just as it completes.
+	{ path: `${BIN}/clang`, occurrence: 2, delayMs: 50 }
 ];
 export const INTERRUPT_DISPATCHES = [
 	[`${BIN}/mkdir`, 0], [`${BIN}/clang`, 0], ['/workspace/demo/spin.wasm', 130],

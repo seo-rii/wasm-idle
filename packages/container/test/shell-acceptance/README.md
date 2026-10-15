@@ -120,7 +120,10 @@ if [ -e interrupted.wasm ]; then echo kept; else echo discarded; fi
 clang main.c -o hello.wasm && ./hello.wasm
 ```
 
-The first interrupt stops the running artifact; the second stops the second Clang compile.
+The first interrupt stops the running artifact one second after it starts. The second stops
+the second Clang compile 50 ms after the snapshot adapter reports it running: the adapter
+reports running only once its Worker is ready, and the compile itself then takes about a
+second, so a later interrupt can race its completion.
 Bash must print `spin=130`, `clang=130`, `discarded` and `hello`, the Supervisor records
 must be 0, 0, 130, 130, 0, 0, each interrupt must land between its command's dispatch and
 completion, the interrupted compile's output must not reach the workspace, and every
@@ -142,6 +145,8 @@ Every attempt's original browser and process receipts are archived under
 | [`service-run-1` … `service-run-5`](evidence/) | `1df732f1` | **All five pass 30/30, cold and warm**, with the SDK that keeps host-command WASIX work off the scheduler thread |
 
 | [`interrupt-run-1`](evidence/interrupt-run-1.json) | `6251c8b7` | **Interrupt run passes all 8 checks**; cold passes; warm stops right after Clang completes |
+| [`interrupt-run-2`](evidence/interrupt-run-2.json) | `46522577` | With the service SDK: **38/38**, cold, warm and interrupt |
+| [`interrupt-run-3`](evidence/interrupt-run-3.json), [`-4`](evidence/interrupt-run-4.json) | `46522577` | Cold and warm pass; the second interrupt arrived 1 ms before the compile completed with 0, so Bash printed `clang=0` and kept the output |
 
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.

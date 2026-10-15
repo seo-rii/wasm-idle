@@ -204,3 +204,23 @@ test('the archived interrupt run stops a running artifact and compile while Bash
 	assert(receipt.qualification.checks.filter((check) => check.id.startsWith('cold:')).every((check) => check.passed));
 	assert.equal(receipt.runs[1].result.type, 'timeout');
 });
+
+test('with the service SDK the interrupt run passes, and a late interrupt races a finishing compile', async () => {
+	const runs = await Promise.all([2, 3, 4].map((index) => archived(`interrupt-run-${index}`)));
+	for (const receipt of runs) {
+		assert.equal(receipt.applicationCommit, '465225776014a2724ff0b29b4821d44d4284616e');
+		assert(receipt.qualification.checks.filter((check) => !check.id.startsWith('interrupt:')).every((check) => check.passed));
+	}
+	assert.deepEqual([runs[0].qualification.passed, runs[0].qualification.total], [38, 38]);
+	for (const receipt of runs.slice(1)) {
+		assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id), [
+			'interrupt:script', 'interrupt:supervisor-statuses', 'interrupt:interrupted-while-running', 'interrupt:interrupted-compile-discarded'
+		]);
+		// One second after the snapshot adapter reported running, the compile was already completing.
+		const timeline = receipt.runs[2].result.timeline;
+		const late = timeline.filter((entry) => entry.type === 'interrupt')[1];
+		const end = timeline.find((entry) => entry.type === 'dispatchEnd' && entry.seq > late.seq);
+		assert.equal(end.status, 0);
+		assert(end.atMs - late.atMs <= 5);
+	}
+});
