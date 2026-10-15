@@ -27,11 +27,12 @@ export const fixtures = [
 		script: 'cd sub && /opt/host/bin/probe roundtrip "space arg" "한글" ""; printf "status=%d\\n" "$?"',
 		readFiles: ['/sub/out.bin'], readContainerFiles: ['/workspace/sub/out.bin']
 	},
-	// Each status is read from `$?` where it is produced, without PIPESTATUS (see BASH-PIPESTATUS).
+	// Each status is read from `$?` where it is produced and saved with a file redirection;
+	// PIPESTATUS and `>&2` inside a pipeline subshell are recorded separately (BASH-* cases).
 	{
 		id: 'HOST-PIPE-REDIRECT', dispatches: 3, stdin: binary,
-		script: '{ /opt/host/bin/tool; printf "first=%d\\n" "$?" >&2; } | /opt/host/bin/tool > binary; printf "last=%d\\n" "$?"; /opt/host/bin/tool < binary',
-		readFiles: ['/binary'], expectedStdout: [...text('last=0\n'), ...binary], expectedStderr: text('first=0\n')
+		script: '{ /opt/host/bin/tool; printf "%d" "$?" > first; } | /opt/host/bin/tool > binary; printf "last=%d\\n" "$?"; IFS= read -r first < first; printf "first=%s\\n" "$first"; /opt/host/bin/tool < binary',
+		readFiles: ['/binary'], expectedStdout: [...text('last=0\nfirst=0\n'), ...binary], expectedStderr: []
 	},
 	{
 		id: 'HOST-EXACT-CONSUMPTION', dispatches: 2,
@@ -45,8 +46,8 @@ export const fixtures = [
 	},
 	{
 		id: 'HOST-EPIPE', dispatches: 2,
-		script: '{ /opt/host/bin/tool yes; printf "writer=%d\\n" "$?" >&2; } | /opt/host/bin/tool one; printf "\\nreader=%d\\n" "$?"',
-		expectedStdout: text('y\nreader=0\n'), expectedStderr: text('writer=64\n')
+		script: '{ /opt/host/bin/tool yes; printf "%d" "$?" > writer; } | /opt/host/bin/tool one; printf "\\nreader=%d\\n" "$?"; IFS= read -r writer < writer; printf "writer=%s\\n" "$writer"',
+		expectedStdout: text('y\nreader=0\nwriter=64\n'), expectedStderr: []
 	},
 	{
 		id: 'HOST-PATH-LOOKUP', dispatches: 1, stdin: text('abc'),
@@ -65,6 +66,11 @@ export const fixtures = [
 	{
 		id: 'BASH-PIPESTATUS', dispatches: 0, diagnostic: true,
 		script: 'true | false; printf "pipestatus=[%s]\\n" "${PIPESTATUS[*]}"'
+	},
+	// Recorded only: `>&2` inside a pipeline subshell printed Invalid argument errors.
+	{
+		id: 'BASH-SUBSHELL-DUP', dispatches: 0, diagnostic: true,
+		script: 'printf "top\\n" >&2; { printf "group\\n" >&2; } | true; printf "after\\n"'
 	}
 ];
 
@@ -192,7 +198,11 @@ export function judgeHostCommandProbe(results) {
 	const pipestatus = byId.get('BASH-PIPESTATUS');
 	return {
 		observations: {
-			bashPipestatus: completed(pipestatus) ? decode(pipestatus.result.stdout) : null
+			bashPipestatus: completed(pipestatus) ? decode(pipestatus.result.stdout) : null,
+			bashSubshellDup: completed(byId.get('BASH-SUBSHELL-DUP')) ? {
+				stdout: decode(byId.get('BASH-SUBSHELL-DUP').result.stdout),
+				stderr: decode(byId.get('BASH-SUBSHELL-DUP').result.stderr)
+			} : null
 		},
 		checks,
 		passed: checks.filter((entry) => entry.passed).length,

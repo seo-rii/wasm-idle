@@ -31,7 +31,8 @@ const special = {
 		invocations: [invocation('/opt/host/bin/broken', ['/opt/host/bin/broken'])], records: [], consoleErrors: ['native exec failure']
 	},
 	'HOST-TAIL-EXEC': { code: 23, invocations: [probe('exit')] },
-	'BASH-PIPESTATUS': { stdout: bytes('pipestatus=[]\n'), invocations: [] }
+	'BASH-PIPESTATUS': { stdout: bytes('pipestatus=[]\n'), invocations: [] },
+	'BASH-SUBSHELL-DUP': { stdout: bytes('after\n'), stderr: bytes('top\n'), invocations: [] }
 };
 function observations() {
 	return fixtures.map((fixture) => {
@@ -61,12 +62,13 @@ test('actual dispatch evidence passes every check while common fd/VFS stays unqu
 	assert.equal(judged.commonContainerFdVfsQualified, false);
 	assert.equal(judged.shellBackendReady, false);
 	assert.equal(judged.observations.bashPipestatus, 'pipestatus=[]\n', 'recorded without affecting acceptance');
+	assert.deepEqual(judged.observations.bashSubshellDup, { stdout: 'after\n', stderr: 'top\n' });
 });
 
 test('a pipeline member status must be observed where it is produced', () => {
 	const results = observations();
-	results.find((result) => result.id === 'HOST-EPIPE').result.stderr = bytes('writer=0\n');
-	results.find((result) => result.id === 'HOST-PIPE-REDIRECT').result.stderr = [];
+	results.find((result) => result.id === 'HOST-EPIPE').result.stdout = bytes('y\nreader=0\nwriter=0\n');
+	results.find((result) => result.id === 'HOST-PIPE-REDIRECT').result.stderr = bytes('bash: line 1: 2: Invalid argument\n');
 	assert.deepEqual(failed(results), ['HOST-PIPE-REDIRECT', 'HOST-EPIPE']);
 });
 
@@ -149,4 +151,18 @@ test('the archived first dispatch run keeps its 31 of 35 result and exact failur
 	assert.deepEqual(byId['HOST-EPIPE'].records.map((record) => record.status), [0, 64]);
 	assert(receipt.results.every((result) => result.workersAfterContextClose === 0));
 	assert.equal((await archived('first-dispatch-process')).exitCode, 1);
+});
+
+test('the archived pipeline-status rerun reproduces the errno-range status loss before patch 0009', async () => {
+	const receipt = await archived('pipeline-status');
+	assert.equal(receipt.applicationCommit, '22b03116d7059d7853bf8e4bf36bd18aa116bd2e');
+	assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [33, 37]);
+	assert.deepEqual(receipt.qualification.observations, { bashPipestatus: 'pipestatus=[]\n' });
+	const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+	const text = (id, stream) => Buffer.from(byId[id].result[stream]).toString();
+	assert.equal(text('HOST-STATUS', 'stdout'), 'exit=23\ncrash=79\n');
+	// `>&2` inside the pipeline subshell failed before printf ran; the reader still saw the bytes.
+	assert.equal(text('HOST-EPIPE', 'stdout'), 'y\nreader=0\n');
+	assert.equal(text('HOST-EPIPE', 'stderr'), 'bash: line 1: 2: Invalid argument\nbash: line 1: 6: Invalid argument\n');
+	assert.equal((await archived('pipeline-status-process')).exitCode, 1);
 });
