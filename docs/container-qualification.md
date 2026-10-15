@@ -1,6 +1,6 @@
 # Container qualification evidence
 
-Recorded 2026-10-14. This is a component evidence ledger, not a released command alpha, shell
+Recorded 2026-10-15. This is a component evidence ledger, not a released command alpha, shell
 MVP or persistent beta. Work that can proceed independently of the blocked shell bridge has
 been implemented; unpassed promotion gates remain explicit.
 
@@ -405,6 +405,24 @@ all five published entries match their recorded byte/hash identities. The
 original worker's dynamic SDK import remains a trusted immutable host module
 graph; actual nested Worker ownership and the original unbounded pre-init
 queue remain unresolved, alongside command registry/fd/VFS.
+
+The [#195 browser layer](https://github.com/seo-rii/wasm-idle/pull/195) now runs the actual
+rebuilt SDK/Bash package together. Chromium 153.0.8010.12/Linux completes all ten observations
+in 10.183 seconds: the supplied-Module/shared-Memory SDK initializers return, but all ten
+SDK waits return WASIX Noexec (45), empty stdout/stderr and the console error
+`Unable to initialize the context and store`. No Bash guest entry or argv/fd/filesystem
+behavior is qualified by this run. The private `exec_v1` import was added to only one
+resolver; the actual Worker calls the separate `import_object_for_all_wasi_versions`,
+which omits `wasm_idle_shell_v1`. Fixing that path and producing a new binary/package/browser
+receipt is the next gate. Original browser and process receipts are preserved unchanged;
+their SHA-256 values are respectively
+`db4ee40be5021dfe47301931fc28aae14e529b833cbdf29096832584292a7ff1` and
+`3297aaf1d24d96ed22822f8c2916e537808b68411332c1f388f2488de57e9276`.
+Forty dedicated Worker targets retire to zero before and after host context close, and all
+owned OS processes are reaped without forced signals. That cleanup result does not qualify
+guest execution, foreground cancellation or common Container fd/VFS ownership. Metadata
+corrects the initial URL-based nested count using recorded parent edges (30 of 40 targets);
+the raw receipt retains its original diagnostic fields.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
