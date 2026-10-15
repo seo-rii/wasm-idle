@@ -25,6 +25,13 @@ been implemented; unpassed promotion gates remain explicit.
 | WASIX proc_join exit statuses                  | [C-02 join #208](https://github.com/seo-rii/wasm-idle/pull/208) (draft)         | #205; patches 0009 (statuses >= 79), 0010 (WNOHANG) and host-command status-before-signal; all gates pass; first-command loss fixed |
 | Shell and live I/O stack integration           | [C-15 merge #203](https://github.com/seo-rii/wasm-idle/pull/203) (draft)        | Merge of #200 into #171 only; 104 container and 14 shell evaluator tests pass on the merge |
 | Real Bash host commands into the Supervisor    | [C-15 dispatch #209](https://github.com/seo-rii/wasm-idle/pull/209) (draft)     | #203 plus #205/#208 SDK packages; delegated live stdio and handler; with the status-order SDK all statuses hold in 5 runs, 3 pass 45/45, 2 miss only Worker retirement timing |
+| Trusted host filesystem mounts                 | [C-02 host filesystem #212](https://github.com/seo-rii/wasm-idle/pull/212) (draft) | #208; patches 0011/0012 (`Directory.fromHostFileSystem`, live-mount revalidation); gate and package pass |
+| Actual Bash on the common container VFS        | [C-15 filesystem #213](https://github.com/seo-rii/wasm-idle/pull/213) (draft)   | #209 plus #212 package; `createShellFilesystem`; 2 of 3 final Chromium runs pass 27/27, one hang before dispatch with the owner unresponsive |
+| Workspace Wasm module routing                  | [C-02 module routing #214](https://github.com/seo-rii/wasm-idle/pull/214) (draft) | #212; `registerHostCommandDirectory` with a Wasm magic check; gate and package pass |
+| Clang browser stack in the shell line          | [C-15 merge #215](https://github.com/seo-rii/wasm-idle/pull/215) (draft)        | Merge of #188 into #213 only |
+| Forwarded and module-directory routes          | [C-15 routes #216](https://github.com/seo-rii/wasm-idle/pull/216) (draft)       | #215; snapshot tools on container streams, workspace modules through `wasm-run` |
+| Shell acceptance script                        | [C-15 acceptance #217](https://github.com/seo-rii/wasm-idle/pull/217) (draft)   | #216 plus #214 package and wasm-llvm#34 sysroot; the plan script passes 30/30 cold and warm once; about half of Clang completions are followed by an owner hang |
+| Owner interrupt of host commands               | [C-15 interrupt #219](https://github.com/seo-rii/wasm-idle/pull/219) (draft)    | #217; `interrupt()` gives 130 and Bash continues; the actual interrupt run passes 8/8 |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -179,7 +186,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199. #205/#208/#209 add the trusted JavaScript host-command registry: real Bash dispatches registered paths to container live guests with its own descriptors 0–2 delegated; argv/env/cwd, binary pipes, shell redirections, exact stdin consumption, EPIPE, statuses (including >= 79 after #208), PATH lookup and tail exec pass in Chromium. With the status-order SDK every status holds in 5 runs; 3 pass all 45 checks | Worker retirement timing; common live VFS (shell Directory and container VFS are still separate), descriptors beyond stdio, Worker retirement timing, and actual Clang/BusyBox shell acceptance before C-15 completes |
+| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199. #205/#208/#209 add the trusted JavaScript host-command registry: real Bash dispatches registered paths to container live guests with its own descriptors 0–2 delegated; argv/env/cwd, binary pipes, shell redirections, exact stdin consumption, EPIPE, statuses (including >= 79 after #208), PATH lookup and tail exec pass in Chromium. With the status-order SDK every status holds in 5 runs; 3 pass all 45 checks. #212/#213 make Bash's `/workspace` the container VFS; #214/#216 route BusyBox, Clang and workspace modules; #217 passes the plan's acceptance script 30/30 (cold and warm) once; #219 interrupts running commands with Bash continuing | An intermittent owner hang right after a host command completes (about half of Clang completions in #217, once before dispatch in #213); Worker retirement timing; descriptors beyond stdio; guest signals/job control |
 | G0-CANCEL | #200 passes 19/19 checks for forced trusted host Worker-group cleanup during actual CPU loop, blocked stdin and partial Bash download, followed by same-page fresh-backend recovery; all observed Workers retire | Public Container cancellation, surviving-shell foreground interruption, POSIX signals and the Container asset-service cancellation contract remain separate; this experiment does not complete the whole G0-CANCEL gate |
 | G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
 | B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
@@ -567,6 +574,28 @@ package `1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`). In 
 runs every status arrived intact, including the first command's, and no case hung before
 dispatch. Three runs pass all 45 checks; two fail only because the probe's owner Worker
 target disappeared 5.03–5.13 s after cleanup, just past the five-second window.
+
+#212 and #213 replace the shell's private WASIX `Directory` with the container VFS:
+`Directory.fromHostFileSystem(createShellFilesystem(container.fs))` posts every guest
+filesystem call to the SDK scheduler thread that owns the delegate, and WASIX revalidates
+inodes cached below the live mount. Bash then sees external unlink/rename/replacement and
+appends after other writers. #214 routes Bash's exec of a workspace Wasm module to the
+container (`wasm-run` on the live artifact adapter) instead of executing it natively.
+#215/#216 bring Clang into the shell line on its snapshot adapter with forwarded output,
+and wasm-llvm#34 derives a process-profile sysroot so the artifact runs in the shell's cwd.
+
+On #217 the development plan's acceptance script ran in actual Bash with actual BusyBox,
+actual Clang and the built artifact. One run passed all 30 checks, cold and warm:
+- stdout `hello`, with only the pinned Clang triple warning on stderr;
+- `main.c` and `result.txt` in the container VFS;
+- five Supervisor processes exiting 0, including `/workspace/demo/hello.wasm`;
+- each package fetched only after its first command;
+- no body request in the warm run.
+
+The run also exposed two VFS errno defects, fixed there. It is not reliable: in five of
+eleven runs that reached the end of Clang, the owner thread stopped right after the Clang
+host command completed and the shell made no further progress. #219's interrupt run
+stops a running artifact and a running compile with status 130 while Bash continues.
 
 Separately, redirections inside forked Bash pipeline subshells fail with `Invalid
 argument`, and `PIPESTATUS` stays empty even for builtins. Every attempt's original
