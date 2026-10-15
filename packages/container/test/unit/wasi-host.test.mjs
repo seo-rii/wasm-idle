@@ -26,6 +26,31 @@ test('path create and truncate require parent capabilities even with inherited w
   assert.equal(fs.readFile('/workspace/x')[0], 1);
   assert.throws(() => fs.stat('/workspace/y'));
 }));
+test('directory NONBLOCK permits enumeration and flag changes while unsupported flags fail', () => hostTest((w, memory, fs) => {
+  fs.mkdir('/workspace/v1');
+  new Uint8Array(memory.buffer)[0] = 46;
+  assert.equal(w.path_open(3, 1, 0, 1, 2, (1n << 14n) | 8n, 0n, 4, 100), 0);
+  const view = new DataView(memory.buffer), fd = view.getUint32(100, true);
+  assert.equal(w.fd_fdstat_get(fd, 104), 0); assert.equal(view.getUint16(106, true), 4);
+  assert.equal(w.fd_readdir(fd, 256, 256, 0n, 120), 0);
+  assert.match(new TextDecoder().decode(new Uint8Array(memory.buffer, 256, view.getUint32(120, true))), /v1/);
+  assert.equal(w.fd_fdstat_set_flags(fd, 2), 58);
+  assert.equal(w.fd_fdstat_get(fd, 104), 0); assert.equal(view.getUint16(106, true), 4);
+  assert.equal(w.fd_fdstat_set_flags(fd, 0), 0);
+  assert.equal(w.fd_fdstat_get(fd, 104), 0); assert.equal(view.getUint16(106, true), 0);
+  assert.equal(w.fd_close(fd), 0);
+}));
+test('regular file NONBLOCK preserves byte reads and rights checks', () => hostTest((w, memory, fs) => {
+  fs.writeFile('/workspace/x', new Uint8Array([0, 255, 10]));
+  new Uint8Array(memory.buffer)[0] = 120;
+  assert.equal(w.path_open(3, 1, 0, 1, 0, 2n, 0n, 4, 100), 0);
+  const view = new DataView(memory.buffer), fd = view.getUint32(100, true);
+  view.setUint32(200, 256, true); view.setUint32(204, 8, true);
+  assert.equal(w.fd_read(fd, 200, 1, 208), 0); assert.equal(view.getUint32(208, true), 3);
+  assert.deepEqual([...new Uint8Array(memory.buffer, 256, 3)], [0, 255, 10]);
+  assert.equal(w.fd_fdstat_set_flags(fd, 0), 76);
+  assert.equal(w.fd_close(fd), 0);
+}));
 test('initial_cwd writes the exact NUL-terminated cwd and rejects short or out-of-bounds buffers', () => {
   const fs = new MemoryFileSystem(); fs.mkdir('/workspace/한 글');
   const memory = new WebAssembly.Memory({ initial: 1, maximum: 1 });

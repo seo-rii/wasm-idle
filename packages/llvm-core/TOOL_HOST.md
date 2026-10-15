@@ -47,18 +47,35 @@ the structural environment contract is a record.
 By default `wasm-ld`, `ld.lld`, `/usr/bin/wasm-ld` and `/usr/bin/ld.lld` resolve, always to
 the pinned `wasm-ld` module. Trusted host code may add up to sixteen exact canonical
 absolute filesystem names with `linkerPaths`. Other paths, dot traversal, URLs and names fail. Flags
-1 inherit the caller's environment and require `envPtr = envc = 0`. Flags 0 provide
+1 inherit the caller's environment and require `envc = 0`. The unused pointer can
+be nonzero because LLVM's empty SmallVector retains inline storage; the host never
+dereferences it. Flags 0 provide
 an explicit environment, including an empty one. Other bits are rejected. Cwd,
 filesystem and fd ownership remain the parent's binding closure; no shell parser
 or interpretation of diagnostic command text participates in dispatch.
 
 Every guest pointer/table is checked against the current exported memory buffer.
 Memory views are rebuilt after growth. Each table has at most 4096 entries, total
-decoded request/invocation text is at most one MiB, and execution depth is at most
-4 including the root. Arguments are copied into strings before child execution.
+decoded request/invocation text is at most one MiB. Only a top-level Clang invocation
+may dispatch its pinned linker, so execution depth is at most two including the
+root. Arguments are copied into strings before child execution. Both modules can
+import the same ABI; any linker request to start another child returns `-1`,
+whether LLD was invoked directly or by Clang. LLD's optional error-handling script
+is unsupported in this profile.
 Successful child exit codes 0 through `INT32_MAX` return exactly; -1 means packet
 rejection or child startup failure, and -2 means child runtime/cleanup failure.
 The caller must treat negative returns as host failure, not a guest exit status.
+
+The qualified multicall producer also requests `program: ''` with the exact argv
+prefix `['', 'clang', '-cc1', ...]` or `['', 'clang', '-cc1as', ...]` for a compile
+and link workflow. Trusted hosts may opt in with `allowClangCc1: true`; the same
+verified compiler module executes the original array, including its empty first
+argument. Public `run()` still requires a nonempty argv0. Other empty-program jobs,
+arbitrary compiler paths, generic driver recursion, and child response-file-only
+packets are unsupported and rejected before child bindings are created. Compiler
+children cannot dispatch further commands; maximum execution depth remains two.
+This opt-in does not admit nonempty compiler self paths or other multicall tool
+names; those need their own trusted registration and actual fixture qualification.
 
 The bridge must be called from the initialized command execution path, after
 instantiation exposes memory. An instantiation-time start function cannot invoke

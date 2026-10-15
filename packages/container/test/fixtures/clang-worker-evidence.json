@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "node": "v24.21.0",
+  "platform": "linux",
+  "rootOnly": false,
+  "bridge": true,
+  "clang": {
+    "sha256": "e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3",
+    "deliverySha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba",
+    "bytes": 51965041
+  },
+  "linker": {
+    "sha256": "3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a",
+    "bytes": 24938493
+  },
+  "results": [
+    {
+      "sysrootSha256": "91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402",
+      "entries": 2285,
+      "files": 2168
+    },
+    {
+      "args": [
+        "--version"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: \n",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 14419.473592000002
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-I../include",
+        "-DEXTRA=2",
+        "-c",
+        "helper.c",
+        "-o",
+        "helper.o"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 13127.216574999999
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-I../include",
+        "-DEXTRA=2",
+        "-E",
+        "helper.c"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "# 1 \"helper.c\"\n# 1 \"<built-in>\" 1\n# 1 \"<built-in>\" 3\n# 375 \"<built-in>\" 3\n# 1 \"<command line>\" 1\n# 1 \"<built-in>\" 2\n# 1 \"helper.c\" 2\n# 1 \"../include/demo.h\" 1\n# 2 \"helper.c\" 2\nint answer(void){return 40 + 2;}\n",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 15104.093704999996
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-I../include",
+        "-DEXTRA=2",
+        "-S",
+        "helper.c",
+        "-o",
+        "helper.s"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 13829.213426000002
+    },
+    {
+      "args": [
+        "@compile.rsp"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 16425.83770399999
+    },
+    {
+      "args": [
+        "--container-deliberately-unsupported-option"
+      ],
+      "code": 1,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: error: unknown argument: '--container-deliberately-unsupported-option'\nclang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nclang: error: no input files\n",
+      "elapsedMs": 10528.603308999998
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-fuse-ld=/opt/toolchains/fixture/bin/wasm-ld",
+        "-nostdlib",
+        "-Wl,--export=_start,--max-memory=67108864,--export-memory",
+        "main file.o",
+        "helper.o",
+        "-o",
+        "hello.wasm"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 11742.577218000006
+    },
+    {
+      "artifact": "e3d31b149dc4e244cf66d479cf819ed8141099e4cd9fb0ea0fd775222217ea49",
+      "code": 0,
+      "stdout": "hello\n"
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-fuse-ld=/opt/toolchains/fixture/bin/wasm-ld",
+        "--sysroot=/opt/toolchains/fixture/sysroot",
+        "-resource-dir=/opt/toolchains/fixture/sysroot/lib/clang/22",
+        "-Wl,--max-memory=67108864",
+        "stdio.c",
+        "-o",
+        "stdio.wasm"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 9190.364010999998
+    },
+    {
+      "args": [
+        "--target=wasm32-wasi",
+        "-fuse-ld=/opt/toolchains/fixture/bin/wasm-ld",
+        "--sysroot=/opt/toolchains/fixture/sysroot",
+        "-resource-dir=/opt/toolchains/fixture/sysroot/lib/clang/22",
+        "-Wl,--max-memory=67108864",
+        "--driver-mode=g++",
+        "-std=c++20",
+        "-fno-exceptions",
+        "templates.cpp",
+        "-o",
+        "cpp.wasm"
+      ],
+      "code": 0,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n",
+      "elapsedMs": 42052.262233
+    },
+    {
+      "c": {
+        "code": 0,
+        "stdout": "hello\n"
+      },
+      "cpp": {
+        "code": 0,
+        "stdout": "sum=6\n"
+      }
+    }
+  ],
+  "passed": true
+}
