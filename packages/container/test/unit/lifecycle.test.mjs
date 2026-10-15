@@ -28,7 +28,10 @@ test('invalid API inputs fail before startup', () => {
     () => snapshotInvocation('x', ['\0']),
     () => snapshotInvocation('x', [], { env: { 'a=b': 'c' } }),
     () => snapshotInvocation('x', [], { cwd: 'relative' }),
-    () => snapshotInvocation('x', [], { timeoutMs: Infinity })
+    () => snapshotInvocation('x', [], { timeoutMs: Infinity }),
+    () => snapshotInvocation('x', new Array(1)),
+    () => snapshotInvocation('x', ['a', , 'b']),
+    () => snapshotInvocation('x', [], null)
   ]) assert.throws(invoke, { code: 'INVALID_ARGUMENT' });
 });
 
@@ -45,4 +48,13 @@ test('invalid trusted-adapter completion still terminates exactly once and relea
     assert.equal((await c.inspect()).processes.length, 0);
     c.fs.writeFile('/workspace/recovered', new Uint8Array([1]));
   } finally { await c.dispose(); }
+});
+
+test('argv is read once, so a getter cannot swap a value after validation', () => {
+  let reads = 0;
+  const args = ['placeholder'];
+  Object.defineProperty(args, 0, { get: () => (reads++ === 0 ? 'ok' : 'changed\0'), enumerable: true });
+  const snapshot = snapshotInvocation('x', args);
+  assert.deepEqual(snapshot.args, ['ok']);
+  assert.equal(reads, 1);
 });

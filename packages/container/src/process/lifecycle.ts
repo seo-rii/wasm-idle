@@ -31,8 +31,14 @@ export class ProcessLifecycle {
 
 export function snapshotInvocation(command: string, args: readonly string[], options: SpawnOptions = {}) {
   const validString = (value: unknown): value is string => typeof value === 'string' && !value.includes('\0');
-  if (!validString(command) || !command || !Array.isArray(args) || !args.every(validString)) {
+  // Copy before validating: every() skips holes in sparse arrays, and a second read of the
+  // caller's array could observe different values than the ones that were checked.
+  const argv: unknown[] | undefined = Array.isArray(args) ? Array.from(args) : undefined;
+  if (!validString(command) || !command || !argv || !argv.every(validString)) {
     throw new ContainerError('INVALID_ARGUMENT', 'Command and argv must be NUL-free strings');
+  }
+  if (options === null || typeof options !== 'object') {
+    throw new ContainerError('INVALID_ARGUMENT', 'Spawn options must be an object');
   }
   const cwd = options.cwd ?? '/workspace';
   if (!validString(cwd) || !cwd.startsWith('/')) {
@@ -49,5 +55,5 @@ export function snapshotInvocation(command: string, args: readonly string[], opt
   if (timeoutMs !== undefined && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2147483647)) {
     throw new ContainerError('INVALID_ARGUMENT', 'timeoutMs must be a positive timer-safe integer');
   }
-  return Object.freeze({ command, args: Object.freeze([...args]), cwd, env: Object.freeze(env), timeoutMs, signal: options.signal });
+  return Object.freeze({ command, args: Object.freeze(argv as string[]), cwd, env: Object.freeze(env), timeoutMs, signal: options.signal });
 }
