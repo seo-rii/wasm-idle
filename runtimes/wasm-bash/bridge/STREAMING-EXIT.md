@@ -49,12 +49,21 @@ classifier, including guest nonzero status and the legacy failure projection.
 Neither check executes the Rust browser tests or qualifies actual Bash. The
 combined SDK typecheck/build and shell streaming fixture establish separate gates.
 
-The exact SDK/WASIX/virtual-fs source inventory at `a63df266` now passes the real
-offline Rust check, a clean release build, matching web bindings, static Wasm
+The SDK/WASIX/virtual-fs source inventory at `37775cd3`, including runtime-error
+classification and patch `0020` for an explicitly mounted `/tmp`, passes the real
+offline Rust check, clean release build, matching web bindings, static Wasm
 inspection, and local index/Worker packaging. See
-[`evidence.streaming-sdk-build.json`](./evidence.streaming-sdk-build.json) and its
-six process receipts. All owned build processes were reaped. The resulting shared
-module is 9,266,592 bytes, SHA-256
-`454832ce73ad3db7d3a9d29cee54cd1a00eaaddf1c66cd4e1d683782531c1567`.
-This build evidence does not claim that the Rust browser tests or actual Bash
-streaming fixture ran; the consumer PR records those execution gates separately.
+[`evidence.streaming-startup-sdk-build.json`](./evidence.streaming-startup-sdk-build.json)
+and its six process receipts. All 625 pinned source/tool inputs remained unchanged
+and every owned build process was reaped. The shared module is 9,262,448 bytes,
+SHA-256 `11063fe5d9d5d16880cb1027e50a07841271e78709788de5b65cc6b9100ea34a`.
+The earlier `a63df266` build record remains historical evidence and does not include
+these startup fixes.
+
+The corresponding
+[source-material receipt](./evidence.streaming-startup-source-pack.json) covers
+the exact patched sources, Bash materials, Rust standard-library source and 477
+locked registry archives. Source status remains `incomplete`: identified notice
+and source-to-binary review gaps are retained in that receipt. Build and source
+pack evidence do not claim that the Rust browser tests or actual Bash streaming
+fixture ran; the consumer PR records those execution gates separately.
