@@ -71,3 +71,9 @@ replace pinned package commands or the reserved `wasm-run` name.
 
 The separate [Clang adapter](./CLANG.md) uses the optional LLVM tool-host entrypoint.
 Root imports do not load it or compiler bytes.
+
+For explicit OPFS/IndexedDB persistence, open a workspace through the optional
+[`@wasm-idle/container/persistence` entrypoint](./PERSISTENCE.md) and pass its owner
+as `workspace`. `flush()` then publishes a verified root; it never clears asset
+caches or deletes user files to resolve storage errors. Dispose the container's
+commands before disposing the separately owned workspace lock.
