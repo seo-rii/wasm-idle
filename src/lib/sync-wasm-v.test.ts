@@ -284,6 +284,29 @@ describe('syncWasmVAssets', () => {
 		],
 		['unsafe path', () => tar({ '../builtin.v': 'builtin' })],
 		[
+			'GNU extension interpreted as a runtime path prefix',
+			() => {
+				const bytes = tar({
+					'v/vlib/builtin/builtin.v': 'builtin',
+					'v/vlib/os/os.v': 'module os',
+					'v/LICENSE': 'MIT'
+				});
+				const header = bytes.subarray(0, 512);
+				header.write('ustar  \0', 257, 8, 'ascii');
+				header.write('00000000001\0', 345, 12, 'ascii');
+				header.fill(32, 148, 156);
+				header.write(
+					`${header
+						.reduce((sum, byte) => sum + byte, 0)
+						.toString(8)
+						.padStart(6, '0')}\0 `,
+					148,
+					8
+				);
+				return bytes;
+			}
+		],
+		[
 			'duplicate path',
 			() => {
 				const bytes = tar({ 'v/vlib/builtin/builtin.v': 'builtin' });
@@ -318,6 +341,45 @@ describe('syncWasmVAssets', () => {
 			);
 			expect(await readdir(targetDir)).toEqual(['existing.txt']);
 			expect(await readFile(path.join(targetDir, 'existing.txt'), 'utf8')).toBe('existing');
+		}
+	);
+
+	it.each(['POSIX prefix', 'zero-extension GNU'])(
+		'keeps compatible %s paths usable by the consumer',
+		async (variant) => {
+			const sourceDir = await makeTempDir();
+			const targetDir = path.join(await makeTempDir(), 'wasm-v');
+			await writeFixture(sourceDir);
+			const contents = readSingleZipEntry(
+				await readFile(path.join(sourceDir, 'vroot.tar.zip')),
+				'vroot.tar'
+			);
+			const header = contents.subarray(0, 512);
+			if (variant === 'POSIX prefix') {
+				header.fill(0, 0, 100);
+				header.write('builtin.v', 0, 100);
+				header.write('v/vlib/builtin', 345, 155);
+			} else {
+				header.write('ustar  \0', 257, 8, 'ascii');
+			}
+			header.fill(32, 148, 156);
+			header.write(
+				`${header
+					.reduce((sum, byte) => sum + byte, 0)
+					.toString(8)
+					.padStart(6, '0')}\0 `,
+				148,
+				8
+			);
+			await replaceArchive(
+				sourceDir,
+				'vroot.tar.zip',
+				Buffer.from(zipSync({ 'vroot.tar': contents }))
+			);
+			await syncWasmVAssets({ sourceDir, targetDir });
+			expect(gunzipSync(await readFile(path.join(targetDir, 'vroot.tar.gz')))).toEqual(
+				contents
+			);
 		}
 	);
 

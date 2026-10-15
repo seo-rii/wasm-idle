@@ -192,6 +192,11 @@ export function readTarEntries(bytes) {
 		const magic = decoder.decode(header.subarray(257, 263));
 		if (magic !== 'ustar\0' && magic !== 'ustar ')
 			throw new Error('TAR must use ustar or GNU headers');
+		// The runtime reads bytes 345..499 as a POSIX path prefix for either
+		// header format. GNU timestamps/sparse metadata occupy the same region,
+		// so only the zero-extension GNU profile has matching extraction paths.
+		if (magic === 'ustar ' && header.subarray(345, 500).some((byte) => byte !== 0))
+			throw new Error('TAR GNU extension fields are unsupported by the consumer runtime');
 		const type = header[156];
 		if (![0, 48, 53].includes(type)) throw new Error(`TAR entry type ${type} is unsupported`);
 		const prefix = magic === 'ustar\0' ? text(345, 155) : '';
