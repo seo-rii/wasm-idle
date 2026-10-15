@@ -12,10 +12,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export async function createReleaseExampleServer({ directory, expectedSha256, sourceHashes: buildSources = {} }) {
   assert(isAbsolute(directory), 'Absolute immutable release directory required');
   const verification = await verifyContainerDistribution({ directory, expectedSha256 });
-  const lockPath = join(directory, 'application-lock.json'), lock = JSON.parse(await readFile(lockPath, 'utf8'));
+  const lockPath = join(directory, 'application-lock.json'), lockBytes = await readFile(lockPath);
+  assert.equal(digest(lockBytes), expectedSha256, 'Application lock changed after verification');
+  const lock = JSON.parse(lockBytes.toString('utf8'));
   const base = new URL(lock.baseURL);
   assert(base.protocol === 'http:' && base.hostname === '127.0.0.1' && base.port, 'This acceptance server binds only an explicitly pinned loopback port');
-  const manifest = JSON.parse(await readFile(join(directory, lock.manifest.path), 'utf8'));
+  const manifestBytes = await readFile(join(directory, lock.manifest.path));
+  assert.equal(digest(manifestBytes), lock.manifest.sha256, 'Distribution manifest changed after verification');
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
   const files = new Map(lock.files.map(file => [new URL(file.path, base).pathname, file]));
   const requests = [], downloads = {}, assetPaths = {};
   for (const pkg of manifest.packages) for (const asset of pkg.assets) {
