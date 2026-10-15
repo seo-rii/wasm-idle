@@ -398,6 +398,26 @@ public class Main {
 				expected: '0.3 0.13 3 1.01 2.68   -12.35|\n'
 			},
 			{
+				// A flush must not end the console decoder's input: a later byte write threw
+				// IllegalStateException and a split UTF-8 character was replaced.
+				name: 'System.out byte writes across flushes',
+				code: `public class Main {
+    public static void main(String[] args) throws Exception {
+        System.out.write('a');
+        System.out.flush();
+        System.out.write("bc\\n".getBytes());
+        System.out.flush();
+        byte[] euro = "\\u20ac\\n".getBytes("UTF-8");
+        System.out.write(euro, 0, 1);
+        System.out.flush();
+        System.out.write(euro, 1, euro.length - 1);
+        System.out.flush();
+    }
+}`,
+				stdin: '',
+				expected: 'abc\n\u20ac\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 
