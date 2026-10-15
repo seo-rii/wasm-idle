@@ -73,3 +73,18 @@ the resulting file. Gzip delivered transparently by HTTP must therefore use `ide
 fetch returns the uncompressed file; a `.gz` suffix alone never selects decompression. A gzip
 file's delivery MIME is checked against its HTTP response, while its logical MIME is pinned
 metadata and its logical bytes must match their separate digest and size.
+
+`createVerifiedAssetLoader({ distribution, persistentCache })` loads only an asset selected
+with `load(packageId, assetId, { signal })`. It delegates delivery fetch/cache reads to Core's
+`fetchPinnedRuntimeAsset`, retaining exact response-URL, complete-response, no-redirect,
+omitted-credentials, MIME, SHA-256 and size checks. Browser storage failure permits verified
+nonpersistent execution. Offline misses report the missing asset identity without version
+fallback. CacheStorage and IndexedDB remain subject to origin quota and eviction.
+
+Concurrent consumers of the same receipt and fixed loader policy share one request. Aborting
+one consumer leaves others running; the final cancellation aborts network/decompression and
+removes the old request generation. Failed work is retryable. Each result is an owned byte
+copy. A separate bounded LRU retains verified logical bytes (64 MiB by default); zero disables
+that memory cache. Pending asset requests and consumer counts are bounded as well.
+`dispose()` is idempotent and aborts outstanding work. `clearMemoryCache()` touches only this
+loader's re-downloadable bytes, never workspace files or the shared persistent asset cache.
