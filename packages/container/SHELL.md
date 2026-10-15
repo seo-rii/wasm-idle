@@ -54,6 +54,12 @@ preserves buffered output for later reads; termination cancels pending I/O.
 Startup cancellation retires the group and discards late SDK handles without
 waiting indefinitely for an uncancellable SDK promise.
 
+The pinned `waitForExit()` rejects SDK environment setup, traps, and lost exit
+channels. The session turns those failures into `code: null` with
+`reason: 'runtime-error'` and completes cleanup. Ordinary guest exits retain
+their numeric code, including nonzero codes. An SDK that converts a host failure
+into guest exit 1 does not satisfy this profile.
+
 This is raw byte I/O, not a PTY. It provides no termios, resize, `isatty`, automatic
 echo, Ctrl-C byte interpretation, `fg`/`bg`, or job control. The terminal binding
 must explicitly call `interrupt()` or `terminate()`. UTF-8/ANSI rendering belongs

@@ -9,7 +9,7 @@ export interface WasixInstance {
   readonly stdin?: WritableStream<Uint8Array>;
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
-  /** Consumes the SDK Instance; retain its streams before this call. */
+  /** Consumes the Instance; retain streams first. Rejects non-guest setup/trap failures. */
   waitForExit(): Promise<{ readonly code: number; readonly ok: boolean }>;
 }
 export interface WasixDirectory { free(): void; }

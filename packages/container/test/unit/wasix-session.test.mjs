@@ -90,6 +90,19 @@ test('SDK startup integrity failure releases worker group before shell execution
   } finally { await f.workers.dispose(); await f.container.dispose(); }
 });
 
+test('SDK non-guest exit failure remains a runtime error and wakes blocked output', async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), session = await createWasixShellSession(f.options);
+  const reader = session.stdout.getReader(), blocked = reader.read();
+  try {
+    f.exit.reject(new Error('WASI environment setup failed'));
+    assert.deepEqual(await session.exited, { code: null, reason: 'runtime-error' });
+    assert.equal((await blocked).done, true);
+    assert.equal(f.workers.inspect().active, 0);
+    await session.dispose();
+  } finally { reader.releaseLock(); await f.workers.dispose(); await f.container.dispose(); }
+});
+
 test('startup abort stops a pending asset request and leaves no SDK workers', async () => {
   globalThis.crossOriginIsolated = true;
   const f = fixture(), abort = new AbortController(), blocked = deferred(); let signal;
