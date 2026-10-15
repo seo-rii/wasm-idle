@@ -22,8 +22,9 @@ const text = (value) => [...new TextEncoder().encode(value)];
 
 export const fixtures = [
 	{
-		id: 'FS-SHELL-TO-GUEST', dispatches: 1, cwd: '/workspace/d/e',
-		script: 'mkdir -p d/e && cd d/e && printf "from-shell\\n" > note && /opt/host/bin/tool read note',
+		// mkdir is not a Bash builtin; until BusyBox is dispatched the trusted editor creates directories.
+		id: 'FS-SHELL-TO-GUEST', dispatches: 2, cwd: '/workspace/d/e',
+		script: '/opt/host/bin/edit mkdir d/e && cd d/e && printf "from-shell\\n" > note && /opt/host/bin/tool read note',
 		expectedStdout: text('from-shell\n'), containerFiles: { '/workspace/d/e/note': text('from-shell\n') }
 	},
 	{
@@ -48,8 +49,8 @@ export const fixtures = [
 		expectedStdout: text('12345X\nabsent\npresent\nnewmore\n')
 	},
 	{
-		id: 'FS-PIPELINE-RESULT', dispatches: 2, cwd: '/workspace/demo',
-		script: 'set -eu; mkdir -p /workspace/demo; cd /workspace/demo; printf "hello\\n" > main.c; ' +
+		id: 'FS-PIPELINE-RESULT', dispatches: 3, cwd: '/workspace/demo',
+		script: 'set -eu; /opt/host/bin/edit mkdir /workspace/demo; cd /workspace/demo; printf "hello\\n" > main.c; ' +
 			'/opt/host/bin/tool read main.c | /opt/host/bin/tool > result.txt; IFS= read -r r < result.txt; printf "%s\\n" "$r"',
 		expectedStdout: text('hello\n'),
 		containerFiles: { '/workspace/demo/main.c': text('hello\n'), '/workspace/demo/result.txt': text('hello\n') }
@@ -107,8 +108,10 @@ export function judgeShellFilesystemProbe(results) {
 		check(`${fixture.id}:dispatches`, invocations.length === fixture.dispatches &&
 			invocations.every((invocation) => invocation.owner === 'sdk-scheduler-thread'), invocations.length);
 		if (fixture.cwd) {
-			check(`${fixture.id}:shared-cwd`, invocations.length > 0 && invocations.every((invocation) =>
-				invocation.cwd === fixture.cwd), invocations.map((invocation) => invocation.cwd));
+			// Guests started after Bash's cd run in that cwd of the common filesystem.
+			const guests = invocations.filter((invocation) => invocation.path === '/opt/host/bin/tool');
+			check(`${fixture.id}:shared-cwd`, guests.length > 0 && guests.every((invocation) =>
+				invocation.cwd === fixture.cwd), guests.map((invocation) => invocation.cwd));
 		}
 		for (const [file, expected] of Object.entries(fixture.containerFiles ?? {}))
 			check(`${fixture.id}:container-file:${file}`, same(result?.containerFiles?.[file], expected),

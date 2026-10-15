@@ -95,7 +95,8 @@ globalThis.onmessage = async ({ data }) => {
 			const [, operation, first, second] = invocation.argv;
 			const path = (name) => name.startsWith('/') ? name : `${invocation.cwd}/${name}`;
 			try {
-				if (operation === 'unlink') container.fs.unlink(path(first));
+				if (operation === 'mkdir') container.fs.mkdir(path(first), { recursive: true });
+				else if (operation === 'unlink') container.fs.unlink(path(first));
 				else if (operation === 'rename') container.fs.rename(path(first), path(second));
 				else if (operation === 'replace-dir') { container.fs.unlink(path(first)); container.fs.mkdir(path(first)); }
 				else if (operation === 'write') container.fs.writeFile(path(first), encoder.encode(second));

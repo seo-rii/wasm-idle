@@ -7,8 +7,9 @@ function observations() {
 	return fixtures.map((fixture) => ({
 		id: fixture.id, type: 'result', backendCompleted: true,
 		result: { code: 0, stdout: fixture.expectedStdout, stderr: [] },
-		invocations: Array.from({ length: fixture.dispatches }, () => ({
-			path: '/opt/host/bin/tool', argv: ['tool'], cwd: fixture.cwd ?? '/workspace', owner: 'sdk-scheduler-thread'
+		invocations: Array.from({ length: fixture.dispatches }, (_, index) => ({
+			path: index === 0 && fixture.cwd ? '/opt/host/bin/edit' : '/opt/host/bin/tool', argv: ['tool'],
+			cwd: index === 0 && fixture.cwd ? '/workspace' : fixture.cwd ?? '/workspace', owner: 'sdk-scheduler-thread'
 		})),
 		containerFiles: structuredClone(fixture.containerFiles ?? {}), containerProcesses: [],
 		events: [{ type: 'sdkInitialized' }, { type: 'started' }],
@@ -39,7 +40,7 @@ test('stale WASIX cache observations fail', () => {
 test('separate namespaces, a wrong cwd or a missing guest file fail', () => {
 	const results = observations();
 	delete results.find((result) => result.id === 'FS-GUEST-TO-SHELL').containerFiles['/workspace/out.bin'];
-	results.find((result) => result.id === 'FS-SHELL-TO-GUEST').invocations[0].cwd = '/workspace';
+	results.find((result) => result.id === 'FS-SHELL-TO-GUEST').invocations[1].cwd = '/workspace';
 	results.find((result) => result.id === 'FS-PIPELINE-RESULT').containerFiles['/workspace/demo/result.txt'] = bytes('');
 	assert.deepEqual(failed(results), [
 		'FS-SHELL-TO-GUEST:shared-cwd', 'FS-GUEST-TO-SHELL:container-file:/workspace/out.bin',
@@ -61,4 +62,18 @@ test('timeouts, retained processes, console errors and leaked Workers fail', () 
 
 test('pinned inputs reject a wrong package receipt digest before reading files', async () => {
 	await assert.rejects(readPinnedProbeInputs({ packageReceipt: '/nonexistent', packageReceiptSha256: '0'.repeat(64) }));
+});
+
+test('the archived preliminary run keeps its mkdir failures and passing filesystem cases', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const receipt = JSON.parse(await readFile(new URL('../packages/container/test/shell-filesystem/evidence/preliminary-mkdir.json', import.meta.url)));
+	assert.equal(receipt.applicationCommit, '1457a6c7333b6db2f12eb30d652e595746ea4f06');
+	assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [18, 27]);
+	const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+	const text = (id) => Buffer.from(byId[id].result.stdout).toString();
+	// mkdir is not a Bash builtin, and no mkdir command was dispatched in this run.
+	assert.equal(Buffer.from(byId['FS-SHELL-TO-GUEST'].result.stderr).toString(), 'bash: line 1: mkdir: command not found\n');
+	assert.equal(text('FS-GUEST-TO-SHELL'), 'saved\n');
+	assert.equal(text('FS-EXTERNAL-ENTRIES'), 'gone\na-gone\nb-present\nt-dir\n');
+	assert.equal(text('FS-LIVE-APPEND'), '12345X\nabsent\npresent\nnewmore\n');
 });
