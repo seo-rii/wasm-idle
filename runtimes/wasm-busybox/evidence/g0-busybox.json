@@ -1,0 +1,645 @@
+{
+  "schemaVersion": 1,
+  "probe": "G0-BUSYBOX",
+  "sourceSha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4",
+  "configSha256": "593f27cc56921406b13b6d3994f86d4f0f0f8e8e139dad5ce716da0fcc8aa751",
+  "patches": [
+    {
+      "path": "patches/0001-wasi-b0-declarations.patch",
+      "sha256": "7ff3457b045006066b32a7cd02ba8be023b9ff014067a6cc0019cd48c60dcc69",
+      "classification": "wasi-header-profile"
+    },
+    {
+      "path": "patches/0002-wasi-b0-libbb-exclusions.patch",
+      "sha256": "44e30fa7a3543b8bd6428ef1556ee982bf8b3ae4ba87fa3c90de4125a5e0a2ea",
+      "classification": "unused-libbb-feature-exclusion"
+    },
+    {
+      "path": "patches/0003-wasi-b0-build-closure.patch",
+      "sha256": "b1eb579cf59793ee8b864d1a1c82d0744e9390f7f76f22546617dc5044002281",
+      "classification": "minimal-build-closure"
+    },
+    {
+      "path": "patches/0004-wasm-partial-link.patch",
+      "sha256": "2d2c8cf3f7225afb3188eb67a042911e1457d6d389e92a32a24423873342589c",
+      "classification": "build-system-wasm-linker"
+    },
+    {
+      "path": "patches/0005-wasi-b0-help-output.patch",
+      "sha256": "a6b768687730002515907ad4997b8580165b7d275ee7e228394d3041be8410df",
+      "classification": "batch-help-stdio"
+    },
+    {
+      "path": "patches/0006-wasm-final-link.patch",
+      "sha256": "764a9f8fc29f37f6376ad61532fd491b7670fcceb2d890818b7f0bdc8eb0c4d0",
+      "classification": "build-system-wasm-final-link"
+    },
+    {
+      "path": "patches/0007-process-initial-cwd.patch",
+      "sha256": "975deca0bbef3948ab00fc32f1e90ba965ee388cb920f650c1978a967bde73db",
+      "classification": "process-initial-cwd-abi"
+    }
+  ],
+  "toolchain": {
+    "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+    "files": {
+      "VERSION": "973b79c8f797edfede7db06753dddd2b8db3e85d4859fb8ef17e0929ca64470e",
+      "bin/clang": "6985ec66b1065976616156773f95ed318b1793f7761fe9e9f38f8e771571021c",
+      "bin/wasm-ld": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26",
+      "bin/llvm-ar": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9",
+      "bin/llvm-nm": "b3eea1506407d1c3d0d0a6512c6daac22050c305960122c4be19a8a611836455",
+      "bin/llvm-strip": "f020ba49404039ce48e0449bf38c763a5a8e65fd9cfe7e9a26c3d78e21a98ee4"
+    },
+    "trees": {
+      "share/wasi-sysroot/include/wasm32-wasip1": {
+        "sha256": "38206b73de93db14b04a13360aac9adfc22c14ff6ba473637a3e81f4215a8074",
+        "files": 3571
+      },
+      "share/wasi-sysroot/lib/wasm32-wasip1": {
+        "sha256": "0d15d178169e9853ae8d42bde25b21738a52b02e38aeb23813de9484115153fc",
+        "files": 62
+      },
+      "lib/clang/22": {
+        "sha256": "e87481dac7224eb96bf7802705d0943abfff37bdc49c6dadf70dfe8f0949f954",
+        "files": 272
+      }
+    }
+  },
+  "processAbi": {
+    "namespace": "wasm_idle_process_v1",
+    "function": "initial_cwd",
+    "signature": "(ptr:i32, capacity:i32)->i32",
+    "result": "UTF-8 cwd and NUL byte count; -1 for insufficient capacity or invalid memory range",
+    "constructorPriority": 101,
+    "bufferBytes": 4096,
+    "failureExitCode": 125,
+    "action": "validate result then call actual libc chdir before upstream main"
+  },
+  "probeScriptSha256": "f9877ecfcd8b1e8e7c64baa708f287e05e30cb4558400d6ff7715ad0839f52fe",
+  "smokeScriptSha256": "385d655aa81f52ea803b5e49975b85ce02c202d283b7e716d0755ca2082ae549",
+  "host": {
+    "system": "Linux-6.1.0-53-cloud-amd64-x86_64-with-glibc2.36",
+    "ccSha256": "75e997ec62297a6484f491bae28ab0ccb489daba23e398fd10fe68e9e6f0def8",
+    "ccVersion": "cc (Debian 12.2.0-14+deb12u1) 12.2.0"
+  },
+  "startedAt": "2026-10-13T16:04:03Z",
+  "qualifiedWasiApplets": [],
+  "browserSmoke": "not-run",
+  "wasi": {
+    "configure": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "wasi-configure.log",
+      "logSha256": "a82320107540b07935c94af83acae658c5277798604ba16177c4c299e1951ec0"
+    },
+    "resolveConfig": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "wasi-resolve-config.log",
+      "logSha256": "7941eb8f649a078bd6c94e8a6dd24d5d9fdf44988e93ae54776e2d66f4eba5e5"
+    },
+    "selectedConfigFlags": [
+      "BASH_IS_NONE",
+      "BUSYBOX",
+      "CAT",
+      "ECHO",
+      "FALSE",
+      "FEATURE_BUFFERS_USE_MALLOC",
+      "HAVE_DOT_CONFIG",
+      "INSTALL_APPLET_SYMLINKS",
+      "LFS",
+      "NO_DEBUG_LIB",
+      "PRINTF",
+      "PWD",
+      "SH_IS_NONE",
+      "TRUE",
+      "TRY_LOOP_CONFIGURE"
+    ],
+    "generatedConfigSha256": "d9ad715880384c2bba790994a776fb33954fdf877ef1d1aa3fff119df5b352ea",
+    "build": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "wasi-build.log",
+      "logSha256": "3fed277199168ab5bbe88a9f165c748e8dc579764282fd992e7155e18cff3511"
+    },
+    "artifact": {
+      "sha256": "e4a21b3bb0cea1495a42b6dfba71a2e89b44b3d80a6d703e1542fd909781b133",
+      "size": 303353
+    },
+    "nodeSmoke": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "wasi-smoke.log",
+      "logSha256": "3a306e93bf67f9d44baa5486d0d221e5c3ac2192c3d1dcbf7ceef59e4aa98523"
+    },
+    "smoke": {
+      "schemaVersion": 1,
+      "runtime": "v24.1.0",
+      "profile": "wasi_snapshot_preview1",
+      "artifact": {
+        "sha256": "e4a21b3bb0cea1495a42b6dfba71a2e89b44b3d80a6d703e1542fd909781b133",
+        "size": 303353
+      },
+      "processAbi": "wasm_idle_process_v1",
+      "cwd": "/workspace/a b",
+      "env": {},
+      "memory": {
+        "initialPages": 2,
+        "maximumPages": 1024
+      },
+      "imports": [
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_seek",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasm_idle_process_v1",
+          "name": "initial_cwd",
+          "kind": "function"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "_start",
+          "kind": "function"
+        }
+      ],
+      "cases": [
+        {
+          "id": "printf-binary",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "410042ff0a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-binary",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "410042ff0a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-numeric",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "ed959ceab8803a303030373a66660a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "printf-numeric",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "ed959ceab8803a303030373a66660a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-binary",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-binary",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-file",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-file",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-absolute",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "multicall",
+          "exitCode": 1,
+          "stdoutHex": "",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "cat-missing",
+          "invocation": "argv0",
+          "exitCode": 1,
+          "stdoutHex": "",
+          "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "ed959ceab8802073706163650a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "echo-utf8",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "ed959ceab8802073706163650a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "true",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "multicall",
+          "exitCode": 1,
+          "stdoutHex": "",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "false",
+          "invocation": "argv0",
+          "exitCode": 1,
+          "stdoutHex": "",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "multicall",
+          "exitCode": 0,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stderrHex": "",
+          "passed": true
+        },
+        {
+          "id": "pwd",
+          "invocation": "argv0",
+          "exitCode": 0,
+          "stdoutHex": "2f776f726b73706163652f6120620a",
+          "stderrHex": "",
+          "passed": true
+        }
+      ],
+      "startupCases": [
+        {
+          "id": "negative-count",
+          "exitCode": 125,
+          "passed": true
+        },
+        {
+          "id": "oversize-count",
+          "exitCode": 125,
+          "passed": true
+        },
+        {
+          "id": "missing-nul",
+          "exitCode": 125,
+          "passed": true
+        },
+        {
+          "id": "missing-directory",
+          "exitCode": 125,
+          "passed": true
+        }
+      ],
+      "passed": true
+    },
+    "requiresQualification": [
+      "browser-byte-smoke",
+      "common-container-vfs"
+    ]
+  },
+  "native": {
+    "configure": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "native-configure.log",
+      "logSha256": "179cf0ecde7f6b5d0cb38719b4b235686d45f953f6c3acf2f9e0b50da6f09513"
+    },
+    "resolveConfig": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "native-resolve-config.log",
+      "logSha256": "49b64858560e30ef83470faf85716aa1bbe402dc9d86b5cd5240b20818d715e8"
+    },
+    "selectedConfigFlags": [
+      "BASH_IS_NONE",
+      "BUSYBOX",
+      "CAT",
+      "ECHO",
+      "FALSE",
+      "FEATURE_BUFFERS_USE_MALLOC",
+      "HAVE_DOT_CONFIG",
+      "INSTALL_APPLET_SYMLINKS",
+      "LFS",
+      "NO_DEBUG_LIB",
+      "PRINTF",
+      "PWD",
+      "SH_IS_NONE",
+      "TRUE",
+      "TRY_LOOP_CONFIGURE"
+    ],
+    "generatedConfigSha256": "d9ad715880384c2bba790994a776fb33954fdf877ef1d1aa3fff119df5b352ea",
+    "build": {
+      "exitCode": 0,
+      "timeout": false,
+      "diagnostics": [],
+      "log": "native-build.log",
+      "logSha256": "bfd5a80117c39eb55ff1b2f8ced244c18dd366e1464e1dfba3cb873fcd67f5ae"
+    },
+    "artifact": {
+      "sha256": "fed3c6c29e041bdb6ce98b3002112ad6c1af3a81d70f71b7d130ee63f5f96b0d",
+      "size": 26176
+    },
+    "smoke": [
+      {
+        "id": "printf-binary",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "410042ff0a",
+        "stderrHex": ""
+      },
+      {
+        "id": "printf-binary",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "410042ff0a",
+        "stderrHex": ""
+      },
+      {
+        "id": "printf-numeric",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "ed959ceab8803a303030373a66660a",
+        "stderrHex": ""
+      },
+      {
+        "id": "printf-numeric",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "ed959ceab8803a303030373a66660a",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-binary",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-binary",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-file",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-file",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-absolute",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-absolute",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "stderrHex": ""
+      },
+      {
+        "id": "cat-missing",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 1,
+        "stdoutHex": "",
+        "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a"
+      },
+      {
+        "id": "cat-missing",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 1,
+        "stdoutHex": "",
+        "stderrHex": "6361743a2063616e2774206f70656e20276d697373696e672e62696e273a204e6f20737563682066696c65206f72206469726563746f72790a"
+      },
+      {
+        "id": "echo-utf8",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "ed959ceab8802073706163650a",
+        "stderrHex": ""
+      },
+      {
+        "id": "echo-utf8",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "ed959ceab8802073706163650a",
+        "stderrHex": ""
+      },
+      {
+        "id": "true",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": ""
+      },
+      {
+        "id": "true",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "",
+        "stderrHex": ""
+      },
+      {
+        "id": "false",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 1,
+        "stdoutHex": "",
+        "stderrHex": ""
+      },
+      {
+        "id": "false",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 1,
+        "stdoutHex": "",
+        "stderrHex": ""
+      },
+      {
+        "id": "pwd",
+        "invocation": "multicall",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "2f646174612f73656f7269692d636f6e7461696e65722d32303236313031342f62757379626f782f72756e2d3230323631303133543136303334385a2f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+        "stderrHex": ""
+      },
+      {
+        "id": "pwd",
+        "invocation": "argv0",
+        "passed": true,
+        "exitCode": 0,
+        "stdoutHex": "2f646174612f73656f7269692d636f6e7461696e65722d32303236313031342f62757379626f782f72756e2d3230323631303133543136303334385a2f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+        "stderrHex": ""
+      }
+    ]
+  },
+  "status": "producer-smoke-passed",
+  "nativeSmokePassed": true,
+  "wasiNodeSmokePassed": true,
+  "nodeWasiApplets": [
+    "cat",
+    "echo",
+    "false",
+    "printf",
+    "pwd",
+    "true"
+  ],
+  "sourcePack": {
+    "path": "busybox-source-pack.tar.gz",
+    "sha256": "ccb77c4afaddc1642651033cec10ea4848124a6f2030d27d346607054461327b",
+    "size": 2570373
+  }
+}
