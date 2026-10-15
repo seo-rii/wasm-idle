@@ -310,8 +310,9 @@ export class MemoryFileSystem {
       throw new FsError('EEXIST', 'Path already exists');
     }
     const parent = this.parent(path, options);
-    this.writable(parent.node);
+    // An existing entry is reported before a read-only parent, as Linux does.
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');
+    this.writable(parent.node);
     parent.node.children.set(parent.name, this.allocate('directory', parent.node.mount, options.mode ?? 0o755));
     this.changed(parent.node);
   }
