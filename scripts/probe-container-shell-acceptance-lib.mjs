@@ -4,6 +4,7 @@ import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-container-shell-lib.mjs';
 import { FULL_SYSROOT_SHA256, loadClangBrowserInputs } from '../packages/container/scripts/clang-browser-inputs.mjs';
+import { selectClangProfile } from '../examples/container/clang-profile.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
 // SDK with bridge patches 0001-0020: registry/filesystem/pipe fixes, exit-only wait,
@@ -183,6 +184,15 @@ export const SYNTAX_COMMANDS = [
 export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline', 'redirection', 'startup-failure', 'syntax'];
 export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT, pipeline: PIPELINE_SCRIPT,
 	redirection: REDIRECTION_SCRIPT, 'startup-failure': "printf 'must-not-execute\\n'\n", syntax: SYNTAX_SCRIPT };
+// Separate live profile: actual Bash keeps its producer pipe open until the
+// owner edits a header and a concurrent real BusyBox reads it during Clang.
+export const LIVE_CLANG_SCRIPT = [
+	'set -eu', 'mkdir -p /workspace/live', 'cd /workspace/live',
+	"printf 'before_editor\\n' > live.h",
+	"{ printf '/* streamed input */\\n'; IFS= read -r release; test \"$release\" = release; printf '#include \"live.h\"\\n'; } | clang -E -P -x c - | cat > preprocessed.txt",
+	'cat preprocessed.txt', 'clang --version 0<&- > version.txt 2> version.err'
+].join('\n') + '\n';
+export const LIVE_CLANG_FILES = ['/workspace/live/live.h', '/workspace/live/preprocessed.txt', '/workspace/live/version.txt', '/workspace/live/version.err'];
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -195,6 +205,7 @@ async function pinned(file, expected) {
 }
 
 export async function readPinnedProbeInputs(configuration) {
+	selectClangProfile(configuration.clangFilesystem);
 	assert.equal(configuration.packageReceiptSha256, PACKAGE_RECEIPT.sha256);
 	const receipt = JSON.parse(await pinned(configuration.packageReceipt, PACKAGE_RECEIPT));
 	assert.equal(receipt.complete, true, 'actual completed SDK package required');
@@ -264,7 +275,7 @@ const same = (actual, expected) => Array.isArray(actual) &&
 	actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
 
 /** One run's acceptance. `downloads` are the server's body counts at the run's start and end. */
-function judgeRun(run, result, downloads, assetPaths, checks) {
+function judgeRun(run, result, downloads, assetPaths, checks, clangAdapterId = 'llvm-clang-tool-host-v1') {
 	const check = (id, passed, observed) => checks.push({ id: `${run}:${id}`, passed: Boolean(passed), observed });
 	const completed = result?.type === 'result' && result.backendCompleted === true;
 	const output = result?.result;
@@ -295,7 +306,7 @@ function judgeRun(run, result, downloads, assetPaths, checks) {
 		result?.lookups?.clang === 'llvm' && ['cat', 'grep', 'mkdir'].every((name) => result.lookups[name] === 'busybox'), result?.lookups);
 	const clang = result?.clangCommand;
 	check('clang-multicall-profile', clang?.path === 'bin/llvm' && clang.argv0 === LLVM_EXECUTABLE &&
-		clang.package === 'llvm' && clang.adapter === 'llvm-clang-tool-host-v1' && same(clang.prefixArgs, ['clang', ...CLANG_PROFILE]), clang);
+		clang.package === 'llvm' && clang.adapter === clangAdapterId && same(clang.prefixArgs, ['clang', ...CLANG_PROFILE]), clang);
 	// Lazy loading: no asset is requested before the command that needs it.
 	const timeline = result?.timeline ?? [];
 	const first = (predicate) => timeline.find(predicate)?.seq ?? Infinity;
@@ -458,6 +469,57 @@ function judgeSyntax(result, downloads, checks) {
 		result.workerGroup.active === 0 && result.workerGroup.created > 0 && result.workerGroup.created === result.workerGroup.terminated &&
 		result.remainingWorkerTargets === 0 && !result.ownedCleanup?.cleanupError && !result.consoleErrors?.length && !result.blockedRequests?.length,
 		{ processes: result?.containerProcesses, workerGroup: result?.workerGroup, remainingWorkerTargets: result?.remainingWorkerTargets });
+}
+
+/** Live Clang has its own gate; it makes no snapshot rollback/cancel claim. */
+export function judgeLiveShellAcceptance(receipt) {
+	const checks = [], profile = selectClangProfile('live');
+	const assets = ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map(name => `/assets/${name}`);
+	const check = (id, passed, observed) => checks.push({ id, passed: Boolean(passed), observed });
+	check('live:explicit-profile', receipt.scenario === 'live-only' && receipt.clangFilesystem === 'live',
+		{ scenario: receipt.scenario, clangFilesystem: receipt.clangFilesystem });
+	for (const name of ['cold', 'warm']) {
+		const entry = receipt.runs?.find(run => run.run === name);
+		judgeRun(name, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assets, checks, profile.adapterId);
+	}
+	const entry = receipt.runs?.find(run => run.run === 'live-io'), result = entry?.result, io = result?.liveIo;
+	const output = result?.result, processed = result?.files?.[LIVE_CLANG_FILES[1]];
+	check('live-io:actual-script-and-pipe-bytes', result?.type === 'result' && result.backendCompleted === true && output?.code === 0 &&
+		decode(output.stderr) === CLANG_TRIPLE_WARNING && decode(processed).trim() === 'after_editor' && same(output.stdout, processed),
+		{ type: result?.type, output, processed });
+	check('live-io:header-edit-during-compiler', io?.compilerRunningBeforeEdit === true &&
+		decode(io.headerBefore) === 'before_editor\n' && decode(io.headerAfter) === 'after_editor\n' &&
+		decode(result?.files?.[LIVE_CLANG_FILES[0]]) === 'after_editor\n', io);
+	check('live-io:concurrent-real-utility', io?.utility?.code === 0 && io.utility.reason === 'exited' &&
+		decode(io.utility.stdout) === 'after_editor\n' && decode(io.utility.stderr) === '' && io.compilerRunningAfterUtility === true,
+		{ utility: io?.utility, compilerRunningAfterUtility: io?.compilerRunningAfterUtility });
+	const invocations = result?.invocations ?? [], records = result?.records ?? [];
+	check('live-io:actual-shell-dispatch', invocations.length === 5 &&
+		invocations.filter(call => call.path === `${BIN}/mkdir` && call.cwd === '/workspace').length === 1 &&
+		invocations.filter(call => call.path === `${BIN}/cat` && call.cwd === '/workspace/live').length === 2 &&
+		invocations.some(call => call.path === `${BIN}/clang` && call.cwd === '/workspace/live' && same(call.argv?.slice(1), ['-E', '-P', '-x', 'c', '-'])), invocations);
+	check('live-io:live-command-profile', result?.clangCommand?.adapter === profile.adapterId &&
+		result.clangCommand.argv0 === LLVM_EXECUTABLE && records.length === 5 && records.every(record =>
+			record.status === 0 && record.result?.reason === 'exited' && record.result.code === 0 && Number.isSafeInteger(record.pid)), records);
+	check('live-io:closed-input-command', invocations.some(call => call.path === `${BIN}/clang` && same(call.argv?.slice(1), ['--version']) &&
+		call.descriptors?.[0] === null) && decode(result?.files?.[LIVE_CLANG_FILES[2]]).startsWith('clang version ') &&
+		decode(result?.files?.[LIVE_CLANG_FILES[3]]) === '', result?.files?.[LIVE_CLANG_FILES[2]]);
+	check('live-io:verified-cache-reuse', assets.every(path => Number.isSafeInteger(entry?.downloads?.start?.[path]) &&
+		entry.downloads.start[path] === entry.downloads.end?.[path]) &&
+		result?.assetsBeforeShell?.cachedEntries === 0, entry?.downloads);
+	check('live-io:full-sysroot', result?.sysroot?.entries === 2285 && result.sysroot.files === 2168, result?.sysroot);
+	check('live-io:owned-resources-retired', Array.isArray(result?.containerProcesses) && result.containerProcesses.length === 0 &&
+		result?.workerGroup?.disposed === true && result.workerGroup.active === 0 && result.workerGroup.created === result.workerGroup.terminated &&
+		result.remainingWorkerTargets === 0 && !result.ownedCleanup?.cleanupError, result?.workerGroup);
+	check('live-io:browser-errors', !result?.consoleErrors?.length && !result?.blockedRequests?.length &&
+		!result?.events?.some(event => event.type === 'threadError'), result?.consoleErrors);
+	check('context-cleanup', receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,
+		[receipt.initialWorkerTargets, receipt.workersAfterContextClose]);
+	if (receipt.diagnosticOptions?.omittedTmpMount === true) check('required-mount-profile', false, 'Diagnostic run omitted common /tmp');
+	const passed = checks.every(entry => entry.passed);
+	return { checks, passed: checks.filter(entry => entry.passed).length, total: checks.length,
+		liveShellAcceptancePassed: passed, liveCompilerFilesystemQualified: passed,
+		shellAcceptancePassed: false, shellSyntaxPassed: false, commonContainerFdVfsQualified: false, shellBackendReady: false };
 }
 
 export function judgeShellAcceptance(receipt) {

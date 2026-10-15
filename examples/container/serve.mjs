@@ -20,6 +20,7 @@ export async function buildWorkbenchModules(options) {
     ['@wasm-idle/container', 'packages/container/src/index.ts'],
     ['@wasm-idle/container/adapters/wasix', 'packages/container/src/adapters/wasix/index.ts'],
     ['@wasm-idle/container/adapters/clang', 'packages/container/src/adapters/clang/index.ts'],
+    ['@wasm-idle/container/adapters/clang-live', 'packages/container/src/adapters/clang-live/index.ts'],
     ['@wasm-idle/container/adapters/wasi-live', 'packages/container/src/adapters/wasi-live/index.ts'],
     ['@wasm-idle/container/persistence', 'packages/container/src/fs/persistence/index.ts'],
     ['@wasm-idle/container/workspace', 'packages/container/src/workspace/index.ts'],

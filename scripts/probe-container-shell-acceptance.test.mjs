@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { manifest } from './probe-container-shell-acceptance.mjs';
+import { manifest, runProbe } from './probe-container-shell-acceptance.mjs';
+import { selectClangProfile } from '../examples/container/clang-profile.mjs';
 import {
 	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
 	SYNTAX_COMMANDS, SYNTAX_CONTENTS, SYNTAX_DIRECTORY, SYNTAX_ENVIRONMENT,
-	judgeShellAcceptance,
+	judgeShellAcceptance, judgeLiveShellAcceptance,
 	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -125,6 +126,28 @@ function receipt() {
 		]
 	};
 }
+function liveReceipt() {
+	const value = receipt(); value.scenario = 'live-only'; value.clangFilesystem = 'live';
+	value.runs = value.runs.filter(run => ['cold', 'warm'].includes(run.run));
+	for (const run of value.runs) run.result.clangCommand.adapter = 'llvm-clang-tool-host-live-v1';
+	const calls = [
+		['mkdir', ['-p', '/workspace/live']], ['clang', ['-E', '-P', '-x', 'c', '-']], ['cat', []], ['cat', ['preprocessed.txt']], ['clang', ['--version']]
+	];
+	value.runs.push({ run: 'live-io', downloads: structuredClone(value.runs[1].downloads), result: {
+		type: 'result', backendCompleted: true, result: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: bytes(CLANG_TRIPLE_WARNING) },
+		files: { '/workspace/live/live.h': bytes('after_editor\n'), '/workspace/live/preprocessed.txt': bytes('after_editor\n'),
+			'/workspace/live/version.txt': bytes('clang version 22\n'), '/workspace/live/version.err': [] },
+		liveIo: { compilerPid: 2, compilerRunningBeforeEdit: true, compilerRunningAfterUtility: true,
+			headerBefore: bytes('before_editor\n'), headerAfter: bytes('after_editor\n'),
+			utility: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: [] } },
+		invocations: calls.map(([name, args], index) => ({ path: `${BIN}/${name}`, cwd: index === 0 ? '/workspace' : '/workspace/live', argv: [name, ...args], descriptors: [index === 4 ? null : 0, 1, 2] })),
+		records: calls.map(([name], index) => ({ path: `${BIN}/${name}`, pid: index + 1, status: 0, result: { code: 0, reason: 'exited' } })),
+		clangCommand: value.runs[0].result.clangCommand, assetsBeforeShell: { cachedEntries: 0 }, sysroot: { entries: 2285, files: 2168 },
+		containerProcesses: [], workerGroup: { disposed: true, active: 0, created: 7, terminated: 7 }, remainingWorkerTargets: 0,
+		events: [], consoleErrors: [], blockedRequests: []
+	} });
+	return value;
+}
 const failed = (value) => judgeShellAcceptance(value).checks.filter((check) => !check.passed).map((check) => check.id);
 
 test('distribution identity covers URL policy and declares the LLVM multicall layout', () => {
@@ -144,6 +167,42 @@ test('distribution identity covers URL policy and declares the LLVM multicall la
 		name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/llvm', argv0: LLVM_EXECUTABLE,
 		prefixArgs: ['clang', ...CLANG_PROFILE]
 	});
+	assert.equal(manifest('https://one.invalid', inputs, 'busybox', 'snapshot'), manifest('https://one.invalid', inputs),
+		'Explicit snapshot retains the original immutable manifest bytes and identity');
+	const live = JSON.parse(manifest('https://one.invalid', inputs, 'busybox', 'live'));
+	assert.notEqual(live.distributionId, first.distributionId);
+	assert.equal(live.commands.find(command => command.name === 'clang').adapter, 'llvm-clang-tool-host-live-v1');
+});
+
+test('trusted Clang profile selects only a fixed adapter, worker and descriptor mode', async () => {
+	assert.equal(selectClangProfile().filesystem, 'snapshot');
+	assert.deepEqual(selectClangProfile('snapshot'), { filesystem: 'snapshot', adapterId: 'llvm-clang-tool-host-v1', workerPath: 'packages/container/src/adapters/clang/worker.ts', stdio: 'forwarded' });
+	assert.deepEqual(selectClangProfile('live'), { filesystem: 'live', adapterId: 'llvm-clang-tool-host-live-v1', workerPath: 'packages/container/src/adapters/clang-live/worker.ts', stdio: 'delegated' });
+	for (const invalid of [null, '', 'auto', true, {}, 'https://example.invalid/host.mjs']) {
+		assert.throws(() => selectClangProfile(invalid), /clangFilesystem must be snapshot or live/);
+		assert.throws(() => manifest('https://one.invalid', {}, 'busybox', invalid), /clangFilesystem must be snapshot or live/);
+	}
+	await assert.rejects(readPinnedProbeInputs({ clangFilesystem: 'auto' }), /clangFilesystem must be snapshot or live/);
+	await assert.rejects(runProbe({ clangFilesystem: 'live' }), /separate --run-live gate/);
+	await assert.rejects(runProbe({}, { liveOnly: true }), /explicit clangFilesystem=live/);
+});
+
+test('live gate qualifies actual shared-header/stdin/utility observations without snapshot rollback claims', () => {
+	const value = judgeLiveShellAcceptance(liveReceipt());
+	assert.deepEqual(value.checks.filter(check => !check.passed), []);
+	assert.equal(value.liveShellAcceptancePassed, true);
+	assert.equal(value.liveCompilerFilesystemQualified, true);
+	assert.equal(value.shellAcceptancePassed, false);
+	assert.equal(value.shellSyntaxPassed, false);
+});
+
+test('live gate rejects missing concurrency, stale pipe output and an unqualified profile', () => {
+	const value = liveReceipt(), live = value.runs[2].result;
+	live.liveIo.compilerRunningBeforeEdit = false; live.liveIo.compilerRunningAfterUtility = false;
+	live.files['/workspace/live/preprocessed.txt'] = bytes('before_editor\n'); live.invocations[4].descriptors[0] = 0;
+	value.clangFilesystem = 'snapshot';
+	assert.deepEqual(judgeLiveShellAcceptance(value).checks.filter(check => !check.passed).map(check => check.id),
+		['live:explicit-profile', 'live-io:actual-script-and-pipe-bytes', 'live-io:header-edit-during-compiler', 'live-io:concurrent-real-utility', 'live-io:closed-input-command']);
 });
 
 test('the plan script is unchanged and an actual passing receipt passes without readiness claims', () => {

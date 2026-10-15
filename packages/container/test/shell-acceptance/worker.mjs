@@ -118,7 +118,31 @@ globalThis.onmessage = async ({ data }) => {
       return Array.from(bytes);
     };
     const outputs = Promise.all([drain(session.stdout), drain(session.stderr)]); void outputs.catch(() => {});
-    await session.stdin.close();
+    let liveIo;
+    if (data.liveIo) {
+      const deadline = performance.now() + 120000;
+      let compiler;
+      for (;;) {
+        lifetime.signal.throwIfAborted();
+        compiler = (await container.inspect()).processes.find(process => process.command === 'clang' && process.state === 'running');
+        if (compiler) break;
+        if (records.some(record => record.path.endsWith('/clang')) || performance.now() >= deadline) throw new Error('Live Clang did not remain running for the shared-header fixture');
+        await new Promise(done => setTimeout(done, 20));
+      }
+      const path = '/workspace/live/live.h', headerBefore = Array.from(container.fs.readFile(path));
+      container.fs.writeFile(path, new TextEncoder().encode('after_editor\n'));
+      const headerAfter = Array.from(container.fs.readFile(path));
+      const utility = await container.run('cat', [path], { cwd: '/workspace/live', timeoutMs: 30000 });
+      liveIo = {
+        compilerPid: compiler.pid, compilerRunningBeforeEdit: true, headerBefore, headerAfter,
+        utility: { ...utility, stdout: Array.from(utility.stdout), stderr: Array.from(utility.stderr) },
+        compilerRunningAfterUtility: (await container.inspect()).processes.some(process => process.pid === compiler.pid && process.state === 'running')
+      };
+      mark({ type: 'liveHeaderEdited', compilerPid: compiler.pid, compilerStillRunning: liveIo.compilerRunningAfterUtility });
+      const writer = session.stdin.getWriter();
+      try { await writer.write(new TextEncoder().encode('release\n')); await writer.close(); }
+      finally { writer.releaseLock(); }
+    } else await session.stdin.close();
     const [result, [stdout, stderr]] = await Promise.all([session.exited, outputs]);
     backendCompleted = true;
     mark({ type: 'shellEnd', code: result.code, reason: result.reason });
@@ -140,7 +164,7 @@ globalThis.onmessage = async ({ data }) => {
     postMessage({
       type: 'result', backendCompleted, result: { ...result, stdout, stderr },
       files, artifact, invocations, records, timeline, lookups, clangCommand, assetsBeforeShell, assetsAfterShell, shellAssetsBefore, shellAssetsAfter,
-      sysroot, containerProcesses, bashWasmSha256: data.bashWasmSha256, virtualCommands, dataArtifactMode,
+      sysroot, containerProcesses, bashWasmSha256: data.bashWasmSha256, virtualCommands, dataArtifactMode, liveIo,
       cacheNames: await caches.keys(), trackedWorkersAtBackendCompletion: workers.inspect().active, workerGroup: workers.inspect(),
       publicApi: { session: 'createWasixShellSession', runtime: Object.getOwnPropertyNames(sdk.Runtime.prototype), directory: Object.getOwnPropertyNames(sdk.Directory) }
     });

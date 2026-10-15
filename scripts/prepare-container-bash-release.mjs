@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkbenchModules } from '../examples/container/serve.mjs';
+import { selectClangProfile } from '../examples/container/clang-profile.mjs';
 import { manifest } from './probe-container-shell-acceptance.mjs';
 import { readPinnedProbeInputs, BASH_WASM_SHA256, MEMORY, COMMAND_TIMEOUT_MS, digest, identity } from './probe-container-shell-acceptance-lib.mjs';
 import { jsonBytes, prepareContainerDistribution } from './container-distribution.mjs';
@@ -12,6 +13,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Provenance records carry independently reviewed receipt/source/notice identities. */
 export async function prepareBashRelease({ configuration, provenance, baseURL, output }) {
+  const clangProfile = selectClangProfile(configuration.clangFilesystem);
   assert(isAbsolute(output), 'Absolute fresh output required');
   const base = new URL(baseURL);
   assert(base.href === baseURL && ['http:', 'https:'].includes(base.protocol) && !base.username && !base.password &&
@@ -20,7 +22,7 @@ export async function prepareBashRelease({ configuration, provenance, baseURL, o
   assert(Array.isArray(provenance), 'Explicit provenance records required');
   for (const record of provenance) for (const entry of [record.receipt, ...record.sources, ...record.notices])
     assert(isAbsolute(entry.path), 'Absolute pinned provenance paths required');
-  const distribution = JSON.parse(manifest(base.origin, inputs));
+  const distribution = JSON.parse(manifest(base.origin, inputs, 'busybox', clangProfile.filesystem));
   // These are the exact immutable URLs the generic preparer will verify and publish.
   for (const pkg of distribution.packages) for (const asset of pkg.assets)
     asset.url = new URL(`objects/${asset.delivery.sha256}/${asset.delivery.mediaType.replace('/', '-')}`, base).href;
@@ -34,14 +36,14 @@ export async function prepareBashRelease({ configuration, provenance, baseURL, o
     sdkAsset: { packageId: 'shell', assetId: 'sdk' }, shellAsset: { packageId: 'shell', assetId: 'bash' },
     bashWasmSha256: BASH_WASM_SHA256, memory: MEMORY,
     clangSha256: inputs.clang.assets.clang.metadata.logical.sha256, linkerSha256: inputs.clang.assets.lld.metadata.logical.sha256,
-    cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS
+    cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS, clangFilesystem: clangProfile.filesystem
   };
   const bundled = await buildWorkbenchModules({
     ownerEntry: join(root, 'examples/container/bash-owner.mjs'),
-    profile: { profileLabel: 'Real GNU Bash · BusyBox · Clang · persistent workspace',
+    profile: { profileLabel: `Real GNU Bash · BusyBox · ${clangProfile.filesystem === 'live' ? 'live Clang' : 'Clang'} · persistent workspace`,
       terminalDescription: 'Actual /bin/bash --noprofile --norc reads these bytes as its script. External commands use the common container workspace. Raw streams; no PTY or job control.' },
     sdkImportURL: './sdk/index.mjs',
-    entries: { 'clang-worker': join(root, 'packages/container/src/adapters/clang/worker.ts') },
+    entries: { 'clang-worker': join(root, clangProfile.workerPath) },
     define: { __CONTAINER_BASH_CONFIG__: JSON.stringify(config) }
   });
   const localAssets = new Map([
@@ -64,7 +66,7 @@ export async function prepareBashRelease({ configuration, provenance, baseURL, o
       ...inputs.receipt.entries[name], mediaType: 'text/javascript'
     });
     const recipe = { schemaVersion: 1, baseURL, distribution,
-      adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'],
+      adapterIds: ['wasi-preview1-live', clangProfile.adapterId],
       inputs: distribution.packages.flatMap(pkg => pkg.assets.map(asset => {
         const path = localAssets.get(asset.id); assert(path && isAbsolute(path));
         return { package: pkg.id, asset: asset.id, path };
@@ -76,7 +78,7 @@ export async function prepareBashRelease({ configuration, provenance, baseURL, o
     const lockBytes = await readFile(join(output, 'application-lock.json'));
     assert.equal(digest(lockBytes), result.lockSha256, 'Returned application URL must use the verified lock bytes');
     const lock = JSON.parse(lockBytes);
-    return { ...result, applicationURL: new URL(`host/${lock.host.sha256}/index.html`, base).href,
+    return { ...result, clangFilesystem: clangProfile.filesystem, applicationURL: new URL(`host/${lock.host.sha256}/index.html`, base).href,
       sourceHashes: bundled.sourceHashes, packageReceiptSha256: configuration.packageReceiptSha256,
       qualification: 'local-real-artifact-closure; browser and hosting response acceptance are separate gates' };
   } finally { await rm(staging, { recursive: true, force: true }); }

@@ -5,8 +5,10 @@ import {
   validateDistribution, extractTarPackage
 } from '@wasm-idle/container';
 import { createClangAdapter } from '@wasm-idle/container/adapters/clang';
+import { createLiveClangAdapter } from '@wasm-idle/container/adapters/clang-live';
 import { createLiveWasiAdapter } from '@wasm-idle/container/adapters/wasi-live';
 import { createWasixShellSession, installWasixWorkerGroup } from '@wasm-idle/container/adapters/wasix';
+import { selectClangProfile } from './clang-profile.mjs';
 
 export const BASH_BIN = '/usr/local/bin';
 export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
@@ -19,12 +21,14 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
  * It contains manifest/manifestSha256/assetURLs; sdkUrl/sdkWorkerUrl; liveWorkerUrl/
  * clangWorkerUrl; sdkAsset/shellAsset; bashWasmSha256; memory; clangSha256/
  * linkerSha256; cacheNamespace; and an optional commandTimeoutMs/maxWorkers.
+ * clangFilesystem is snapshot by default, or an explicit live application profile.
  * The injecting host retains the lifetime of an optional persistence workspace.
  */
 export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation }) {
+  const clangProfile = selectClangProfile(config.clangFilesystem);
   const distribution = await validateDistribution({
     bytes: new TextEncoder().encode(config.manifest), expectedSha256: config.manifestSha256,
-    adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'], allowedAssetURLs: config.assetURLs
+    adapterIds: ['wasi-preview1-live', clangProfile.adapterId], allowedAssetURLs: config.assetURLs
   });
   const cache = Object.freeze({ enabled: true, namespace: config.cacheNamespace, version: config.manifestSha256, storageReserveBytes: 0 });
   const assetOptions = { distribution, fetch: fetcher, persistentCache: cache, maxCachedBytes: 192 * 1024 * 1024 };
@@ -37,7 +41,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
       workspace, packages: manager, maxBytes: workspace?.fs.maxBytes ?? 256 * 1024 * 1024,
       adapters: [
         createLiveWasiAdapter({ maxBlockedIoMs: 120000, workerFactory: () => new Worker(config.liveWorkerUrl, { type: 'module' }) }),
-        createClangAdapter({
+        (clangProfile.filesystem === 'live' ? createLiveClangAdapter : createClangAdapter)({
           clangSha256: config.clangSha256, linkerSha256: config.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
           compilerPaths: [`${TOOLCHAIN}/bin/llvm`],
           executableOutputProfile: 'wasi-preview1-process', workerFactory: () => new Worker(config.clangWorkerUrl, { type: 'module' })
@@ -50,7 +54,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
   }
   const routes = {
     ...Object.fromEntries(BASH_APPLETS.map(name => [`${BASH_BIN}/${name}`, { command: name }])),
-    [`${BASH_BIN}/clang`]: { command: 'clang', stdio: 'forwarded' },
+    [`${BASH_BIN}/clang`]: { command: 'clang', stdio: clangProfile.stdio },
     [`${BASH_BIN}/wasm-run`]: { command: 'wasm-run' }
   };
   let sysroot, session, starting, disposal;
@@ -69,7 +73,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
     if (!sysroot) { container.fs.mountReadonly(BASH_SYSROOT, entries); sysroot = metadata; }
   };
   return Object.freeze({
-    container, manager, shellAssets, workers, cache,
+    container, manager, shellAssets, workers, cache, clangFilesystem: clangProfile.filesystem,
     inspectSysroot: () => sysroot ?? null,
     startShell(options = {}, signal) {
       if (starting || stop.signal.aborted) return Promise.reject(new Error('The dedicated Bash owner has already started or retired'));

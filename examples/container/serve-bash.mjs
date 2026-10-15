@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkbenchModules, EXAMPLE_CSP } from './serve.mjs';
+import { selectClangProfile } from './clang-profile.mjs';
 import { manifest } from '../../scripts/probe-container-shell-acceptance.mjs';
 import { readPinnedProbeInputs, BASH_WASM_SHA256, MEMORY, COMMAND_TIMEOUT_MS, digest, identity } from '../../scripts/probe-container-shell-acceptance-lib.mjs';
 
@@ -11,6 +12,7 @@ const directory = dirname(fileURLToPath(import.meta.url)), root = resolve(direct
 
 /** Explicit local development profile. No upload, production origin or mutable runtime lookup. */
 export async function createBashExampleServer(configuration, options = {}) {
+  const clangProfile = selectClangProfile(configuration.clangFilesystem);
   const inputs = await readPinnedProbeInputs(configuration);
   const resources = new Map(), requests = [], downloads = {};
   const server = createServer((request, response) => {
@@ -27,23 +29,23 @@ export async function createBashExampleServer(configuration, options = {}) {
   await new Promise((yes, no) => { server.once('error', no); server.listen(options.port ?? 0, '127.0.0.1', yes); });
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
-    const distribution = manifest(origin, inputs), manifestSha256 = digest(Buffer.from(distribution));
+    const distribution = manifest(origin, inputs, 'busybox', clangProfile.filesystem), manifestSha256 = digest(Buffer.from(distribution));
     const parsed = JSON.parse(distribution), sdkBase = `${origin}/sdk/${inputs.receipt.packageId}`;
     const { validateDistribution } = await import('../../packages/container/dist/packages/distribution.js');
     await validateDistribution({ bytes: Buffer.from(distribution), expectedSha256: manifestSha256,
-      adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'], allowedAssetURLs: parsed.packages.flatMap(pkg => pkg.assets.map(asset => asset.url)) });
+      adapterIds: ['wasi-preview1-live', clangProfile.adapterId], allowedAssetURLs: parsed.packages.flatMap(pkg => pkg.assets.map(asset => asset.url)) });
     const config = {
       manifest: distribution, manifestSha256, assetURLs: parsed.packages.flatMap(pkg => pkg.assets.map(asset => asset.url)),
       sdkUrl: `${sdkBase}/index.mjs`, sdkWorkerUrl: `${sdkBase}/worker.mjs`, liveWorkerUrl: `${origin}/live-worker.mjs`, clangWorkerUrl: `${origin}/clang-worker.mjs`,
       sdkAsset: { packageId: 'shell', assetId: 'sdk' }, shellAsset: { packageId: 'shell', assetId: 'bash' }, bashWasmSha256: BASH_WASM_SHA256,
       memory: MEMORY, clangSha256: inputs.clang.assets.clang.metadata.logical.sha256, linkerSha256: inputs.clang.assets.lld.metadata.logical.sha256,
-      cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS
+      cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS, clangFilesystem: clangProfile.filesystem
     };
     const bundled = await buildWorkbenchModules({
       ownerEntry: resolve(directory, 'bash-owner.mjs'),
-      profile: { profileLabel: 'Real GNU Bash · BusyBox · Clang · persistent workspace', terminalDescription: 'Actual /bin/bash --noprofile --norc reads these bytes as its script. External commands use the common container workspace. Raw streams; no PTY or job control.' },
+      profile: { profileLabel: `Real GNU Bash · BusyBox · ${clangProfile.filesystem === 'live' ? 'live Clang' : 'Clang'} · persistent workspace`, terminalDescription: 'Actual /bin/bash --noprofile --norc reads these bytes as its script. External commands use the common container workspace. Raw streams; no PTY or job control.' },
       sdkImportURL: new URL(`${sdkBase}/index.mjs`).pathname,
-      entries: { 'clang-worker': resolve(root, 'packages/container/src/adapters/clang/worker.ts') }, define: { __CONTAINER_BASH_CONFIG__: JSON.stringify(config) }
+      entries: { 'clang-worker': resolve(root, clangProfile.workerPath) }, define: { __CONTAINER_BASH_CONFIG__: JSON.stringify(config) }
     });
     for (const [name, entry] of bundled.resources) resources.set(name, entry);
     for (const name of ['index.mjs', 'worker.mjs']) resources.set(new URL(`${sdkBase}/${name}`).pathname, { type: 'text/javascript', bytes: inputs.entries.get(name) });

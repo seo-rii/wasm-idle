@@ -44,7 +44,9 @@ node examples/container/serve-bash.mjs /absolute/path/to/pinned-shell-config.jso
 
 This server reuses the existing receipt and artifact verifier. The configuration supplies local SDK package, Bash WEBc, BusyBox receipt/bytes, Clang producer/smoke receipts and compressed modules, and the complete process-profile sysroot with its derivation receipt. SDK pins must match the reviewed SDK profile in the repository. It does not build LLVM, find a mutable “latest” package, upload files or deploy infrastructure. The SDK remains a fixed static module import of the pinned host package; it is not inlined into a different module URL. Manifests select only pre-registered runtime adapters and verified data assets.
 
-`bash-profile.mjs` is the trusted shared host setup for the browser acceptance owner and `bash-owner.mjs`. The workbench's Bash owner adds the OPFS workspace, save controller and distinct cache callback. The initial shell is `/bin/bash --noprofile --norc`, reading real script input from the process streams. It exposes only the qualified BusyBox applets, Clang profile and explicit `wasm-run` route. The current compiler filesystem is a snapshot adapter with a writer lease; live utility/artifact execution uses the common workspace directly. This profile does not promise a PTY, full POSIX compatibility, job control or a persistent SDK instance across page reloads.
+`bash-profile.mjs` is the trusted shared host setup for the browser acceptance owner and `bash-owner.mjs`. The workbench's Bash owner adds the OPFS workspace, save controller and distinct cache callback. The initial shell is `/bin/bash --noprofile --norc`, reading real script input from the process streams. It exposes only the qualified BusyBox applets, Clang profile and explicit `wasm-run` route. The default compiler filesystem is a snapshot adapter with a writer lease; live utility/artifact execution uses the common workspace directly. This profile does not promise a PTY, full POSIX compatibility, job control or a persistent SDK instance across page reloads.
+
+Set `"clangFilesystem": "live"` in the trusted local shell configuration to select the optional live compiler profile. The application builder selects the fixed `llvm-clang-tool-host-live-v1` adapter and its static Worker entry; its manifest command and distribution identity change together. Live Clang inherits the actual shell descriptors, supports streamed stdin, and uses the shared workspace while other commands run. Completed writes remain visible after cancellation. Omitted configuration or explicit `"snapshot"` keeps the snapshot adapter and forwarded output; other values fail before starting. A guest message or remote manifest cannot supply a new host module URL. Preparing an immutable release uses this same selection and requires a new lock; existing prepared releases remain unchanged.
 
 The pinned SDK reports terminal descriptors, so this Bash invocation emits its real prompts and readline input echo on stderr. The raw text view preserves those bytes, including any carriage returns and backspaces; it does not emulate a screen or remove prompts from captured diagnostics. Compiler diagnostics remain on stderr, and pipe/file bytes do not pass through this display handling.
 
@@ -57,3 +59,12 @@ node packages/container/scripts/test-product-shell-browser.mjs \
 ```
 
 Use the resulting receipt's actual browser, source hashes and checks to determine qualification. The presence of this example or a successful host bundle alone is not a passing real-shell gate.
+
+The live profile has an additional actual Bash gate:
+
+```sh
+node scripts/probe-container-shell-acceptance.mjs --run-live \
+  /absolute/path/to/pinned-live-shell-config.json
+```
+
+It runs the unchanged plan script cold and warm, then an actual Bash producer→Clang stdin→BusyBox pipeline. While Clang waits for input, the owner edits a header and a concurrent real BusyBox reads the new bytes; only then does Bash finish its compiler input. A separate closed-input `clang --version` call checks shell descriptor inheritance. This gate records its own live receipt and does not reuse the snapshot gate's interrupted-output rollback expectations. The default `--run` still executes the eight snapshot scenarios.

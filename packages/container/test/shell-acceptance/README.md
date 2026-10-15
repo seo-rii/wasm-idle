@@ -33,7 +33,8 @@ imported patched SDK, one container Supervisor and one filesystem:
   registered with `Runtime.registerHostCommand` and routed by `createHostCommandHandler`:
     - `mkdir`, `grep`, `cat` (and `cp`, `mv`, `rm`) are BusyBox B1 package commands on the
       live adapter, with the shell child's descriptors delegated.
-    - `clang` is the real Clang on its snapshot adapter with forwarded output.
+    - `clang` defaults to the real snapshot adapter with forwarded output. The explicit
+      live application profile uses the fixed live adapter and delegates stdio.
 - `/workspace` is also registered with `registerHostCommandDirectory`. Bash's exec of
   `./hello.wasm` therefore runs the artifact as `wasm-run` on the live artifact adapter
   instead of natively inside the Bash runtime. Direct dispatch requires executable
@@ -150,6 +151,8 @@ The configuration names absolute paths and independently reviewed digests:
 pinned input it was derived from), `processSysrootReceipt`/`processSysrootReceiptSha256`,
 `processSysroot`,
 optional `chromium`, and a fresh `output` directory outside the checkout.
+`clangFilesystem` is omitted or `"snapshot"` for the existing eight-scenario gate.
+An explicit `"live"` selects the separate live gate; other values fail.
 
 For a failed startup, `sdkDiagnostics: true` records bounded SDK logs and actual
 host filesystem operations in the private receipt. The optional diagnostic-only
@@ -157,6 +160,31 @@ host filesystem operations in the private receipt. The optional diagnostic-only
 such receipt fails the required mount-profile gate even if its scripts pass.
 It does not alter the public session's mounts. The compiler and shell traces are
 fixture data; this logging is absent from the product owner.
+
+## Live compiler filesystem and stdin
+
+```sh
+node scripts/probe-container-shell-acceptance.mjs --run-live /absolute/live-config.json
+```
+
+This requires `"clangFilesystem": "live"`. The fixed adapter ID
+`llvm-clang-tool-host-live-v1` changes the manifest/distribution identity and selects
+the live compiler Worker. The default snapshot manifest remains unchanged.
+
+Cold and warm runs execute the plan's unchanged compile/link/artifact/BusyBox
+script. A third run executes a real Bash producer→Clang `-E -P -x c -`→BusyBox
+pipeline. Bash holds its producer open on `read` while the owner waits for a real
+running Clang process, edits `live.h`, and runs a concurrent real BusyBox `cat`.
+The utility must read the edited bytes while Clang is still running. Only then
+does the owner release Bash's input, allowing Clang to preprocess the new header.
+The pipeline file and final stdout must contain identical bytes. A following
+`clang --version 0<&-` preserves the shell's closed stdin and output redirections.
+
+This receipt reports `scenario: "live-only"` and its independent
+`liveShellAcceptancePassed`/`liveCompilerFilesystemQualified` flags. It does not
+reuse interrupted snapshot-output expectations or set the complete snapshot
+`shellAcceptancePassed` flag. Live writes are not rolled back on cancellation.
+The mode is a trusted application choice, never a remote JavaScript import.
 
 ## Quoting, exported environment and shell syntax
 

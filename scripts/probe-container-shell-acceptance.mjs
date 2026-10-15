@@ -9,10 +9,11 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
+import { selectClangProfile } from '../examples/container/clang-profile.mjs';
 import {
 	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, LLVM_EXECUTABLE, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
-	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT, SYNTAX_FILES, SYNTAX_SCRIPT,
-	digest, identity, judgeShellAcceptance, readPinnedProbeInputs
+	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT, SYNTAX_FILES, SYNTAX_SCRIPT, LIVE_CLANG_SCRIPT, LIVE_CLANG_FILES,
+	digest, identity, judgeShellAcceptance, judgeLiveShellAcceptance, readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,19 +22,20 @@ const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-sr
 
 // Container, Core and LLVM tool-host source bundled into local modules, as the Clang browser
 // qualification does, so module Workers need no import map.
-async function bundles(inputs) {
+async function bundles(inputs, clangProfile) {
 	const sdkImport = `/sdk/${inputs.receipt.packageId}/index.mjs`;
 	const sourceBytes = new Map();
 	const result = await build({
 		absWorkingDir: root,
 		entryPoints: {
 			owner: join(containerRoot, 'test/shell-acceptance/worker.mjs'),
-			'clang-worker': join(containerRoot, 'src/adapters/clang/worker.ts'),
+			'clang-worker': join(root, clangProfile.workerPath),
 			'live-worker': join(containerRoot, 'src/adapters/wasi-live/worker.ts')
 		},
 		alias: {
 			'@wasm-idle/container': join(root, 'packages/container/src/index.ts'),
 			'@wasm-idle/container/adapters/clang': join(root, 'packages/container/src/adapters/clang/index.ts'),
+			'@wasm-idle/container/adapters/clang-live': join(root, 'packages/container/src/adapters/clang-live/index.ts'),
 			'@wasm-idle/container/adapters/wasi-live': join(root, 'packages/container/src/adapters/wasi-live/index.ts'),
 			'@wasm-idle/container/adapters/wasix': join(root, 'packages/container/src/adapters/wasix/index.ts'),
 			'@wasm-idle/core': join(root, 'packages/core/src/index.ts'),
@@ -63,6 +65,7 @@ async function bundles(inputs) {
 }
 
 export async function checkProbe(configuration) {
+	const clangProfile = selectClangProfile(configuration.clangFilesystem);
 	assert(isAbsolute(configuration.output), 'absolute fresh output required');
 	assert(!configuration.output.startsWith(root + '/'), 'output must be outside the checkout');
 	assert.equal(await lstat(configuration.output).catch((error) => {
@@ -74,15 +77,16 @@ export async function checkProbe(configuration) {
 	const inputs = await readPinnedProbeInputs(configuration);
 	// The container's own validator must accept the distribution before Chromium starts.
 	const { validateDistribution } = await import('../packages/container/dist/packages/distribution.js');
-	const bytes = Buffer.from(manifest('http://127.0.0.1:1', inputs));
-	await validateDistribution({ bytes, expectedSha256: digest(bytes), adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'],
+	const bytes = Buffer.from(manifest('http://127.0.0.1:1', inputs, 'busybox', clangProfile.filesystem));
+	await validateDistribution({ bytes, expectedSha256: digest(bytes), adapterIds: ['wasi-preview1-live', clangProfile.adapterId],
 		allowedAssetURLs: ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map((name) => `http://127.0.0.1:1/assets/${name}`) });
-	return { inputs, bundles: await bundles(inputs) };
+	return { inputs, bundles: await bundles(inputs, clangProfile) };
 }
 
 // `busyboxAsset` names the served BusyBox body; the failure run points it at corrupted bytes
 // while the manifest keeps the pinned digest.
-export function manifest(origin, inputs, busyboxAsset = 'busybox') {
+export function manifest(origin, inputs, busyboxAsset = 'busybox', clangFilesystem) {
+	const clangProfile = selectClangProfile(clangFilesystem);
 	const busyboxIdentity = { ...identity(inputs.busybox), mediaType: 'application/wasm' };
 	const producer = inputs.clang.producer.source;
 	const llvmFiles = [
@@ -128,7 +132,7 @@ export function manifest(origin, inputs, busyboxAsset = 'busybox') {
 			// This producer emits an LLVM multicall executable. Its canonical basename must
 			// remain llvm so the real driver can invoke [llvm, clang, -cc1, ...] unchanged.
 			// The target profile follows that subcommand, before the user's arguments.
-			{ name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/llvm', argv0: LLVM_EXECUTABLE, prefixArgs: ['clang', ...CLANG_PROFILE] }
+			{ name: 'clang', package: 'llvm', adapter: clangProfile.adapterId, path: 'bin/llvm', argv0: LLVM_EXECUTABLE, prefixArgs: ['clang', ...CLANG_PROFILE] }
 		]
 	};
 	// The ID identifies this complete immutable policy and layout. It is not its
@@ -136,18 +140,22 @@ export function manifest(origin, inputs, busyboxAsset = 'busybox') {
 	return JSON.stringify({ ...index, distributionId: `shell-acceptance-${digest(Buffer.from(JSON.stringify(index)))}` });
 }
 
-export async function runProbe(configuration, { syntaxOnly = false } = {}) {
-	assert.equal(typeof syntaxOnly, 'boolean', 'syntaxOnly must be explicit boolean');
+export async function runProbe(configuration, { syntaxOnly = false, liveOnly = false } = {}) {
+	assert(typeof syntaxOnly === 'boolean' && typeof liveOnly === 'boolean' && !(syntaxOnly && liveOnly), 'Select one explicit acceptance scenario');
+	const clangProfile = selectClangProfile(configuration.clangFilesystem);
+	assert(!liveOnly || clangProfile.filesystem === 'live', '--run-live requires explicit clangFilesystem=live');
+	assert(clangProfile.filesystem === 'snapshot' || liveOnly || syntaxOnly, 'Live Clang uses its separate --run-live gate, not snapshot interruption expectations');
 	const prepared = await checkProbe(configuration);
 	await mkdir(configuration.output, { mode: 0o700 });
 	const receipt = {
-		schemaVersion: 1, complete: false, shellAcceptancePassed: false, shellSyntaxPassed: false,
-		scenario: syntaxOnly ? 'syntax-only' : 'full',
+		schemaVersion: 1, complete: false, shellAcceptancePassed: false, shellSyntaxPassed: false, liveShellAcceptancePassed: false,
+		scenario: syntaxOnly ? 'syntax-only' : liveOnly ? 'live-only' : 'full', clangFilesystem: clangProfile.filesystem,
 		startedAt: new Date().toISOString(),
 		host: { node: process.version, platform: platform(), arch: arch(), kernelRelease: release(), osVersion: version() },
 		applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
 		script: syntaxOnly ? SYNTAX_SCRIPT : SCRIPT,
 		syntaxScript: SYNTAX_SCRIPT,
+		...(liveOnly ? { liveScript: LIVE_CLANG_SCRIPT } : {}),
 		interruptScript: RUN_SCRIPTS.interrupt,
 		interrupts: INTERRUPTS,
 		packageReceipt: PACKAGE_RECEIPT,
@@ -163,7 +171,9 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 			assets: Object.fromEntries(Object.entries(prepared.inputs.clang.assets).map(([name, asset]) => [name, asset.metadata]))
 		},
 		runs: [],
-		scope: 'One container Supervisor and filesystem; Bash /workspace is that filesystem; BusyBox and the artifact run live with delegated stdio; Clang runs on its snapshot adapter with forwarded output',
+		scope: liveOnly ? 'Real Bash, BusyBox, Clang and artifact share one live VFS; the live-only gate checks the unchanged script and streamed preprocessing while a concurrent utility reads an edited header; no snapshot cancellation or rollback claim'
+			: clangProfile.filesystem === 'live' ? 'Syntax-only real Bash and BusyBox on the trusted live Clang application profile; Clang is not executed or qualified in this scenario'
+			: 'One container Supervisor and filesystem; Bash /workspace is that filesystem; BusyBox and the artifact run live with delegated stdio; Clang runs on its snapshot adapter with forwarded output',
 		cacheScope: 'Asset responses are no-store; the warm run is a new owner Worker, container and package manager in the same browser profile',
 		networkScope: 'Trusted local bootstrap and origin/asset allowlist; no guest/network security qualification',
 		workerObservationScope: 'All dedicated Workers in this exclusively owned Chromium browser',
@@ -207,9 +217,9 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 		});
 		await new Promise((done) => server.listen(0, '127.0.0.1', done));
 		const origin = `http://127.0.0.1:${server.address().port}`;
-		const distribution = manifest(origin, prepared.inputs);
+		const distribution = manifest(origin, prepared.inputs, 'busybox', clangProfile.filesystem);
 		receipt.distributionSha256 = digest(Buffer.from(distribution));
-		const failureDistribution = manifest(origin, prepared.inputs, 'busybox-corrupt');
+		const failureDistribution = manifest(origin, prepared.inputs, 'busybox-corrupt', clangProfile.filesystem);
 		receipt.failureDistributionSha256 = digest(Buffer.from(failureDistribution));
 		const { chromium } = await import('playwright-core');
 		const { resolveChromiumExecutable } = await import('./rust-browser-probe-lib.mjs');
@@ -249,7 +259,7 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 			if (message.type() === 'warning') warnings.push(message.text().slice(0, 2000));
 		});
 		await page.goto(origin, { timeout: 10000 });
-			for (const run of syntaxOnly ? ['syntax'] : RUNS) {
+			for (const run of syntaxOnly ? ['syntax'] : liveOnly ? ['cold', 'warm', 'live-io'] : RUNS) {
 			const start = { ...downloads }, started = Date.now(), errorsBefore = consoleErrors.length;
 			let result = {};
 			try {
@@ -287,15 +297,16 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 					payload: {
 						sdkDiagnostics: configuration.sdkDiagnostics === true,
 						sdkDiagnosticsOmitTmp: configuration.sdkDiagnostics === true && configuration.sdkDiagnosticsOmitTmp === true,
-						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
+						script: run === 'live-io' ? LIVE_CLANG_SCRIPT : RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
+						clangFilesystem: clangProfile.filesystem, liveIo: run === 'live-io',
 							recordSyntaxEnvironment: run === 'syntax',
 						cwd: run === 'startup-failure' ? '/workspace/missing-initial-directory' : '/workspace',
-						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm']
+						readFiles: run === 'live-io' ? LIVE_CLANG_FILES : run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm']
 								: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : run === 'redirection' ? REDIRECTION_FILES : run === 'syntax' ? SYNTAX_FILES : READ_FILES,
 						artifactPath: ['failure', 'redirection'].includes(run) ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
 						...(run === 'failure'
 							? { manifest: failureDistribution, manifestSha256: receipt.failureDistributionSha256, cacheNamespace: 'container-shell-acceptance-failure' }
-							: { manifest: distribution, manifestSha256: receipt.distributionSha256, cacheNamespace: 'container-shell-acceptance' }),
+							: { manifest: distribution, manifestSha256: receipt.distributionSha256, cacheNamespace: liveOnly ? 'container-shell-acceptance-live' : 'container-shell-acceptance' }),
 						assetURLs: Object.keys(downloads).map((path) => origin + path),
 						clangSha256: prepared.inputs.clang.assets.clang.metadata.logical.sha256,
 						linkerSha256: prepared.inputs.clang.assets.lld.metadata.logical.sha256,
@@ -322,10 +333,11 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 		context = undefined;
 		receipt.workersAfterContextClose = (await retire()).length;
 		await readPinnedProbeInputs(configuration);
-		assert.deepEqual((await bundles(prepared.inputs)).sources, prepared.bundles.sources, 'bundle sources changed during the probe');
-		receipt.qualification = judgeShellAcceptance(receipt);
+		assert.deepEqual((await bundles(prepared.inputs, clangProfile)).sources, prepared.bundles.sources, 'bundle sources changed during the probe');
+		receipt.qualification = liveOnly ? judgeLiveShellAcceptance(receipt) : judgeShellAcceptance(receipt);
 		receipt.shellAcceptancePassed = receipt.qualification.shellAcceptancePassed;
 			receipt.shellSyntaxPassed = receipt.qualification.shellSyntaxPassed;
+		receipt.liveShellAcceptancePassed = receipt.qualification.liveShellAcceptancePassed ?? false;
 		receipt.complete = true;
 	} catch (error) {
 		receipt.error = String(error);
@@ -338,25 +350,27 @@ export async function runProbe(configuration, { syntaxOnly = false } = {}) {
 		await save();
 	}
 	return { output: configuration.output, receipt: receiptPath, complete: receipt.complete,
-		shellAcceptancePassed: receipt.shellAcceptancePassed, shellSyntaxPassed: receipt.shellSyntaxPassed, shellBackendReady: false };
+		shellAcceptancePassed: receipt.shellAcceptancePassed, shellSyntaxPassed: receipt.shellSyntaxPassed,
+		liveShellAcceptancePassed: receipt.liveShellAcceptancePassed, clangFilesystem: clangProfile.filesystem, shellBackendReady: false };
 }
 
 const invoked = process.argv[1] && (await realpath(process.argv[1]).catch(() => null));
 if (invoked === (await realpath(fileURLToPath(import.meta.url)))) {
 	try {
-		assert(process.argv.length === 4 && ['--check', '--run', '--run-syntax'].includes(process.argv[2]),
-			'usage: probe-container-shell-acceptance.mjs --check|--run|--run-syntax /absolute/config.json');
+		assert(process.argv.length === 4 && ['--check', '--run', '--run-syntax', '--run-live'].includes(process.argv[2]),
+			'usage: probe-container-shell-acceptance.mjs --check|--run|--run-syntax|--run-live /absolute/config.json');
 		assert(isAbsolute(process.argv[3]), 'absolute configuration path required');
 		const configuration = JSON.parse(await readFile(process.argv[3]));
 		if (process.argv[2] === '--check') {
 			const checked = await checkProbe(configuration);
-			console.log(JSON.stringify({ checked: true, browserLaunched: false, packageId: checked.inputs.receipt.packageId,
+			console.log(JSON.stringify({ checked: true, browserLaunched: false, clangFilesystem: selectClangProfile(configuration.clangFilesystem).filesystem, packageId: checked.inputs.receipt.packageId,
 				bundles: Object.fromEntries([...checked.bundles.modules].map(([name, bytes]) => [name, bytes.length])) }));
 		} else {
 			const syntaxOnly = process.argv[2] === '--run-syntax';
-			const result = await runProbe(configuration, { syntaxOnly });
+			const liveOnly = process.argv[2] === '--run-live';
+			const result = await runProbe(configuration, { syntaxOnly, liveOnly });
 			console.log(JSON.stringify(result));
-			if (!result.complete || !(syntaxOnly ? result.shellSyntaxPassed : result.shellAcceptancePassed)) process.exitCode = 1;
+			if (!result.complete || !(syntaxOnly ? result.shellSyntaxPassed : liveOnly ? result.liveShellAcceptancePassed : result.shellAcceptancePassed)) process.exitCode = 1;
 		}
 	} catch (error) {
 		console.error(String(error));
