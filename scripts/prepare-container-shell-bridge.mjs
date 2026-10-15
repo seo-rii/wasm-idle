@@ -5,6 +5,7 @@ import { cp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyShellWorkerImports } from './verify-container-shell-worker-imports.mjs';
 
 const bridge = fileURLToPath(new URL('../runtimes/wasm-bash/bridge/', import.meta.url));
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
@@ -40,7 +41,8 @@ const patches = [
 	'0002-replace-explicit-environment.patch',
 	'0003-add-lossless-exec-frame.patch',
 	'0004-expose-host-command-hook.patch',
-	'0005-owned-command-snapshot.patch'
+	'0005-owned-command-snapshot.patch',
+	'0006-register-worker-shell-import.patch'
 ];
 const compileProbe = 'host_command_compile_probe.rs';
 const sdkExample = 'container_command_snapshot_compile';
@@ -148,10 +150,8 @@ if (verifyOnly) {
 		await cp(join(bridge, name), join(output, 'wasmer-wasix/src/syscalls/wasix', name));
 		receipts[name] = sha256(await readFile(join(bridge, name)));
 	}
-	await cp(
-		join(bridge, compileProbe),
-		join(output, 'wasmer-sdk/examples', `${sdkExample}.rs`)
-	);
+	const workerImports = await verifyShellWorkerImports(join(output, 'wasmer-wasix'));
+	await cp(join(bridge, compileProbe), join(output, 'wasmer-sdk/examples', `${sdkExample}.rs`));
 	receipts[compileProbe] = sha256(await readFile(join(bridge, compileProbe)));
 	const cargo = join(output, 'wasmer-sdk/Cargo.toml');
 	const manifest = await readFile(cargo, 'utf8');
@@ -176,6 +176,7 @@ if (verifyOnly) {
 		sdkSourceRevision: '93b8b738ebd3ee57e118da0f0eb795b97d5b999e',
 		inputs: inputs.map(({ name, sha256, bytes }) => ({ name, sha256, bytes })),
 		patches: receipts,
+		workerImports,
 		compilerProbe: {
 			status: 'not-run',
 			sdkExample,

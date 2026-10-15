@@ -1,6 +1,7 @@
 # Source-pinned shell bridge candidate
 
-This directory is an unbuilt porting prototype for the real Bash/WASIX backend. It does
+This directory contains a source-pinned experimental port for the real Bash/WASIX backend.
+The six-patch SDK now passes real typechecking and release/bindgen generation. It does
 not produce a supported SDK, replace the existing Bash distribution, or expose a public
 container adapter. The existing upstream Bash parser and evaluator remain the shell.
 See [ADR-002](../../../docs/adr/ADR-002-shell-backend.md) and the
@@ -60,6 +61,25 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    capabilities. Automatic Rust `Send + Sync` on owned values requires no unsafe
    implementation or JS callback assertion. This metadata accessor does not
    supply descriptor routing or the trusted JavaScript command registry.
+6. `0006-register-worker-shell-import.patch`: register the existing private
+   `wasm_idle_shell_v1.exec_v1` binding in the separate resolver actually used
+   by SDK Worker instantiation. `WasiEnv::instantiate` calls the free
+   `import_object_for_all_wasi_versions`; the binding added by `0003` to
+   `generate_import_object_from_env` does not reach that call. The actual
+   resolver now adds the same typed function only when the module imports a
+   `wasix_32v1` function, matching the existing wasm32 profile. A pure WASI
+   or WASIX64 module does not gain this private import. The original patch
+   and its historical receipts remain unchanged.
+
+The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
+of the rebuilt five-patch SDK and shim-linked
+Bash reached SDK initialization in all ten cases, then returned exit 45 with
+empty stdout/stderr and `Unable to initialize the context and store`. The
+missing namespace in the actual resolver makes `Instance::new` fail before
+Bash executes even a builtin; that branch publishes `Errno::Noexec` (45).
+The `0006` change addresses that source-level omission. Its source checks do
+not establish a corrected SDK build, Bash execution or common Container
+fd/filesystem support.
 
 No speculative change to signal ordering is included. No libc API returns fake success,
 no stdout marker is interpreted as an exec request, and no shell string is parsed by host code.
@@ -144,6 +164,7 @@ From the repository root, with a C compiler and Rust installed:
 
 ```sh
 node --test scripts/probe-container-shell.test.mjs
+node --test scripts/verify-container-shell-worker-imports.test.mjs
 node scripts/test-container-shell-bridge.mjs
 node scripts/prepare-container-shell-bridge.mjs --verify-only \
   --sdk-archive /path/to/wasmer-sdk.tgz \
@@ -177,6 +198,26 @@ the patch and compile-probe hashes. It installs the probe as the SDK example
 `container_command_snapshot_compile`. It does not build, download dependencies
 or modify an active checkout. The dry-run receipt is not full preparation or
 SDK compile evidence.
+
+Fresh preparation also checks the actual Worker resolver, its wasm32 gate,
+the version-specific resolver and the existing seven-i32 syscall signature.
+It records `workerImports.status: source-shape-checked-not-typechecked` and
+the three inspected Rust source hashes in the preparation receipt. This is
+an explicit guard against the missing-resolver regression, not a Rust parser,
+typecheck or runtime test. To rerun it read-only on prepared sources:
+
+```sh
+node scripts/verify-container-shell-worker-imports.mjs /absolute/prepared/wasmer-wasix
+```
+
+The original five-patch source tree fails this guard. Keep that tree and its
+failure evidence unchanged; prepare a new source directory for the six-patch
+candidate and use distinct build directories before any later rebuild.
+The [six-patch preparation receipt](evidence.worker-imports-source-preparation.json)
+records successful fresh extraction, zero-fuzz sequential patch application and
+the source guard. The prepared SDK tree is byte-identical to the preceding
+five-patch SDK source; only WASIX `src/lib.rs` changes. Compiler and guest
+qualification remain `not-run`/false in this receipt.
 
 After provisioning the pinned nightly and `rust-src`, prefetch all locked
 dependency targets for both the SDK and the pinned standard-library source
@@ -249,6 +290,8 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+## Original five-patch SDK build deadline
+
 The first real [SDK release-build receipt](evidence.sdk-build-timeout.json) records
 a failed 3,600-second attempt using the original helper commit
 `635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2`. The outer wall deadline killed
@@ -264,25 +307,52 @@ excerpt. No runnable SDK Wasm was produced. Web glue, static inventory, local
 module/Worker packaging, real Bash execution and browser gates remain unqualified;
 the source, locks and release profile retain their original identities.
 
+## Six-patch SDK check and binary gate
+
+The fresh six-patch candidate at source commit
+`7ceef67180e047d4703936482006a69b814662d2` now passes the real pinned SDK
+library and external `container_command_snapshot_compile` check. The
+[original typecheck process receipt](evidence.worker-imports-typecheck-process.json)
+records exit 0 in 373.991 seconds. The same physical source and its own checked
+target then produce the release SDK in 586.098 seconds, web glue with matching
+`wasm-bindgen 0.2.101` in 1.762 seconds and static inspection in 0.255 seconds.
+All four process receipts report normal exit 0, all owned processes reaped,
+and no cleanup signals, remaining descendants or cleanup errors.
+
+The [original binary receipt](evidence.worker-imports-sdk-binary.json) preserves
+its bytes and full import/export inventory once. The bound SDK is 9,071,791
+bytes with SHA-256
+`326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551`.
+The separate [archival verification](evidence.worker-imports-sdk-binary-metadata.json)
+rechecks all 581 source/toolchain pins, the complete 198-file SDK and 376-file
+WASIX inventories, six additional tool/compiler-library pins and all six outputs.
+The source/lockfiles, atomics/build-std configuration and original release profile
+remain unchanged. These sources and target were not copied from another build;
+release reuses this physical source's preceding check target, so its timing is
+not an independent clean-build benchmark.
+
+This establishes Rust typing, release Wasm generation and static validity of
+the corrected resolver. The actual guest still requires a separately packaged
+SDK/Worker graph and Chromium run. It does not prove Bash execution, the private
+import's runtime behavior, a trusted JS command registry, common live fd/VFS or
+shell cleanup. The earlier [failed Chromium evidence](https://github.com/seo-rii/wasm-idle/pull/195)
+and source-only preparation receipts retain their original results. No binary
+or source archive is checked into Git.
+
 ## Remaining runtime gate
 
 The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and build-std; its
 Cargo lock contains 457 packages. The earlier source inspection lacked the required
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
-prefetch, offline validation and corrected Wasmer/SDK/example Rust typing now
-pass. Existing Bash source/sysroot
-artifacts were not found in the producer's configured cache roots during the initial
-investigation. The separate [Bash producer follow-up #192](https://github.com/seo-rii/wasm-idle/pull/192)
-now has a real build/import receipt for the exec-shim candidate; it does not qualify
-execution against the modified SDK. Full SDK linking and actual browser qualification
-still require a sequential resource budget. No memory
-or disk estimate is a measured producer requirement, and no previous or unrelated cache
-was deleted.
+prefetch, offline validation, corrected Wasmer/SDK/example Rust typing and the six-patch
+SDK release/bindgen gate now pass. The separate [real Bash producer](producer/README.md) and local host-module
+packaging follow-ups retain their own receipts; they are independent of this
+SDK resolver build. No memory or disk estimate is a measured producer
+requirement, and no previous or unrelated cache was deleted.
 
-Next, finish the pinned SDK build in a separately recorded attempt, preserving
-the earlier deadline failure. Then qualify the already built real Bash candidate's
-argv/env/cwd/exit, FD/FS visibility and Worker cleanup using the same real browser fixtures.
+Actual guest qualification uses a separately pinned package and the same real Chromium
+fixtures; preserve the previous failure and each subsequent observation separately.
 Implement the trusted SDK command registry and Supervisor FS/fd bindings only behind that
 experimental profile. The first Clang-to-BusyBox pipeline, command-lazy verified loading,
 foreground cancellation and common live workspace remain required shell MVP gates.
