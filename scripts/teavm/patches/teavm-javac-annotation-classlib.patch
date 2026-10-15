@@ -1,0 +1,70 @@
+diff --git a/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java b/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java
+new file mode 100644
+index 0000000..6a88531
+--- /dev/null
++++ b/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java
+@@ -0,0 +1,34 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.classlib.java.lang;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Replaces SuppressWarnings of TeaVM classlib, which lacks {@code value} element. javac expects it to be there:
++ * otherwise, {@code @SuppressWarnings("unchecked")} reports "cannot find symbol", and then javac fails with
++ * null pointer dereference while collecting suppressed lint categories.
++ */
++@Retention(RetentionPolicy.SOURCE)
++@Target({ ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER, ElementType.CONSTRUCTOR,
++        ElementType.LOCAL_VARIABLE })
++public @interface TSuppressWarnings {
++    String[] value();
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+index c29cb42..f951840 100644
+--- a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
++++ b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+@@ -80,12 +80,23 @@ public class StdlibConverter extends ClassVisitor {
+             case "java/lang/RuntimeException":
+                 superName = "java/lang/Exception";
+                 break;
++            case "java/lang/annotation/Annotation":
++                // TAnnotation is declared as @interface, while Annotation of JDK is a plain interface
++                access &= ~Opcodes.ACC_ANNOTATION;
++                break;
+         }
+ 
+         if (interfaces != null) {
+-            for (int i = 0; i < interfaces.length; ++i) {
+-                interfaces[i] = rename(interfaces[i]);
++            // Skip interfaces that turn into the class itself after renaming. For example, TAnnotation, being
++            // an @interface, extends java.lang.annotation.Annotation. javac does not check class files for cyclic
++            // inheritance, so Types.rank() recurses on such a class until the stack overflows, which happens
++            // whenever javac resolves an annotation element, as in @SuppressWarnings("unchecked").
++            var renamedInterfaces = new LinkedHashSet<String>();
++            for (var itf : interfaces) {
++                renamedInterfaces.add(rename(itf));
+             }
++            renamedInterfaces.remove(name);
++            interfaces = renamedInterfaces.toArray(new String[0]);
+         }
+         if (signature != null) {
+             signature = renameClassSignature(signature);

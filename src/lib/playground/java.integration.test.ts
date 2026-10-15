@@ -471,6 +471,32 @@ public class Main {
 					'3 GREEN\n[RED, GREEN, BLUE] [GREEN, BLUE]\n{RED=1, BLUE=3}\nMUL 42 [ADD, MUL]\n'
 			},
 			{
+				// Annotation element values overflowed javac's stack: the SDK's Annotation extended itself.
+				name: 'annotations with element values',
+				code: `import java.lang.annotation.*;
+import java.util.*;
+
+public class Main {
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Label {
+        String value() default "none";
+    }
+
+    @Label("main")
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public static void main(String[] args) {
+        @SuppressWarnings("unchecked")
+        List<Integer> list = (List<Integer>) (List) new ArrayList<>(List.of(3, 1, 2));
+        for (@SuppressWarnings("unused") int i = 0; i < 1; i++) {
+            Collections.sort(list);
+        }
+        System.out.println(list);
+    }
+}`,
+				stdin: '',
+				expected: '[1, 2, 3]\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

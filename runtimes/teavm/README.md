@@ -46,6 +46,15 @@ trapped or printed `Main$Color@...`. The patch registers an equivalent listener 
 `org.teavm.platform.Platform`, which the Wasm GC target does not support. It changes only
 `compiler.wasm`.
 
+A fourth source patch, `scripts/teavm/patches/teavm-javac-annotation-classlib.patch`, repairs
+annotations in the javac SDK. TeaVM declares `TAnnotation` as an `@interface`, so after renaming the
+SDK's `java.lang.annotation.Annotation` extended itself; javac does not check class files for cyclic
+inheritance and `Types.rank()` recursed until the stack overflowed whenever it resolved an
+annotation element, as in `@SuppressWarnings("unchecked")`. TeaVM's `SuppressWarnings` also has no
+`value()` element. The patch drops self-referencing interfaces in `StdlibConverter` and adds a
+`SuppressWarnings` with `value()` to teavm-javac's class-library emulation sources. It changes only
+`compile-classlib-teavm.bin` and must be applied after the `199bed0` backport.
+
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
 exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,

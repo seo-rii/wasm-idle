@@ -123,7 +123,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' },
 					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' },
 					// Link enum values() for Class.getEnumConstants (EnumDependencySupport).
-					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' },
+					// Annotation must not extend itself and SuppressWarnings needs value().
+					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,
