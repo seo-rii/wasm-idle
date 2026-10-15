@@ -71,3 +71,32 @@ qualify the common public Container fd/VFS bindings; `shellBackendReady` and
 `commonContainerFdVfsQualified` remain false even when all minimum observations
 pass. License inventory, public host-command registry, common live ownership,
 cancellation and the complete shell/browser acceptance remain separate gates.
+
+## First actual browser result: failed before guest entry
+
+The attempt at application commit `96ea935d869594679a7c285310b6b3e013736b38`
+completed collection on Chromium `153.0.8010.12`/Linux in 10.183 seconds. All ten
+actual SDK initializers returned, but all ten `instance.wait()` results were
+code **45** with empty stdout/stderr and the console error
+`Error: Unable to initialize the context and store`. A completed SDK wait does
+not demonstrate that Bash or any guest entry point ran. No argv/fd/filesystem
+fixture passed; guest acceptance and shell qualification remain false.
+
+The original [browser receipt](evidence/first-browser.json) and
+[process receipt](evidence/first-browser-process.json) are preserved byte for
+byte. [Metadata](evidence/first-browser-metadata.json) records their identities,
+limits, result scope and a diagnostic correction: initial CDP creation events
+have empty URLs, so the original URL-based nested count overcounts root Workers.
+Recorded parent edges identify 30 nested targets among 40 total. All cases have
+zero remaining targets after owner cleanup and after context close. The outer
+Node process exited 1, the supervisor exited 3, and all owned OS processes were
+reaped without forced signals. Cleanup success does not qualify guest execution.
+
+The actual SDK Worker calls `WasiEnv::instantiate`, whose separate
+`import_object_for_all_wasi_versions` resolver omits `wasm_idle_shell_v1`.
+The existing patch registers that namespace only in
+`generate_import_object_from_env`. Therefore the rebuilt Bash cannot link its
+required `exec_v1` import on this path; instantiation failure maps to WASIX
+`Errno::Noexec` (45). Fixing and rebuilding the actual resolver is the next gate.
+The completed binary, local package and producer receipts remain valid for their
+limited build/packaging scope.

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "applicationCommit": "96ea935d869594679a7c285310b6b3e013736b38",
+  "attemptRoot": "/data/seorii-container-20261014/patched-shell-chromium-20261015T000957Z",
+  "originalReceipts": {
+    "first-browser.json": {
+      "original": "/data/seorii-container-20261014/patched-shell-chromium-20261015T000957Z/browser/receipt.json",
+      "bytes": 223695,
+      "sha256": "db4ee40be5021dfe47301931fc28aae14e529b833cbdf29096832584292a7ff1"
+    },
+    "first-browser-process.json": {
+      "original": "/data/seorii-container-20261014/patched-shell-chromium-20261015T000957Z/browser.process.json",
+      "bytes": 1050,
+      "sha256": "3297aaf1d24d96ed22822f8c2916e537808b68411332c1f388f2488de57e9276"
+    }
+  },
+  "stageExitCode": 1,
+  "supervisorExitCode": 3,
+  "wallSeconds": 10.183,
+  "browser": "153.0.8010.12",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "completeCollection": true,
+  "guestAcceptancePassed": false,
+  "shellBackendReady": false,
+  "actualSdkInitializations": 10,
+  "completedSdkWaitResults": 10,
+  "guestEntryExecutionQualified": false,
+  "codes": [
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45
+  ],
+  "consoleError": "Error: Unable to initialize the context and store",
+  "observedCreatedWorkerTargets": 40,
+  "nestedTargetsFromRecordedParentEdges": 30,
+  "diagnosticCorrection": "Original createdNestedWorkerTargets compares initially empty TargetCreated URLs and overcounts root workers. Parent edges identify30 nested targets among40 total; raw receipt remains unchanged. Zero remaining-target observations are unaffected.",
+  "remainingWorkersAfterOwnedCleanup": 0,
+  "remainingWorkersAfterContextClose": 0,
+  "allOwnedProcessesReaped": true,
+  "sourceBoundary": {
+    "preparedSource": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source",
+    "resolverFile": "wasmer-wasix/src/lib.rs",
+    "actualWorkerResolver": "import_object_for_all_wasi_versions",
+    "missingNamespace": "wasm_idle_shell_v1",
+    "failureMapping": "WasiEnv::instantiate maps Instance::new failure to Errno::Noexec (45). The generic task error does not expose its lower-level diagnostic.",
+    "identities": {
+      "wasmer-wasix/src/lib.rs": {
+        "bytes": 51736,
+        "sha256": "18696a162af8c671a363a446fbfa01d0aaf6b5c42c1b15555b3a1e9eb6abdf35"
+      },
+      "wasmer-wasix/src/state/env.rs": {
+        "bytes": 50513,
+        "sha256": "df64bf6e57b65f0396fa4412efbee95e2d16ca2e65036e2363f6a4f1f4197c29"
+      },
+      "wasmer-sdk/src/tasks/task_wasm.rs": {
+        "bytes": 10578,
+        "sha256": "62e356cff0985cb66437cbe8942e7cce11c2fe96a92f48719e960126ed346a4a"
+      }
+    }
+  },
+  "log": {
+    "path": "/home/seorii/logs/patched-shell-chromium-20261015T000957Z.log",
+    "bytes": 270,
+    "sha256": "cfb374b18bb0c636998da0b665687e730cebb25f3c75aad2f6ad5ae5eb84b1a4"
+  },
+  "notQualified": [
+    "Guest argv/env/cwd/stdio or filesystem semantics",
+    "Public host-command registry",
+    "Common Container live fd/VFS",
+    "Cancellation/recovery",
+    "Shell MVP"
+  ],
+  "executionLimits": {
+    "cpuSoftSeconds": 240,
+    "cpuHardSeconds": 300,
+    "addressSpaceBytes": -1,
+    "minimumRemainingDiskBytes": 1073741824,
+    "outerWallSeconds": 480,
+    "scope": "CPU limit per process; Chromium virtual address space unlimited; external wall and disk admission bounds; sampled RSS is not a hard aggregate memory guarantee"
+  },
+  "admission": {
+    "availableMemoryBytes": 22419394560,
+    "freeDiskBytes": 17592733696,
+    "loadAverage": [
+      2.150390625,
+      1.6474609375,
+      1.15478515625
+    ],
+    "checkedAtUnix": 1792023063.740762
+  }
+}

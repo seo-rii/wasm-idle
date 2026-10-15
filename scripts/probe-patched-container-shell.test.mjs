@@ -1,6 +1,7 @@
 // Contract unit observations only. These tests do not produce browser evidence.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { fixtures, judgePatchedShellProbe, readPinnedProbeInputs } from './probe-patched-container-shell-lib.mjs';
 
 const bytes = (text) => Array.from(new TextEncoder().encode(text));
@@ -70,4 +71,17 @@ test('a failed initializer or leaked Worker cannot be hidden by final guest outp
 
 test('an unapproved package receipt digest is rejected before reading any local input', async () => {
 	await assert.rejects(readPinnedProbeInputs({ packageReceiptSha256: '0'.repeat(64) }));
+});
+
+test('actual first-browser SDK failure remains unqualified despite initialization and cleanup', async () => {
+	const receipt = JSON.parse(await readFile(new URL(
+		'../packages/container/test/patched-shell/evidence/first-browser.json', import.meta.url
+	)));
+	const judged = judgePatchedShellProbe(receipt.results);
+	assert.equal(judged.guestAcceptancePassed, false);
+	assert.equal(judged.backendCompleteCases, 10);
+	assert.equal(judged.checks.find(({ id }) => id === 'actual-sdk-initialization').status, 'passed');
+	assert.equal(judged.checks.find(({ id }) => id === 'owned-host-context-cleanup').status, 'passed');
+	assert.equal(judged.checks.find(({ id }) => id === 'builtins-stdin').status, 'failed');
+	assert.equal(judged.checks.find(({ id }) => id === 'browser-errors').status, 'failed');
 });
