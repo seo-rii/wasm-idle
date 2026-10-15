@@ -23,6 +23,10 @@
       "types": "./dist/adapters/clang/index.d.ts",
       "import": "./dist/adapters/clang/index.js"
     },
+    "./adapters/wasix": {
+      "types": "./dist/adapters/wasix/index.d.ts",
+      "import": "./dist/adapters/wasix/index.js"
+    },
     "./persistence": {
       "types": "./dist/fs/persistence/index.d.ts",
       "import": "./dist/fs/persistence/index.js"
@@ -46,7 +50,8 @@
     "PERSISTENCE.md",
     "LIVE.md",
     "WORKSPACE.md",
-    "TERMINAL.md"
+    "TERMINAL.md",
+    "SHELL.md"
   ],
   "publishConfig": {
     "access": "public",

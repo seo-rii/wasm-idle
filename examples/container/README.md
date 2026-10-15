@@ -1,0 +1,35 @@
+# Container workbench example
+
+This view binds a file editor, raw process streams, workspace save status, backup/restore, and separate asset-cache controls to one private container-owner `MessagePort`. Published files live in the owner's workspace. The textarea is an explicitly unpublished editor buffer; **Save never publishes that buffer**.
+
+From the repository root, after installing the workspace's development dependencies:
+
+```sh
+node examples/container/serve.mjs
+```
+
+Open `http://127.0.0.1:4174`. The local server binds only loopback and sends COOP/COEP and a restrictive same-origin CSP. It bundles trusted host code locally; it does not download JavaScript named by a distribution. `PORT` selects a different local port. `?workspace=my-project` selects a separate persistent workspace identifier. A second writer for the same identifier is refused visibly.
+
+The default session is a **real checked-in WASI byte guest**, not a shell or compiler. It writes input bytes to stdout and `/workspace/input.bin` until EOF. Start downloads its verified Wasm only when requested. A second owner can reuse the selected persistent asset cache. The fixture receipt records the actual source, artifact and build-script hashes; starting this example does not rebuild or qualify a compiler. The existing C file is editable sample data.
+
+`mountContainerWorkbench(element, client, options)` in `workbench.mjs` also accepts an actual Bash owner client from `createContainerOwnerClient`. The owning Worker supplies `serveContainerOwner` with the container, `startShell`, save controller, explicit cache-clear callback and persistence cleanup. Its `startShell` can call the public `createWasixShellSession` with the application's statically imported SDK, verified assets and owned Worker group. Pass a truthful `profileLabel`, `terminalDescription` and optional `startOptions` to the view. An application embedding this view still owns its distribution lock, SDK bootstrap, browser qualification and deployment. The owner protocol supports one session per owner; reload or explicitly create a fresh owner for another session.
+
+`createExampleServer({ ownerEntry, profile })` accepts a trusted local owner entry and truthful view profile at build time. That entry uses the same one-time initialization message `{port, workspaceId}` and acknowledges `{ready:true}` only after ownership and serving are established, or `{ready:false, code, message}` on failure. This is a local application-build choice, not a runtime manifest or user URL. The shipped `main.mjs` exports an `application` promise with `{client, view}` for host controls. Worker errors abort the owner client so pending stream and control operations fail visibly. `view.dispose()` closes the owner and invokes the host cleanup callback; it does not save implicitly.
+
+The editor reads UTF-8 files up to 8 MiB. A publish compares the original inode and bytes in the owner before writing; external edits and snapshot leases preserve the staged buffer and report a conflict or busy error. Switching files with unpublished edits is refused until explicit discard. Invalid UTF-8 is left intact and can be exported with the workspace. Browser text editing uses LF line endings; opening an untouched file does not rewrite its bytes. “Export editor buffer” and “Export published workspace” deliberately export different revisions.
+
+Workspace backups are bounded to 32 MiB and validated before replacing files. Restore requires a selected file and explicit replacement checkbox, and refuses to discard a staged editor buffer. Restored memory is still dirty until saved. Save failure pauses autosave and leaves retry/export available. Browser storage is subject to quota, eviction and interruption; a successful save publishes a validated root using the browser's storage APIs, not an unlimited durability guarantee.
+
+“Clear downloaded assets” clears only this example's Core asset-cache namespace. It does not clear OPFS, workspace journals, another host's caches or loaded in-memory executable bytes. “Collect orphan workspace blobs” is explicit bounded maintenance that preserves every retained recovery root. Neither action deletes a workspace to fix a storage error.
+
+Streams are bytes until the terminal binding decodes them for display. stdout and stderr remain separate and render through `textContent`, capped at 32,768 code units per channel. Input is UTF-8, capped by the binding's 64 KiB pending-byte budget; no shell parser, ANSI interpreter, PTY, job-control or global stdout/stderr ordering is supplied by this view. The default byte-guest profile's interrupt terminates that guest; an actual Bash profile supplies its own foreground-interrupt semantics.
+
+The real Chromium UI regression runs with a separate trusted test owner that injects a storage-publication failure. The normal owner does not install its fault channel. Run it with a new evidence directory; previous receipts are never overwritten automatically:
+
+```sh
+CHROMIUM_PATH=/path/to/playwright/chromium \
+CONTAINER_PRODUCT_TEST_OUTPUT=/path/to/new-evidence-directory \
+node packages/container/scripts/test-product-browser.mjs
+```
+
+The suite exercises actual owner RPC, Workers, Wasm, OPFS/IndexedDB, conflicts, downloads, restore, cache cold/warm reuse, cancellation and writer ownership. Its fixture profile is not evidence that Bash, BusyBox or Clang passed their separate release gates.
