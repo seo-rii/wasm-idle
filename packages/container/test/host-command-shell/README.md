@@ -18,18 +18,49 @@ Wasm or as a script. The file only satisfies Bash's own command search.
 | Case | Script behavior | Required observation |
 | --- | --- | --- |
 | HOST-METADATA | `cd sub`, then argv with spaces, Korean and an empty argument | Prepared argv, raw environment and actual cwd `/workspace/sub`; guest argv/env bytes; descriptors 0–2 |
-| HOST-PIPE-REDIRECT | Two host commands joined by a Bash pipe, then `> binary` and `< binary` | Exact binary bytes through WASIX pipes and a shell-opened file; `PIPESTATUS` 0 0 |
+| HOST-PIPE-REDIRECT | Two host commands joined by a Bash pipe, then `> binary` and `< binary` | Exact binary bytes through WASIX pipes and a shell-opened file; last status 0 in Bash; all three Supervisor records exit 0 |
 | HOST-EXACT-CONSUMPTION | `printf xyz \| { tool one; tool; }` | The first guest consumes one byte; the second receives the rest |
 | HOST-STATUS | Guest `proc_exit(23)` and a trapping guest | Statuses 23 and 134 |
-| HOST-EPIPE | `tool yes \| tool one` | The writer receives `EPIPE` and exits 64 after the reader exits |
+| HOST-EPIPE | `tool yes \| tool one` | The reader exits 0 in Bash; the Supervisor record shows the writer received `EPIPE` and exited 64 |
 | HOST-PATH-LOOKUP | Bare `tool` through `PATH` | Bash's own lookup reaches the registered path with argv0 `tool` |
 | HOST-FAILURE | Throwing handler, then the unregistered placeholder | Status 126 without running a guest; no dispatch or native execution for the unregistered path; the shell continues |
 | HOST-TAIL-EXEC | `exec /opt/host/bin/probe exit` | Bash itself completes with the host command's status 23 |
+| BASH-PIPESTATUS | `true \| false`, then print `PIPESTATUS` | Recorded only; not part of acceptance |
+| BASH-SUBSHELL-DUP | `>&2` and `> file` at top level and inside pipeline brace groups | Recorded only; not part of acceptance |
 
 Every case also requires one handler call per external command on the SDK scheduler
 thread with a frozen invocation, an empty container process list after Bash completes,
 the SDK and container Workers retired before and after context close, no unexpected
 console errors and the public `registerHostCommand`/`HostCommandDescriptor` API.
+
+## Attempt history
+
+Every attempt's original browser and process receipts are archived unchanged under
+[`evidence/`](evidence/); `scripts/probe-container-shell-host-command.test.mjs` checks their
+recorded results.
+
+1. [`module-import`](evidence/module-import.json): all eight cases failed before any
+   guest started. The package root re-exports the verified asset loader, whose bare
+   `@wasm-idle/core` import does not resolve in the owner Worker. The owner now imports
+   the Supervisor and host-command modules directly.
+2. [`first-dispatch`](evidence/first-dispatch.json), application `ad239941`: real Bash
+   dispatch reached the Supervisor in every case and 31 of 35 checks passed. Bash printed an
+   empty `PIPESTATUS`, and host-command statuses 126 and 134 arrived as 79, as did Bash's own
+   native exec failure 126. The Supervisor records held the correct statuses.
+3. [`pipeline-status`](evidence/pipeline-status.json), `22b03116`: printing member statuses
+   with `>&2` inside a pipeline brace group failed with `Invalid argument`; a builtin-only
+   pipeline also shows an empty `PIPESTATUS`.
+4. [`subshell-redirect`](evidence/subshell-redirect.json), `9b091e5a`: a file redirection in
+   the same position fails the same way, while redirections on simple pipeline commands
+   (`tool > binary`) work. Member statuses are now checked against Supervisor records.
+5. [`before-exit-status-fix`](evidence/before-exit-status-fix.json), `26981d03`: 39 of 41
+   checks pass with the eight-patch SDK; only the two statuses above 78 fail.
+
+The status loss is in the pinned WASIX `proc_join`, which writes the exit code through the
+`Errno` type and maps every non-errno value to 79. Bridge patch 0009 writes the raw status
+that wasix-libc `waitpid` reads. The empty `PIPESTATUS` and the failing redirections inside
+forked subshells are Bash/WASIX behaviors independent of host commands; they remain open
+shell gaps, recorded by the two diagnostic cases.
 
 ## Scope
 

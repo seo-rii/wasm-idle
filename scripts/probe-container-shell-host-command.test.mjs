@@ -187,3 +187,12 @@ test('the archived subshell-redirect rerun shows redirection failing inside a fo
 	});
 	assert.equal((await archived('subshell-redirect-process')).exitCode, 1);
 });
+
+test('the archived pre-0009 baseline fails only the statuses above the errno range', async () => {
+	const receipt = await archived('before-exit-status-fix');
+	assert.equal(receipt.applicationCommit, '26981d03c1f1dbecc414812010237f5c325accec');
+	assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [39, 41]);
+	assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id),
+		['HOST-STATUS', 'HOST-FAILURE']);
+	assert.equal((await archived('before-exit-status-fix-process')).exitCode, 1);
+});

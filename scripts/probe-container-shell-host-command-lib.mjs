@@ -5,16 +5,16 @@ import path from 'node:path';
 import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-container-shell-lib.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
-// SDK with bridge patches 0001-0008; see runtimes/wasm-bash/bridge/README.md on that branch.
+// SDK with bridge patches 0001-0009 (#205 and its exit-status follow-up); see the bridge README there.
 export const PACKAGE_RECEIPT = {
 	bytes: 2605,
-	sha256: '83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55'
+	sha256: '21c82836f8cbce9a2d07133c35dca7c177944ebb9abf3ef2b25b74374803fbae'
 };
 export const BINARY_RECEIPT_SHA256 =
-	'1e85d0d18925ab2817cb2acfa77f394ecbb2be3fa78d84f1d576ea2ca45696ac';
+	'50a2f1c18574ea655543c7808b40541736083226b5d8abf40477a1bc5e7da720';
 export const SDK_WASM = {
-	bytes: 9139276,
-	sha256: '57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367'
+	bytes: 9140285,
+	sha256: 'b4a6675fa70a7e7e5a0dbb858d2c8b23678e893a2d41163620140e6f1929bb08'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 export const CASE_TIMEOUT_MS = 30000;
