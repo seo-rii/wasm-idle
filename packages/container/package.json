@@ -15,6 +15,10 @@
       "types": "./dist/adapters/wasi/index.d.ts",
       "import": "./dist/adapters/wasi/index.js"
     },
+    "./adapters/wasi-live": {
+      "types": "./dist/adapters/wasi-live/index.d.ts",
+      "import": "./dist/adapters/wasi-live/index.js"
+    },
     "./adapters/clang": {
       "types": "./dist/adapters/clang/index.d.ts",
       "import": "./dist/adapters/clang/index.js"
@@ -31,7 +35,8 @@
     "FS.md",
     "DISTRIBUTIONS.md",
     "CLANG.md",
-    "PERSISTENCE.md"
+    "PERSISTENCE.md",
+    "LIVE.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -45,6 +50,7 @@
     "prepack": "pnpm run build && pnpm run verify:package-boundary",
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
     "test:browser": "pnpm run build && node scripts/test-browser.mjs",
+    "test:live": "pnpm run build && node scripts/test-live-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
     "test:persistence": "pnpm run build && node scripts/test-persistence-browser.mjs"
   },

@@ -1,4 +1,4 @@
-import type { FileSystemSnapshot } from '../fs/index.js';
+import type { FileSystemSnapshot, MemoryFileSystem } from '../fs/index.js';
 
 export interface CommandDefinition {
   readonly adapter: string;
@@ -28,16 +28,29 @@ export interface PreparedRuntime {
   run(stdin: Uint8Array): Promise<RuntimeCompletion>;
   dispose(): Promise<void>;
 }
-/** Trusted local adapter code, never supplied by a distribution URL. */
-export interface CommandAdapter {
+interface StartRequest {
+  command: CommandDefinition;
+  invocation: CommandInvocation;
+  limits: RuntimeLimits;
+  generation: number;
+  signal: AbortSignal;
+}
+export interface SnapshotCommandAdapter {
   readonly id: string;
   readonly filesystem: 'snapshot';
-  start(request: {
-    command: CommandDefinition;
-    invocation: CommandInvocation;
-    snapshot: FileSystemSnapshot;
-    limits: RuntimeLimits;
-    generation: number;
-    signal: AbortSignal;
-  }): Promise<PreparedRuntime>;
+  start(request: StartRequest & { snapshot: FileSystemSnapshot }): Promise<PreparedRuntime>;
 }
+export interface PreparedLiveRuntime {
+  readonly stdin: WritableStream<Uint8Array>;
+  readonly stdout: ReadableStream<Uint8Array>;
+  readonly stderr: ReadableStream<Uint8Array>;
+  run(): Promise<{ readonly code: number }>;
+  dispose(): Promise<void>;
+}
+export interface LiveCommandAdapter {
+  readonly id: string;
+  readonly filesystem: 'live';
+  start(request: StartRequest & { fs: MemoryFileSystem }): Promise<PreparedLiveRuntime>;
+}
+/** Trusted local adapter code, never supplied by a distribution URL. */
+export type CommandAdapter = SnapshotCommandAdapter | LiveCommandAdapter;

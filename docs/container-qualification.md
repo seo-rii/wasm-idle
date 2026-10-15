@@ -22,14 +22,30 @@ been implemented; unpassed promotion gates remain explicit.
 | Real BusyBox B0 producer | [C-12 #143](https://github.com/seo-rii/wasm-idle/pull/143) | C-01, separate producer branch |
 | BusyBox container qualification | [C-13 #146](https://github.com/seo-rii/wasm-idle/pull/146) | C-10 plus external C-12 verified artifact |
 | Explicit workspace persistence | [C-17 #145](https://github.com/seo-rii/wasm-idle/pull/145) | C-10; independent of live shell |
+| Host CI and qualification ledger | [C-19 groundwork #147](https://github.com/seo-rii/wasm-idle/pull/147) | C-17; production release still gated |
+| Live VFS ownership and additive mounts | [C-14a #148](https://github.com/seo-rii/wasm-idle/pull/148) | C-19 groundwork |
+| Isolated live WASI and explicit byte pipelines | [C-14b branch](https://github.com/seo-rii/wasm-idle/tree/feat/container/c14-live-wasi) | C-14a; actual shell backend remains separate |
 
-The final CI/documentation PR is based on C-17. It implements only the independently testable
-portion of C-19, without claiming production qualification. C-14/15/16/18/20 are not empty
-placeholder implementations. Merge in dependency order and retarget/rebase the remaining stack
+The CI/documentation PR is based on C-17. It implements only the independently testable
+portion of C-19, without claiming production qualification. The subsequent C-14 stack adds
+live VFS ownership and an isolated WASI adapter; it does not supply the pending actual shell
+backend. Merge in dependency order and retarget/rebase the remaining stack
 as needed; no PR is automatically merged.
 
 ## Verified components
 
+- The initial C-14 worktree source snapshot passed 83 container Node unit/contract cases and real
+  isolated Chromium live execution, including two guest file sharing, partial binary I/O,
+  byte pipelines, early reader exit, crash visibility, blocked-I/O/CPU cancellation and
+  zero owned Workers after cleanup. Nonisolated startup rejects before allocating a Worker.
+  The committed `packages/container/test/fixtures/live-browser-evidence.json` records the
+  baseline commit plus exact source hashes, environment and checks. This does not qualify
+  actual Bash or BusyBox pipelines. The current live guest SHA-256, also recorded in that
+  receipt, is `f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf`.
+  The initial C-14 npm dry-run pack contained 65 host/type/document files, 256,582 unpacked bytes;
+  binaries and test receipts are excluded and root import still performs zero fetches.
+  Existing Chromium batch/cache and all 10 persistence regressions also passed after
+  the live changes; cache reuse and explicit committed-root recovery remain intact.
 - The C-10 source snapshot passed 68 container Node unit/contract tests, 9 focused LLVM tool-host
   protocol tests, and real Chromium batch/cache tests. The existing LLVM Clang regression suite
   passed 202 tests across 20 files. Protocol fixtures do not replace real Clang evidence.
@@ -69,15 +85,16 @@ not imply the GitHub workflow has already completed, or that another browser/ver
 | G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup | C-02 backend investigation; choose and qualify a maintained native/bridge path before C-14/15 |
 | G0-CLANG / CLI-01–03 | Existing raw Clang reports that WASI cannot spawn subprocesses. Preopens/PWD do not set wasi-libc's cwd. Full modified compiler qualification is pending | wasm-llvm #32 opt-in LLVM `ExecuteAndWait` bridge and real `chdir` startup; complete Clang/LLD relink and actual C/C++ CLI gate, then browser |
 | B1 / P3 | Only six B0 applets have runtime evidence | Port and differentially test `grep`, `mkdir`, `cp/mv/rm` and required filesystem calls; do not infer support from multicall build success |
-| P4 / shell MVP | No common live VFS/SAB syscall bridge, pipeline resource scheduler, shell dispatch or complete acceptance script | C-14/15 after backend and real compiler gates; preserve existing snapshot capability boundary |
+| P4 / shell MVP | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users |
 | P5 / product beta | Persistence storage primitive passes targeted Chromium cases; editor/terminal/save/export UI and orphan GC absent | C-16/18; failure UI, lifecycle and actual crash/reload matrix |
 | C-19/20 | Local header smoke only; no production release or performance baseline | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
 real wasi-libc constructor fixture confirmed `getcwd`, relative reads, bad-cwd rejection and
 restart. Neither proves the full compiler. An initial exec-only private relink exceeded its
-2,700-second wall deadline. The successor includes both exec and cwd contracts, with bounded,
-sequential Clang/LLD links and a separately recorded consumer gate. Keep compiler PRs draft
+2,700-second wall deadline. The exec+cwd successor exhausted its 10 GiB address-space cap under
+full LTO. A correctness-only retry uses O1/CGO1, one linker thread and a 16 GiB address-space
+bound, with sequential Clang/LLD links and a separately recorded consumer gate. Keep compiler PRs draft
 until that gate and required browser/header coverage have actual receipts.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus

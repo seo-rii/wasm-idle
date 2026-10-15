@@ -1,3 +1,9 @@
+export interface WasiStdio {
+  read(length: number): Uint8Array;
+  write(fd: 1 | 2, bytes: Uint8Array): number;
+  close?(fd: number): void;
+  capture(): { stdout: Uint8Array; stderr: Uint8Array };
+}
 /** One batch byte channel shared by a driver and its synchronous child tools. */
 export function createBatchStdio(stdin: Uint8Array, maxOutputBytes: number) {
   let inputOffset = 0, outputBytes = 0;

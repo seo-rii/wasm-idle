@@ -6,11 +6,11 @@ Existing playground support is not evidence of container CLI support.
 
 | Capability | Implemented and tested | Remaining boundary |
 | --- | --- | --- |
-| Direct command API | `spawn/run`, argv/env snapshots, byte stdout/stderr, normal/nonzero exit, timeout/termination/disposal, CPU-loop restart | Batch execution begins after stdin EOF; no interactive guest I/O |
+| Direct command API | `spawn/run`, argv/env snapshots, byte stdout/stderr, normal/nonzero exit, timeout/termination/disposal, CPU-loop restart; optional live WASI and explicit `spawnPipeline` | Batch execution starts after EOF; live mode requires isolation and has an explicit blocked-I/O deadline |
 | WASI commands | Bounded core wasm32 Preview 1 modules in a dedicated Worker; explicit syscall/import allowlist and pointer validation | No components, shared/imported/unbounded memory, start section, sockets or arbitrary imports |
 | Working directory | Real cwd capability plus producer `wasm_idle_process_v1.initial_cwd`; libc producers call actual `chdir` | Legacy Preview 1 modules must use explicit `cwd: '/'`; PWD alone is insufficient |
-| Memory workspace | Inodes, descriptors, symlinks, relative paths, mount capabilities, readonly packages, atomic snapshot commit and writer lease | Snapshot visibility at command completion; one writer; no hardlinks, permissions mutation or live multiprocess sharing |
-| Byte pipes | Bounded endpoint queues, partial/zero I/O, EOF, EPIPE, fd reference ownership | Primitive tests only; no guest pipeline scheduler or live SAB bridge |
+| Memory workspace | Inodes, descriptors, symlinks, relative paths, mount capabilities, readonly packages, atomic snapshot commit and writer lease; live guests share completed VFS operations | Snapshot and live executions cannot overlap; no hardlinks or permissions mutation |
+| Byte pipes | Bounded endpoint queues, partial/zero I/O, EOF, EPIPE, fd reference ownership; live SAB bridge and all-consumer pipeline reservation tested with real Wasm | No WASIX shell fd inheritance, PTY or POSIX signal mapping; actual BusyBox pipeline qualification remains separate |
 | Command packages | Pinned manifest digest, validated graph/adapter allowlist, command-lazy verified assets, atomic readonly mount | Command index is host metadata; no fake PATH executable nodes, shell exec or shebang support |
 | Asset cache | Core CacheStorage/IndexedDB verification, independent cancellation, quota fallback; actual reload uses one body request with HTTP cache disabled | Browser eviction remains possible; no complete offline application bootstrap |
 | Workspace artifact | Explicit `wasm-run <path>` with import/memory validation | Direct `./file.wasm` and executable mode dispatch are not implemented |
@@ -18,7 +18,7 @@ Existing playground support is not evidence of container CLI support.
 | BusyBox B0 | Separate C-12/C-13 stack: actual 1.37.0 `printf`, `echo`, `cat`, `pwd`, `true`, `false`; native/Node/Chromium alias and byte fixtures | B1 including `grep`, file mutation commands and live pipes are not qualified |
 | Real Bash | C-02 probe executes actual WASIX Bash external Wasm with selected args/env/fd cases | Empty argv loss, inconsistent exit propagation and filesystem visibility block promotion; no selected production bridge |
 | Persistent workspace | Optional OPFS blobs/IndexedDB roots, explicit flush, last-good recovery, Web Locks single writer, separate cache namespace | No autosave/editor/save UI, orphan GC, permanent storage guarantee or complete P5 beta qualification |
-| Deployment | Local Chromium/Linux batch smoke under restrictive CSP, with and without COOP/COEP | Isolated headers do not implement live I/O; production CDN, full release inventory and clean-origin shell acceptance remain unqualified |
+| Deployment | Local Chromium/Linux batch and live smoke under restrictive CSP; nonisolated live startup rejects before Worker allocation | Production CDN, full release inventory and clean-origin shell acceptance remain unqualified |
 | Terminal, PTY, preview, job control, Node/Linux | No container implementation | Unsupported |
 
 The review stack is rooted at [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128).

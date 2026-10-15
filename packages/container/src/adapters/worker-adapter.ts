@@ -1,5 +1,5 @@
 import { ContainerError } from '../errors.js';
-import type { CommandAdapter, RuntimeCompletion } from './types.js';
+import type { SnapshotCommandAdapter, RuntimeCompletion } from './types.js';
 
 export interface CommandWorker {
   postMessage(message: unknown): void;
@@ -14,7 +14,7 @@ export interface SnapshotWorkerAdapterOptions {
   configuration?: unknown;
 }
 
-export function createSnapshotWorkerAdapter(options: SnapshotWorkerAdapterOptions): CommandAdapter {
+export function createSnapshotWorkerAdapter(options: SnapshotWorkerAdapterOptions): SnapshotCommandAdapter {
   const { workerFactory } = options;
   return {
     id: options.id, filesystem: 'snapshot',

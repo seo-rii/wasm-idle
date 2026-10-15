@@ -1,12 +1,12 @@
 import { createLlvmToolHost, type LlvmToolHost } from '@wasm-idle/llvm-core/tool-host';
 import { MemoryFileSystem } from '../../fs/index.js';
-import type { CommandAdapter } from '../types.js';
+import type { SnapshotCommandAdapter } from '../types.js';
 import type { ClangAdapterOptions } from './index.js';
 import { createWasiHost } from '../wasi/host.js';
 import { checkMemoryProfile } from '../wasi/profile.js';
 import { createBatchStdio, type BatchStdio } from '../wasi/stdio.js';
 
-type Request = Parameters<CommandAdapter['start']>[0] & { configuration: ClangAdapterOptions };
+type Request = Parameters<SnapshotCommandAdapter['start']>[0] & { configuration: ClangAdapterOptions };
 let prepared: { request: Request; fs: MemoryFileSystem; toolHost: LlvmToolHost } | undefined;
 let preparing = false, ran = false;
 let stdio: BatchStdio | undefined;
