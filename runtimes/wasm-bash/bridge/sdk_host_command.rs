@@ -428,13 +428,13 @@ fn serve(process: HostCommandProcess, mut requests: UnboundedReceiver<ServiceReq
                 }
                 ServiceRequest::Read { fd, max, key } => {
                     let descriptor = process.descriptor(fd);
-                    let pool = pool.clone();
+                    let task_pool = pool.clone();
                     let task = async move {
                         let result = match descriptor {
                             Ok(descriptor) => descriptor.read(max).await.map(ReplyValue::Bytes),
                             Err(errno) => Err(errno),
                         };
-                        reply(&pool, key, result);
+                        reply(&task_pool, key, result);
                     };
                     if spawner.spawn_local(task).is_err() {
                         reply(&pool, key, Err(Errno::Io));
