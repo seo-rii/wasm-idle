@@ -8,6 +8,8 @@ export interface FileStat {
   readonly mode: number;
   readonly mtimeMs: number;
   readonly ctimeMs: number;
+  /** Readonly virtual command entry: executable by a registered backend, no file body. */
+  readonly command?: true;
 }
 
 export interface PathOptions {
@@ -53,6 +55,8 @@ export interface SnapshotEntry {
   readonly ctimeMs?: number;
   readonly data?: Uint8Array;
   readonly target?: string;
+  /** Trusted virtual executable metadata, valid only on a readonly file entry. */
+  readonly command?: true;
 }
 
 export interface FileSystemSnapshot {

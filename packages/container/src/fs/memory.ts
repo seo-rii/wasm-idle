@@ -17,6 +17,7 @@ interface Inode {
   linked: boolean;
   mtimeMs: number;
   ctimeMs: number;
+  command?: true;
 }
 
 interface Description {
@@ -58,7 +59,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 function sameEntry(a: SnapshotEntry, b: SnapshotEntry, compareTimes: boolean): boolean {
-  return a.inode === b.inode && a.type === b.type && a.mode === b.mode && a.target === b.target &&
+  return a.inode === b.inode && a.type === b.type && a.mode === b.mode && a.target === b.target && a.command === b.command &&
     (!compareTimes || a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs) &&
     (a.type !== 'file' || sameBytes(a.data!, b.data!));
 }
@@ -280,6 +281,7 @@ export class MemoryFileSystem {
       inode: node.inode, type: node.type, mode: node.mode,
       size: node.type === 'file' ? node.data.length : node.type === 'symlink' ? encoder.encode(node.target).length : 0,
       mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+      ...(node.command ? { command: true as const } : {}),
     };
   }
 
@@ -301,6 +303,7 @@ export class MemoryFileSystem {
 
   readFile(path: string, options: PathOptions = {}): Uint8Array {
     const { node } = this.resolve(path, options);
+    if (node.command) throw new FsError('ENOTSUP', 'Virtual command entries have no readable executable body');
     this.file(node);
     return node.data.slice();
   }
@@ -475,6 +478,7 @@ export class MemoryFileSystem {
       resolved = this.resolve(path, options);
     }
     const { node } = resolved;
+    if (node.command) throw new FsError('ENOTSUP', 'Virtual commands execute through the registered backend');
     if (options.directory && node.type !== 'directory') throw new FsError('ENOTDIR', 'A directory descriptor was requested');
     if (write) { this.writable(node); this.file(node); }
     if (options.truncate) this.resize(node, 0);
@@ -592,6 +596,7 @@ export class MemoryFileSystem {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
       entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+        ...(node.command ? { command: true as const } : {}),
         ...(node.type === 'file' ? { data: node.data.slice() } : {}),
         ...(node.type === 'symlink' ? { target: node.target } : {}),
       });
@@ -671,6 +676,9 @@ export class MemoryFileSystem {
       if (entry.mtimeMs !== undefined) integer(entry.mtimeMs, 'mtimeMs');
       if (entry.ctimeMs !== undefined) integer(entry.ctimeMs, 'ctimeMs');
       if (!['file', 'directory', 'symlink'].includes(entry.type)) throw new FsError('EINVAL', 'Invalid snapshot entry type');
+      if (entry.command !== undefined && (entry.command !== true || entry.type !== 'file' || entry.mode !== 0o555 || entry.data?.length !== 0)) {
+        throw new FsError('EINVAL', 'Invalid virtual command entry');
+      }
       if (entry.type === 'file') {
         if (!(entry.data instanceof Uint8Array) || entry.target !== undefined) throw new FsError('EINVAL', 'Invalid file entry');
         bytes += entry.data.length;
@@ -704,7 +712,9 @@ export class MemoryFileSystem {
     const orderedMounts = [...mounts.keys()].sort((a, b) => b.length - a.length);
     for (const [path, entry] of [...records].sort(([a], [b]) => components(a).length - components(b).length)) {
       const mount = orderedMounts.find(candidate => within(path, candidate))!;
+      if (entry.command && !mounts.get(mount)) throw new FsError('EINVAL', 'Virtual commands require a readonly mount');
       const node = fs.allocate(entry.type, mount, entry.mode);
+      node.command = entry.command;
       node.inode = entry.inode;
       if (entry.mtimeMs !== undefined) node.mtimeMs = entry.mtimeMs;
       if (entry.ctimeMs !== undefined) node.ctimeMs = entry.ctimeMs;
@@ -784,6 +794,15 @@ export class MemoryFileSystem {
   /** Publish a complete readonly tree after namespace, quota and symlink validation. */
   mountReadonly(path: string, entries: readonly Omit<SnapshotEntry, 'inode'>[]): void {
     this.mountReadonlyPackages([{ path, entries }]);
+  }
+
+  /** Publish metadata for trusted backend registrations, never placeholder binaries. */
+  mountCommands(path: string, names: readonly string[]): void {
+    if (!Array.isArray(names) || names.length === 0 || new Set(names).size !== names.length ||
+        names.some(name => typeof name !== 'string' || !name || name.includes('/') || name === '.' || name === '..')) {
+      throw new FsError('EINVAL', 'Virtual commands require distinct file names');
+    }
+    this.mountReadonly(path, names.map(name => ({ path: name, type: 'file', mode: 0o555, command: true, data: new Uint8Array() })));
   }
 
   /** Stage a dependency closure and publish it as one filesystem generation, or nothing. */
