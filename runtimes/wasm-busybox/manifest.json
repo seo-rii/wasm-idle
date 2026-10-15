@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-b0-candidate",
+  "status": "producer-b1-subset-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -44,9 +44,9 @@
     }
   },
   "config": {
-    "path": "config/b0.config",
-    "sha256": "593f27cc56921406b13b6d3994f86d4f0f0f8e8e139dad5ce716da0fcc8aa751",
-    "method": "make allnoconfig; overlay config/b0.config; make oldconfig; assert B0/no-shell flags"
+    "path": "config/b1.config",
+    "sha256": "8b842510f2d758ee4cf416449db59963e990a37a5bb8d9a6fd9d4fdae9581c36",
+    "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
   },
   "patches": [
     {
@@ -83,14 +83,39 @@
       "path": "patches/0007-process-initial-cwd.patch",
       "sha256": "975deca0bbef3948ab00fc32f1e90ba965ee388cb920f650c1978a967bde73db",
       "classification": "process-initial-cwd-abi"
+    },
+    {
+      "path": "patches/0008-b1-build-closure.patch",
+      "sha256": "1d03974c023d1e72a40a2ec65a011eeb5bf66042c3b8aeaae208e837a8c94c05",
+      "classification": "selected-b1-build-closure"
+    },
+    {
+      "path": "patches/0009-b1-directory-mode-profile.patch",
+      "sha256": "fca44b0694c0c9a867d22ff0335a44b71ee145d8300752e35dcfa5e9782083af",
+      "classification": "unsupported-metadata-explicit-rejection"
+    },
+    {
+      "path": "patches/0010-b1-file-mutation-profile.patch",
+      "sha256": "0abb360f09c99316ee1e564a66e4132c1b6cde23cf1258cd3dab37ca16844524",
+      "classification": "unsupported-copy-move-explicit-rejection"
+    },
+    {
+      "path": "patches/0011-b1-text-grep-profile.patch",
+      "sha256": "6d1561c7c34a3996f201de3e522745fecc62773b0883246b360330dcbfe09313",
+      "classification": "unsupported-binary-grep-explicit-rejection"
     }
   ],
   "requestedApplets": [
     "cat",
+    "cp",
     "echo",
     "false",
+    "grep",
+    "mkdir",
+    "mv",
     "printf",
     "pwd",
+    "rm",
     "true"
   ],
   "qualifiedWasiApplets": [],
@@ -99,7 +124,7 @@
     "source": "LICENSE in the pinned upstream tarball",
     "notice": "https://busybox.net/license.html"
   },
-  "buildCommand": "python3 scripts/probe.py --sdk <existing pinned SDK> --work-dir <new empty path> [--source-archive <pinned tarball>]",
+  "buildCommand": "python3 scripts/probe.py --sdk <existing pinned SDK> --work-dir <new empty path> [--source-archive <pinned tarball>] [--jobs 1|2]",
   "processAbi": {
     "namespace": "wasm_idle_process_v1",
     "function": "initial_cwd",
@@ -109,5 +134,13 @@
     "bufferBytes": 4096,
     "failureExitCode": 125,
     "action": "validate result then call actual libc chdir before upstream main"
-  }
+  },
+  "limitations": [
+    "Batch byte streams; no PTY, shell or live-pipe qualification",
+    "Host owns creation modes; mkdir -m is rejected",
+    "cp regular files and symlinks only; -p/-a/-r/-R/-l/-s are rejected before destination mutation",
+    "mv uses same-mount rename only; cross-mount fallback is rejected without copy or unlink",
+    "No ownership, timestamps, permission mutation, hardlink preservation or device/FIFO/socket copying",
+    "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated"
+  ]
 }

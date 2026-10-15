@@ -1,8 +1,9 @@
-# B0-only WASI patch boundary
+# Selected BusyBox WASI patch boundary
 
 Apply patches in filename order to the pinned BusyBox 1.37.0 source. They preserve
-the upstream bodies of all six selected applets and its multicall dispatch.
-`BB_WASI_B0` is set only for `ARCH=wasm32`. The native reference build compiles the
+upstream applet operations and multicall dispatch, with explicit B1 capability
+rejections. The first seven patches preserve the original B0 behavior.
+`BB_WASI_B0` and `BB_WASI_B1` are set only for `ARCH=wasm32`. The native reference build compiles the
 original helpers and paths.
 
 | Patch | Cause and scope |
@@ -14,6 +15,10 @@ original helpers and paths.
 | `0005-wasi-b0-help-output.patch` | Write help/list bytes directly to stdout in WASI batch mode, instead of duplicating fd 1 onto fd 2. Use 80-column help layout because batch mode has no terminal. |
 | `0006-wasm-final-link.patch` | Omit GNU archive group and informational options unsupported by wasm-ld. wasm-ld resolves archive dependencies without the GNU group flags. |
 | `0007-process-initial-cwd.patch` | A priority-101 constructor obtains the initial cwd from the versioned host import, validates its NUL-terminated result, and calls libc `chdir` before the real multicall entry. Invalid or inaccessible cwd exits 125. Environment entries are unchanged. |
+| `0008-b1-build-closure.patch` | Add upstream grep, file utilities, `coreutils/libcoreutils` and their actual common helper closure; retain the B0 helpers and process ABI. |
+| `0009-b1-directory-mode-profile.patch` | WASI Preview 1 has no chmod/umask contract. Reject `mkdir -m` before mutation and use actual mkdir/stat path traversal with host-owned creation modes. Native behavior is retained. |
+| `0010-b1-file-mutation-profile.patch` | Reject recursive/preserving/link copy modes before mutation, reject special files, and retain actual regular/symlink copy code. Use actual rename for mv; reject its cross-mount fallback before copy/unlink because metadata preservation is unavailable. Native code retains the upstream fallback. |
+| `0011-b1-text-grep-profile.patch` | The small upstream grep accepts but ignores -a/-I and truncates NUL chunks. Reject these modes/input explicitly. WASI libc lacks the GNU regex API required by EXTRA_COMPAT; no replacement regex engine is introduced. Native reference behavior remains upstream. |
 
 No shell parser, fake process success, network implementation or filesystem stub
 is introduced. Unsupported applets remain disabled. Extending this closure needs
