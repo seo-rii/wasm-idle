@@ -23,6 +23,10 @@
       "types": "./dist/adapters/clang/index.d.ts",
       "import": "./dist/adapters/clang/index.js"
     },
+    "./adapters/clang-live": {
+      "types": "./dist/adapters/clang-live/index.d.ts",
+      "import": "./dist/adapters/clang-live/index.js"
+    },
     "./adapters/wasix": {
       "types": "./dist/adapters/wasix/index.d.ts",
       "import": "./dist/adapters/wasix/index.js"
@@ -68,6 +72,7 @@
     "test:live": "pnpm run build && node scripts/test-live-browser.mjs",
     "test:workspace": "pnpm run build && node scripts/test-workspace-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
+    "test:clang:live": "node scripts/test-live-clang.mjs",
     "test:browser:clang": "node scripts/test-clang-browser.mjs",
     "test:clang:headers": "node scripts/test-clang-headers.mjs",
     "test:browser:clang:headers": "node scripts/test-clang-browser.mjs --headers",

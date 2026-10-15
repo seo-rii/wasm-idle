@@ -1,6 +1,7 @@
-export type FileType = 'file' | 'directory' | 'symlink';
+export type FileType = 'file' | 'directory' | 'symlink' | 'character-device';
 
 export interface FileStat {
+  /** The immutable built-in /dev/null reserves inode 0; other identities are positive. */
   readonly inode: number;
   readonly type: FileType;
   readonly size: number;
@@ -10,6 +11,12 @@ export interface FileStat {
   readonly ctimeMs: number;
   /** Readonly virtual command entry: executable by a registered backend, no file body. */
   readonly command?: true;
+}
+
+/** Owner-only identity for one inode revision; never serialized into guest messages. */
+export interface FileVersion {
+  readonly inode: number;
+  readonly revision: bigint;
 }
 
 export interface PathOptions {

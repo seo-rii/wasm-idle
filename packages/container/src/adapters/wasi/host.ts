@@ -23,7 +23,7 @@ export interface WasiPathBinding {
 }
 export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'> & { readonly paths?: WasiPathBinding };
 interface HostOptions { fs: WasiFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: WasiStdio; }
-const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : 4;
+const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : type === 'character-device' ? 2 : 4;
 const RIGHTS = (1n << 30n) - 1n;
 
 /** Synchronous WASI imports. A live binding may block only its dedicated guest Worker. */
@@ -31,7 +31,7 @@ export function createWasiHost(options: HostOptions) {
   let memory: WebAssembly.Memory;
   const stdio: WasiStdio = options.stdio ?? createBatchStdio(options.stdin, options.maxOutputBytes);
   const handles = new Map<number, Handle>();
-  const standard = new Set([0, 1, 2]);
+  const standard = new Set([0, 1, 2].filter(fd => stdio.isOpen?.(fd) ?? true));
   let nextFd = 3;
   // Real relative file access is rooted at cwd. Absolute paths use the root preopen.
   for (const [label, path] of [['.', options.cwd], ['/', '/']] as const) {
@@ -118,12 +118,13 @@ export function createWasiHost(options: HostOptions) {
   const fdRead = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count);
     if (fd !== 0 || !standard.has(0)) handle(fd, 2n);
-    if (fd === 0 && offset !== undefined) throw new WasiFault(70);
+    const input = fd === 0 && standard.has(fd);
+    if (input && offset !== undefined) throw new WasiFault(70);
     const length = buffers.reduce((total, buffer) => Math.min(1024 * 1024, total + buffer.length), 0);
     if (!length) { put32(result, 0); return 0; }
     // A stream read must return bytes already available without blocking again on
     // the next iovec. Perform one bounded read, then scatter its partial result.
-    const bytes = fd === 0 ? stdio.read(length) : offset === undefined
+    const bytes = input ? stdio.read(length) : offset === undefined
       ? options.fs.read(handle(fd, 2n).fd, length)
       : options.fs.pread(handle(fd, 2n).fd, length, safeOffset(offset));
     if (bytes.length > length) throw new WasiFault(29);
@@ -137,13 +138,14 @@ export function createWasiHost(options: HostOptions) {
   };
   const fdWrite = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count); let total = 0;
-    if (!([1, 2].includes(fd) && standard.has(fd))) handle(fd, 64n);
-    if ([1, 2].includes(fd) && offset !== undefined) throw new WasiFault(70);
+    const output = (fd === 1 || fd === 2) && standard.has(fd);
+    if (!output) handle(fd, 64n);
+    if (output && offset !== undefined) throw new WasiFault(70);
     for (const buffer of buffers) {
       const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
       if (!bytes.length) { if (total === 1024 * 1024) break; continue; }
-      if (fd === 1 || fd === 2) {
-        const n = stdio.write(fd, bytes);
+      if (output) {
+        const n = stdio.write(fd as 1 | 2, bytes);
         total += n; if (n < bytes.length) break;
       } else {
         const h = handle(fd, 64n);
@@ -196,7 +198,7 @@ export function createWasiHost(options: HostOptions) {
       if ((oflags & 1) && !(parent.rights & (1n << 10n))) return 76;
       if ((oflags & 8) && (!(parent.rights & (1n << 19n)) || !(rights & 64n))) return 76;
       const p = relative(fd, ptr, len);
-      let newFd = 3; while (handles.has(newFd)) newFd++; if (newFd >= 256) return 33;
+      let newFd = 0; while (handles.has(newFd) || standard.has(newFd)) newFd++; if (newFd >= 256) return 33;
       const opened = paths.open(p, { read: Boolean(rights & 2n) || !(rights & 64n), write: Boolean(rights & 64n), create: Boolean(oflags & 1), directory: Boolean(oflags & 2), exclusive: Boolean(oflags & 4), truncate: Boolean(oflags & 8), append: Boolean(fdflags & 1) }, Boolean(flags & 1));
       handles.set(newFd, { fd: opened, root: parent.root, flags: fdflags, rights, inherited }); put32(result, newFd); return 0;
     },
