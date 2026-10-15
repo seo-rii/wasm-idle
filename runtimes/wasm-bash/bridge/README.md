@@ -60,6 +60,25 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    capabilities. Automatic Rust `Send + Sync` on owned values requires no unsafe
    implementation or JS callback assertion. This metadata accessor does not
    supply descriptor routing or the trusted JavaScript command registry.
+6. `0006-register-worker-shell-import.patch`: register the existing private
+   `wasm_idle_shell_v1.exec_v1` binding in the separate resolver actually used
+   by SDK Worker instantiation. `WasiEnv::instantiate` calls the free
+   `import_object_for_all_wasi_versions`; the binding added by `0003` to
+   `generate_import_object_from_env` does not reach that call. The actual
+   resolver now adds the same typed function only when the module imports a
+   `wasix_32v1` function, matching the existing wasm32 profile. A pure WASI
+   or WASIX64 module does not gain this private import. The original patch
+   and its historical receipts remain unchanged.
+
+The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
+of the rebuilt five-patch SDK and shim-linked
+Bash reached SDK initialization in all ten cases, then returned exit 45 with
+empty stdout/stderr and `Unable to initialize the context and store`. The
+missing namespace in the actual resolver makes `Instance::new` fail before
+Bash executes even a builtin; that branch publishes `Errno::Noexec` (45).
+The `0006` change addresses that source-level omission. Its source checks do
+not establish a corrected SDK build, Bash execution or common Container
+fd/filesystem support.
 
 No speculative change to signal ordering is included. No libc API returns fake success,
 no stdout marker is interpreted as an exec request, and no shell string is parsed by host code.
@@ -144,6 +163,7 @@ From the repository root, with a C compiler and Rust installed:
 
 ```sh
 node --test scripts/probe-container-shell.test.mjs
+node --test scripts/verify-container-shell-worker-imports.test.mjs
 node scripts/test-container-shell-bridge.mjs
 node scripts/prepare-container-shell-bridge.mjs --verify-only \
   --sdk-archive /path/to/wasmer-sdk.tgz \
@@ -176,6 +196,26 @@ the patch and compile-probe hashes. It installs the probe as the SDK example
 `container_command_snapshot_compile`. It does not build, download dependencies
 or modify an active checkout. The dry-run receipt is not full preparation or
 SDK compile evidence.
+
+Fresh preparation also checks the actual Worker resolver, its wasm32 gate,
+the version-specific resolver and the existing seven-i32 syscall signature.
+It records `workerImports.status: source-shape-checked-not-typechecked` and
+the three inspected Rust source hashes in the preparation receipt. This is
+an explicit guard against the missing-resolver regression, not a Rust parser,
+typecheck or runtime test. To rerun it read-only on prepared sources:
+
+```sh
+node scripts/verify-container-shell-worker-imports.mjs /absolute/prepared/wasmer-wasix
+```
+
+The original five-patch source tree fails this guard. Keep that tree and its
+failure evidence unchanged; prepare a new source directory for the six-patch
+candidate and use distinct build directories before any later rebuild.
+The [six-patch preparation receipt](evidence.worker-imports-source-preparation.json)
+records successful fresh extraction, zero-fuzz sequential patch application and
+the source guard. The prepared SDK tree is byte-identical to the preceding
+five-patch SDK source; only WASIX `src/lib.rs` changes. Compiler and guest
+qualification remain `not-run`/false in this receipt.
 
 After provisioning the pinned nightly and `rust-src`, prefetch all locked
 dependency targets for both the SDK and the pinned standard-library source
