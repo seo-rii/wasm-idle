@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-pinned-sdk-release-binary-web-glue-and-static-inspection-passed",
+  "runRoot": "/data/seorii-container-20261014/shell-sdk-binary-resume-20261015",
+  "originalReceipt": {
+    "archive": "evidence.sdk-binary.json",
+    "sourceFile": "receipt.json",
+    "bytes": 357698,
+    "sha256": "a8ca2caa7f1e511a6bdb66ea6fc18ccd34911d78113da8a7cd73c521b2ba511a"
+  },
+  "originalBytesPreserved": true,
+  "helperSourceCommit": "d801882b518211eb0563cdda9f3f4369a30f8e6a",
+  "sdkSourceCommit": "de98d061435a308e8bbcd2ca195d29ac07401774",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "helperSnapshots": [
+    {
+      "sealedFile": "run.py",
+      "bytes": 18392,
+      "sha256": "ab2807f4cb3087ee2ac56b7ab17edf3984287fa5473e68664b6a1ffe31fcc95d"
+    },
+    {
+      "sealedFile": "container_shell_sdk_build_guard.py",
+      "bytes": 7594,
+      "sha256": "79b2341b0ad1b81820b1d3420c6be1de0498213cbe3fb3ba5d68a3e665c5bb84"
+    },
+    {
+      "sealedFile": "inspect.mjs",
+      "bytes": 2997,
+      "sha256": "b78c28b47ed60c609ef77bd53b7fecc058a74bbe8aaeca885df6e631e2caecb2"
+    }
+  ],
+  "sourcePolicy": {
+    "sourceFile": "checked-source-policy.json",
+    "bytes": 136003,
+    "sha256": "bb84df32cb7a564fac6c0f0b3cc79d5fdcb60edbecfd2d631d5c3e0debca0533"
+  },
+  "buildPlan": {
+    "sourceFile": "build-plan.json",
+    "bytes": 5458,
+    "sha256": "6ac9796a6e50e01535c49289e25e00f71bd532e344c3bb696e0a1889501ea925"
+  },
+  "preparedInputs": {
+    "sourceFile": "prepared-inputs.json",
+    "bytes": 802,
+    "sha256": "663036edbfbdd2ac1278ea8b827337575601fca7dfee49a4d6b4fe8c8b228341"
+  },
+  "continuationContext": {
+    "sourceFile": "continuation-context.json",
+    "bytes": 867,
+    "sha256": "5cb0d87b50752220eec3b9f10252988e34f2ef126d60a13af544a5da75b78ed9"
+  },
+  "stageReceipts": [
+    {
+      "stage": "sdk-build",
+      "sourceFile": "sdk-build.process.json",
+      "archive": "evidence.sdk-binary-build-process.json",
+      "bytes": 698,
+      "sha256": "f8238abacd7a767f0bc07cb00873983a0f63819426e44585911a67ba97b779ee",
+      "exitCode": 0,
+      "wallSeconds": 100.969,
+      "allReaped": true,
+      "signalsSent": false
+    },
+    {
+      "stage": "bindgen",
+      "sourceFile": "bindgen.process.json",
+      "archive": "evidence.sdk-binary-bindgen-process.json",
+      "bytes": 805,
+      "sha256": "ac12adbce3ce06d7a1a18f281f14715cbb0f7d748450fc100c50a7d4720dbc99",
+      "exitCode": 0,
+      "wallSeconds": 1.761,
+      "allReaped": true,
+      "signalsSent": false
+    },
+    {
+      "stage": "inspect",
+      "sourceFile": "inspect.process.json",
+      "archive": "evidence.sdk-binary-inspect-process.json",
+      "bytes": 953,
+      "sha256": "5488e2417e3e72601ab5838ac17dff6138478e679cfccbdad1d9c4167e2371f8",
+      "exitCode": 0,
+      "wallSeconds": 0.255,
+      "allReaped": true,
+      "signalsSent": false
+    }
+  ],
+  "archiveVerification": {
+    "checkedAtUtc": "2026-10-14T23:31:07.493576+00:00",
+    "sourcePolicyPins": 580,
+    "additionalToolAndCompilerLibraryPins": 6,
+    "preparedInputFiles": 6,
+    "outputArtifacts": 6,
+    "allRecordedHashesMatched": true,
+    "sourceInventoriesMatched": true,
+    "sourceSymlinksFound": false,
+    "cargoOutputMatchesRawArtifact": true,
+    "inventoryMatchesOriginalReceipt": true
+  },
+  "manualFollowup": {
+    "historicalTimeoutReceipt": "evidence.sdk-build-timeout.json",
+    "samePhysicalSdkSource": true,
+    "sameCheckedTargetReused": true,
+    "freshCleanBuild": false,
+    "automaticRetry": false,
+    "releaseProfilePreserved": true
+  },
+  "sharedMemory": {
+    "raw": [
+      {
+        "shared": true,
+        "minimumPages": 33,
+        "maximumPages": 16384
+      }
+    ],
+    "bindgen": [
+      {
+        "shared": true,
+        "minimumPages": 34,
+        "maximumPages": 16384
+      }
+    ]
+  },
+  "generatedGlue": {
+    "changedAfterGeneration": false,
+    "callerSuppliedModuleAndMemory": "Accepted by both generated initialization APIs; positional parameters emit a deprecation warning.",
+    "qualification": "Source inspection only; initialization and a browser guest were not executed by this archival work."
+  },
+  "remainingGates": [
+    "Local index/worker module packaging",
+    "Trusted JS command registry",
+    "Real Bash with private exec shim",
+    "Common live fd/VFS and cancellation",
+    "Browser guest acceptance",
+    "Complete dependency licenses/source notices"
+  ],
+  "scope": "Real SDK release Wasm, generated web glue and static inventory passed on a warm target from the same physical source copy. Local index/worker packaging and guest/browser behavior remain unqualified. No binary or source archive is checked into Git."
+}

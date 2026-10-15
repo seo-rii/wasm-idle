@@ -120,6 +120,7 @@ if (verifyOnly) {
 	await verifySource(virtualFsSource, inputs[2].path, 'virtual-fs-0.601.0', virtualFsPatches);
 	const receipts = {};
 	// Check dependent patches in order on private copies, preserving the caller's sources.
+	// --forward rejects reversed/already-applied patches instead of silently undoing them.
 	for (const [names, cwd] of [
 		[patches, source],
 		[sdkPatches, sdkSource],
@@ -131,7 +132,7 @@ if (verifyOnly) {
 			await cp(cwd, copy, { recursive: true });
 			for (const name of names) {
 				const path = join(bridge, 'patches', name);
-				execFileSync('patch', ['--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path], {
+				execFileSync('patch', ['--batch', '--forward', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path], {
 					cwd: copy, stdio: 'pipe'
 				});
 				receipts[name] = sha256(await readFile(path));
@@ -196,7 +197,7 @@ if (verifyOnly) {
 			// Sequential patches may apply at an offset; never leave *.orig backups.
 			execFileSync(
 				'patch',
-				['--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
+				['--batch', '--forward', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
 				{
 					cwd: join(output, crate),
 					stdio: 'pipe'
