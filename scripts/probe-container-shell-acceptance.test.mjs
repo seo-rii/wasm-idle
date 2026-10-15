@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { manifest } from './probe-container-shell-acceptance.mjs';
 import {
-	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
+	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
 	judgeShellAcceptance,
 	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
 const bytes = (value) => [...new TextEncoder().encode(value)];
-const assets = ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
+const assets = ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
 function result(run) {
 	let seq = 0;
 	const timeline = [{ seq: seq++, type: 'shellStart' }];
 	const fetch = (name) => run === 'cold' && timeline.push({ seq: seq++, type: 'fetch', url: `http://127.0.0.1:1/assets/${name}` });
+	['sdk', 'bash'].forEach(fetch);
 	for (const dispatch of DISPATCHES) {
 		timeline.push({ seq: seq++, type: 'dispatch', path: dispatch.path });
 		if (dispatch.path.endsWith('/mkdir')) fetch('busybox');
@@ -22,12 +24,15 @@ function result(run) {
 		type: 'result', backendCompleted: true,
 		result: { code: 0, stdout: bytes('hello\n'), stderr: bytes(CLANG_TRIPLE_WARNING) },
 		files: { '/workspace/demo/main.c': [...SOURCE], '/workspace/demo/result.txt': bytes('hello\n') },
-		artifact: { bytes: 1234, magic: [0, 97, 115, 109, 1, 0, 0, 0] },
+		artifact: { bytes: 1234, magic: [0, 97, 115, 109, 1, 0, 0, 0], mode: 0o755 },
 		invocations: DISPATCHES.map(({ path, cwd }) => ({ path, cwd, argv: [path], descriptors: [0, 1, 2] })),
 		records: DISPATCHES.map(({ path }, pid) => ({ path, status: 0, pid: pid + 1, result: { code: 0, reason: 'exited' } })),
 		timeline, lookups: { cat: 'busybox', cp: 'busybox', grep: 'busybox', mkdir: 'busybox', mv: 'busybox', rm: 'busybox', clang: 'llvm' },
-		assetsBeforeShell: { cachedEntries: 0 }, sysroot: { entries: 2285, files: 2168 }, containerProcesses: [],
-		publicApi: { runtime: ['registerHostCommand', 'registerHostCommandDirectory'], directory: ['fromHostFileSystem'] },
+		clangCommand: { name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/llvm', argv0: LLVM_EXECUTABLE, prefixArgs: ['clang', ...CLANG_PROFILE] },
+		assetsBeforeShell: { cachedEntries: 0 }, shellAssetsBefore: { cachedEntries: 0 }, sysroot: { entries: 2285, files: 2168 }, containerProcesses: [],
+		virtualCommands: Object.fromEntries(['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm', 'clang'].map(name => [name, { command: true, mode: 0o555, size: 0 }])),
+		workerGroup: { disposed: true, active: 0, created: 5, terminated: 5 },
+		publicApi: { session: 'createWasixShellSession', runtime: ['registerHostCommand', 'registerHostCommandDirectory'], directory: ['fromHostFileSystem'] },
 		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
@@ -74,6 +79,19 @@ function piped() {
 		containerProcesses: [], events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function redirected() {
+	return {
+		type: 'result', backendCompleted: true,
+		result: { code: 0, stdout: bytes('hello\nbad=1\ndata=126\nhello\nvirtual=1\n'), stderr: [] },
+		files: {
+			'/workspace/command-path': bytes(`${BIN}/clang\n`), '/workspace/compile.out': [], '/workspace/compile.err': bytes(CLANG_TRIPLE_WARNING),
+			'/workspace/version.txt': bytes('clang version 22\n'), '/workspace/failed.out': [], '/workspace/failed.err': bytes('bad.c:1:16: error: expected closing brace\n'),
+			'/workspace/bad.wasm': { error: 'ENOENT' }, '/workspace/denied.out': [], '/workspace/virtual-body': [], '/workspace/virtual-error': bytes('Operation not supported\n')
+		},
+		artifact: { mode: 0o755 }, dataArtifactMode: 0o644, records: [{ path: `${BIN}/wasm-run`, status: 0 }],
+		containerProcesses: [], workerGroup: { disposed: true, active: 0 }, consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
@@ -85,11 +103,33 @@ function receipt() {
 			{ run: 'failure', result: failing(), downloads: {
 				start: { ...counts(1), '/assets/busybox-corrupt': 0 }, end: { ...counts(1), '/assets/clang': 2, '/assets/lld': 2, '/assets/sysroot': 2, '/assets/busybox-corrupt': 2 }
 			} },
-			{ run: 'pipeline', result: piped(), downloads: { start: counts(1), end: counts(1) } }
+			{ run: 'pipeline', result: piped(), downloads: { start: counts(1), end: counts(1) } },
+			{ run: 'redirection', result: redirected(), downloads: { start: counts(1), end: counts(1) } },
+			{ run: 'startup-failure', result: { type: 'result', backendCompleted: true, result: { code: null, reason: 'runtime-error', stdout: [], stderr: [] },
+				records: [], workerGroup: { disposed: true, active: 0, created: 1, terminated: 1 }, remainingWorkerTargets: 0, consoleErrors: [], blockedRequests: [] } }
 		]
 	};
 }
 const failed = (value) => judgeShellAcceptance(value).checks.filter((check) => !check.passed).map((check) => check.id);
+
+test('distribution identity covers URL policy and declares the LLVM multicall layout', () => {
+	const inputs = {
+		receipt: { packageId: 'fixture', sourceCommit: 'fixture' }, bash: Buffer.from('bash'), busybox: Buffer.from('busybox'),
+		entries: new Map([['wasmer_js_bg.wasm', Buffer.from('sdk')]]), busyboxReceiptSha256: 'b'.repeat(64),
+		clang: { producer: { source: { repository: 'https://example.invalid/producer', revision: 'fixture' } }, producerSha256: 'c'.repeat(64), assets: {} }
+	};
+	const first = JSON.parse(manifest('https://one.invalid', inputs)), second = JSON.parse(manifest('https://two.invalid', inputs));
+	assert.notEqual(first.distributionId, second.distributionId);
+	assert.notEqual(first.distributionId, JSON.parse(manifest('https://one.invalid', inputs, 'busybox-corrupt')).distributionId);
+	assert.deepEqual(first.packages.find(pkg => pkg.id === 'llvm').files, [
+		{ path: 'bin/llvm', asset: 'clang', executable: true }, { path: 'bin/wasm-ld', asset: 'lld', executable: true },
+		{ path: 'sysroot.tar', asset: 'sysroot', executable: false }
+	]);
+	assert.deepEqual(first.commands.find(command => command.name === 'clang'), {
+		name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/llvm', argv0: LLVM_EXECUTABLE,
+		prefixArgs: ['clang', ...CLANG_PROFILE]
+	});
+});
 
 test('the plan script is unchanged and an actual passing receipt passes without readiness claims', () => {
 	assert.equal(SCRIPT, "set -eu\nmkdir -p /workspace/demo\ncd /workspace/demo\nprintf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c\nclang main.c -o hello.wasm\n./hello.wasm | grep hello > result.txt\ncat result.txt\n");
@@ -106,7 +146,7 @@ test('printing hello alone is insufficient', () => {
 	value.runs[0].result.records.pop();
 	value.runs[0].result.invocations[2].cwd = '/workspace';
 	value.runs[0].result.artifact = { error: 'ENOENT' };
-	assert.deepEqual(failed(value), ['cold:workspace-files', 'cold:artifact', 'cold:shared-cwd', 'cold:supervisor-exits']);
+	assert.deepEqual(failed(value), ['cold:workspace-files', 'cold:artifact', 'cold:shared-cwd', 'cold:supervisor-exits', 'cold:executable-artifact']);
 });
 
 test('an eager or repeated asset body request fails', () => {
@@ -116,6 +156,36 @@ test('an eager or repeated asset body request fails', () => {
 	timeline.find((entry) => entry.type === 'fetch' && entry.url.endsWith('/clang')).seq = -1;
 	value.runs[1].downloads.end['/assets/sysroot'] = 2;
 	assert.deepEqual(failed(value), ['cold:clang-lazy', 'warm:verified-cache-reuse']);
+});
+
+test('public session qualification requires virtual metadata, executable artifacts and complete worker retirement', () => {
+	const value = receipt();
+	value.runs[0].result.virtualCommands.clang.command = undefined;
+	value.runs[1].result.workerGroup.active = 1;
+	value.runs[5].result.dataArtifactMode = 0o755;
+	value.runs[5].result.files['/workspace/failed.err'] = bytes('filesystem busy');
+	assert.deepEqual(failed(value), ['cold:virtual-command-metadata', 'warm:sdk-group-retired', 'redirection:compiler-redirections', 'redirection:artifact-mode-enforced']);
+});
+
+test('the compiler must retain its actual multicall identity and subcommand', () => {
+	const value = receipt();
+	value.runs[0].result.clangCommand.argv0 = `${BIN}/clang`;
+	value.runs[1].result.clangCommand.prefixArgs.shift();
+	assert.deepEqual(failed(value), ['cold:clang-multicall-profile', 'warm:clang-multicall-profile']);
+});
+
+test('SDK setup failure must not masquerade as guest exit 1 or leave owned workers', () => {
+	const value = receipt(), result = value.runs[6].result;
+	result.result = { code: 1, reason: 'exited', stdout: [], stderr: [] };
+	assert.deepEqual(failed(value), ['startup-failure:runtime-error']);
+	result.workerGroup.active = 1;
+	assert.deepEqual(failed(value), ['startup-failure:runtime-error', 'startup-failure:owned-cleanup']);
+});
+
+test('a diagnostic profile cannot qualify after omitting a required real mount', () => {
+	const value = receipt(); value.diagnosticOptions = { sdkDiagnostics: true, omittedTmpMount: true };
+	assert.deepEqual(failed(value), ['required-mount-profile']);
+	assert.equal(judgeShellAcceptance(value).shellAcceptancePassed, false);
 });
 
 test('a natively executed artifact, wrong order, nonzero exit or leaked process fails', () => {
