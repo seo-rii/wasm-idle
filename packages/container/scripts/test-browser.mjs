@@ -5,15 +5,23 @@ import { createHash } from 'node:crypto';
 import { resolve, relative, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { execFileSync } from 'node:child_process';
+import { release } from 'node:os';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const coreRoot = resolve(root, '../core/dist');
 const fixture = await readFile(resolve(root, 'test/fixtures/command.wasm'));
 const fixtureSha256 = createHash('sha256').update(fixture).digest('hex');
 let assetRequests = 0;
+const isolated = process.env.CONTAINER_ISOLATED === '1';
+const importMap = '{"imports":{"@wasm-idle/core":"/core/index.js"}}';
+const contentSecurityPolicy = `default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-${createHash('sha256').update(importMap).digest('base64')}'; worker-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'`;
 const server = createServer(async (request, response) => {
   try {
+    response.setHeader('Content-Security-Policy', contentSecurityPolicy);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (isolated) { response.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp'); }
     const pathname = new URL(request.url, 'http://localhost').pathname;
-    if (pathname === '/') { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><meta charset="utf-8"><title>Container contract</title><script type="importmap">{"imports":{"@wasm-idle/core":"/core/index.js"}}</script>'); return; }
+    if (pathname === '/') { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><meta charset="utf-8"><title>Container contract</title><script type="importmap">${importMap}</script>`); return; }
     if (pathname === '/asset.wasm') {
       assetRequests++; response.setHeader('Content-Type', 'application/wasm');
       response.setHeader('Cache-Control', 'no-store'); response.end(fixture); return;
@@ -30,7 +38,9 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 try {
   const page = await browser.newPage();
   const faults = []; page.on('pageerror', (error) => faults.push(error.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  page.on('console', (message) => { if (message.type() === 'error' && /Content Security Policy|Refused to/u.test(message.text())) faults.push(message.text()); });
+  const document = await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  assert.equal(document.headers()['content-security-policy'], contentSecurityPolicy);
   const result = await page.evaluate(async () => {
     const { createContainer } = await import('/dist/index.js');
     const { createWasiAdapter } = await import('/dist/adapters/wasi/index.js');
@@ -70,7 +80,7 @@ try {
       };
     } finally { await c.dispose(); }
   });
-  assert.equal(result.isolated, false); assert.equal(result.code, 0);
+  assert.equal(result.isolated, isolated); assert.equal(result.code, 0);
   assert.deepEqual(result.argv, Array.from(new TextEncoder().encode('tool\0roundtrip\0\0한 글\0')));
   assert.deepEqual(result.env, Array.from(new TextEncoder().encode('MARK=한 글\0')));
   assert.deepEqual(result.actualCwdFile, Array.from(new TextEncoder().encode('saved')));
@@ -118,7 +128,7 @@ try {
   assert.deepEqual(faults, []);
   const sourceHashes = {};
   for (const file of (await readdir(resolve(root, 'src'), { recursive: true })).filter((f) => f.endsWith('.ts')).sort()) { sourceHashes[file] = createHash('sha256').update(await readFile(resolve(root, 'src', file))).digest('hex'); }
-  const evidence = { schemaVersion: 1, sourceHashes, browser: browser.version(), platform: process.platform, arch: process.arch, fixtureSha256, result, cache: { cacheRuns, assetRequests, reloaded: true, httpCache: 'no-store', memoryCache: false } };
+  const evidence = { schemaVersion: 1, applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceHashes, browser: browser.version(), platform: process.platform, kernel: release(), image: process.env.ImageVersion, arch: process.arch, contentSecurityPolicy, fixtureSha256, result, cache: { cacheRuns, assetRequests, reloaded: true, httpCache: 'no-store', memoryCache: false } };
   const output = process.env.CONTAINER_EVIDENCE;
   if (output) { await mkdir(dirname(output), { recursive: true }); await writeFile(output, JSON.stringify(evidence, null, 2) + '\n'); }
   console.log(JSON.stringify(evidence));
