@@ -457,3 +457,14 @@ the pinned types crate; `From<ExitCode> for Errno` turns values that are not err
 variants into `Errno::Unknown` (79). Patch 0009 writes the raw `u16` status into that
 union field after the normal `JoinStatus` write, which is exactly what libc's
 `W_EXITCODE(code.u.exit_normal, 0)` consumes. It applies independently with zero fuzz.
+
+The nine-patch SDK at source `4a9e7a9b77dac2551a31d74a8ee3b618af4d1816` passed the same
+fresh-source gate with 583 pins: typecheck 291.062 s, release 622.133 s, bindgen 2.019 s
+and static inspection 0.255 s, each exiting 0 with all owned processes reaped. The bound
+Wasm is 9,140,285 bytes, SHA-256
+`b4a6675fa70a7e7e5a0dbb858d2c8b23678e893a2d41163620140e6f1929bb08`; binary receipt
+`50a2f1c18574ea655543c7808b40541736083226b5d8abf40477a1bc5e7da720` and the stage receipts
+are archived unchanged as `evidence.exit-status-*.json` with a
+[post-run recheck](evidence.exit-status-sdk-binary-metadata.json). The unchanged local
+packaging step produced package receipt
+`21c82836f8cbce9a2d07133c35dca7c177944ebb9abf3ef2b25b74374803fbae` in 1.511 seconds.
