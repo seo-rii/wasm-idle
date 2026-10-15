@@ -65,7 +65,29 @@ export const DISPATCHES = [
 	{ path: `${BIN}/grep`, cwd: '/workspace/demo', pipeline: true },
 	{ path: `${BIN}/cat`, cwd: '/workspace/demo' }
 ];
-export const RUNS = ['cold', 'warm'];
+// A third run in the same profile interrupts a running artifact and a running compile.
+export const INTERRUPT_SCRIPT = [
+	'set -u',
+	'mkdir -p /workspace/demo',
+	'cd /workspace/demo',
+	"printf 'int main(void){for(;;){}}\\n' > spin.c",
+	'clang spin.c -o spin.wasm',
+	'./spin.wasm; printf \'spin=%d\\n\' "$?"',
+	"printf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c",
+	'clang main.c -o interrupted.wasm; printf \'clang=%d\\n\' "$?"',
+	'if [ -e interrupted.wasm ]; then echo kept; else echo discarded; fi',
+	'clang main.c -o hello.wasm && ./hello.wasm'
+].join('\n') + '\n';
+export const INTERRUPTS = [
+	{ path: '/workspace/demo/spin.wasm', occurrence: 1, delayMs: 1000 },
+	{ path: `${BIN}/clang`, occurrence: 2, delayMs: 1000 }
+];
+export const INTERRUPT_DISPATCHES = [
+	[`${BIN}/mkdir`, 0], [`${BIN}/clang`, 0], ['/workspace/demo/spin.wasm', 130],
+	[`${BIN}/clang`, 130], [`${BIN}/clang`, 0], ['/workspace/demo/hello.wasm', 0]
+];
+export const RUNS = ['cold', 'warm', 'interrupt'];
+export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT };
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -200,12 +222,45 @@ function judgeRun(run, result, downloads, assetPaths, checks) {
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
 }
 
+/** The owner interrupts a running artifact and a running compile; Bash continues. */
+function judgeInterrupt(result, checks) {
+	const check = (id, passed, observed) => checks.push({ id: `interrupt:${id}`, passed: Boolean(passed), observed });
+	const completed = result?.type === 'result' && result.backendCompleted === true;
+	const output = result?.result, stderr = decode(output?.stderr);
+	const warnings = stderr.split(CLANG_TRIPLE_WARNING);
+	check('script', completed && output.code === 0 && decode(output.stdout) === 'spin=130\nclang=130\ndiscarded\nhello\n' &&
+		warnings.every((part) => part === '') && [3, 4].includes(warnings.length),
+	{ type: result?.type, code: output?.code, stdout: decode(output?.stdout), stderr, error: result?.error });
+	const records = result?.records ?? [];
+	check('supervisor-statuses', JSON.stringify(records.map((record) => [record.path, record.status])) === JSON.stringify(INTERRUPT_DISPATCHES),
+		records.map(({ path, status, startError, result: value }) => [path, status, startError ?? value?.reason]));
+	// Each interrupt stopped exactly one command while it ran, between its dispatch and completion.
+	const timeline = result?.timeline ?? [];
+	const interrupts = timeline.filter((entry) => entry.type === 'interrupt');
+	check('interrupted-while-running', interrupts.length === 2 && interrupts.every((entry) => entry.interrupted === 1) &&
+		INTERRUPTS.every((plan, index) => {
+			const dispatches = timeline.filter((entry) => entry.type === 'dispatch' && entry.path === plan.path);
+			const ends = timeline.filter((entry) => entry.type === 'dispatchEnd' && entry.path === plan.path);
+			const at = interrupts[index]?.seq;
+			return at > dispatches[plan.occurrence - 1]?.seq && at < ends[plan.occurrence - 1]?.seq && ends[plan.occurrence - 1]?.status === 130;
+		}), interrupts);
+	check('interrupted-compile-discarded', result?.files?.['/workspace/demo/interrupted.wasm']?.error === 'ENOENT',
+		result?.files?.['/workspace/demo/interrupted.wasm']);
+	check('later-artifact', same(result?.artifact?.magic?.slice(0, 4), [0, 97, 115, 109]), result?.artifact);
+	check('processes-retired', completed && Array.isArray(result.containerProcesses) && !result.containerProcesses.length,
+		result?.containerProcesses?.length);
+	check('browser-errors', !result?.events?.some((event) => event.type === 'threadError') &&
+		!result?.blockedRequests?.length && !result?.consoleErrors?.length, result?.consoleErrors);
+	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
+}
+
 export function judgeShellAcceptance(receipt) {
 	const checks = [];
 	const assetPaths = ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
 	for (const run of RUNS) {
 		const entry = receipt.runs?.find((candidate) => candidate.run === run);
-		judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
+		if (run === 'interrupt') judgeInterrupt(entry?.result, checks);
+		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
 	}
 	checks.push({ id: 'context-cleanup', passed: receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,
 		observed: [receipt.initialWorkerTargets, receipt.workersAfterContextClose] });

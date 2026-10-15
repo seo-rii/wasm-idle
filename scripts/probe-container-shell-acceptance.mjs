@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import {
-	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY, PACKAGE_RECEIPT, READ_FILES, RUNS, RUN_TIMEOUT_MS, SCRIPT,
+	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
+	PACKAGE_RECEIPT, READ_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT,
 	digest, identity, judgeShellAcceptance, readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -109,6 +110,8 @@ export async function runProbe(configuration) {
 		host: { node: process.version, platform: platform(), arch: arch(), kernelRelease: release(), osVersion: version() },
 		applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
 		script: SCRIPT,
+		interruptScript: RUN_SCRIPTS.interrupt,
+		interrupts: INTERRUPTS,
 		packageReceipt: PACKAGE_RECEIPT,
 		packageId: prepared.inputs.receipt.packageId,
 		memory: MEMORY,
@@ -255,7 +258,9 @@ export async function runProbe(configuration) {
 				}), {
 					descriptions, sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
 					payload: {
-						script: SCRIPT, readFiles: READ_FILES, manifest: distribution, manifestSha256: receipt.distributionSha256,
+						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
+						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : READ_FILES,
+						manifest: distribution, manifestSha256: receipt.distributionSha256,
 						assetURLs: Object.keys(downloads).map((path) => origin + path), cacheNamespace: 'container-shell-acceptance',
 						clangSha256: prepared.inputs.clang.assets.clang.metadata.logical.sha256,
 						linkerSha256: prepared.inputs.clang.assets.lld.metadata.logical.sha256,

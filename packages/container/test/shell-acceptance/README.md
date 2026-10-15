@@ -102,6 +102,30 @@ pinned input it was derived from), `processSysrootReceipt`/`processSysrootReceip
 `processSysroot`,
 optional `chromium`, and a fresh `output` directory outside the checkout.
 
+## Interrupt run
+
+A third run in the same profile checks owner-initiated cancellation with a surviving shell.
+The owner calls the handler's `interrupt()` once the foreground command is actually running:
+
+```sh
+set -u
+mkdir -p /workspace/demo
+cd /workspace/demo
+printf 'int main(void){for(;;){}}\n' > spin.c
+clang spin.c -o spin.wasm
+./spin.wasm; printf 'spin=%d\n' "$?"
+printf '#include <stdio.h>\nint main(void){puts("hello");return 0;}\n' > main.c
+clang main.c -o interrupted.wasm; printf 'clang=%d\n' "$?"
+if [ -e interrupted.wasm ]; then echo kept; else echo discarded; fi
+clang main.c -o hello.wasm && ./hello.wasm
+```
+
+The first interrupt stops the running artifact; the second stops the second Clang compile.
+Bash must print `spin=130`, `clang=130`, `discarded` and `hello`, the Supervisor records
+must be 0, 0, 130, 130, 0, 0, each interrupt must land between its command's dispatch and
+completion, the interrupted compile's output must not reach the workspace, and every
+process and Worker must retire.
+
 ## Results
 
 Every attempt's original browser and process receipts are archived under

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance, readPinnedProbeInputs
+	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance,
+	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
 const bytes = (value) => [...new TextEncoder().encode(value)];
@@ -29,13 +30,34 @@ function result(run) {
 		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function interrupted() {
+	let seq = 0;
+	const timeline = [], counts = new Map();
+	for (const [path, status] of INTERRUPT_DISPATCHES) {
+		const occurrence = (counts.get(path) ?? 0) + 1;
+		counts.set(path, occurrence);
+		timeline.push({ seq: seq++, type: 'dispatch', path });
+		if (INTERRUPTS.some((plan) => plan.path === path && plan.occurrence === occurrence))
+			timeline.push({ seq: seq++, type: 'interrupt', path, interrupted: 1 });
+		timeline.push({ seq: seq++, type: 'dispatchEnd', path, status });
+	}
+	return {
+		type: 'result', backendCompleted: true,
+		result: { code: 0, stdout: bytes('spin=130\nclang=130\ndiscarded\nhello\n'), stderr: bytes(CLANG_TRIPLE_WARNING.repeat(2)) },
+		records: INTERRUPT_DISPATCHES.map(([path, status]) => ({ path, status })), timeline,
+		files: { '/workspace/demo/interrupted.wasm': { error: 'ENOENT' } },
+		artifact: { bytes: 1234, magic: [0, 97, 115, 109, 1, 0, 0, 0] }, containerProcesses: [],
+		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
 		initialWorkerTargets: 0, workersAfterContextClose: 0,
 		runs: [
 			{ run: 'cold', result: result('cold'), downloads: { start: counts(0), end: counts(1) } },
-			{ run: 'warm', result: result('warm'), downloads: { start: counts(1), end: counts(1) } }
+			{ run: 'warm', result: result('warm'), downloads: { start: counts(1), end: counts(1) } },
+			{ run: 'interrupt', result: interrupted(), downloads: { start: counts(1), end: counts(1) } }
 		]
 	};
 }
@@ -94,6 +116,23 @@ test('stderr may hold only the pinned Clang triple warning, once', () => {
 	assert.deepEqual(failed(value), ['cold:script', 'warm:script']);
 	value.runs[1].result.result.stderr = [];
 	assert.deepEqual(failed(value), ['cold:script', 'warm:script'], 'the warning proves Clang ran on the forwarded route');
+});
+
+test('an interrupt must stop the running command, keep Bash going and discard the compile', () => {
+	const value = receipt(), run = value.runs[2].result;
+	run.result.stdout = bytes('spin=0\nclang=130\nkept\nhello\n');
+	run.files['/workspace/demo/interrupted.wasm'] = [0, 97, 115, 109];
+	// An interrupt after the command had already finished proves nothing.
+	const late = run.timeline.findIndex((entry) => entry.type === 'interrupt');
+	run.timeline[late].seq = 1000;
+	run.records[2].status = 0;
+	assert.deepEqual(failed(value), ['interrupt:script', 'interrupt:supervisor-statuses', 'interrupt:interrupted-while-running',
+		'interrupt:interrupted-compile-discarded']);
+	const fresh = receipt();
+	fresh.runs[2].result.result.stderr = bytes(CLANG_TRIPLE_WARNING.repeat(3));
+	assert.deepEqual(failed(fresh), [], 'the interrupted compile may or may not have printed its warning');
+	fresh.runs[2].result.timeline.find((entry) => entry.type === 'interrupt').interrupted = 2;
+	assert.deepEqual(failed(fresh), ['interrupt:interrupted-while-running']);
 });
 
 test('browser errors and Workers that outlive their owner fail', () => {
