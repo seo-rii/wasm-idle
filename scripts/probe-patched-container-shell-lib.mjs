@@ -7,13 +7,13 @@ import { judgeShellProbe } from './probe-container-shell-lib.mjs';
 
 export const PACKAGE_RECEIPT = {
 	bytes: 2604,
-	sha256: '86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34'
+	sha256: '9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525'
 };
 export const BINARY_RECEIPT_SHA256 =
-	'a8ca2caa7f1e511a6bdb66ea6fc18ccd34911d78113da8a7cd73c521b2ba511a';
+	'e8d02ef4041beb868393f0f5c72c6a8858cdf1b9d43f57337044b8ab88dad08a';
 export const SDK_WASM = {
-	bytes: 9044795,
-	sha256: '01dae00296dd2257f1cd7ede3e4d1e42837d0c4432ce1f70b539c62a9b63b561'
+	bytes: 9071791,
+	sha256: '326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551'
 };
 export const BASH_WEBC = {
 	bytes: 1812328,

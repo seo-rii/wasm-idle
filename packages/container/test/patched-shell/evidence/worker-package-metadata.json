@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "qualification": "Actual deterministic fixed-resolver SDK host module/Worker packaging only",
+  "sourceCommit": "7ceef67180e047d4703936482006a69b814662d2",
+  "binaryReceiptIdentity": {
+    "bytes": 357696,
+    "sha256": "e8d02ef4041beb868393f0f5c72c6a8858cdf1b9d43f57337044b8ab88dad08a"
+  },
+  "originalReceipts": {
+    "worker-package.json": {
+      "original": "/data/seorii-container-20261014/sdk-worker-imports-package-20261015T011754Z/local-package/receipt.json",
+      "bytes": 2604,
+      "sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+    },
+    "worker-package-process.json": {
+      "original": "/data/seorii-container-20261014/sdk-worker-imports-package-20261015T011754Z/package.process.json",
+      "bytes": 763,
+      "sha256": "2f58a5da4f7b966cde13bc54f51316f720addf01a5ecaf6f408ce5af0f875d36"
+    }
+  },
+  "packageId": "sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914",
+  "recheckedPublishedEntries": {
+    "LICENSE.sdk": {
+      "bytes": 1097,
+      "sha256": "76dc7d305458d07478bc62669fe53dbfd3b94b95c5e00fbb45af1f492cbd7284"
+    },
+    "index.mjs": {
+      "bytes": 97650,
+      "sha256": "14c8629eb161a2625b7e6022fd737c86bc2cc7c035f40f5201f32991de63e20c"
+    },
+    "wasmer_js.d.ts": {
+      "bytes": 23335,
+      "sha256": "47c28a8b4a8060ab01e2fcba91fc47bbf62edc3d4fe15bf464a5118bd5de9705"
+    },
+    "wasmer_js_bg.wasm": {
+      "bytes": 9071791,
+      "sha256": "326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551"
+    },
+    "worker.mjs": {
+      "bytes": 2425,
+      "sha256": "dd9ac9a689ad88f9693f0147c41a6d430a588a4d49e5b4d57d30ca212669b2e8"
+    }
+  },
+  "stageExitCode": 0,
+  "wallSeconds": 1.762,
+  "allOwnedProcessesReaped": true,
+  "guestQualified": false,
+  "remainingGates": [
+    "Actual Chromium guest observations",
+    "Trusted host command dispatch",
+    "Common Container live fd/VFS",
+    "Cancellation and recovery",
+    "Full licenses/source notices"
+  ],
+  "log": {
+    "path": "/home/seorii/logs/sdk-worker-imports-package-20261015T011754Z-package.log",
+    "bytes": 228,
+    "sha256": "7282cb9c54789a456b918ce0eab80902ca84b96427d08c4b1855dbeae6ca7482"
+  }
+}

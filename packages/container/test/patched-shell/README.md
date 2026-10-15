@@ -7,9 +7,9 @@ that calls `environ_sizes_get` so `exec -c` must demonstrate an actually empty
 environment. No JavaScript shell evaluator or substitute guest is included.
 
 The independently supplied local package receipt is 2,604 bytes with SHA-256
-`86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34`.
+`9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525`.
 It binds the successful binary receipt, the exact generated 0.2.101 host graph
-and 9,044,795-byte SDK Wasm. Package entries and the real Bash WEBc are verified
+and 9,071,791-byte SDK Wasm. Package entries and the real Bash WEBc are verified
 before execution. The native Clang 16/lld digests match their complete pinned
 WASI SDK 20.0 archive members; no build or download of those tools is performed.
 
@@ -22,7 +22,7 @@ provide an absolute configuration file containing:
 ```json
 {
   "packageReceipt": "/private/sdk-local-package/receipt.json",
-  "packageReceiptSha256": "86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34",
+  "packageReceiptSha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525",
   "bashWebc": "/private/bash-build/candidate/bash-exec-shim.webc",
   "clang": "/private/bash-build/work/wasi-sdk/bin/clang-16",
   "output": "/private/new-patched-shell-probe"
@@ -100,3 +100,68 @@ required `exec_v1` import on this path; instantiation failure maps to WASIX
 `Errno::Noexec` (45). Fixing and rebuilding the actual resolver is the next gate.
 The completed binary, local package and producer receipts remain valid for their
 limited build/packaging scope.
+
+## Worker resolver candidate
+
+The current probe pins the six-patch SDK at application source
+`7ceef67180e047d4703936482006a69b814662d2` on
+[#196](https://github.com/seo-rii/wasm-idle/pull/196). Its actual fresh-source
+typecheck completes in 373.991 seconds and release build in 586.098 seconds;
+matching bindgen/static inspection also pass with complete owned-process cleanup.
+The binary receipt has SHA-256
+`e8d02ef4041beb868393f0f5c72c6a8858cdf1b9d43f57337044b8ab88dad08a`.
+The unchanged local packaging helper produces the explicitly pinned package above.
+Its shared-memory profile remains 34/16,384 pages. New browser observations must
+be recorded separately; the original five-patch failure is retained unchanged.
+
+The new [original local-package receipt](evidence/worker-package.json) is archived
+unchanged beside its [process receipt](evidence/worker-package-process.json).
+Packaging exits 0 in 1.762 seconds with complete cleanup, and all five published
+entries pass independent byte/hash rechecks. [Metadata](evidence/worker-package-metadata.json)
+keeps that scope separate from guest execution; the original host-module graph
+and fixed SDK Worker URL policy are preserved.
+
+## Fixed resolver browser result: 17 of 18 selected checks pass
+
+At application `77c8dad608e642f5891d2bb389bbdabb41c2d7b8`, all ten real Bash
+runs reach guest execution and return code 0 in Chromium 153.0.8010.12/Linux.
+The outer gate completes in 17.671 seconds. Seventeen selected checks pass,
+including UTF-8/empty/LF/CR argv, explicit and empty environment, raw stderr,
+status 23, actual cwd, tail exec, binary pipes and the separate G0-FS sharing case.
+No browser errors or blocked requests occur. All 60 observed Workers (50 nested)
+retire to zero after owner cleanup and after closing the host context; all owned
+OS descendants are reaped without forced signals.
+
+The remaining check is **redirect-mount**: the actual pipeline returns the exact
+nine stdout bytes, but host `Directory.readFile('/binary')` reports
+`entry not found`. Successful pipe bytes do not establish that this redirect
+created a file in the intended mount. This fails guest acceptance: the outer
+process exits 1 and its supervisor exits 3. Full shell and common Container live
+fd/VFS qualification remain false.
+
+The [original browser receipt](evidence/worker-browser.json) and
+[process receipt](evidence/worker-browser-process.json) retain their exact bytes;
+[metadata](evidence/worker-browser-metadata.json) records source/binary/package,
+browser/OS and cleanup scope. The first Noexec failure remains separate. No
+assertion was removed to turn the missing file into a pass. Cancellation, public
+host-command dispatch and real Clang/BusyBox shell acceptance remain separate gates.
+
+The fixed `probe-container-shell-cwd-diagnostic.mjs` comparisons use the same
+SDK/Bash bytes: unchanged relative redirect, absolute `/workspace` redirect,
+an explicit initial `cd /workspace`, and a parent builtin's relative write.
+Use its `--check`/`--run` interface with a fresh output configuration. It records
+`fixtureSet: diagnostic-only`; exit 0 means collection completed, and diagnostics
+always retain false guest/backend qualification. They do not replace the failing
+original contract fixture.
+
+The [actual cwd comparison receipt](evidence/cwd-diagnostic.json) and
+[process receipt](evidence/cwd-diagnostic-process.json) complete collection in
+7.133 seconds with all four actual commands exiting 0 and complete cleanup.
+The host cwd guest reports `/workspace`, while relative pipeline and parent
+builtin files are absent from the host mount. Absolute `/workspace` and explicit
+initial `cd /workspace` both publish the exact nine binary bytes. The contrast
+matches the pinned libc's separate legacy cwd used by relative `open`; only
+`chdir` updates that state alongside WASIX cwd. [Metadata](evidence/cwd-diagnostic-metadata.json)
+records binary/object identities and the startup-boundary inference. A selected
+Bash producer initialization fix and a rerun of the unchanged contract are next;
+these diagnostic scripts are not a production workaround or shell qualification.

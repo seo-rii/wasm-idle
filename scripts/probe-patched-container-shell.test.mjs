@@ -85,3 +85,16 @@ test('actual first-browser SDK failure remains unqualified despite initializatio
 	assert.equal(judged.checks.find(({ id }) => id === 'builtins-stdin').status, 'failed');
 	assert.equal(judged.checks.find(({ id }) => id === 'browser-errors').status, 'failed');
 });
+
+test('actual corrected resolver does not hide a missing redirected workspace file behind valid pipe bytes', async () => {
+	const receipt = JSON.parse(await readFile(new URL(
+		'../packages/container/test/patched-shell/evidence/worker-browser.json', import.meta.url
+	)));
+	const judged = judgePatchedShellProbe(receipt.results);
+	assert.equal(judged.backendCompleteCases, 10);
+	assert.equal(judged.checks.filter(({ status }) => status === 'passed').length, 17);
+	assert.equal(judged.checks.find(({ id }) => id === 'pipe-bytes').status, 'passed');
+	assert.equal(judged.checks.find(({ id }) => id === 'redirect-mount').status, 'failed');
+	assert.equal(judged.guestAcceptancePassed, false);
+	assert.equal(judged.shellBackendReady, false);
+});

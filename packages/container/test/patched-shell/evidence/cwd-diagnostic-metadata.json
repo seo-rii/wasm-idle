@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "originalReceipts": {
+    "cwd-diagnostic.json": {
+      "original": "/data/seorii-container-20261014/worker-shell-cwd-20261015T012700Z/browser/receipt.json",
+      "bytes": 113281,
+      "sha256": "58b06aa11cee80ce44ed127339ce08ea96286cb3504ee319cb93be2bc3c579b4"
+    },
+    "cwd-diagnostic-process.json": {
+      "original": "/data/seorii-container-20261014/worker-shell-cwd-20261015T012700Z/browser.process.json",
+      "bytes": 1057,
+      "sha256": "2e8bdfaaa9f31d8ce517199438d87301893f2319073e52fb4d0d7197a92124f3"
+    }
+  },
+  "applicationCommit": "71a1ce87e6b24bf7459f1c2a6a80ddf95eb619bc",
+  "fixtureSet": "diagnostic-only",
+  "collectionExitCode": 0,
+  "supervisorExitCode": 0,
+  "wallSeconds": 7.133,
+  "guestAcceptancePassed": false,
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "actualObservations": {
+    "initialActualHostCwd": "/workspace",
+    "relativePipelineFileHostVisible": false,
+    "absolutePipelineFileHostVisible": true,
+    "explicitChdirPipelineFileHostVisible": true,
+    "parentBuiltinRelativeFileHostVisible": false,
+    "binaryFileBytes": [
+      0,
+      255,
+      226,
+      130,
+      172,
+      10,
+      13,
+      97,
+      98
+    ]
+  },
+  "interpretation": "Relative file resolution uses pinned libc legacy cwd initialized to slash, while actual WASIX host cwd is workspace. Explicit chdir synchronizes both. This is not solely a pipeline/fork visibility defect. Startup synchronization needs a separate producer change and unchanged original contract rerun.",
+  "createdWorkerTargets": 30,
+  "remainingAfterOwnedCleanup": 0,
+  "remainingAfterContextClose": 0,
+  "allOwnedProcessesReaped": true,
+  "libcEvidence": {
+    "archive": {
+      "path": "/data/seorii-container-20261014/bash-shim-inputs/wasix-sysroot-v2024-07-08.1.tar.gz",
+      "bytes": 2134068,
+      "sha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9"
+    },
+    "libc": {
+      "bytes": 1672622,
+      "sha256": "00196f7b61519380e3b6c7cc84d1fb7772f2d73e581ddee9cbed37d9555e4585"
+    },
+    "members": {
+      "posix.o": "1a48be1af6c901d15728acfe3b70bbc0e7f75a0c4ba25614e92d732983c3d40c",
+      "preopens.o": "f33dd7ea73023db9545d8afd788a37ccb6507c284a58356d1e78e7fe502b66e1",
+      "getcwd.o": "6e217fbadbaeb769d64401858a5379c4a342ad43ebac2bcffee7b9c6386d1448",
+      "chdir.o": "b08cab3d47e25cc13ac38f9f6405e627b4491abae7e8fd0d5a2b76804c1b5503"
+    },
+    "chain": [
+      "getcwd reads actual WASIX cwd without updating legacy __wasilibc_cwd",
+      "open uses __wasilibc_find_relpath_alloc and legacy cwd",
+      "chdir_legacy and __wasi_chdir synchronize both states",
+      "crt1-command initializes TLS then constructors then Bash main; preopens constructor has priority51"
+    ]
+  },
+  "log": {
+    "path": "/home/seorii/logs/worker-shell-cwd-20261015T012700Z.log",
+    "bytes": 289,
+    "sha256": "90488f00021786a27e7d44ad60eb20ccf36bc00ece75197de2d3fd885620daa9"
+  }
+}

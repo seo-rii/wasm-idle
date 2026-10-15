@@ -37,7 +37,7 @@ export async function checkProbe(configuration) {
 	return { inputs, compilerVersion, sources };
 }
 
-export async function runProbe(configuration) {
+export async function runProbe(configuration, cases = fixtures) {
 	const prepared = await checkProbe(configuration);
 	await mkdir(configuration.output, { mode: 0o700 });
 	const receipt = {
@@ -49,6 +49,7 @@ export async function runProbe(configuration) {
 			cwd: root, encoding: 'utf8'
 		}).trim(),
 		packageReceipt: PACKAGE_RECEIPT,
+		fixtureSet: cases === fixtures ? 'shell-contract' : 'diagnostic-only',
 		packageId: prepared.inputs.receipt.packageId,
 		memory: MEMORY,
 		compilerVersion: prepared.compilerVersion,
@@ -163,7 +164,7 @@ export async function runProbe(configuration) {
 			} while (Date.now() < deadline);
 			return remaining;
 		};
-		for (const fixture of fixtures) {
+		for (const fixture of cases) {
 			const context = await browser.newContext({ serviceWorkers: 'block' });
 			const consoleErrors = [], warnings = [], blockedRequests = [];
 			let page, result = {}, hostContextClosed = false;
@@ -275,6 +276,7 @@ export async function runProbe(configuration) {
 			assert.deepEqual(identity(await readFile(join(fixtureRoot, relative))), expected);
 		await readPinnedProbeInputs(configuration);
 		receipt.qualification = judgePatchedShellProbe(receipt.results);
+		if (cases !== fixtures) receipt.qualification.guestAcceptancePassed = false;
 		receipt.guestAcceptancePassed = receipt.qualification.guestAcceptancePassed;
 		receipt.complete = true;
 	} catch (error) {
