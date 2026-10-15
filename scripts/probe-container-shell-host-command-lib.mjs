@@ -45,6 +45,12 @@ export const fixtures = [
 		script: '/opt/host/bin/probe exit; printf "exit=%d\\n" "$?"; /opt/host/bin/tool crash; printf "crash=%d\\n" "$?"',
 		expectedStdout: text('exit=23\ncrash=134\n')
 	},
+	// Twenty consecutive dispatches: one nine-patch run reported 0 instead of 23 to Bash once.
+	{
+		id: 'HOST-STATUS-REPEAT', dispatches: 20, expectedRecords: Array(20).fill(23),
+		script: 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do /opt/host/bin/probe exit; printf "%d " "$?"; done; printf "\\n"',
+		expectedStdout: text(`${Array(20).fill(23).join(' ')} \n`)
+	},
 	{
 		// Records are in completion order: the reader exits first, then the writer sees EPIPE.
 		id: 'HOST-EPIPE', dispatches: 2, expectedRecords: [0, 64],

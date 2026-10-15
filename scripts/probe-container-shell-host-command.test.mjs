@@ -27,6 +27,10 @@ const special = {
 		invocations: [probe('exit'), tool('crash')],
 		records: [{ status: 23, result: { code: 23, reason: 'exited' } }, { status: 134, result: { code: null, reason: 'runtime-error' } }]
 	},
+	'HOST-STATUS-REPEAT': {
+		invocations: Array.from({ length: 20 }, () => probe('exit')),
+		records: Array.from({ length: 20 }, () => ({ status: 23, result: { code: 23, reason: 'exited' } }))
+	},
 	'HOST-EPIPE': {
 		invocations: [tool('yes'), tool('one')],
 		records: [0, 64].map((status) => ({ status, result: { code: status, reason: 'exited' } }))
@@ -195,4 +199,34 @@ test('the archived pre-0009 baseline fails only the statuses above the errno ran
 	assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id),
 		['HOST-STATUS', 'HOST-FAILURE']);
 	assert.equal((await archived('before-exit-status-fix-process')).exitCode, 1);
+});
+
+test('one lost status in twenty consecutive dispatches fails', () => {
+	const results = observations();
+	results.find((result) => result.id === 'HOST-STATUS-REPEAT').result.stdout = bytes(`${[...Array(19).fill(23), 0].join(' ')} \n`);
+	assert.deepEqual(failed(results), ['HOST-STATUS-REPEAT']);
+});
+
+test('the archived nine-patch runs keep their separate intermittent failures', async () => {
+	const retirement = await archived('exit-status-worker-retirement');
+	const lost = await archived('exit-status-lost-zero');
+	for (const receipt of [retirement, lost]) {
+		assert.equal(receipt.applicationCommit, '24803a5109f59ecf9e5e4207ff51d16b31eca45e');
+		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total], [40, 41]);
+	}
+	const byId = (receipt) => Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+	const text = (result) => Buffer.from(result.result.stdout).toString();
+	// Statuses above 78 now arrive intact.
+	assert.equal(text(byId(retirement)['HOST-STATUS']), 'exit=23\ncrash=134\n');
+	assert.equal(text(byId(retirement)['HOST-FAILURE']), 'broken=126\nnative=126\nafter\n');
+	// One SDK Worker outlived the five-second retirement window in a builtin-only case.
+	assert.equal(retirement.qualification.checks.find((check) => !check.passed).id, 'owned-host-context-cleanup');
+	assert.equal(byId(retirement)['BASH-PIPESTATUS'].remainingWorkerTargets, 1);
+	assert.equal(byId(retirement)['BASH-PIPESTATUS'].workersAfterContextClose, 0);
+	// The Supervisor completed with 23, but Bash observed 0 for that one command.
+	assert.equal(lost.qualification.checks.find((check) => !check.passed).id, 'HOST-STATUS');
+	assert.equal(text(byId(lost)['HOST-STATUS']), 'exit=0\ncrash=134\n');
+	assert.deepEqual(byId(lost)['HOST-STATUS'].records.map((record) => record.status), [23, 134]);
+	for (const name of ['exit-status-worker-retirement-process', 'exit-status-lost-zero-process'])
+		assert.equal((await archived(name)).exitCode, 1);
 });
