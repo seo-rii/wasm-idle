@@ -1,0 +1,74 @@
+--- a/src/tasks/scheduler.rs
++++ b/src/tasks/scheduler.rs
+@@ -217,6 +217,10 @@
+                 crate::host_command::start(*dispatch);
+                 Ok(())
+             }
++            SchedulerMessage::HostCommandReply(reply) => {
++                crate::host_command::complete(*reply);
++                Ok(())
++            }
+             SchedulerMessage::WorkerIdle { worker_id } => {
+                 move_worker(worker_id, &mut self.busy, &mut self.idle);
+                 tracing::trace!(
+--- a/src/tasks/scheduler_message.rs
++++ b/src/tasks/scheduler_message.rs
+@@ -55,6 +55,9 @@
+     },
+     /// Run a trusted host command's handler on the scheduler thread.
+     HostCommand(Box<crate::host_command::HostCommandDispatch>),
++    /// The result of one host-command descriptor operation, performed off
++    /// the scheduler thread, for the handler's pending promise.
++    HostCommandReply(Box<crate::host_command::HostCommandReply>),
+     #[doc(hidden)]
+     #[allow(dead_code)]
+     Markers {
+@@ -136,6 +139,10 @@
+                 let dispatch = de.boxed(consts::PTR)?;
+                 Ok(SchedulerMessage::HostCommand(dispatch))
+             }
++            consts::TYPE_HOST_COMMAND_REPLY => {
++                let reply = de.boxed(consts::PTR)?;
++                Ok(SchedulerMessage::HostCommandReply(reply))
++            }
+             other => {
+                 tracing::warn!(r#type = other, "Unknown message type");
+                 Err(anyhow::anyhow!("Unknown message type, \"{other}\"").into())
+@@ -192,6 +199,11 @@
+             SchedulerMessage::HostCommand(dispatch) => Serializer::new(consts::TYPE_HOST_COMMAND)
+                 .boxed(consts::PTR, dispatch)
+                 .finish(),
++            SchedulerMessage::HostCommandReply(reply) => {
++                Serializer::new(consts::TYPE_HOST_COMMAND_REPLY)
++                    .boxed(consts::PTR, reply)
++                    .finish()
++            }
+             SchedulerMessage::Markers { uninhabited, .. } => match uninhabited {},
+         }
+     }
+@@ -208,6 +220,7 @@
+     pub const TYPE_SPAWN_WITH_MODULE: &str = "spawn-with-module";
+     pub const TYPE_SPAWN_WITH_MODULE_AND_MEMORY: &str = "spawn-with-module-and-memory";
+     pub const TYPE_HOST_COMMAND: &str = "host-command";
++    pub const TYPE_HOST_COMMAND_REPLY: &str = "host-command-reply";
+     pub const MEMORY: &str = "memory";
+     pub const MODULE_HASH: &str = "module-hash";
+     pub const MODULE: &str = "module";
+--- a/src/tasks/thread_pool.rs
++++ b/src/tasks/thread_pool.rs
+@@ -59,6 +59,15 @@
+             .send(SchedulerMessage::HostCommand(Box::new(dispatch)))
+     }
+ 
++    /// Return one host-command descriptor result to the scheduler thread.
++    pub(crate) fn host_command_reply(
++        &self,
++        reply: crate::host_command::HostCommandReply,
++    ) -> Result<(), anyhow::Error> {
++        self.scheduler
++            .send(SchedulerMessage::HostCommandReply(Box::new(reply)))
++    }
++
+     pub fn close(&self) {
+         self.scheduler.close();
+     }

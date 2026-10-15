@@ -46,12 +46,14 @@ const patches = [
 	'0007-delegate-host-command-descriptors.patch',
 	'0009-preserve-join-exit-status.patch',
 	'0010-keep-running-child-on-wnohang.patch',
-	'0012-revalidate-live-mounts.patch'
+	'0012-revalidate-live-mounts.patch',
+	'0014-preserve-live-append.patch'
 ];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = [
 	'0008-dispatch-trusted-host-commands.patch',
-	'0011-mount-host-filesystems.patch'
+	'0011-mount-host-filesystems.patch',
+	'0013-serve-host-commands-off-the-scheduler.patch'
 ];
 // Standalone new sources: [bridge file, crate, installed path].
 const installedSources = [
@@ -59,7 +61,9 @@ const installedSources = [
 	['proc_exec_v1.rs', 'wasmer-wasix', 'src/syscalls/wasix/proc_exec_v1.rs'],
 	['host_command_io.rs', 'wasmer-wasix', 'src/state/host_command_io.rs'],
 	['sdk_host_command.rs', 'wasmer-sdk', 'src/host_command.rs'],
-	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs']
+	['sdk_host_command_pending.rs', 'wasmer-sdk', 'src/host_command_pending.rs'],
+	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs'],
+	['sdk_host_filesystem_lifetime.rs', 'wasmer-sdk', 'src/host_filesystem_lifetime.rs']
 ];
 const compileProbe = 'host_command_compile_probe.rs';
 const sdkExample = 'container_command_snapshot_compile';

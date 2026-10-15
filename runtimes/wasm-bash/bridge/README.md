@@ -98,6 +98,9 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
     (`Directory.fromHostFileSystem(delegate)`), and registers that mount as live with WASIX.
 12. `0012-revalidate-live-mounts.patch`: WASIX revalidates cached inodes below live mounts
     and reads a live file's size from its handle where the cached stat would be stale.
+13. `0013-serve-host-commands-off-the-scheduler.patch` plus `sdk_host_command.rs`: the SDK
+    scheduler thread never touches WASIX state for a host command. A dedicated service
+    thread performs descriptor operations and completion; see below.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -585,6 +588,12 @@ How calls reach the delegate:
 - Operations on the owning thread itself run directly.
 - Delegates live in a thread-local table, and nothing is implemented as `Send`/`Sync` by
   hand.
+- A shared Rust registration belongs to the filesystem, every open file and each queued
+  request. The last release removes the delegate from its owner thread's table. Dropping
+  a file posts its close while retaining the registration, so queued closes complete
+  before release. Cleanup from a guest thread is posted without synchronously waiting
+  for the owner. `Directory.free()` therefore does not invalidate open files, and normal
+  completion in a long-lived SDK Worker does not retain disposed workspaces.
 - Every read, write, size and listing reaches the delegate; nothing is cached in the SDK.
 - Writes use explicit offsets. A file opened in append mode lets the delegate place each
   write at the current end.
@@ -601,6 +610,20 @@ covers the state WASIX caches itself:
 - `O_CREAT` without `O_EXCL` opens a file that another process created after the lookup,
   instead of failing with `EPERM`.
 - Host-command descriptors use the same live end-of-file rule.
+
+Patch 0014 also preserves append intent when opening an **existing** file on a live mount.
+The host file then sends one `append(handle, bytes)` operation to its owner. The earlier
+EOF seek remains an offset refresh; it does not choose the location of an append write.
+This avoids a separate EOF lookup and positional write overwriting another process's
+append. New-file opens already retain append intent. Ordinary non-append writes and
+non-live mounts retain their existing behavior. This correction has source/preparation
+checks; the previously published SDK binary predates it and needs rebuilding.
+
+`sdk_host_filesystem_lifetime.rs` is the JavaScript-free registration shared by the SDK
+filesystem and native lifecycle tests. These tests cover open files outliving a directory,
+pending close ownership, cross-thread final release and repeated registration teardown.
+They validate Rust ownership, not browser garbage-collector timing or abrupt termination
+of a Worker before Rust destructors run.
 
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
@@ -662,3 +685,54 @@ archived as `evidence.host-executables-*.json` with a
 [recheck](evidence.host-executables-sdk-binary-metadata.json). Local packaging produced
 receipt `c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44`. The shell
 acceptance script runs with this package on the wasm-idle shell branch.
+
+## Keeping WASIX state off the scheduler thread
+
+The shell acceptance probe hung in about half of its runs right after a Clang host command
+completed. A local diagnostic build that logs on every thread captured the cycle:
+
+- A Bash child resolving a path below the live `/workspace` mount holds the directory
+  inode's write lock while it asks the scheduler thread to `stat` the entry, because the
+  delegate is served there. WASIX takes that lock for every lookup step, so this is not
+  specific to revalidation.
+- At the same time, the scheduler thread was preparing the next host command
+  (`./hello.wasm`): it read the child's snapshot and descriptors, which needs that same
+  inode lock. It blocked in `Atomics.wait`, so nobody served the `stat`.
+
+Neither thread can proceed, and the scheduler thread stops answering every other message.
+The rule is therefore that the scheduler thread never waits for a WASIX lock:
+
+- `HostCommandBridge::exec`, on the guest's own thread, records argv, environment, cwd and
+  which of descriptors 0–2 are open. It moves the child to a dedicated service thread
+  (`task_dedicated`) and sends only that owned metadata to the scheduler thread.
+- `HostCommandDescriptor.read` and `write` send a request to the service thread and
+  return a promise. The service thread performs the operation, which may wait for locks,
+  and returns the result in a new `SchedulerMessage` variant. Reads run as separate
+  tasks because they can wait for data; writes and closes keep their order.
+- `close()` stays synchronous and is ordered after earlier writes; like a close after
+  process exit, its outcome is not reported.
+- When the handler settles, its still-pending promises are rejected with `EBADF`, and the
+  service thread completes the child exactly as before: it closes descriptors, publishes
+  the status, then signals.
+- A request channel dropped without completion still completes the child with status 126.
+
+Each running host command occupies one pooled service Worker until it completes.
+Outstanding descriptor requests are indexed by command and removed on completion.
+Terminal cleanup rejects only that command's outstanding promises; completed request
+IDs are not retained for the lifetime of a long-running stream. The native bridge test
+also checks this request ownership and the host filesystem registration lifetime.
+
+### Actual SDK gate
+
+The first gate of commit `9e2566476bc453a6ede731bc2f987493ffaf0c84` failed typechecking after
+308 s with one error (`E0382`: the read task moved the pool that the spawn-failure reply
+still used); its process and failure receipts are archived as
+`evidence.host-service-first-typecheck-*.json`. Commit
+`3ba1d35161722887ed21620039ca89d105c5499b` fixes it and passes in a fresh physical copy with
+584 pins and a unique target: typecheck 377.317 s, release 726.224 s, bindgen 2.012 s and
+static inspection 0.255 s, each exiting 0 with every process reaped. The bound Wasm is
+9,215,380 bytes, SHA-256 `9fb4a0aced4526547a061599f3ad8522e22cef766f33a73e5566de85687661af`;
+binary receipt `947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6`. Stage
+receipts are archived as `evidence.host-service-*.json` with a
+[recheck](evidence.host-service-sdk-binary-metadata.json). Local packaging produced receipt
+`ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85`.
