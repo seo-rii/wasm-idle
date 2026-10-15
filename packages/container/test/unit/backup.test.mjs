@@ -66,10 +66,13 @@ test('valid-checksum hostile archives cannot escape, overlap, duplicate or publi
     value => { value.entries[1].path = '/workspace/\ud800'; },
     value => { value.entries[1].mode = 0o1777; },
     value => { value.entries[1].mtimeMs = -1; },
+    value => { value.entries[1].mtimeMs = 1.5; },
+    value => { value.entries.push({ path: '/workspace/empty-link', type: 'symlink', mode: 0o777, mtimeMs: 0, ctimeMs: 0, target: '' }); },
     value => { value.schemaVersion = 2; }
   ];
   for (const edit of edits) {
-    await assert.rejects(restoreWorkspaceBackup(fs, await changeArchive(archive, edit), { replace: true }));
+    // A checksum-valid but structurally invalid archive has one error contract.
+    await assert.rejects(restoreWorkspaceBackup(fs, await changeArchive(archive, edit), { replace: true }), { name: 'WorkspaceBackupError', code: 'INVALID_ARCHIVE' });
     assert.equal(fs.generation, generation); assert.equal(text(fs.readFile('a')), 'current');
   }
   await assert.rejects(restoreWorkspaceBackup(fs, await changeArchive(archive, () => {}, new Uint8Array([1])), { replace: true }), { code: 'INVALID_ARCHIVE' });

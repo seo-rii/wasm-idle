@@ -1,9 +1,9 @@
-import { MemoryFileSystem, type SnapshotEntry } from '../fs/index.js';
+import { FsError, MemoryFileSystem, type SnapshotEntry } from '../fs/index.js';
 
 export type WorkspaceBackupErrorCode = 'INVALID_ARCHIVE' | 'LIMIT' | 'INTEGRITY' | 'UNSUPPORTED';
 export class WorkspaceBackupError extends Error {
   override readonly name = 'WorkspaceBackupError';
-  constructor(readonly code: WorkspaceBackupErrorCode, message: string) { super(message); }
+  constructor(readonly code: WorkspaceBackupErrorCode, message: string, options?: ErrorOptions) { super(message, options); }
 }
 export interface WorkspaceBackupOptions {
   /** Total encoded bytes, including metadata and checksum. Default: 96 MiB. */
@@ -97,10 +97,16 @@ export async function restoreWorkspaceBackup(fs: MemoryFileSystem, input: Uint8A
   // rules as the VFS. No imported symlink is followed while restoring names.
   const empty = new MemoryFileSystem({ maxBytes: fs.maxBytes, maxInodes: fs.maxInodes }).exportSnapshot();
   let next = empty.nextInode;
-  MemoryFileSystem.fromSnapshot({ ...empty, nextInode: next + records.length - 1, entries: [
-    ...empty.entries,
-    ...records.filter(entry => entry.path !== '/workspace').map(entry => ({ ...entry, inode: next++ }))
-  ] }, { maxBytes: fs.maxBytes, maxInodes: fs.maxInodes });
+  try {
+    MemoryFileSystem.fromSnapshot({ ...empty, nextInode: next + records.length - 1, entries: [
+      ...empty.entries,
+      ...records.filter(entry => entry.path !== '/workspace').map(entry => ({ ...entry, inode: next++ }))
+    ] }, { maxBytes: fs.maxBytes, maxInodes: fs.maxInodes });
+  } catch (error) {
+    // Target quota stays a filesystem error; any other rejection is archive structure.
+    if (!(error instanceof FsError) || error.code === 'ENOSPC') throw error;
+    throw new WorkspaceBackupError('INVALID_ARCHIVE', `Workspace manifest violates filesystem rules: ${error.code}`, { cause: error });
+  }
   const lease = fs.acquireSnapshot();
   try {
     next = lease.snapshot.nextInode;

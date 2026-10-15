@@ -77,7 +77,8 @@ of all preceding bytes. The checksum detects corruption; it does not authenticat
 the sender or make user programs trustworthy. The default limits are 96 MiB for the
 whole archive and 8 MiB for metadata. Filesystem byte, inode, path and depth quotas
 also apply before publication. Duplicate paths, escaping write paths, overlapping
-bodies, dangling body bytes and invalid UTF-8/metadata fail without partial changes.
+bodies, dangling body bytes and invalid UTF-8/metadata fail without partial changes
+as `WorkspaceBackupError` `INVALID_ARCHIVE`; a target quota failure remains `ENOSPC`.
 Imported symlinks are inert records: restoration never writes through them. Later
 access still obeys the requesting VFS capability, including symlinks outside it.
 No archive JavaScript, shell script or program is executed during restore.
@@ -131,5 +132,5 @@ The persistence Chromium suite also covers exporting all unsaved files after a
 failed save, restoring into a separate owner without touching runtime caches/tmp,
 rejecting a corrupt replacement, and explicitly flushing/reopening the restored
 workspace. Its 12-case receipt is in
-`test/fixtures/workspace-backup-browser-evidence.json`; six focused backup unit
+`test/fixtures/workspace-backup-browser-evidence.json`; seven focused backup unit
 cases exercise checksum-valid hostile manifests, atomicity, quotas and byte ownership.
