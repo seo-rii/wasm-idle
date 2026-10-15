@@ -14,7 +14,9 @@ been implemented; unpassed promotion gates remain explicit.
 | Owned prepared-child command metadata          | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft)      | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending     |
 | Pinned SDK Wasm/web-glue build gate            | [C-02 SDK build #191](https://github.com/seo-rii/wasm-idle/pull/191) (draft)     | #189; real SDK/bindgen/static inspection passes on a warm target; original timeout preserved; guest qualification pending |
 | Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; real source-pinned Bash build/import receipt passes; actual SDK/Bash execution pending |
-| Local SDK module/Worker packaging              | [C-02 SDK package #193](https://github.com/seo-rii/wasm-idle/pull/193) (draft)   | #191; actual pinned-esbuild local package and original receipts pass; browser guest acceptance pending |
+| Local SDK module/Worker packaging              | [C-02 SDK package #193](https://github.com/seo-rii/wasm-idle/pull/193) (draft)   | #191; actual pinned-esbuild package passes; first actual guest acceptance fails on #195 |
+| Rebuilt SDK/Bash Chromium probe                | [C-02 browser #195](https://github.com/seo-rii/wasm-idle/pull/195) (draft)      | #193 plus #192; ten SDK initializers return but guest instantiation fails with Noexec(45); raw failures preserved |
+| Actual SDK Worker import resolver              | [C-02 resolver #196](https://github.com/seo-rii/wasm-idle/pull/196) (draft)     | #189; fixes the resolver omitted from the first build; six-patch source checks pass, new build/browser gates remain |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -413,8 +415,9 @@ SDK waits return WASIX Noexec (45), empty stdout/stderr and the console error
 `Unable to initialize the context and store`. No Bash guest entry or argv/fd/filesystem
 behavior is qualified by this run. The private `exec_v1` import was added to only one
 resolver; the actual Worker calls the separate `import_object_for_all_wasi_versions`,
-which omits `wasm_idle_shell_v1`. Fixing that path and producing a new binary/package/browser
-receipt is the next gate. Original browser and process receipts are preserved unchanged;
+which omits `wasm_idle_shell_v1`. The [#196 resolver fix](https://github.com/seo-rii/wasm-idle/pull/196)
+passes six-patch/source guards; a new SDK typecheck and binary/package/browser receipt
+are the next gates. Original browser and process receipts are preserved unchanged;
 their SHA-256 values are respectively
 `db4ee40be5021dfe47301931fc28aae14e529b833cbdf29096832584292a7ff1` and
 `3297aaf1d24d96ed22822f8c2916e537808b68411332c1f388f2488de57e9276`.
