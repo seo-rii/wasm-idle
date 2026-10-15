@@ -33,6 +33,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Host-command work off the scheduler thread     | [C-02 service #220](https://github.com/seo-rii/wasm-idle/pull/220) (draft)      | #214; patch 0013; fixes the owner deadlock behind the shell hangs; gate and package pass |
 | Shell acceptance script                        | [C-15 acceptance #217](https://github.com/seo-rii/wasm-idle/pull/217) (draft)   | #216 plus #220 package and wasm-llvm#34 sysroot; the plan script passes 30/30 cold and warm in 5 of 5 consecutive runs (8-11 s each) |
 | Owner interrupt of host commands               | [C-15 interrupt #219](https://github.com/seo-rii/wasm-idle/pull/219) (draft)    | #217; `interrupt()` gives 130 and Bash continues; 3 of 3 consecutive runs pass 38/38 |
+| Shell failure fixtures                         | [C-15 failures #221](https://github.com/seo-rii/wasm-idle/pull/221) (draft)     | #219; corrupt BusyBox body (126, INTEGRITY, never cached), compile error (1, no artifact), missing command (127); 2 of 3 runs pass 47/47, 1 misses only Worker retirement timing |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -604,7 +605,10 @@ it, five consecutive acceptance runs pass all 30 checks in 8–11 seconds instea
 and the shared-filesystem and dispatch probes, re-run with only their pin changed, keep
 every status and pass 5 of 5 and 4 of 5 (one Worker retirement miss). #219's interrupt
 run stops a running artifact and a running compile with status 130 while Bash continues;
-three consecutive runs pass all 38 checks.
+three consecutive runs pass all 38 checks. #221 adds the failure fixtures: an integrity
+failure of a whole package, a compile error and a missing command each fail alone while
+Bash and the other package keep working; two of three runs pass all 47 checks and the
+third misses only the five-second Worker retirement window.
 
 Separately, redirections inside forked Bash pipeline subshells fail with `Invalid
 argument`, and `PIPESTATUS` stays empty even for builtins. Every attempt's original
