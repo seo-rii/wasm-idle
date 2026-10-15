@@ -342,6 +342,9 @@ importers:
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:../core
+      '@wasm-idle/llvm-core':
+        specifier: workspace:*
+        version: link:../llvm-core
     devDependencies:
       playwright-core:
         specifier: ^1.63.0

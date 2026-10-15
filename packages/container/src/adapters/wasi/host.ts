@@ -1,4 +1,5 @@
 import { MemoryFileSystem, FsError } from '../../fs/index.js';
+import { createBatchStdio, type BatchStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -6,16 +7,14 @@ const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 1
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
 interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; }
-interface HostOptions { fs: MemoryFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; }
+interface HostOptions { fs: MemoryFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: BatchStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : 4;
 const RIGHTS = (1n << 30n) - 1n;
 
 /** Synchronous batch host. It never returns promises to a Wasm import. */
 export function createWasiHost(options: HostOptions) {
   let memory: WebAssembly.Memory;
-  let stdinOffset = 0, outputBytes = 0;
-  const output = [new Uint8Array(0), new Uint8Array(0)];
-  const outputSizes = [0, 0];
+  const stdio = options.stdio ?? createBatchStdio(options.stdin, options.maxOutputBytes);
   const handles = new Map<number, Handle>();
   const standard = new Set([0, 1, 2]);
   let nextFd = 3;
@@ -81,7 +80,7 @@ export function createWasiHost(options: HostOptions) {
       const length = Math.min(buffer.length, 1024 * 1024 - total);
       if (!length) { if (total === 1024 * 1024) break; continue; }
       let bytes: Uint8Array;
-      if (fd === 0) { bytes = options.stdin.subarray(stdinOffset, stdinOffset + length); stdinOffset += bytes.length; }
+      if (fd === 0) { bytes = stdio.read(length); }
       else { const h = handle(fd, 2n); bytes = offset === undefined ? options.fs.read(h.fd, length) : options.fs.pread(h.fd, length, safeOffset(offset) + total); }
       buffer.set(bytes); total += bytes.length;
       if (bytes.length < length) break;
@@ -96,14 +95,7 @@ export function createWasiHost(options: HostOptions) {
       const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
       if (!bytes.length) { if (total === 1024 * 1024) break; continue; }
       if (fd === 1 || fd === 2) {
-        if (outputBytes + bytes.length > options.maxOutputBytes) throw new Error('Batch output exceeds configured limit');
-        const index = fd - 1, used = outputSizes[index]!, required = used + bytes.length;
-        if (required > output[index]!.length) {
-          const grown = new Uint8Array(Math.min(options.maxOutputBytes, Math.max(4096, required, output[index]!.length * 2)));
-          grown.set(output[index]!); output[index] = grown;
-        }
-        output[index]!.set(bytes, used); outputSizes[index] = required;
-        outputBytes += bytes.length; total += bytes.length;
+        total += stdio.write(fd, bytes);
       } else {
         const h = handle(fd, 64n);
         const n = offset === undefined ? options.fs.write(h.fd, bytes) : options.fs.pwrite(h.fd, bytes, safeOffset(offset) + total);
@@ -192,12 +184,22 @@ export function createWasiHost(options: HostOptions) {
   }]));
   return {
     imports,
+    processImports: {
+      initial_cwd(ptr: number, capacity: number) {
+        const bytes = encoder.encode(options.cwd + '\0');
+        try {
+          if ((capacity >>> 0) < bytes.length) return -1;
+          span(ptr, capacity).subarray(0, bytes.length).set(bytes);
+          return bytes.length;
+        } catch (error) { if (error instanceof WasiFault) return -1; throw error; }
+      }
+    },
     run(instance: WebAssembly.Instance) {
       memory = instance.exports.memory as WebAssembly.Memory;
       let code = 0;
       try { (instance.exports._start as () => void)(); }
       catch (error) { if (error instanceof WasiExit) code = error.code; else throw error; }
-      return { code, stdout: output[0]!.slice(0, outputSizes[0]), stderr: output[1]!.slice(0, outputSizes[1]) };
+      return { code, ...stdio.capture() };
     },
     dispose() { for (const h of handles.values()) options.fs.close(h.fd); handles.clear(); }
   };
