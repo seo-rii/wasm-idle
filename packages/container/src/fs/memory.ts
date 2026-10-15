@@ -302,9 +302,17 @@ export class MemoryFileSystem {
       }
       return;
     }
+    const last = path.split('/').filter(Boolean).at(-1);
+    if (last === undefined || last === '.' || last === '..') {
+      // "/", "." and ".." name a directory that exists once it resolves (POSIX EEXIST).
+      checkPath(path);
+      this.resolve(path, options);
+      throw new FsError('EEXIST', 'Path already exists');
+    }
     const parent = this.parent(path, options);
-    this.writable(parent.node);
+    // An existing entry is reported before a read-only parent, as Linux does.
     if (parent.node.children.has(parent.name)) throw new FsError('EEXIST', 'Path already exists');
+    this.writable(parent.node);
     parent.node.children.set(parent.name, this.allocate('directory', parent.node.mount, options.mode ?? 0o755));
     this.changed(parent.node);
   }

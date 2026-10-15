@@ -90,3 +90,7 @@ test('regular file NONBLOCK preserves byte reads and rights checks', () => hostT
   assert.equal(w.fd_fdstat_set_flags(fd, 0), 76);
   assert.equal(w.fd_close(fd), 0);
 }));
+test('path_create_directory of the preopen itself reports EEXIST, as mkdir("/") must', () => hostTest((w, memory) => {
+  new Uint8Array(memory.buffer)[0] = 46;
+  assert.equal(w.path_create_directory(3, 0, 1), 20);
+}));
