@@ -140,6 +140,11 @@
 				"path": "scripts/teavm/patches/teavm-javac-enum-constants.patch",
 				"bytes": 5131,
 				"sha256": "0b8907cc32bb12eee450e03d691d4328e6417f2925ee97a982a5df4a7dafcd88"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-annotation-classlib.patch",
+				"bytes": 3462,
+				"sha256": "f1cfcf898a8a96aa9bad16369751735e9cb4e080fcf3d7d87d74968aba2ac12b"
 			}
 		],
 		"commands": [
@@ -158,12 +163,12 @@
 			{
 				"path": "compiler.wasm",
 				"bytes": 4315001,
-				"sha256": "1b78b97c314c744018bbc3ea2a15e75b220942791f785002179bbed3f8caefda"
+				"sha256": "b6d543bc45c1de7b8281908d58791a931c0194a862aa7882efa640c9c9dad02f"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
-				"bytes": 200172,
-				"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f"
+				"bytes": 200347,
+				"sha256": "84620339d4c0aaeab44d7c63c21bfcc1bbd8335701629071781e7f3e6f28b732"
 			},
 			{
 				"path": "runtime-classlib-teavm.bin",
@@ -505,8 +510,8 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39904,
-			"sha256": "f8f3330e3961256cc8f31e5c43538bf6c6d3b6a856d2a2144c24ed45bea26bf7"
+			"bytes": 39967,
+			"sha256": "c95d00420f4e72ddf1bc1696e05e88b7fe386abec9b7467d025304b772a9e821"
 		}
 	],
 	"assets": [
@@ -526,24 +531,24 @@
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
 			"bytes": 4315001,
-			"sha256": "1b78b97c314c744018bbc3ea2a15e75b220942791f785002179bbed3f8caefda",
+			"sha256": "b6d543bc45c1de7b8281908d58791a931c0194a862aa7882efa640c9c9dad02f",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1684288,
-				"sha256": "9fee97f234c3cb70b119214e7f691640814b384e6df98f46e5f318b64c4f7d3e"
+				"bytes": 1684281,
+				"sha256": "acd1b1dbd3887483c5ad47ddd36677b39ff79238920c7b8f5babc0975cdf76cc"
 			}
 		},
 		{
 			"path": "compile-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 200172,
-			"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f",
+			"bytes": 200347,
+			"sha256": "84620339d4c0aaeab44d7c63c21bfcc1bbd8335701629071781e7f3e6f28b732",
 			"storage": {
 				"path": "compile-classlib-teavm.bin",
 				"encoding": "identity",
-				"bytes": 200172,
-				"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f"
+				"bytes": 200347,
+				"sha256": "84620339d4c0aaeab44d7c63c21bfcc1bbd8335701629071781e7f3e6f28b732"
 			}
 		},
 		{
@@ -559,5 +564,5 @@
 			}
 		}
 	],
-	"fingerprint": "7d8fffcaaacff2803d4562b70abff4e4291f5ac3cd9d16b389078556910bd02b"
+	"fingerprint": "54b24037479071bc3a5dc617100ef0bd783767467e930e7b862a9e0dbff41330"
 }
