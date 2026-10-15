@@ -197,7 +197,8 @@ enum Endpoint {
 }
 
 enum WriteTarget {
-    File(FileHandle),
+    /// A file handle, and whether it belongs to a live mount.
+    File(FileHandle, bool),
     Written(usize),
 }
 
@@ -307,8 +308,9 @@ impl HostCommandDescriptor {
             match &mut *guard {
                 Kind::File {
                     handle: Some(handle),
+                    path,
                     ..
-                } => WriteTarget::File(handle.clone()),
+                } => WriteTarget::File(handle.clone(), crate::fs::is_live_path(path)),
                 Kind::File { handle: None, .. } => return Err(Errno::Inval),
                 Kind::PipeTx { tx } => {
                     WriteTarget::Written(std::io::Write::write(tx, data).map_err(pipe_error)?)
@@ -321,8 +323,8 @@ impl HostCommandDescriptor {
                 _ => return Err(Errno::Notsup),
             }
         };
-        let handle = match target {
-            WriteTarget::File(handle) => handle,
+        let (handle, live) = match target {
+            WriteTarget::File(handle, live) => (handle, live),
             WriteTarget::Written(written) => {
                 if !is_stdio {
                     fd_entry.inode.stat.write().unwrap().st_size += written as u64;
@@ -335,7 +337,12 @@ impl HostCommandDescriptor {
         let mut handle = handle.write().map_err(|_| Errno::Fault)?;
         if !is_stdio {
             if fd_entry.inner.flags.contains(Fdflags::APPEND) {
-                let size = fd_entry.inode.stat.read().unwrap().st_size;
+                // A live file may have grown outside this process.
+                let size = if live {
+                    handle.seek(SeekFrom::End(0)).await.map_err(map_io_err)?
+                } else {
+                    fd_entry.inode.stat.read().unwrap().st_size
+                };
                 fd_entry.inner.offset.store(size, Ordering::Release);
             }
             let offset = fd_entry.inner.offset.load(Ordering::Acquire);

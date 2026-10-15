@@ -93,6 +93,11 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
     status 0. The child now stays joinable and the call reports pid 0, so `waitpid`
     returns 0 as POSIX requires. Blocking joins and finished children are unchanged. The
     pinned Bash does not use this call; see below.
+11. `0011-mount-host-filesystems.patch` plus `sdk_host_filesystem.rs`: the SDK can mount a
+    trusted synchronous JavaScript filesystem owned by one thread
+    (`Directory.fromHostFileSystem(delegate)`), and registers that mount as live with WASIX.
+12. `0012-revalidate-live-mounts.patch`: WASIX revalidates cached inodes below live mounts
+    and reads a live file's size from its handle where the cached stat would be stale.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -532,3 +537,41 @@ timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
 `on_exit` runs on its only thread after `_start` returns, so it does not have this race.
 The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
 enabled for these runtimes.
+
+## Trusted host filesystem mounts
+
+Patches 0011 and 0012 let Bash use the common container filesystem instead of a private
+WASIX `Directory`. `Directory.fromHostFileSystem(delegate)` takes a synchronous delegate
+owned by the calling thread. In the container this is `createShellFilesystem(container.fs)`
+on the Supervisor's thread. The delegate's operations are `stat`, `lstat`, `readdir`,
+`mkdir`, `rmdir`, `unlink`, `rename`, `readlink`, `open`, `read`, `write`, `append`, `fstat`,
+`truncate` and `close`, on paths absolute inside the mount and on delegate-owned handles.
+
+How calls reach the delegate:
+
+- Guest threads never call JavaScript. Each filesystem operation is posted as a new
+  `SchedulerMessage` variant to the SDK scheduler thread, which owns the delegate.
+- The guest thread then blocks on an owned reply channel.
+- Operations on the owning thread itself run directly.
+- Delegates live in a thread-local table, and nothing is implemented as `Send`/`Sync` by
+  hand.
+- Every read, write, size and listing reaches the delegate; nothing is cached in the SDK.
+- Writes use explicit offsets. A file opened in append mode lets the delegate place each
+  write at the current end.
+
+Mounting such a directory registers its path with WASIX as a live mount, and patch 0012
+covers the state WASIX caches itself:
+
+- A cached child below a live mount is checked with `symlink_metadata` on every lookup:
+    - a missing entry is evicted, and the lookup then fails with `ENOENT`;
+    - an entry whose type changed is evicted and rediscovered;
+    - otherwise its stat is refreshed.
+- `fd_filestat_get` and `path_open` refresh a live file's size and times from its handle.
+- An `O_APPEND` write seeks to the handle's actual end, not WASIX's cached size.
+- `O_CREAT` without `O_EXCL` opens a file that another process created after the lookup,
+  instead of failing with `EPERM`.
+- Host-command descriptors use the same live end-of-file rule.
+
+Registering a mount that is not live only costs extra metadata calls. Path symlinks,
+hard links, directory listing cookies across concurrent changes, and rename/rmdir races
+against other processes keep their existing WASIX behavior. These remain gaps.
