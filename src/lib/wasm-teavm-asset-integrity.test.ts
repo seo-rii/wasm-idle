@@ -129,7 +129,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 					// Propagate cloned primitive array types to Object.clone().
 					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' },
 					// Deterministic class order and tags so compiler.wasm is byte-reproducible.
-					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' },
+					// ServiceLoader and runtime annotations skipped by JCLPlugin in the bootstrap.
+					{ path: 'scripts/teavm/patches/teavm-javac-bootstrap-services.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,

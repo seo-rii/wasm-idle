@@ -520,6 +520,46 @@ public class Main {
 				expected: '1 9 3 4 b 3 7 [1, 2, 3]\n'
 			},
 			{
+				// JCLPlugin skips ServiceLoader and runtime-annotation support when TeaVM is compiled by
+				// TeaVM, and String element values got no type, so concatenating one trapped.
+				name: 'runtime annotations and ServiceLoader',
+				code: `import java.lang.annotation.*;
+import java.util.ServiceLoader;
+
+public class Main {
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Tag {
+        String value();
+        int level() default 1;
+        String[] aliases() default {};
+    }
+
+    @interface Hidden {}
+
+    @Tag(value = "solver", level = 3, aliases = { "s", "sv" })
+    @Hidden
+    static class Solver {}
+
+    @Tag("plain")
+    static class Plain {}
+
+    public static void main(String[] args) {
+        Tag tag = Solver.class.getAnnotation(Tag.class);
+        Tag plain = Plain.class.getAnnotation(Tag.class);
+        int services = 0;
+        for (Runnable service : ServiceLoader.load(Runnable.class)) {
+            services++;
+        }
+        System.out.println(tag.value() + " " + tag.level() + " " + String.join("/", tag.aliases()) + " "
+            + plain.value() + " " + plain.level() + " " + plain.aliases().length
+            + " " + Solver.class.isAnnotationPresent(Hidden.class)
+            + " " + (Main.class.getAnnotation(Tag.class) == null) + " " + services);
+    }
+}`,
+				stdin: '',
+				expected: 'solver 3 s/sv plain 1 0 false true 0\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

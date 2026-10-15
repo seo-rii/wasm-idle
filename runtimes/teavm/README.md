@@ -74,6 +74,16 @@ in those `i32.const` tags. The patch puts copies of both classes with determinis
 build daemon. They are not part of the compiled program, and the build fails if the TeaVM version
 changes.
 
+A seventh source patch, `scripts/teavm/patches/teavm-javac-bootstrap-services.patch`, installs the
+`ServiceLoader` and runtime-annotation support that TeaVM's `JCLPlugin` skips when TeaVM itself is
+compiled by TeaVM, as the browser compiler is. Without it, `ServiceLoader.load(...)` failed with
+"Method is not annotated with {{c0}}" and `Class.getAnnotation` of a `RUNTIME` annotation crashed
+code generation. TeaVM 0.13.1's Wasm GC annotation support also propagates no type for `String` and
+`String[]` element values, so using such a value, as in `tag.value() + "!"`, dereferenced a null
+pointer even in JVM-hosted TeaVM; the patch adds a listener that propagates `String` to those
+fields. Reflective field and method access stays unsupported, as in TeaVM's Wasm GC backend. It
+changes only `compiler.wasm`.
+
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
 exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
