@@ -1,0 +1,31 @@
+--- a/libbb/appletlib.c
++++ b/libbb/appletlib.c
+@@ -34,6 +34,28 @@
+ 
+ #include "busybox.h"
+ 
++#if defined(BB_WASI_B0)
++/* The trusted host supplies the initial cwd without adding guest env entries.
++ * chdir is the actual WASI libc operation: relative paths and getcwd agree. */
++__attribute__((import_module("wasm_idle_process_v1"), import_name("initial_cwd")))
++extern int bb_initial_cwd(char *buffer, int capacity);
++
++__attribute__((constructor(101)))
++static void bb_set_initial_cwd(void)
++{
++	char cwd[4096] = { 0 };
++	int count = bb_initial_cwd(cwd, sizeof(cwd));
++
++	if (count <= 1 || count > sizeof(cwd)
++	 || cwd[0] != '/' || cwd[count - 1] != '\0'
++	 || memchr(cwd, '\0', count - 1) != NULL
++	 || chdir(cwd) != 0
++	) {
++		_exit(125);
++	}
++}
++#endif
++
+ #if !(defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) \
+     || defined(__APPLE__) || defined(BB_WASI_B0) \
+     )

@@ -80,3 +80,8 @@ For explicit OPFS/IndexedDB persistence, open a workspace through the optional
 as `workspace`. `flush()` then publishes a verified root; it never clears asset
 caches or deletes user files to resolve storage errors. Dispose the container's
 commands before disposing the separately owned workspace lock.
+
+The optional [`@wasm-idle/container/workspace` entrypoint](./WORKSPACE.md) stages
+editor bytes and checks for conflicts before publishing a revision. Bounded VFS
+change streams let a host refresh its file tree without keeping another source of
+truth. Memory publication and persistent `flush()` remain distinct operations.

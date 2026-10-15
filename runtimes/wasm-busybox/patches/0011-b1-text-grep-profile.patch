@@ -1,0 +1,41 @@
+--- a/findutils/grep.c
++++ b/findutils/grep.c
+@@ -139,6 +139,12 @@
+ 	IF_FEATURE_GREP_CONTEXT(    OPTBIT_C ,) /* -C NUM: -A and -B combined */
+ 	OPTBIT_E, /* extended regexp */
+ 	IF_EXTRA_COMPAT(            OPTBIT_z ,) /* input is NUL terminated */
++#if defined(BB_WASI_B1)
++	OPTBIT_a,
++	OPTBIT_I,
++	OPT_a = 1 << OPTBIT_a,
++	OPT_I = 1 << OPTBIT_I,
++#endif
+ 	OPT_l = 1 << OPTBIT_l,
+ 	OPT_n = 1 << OPTBIT_n,
+ 	OPT_q = 1 << OPTBIT_q,
+@@ -756,6 +762,11 @@
+ 	getopt32(argv, "^" OPTSTR_GREP "\0" "H-h:c-n:q-n:l-n:", // why trailing ":"?
+ 		&pattern_head, &fopt, &max_matches);
+ #endif
++#if defined(BB_WASI_B1)
++	/* The small upstream regex profile otherwise silently ignores -a/-I. */
++	if (option_mask32 & (OPT_a | OPT_I))
++		bb_simple_error_msg_and_die("binary input modes are unsupported by the WASI profile");
++#endif
+ 	invert_search = ((option_mask32 & OPT_v) != 0); /* 0 | 1 */
+ 
+ 	{	/* convert char **argv to pattern_list */
+--- a/libbb/get_line_from_file.c
++++ b/libbb/get_line_from_file.c
+@@ -17,6 +17,11 @@
+ 	char *linebuf = NULL;
+ 
+ 	while ((ch = getc(file)) != EOF) {
++#if defined(BB_WASI_B1)
++		/* Do not turn a binary input chunk into a silently truncated C string. */
++		if (ch == '\0')
++			bb_simple_error_msg_and_die("NUL input is unsupported by the WASI text profile");
++#endif
+ 		/* grow the line buffer as necessary */
+ 		if (!(idx & 0xff)) {
+ 			if (idx == ((size_t)-1) - 0xff)

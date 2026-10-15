@@ -24,7 +24,7 @@ entrypoint; this module has no dependency on the runtime asset cache or compiler
 adapters. Only `/workspace` is saved. Temporary files, home configuration and
 readonly toolchains are excluded. Paths, file bytes, directory entries, symlinks,
 permission bits, inode identities and the inode allocation high-water mark are
-preserved. Timestamps are currently recreated when restoring a memory snapshot.
+preserved, including the recorded modification/change timestamps.
 
 ## Commit and recovery
 
@@ -82,8 +82,9 @@ with `DISPOSED`.
 `exportSnapshot()` returns an owned snapshot of current `/workspace` content,
 including unsaved data and inode identities, with empty default mounts. A host can
 use it for user-initiated export and recovery UI. It contains `Uint8Array` file
-data, so a downloadable JSON format must encode those arrays explicitly. This
-module does not automatically upload telemetry, source files, or diagnostic
+data. The optional workspace entrypoint provides a bounded downloadable binary
+backup and atomic explicit restore; see [workspace bindings](./WORKSPACE.md).
+This module does not automatically upload telemetry, source files, or diagnostic
 bundles. Runtime cache clear/prune never calls this module; its OPFS directory,
 IndexedDB database and lock names use the `wasm-idle-workspaces-v1` namespace.
 
@@ -120,5 +121,5 @@ Passing conflicting container/owner quotas or a disposed owner fails explicitly.
 
 This is a persistence primitive with Chromium/Linux coverage, not qualification of
 the complete persistent container beta. Editor integration, autosave UI,
-downloadable export, orphan collection, broader browser coverage and process-crash
+export UI, orphan collection, broader browser coverage and process-crash
 testing during an active IndexedDB transaction remain separate work.
