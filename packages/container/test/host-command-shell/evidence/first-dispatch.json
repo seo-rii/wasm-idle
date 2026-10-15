@@ -1,0 +1,5756 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "hostCommandDispatchPassed": false,
+  "startedAt": "2026-10-15T06:04:35.076Z",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "applicationCommit": "ad23994135b804a4f0103886997a854c564eca5a",
+  "packageReceipt": {
+    "bytes": 2605,
+    "sha256": "83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55"
+  },
+  "fixtureSet": "host-command-contract",
+  "packageId": "sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a",
+  "memory": {
+    "initial": 35,
+    "maximum": 16384,
+    "shared": true
+  },
+  "fixtureSources": {
+    "fixtures/live.c": {
+      "bytes": 3708,
+      "sha256": "e841048646c247d655f5d53345812e33b0b6ebd939f0e04af8b6c5ea0ebf8faa"
+    },
+    "fixtures/live.wasm": {
+      "bytes": 3314,
+      "sha256": "f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf"
+    },
+    "fixtures/command.c": {
+      "bytes": 2619,
+      "sha256": "1d6825ba175ebf02e31398bcb0b414bb40d9b4a760b462fb298c11204647ea41"
+    },
+    "fixtures/command.wasm": {
+      "bytes": 2643,
+      "sha256": "d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982"
+    },
+    "host-command-shell/worker.mjs": {
+      "bytes": 6322,
+      "sha256": "1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c"
+    }
+  },
+  "container": {
+    "sources": {
+      "src/adapters/clang/index.ts": {
+        "bytes": 1542,
+        "sha256": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae"
+      },
+      "src/adapters/clang/worker.ts": {
+        "bytes": 5082,
+        "sha256": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6"
+      },
+      "src/adapters/types.ts": {
+        "bytes": 1894,
+        "sha256": "5e41c859ee11ce7e1fcda760c11f421e1636d1710e2091acd18673258f7787e6"
+      },
+      "src/adapters/wasi-live/index.ts": {
+        "bytes": 5267,
+        "sha256": "6064a7744ef40616cc53e24eaa66dd47a514f8ea5a69beb3607d296f4c0e3375"
+      },
+      "src/adapters/wasi-live/io.ts": {
+        "bytes": 18177,
+        "sha256": "b4625b01571994c948581c2f163aa9f56d67a4d47cfe52cfda4b5a2ed3f12441"
+      },
+      "src/adapters/wasi-live/worker.ts": {
+        "bytes": 3538,
+        "sha256": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a"
+      },
+      "src/adapters/wasi/host.ts": {
+        "bytes": 18439,
+        "sha256": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7"
+      },
+      "src/adapters/wasi/index.ts": {
+        "bytes": 587,
+        "sha256": "c2485cb72ebc8c4baefe0d897e56be203857962cf052311d3fcc058c5a332691"
+      },
+      "src/adapters/wasi/profile.ts": {
+        "bytes": 1710,
+        "sha256": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4"
+      },
+      "src/adapters/wasi/stdio.ts": {
+        "bytes": 1420,
+        "sha256": "e6ae9fee901d4e68393553463372eab33b06f5da755daff9ff86aa446973ef4e"
+      },
+      "src/adapters/wasi/worker.ts": {
+        "bytes": 3692,
+        "sha256": "d5eeb20dc98706b2aa6cd2c770f67ee5f3ca839f4faddf097651ccc73a3d8e88"
+      },
+      "src/adapters/worker-adapter.ts": {
+        "bytes": 4234,
+        "sha256": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e"
+      },
+      "src/container.ts": {
+        "bytes": 22188,
+        "sha256": "e340c972a6bfff92f6a6ec0e59232eeba5a12a8576a3638e56c187077fd752a2"
+      },
+      "src/errors.ts": {
+        "bytes": 560,
+        "sha256": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8"
+      },
+      "src/fd/pipe.ts": {
+        "bytes": 4180,
+        "sha256": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646"
+      },
+      "src/fd/table.ts": {
+        "bytes": 1348,
+        "sha256": "3c29a6ab85bb7e217135749f1aa5fa2fac19b3cf8bb538b48fff9b089e1f8107"
+      },
+      "src/fs/errors.ts": {
+        "bytes": 520,
+        "sha256": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a"
+      },
+      "src/fs/index.ts": {
+        "bytes": 297,
+        "sha256": "9a3f65468cd2c80ee539b2d63d4bbbc50d3055f6d739748111bde39d07c01443"
+      },
+      "src/fs/memory.ts": {
+        "bytes": 39491,
+        "sha256": "4a120d046854511f80f1f0d9676b0c43d867229aff8262aa501a55b1a1f9bc68"
+      },
+      "src/fs/persistence/index.ts": {
+        "bytes": 16447,
+        "sha256": "5d712c0a5cea7491232b00f0b91fd853f56043cb726d65e3efef8d3eeaa59f12"
+      },
+      "src/fs/types.ts": {
+        "bytes": 2175,
+        "sha256": "7f2a068caeebce04e123d2e691bd2da55f6e9197117330abe497f386f26c6e00"
+      },
+      "src/index.ts": {
+        "bytes": 665,
+        "sha256": "e952073d369f2964d14dfcb16702bf4b87b0932646375463f78a3b4b15c3c87e"
+      },
+      "src/packages/assets.ts": {
+        "bytes": 10988,
+        "sha256": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5"
+      },
+      "src/packages/distribution.ts": {
+        "bytes": 16417,
+        "sha256": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7"
+      },
+      "src/packages/index.ts": {
+        "bytes": 758,
+        "sha256": "8cbc81e19bf2a5009331e9fe4bac2bb401e3827c655215bfcf7356fbfa1ac0b1"
+      },
+      "src/packages/manager.ts": {
+        "bytes": 9776,
+        "sha256": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c"
+      },
+      "src/process/lifecycle.ts": {
+        "bytes": 2712,
+        "sha256": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b"
+      },
+      "src/shell/host-command.ts": {
+        "bytes": 5842,
+        "sha256": "7a7d96a9ae0aa10189292e3e3e3f30e626e2fac0a1eb6857fe4d946ec4e0fd91"
+      },
+      "src/transport/rpc.ts": {
+        "bytes": 7569,
+        "sha256": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900"
+      },
+      "src/types.ts": {
+        "bytes": 3387,
+        "sha256": "fbe24cbe744f6150be12c045260f76cc4956bc8a96ac6991d5d1f016e48adad5"
+      }
+    },
+    "modules": {
+      "adapters/clang/index.js": {
+        "bytes": 1162,
+        "sha256": "03fec84f443f4362e568b54067ab3c1fa5340d52f3e0d56458ff8d7720b63a66"
+      },
+      "adapters/clang/worker.js": {
+        "bytes": 5188,
+        "sha256": "a2aee544b629625bf2ea95f7df77ef27fffda18d8377e4ac57109860cd2bf3bc"
+      },
+      "adapters/types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      },
+      "adapters/wasi-live/index.js": {
+        "bytes": 5621,
+        "sha256": "9544fd1897e7c8cdfeff26721e9838e72d28a9211d173e52a2ba4f5b2703cf74"
+      },
+      "adapters/wasi-live/io.js": {
+        "bytes": 21616,
+        "sha256": "67b8962576282e6e1c982c6f90c5147e6bf5f1f34ec98248906e4c9d4696a7cc"
+      },
+      "adapters/wasi-live/worker.js": {
+        "bytes": 3554,
+        "sha256": "fee22b8a7e196e4ea2b0a699c032d806aba13f5ff05f1f4f12fb0075d0c8b1c9"
+      },
+      "adapters/wasi/host.js": {
+        "bytes": 19170,
+        "sha256": "c7d19575f04e21d5c3269b86e1696600bc3097a68f3c48301079acffc4efe4db"
+      },
+      "adapters/wasi/index.js": {
+        "bytes": 353,
+        "sha256": "46fedcca19fa0cd7e8659aefc0b00e3f52ca5c473769d9bfcdc3d77486956204"
+      },
+      "adapters/wasi/profile.js": {
+        "bytes": 1910,
+        "sha256": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275"
+      },
+      "adapters/wasi/stdio.js": {
+        "bytes": 1261,
+        "sha256": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467"
+      },
+      "adapters/wasi/worker.js": {
+        "bytes": 3779,
+        "sha256": "6898ee355a4e27a5bd8db659f52fec140181fff7d1eec838584d9c91368e6825"
+      },
+      "adapters/worker-adapter.js": {
+        "bytes": 4228,
+        "sha256": "f5c145b2de17a19adf2d57489f9a40efd5723b61c8381f24410a1f0bd71a42e8"
+      },
+      "container.js": {
+        "bytes": 23014,
+        "sha256": "87ad85a7394dd984dfb62d30dc6951221e8d18490d05fc45dace186195fb01bb"
+      },
+      "errors.js": {
+        "bytes": 264,
+        "sha256": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a"
+      },
+      "fd/pipe.js": {
+        "bytes": 4710,
+        "sha256": "88cad76f4c9bc8db13710094e7383937a9d345bc5116cc192010bb6436e78335"
+      },
+      "fd/table.js": {
+        "bytes": 1325,
+        "sha256": "aa8bf5d0436f65f7255551548395f18b787c09e2482df15da7214bb808d777bb"
+      },
+      "fs/errors.js": {
+        "bytes": 282,
+        "sha256": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8"
+      },
+      "fs/index.js": {
+        "bytes": 87,
+        "sha256": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232"
+      },
+      "fs/memory.js": {
+        "bytes": 42299,
+        "sha256": "9e6fd14385658f4203d3beb4028b04728dfdcf5e0a596260da7d24ae058fe15f"
+      },
+      "fs/persistence/index.js": {
+        "bytes": 16457,
+        "sha256": "e9ad46201b83a4e00547a4a75e515e45cae3e8986bbbe13faec2c58ce57cb9ea"
+      },
+      "fs/types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      },
+      "index.js": {
+        "bytes": 309,
+        "sha256": "7bb2f153c7a628125ae31b65b1d8114ca670d48fc86b2cbe78f80eef25f4fa95"
+      },
+      "packages/assets.js": {
+        "bytes": 11022,
+        "sha256": "95bac822311b033c2fb54d631500c32a6ef5939341ef5583a33b482c2e462714"
+      },
+      "packages/distribution.js": {
+        "bytes": 14184,
+        "sha256": "89de1674b599fef83d6f28d4aff92e02c736dd546e670498040605d42ffb1d51"
+      },
+      "packages/index.js": {
+        "bytes": 206,
+        "sha256": "46a40278e915c8a26f400a4b564da8755534bb835f86d4557c4777e1b0a2d03a"
+      },
+      "packages/manager.js": {
+        "bytes": 7882,
+        "sha256": "adaf4e039ec28e46221d8b4b9d4e64e495edce5324a16316a46a1e087fe47e0e"
+      },
+      "process/lifecycle.js": {
+        "bytes": 2501,
+        "sha256": "cd1c13564379c76b1fe9e774a0e48da6f002f113a97ba9a0b49e06715c148490"
+      },
+      "shell/host-command.js": {
+        "bytes": 4288,
+        "sha256": "90ba0a88a61997c858e01c98e9e3349c22131b52033c573097680dc28d2d64f1"
+      },
+      "transport/rpc.js": {
+        "bytes": 9447,
+        "sha256": "f3cd605edca66796a4ca6d3a30d95d80865d69873c58b977471acacb5b2f402b"
+      },
+      "types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "HOST-METADATA",
+      "script": "cd sub && /opt/host/bin/probe roundtrip \"space arg\" \"한글\" \"\"; printf \"status=%d\\n\" \"$?\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          112,
+          114,
+          111,
+          98,
+          101,
+          0,
+          114,
+          111,
+          117,
+          110,
+          100,
+          116,
+          114,
+          105,
+          112,
+          0,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          97,
+          114,
+          103,
+          0,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0,
+          0,
+          115,
+          116,
+          97,
+          116,
+          117,
+          115,
+          61,
+          48,
+          10
+        ],
+        "stderr": [
+          80,
+          87,
+          68,
+          61,
+          47,
+          119,
+          111,
+          114,
+          107,
+          115,
+          112,
+          97,
+          99,
+          101,
+          47,
+          115,
+          117,
+          98,
+          0,
+          71,
+          48,
+          61,
+          115,
+          112,
+          97,
+          99,
+          101,
+          32,
+          237,
+          149,
+          156,
+          234,
+          184,
+          128,
+          0,
+          83,
+          72,
+          76,
+          86,
+          76,
+          61,
+          49,
+          0,
+          80,
+          65,
+          84,
+          72,
+          61,
+          47,
+          111,
+          112,
+          116,
+          47,
+          104,
+          111,
+          115,
+          116,
+          47,
+          98,
+          105,
+          110,
+          58,
+          47,
+          117,
+          115,
+          114,
+          47,
+          98,
+          105,
+          110,
+          58,
+          47,
+          98,
+          105,
+          110,
+          0,
+          79,
+          76,
+          68,
+          80,
+          87,
+          68,
+          61,
+          47,
+          119,
+          111,
+          114,
+          107,
+          115,
+          112,
+          97,
+          99,
+          101,
+          0,
+          95,
+          61,
+          47,
+          111,
+          112,
+          116,
+          47,
+          104,
+          111,
+          115,
+          116,
+          47,
+          98,
+          105,
+          110,
+          47,
+          112,
+          114,
+          111,
+          98,
+          101,
+          0
+        ]
+      },
+      "files": {
+        "/sub/out.bin": {
+          "error": "Error: entry not found"
+        }
+      },
+      "containerFiles": {
+        "/workspace/sub/out.bin": [
+          115,
+          97,
+          118,
+          101,
+          100
+        ]
+      },
+      "invocations": [
+        {
+          "path": "/opt/host/bin/probe",
+          "argv": [
+            "/opt/host/bin/probe",
+            "roundtrip",
+            "space arg",
+            "한글",
+            ""
+          ],
+          "cwd": "/workspace/sub",
+          "env": [
+            "PWD=/workspace/sub",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "OLDPWD=/workspace",
+            "_=/opt/host/bin/probe"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/probe",
+          "pid": 1,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              112,
+              114,
+              111,
+              98,
+              101,
+              0,
+              114,
+              111,
+              117,
+              110,
+              100,
+              116,
+              114,
+              105,
+              112,
+              0,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              97,
+              114,
+              103,
+              0,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              0,
+              0,
+              115,
+              116,
+              97,
+              116,
+              117,
+              115,
+              61,
+              48,
+              10
+            ],
+            "stderr": [
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              47,
+              115,
+              117,
+              98,
+              0,
+              71,
+              48,
+              61,
+              115,
+              112,
+              97,
+              99,
+              101,
+              32,
+              237,
+              149,
+              156,
+              234,
+              184,
+              128,
+              0,
+              83,
+              72,
+              76,
+              86,
+              76,
+              61,
+              49,
+              0,
+              80,
+              65,
+              84,
+              72,
+              61,
+              47,
+              111,
+              112,
+              116,
+              47,
+              104,
+              111,
+              115,
+              116,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              117,
+              115,
+              114,
+              47,
+              98,
+              105,
+              110,
+              58,
+              47,
+              98,
+              105,
+              110,
+              0,
+              79,
+              76,
+              68,
+              80,
+              87,
+              68,
+              61,
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              0,
+              95,
+              61,
+              47,
+              111,
+              112,
+              116,
+              47,
+              104,
+              111,
+              115,
+              116,
+              47,
+              98,
+              105,
+              110,
+              47,
+              112,
+              114,
+              111,
+              98,
+              101,
+              0
+            ]
+          },
+          "files": {
+            "/sub/out.bin": {
+              "error": "Error: entry not found"
+            }
+          },
+          "containerFiles": {
+            "/workspace/sub/out.bin": [
+              115,
+              97,
+              118,
+              101,
+              100
+            ]
+          },
+          "invocations": [
+            {
+              "path": "/opt/host/bin/probe",
+              "argv": [
+                "/opt/host/bin/probe",
+                "roundtrip",
+                "space arg",
+                "한글",
+                ""
+              ],
+              "cwd": "/workspace/sub",
+              "env": [
+                "PWD=/workspace/sub",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "OLDPWD=/workspace",
+                "_=/opt/host/bin/probe"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/probe",
+              "pid": 1,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "5573B870FF109910FB2E71BEF6913190",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "3104458D7073C61FB2E0BEDCB697544C",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1105,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "5573B870FF109910FB2E71BEF6913190",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3104458D7073C61FB2E0BEDCB697544C",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        },
+        {
+          "targetId": "07FE4F729579EB0EA36FE2E9B140D68E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "5573B870FF109910FB2E71BEF6913190",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        },
+        {
+          "targetId": "F75731C768850E537CA152CDE950A5A1",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "5573B870FF109910FB2E71BEF6913190",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        },
+        {
+          "targetId": "77E224E516679D4D0F67BBC61C6A00A2",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "5573B870FF109910FB2E71BEF6913190",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        },
+        {
+          "targetId": "E9361D18D0CB261C790AF2B64C2B7AEE",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "5573B870FF109910FB2E71BEF6913190",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        },
+        {
+          "targetId": "B41F87EA702156A4E70AE1E6565310CF",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "5573B870FF109910FB2E71BEF6913190",
+          "canAccessOpener": false,
+          "parentFrameId": "3104458D7073C61FB2E0BEDCB697544C",
+          "browserContextId": "56D1DFA64B010456A4AC699684315AF3"
+        }
+      ],
+      "createdNestedWorkerTargets": 5,
+      "peakLiveWorkerTargets": 5,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-PIPE-REDIRECT",
+      "script": "/opt/host/bin/tool | /opt/host/bin/tool > binary; printf \"pipe=%s\\n\" \"${PIPESTATUS[*]}\"; /opt/host/bin/tool < binary",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          112,
+          105,
+          112,
+          101,
+          61,
+          10,
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ],
+        "stderr": []
+      },
+      "files": {
+        "/binary": [
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ]
+      },
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=0",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=0",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 1,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 2,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 3,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              112,
+              105,
+              112,
+              101,
+              61,
+              10,
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ],
+            "stderr": []
+          },
+          "files": {
+            "/binary": [
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ]
+          },
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=0",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=0",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 1,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 2,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 3,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "DF8C90FC1B29FD70814A630D5E0B7F52",
+          "type": "worker",
+          "title": "worker-4",
+          "url": "http://127.0.0.1:36433/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+          "attached": true,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "392161EF66BF2104F4BCB57DF2EB94F5",
+          "type": "worker",
+          "title": "worker-3",
+          "url": "http://127.0.0.1:36433/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+          "attached": true,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 3215,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "C1E96F550207777D77CEE5A490658029",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "84C7CF7D23A0171A7A37A1DF856C1ACA",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "392161EF66BF2104F4BCB57DF2EB94F5",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "DF8C90FC1B29FD70814A630D5E0B7F52",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "5B0A34919A7176BE6A486E214DBE990C",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "BF61D98FA47A6DA7689C2E68A5CA1A41",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "6C55C0A7CE4583DF7E2B556A80B23EE8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "049534A95F7E98AB3FACB1748977676B",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        },
+        {
+          "targetId": "220EC094A6EB6BD19B3B1A2CDACCED4F",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A23CE902C92A2291EEE6A3377C67AA17",
+          "canAccessOpener": false,
+          "parentFrameId": "A6E0CF15B4F5F0209681A499A6DE6C87",
+          "browserContextId": "1E2CC4A306DDFFD8F6536B19608FDBF4"
+        }
+      ],
+      "createdNestedWorkerTargets": 9,
+      "peakLiveWorkerTargets": 7,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-EXACT-CONSUMPTION",
+      "script": "printf xyz | { /opt/host/bin/tool one; /opt/host/bin/tool; }; printf \"\\n\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          120,
+          121,
+          122,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool",
+            "one"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 1,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 2,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              120,
+              121,
+              122,
+              10
+            ],
+            "stderr": []
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool",
+                "one"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 1,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 2,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "15C8CC458E844C07FC8738279501F2C8",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1235,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "15C8CC458E844C07FC8738279501F2C8",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "E957A9C5DA0B03A03DBE1FCADF495C91",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "567EB03D5DA858896885F79D97F44481",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "D7BC9BCC526E1599D2E5C654880C8F8E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "B528F977E7EBF0F1C1A31BB703ACBBC8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "0186465E300971C9AFF74E85208C0E5A",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "C3F9FC0757F1C73D36F28BE062245626",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "861C9CEF05133AEA275F6409C602327C",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        },
+        {
+          "targetId": "EFF44AC9DE2E204A62BE205EF5BCC3FC",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "E8D79BCEA9FA64814C925E09C1DB20AF",
+          "canAccessOpener": false,
+          "parentFrameId": "15C8CC458E844C07FC8738279501F2C8",
+          "browserContextId": "7D6C187DADD2C7B3291DB89330264F68"
+        }
+      ],
+      "createdNestedWorkerTargets": 8,
+      "peakLiveWorkerTargets": 8,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-STATUS",
+      "script": "/opt/host/bin/probe exit; printf \"exit=%d\\n\" \"$?\"; /opt/host/bin/tool crash; printf \"crash=%d\\n\" \"$?\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          101,
+          120,
+          105,
+          116,
+          61,
+          50,
+          51,
+          10,
+          99,
+          114,
+          97,
+          115,
+          104,
+          61,
+          55,
+          57,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/probe",
+          "argv": [
+            "/opt/host/bin/probe",
+            "exit"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/probe"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool",
+            "crash"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/probe",
+          "pid": 1,
+          "result": {
+            "code": 23,
+            "reason": "exited"
+          },
+          "status": 23
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 2,
+          "result": {
+            "code": null,
+            "reason": "runtime-error"
+          },
+          "status": 134
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              101,
+              120,
+              105,
+              116,
+              61,
+              50,
+              51,
+              10,
+              99,
+              114,
+              97,
+              115,
+              104,
+              61,
+              55,
+              57,
+              10
+            ],
+            "stderr": []
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/probe",
+              "argv": [
+                "/opt/host/bin/probe",
+                "exit"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/probe"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool",
+                "crash"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/probe",
+              "pid": 1,
+              "result": {
+                "code": 23,
+                "reason": "exited"
+              },
+              "status": 23
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 2,
+              "result": {
+                "code": null,
+                "reason": "runtime-error"
+              },
+              "status": 134
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1084,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "D28045862E7FC64564147F71B88A3C21",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "AA39E99D7963F5276353B7FECA66EA87",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "E79DFD9E6DD8993992CA88E9053DCE77",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "9F0C73C21E0CF3B6F09DBEE6CBEBA93F",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "27ABEA189B930813EB5611C41BFE2C86",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        },
+        {
+          "targetId": "88CF98B386C16847B4F479CD98F29DC4",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "09362DB4C0318CC5ABD276EA5EAC49AA",
+          "canAccessOpener": false,
+          "parentFrameId": "ACD53A3A54D6BBC1F8DE35DDC2FFEBAA",
+          "browserContextId": "12A6F226B66AE451C724772FF23C9B0B"
+        }
+      ],
+      "createdNestedWorkerTargets": 6,
+      "peakLiveWorkerTargets": 6,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-EPIPE",
+      "script": "/opt/host/bin/tool yes | /opt/host/bin/tool one; printf \"\\npipe=%s\\n\" \"${PIPESTATUS[*]}\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          121,
+          10,
+          112,
+          105,
+          112,
+          101,
+          61,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool",
+            "yes"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=0",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "/opt/host/bin/tool",
+            "one"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=0",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 2,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        },
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 1,
+          "result": {
+            "code": 64,
+            "reason": "exited"
+          },
+          "status": 64
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              121,
+              10,
+              112,
+              105,
+              112,
+              101,
+              61,
+              10
+            ],
+            "stderr": []
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool",
+                "yes"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=0",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "/opt/host/bin/tool",
+                "one"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=0",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 2,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            },
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 1,
+              "result": {
+                "code": 64,
+                "reason": "exited"
+              },
+              "status": 64
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "3F8A6078BBB807113C599565650EA34E",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1270,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "3F8A6078BBB807113C599565650EA34E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "43026A8DCC5404D3D667E613C1ABBF4D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "E92EF50EABE0E6E8308489A877EF2F84",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "92FE2EED83E96737FCC38723B60513E8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "5311F38D5D4DAE66A7B5C8C831B01EA9",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "A4812BB7BE3E899DE45A0FD81BD87F13",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "0796AA5B852755D04CFE89A30D9187EB",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        },
+        {
+          "targetId": "928CA968FA97564EEF91898318E5B5AD",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "3F8A6078BBB807113C599565650EA34E",
+          "canAccessOpener": false,
+          "parentFrameId": "A1FEFBEC9EEEB5827FEAFA2864E952B7",
+          "browserContextId": "0BC270DD2295EE0925FE0188BC168B68"
+        }
+      ],
+      "createdNestedWorkerTargets": 7,
+      "peakLiveWorkerTargets": 7,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-PATH-LOOKUP",
+      "script": "tool; printf \"\\n\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          97,
+          98,
+          99,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/tool",
+          "argv": [
+            "tool"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/tool"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/tool",
+          "pid": 1,
+          "result": {
+            "code": 0,
+            "reason": "exited"
+          },
+          "status": 0
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              97,
+              98,
+              99,
+              10
+            ],
+            "stderr": []
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/tool",
+              "argv": [
+                "tool"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/tool"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/tool",
+              "pid": 1,
+              "result": {
+                "code": 0,
+                "reason": "exited"
+              },
+              "status": 0
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "506A28B3AEA2705F0084485D758B3BE5",
+          "type": "worker",
+          "title": "worker-4",
+          "url": "http://127.0.0.1:36433/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+          "attached": true,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "2A83F9B55222D077835E9B69AB3B8143",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1311,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2A83F9B55222D077835E9B69AB3B8143",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "AC413A989D78B48F36C4E5B623DA2939",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "3475BA320E27D9BE0D6B775AF912AAE3",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "8AEE8904DE6A4615F017C9B982292ACA",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "AE43D48FADE052A1299936F80E32779B",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        },
+        {
+          "targetId": "506A28B3AEA2705F0084485D758B3BE5",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7EAFBD2517C294B0A2092A52A69AFBA8",
+          "canAccessOpener": false,
+          "parentFrameId": "2A83F9B55222D077835E9B69AB3B8143",
+          "browserContextId": "AF15A5EF56212CF083B10F9597614A9E"
+        }
+      ],
+      "createdNestedWorkerTargets": 5,
+      "peakLiveWorkerTargets": 5,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-FAILURE",
+      "script": "/opt/host/bin/broken; printf \"broken=%d\\n\" \"$?\"; /opt/host/bin/unregistered; printf \"native=%d\\n\" \"$?\"; printf \"after\\n\"",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          98,
+          114,
+          111,
+          107,
+          101,
+          110,
+          61,
+          55,
+          57,
+          10,
+          110,
+          97,
+          116,
+          105,
+          118,
+          101,
+          61,
+          55,
+          57,
+          10,
+          97,
+          102,
+          116,
+          101,
+          114,
+          10
+        ],
+        "stderr": [
+          98,
+          97,
+          115,
+          104,
+          58,
+          32,
+          108,
+          105,
+          110,
+          101,
+          32,
+          49,
+          58,
+          32,
+          47,
+          111,
+          112,
+          116,
+          47,
+          104,
+          111,
+          115,
+          116,
+          47,
+          98,
+          105,
+          110,
+          47,
+          117,
+          110,
+          114,
+          101,
+          103,
+          105,
+          115,
+          116,
+          101,
+          114,
+          101,
+          100,
+          58,
+          32,
+          99,
+          97,
+          110,
+          110,
+          111,
+          116,
+          32,
+          101,
+          120,
+          101,
+          99,
+          117,
+          116,
+          101,
+          32,
+          98,
+          105,
+          110,
+          97,
+          114,
+          121,
+          32,
+          102,
+          105,
+          108,
+          101,
+          58,
+          32,
+          69,
+          120,
+          101,
+          99,
+          32,
+          102,
+          111,
+          114,
+          109,
+          97,
+          116,
+          32,
+          101,
+          114,
+          114,
+          111,
+          114,
+          10
+        ]
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/broken",
+          "argv": [
+            "/opt/host/bin/broken"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "_=/opt/host/bin/broken"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              98,
+              114,
+              111,
+              107,
+              101,
+              110,
+              61,
+              55,
+              57,
+              10,
+              110,
+              97,
+              116,
+              105,
+              118,
+              101,
+              61,
+              55,
+              57,
+              10,
+              97,
+              102,
+              116,
+              101,
+              114,
+              10
+            ],
+            "stderr": [
+              98,
+              97,
+              115,
+              104,
+              58,
+              32,
+              108,
+              105,
+              110,
+              101,
+              32,
+              49,
+              58,
+              32,
+              47,
+              111,
+              112,
+              116,
+              47,
+              104,
+              111,
+              115,
+              116,
+              47,
+              98,
+              105,
+              110,
+              47,
+              117,
+              110,
+              114,
+              101,
+              103,
+              105,
+              115,
+              116,
+              101,
+              114,
+              101,
+              100,
+              58,
+              32,
+              99,
+              97,
+              110,
+              110,
+              111,
+              116,
+              32,
+              101,
+              120,
+              101,
+              99,
+              117,
+              116,
+              101,
+              32,
+              98,
+              105,
+              110,
+              97,
+              114,
+              121,
+              32,
+              102,
+              105,
+              108,
+              101,
+              58,
+              32,
+              69,
+              120,
+              101,
+              99,
+              32,
+              102,
+              111,
+              114,
+              109,
+              97,
+              116,
+              32,
+              101,
+              114,
+              114,
+              111,
+              114,
+              10
+            ]
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/broken",
+              "argv": [
+                "/opt/host/bin/broken"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=1",
+                "PATH=/opt/host/bin:/usr/bin:/bin",
+                "_=/opt/host/bin/broken"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "2743D63238D2BF13B62CE51F34552308",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1327,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "2743D63238D2BF13B62CE51F34552308",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        },
+        {
+          "targetId": "146F99FAE580622E39108FC7110D0285",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2743D63238D2BF13B62CE51F34552308",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        },
+        {
+          "targetId": "E1F1D23AB29B1CB4EB335957201AB0EF",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2743D63238D2BF13B62CE51F34552308",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        },
+        {
+          "targetId": "99BA211F95CB1486309D42EB260C13E3",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2743D63238D2BF13B62CE51F34552308",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        },
+        {
+          "targetId": "421927156BE9E6ADC56474D25470338B",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2743D63238D2BF13B62CE51F34552308",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        },
+        {
+          "targetId": "50464A63F734E33C94EB7D240BF4A300",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "2743D63238D2BF13B62CE51F34552308",
+          "canAccessOpener": false,
+          "parentFrameId": "529A2616F950EEC33D2C17E3C0F064CF",
+          "browserContextId": "C729AF85896D7F71518611CB4DA4DF03"
+        }
+      ],
+      "createdNestedWorkerTargets": 5,
+      "peakLiveWorkerTargets": 6,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-TAIL-EXEC",
+      "script": "exec /opt/host/bin/probe exit",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 23,
+        "stdout": [],
+        "stderr": []
+      },
+      "files": {},
+      "containerFiles": {},
+      "invocations": [
+        {
+          "path": "/opt/host/bin/probe",
+          "argv": [
+            "/opt/host/bin/probe",
+            "exit"
+          ],
+          "cwd": "/workspace",
+          "env": [
+            "PWD=/workspace",
+            "G0=space 한글",
+            "SHLVL=0",
+            "PATH=/opt/host/bin:/usr/bin:/bin"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      ],
+      "records": [
+        {
+          "path": "/opt/host/bin/probe",
+          "pid": 1,
+          "result": {
+            "code": 23,
+            "reason": "exited"
+          },
+          "status": 23
+        }
+      ],
+      "containerProcesses": [],
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "registerHostCommand",
+          "unregisterHostCommand",
+          "__getClassname"
+        ],
+        "hostCommandDescriptor": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "fd",
+          "read",
+          "write",
+          "close"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 23,
+            "stdout": [],
+            "stderr": []
+          },
+          "files": {},
+          "containerFiles": {},
+          "invocations": [
+            {
+              "path": "/opt/host/bin/probe",
+              "argv": [
+                "/opt/host/bin/probe",
+                "exit"
+              ],
+              "cwd": "/workspace",
+              "env": [
+                "PWD=/workspace",
+                "G0=space 한글",
+                "SHLVL=0",
+                "PATH=/opt/host/bin:/usr/bin:/bin"
+              ],
+              "frozen": true,
+              "descriptors": [
+                0,
+                1,
+                2
+              ],
+              "owner": "sdk-scheduler-thread"
+            }
+          ],
+          "records": [
+            {
+              "path": "/opt/host/bin/probe",
+              "pid": 1,
+              "result": {
+                "code": 23,
+                "reason": "exited"
+              },
+              "status": 23
+            }
+          ],
+          "containerProcesses": [],
+          "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "registerHostCommand",
+              "unregisterHostCommand",
+              "__getClassname"
+            ],
+            "hostCommandDescriptor": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "fd",
+              "read",
+              "write",
+              "close"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "type": "worker",
+          "title": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "url": "http://127.0.0.1:36433/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+          "attached": true,
+          "parentId": "7AC0C1917D269831B56A510745DFAFD8",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1231,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7AC0C1917D269831B56A510745DFAFD8",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        },
+        {
+          "targetId": "698CDD0D08C202AC29754E87A97D76CA",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        },
+        {
+          "targetId": "30A5B9905ABDD91827E387AF8539E8D1",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        },
+        {
+          "targetId": "DF78C508C3C9356D8B080AC9332CBC52",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        },
+        {
+          "targetId": "B5F26429B2B3694947C2A6DF3BA238EB",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "C41BF4C45B405B777D4EFF15AF2D3AC0",
+          "canAccessOpener": false,
+          "parentFrameId": "7AC0C1917D269831B56A510745DFAFD8",
+          "browserContextId": "8F1A46E9A425B9A4A6380F58682D2DD4"
+        }
+      ],
+      "createdNestedWorkerTargets": 4,
+      "peakLiveWorkerTargets": 5,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    }
+  ],
+  "dispatchScope": "Exact registered paths; prepared-child argv/env/cwd and delegated descriptors 0-2 reach container live guests directly",
+  "filesystemScope": "Shell WASIX Directory and container VFS remain separate namespaces; common Container VFS not installed",
+  "networkScope": "Trusted local bootstrap and origin/asset allowlist; no guest/network security qualification",
+  "workerObservationScope": "All dedicated Workers in this exclusively owned Chromium browser",
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "assets": {
+    "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm": {
+      "bytes": 3314,
+      "sha256": "f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf"
+    },
+    "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm": {
+      "bytes": 2643,
+      "sha256": "d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982"
+    },
+    "/container/adapters/clang/index.js": {
+      "bytes": 1162,
+      "sha256": "03fec84f443f4362e568b54067ab3c1fa5340d52f3e0d56458ff8d7720b63a66"
+    },
+    "/container/adapters/clang/worker.js": {
+      "bytes": 5188,
+      "sha256": "a2aee544b629625bf2ea95f7df77ef27fffda18d8377e4ac57109860cd2bf3bc"
+    },
+    "/container/adapters/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/container/adapters/wasi-live/index.js": {
+      "bytes": 5621,
+      "sha256": "9544fd1897e7c8cdfeff26721e9838e72d28a9211d173e52a2ba4f5b2703cf74"
+    },
+    "/container/adapters/wasi-live/io.js": {
+      "bytes": 21616,
+      "sha256": "67b8962576282e6e1c982c6f90c5147e6bf5f1f34ec98248906e4c9d4696a7cc"
+    },
+    "/container/adapters/wasi-live/worker.js": {
+      "bytes": 3554,
+      "sha256": "fee22b8a7e196e4ea2b0a699c032d806aba13f5ff05f1f4f12fb0075d0c8b1c9"
+    },
+    "/container/adapters/wasi/host.js": {
+      "bytes": 19170,
+      "sha256": "c7d19575f04e21d5c3269b86e1696600bc3097a68f3c48301079acffc4efe4db"
+    },
+    "/container/adapters/wasi/index.js": {
+      "bytes": 353,
+      "sha256": "46fedcca19fa0cd7e8659aefc0b00e3f52ca5c473769d9bfcdc3d77486956204"
+    },
+    "/container/adapters/wasi/profile.js": {
+      "bytes": 1910,
+      "sha256": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275"
+    },
+    "/container/adapters/wasi/stdio.js": {
+      "bytes": 1261,
+      "sha256": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467"
+    },
+    "/container/adapters/wasi/worker.js": {
+      "bytes": 3779,
+      "sha256": "6898ee355a4e27a5bd8db659f52fec140181fff7d1eec838584d9c91368e6825"
+    },
+    "/container/adapters/worker-adapter.js": {
+      "bytes": 4228,
+      "sha256": "f5c145b2de17a19adf2d57489f9a40efd5723b61c8381f24410a1f0bd71a42e8"
+    },
+    "/container/container.js": {
+      "bytes": 23014,
+      "sha256": "87ad85a7394dd984dfb62d30dc6951221e8d18490d05fc45dace186195fb01bb"
+    },
+    "/container/errors.js": {
+      "bytes": 264,
+      "sha256": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a"
+    },
+    "/container/fd/pipe.js": {
+      "bytes": 4710,
+      "sha256": "88cad76f4c9bc8db13710094e7383937a9d345bc5116cc192010bb6436e78335"
+    },
+    "/container/fd/table.js": {
+      "bytes": 1325,
+      "sha256": "aa8bf5d0436f65f7255551548395f18b787c09e2482df15da7214bb808d777bb"
+    },
+    "/container/fs/errors.js": {
+      "bytes": 282,
+      "sha256": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8"
+    },
+    "/container/fs/index.js": {
+      "bytes": 87,
+      "sha256": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232"
+    },
+    "/container/fs/memory.js": {
+      "bytes": 42299,
+      "sha256": "9e6fd14385658f4203d3beb4028b04728dfdcf5e0a596260da7d24ae058fe15f"
+    },
+    "/container/fs/persistence/index.js": {
+      "bytes": 16457,
+      "sha256": "e9ad46201b83a4e00547a4a75e515e45cae3e8986bbbe13faec2c58ce57cb9ea"
+    },
+    "/container/fs/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/container/index.js": {
+      "bytes": 309,
+      "sha256": "7bb2f153c7a628125ae31b65b1d8114ca670d48fc86b2cbe78f80eef25f4fa95"
+    },
+    "/container/packages/assets.js": {
+      "bytes": 11022,
+      "sha256": "95bac822311b033c2fb54d631500c32a6ef5939341ef5583a33b482c2e462714"
+    },
+    "/container/packages/distribution.js": {
+      "bytes": 14184,
+      "sha256": "89de1674b599fef83d6f28d4aff92e02c736dd546e670498040605d42ffb1d51"
+    },
+    "/container/packages/index.js": {
+      "bytes": 206,
+      "sha256": "46a40278e915c8a26f400a4b564da8755534bb835f86d4557c4777e1b0a2d03a"
+    },
+    "/container/packages/manager.js": {
+      "bytes": 7882,
+      "sha256": "adaf4e039ec28e46221d8b4b9d4e64e495edce5324a16316a46a1e087fe47e0e"
+    },
+    "/container/process/lifecycle.js": {
+      "bytes": 2501,
+      "sha256": "cd1c13564379c76b1fe9e774a0e48da6f002f113a97ba9a0b49e06715c148490"
+    },
+    "/container/shell/host-command.js": {
+      "bytes": 4288,
+      "sha256": "90ba0a88a61997c858e01c98e9e3349c22131b52033c573097680dc28d2d64f1"
+    },
+    "/container/transport/rpc.js": {
+      "bytes": 9447,
+      "sha256": "f3cd605edca66796a4ca6d3a30d95d80865d69873c58b977471acacb5b2f402b"
+    },
+    "/container/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs": {
+      "bytes": 101271,
+      "sha256": "a548923df545ea76152924c0e9bf741e4e549a6de4c455308bde1d06945a91a2"
+    },
+    "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs": {
+      "bytes": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    },
+    "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm": {
+      "bytes": 9139276,
+      "sha256": "57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367"
+    },
+    "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc": {
+      "bytes": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs": {
+      "bytes": 6322,
+      "sha256": "1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c"
+    },
+    "/": {
+      "bytes": 60,
+      "sha256": "5ff229aebdaed9f5b677a3b36908f96ff6cd04a91c14bf81ed13fa7dbb3fdcaf"
+    }
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-1211b9fd433eba5bf7d66afd444fcee26ebb9be44199e720bd3be3c187fae96c/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/worker.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/transport/rpc.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/host.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/profile.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi-live/io.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/adapters/wasi/stdio.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs",
+      "accepted": true
+    }
+  ],
+  "chromiumExecutable": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browser": "153.0.8010.12",
+  "qualification": {
+    "checks": [
+      {
+        "id": "HOST-METADATA:dispatches",
+        "passed": true,
+        "observed": 1
+      },
+      {
+        "id": "HOST-METADATA:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT",
+        "passed": false,
+        "observed": {
+          "code": 0,
+          "stdout": "pipe=\n\u0000�€\n\rab",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:dispatches",
+        "passed": true,
+        "observed": 3
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "stdout": "xyz\n",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION:dispatches",
+        "passed": true,
+        "observed": 2
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-STATUS",
+        "passed": false,
+        "observed": {
+          "code": 0,
+          "stdout": "exit=23\ncrash=79\n",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-STATUS:dispatches",
+        "passed": true,
+        "observed": 2
+      },
+      {
+        "id": "HOST-STATUS:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-EPIPE",
+        "passed": false,
+        "observed": {
+          "code": 0,
+          "stdout": "y\npipe=\n",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-EPIPE:dispatches",
+        "passed": true,
+        "observed": 2
+      },
+      {
+        "id": "HOST-EPIPE:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-PATH-LOOKUP",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "stdout": "abc\n",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:dispatches",
+        "passed": true,
+        "observed": 1
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-FAILURE:dispatches",
+        "passed": true,
+        "observed": 1
+      },
+      {
+        "id": "HOST-FAILURE:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-TAIL-EXEC",
+        "passed": true,
+        "observed": {
+          "code": 23,
+          "stdout": "",
+          "type": "result"
+        }
+      },
+      {
+        "id": "HOST-TAIL-EXEC:dispatches",
+        "passed": true,
+        "observed": 1
+      },
+      {
+        "id": "HOST-TAIL-EXEC:container-processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "HOST-METADATA",
+        "passed": true,
+        "observed": "probe\u0000roundtrip\u0000space arg\u0000한글\u0000\u0000status=0\n"
+      },
+      {
+        "id": "HOST-METADATA:prepared-child",
+        "passed": true,
+        "observed": {
+          "path": "/opt/host/bin/probe",
+          "argv": [
+            "/opt/host/bin/probe",
+            "roundtrip",
+            "space arg",
+            "한글",
+            ""
+          ],
+          "cwd": "/workspace/sub",
+          "env": [
+            "PWD=/workspace/sub",
+            "G0=space 한글",
+            "SHLVL=1",
+            "PATH=/opt/host/bin:/usr/bin:/bin",
+            "OLDPWD=/workspace",
+            "_=/opt/host/bin/probe"
+          ],
+          "frozen": true,
+          "descriptors": [
+            0,
+            1,
+            2
+          ],
+          "owner": "sdk-scheduler-thread"
+        }
+      },
+      {
+        "id": "HOST-METADATA:environment-bytes",
+        "passed": true,
+        "observed": 7
+      },
+      {
+        "id": "HOST-METADATA:distinct-filesystems",
+        "passed": true,
+        "observed": {
+          "container": {
+            "/workspace/sub/out.bin": [
+              115,
+              97,
+              118,
+              101,
+              100
+            ]
+          },
+          "shell": {
+            "/sub/out.bin": {
+              "error": "Error: entry not found"
+            }
+          }
+        }
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:shell-file",
+        "passed": true,
+        "observed": {
+          "/binary": [
+            0,
+            255,
+            226,
+            130,
+            172,
+            10,
+            13,
+            97,
+            98
+          ]
+        }
+      },
+      {
+        "id": "HOST-STATUS:records",
+        "passed": true,
+        "observed": [
+          {
+            "path": "/opt/host/bin/probe",
+            "pid": 1,
+            "result": {
+              "code": 23,
+              "reason": "exited"
+            },
+            "status": 23
+          },
+          {
+            "path": "/opt/host/bin/tool",
+            "pid": 2,
+            "result": {
+              "code": null,
+              "reason": "runtime-error"
+            },
+            "status": 134
+          }
+        ]
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:argv0",
+        "passed": true,
+        "observed": [
+          "tool"
+        ]
+      },
+      {
+        "id": "HOST-FAILURE",
+        "passed": false,
+        "observed": {
+          "stdout": "broken=79\nnative=79\nafter\n",
+          "stderr": "bash: line 1: /opt/host/bin/unregistered: cannot execute binary file: Exec format error\n"
+        }
+      },
+      {
+        "id": "HOST-FAILURE:no-native-fallback",
+        "passed": true,
+        "observed": [
+          "/opt/host/bin/broken"
+        ]
+      },
+      {
+        "id": "actual-sdk-initialization",
+        "passed": true,
+        "observed": 8
+      },
+      {
+        "id": "public-host-command-api",
+        "passed": true,
+        "observed": {
+          "runtime": [
+            "constructor",
+            "__destroy_into_raw",
+            "free",
+            "registerHostCommand",
+            "unregisterHostCommand",
+            "__getClassname"
+          ],
+          "hostCommandDescriptor": [
+            "constructor",
+            "__destroy_into_raw",
+            "free",
+            "fd",
+            "read",
+            "write",
+            "close"
+          ]
+        }
+      },
+      {
+        "id": "browser-errors",
+        "passed": true,
+        "observed": [
+          [
+            "HOST-METADATA",
+            0
+          ],
+          [
+            "HOST-PIPE-REDIRECT",
+            0
+          ],
+          [
+            "HOST-EXACT-CONSUMPTION",
+            0
+          ],
+          [
+            "HOST-STATUS",
+            0
+          ],
+          [
+            "HOST-EPIPE",
+            0
+          ],
+          [
+            "HOST-PATH-LOOKUP",
+            0
+          ],
+          [
+            "HOST-FAILURE",
+            0
+          ],
+          [
+            "HOST-TAIL-EXEC",
+            0
+          ]
+        ]
+      },
+      {
+        "id": "owned-host-context-cleanup",
+        "passed": true,
+        "observed": [
+          [
+            "HOST-METADATA",
+            0,
+            0
+          ],
+          [
+            "HOST-PIPE-REDIRECT",
+            0,
+            0
+          ],
+          [
+            "HOST-EXACT-CONSUMPTION",
+            0,
+            0
+          ],
+          [
+            "HOST-STATUS",
+            0,
+            0
+          ],
+          [
+            "HOST-EPIPE",
+            0,
+            0
+          ],
+          [
+            "HOST-PATH-LOOKUP",
+            0,
+            0
+          ],
+          [
+            "HOST-FAILURE",
+            0,
+            0
+          ],
+          [
+            "HOST-TAIL-EXEC",
+            0,
+            0
+          ]
+        ]
+      }
+    ],
+    "passed": 31,
+    "total": 35,
+    "hostCommandDispatchPassed": false,
+    "commonContainerFdVfsQualified": false,
+    "shellBackendReady": false
+  },
+  "finishedAt": "2026-10-15T06:04:48.362Z"
+}

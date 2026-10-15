@@ -1,0 +1,2121 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "hostCommandDispatchPassed": false,
+  "startedAt": "2026-10-15T06:03:34.953Z",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "applicationCommit": "c67023c80b095a9e343f67cdb85edbfad1bad6a2",
+  "packageReceipt": {
+    "bytes": 2605,
+    "sha256": "83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55"
+  },
+  "fixtureSet": "host-command-contract",
+  "packageId": "sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a",
+  "memory": {
+    "initial": 35,
+    "maximum": 16384,
+    "shared": true
+  },
+  "fixtureSources": {
+    "fixtures/live.c": {
+      "bytes": 3708,
+      "sha256": "e841048646c247d655f5d53345812e33b0b6ebd939f0e04af8b6c5ea0ebf8faa"
+    },
+    "fixtures/live.wasm": {
+      "bytes": 3314,
+      "sha256": "f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf"
+    },
+    "fixtures/command.c": {
+      "bytes": 2619,
+      "sha256": "1d6825ba175ebf02e31398bcb0b414bb40d9b4a760b462fb298c11204647ea41"
+    },
+    "fixtures/command.wasm": {
+      "bytes": 2643,
+      "sha256": "d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982"
+    },
+    "host-command-shell/worker.mjs": {
+      "bytes": 6131,
+      "sha256": "eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280"
+    }
+  },
+  "container": {
+    "sources": {
+      "src/adapters/clang/index.ts": {
+        "bytes": 1542,
+        "sha256": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae"
+      },
+      "src/adapters/clang/worker.ts": {
+        "bytes": 5082,
+        "sha256": "d90171f31dcfe16972003491f652ed648b37d28bbf6c943765a18d6ff64e39c6"
+      },
+      "src/adapters/types.ts": {
+        "bytes": 1894,
+        "sha256": "5e41c859ee11ce7e1fcda760c11f421e1636d1710e2091acd18673258f7787e6"
+      },
+      "src/adapters/wasi-live/index.ts": {
+        "bytes": 5267,
+        "sha256": "6064a7744ef40616cc53e24eaa66dd47a514f8ea5a69beb3607d296f4c0e3375"
+      },
+      "src/adapters/wasi-live/io.ts": {
+        "bytes": 18177,
+        "sha256": "b4625b01571994c948581c2f163aa9f56d67a4d47cfe52cfda4b5a2ed3f12441"
+      },
+      "src/adapters/wasi-live/worker.ts": {
+        "bytes": 3538,
+        "sha256": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a"
+      },
+      "src/adapters/wasi/host.ts": {
+        "bytes": 18439,
+        "sha256": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7"
+      },
+      "src/adapters/wasi/index.ts": {
+        "bytes": 587,
+        "sha256": "c2485cb72ebc8c4baefe0d897e56be203857962cf052311d3fcc058c5a332691"
+      },
+      "src/adapters/wasi/profile.ts": {
+        "bytes": 1710,
+        "sha256": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4"
+      },
+      "src/adapters/wasi/stdio.ts": {
+        "bytes": 1420,
+        "sha256": "e6ae9fee901d4e68393553463372eab33b06f5da755daff9ff86aa446973ef4e"
+      },
+      "src/adapters/wasi/worker.ts": {
+        "bytes": 3692,
+        "sha256": "d5eeb20dc98706b2aa6cd2c770f67ee5f3ca839f4faddf097651ccc73a3d8e88"
+      },
+      "src/adapters/worker-adapter.ts": {
+        "bytes": 4234,
+        "sha256": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e"
+      },
+      "src/container.ts": {
+        "bytes": 22188,
+        "sha256": "e340c972a6bfff92f6a6ec0e59232eeba5a12a8576a3638e56c187077fd752a2"
+      },
+      "src/errors.ts": {
+        "bytes": 560,
+        "sha256": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8"
+      },
+      "src/fd/pipe.ts": {
+        "bytes": 4180,
+        "sha256": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646"
+      },
+      "src/fd/table.ts": {
+        "bytes": 1348,
+        "sha256": "3c29a6ab85bb7e217135749f1aa5fa2fac19b3cf8bb538b48fff9b089e1f8107"
+      },
+      "src/fs/errors.ts": {
+        "bytes": 520,
+        "sha256": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a"
+      },
+      "src/fs/index.ts": {
+        "bytes": 297,
+        "sha256": "9a3f65468cd2c80ee539b2d63d4bbbc50d3055f6d739748111bde39d07c01443"
+      },
+      "src/fs/memory.ts": {
+        "bytes": 39491,
+        "sha256": "4a120d046854511f80f1f0d9676b0c43d867229aff8262aa501a55b1a1f9bc68"
+      },
+      "src/fs/persistence/index.ts": {
+        "bytes": 16447,
+        "sha256": "5d712c0a5cea7491232b00f0b91fd853f56043cb726d65e3efef8d3eeaa59f12"
+      },
+      "src/fs/types.ts": {
+        "bytes": 2175,
+        "sha256": "7f2a068caeebce04e123d2e691bd2da55f6e9197117330abe497f386f26c6e00"
+      },
+      "src/index.ts": {
+        "bytes": 665,
+        "sha256": "e952073d369f2964d14dfcb16702bf4b87b0932646375463f78a3b4b15c3c87e"
+      },
+      "src/packages/assets.ts": {
+        "bytes": 10988,
+        "sha256": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5"
+      },
+      "src/packages/distribution.ts": {
+        "bytes": 16417,
+        "sha256": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7"
+      },
+      "src/packages/index.ts": {
+        "bytes": 758,
+        "sha256": "8cbc81e19bf2a5009331e9fe4bac2bb401e3827c655215bfcf7356fbfa1ac0b1"
+      },
+      "src/packages/manager.ts": {
+        "bytes": 9776,
+        "sha256": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c"
+      },
+      "src/process/lifecycle.ts": {
+        "bytes": 2712,
+        "sha256": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b"
+      },
+      "src/shell/host-command.ts": {
+        "bytes": 5842,
+        "sha256": "7a7d96a9ae0aa10189292e3e3e3f30e626e2fac0a1eb6857fe4d946ec4e0fd91"
+      },
+      "src/transport/rpc.ts": {
+        "bytes": 7569,
+        "sha256": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900"
+      },
+      "src/types.ts": {
+        "bytes": 3387,
+        "sha256": "fbe24cbe744f6150be12c045260f76cc4956bc8a96ac6991d5d1f016e48adad5"
+      }
+    },
+    "modules": {
+      "adapters/clang/index.js": {
+        "bytes": 1162,
+        "sha256": "03fec84f443f4362e568b54067ab3c1fa5340d52f3e0d56458ff8d7720b63a66"
+      },
+      "adapters/clang/worker.js": {
+        "bytes": 5188,
+        "sha256": "a2aee544b629625bf2ea95f7df77ef27fffda18d8377e4ac57109860cd2bf3bc"
+      },
+      "adapters/types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      },
+      "adapters/wasi-live/index.js": {
+        "bytes": 5621,
+        "sha256": "9544fd1897e7c8cdfeff26721e9838e72d28a9211d173e52a2ba4f5b2703cf74"
+      },
+      "adapters/wasi-live/io.js": {
+        "bytes": 21616,
+        "sha256": "67b8962576282e6e1c982c6f90c5147e6bf5f1f34ec98248906e4c9d4696a7cc"
+      },
+      "adapters/wasi-live/worker.js": {
+        "bytes": 3554,
+        "sha256": "fee22b8a7e196e4ea2b0a699c032d806aba13f5ff05f1f4f12fb0075d0c8b1c9"
+      },
+      "adapters/wasi/host.js": {
+        "bytes": 19170,
+        "sha256": "c7d19575f04e21d5c3269b86e1696600bc3097a68f3c48301079acffc4efe4db"
+      },
+      "adapters/wasi/index.js": {
+        "bytes": 353,
+        "sha256": "46fedcca19fa0cd7e8659aefc0b00e3f52ca5c473769d9bfcdc3d77486956204"
+      },
+      "adapters/wasi/profile.js": {
+        "bytes": 1910,
+        "sha256": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275"
+      },
+      "adapters/wasi/stdio.js": {
+        "bytes": 1261,
+        "sha256": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467"
+      },
+      "adapters/wasi/worker.js": {
+        "bytes": 3779,
+        "sha256": "6898ee355a4e27a5bd8db659f52fec140181fff7d1eec838584d9c91368e6825"
+      },
+      "adapters/worker-adapter.js": {
+        "bytes": 4228,
+        "sha256": "f5c145b2de17a19adf2d57489f9a40efd5723b61c8381f24410a1f0bd71a42e8"
+      },
+      "container.js": {
+        "bytes": 23014,
+        "sha256": "87ad85a7394dd984dfb62d30dc6951221e8d18490d05fc45dace186195fb01bb"
+      },
+      "errors.js": {
+        "bytes": 264,
+        "sha256": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a"
+      },
+      "fd/pipe.js": {
+        "bytes": 4710,
+        "sha256": "88cad76f4c9bc8db13710094e7383937a9d345bc5116cc192010bb6436e78335"
+      },
+      "fd/table.js": {
+        "bytes": 1325,
+        "sha256": "aa8bf5d0436f65f7255551548395f18b787c09e2482df15da7214bb808d777bb"
+      },
+      "fs/errors.js": {
+        "bytes": 282,
+        "sha256": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8"
+      },
+      "fs/index.js": {
+        "bytes": 87,
+        "sha256": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232"
+      },
+      "fs/memory.js": {
+        "bytes": 42299,
+        "sha256": "9e6fd14385658f4203d3beb4028b04728dfdcf5e0a596260da7d24ae058fe15f"
+      },
+      "fs/persistence/index.js": {
+        "bytes": 16457,
+        "sha256": "e9ad46201b83a4e00547a4a75e515e45cae3e8986bbbe13faec2c58ce57cb9ea"
+      },
+      "fs/types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      },
+      "index.js": {
+        "bytes": 309,
+        "sha256": "7bb2f153c7a628125ae31b65b1d8114ca670d48fc86b2cbe78f80eef25f4fa95"
+      },
+      "packages/assets.js": {
+        "bytes": 11022,
+        "sha256": "95bac822311b033c2fb54d631500c32a6ef5939341ef5583a33b482c2e462714"
+      },
+      "packages/distribution.js": {
+        "bytes": 14184,
+        "sha256": "89de1674b599fef83d6f28d4aff92e02c736dd546e670498040605d42ffb1d51"
+      },
+      "packages/index.js": {
+        "bytes": 206,
+        "sha256": "46a40278e915c8a26f400a4b564da8755534bb835f86d4557c4777e1b0a2d03a"
+      },
+      "packages/manager.js": {
+        "bytes": 7882,
+        "sha256": "adaf4e039ec28e46221d8b4b9d4e64e495edce5324a16316a46a1e087fe47e0e"
+      },
+      "process/lifecycle.js": {
+        "bytes": 2501,
+        "sha256": "cd1c13564379c76b1fe9e774a0e48da6f002f113a97ba9a0b49e06715c148490"
+      },
+      "shell/host-command.js": {
+        "bytes": 4288,
+        "sha256": "90ba0a88a61997c858e01c98e9e3349c22131b52033c573097680dc28d2d64f1"
+      },
+      "transport/rpc.js": {
+        "bytes": 9447,
+        "sha256": "f3cd605edca66796a4ca6d3a30d95d80865d69873c58b977471acacb5b2f402b"
+      },
+      "types.js": {
+        "bytes": 11,
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "HOST-METADATA",
+      "script": "cd sub && /opt/host/bin/probe roundtrip \"space arg\" \"한글\" \"\"; printf \"status=%d\\n\" \"$?\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "AEB72049ECD07D1EB1BFDB143C17B8F4",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "FD7B5158EFDDB04375127D21D8137B94",
+          "canAccessOpener": false,
+          "parentFrameId": "FD7B5158EFDDB04375127D21D8137B94",
+          "browserContextId": "AB1B3650B60FD51F0E8B0EB677E55D4F"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 876,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "AEB72049ECD07D1EB1BFDB143C17B8F4",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "FD7B5158EFDDB04375127D21D8137B94",
+          "canAccessOpener": false,
+          "parentFrameId": "FD7B5158EFDDB04375127D21D8137B94",
+          "browserContextId": "AB1B3650B60FD51F0E8B0EB677E55D4F"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-PIPE-REDIRECT",
+      "script": "/opt/host/bin/tool | /opt/host/bin/tool > binary; printf \"pipe=%s\\n\" \"${PIPESTATUS[*]}\"; /opt/host/bin/tool < binary",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "587D86B1A631B50326AFA03BFAFCE403",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "EA9339461A5A14C6038984C405A8E871",
+          "canAccessOpener": false,
+          "parentFrameId": "EA9339461A5A14C6038984C405A8E871",
+          "browserContextId": "64FFC748D56543CFD2E5094386208904"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 574,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "587D86B1A631B50326AFA03BFAFCE403",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "EA9339461A5A14C6038984C405A8E871",
+          "canAccessOpener": false,
+          "parentFrameId": "EA9339461A5A14C6038984C405A8E871",
+          "browserContextId": "64FFC748D56543CFD2E5094386208904"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-EXACT-CONSUMPTION",
+      "script": "printf xyz | { /opt/host/bin/tool one; /opt/host/bin/tool; }; printf \"\\n\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "154ABE67422AAF2B1B702AA04C29DDFA",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "634B383B5DDB92E320E6926D311FCC52",
+          "canAccessOpener": false,
+          "parentFrameId": "634B383B5DDB92E320E6926D311FCC52",
+          "browserContextId": "85B77698F93F0D1381509BF63FAF27AC"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 495,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "154ABE67422AAF2B1B702AA04C29DDFA",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "634B383B5DDB92E320E6926D311FCC52",
+          "canAccessOpener": false,
+          "parentFrameId": "634B383B5DDB92E320E6926D311FCC52",
+          "browserContextId": "85B77698F93F0D1381509BF63FAF27AC"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-STATUS",
+      "script": "/opt/host/bin/probe exit; printf \"exit=%d\\n\" \"$?\"; /opt/host/bin/tool crash; printf \"crash=%d\\n\" \"$?\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "23D9DE5E2A10DB7D9C1507416321F550",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "975743056F260C95EFF01CD257A3A8AC",
+          "canAccessOpener": false,
+          "parentFrameId": "975743056F260C95EFF01CD257A3A8AC",
+          "browserContextId": "71486511BFD2BD9CC563F4CCCDDAF441"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 506,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "23D9DE5E2A10DB7D9C1507416321F550",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "975743056F260C95EFF01CD257A3A8AC",
+          "canAccessOpener": false,
+          "parentFrameId": "975743056F260C95EFF01CD257A3A8AC",
+          "browserContextId": "71486511BFD2BD9CC563F4CCCDDAF441"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-EPIPE",
+      "script": "/opt/host/bin/tool yes | /opt/host/bin/tool one; printf \"\\npipe=%s\\n\" \"${PIPESTATUS[*]}\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "04F5ED50AC6F248AFE4BBCD54027CC69",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "EA5E5AD215AAF347EA1075BD12106AA5",
+          "canAccessOpener": false,
+          "parentFrameId": "EA5E5AD215AAF347EA1075BD12106AA5",
+          "browserContextId": "3A9D0CEE070A559B421C7D0F1E4F243E"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 451,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "04F5ED50AC6F248AFE4BBCD54027CC69",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "EA5E5AD215AAF347EA1075BD12106AA5",
+          "canAccessOpener": false,
+          "parentFrameId": "EA5E5AD215AAF347EA1075BD12106AA5",
+          "browserContextId": "3A9D0CEE070A559B421C7D0F1E4F243E"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-PATH-LOOKUP",
+      "script": "tool; printf \"\\n\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "1906BAE9BC6CCDE2BEFBFA314ED420FD",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "0461E629023C6B1E880520459A072CF0",
+          "canAccessOpener": false,
+          "parentFrameId": "0461E629023C6B1E880520459A072CF0",
+          "browserContextId": "B2B717CFBAEBFA959931805BC87BBC62"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 493,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "1906BAE9BC6CCDE2BEFBFA314ED420FD",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "0461E629023C6B1E880520459A072CF0",
+          "canAccessOpener": false,
+          "parentFrameId": "0461E629023C6B1E880520459A072CF0",
+          "browserContextId": "B2B717CFBAEBFA959931805BC87BBC62"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-FAILURE",
+      "script": "/opt/host/bin/broken; printf \"broken=%d\\n\" \"$?\"; /opt/host/bin/unregistered; printf \"native=%d\\n\" \"$?\"; printf \"after\\n\"",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "55E5A17056C2A5AF8DC9752616B04A18",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "DA7F6E8210AB10A20E137149904F03CD",
+          "canAccessOpener": false,
+          "parentFrameId": "DA7F6E8210AB10A20E137149904F03CD",
+          "browserContextId": "E74FA0273C37191915597DA5FDDA296F"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 452,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "55E5A17056C2A5AF8DC9752616B04A18",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "DA7F6E8210AB10A20E137149904F03CD",
+          "canAccessOpener": false,
+          "parentFrameId": "DA7F6E8210AB10A20E137149904F03CD",
+          "browserContextId": "E74FA0273C37191915597DA5FDDA296F"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "HOST-TAIL-EXEC",
+      "script": "exec /opt/host/bin/probe exit",
+      "type": "failure",
+      "backendCompleted": false,
+      "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+      "trackedChildren": 0,
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "failure",
+          "backendCompleted": false,
+          "error": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "stack": "TypeError: Failed to resolve module specifier \"@wasm-idle/core\". Relative references must start with either \"/\", \"./\", or \"../\".",
+          "trackedChildren": 0
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "2109E71DD9526AD19F45450FB2215A6E",
+          "type": "worker",
+          "title": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "url": "http://127.0.0.1:40321/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+          "attached": true,
+          "parentId": "FFF642A0323EC4DC266B3A52BCF3722F",
+          "canAccessOpener": false,
+          "parentFrameId": "FFF642A0323EC4DC266B3A52BCF3722F",
+          "browserContextId": "5772C75BEF9F1A4D5A25AF6EA2B8FBF8"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": false,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 454,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "2109E71DD9526AD19F45450FB2215A6E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "FFF642A0323EC4DC266B3A52BCF3722F",
+          "canAccessOpener": false,
+          "parentFrameId": "FFF642A0323EC4DC266B3A52BCF3722F",
+          "browserContextId": "5772C75BEF9F1A4D5A25AF6EA2B8FBF8"
+        }
+      ],
+      "createdNestedWorkerTargets": 0,
+      "peakLiveWorkerTargets": 1,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    }
+  ],
+  "dispatchScope": "Exact registered paths; prepared-child argv/env/cwd and delegated descriptors 0-2 reach container live guests directly",
+  "filesystemScope": "Shell WASIX Directory and container VFS remain separate namespaces; common Container VFS not installed",
+  "networkScope": "Trusted local bootstrap and origin/asset allowlist; no guest/network security qualification",
+  "workerObservationScope": "All dedicated Workers in this exclusively owned Chromium browser",
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "assets": {
+    "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm": {
+      "bytes": 3314,
+      "sha256": "f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf"
+    },
+    "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm": {
+      "bytes": 2643,
+      "sha256": "d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982"
+    },
+    "/container/adapters/clang/index.js": {
+      "bytes": 1162,
+      "sha256": "03fec84f443f4362e568b54067ab3c1fa5340d52f3e0d56458ff8d7720b63a66"
+    },
+    "/container/adapters/clang/worker.js": {
+      "bytes": 5188,
+      "sha256": "a2aee544b629625bf2ea95f7df77ef27fffda18d8377e4ac57109860cd2bf3bc"
+    },
+    "/container/adapters/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/container/adapters/wasi-live/index.js": {
+      "bytes": 5621,
+      "sha256": "9544fd1897e7c8cdfeff26721e9838e72d28a9211d173e52a2ba4f5b2703cf74"
+    },
+    "/container/adapters/wasi-live/io.js": {
+      "bytes": 21616,
+      "sha256": "67b8962576282e6e1c982c6f90c5147e6bf5f1f34ec98248906e4c9d4696a7cc"
+    },
+    "/container/adapters/wasi-live/worker.js": {
+      "bytes": 3554,
+      "sha256": "fee22b8a7e196e4ea2b0a699c032d806aba13f5ff05f1f4f12fb0075d0c8b1c9"
+    },
+    "/container/adapters/wasi/host.js": {
+      "bytes": 19170,
+      "sha256": "c7d19575f04e21d5c3269b86e1696600bc3097a68f3c48301079acffc4efe4db"
+    },
+    "/container/adapters/wasi/index.js": {
+      "bytes": 353,
+      "sha256": "46fedcca19fa0cd7e8659aefc0b00e3f52ca5c473769d9bfcdc3d77486956204"
+    },
+    "/container/adapters/wasi/profile.js": {
+      "bytes": 1910,
+      "sha256": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275"
+    },
+    "/container/adapters/wasi/stdio.js": {
+      "bytes": 1261,
+      "sha256": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467"
+    },
+    "/container/adapters/wasi/worker.js": {
+      "bytes": 3779,
+      "sha256": "6898ee355a4e27a5bd8db659f52fec140181fff7d1eec838584d9c91368e6825"
+    },
+    "/container/adapters/worker-adapter.js": {
+      "bytes": 4228,
+      "sha256": "f5c145b2de17a19adf2d57489f9a40efd5723b61c8381f24410a1f0bd71a42e8"
+    },
+    "/container/container.js": {
+      "bytes": 23014,
+      "sha256": "87ad85a7394dd984dfb62d30dc6951221e8d18490d05fc45dace186195fb01bb"
+    },
+    "/container/errors.js": {
+      "bytes": 264,
+      "sha256": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a"
+    },
+    "/container/fd/pipe.js": {
+      "bytes": 4710,
+      "sha256": "88cad76f4c9bc8db13710094e7383937a9d345bc5116cc192010bb6436e78335"
+    },
+    "/container/fd/table.js": {
+      "bytes": 1325,
+      "sha256": "aa8bf5d0436f65f7255551548395f18b787c09e2482df15da7214bb808d777bb"
+    },
+    "/container/fs/errors.js": {
+      "bytes": 282,
+      "sha256": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8"
+    },
+    "/container/fs/index.js": {
+      "bytes": 87,
+      "sha256": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232"
+    },
+    "/container/fs/memory.js": {
+      "bytes": 42299,
+      "sha256": "9e6fd14385658f4203d3beb4028b04728dfdcf5e0a596260da7d24ae058fe15f"
+    },
+    "/container/fs/persistence/index.js": {
+      "bytes": 16457,
+      "sha256": "e9ad46201b83a4e00547a4a75e515e45cae3e8986bbbe13faec2c58ce57cb9ea"
+    },
+    "/container/fs/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/container/index.js": {
+      "bytes": 309,
+      "sha256": "7bb2f153c7a628125ae31b65b1d8114ca670d48fc86b2cbe78f80eef25f4fa95"
+    },
+    "/container/packages/assets.js": {
+      "bytes": 11022,
+      "sha256": "95bac822311b033c2fb54d631500c32a6ef5939341ef5583a33b482c2e462714"
+    },
+    "/container/packages/distribution.js": {
+      "bytes": 14184,
+      "sha256": "89de1674b599fef83d6f28d4aff92e02c736dd546e670498040605d42ffb1d51"
+    },
+    "/container/packages/index.js": {
+      "bytes": 206,
+      "sha256": "46a40278e915c8a26f400a4b564da8755534bb835f86d4557c4777e1b0a2d03a"
+    },
+    "/container/packages/manager.js": {
+      "bytes": 7882,
+      "sha256": "adaf4e039ec28e46221d8b4b9d4e64e495edce5324a16316a46a1e087fe47e0e"
+    },
+    "/container/process/lifecycle.js": {
+      "bytes": 2501,
+      "sha256": "cd1c13564379c76b1fe9e774a0e48da6f002f113a97ba9a0b49e06715c148490"
+    },
+    "/container/shell/host-command.js": {
+      "bytes": 4288,
+      "sha256": "90ba0a88a61997c858e01c98e9e3349c22131b52033c573097680dc28d2d64f1"
+    },
+    "/container/transport/rpc.js": {
+      "bytes": 9447,
+      "sha256": "f3cd605edca66796a4ca6d3a30d95d80865d69873c58b977471acacb5b2f402b"
+    },
+    "/container/types.js": {
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs": {
+      "bytes": 101271,
+      "sha256": "a548923df545ea76152924c0e9bf741e4e549a6de4c455308bde1d06945a91a2"
+    },
+    "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/worker.mjs": {
+      "bytes": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    },
+    "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm": {
+      "bytes": 9139276,
+      "sha256": "57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367"
+    },
+    "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc": {
+      "bytes": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs": {
+      "bytes": 6131,
+      "sha256": "eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280"
+    },
+    "/": {
+      "bytes": 60,
+      "sha256": "5ff229aebdaed9f5b677a3b36908f96ff6cd04a91c14bf81ed13fa7dbb3fdcaf"
+    }
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-f27e623971cec039be49e18209fa19822d9b8acb1e6d0a33ca65e02cd765efaf/live.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982/command.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-eafee4ca1b29ba1249dff3b1645b22cd4f4988bd1165500ee854c36a14f13280/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-abc2ab4e0c050795086f9daa1657c28605a1517d898195fd2cc64dcd9221627a/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/errors.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/container.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/index.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/shell/host-command.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/process/lifecycle.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fd/pipe.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/distribution.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/assets.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/packages/manager.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/memory.js",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/container/fs/errors.js",
+      "accepted": true
+    }
+  ],
+  "chromiumExecutable": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browser": "153.0.8010.12",
+  "qualification": {
+    "checks": [
+      {
+        "id": "HOST-METADATA:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-METADATA:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-EXACT-CONSUMPTION:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-STATUS",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-STATUS:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-STATUS:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-EPIPE",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-EPIPE:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-EPIPE:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-PATH-LOOKUP",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-FAILURE:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-FAILURE:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-TAIL-EXEC",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "type": "failure"
+        }
+      },
+      {
+        "id": "HOST-TAIL-EXEC:dispatches",
+        "passed": false,
+        "observed": 0
+      },
+      {
+        "id": "HOST-TAIL-EXEC:container-processes-retired",
+        "passed": false
+      },
+      {
+        "id": "HOST-METADATA",
+        "passed": false,
+        "observed": ""
+      },
+      {
+        "id": "HOST-METADATA:prepared-child",
+        "passed": false
+      },
+      {
+        "id": "HOST-METADATA:environment-bytes",
+        "passed": false,
+        "observed": 1
+      },
+      {
+        "id": "HOST-METADATA:distinct-filesystems",
+        "passed": false,
+        "observed": {}
+      },
+      {
+        "id": "HOST-PIPE-REDIRECT:shell-file",
+        "passed": false
+      },
+      {
+        "id": "HOST-STATUS:records",
+        "passed": false
+      },
+      {
+        "id": "HOST-PATH-LOOKUP:argv0",
+        "passed": false
+      },
+      {
+        "id": "HOST-FAILURE",
+        "passed": false,
+        "observed": {
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "HOST-FAILURE:no-native-fallback",
+        "passed": true
+      },
+      {
+        "id": "actual-sdk-initialization",
+        "passed": true,
+        "observed": 8
+      },
+      {
+        "id": "public-host-command-api",
+        "passed": false
+      },
+      {
+        "id": "browser-errors",
+        "passed": true,
+        "observed": [
+          [
+            "HOST-METADATA",
+            0
+          ],
+          [
+            "HOST-PIPE-REDIRECT",
+            0
+          ],
+          [
+            "HOST-EXACT-CONSUMPTION",
+            0
+          ],
+          [
+            "HOST-STATUS",
+            0
+          ],
+          [
+            "HOST-EPIPE",
+            0
+          ],
+          [
+            "HOST-PATH-LOOKUP",
+            0
+          ],
+          [
+            "HOST-FAILURE",
+            0
+          ],
+          [
+            "HOST-TAIL-EXEC",
+            0
+          ]
+        ]
+      },
+      {
+        "id": "owned-host-context-cleanup",
+        "passed": true,
+        "observed": [
+          [
+            "HOST-METADATA",
+            0,
+            0
+          ],
+          [
+            "HOST-PIPE-REDIRECT",
+            0,
+            0
+          ],
+          [
+            "HOST-EXACT-CONSUMPTION",
+            0,
+            0
+          ],
+          [
+            "HOST-STATUS",
+            0,
+            0
+          ],
+          [
+            "HOST-EPIPE",
+            0,
+            0
+          ],
+          [
+            "HOST-PATH-LOOKUP",
+            0,
+            0
+          ],
+          [
+            "HOST-FAILURE",
+            0,
+            0
+          ],
+          [
+            "HOST-TAIL-EXEC",
+            0,
+            0
+          ]
+        ]
+      }
+    ],
+    "passed": 4,
+    "total": 35,
+    "hostCommandDispatchPassed": false,
+    "commonContainerFdVfsQualified": false,
+    "shellBackendReady": false
+  },
+  "finishedAt": "2026-10-15T06:03:41.094Z"
+}

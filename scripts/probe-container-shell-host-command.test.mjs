@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { fixtures, judgeHostCommandProbe, readPinnedProbeInputs } from './probe-container-shell-host-command-lib.mjs';
 
 const bytes = (value) => [...new TextEncoder().encode(value)];
@@ -29,14 +30,15 @@ const special = {
 		stdout: bytes('broken=126\nnative=126\nafter\n'),
 		invocations: [invocation('/opt/host/bin/broken', ['/opt/host/bin/broken'])], records: [], consoleErrors: ['native exec failure']
 	},
-	'HOST-TAIL-EXEC': { code: 23, invocations: [probe('exit')] }
+	'HOST-TAIL-EXEC': { code: 23, invocations: [probe('exit')] },
+	'BASH-PIPESTATUS': { stdout: bytes('pipestatus=[]\n'), invocations: [] }
 };
 function observations() {
 	return fixtures.map((fixture) => {
 		const extra = structuredClone(special[fixture.id] ?? {});
 		return {
 			id: fixture.id, type: 'result', backendCompleted: true,
-			result: { code: extra.code ?? 0, stdout: extra.stdout ?? fixture.expectedStdout, stderr: extra.stderr ?? [] },
+			result: { code: extra.code ?? 0, stdout: extra.stdout ?? fixture.expectedStdout, stderr: extra.stderr ?? fixture.expectedStderr ?? [] },
 			invocations: extra.invocations, records: extra.records ?? [],
 			files: extra.files ?? {}, containerFiles: extra.containerFiles ?? {}, containerProcesses: [],
 			events: [{ type: 'sdkInitialized' }, { type: 'started' }],
@@ -58,6 +60,14 @@ test('actual dispatch evidence passes every check while common fd/VFS stays unqu
 	assert.equal(judged.passed, judged.total);
 	assert.equal(judged.commonContainerFdVfsQualified, false);
 	assert.equal(judged.shellBackendReady, false);
+	assert.equal(judged.observations.bashPipestatus, 'pipestatus=[]\n', 'recorded without affecting acceptance');
+});
+
+test('a pipeline member status must be observed where it is produced', () => {
+	const results = observations();
+	results.find((result) => result.id === 'HOST-EPIPE').result.stderr = bytes('writer=0\n');
+	results.find((result) => result.id === 'HOST-PIPE-REDIRECT').result.stderr = [];
+	assert.deepEqual(failed(results), ['HOST-PIPE-REDIRECT', 'HOST-EPIPE']);
 });
 
 test('missing or extra dispatches fail, including native fallback of an unregistered path', () => {
@@ -103,4 +113,40 @@ test('a handler running outside the scheduler owner or with a mutable invocation
 
 test('pinned inputs reject a wrong package receipt digest before reading files', async () => {
 	await assert.rejects(readPinnedProbeInputs({ packageReceipt: '/nonexistent', packageReceiptSha256: '0'.repeat(64) }));
+});
+
+const archived = async (name) => JSON.parse(await readFile(new URL(`../packages/container/test/host-command-shell/evidence/${name}.json`, import.meta.url)));
+
+test('the archived module-import attempt failed before any guest or dispatch', async () => {
+	const receipt = await archived('module-import');
+	assert.equal(receipt.complete, true);
+	assert.equal(receipt.hostCommandDispatchPassed, false);
+	assert.equal(receipt.results.length, 8);
+	for (const result of receipt.results) {
+		assert.equal(result.type, 'failure');
+		assert.match(result.error, /Failed to resolve module specifier "@wasm-idle\/core"/);
+		assert.equal(result.invocations, undefined);
+		assert.equal(result.workersAfterContextClose, 0);
+	}
+	assert.equal((await archived('module-import-process')).exitCode, 1);
+});
+
+test('the archived first dispatch run keeps its 31 of 35 result and exact failures', async () => {
+	const receipt = await archived('first-dispatch');
+	assert.equal(receipt.applicationCommit, 'ad23994135b804a4f0103886997a854c564eca5a');
+	assert.equal(receipt.hostCommandDispatchPassed, false);
+	const { passed, total, checks } = receipt.qualification;
+	assert.deepEqual([passed, total], [31, 35]);
+	assert.deepEqual(checks.filter((check) => !check.passed).map((check) => check.id),
+		['HOST-PIPE-REDIRECT', 'HOST-STATUS', 'HOST-EPIPE', 'HOST-FAILURE']);
+	const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+	const stdout = (id) => Buffer.from(byId[id].result.stdout).toString();
+	// Host-command statuses 126/134 and Bash's native exec failure 126 all arrived as 79.
+	assert.equal(stdout('HOST-STATUS'), 'exit=23\ncrash=79\n');
+	assert.equal(stdout('HOST-FAILURE'), 'broken=79\nnative=79\nafter\n');
+	assert.deepEqual(byId['HOST-STATUS'].records.map((record) => record.status), [23, 134]);
+	assert.equal(stdout('HOST-EPIPE'), 'y\npipe=\n');
+	assert.deepEqual(byId['HOST-EPIPE'].records.map((record) => record.status), [0, 64]);
+	assert(receipt.results.every((result) => result.workersAfterContextClose === 0));
+	assert.equal((await archived('first-dispatch-process')).exitCode, 1);
 });

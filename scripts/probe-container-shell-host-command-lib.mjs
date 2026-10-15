@@ -27,10 +27,11 @@ export const fixtures = [
 		script: 'cd sub && /opt/host/bin/probe roundtrip "space arg" "한글" ""; printf "status=%d\\n" "$?"',
 		readFiles: ['/sub/out.bin'], readContainerFiles: ['/workspace/sub/out.bin']
 	},
+	// Each status is read from `$?` where it is produced, without PIPESTATUS (see BASH-PIPESTATUS).
 	{
 		id: 'HOST-PIPE-REDIRECT', dispatches: 3, stdin: binary,
-		script: '/opt/host/bin/tool | /opt/host/bin/tool > binary; printf "pipe=%s\\n" "${PIPESTATUS[*]}"; /opt/host/bin/tool < binary',
-		readFiles: ['/binary'], expectedStdout: [...text('pipe=0 0\n'), ...binary]
+		script: '{ /opt/host/bin/tool; printf "first=%d\\n" "$?" >&2; } | /opt/host/bin/tool > binary; printf "last=%d\\n" "$?"; /opt/host/bin/tool < binary',
+		readFiles: ['/binary'], expectedStdout: [...text('last=0\n'), ...binary], expectedStderr: text('first=0\n')
 	},
 	{
 		id: 'HOST-EXACT-CONSUMPTION', dispatches: 2,
@@ -44,8 +45,8 @@ export const fixtures = [
 	},
 	{
 		id: 'HOST-EPIPE', dispatches: 2,
-		script: '/opt/host/bin/tool yes | /opt/host/bin/tool one; printf "\\npipe=%s\\n" "${PIPESTATUS[*]}"',
-		expectedStdout: text('y\npipe=64 0\n')
+		script: '{ /opt/host/bin/tool yes; printf "writer=%d\\n" "$?" >&2; } | /opt/host/bin/tool one; printf "\\nreader=%d\\n" "$?"',
+		expectedStdout: text('y\nreader=0\n'), expectedStderr: text('writer=64\n')
 	},
 	{
 		id: 'HOST-PATH-LOOKUP', dispatches: 1, stdin: text('abc'),
@@ -58,6 +59,12 @@ export const fixtures = [
 	{
 		id: 'HOST-TAIL-EXEC', dispatches: 1, expectedCode: 23,
 		script: 'exec /opt/host/bin/probe exit', expectedStdout: []
+	},
+	// Recorded only: the first dispatch run printed empty PIPESTATUS for host commands.
+	// This builtin-only pipeline shows whether that is a property of this Bash build.
+	{
+		id: 'BASH-PIPESTATUS', dispatches: 0, diagnostic: true,
+		script: 'true | false; printf "pipestatus=[%s]\\n" "${PIPESTATUS[*]}"'
 	}
 ];
 
@@ -109,8 +116,9 @@ export function judgeHostCommandProbe(results) {
 		const invocations = result?.invocations ?? [];
 		if (fixture.expectedStdout) {
 			check(fixture.id, completed(result) && output.code === (fixture.expectedCode ?? 0) &&
-				same(output.stdout, fixture.expectedStdout), {
-				code: output?.code, stdout: decode(output?.stdout), type: result?.type
+				same(output.stdout, fixture.expectedStdout) &&
+				(!fixture.expectedStderr || same(output.stderr, fixture.expectedStderr)), {
+				code: output?.code, stdout: decode(output?.stdout), stderr: decode(output?.stderr), type: result?.type
 			});
 		}
 		check(`${fixture.id}:dispatches`, invocations.length === fixture.dispatches &&
@@ -181,7 +189,11 @@ export function judgeHostCommandProbe(results) {
 	check('owned-host-context-cleanup', results.every((result) => result.initialWorkerTargets === 0 &&
 		result.remainingWorkerTargets === 0 && result.workersAfterContextClose === 0),
 	results.map((result) => [result.id, result.remainingWorkerTargets, result.workersAfterContextClose]));
+	const pipestatus = byId.get('BASH-PIPESTATUS');
 	return {
+		observations: {
+			bashPipestatus: completed(pipestatus) ? decode(pipestatus.result.stdout) : null
+		},
 		checks,
 		passed: checks.filter((entry) => entry.passed).length,
 		total: checks.length,
