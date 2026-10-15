@@ -207,8 +207,9 @@ node scripts/prepare-container-shell-bridge.mjs --verify-only \
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --fuzz=0` against its own crate (0001–0007 WASIX, 0008 SDK), and checks
-source identity again. `--sdk-source` is required since the SDK gained its own patch. It creates no source copy and
+`patch --dry-run --forward --fuzz=0` against its own crate (0001–0007 WASIX, 0008 SDK), and checks
+source identity again. Reversed or already applied patches fail. `--sdk-source` is
+required since the SDK gained its own patch. It creates no source copy and
 makes no changes to the supplied checkout. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says
 `patches-apply-cleanly-not-built`. The five-patch
@@ -322,6 +323,23 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+## Original five-patch SDK build deadline
+
+The first real [SDK release-build receipt](evidence.sdk-build-timeout.json) records
+a failed 3,600-second attempt using the original helper commit
+`635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2`. The outer wall deadline killed
+Cargo, which exited -9 after 3,600.395 seconds; the supervisor's final status is 3. The [unchanged original process record](evidence.sdk-build-timeout-process.json)
+also records rustc child 4042242 subsequently reaped with exit 0 and no remaining
+entries or cleanup errors. That older guard's main-thread-only traversal could
+miss worker-thread children in process/RSS samples, so its `allReaped` result
+does not independently qualify every task-owned descendant. Separate read-only
+archival checks match all 580 source pins and report the known historical PIDs
+gone; they do not reconstruct missing observations. The completed log's inspected
+tail ends at `console_error_panic_hook` without a Rust compile error in that
+excerpt. No runnable SDK Wasm was produced. Web glue, static inventory, local
+module/Worker packaging, real Bash execution and browser gates remain unqualified;
+the source, locks and release profile retain their original identities.
+
 ## Six-patch SDK check and binary gate
 
 The fresh six-patch candidate at source commit
@@ -361,8 +379,9 @@ Cargo lock contains 457 packages. The earlier source inspection lacked the requi
 nightly; the recorded preparation attempt used an isolated installation of the exact
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
 prefetch, offline validation, corrected Wasmer/SDK/example Rust typing and the six-patch
-SDK release/bindgen gate now pass. The separate real Bash producer and local host-module
-packaging have their own receipts. No memory or disk estimate is a measured producer
+SDK release/bindgen gate now pass. The separate [real Bash producer](producer/README.md) and local host-module
+packaging follow-ups retain their own receipts; they are independent of this
+SDK resolver build. No memory or disk estimate is a measured producer
 requirement, and no previous or unrelated cache was deleted.
 
 Actual guest qualification uses a separately pinned package and the same real Chromium
@@ -541,6 +560,17 @@ timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
 The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
 enabled for these runtimes.
 
+The fix was gated on commit `25e0c1f958d5a9c87b8fdf012e681652ca23a621` in a fresh physical
+copy with 583 pins and a unique target: typecheck 330.07 s, release 738.759 s, bindgen
+2.284 s and static inspection 0.282 s, each exiting 0 with every process reaped. The bound
+Wasm is 9,132,255 bytes, SHA-256
+`2ce591c515f353f91b7966da10a49f3b177c4d40d365a4be651ac69714e9825d`; binary receipt
+`ec389294c97172bb6457f0044bd781eab8e78fc9ca77998c79a994a54724ecc6`. Stage receipts are
+archived as `evidence.status-order-*.json` with a
+[recheck](evidence.status-order-sdk-binary-metadata.json). Local packaging produced receipt
+`1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`. Browser results with
+this package are recorded on the dispatch branch.
+
 ## Trusted host filesystem mounts
 
 Patches 0011 and 0012 let Bash use the common container filesystem instead of a private
@@ -598,6 +628,20 @@ of a Worker before Rust destructors run.
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
 against other processes keep their existing WASIX behavior. These remain gaps.
+
+### Actual SDK gate
+
+Commit `b0e740d17d107516f98c42862a61f98046fcd8b4` (patches 0001–0012, including #208's
+status-order fix) was prepared into a fresh physical copy with 584 pins (SDK 200 and WASIX
+377 files) and a unique target: typecheck 517.947 s, release 647.743 s, bindgen 2.017 s and
+static inspection 0.255 s. Each stage exited 0 with every process reaped. The bound Wasm is
+9,187,858 bytes, SHA-256 `8385617d56ffcdf261bb5af83061233bd302004a64f5d729c62791f0993b5ca3`;
+binary receipt `7bbb04175c6d94337ea9c64d7f0290cfaba912a6f1e4b491cd160ce0589215e7`. Stage
+receipts are archived as `evidence.host-filesystem-*.json` with a
+[recheck](evidence.host-filesystem-sdk-binary-metadata.json). Local packaging produced
+receipt `bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e`. An earlier
+gate of the same patches on the pre-fix base passed and only produced a preliminary
+package; its browser runs are recorded as preliminary on the shell branch.
 
 ## Workspace WebAssembly executables
 
