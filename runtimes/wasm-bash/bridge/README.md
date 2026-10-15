@@ -673,6 +673,10 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - A request channel dropped without completion still completes the child with status 126.
 
 Each running host command occupies one pooled service Worker until it completes.
+Outstanding descriptor requests are indexed by command and removed on completion.
+Terminal cleanup rejects only that command's outstanding promises; completed request
+IDs are not retained for the lifetime of a long-running stream. The native bridge test
+also checks this request ownership and the host filesystem registration lifetime.
 
 ### Actual SDK gate
 
