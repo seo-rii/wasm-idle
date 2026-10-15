@@ -121,8 +121,9 @@ persistent cache. Each run requires:
 | browser-errors / owned-workers-retired | no browser errors or remaining dedicated Workers |
 
 `shellBackendReady` and `commonContainerFdVfsQualified` stay false. Passing this script
-does not qualify descriptors beyond stdio, cancellation of a running shell command, job
-control, signals, PTY behavior, or Clang reading the shell's stdin.
+does not qualify descriptors beyond stdio, job control, signals, PTY behavior, or
+Clang reading the shell's stdin. The separate interrupt scenario qualifies the
+explicit owner cancellation it actually exercises.
 
 ## Running
 
@@ -132,7 +133,15 @@ esbuild. `--check` validates every pin and the bundles without launching Chromiu
 ```sh
 node scripts/probe-container-shell-acceptance.mjs --check /absolute/config.json
 node scripts/probe-container-shell-acceptance.mjs --run /absolute/config.json
+node scripts/probe-container-shell-acceptance.mjs --run-syntax /absolute/config.json
 ```
+
+`--run-syntax` runs only the SH-02/SH-03 syntax scenario below, with a 60-second
+scenario deadline and 30-second command deadlines. It reads and verifies the
+same local input pins, but never executes Clang or downloads compiler/sysroot
+bodies in the browser. Its receipt reports `scenario: "syntax-only"` and the
+independent `shellSyntaxPassed` flag; `shellAcceptancePassed` stays false. The
+default `--run` now includes this scenario after the seven existing ones.
 
 The configuration names absolute paths and independently reviewed digests:
 `packageReceipt`/`packageReceiptSha256`, `bashWebc`, `busyboxReceipt`/`busyboxReceiptSha256`,
@@ -148,6 +157,43 @@ host filesystem operations in the private receipt. The optional diagnostic-only
 such receipt fails the required mount-profile gate even if its scripts pass.
 It does not alter the public session's mounts. The compiler and shell traces are
 fixture data; this logging is absent from the product owner.
+
+## Quoting, exported environment and shell syntax
+
+The standalone scenario passes **12/12 checks** in actual Chromium with the same
+0001–0020 SDK: [receipt](./evidence/syntax-0020.json),
+[process cleanup](./evidence/syntax-0020-process.json) and
+[execution/source pins](./evidence/syntax-0020-metadata.json). Guarded time was
+19.952 seconds; all 16 SDK Workers retired and no compiler, linker or sysroot body
+was downloaded. This additional result preserves the earlier seven-scenario
+72/72 receipt unchanged.
+
+The syntax scenario uses the public session, real GNU Bash and the pinned BusyBox
+`mkdir`, `cp`, `cat` and `grep` commands. It adds the coverage missing from the
+earlier seven scenarios:
+
+- Single/double quoting preserves spaces, Korean UTF-8 and an empty `grep` pattern
+  in actual external-command argv; quoted file names remain in the common VFS.
+- `export CONTAINER_SYNTAX_VALUE='value with spaces 한글'` reaches each later
+  external-command invocation unchanged. The owner records only that fixed
+  fixture key, never arbitrary environment entries. Each invocation also has
+  the actual cwd `/workspace/syntax 한글`, and relative BusyBox file access works.
+- `&&` and `||` follow real `grep` statuses 0 and 1, including a skipped success
+  branch and a selected fallback. Supervisor statuses and file bytes are checked.
+- `$(cat 'input file')` captures the real command's output, strips its final
+  newline and preserves its embedded newline inside double quotes.
+- `<`, truncating `>`, and `>>` preserve exact input/file bytes. A group containing
+  real `cat` followed by a stderr write distinguishes `>merged.out 2>&1` from
+  `2>&1 >split.out`: only the latter leaves that stderr write on the original
+  stdout. The test checks both files and both captured streams.
+
+Twelve actual BusyBox dispatches must produce their expected argv, cwd and exit
+statuses. The scenario additionally requires zero compiler body requests, no
+prepared sysroot, no browser errors, and full process/Worker cleanup. Judge unit
+tests mutate these observations to show that a matching final success marker
+alone cannot qualify the run. They do not replace the actual Chromium evidence.
+This covers these named Bash constructs only; no shebang, PTY or general POSIX
+conformance claim is added.
 
 ## Interrupt run
 
