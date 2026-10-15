@@ -1,5 +1,9 @@
 # Actual live LLVM qualification
 
+The [closed-input follow-up](null-device/README.md) qualifies the null device and
+fd reuse fix at `29435e8a`: 14 real checks in each environment, nine retired Workers
+each, and 235 unit/contract tests. The original evidence below remains unchanged.
+
 The Node and isolated Chromium receipts qualify `llvm-clang-tool-host-live-v1`
 at application commit `66ac18fa9c1ec4bec4bfa92c7e9aca43c21608ed`. Both run the same
 `fixture.mjs` with the real pinned Clang, cc1 and LLD modules and the complete
