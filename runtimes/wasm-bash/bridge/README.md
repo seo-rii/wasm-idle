@@ -476,7 +476,7 @@ packaging step produced package receipt
 
 ### Nonblocking join of a running child
 
-With patch 0009, two further actual runs of the unchanged eight cases each passed all
+With patch 0009, two further actual runs each passed every
 status checks except one intermittent loss: Bash once observed 0 for the first host
 command of a shell while the Supervisor completed it with 23. Twenty consecutive
 dispatches in one shell then reproduced it on the first command only. In `proc_join`,

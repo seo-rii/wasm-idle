@@ -158,10 +158,15 @@ if (verifyOnly) {
 	]) {
 		for (const name of names) {
 			const path = join(bridge, 'patches', name);
-			execFileSync('patch', ['--batch', '--fuzz=0', '-p1', '-i', path], {
-				cwd: join(output, crate),
-				stdio: 'pipe'
-			});
+			// Sequential patches may apply at an offset; never leave *.orig backups.
+			execFileSync(
+				'patch',
+				['--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
+				{
+					cwd: join(output, crate),
+					stdio: 'pipe'
+				}
+			);
 			receipts[name] = sha256(await readFile(path));
 		}
 	}
