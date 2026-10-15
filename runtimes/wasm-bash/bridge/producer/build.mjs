@@ -13,6 +13,7 @@ const HERE = path.dirname(THIS_FILE),
 	BRIDGE = path.resolve(HERE, '..');
 const REPOSITORY = path.resolve(HERE, '../../../..');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
+const STARTUP_CWD_LOCK_SHA256 = '6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5';
 const REDIRECT_HOSTS = new Set([
 	'github.com',
 	'codeload.github.com',
@@ -96,6 +97,22 @@ export async function verifyLocalSources(lock) {
 		files[relative] = { bytes: bytes.length, sha256: digest };
 	}
 	return files;
+}
+
+export async function verifyStartupCwdSources() {
+	const bytes = await readFile(path.join(HERE, 'startup-cwd.lock.json'));
+	assert.equal(sha256(bytes), STARTUP_CWD_LOCK_SHA256, 'startup cwd input lock identity');
+	const policy = JSON.parse(bytes);
+	const source = await readFile(path.join(BRIDGE, policy.source.path));
+	assert.deepEqual(
+		{ bytes: source.length, sha256: sha256(source) },
+		{ bytes: policy.source.bytes, sha256: policy.source.sha256 },
+		'startup cwd source identity'
+	);
+	return {
+		...policy,
+		manifest: { bytes: bytes.length, sha256: STARTUP_CWD_LOCK_SHA256 }
+	};
 }
 
 export async function verifyArchive(file, expectedSha256) {
@@ -185,8 +202,9 @@ async function fetchPinned(input, destination, signal) {
 	return verifyArchive(destination, input.sha256);
 }
 
-export function compilerWrapper(clang, resource, object) {
-	for (const value of [clang, resource, object])
+export function compilerWrapper(clang, resource, objects) {
+	assert.equal(objects.length, 2, 'the exec encoder and startup cwd objects are required');
+	for (const value of [clang, resource, ...objects])
 		assert(/^[A-Za-z0-9_/.-]+$/.test(value), 'unsafe compiler wrapper path');
 	return `#!/bin/sh
 set -eu
@@ -199,7 +217,7 @@ for arg in "$@"; do
   esac
 done
 if [ "$link" = 1 ]; then
-  exec '${clang}' -resource-dir '${resource}' '${object}' "$@"
+  exec '${clang}' -resource-dir '${resource}' ${objects.map((object) => `'${object}'`).join(' ')} "$@"
 fi
 exec '${clang}' -resource-dir '${resource}' "$@"
 `;
@@ -208,13 +226,21 @@ exec '${clang}' -resource-dir '${resource}' "$@"
 export async function buildBashShim(options) {
 	const lock = await readProducerLock();
 	const localFiles = await verifyLocalSources(lock);
+	const startupCwd = await verifyStartupCwdSources();
+	localFiles[startupCwd.source.path] = {
+		bytes: startupCwd.source.bytes,
+		sha256: startupCwd.source.sha256
+	};
 	const producerFiles = {};
 	for (const name of [
 		'build.mjs',
 		'verify.mjs',
 		'inputs.lock.json',
 		'README.md',
-		'build.test.mjs'
+		'build.test.mjs',
+		'startup-cwd.lock.json',
+		'startup-cwd.test.mjs',
+		'startup-cwd.fixture.c'
 	]) {
 		const bytes = await readFile(path.join(HERE, name));
 		producerFiles[name] = { bytes: bytes.length, sha256: sha256(bytes) };
@@ -236,6 +262,7 @@ export async function buildBashShim(options) {
 			jobs: options.jobs,
 			buildTarget: 'shell',
 			shimTarget: 'wasm32-wasmer-wasi',
+			startupCwd,
 			qualification: 'not-run; SDK/browser execution remains a separate gate'
 		};
 	assert(
@@ -311,7 +338,9 @@ export async function buildBashShim(options) {
 				upstreamTarget: 'shell',
 				sourceDateEpoch: lock.sourceDateEpoch,
 				shimTarget: 'wasm32-wasmer-wasi',
-				wrapper: 'link-time execve object; original configure and Asyncify recipe unchanged'
+				wrapper:
+					'link-time execve and startup cwd objects; original configure and Asyncify recipe unchanged',
+				startupCwd
 			},
 			commands: [],
 			artifacts: {},
@@ -417,6 +446,14 @@ export async function buildBashShim(options) {
 		}
 		const license = await readFile(path.join(source, 'COPYING'));
 		assert.equal(sha256(license), lock.licenseSha256, 'original GNU Bash license');
+		for (const [relative, expected] of Object.entries(startupCwd.sysrootFiles)) {
+			const bytes = await readFile(path.join(sysroot, relative));
+			assert.deepEqual(
+				{ bytes: bytes.length, sha256: sha256(bytes) },
+				expected,
+				`startup cwd pinned libc/CRT identity: ${relative}`
+			);
+		}
 		receipt.recipe.upstreamBuildFiles = [];
 		for (const name of ['Makefile', 'makefile', 'GNUmakefile', 'configure', 'Makefile.in']) {
 			const bytes = await readFile(path.join(source, name)).catch((error) => {
@@ -442,29 +479,39 @@ export async function buildBashShim(options) {
 		const binaryenVersion = await run(wasmOpt, ['--version'], work, true);
 		assert.match(clangVersion, /\bclang version 16\.0\.0\b/, 'pinned native Clang version');
 		assert.match(binaryenVersion, /\bwasm-opt version 108\b/, 'pinned native Binaryen version');
-		const object = path.join(work, 'execve.o'),
-			shim = path.join(work, 'execve.c');
-		await cp(path.join(BRIDGE, 'execve.c'), shim);
-		await run(clang, [
-			'--target=wasm32-wasmer-wasi',
-			`--sysroot=${sysroot}`,
-			'-resource-dir',
-			resource,
-			'-O2',
-			'-pthread',
-			'-matomics',
-			'-mbulk-memory',
-			'-mmutable-globals',
-			'-msign-ext',
-			'-c',
-			shim,
-			'-o',
-			object
-		]);
-		const objectBytes = await readFile(object);
-		receipt.artifacts.shimObject = { bytes: objectBytes.length, sha256: sha256(objectBytes) };
+		const objects = [];
+		for (const [name, artifact] of [
+			['execve', 'shimObject'],
+			['startup_cwd', 'startupCwdObject']
+		]) {
+			const object = path.join(work, `${name}.o`),
+				shim = path.join(work, `${name}.c`);
+			await cp(path.join(BRIDGE, `${name}.c`), shim);
+			await run(clang, [
+				'--target=wasm32-wasmer-wasi',
+				`--sysroot=${sysroot}`,
+				'-resource-dir',
+				resource,
+				'-O2',
+				'-pthread',
+				'-matomics',
+				'-mbulk-memory',
+				'-mmutable-globals',
+				'-msign-ext',
+				'-c',
+				shim,
+				'-o',
+				object
+			]);
+			const objectBytes = await readFile(object);
+			receipt.artifacts[artifact] = {
+				bytes: objectBytes.length,
+				sha256: sha256(objectBytes)
+			};
+			objects.push(object);
+		}
 		const wrapper = path.join(work, 'clang-with-exec-shim');
-		await writeFile(wrapper, compilerWrapper(clang, resource, object), { mode: 0o700 });
+		await writeFile(wrapper, compilerWrapper(clang, resource, objects), { mode: 0o700 });
 		await run(
 			'make',
 			[`-j${options.jobs}`, `CC=${wrapper}`, `LLD_PATH=${toolchain}/bin`, 'shell'],
@@ -570,6 +617,7 @@ export async function buildBashShim(options) {
 		};
 		// Recheck local dependencies and source archives after compilation, before success.
 		await verifyLocalSources(lock);
+		assert.deepEqual(await verifyStartupCwdSources(), startupCwd, 'startup cwd inputs changed');
 		for (const [name, identity] of Object.entries(producerFiles)) {
 			const bytes = await readFile(path.join(HERE, name));
 			assert.deepEqual(

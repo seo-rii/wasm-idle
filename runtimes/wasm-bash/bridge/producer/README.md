@@ -1,7 +1,8 @@
 # Optional real-Bash exec shim producer
 
-This opt-in experiment links [the lossless `execve.c` encoder](../execve.c) into
-the same pinned upstream GNU Bash parser/evaluator as the existing producer.
+This opt-in experiment links [the lossless `execve.c` encoder](../execve.c) and
+a separate [startup cwd initializer](../startup_cwd.c) into the same pinned
+upstream GNU Bash parser/evaluator as the existing producer.
 It does not change `scripts/prepare-runtime.mjs`, the original expected hashes,
 the playground assets or its Wasmer SDK. Neither a successful source preparation
 nor an import verifier result establishes a supported shell backend.
@@ -9,10 +10,94 @@ nor an import verifier result establishes a supported shell backend.
 The patched SDK library and external snapshot example have passed a real Rust
 typecheck, as recorded by the preceding source-bridge change. A built SDK binary,
 real guest exec/wait and common Supervisor fd/filesystem bindings remain separate
-gates. The producer has built a real Bash Wasm/WEBc candidate; guest execution is
-still pending.
+gates. Both the original producer and the startup cwd variant have built real
+Bash Wasm/WEBc candidates. Their distinct receipts below cover build/import
+inspection; actual browser qualification is recorded separately.
+
+The rebuilt SDK resolver on [#196](https://github.com/seo-rii/wasm-idle/pull/196)
+and this Bash variant pass all 18 selected actual Chromium observations on
+[#199](https://github.com/seo-rii/wasm-idle/pull/199). Those results cover native
+WASIX Directory/stdio only; common Container ownership and shell MVP remain open.
+
+## Startup cwd compatibility
+
+The pinned WASIX libc has two cwd states. Its `getcwd()` reads the host's actual
+cwd, but relative `open()` calls use a legacy `__wasilibc_cwd` initialized to
+`/`. Its `chdir()` updates both. Actual Chromium comparisons with the unchanged
+Bash/SDK observed `/workspace` from the host cwd syscall while relative shell
+redirects were absent from the mounted `Directory`. An absolute
+`/workspace/binary` redirect and an explicit initial `cd /workspace` each wrote
+the exact nine binary fixture bytes into that same mount. A parent shell builtin
+relative redirect reproduced the failure, so a pipeline fork alone cannot
+explain it. These comparisons identify this selected libc's startup boundary;
+they do not qualify the common Container filesystem.
+
+The new fixed-source constructor calls `getcwd(NULL, 0)`, `chdir()` with that
+actual path and `free()` before Bash's `main`. It reads no environment variable
+and changes no script or argument. The pinned CRT initializes TLS and invokes
+constructors before `main`; its preopen constructor runs at priority 51, before
+this initializer's priority 65,535. On getcwd/chdir failure the initializer emits
+a fixed stderr diagnostic and exits 125 before the shell runs. Partial diagnostic
+writes are drained; a closed or zero-progress stderr stops diagnostic output
+and still fails, rather than hanging. The cwd allocation is freed after either
+successful or failed `chdir`.
+
+[startup-cwd.lock.json](startup-cwd.lock.json) independently pins this C source,
+the exact extracted libc/CRT bytes, constructor priorities and failure status.
+`build.mjs` pins that complete manifest digest. The original `inputs.lock.json`,
+`verify.mjs`, exec encoder and archived build receipts remain unchanged so the
+historical reader continues to verify the original candidate. A new receipt
+records both manifests, `startupCwdObject`, its source and the second link object;
+the source-materials pack includes the initializer, manifest and native fixture.
+The current source/native checks verify constructor ordering, argv preservation,
+error cleanup and bounded failure output. They do not run WASIX or Bash.
+
+This is a port for the selected Bash producer. It does not automatically repair
+other WASIX command binaries, replace dirfd/path semantics or implement the
+trusted Supervisor command registry, common live fd/VFS or shell MVP.
 
 ## Archived real build and read-only verification
+
+The startup cwd variant was built offline from application commit
+`7d15375967ed557e724488e82bab75cb5c4b41cb` on 2026-10-15. Its unchanged
+[build receipt](evidence.startup-cwd-build.json) records all 14 successful
+commands and the separate 708-byte startup object with SHA-256
+`653f5b867e93d0a1a9059e2a60bf479d3e531ff6a0308d25bc9cc71cb4699a7a`.
+The [process receipt](evidence.startup-cwd-process.json) records exit 0,
+129.466 seconds and complete descendant cleanup with no cleanup errors or
+termination signals. `make shell` took 110.262 seconds in this local run.
+These observations do not establish clean/cold build performance or a speedup
+over the earlier build.
+
+The [recheck receipt](evidence.startup-cwd-recheck.json) preserves the original
+build/process digests, all 29 supervisor source/input/tool pins, complete input
+archive identities and all 25 source-materials file identities. The actual
+extracted libc and CRT match `startup-cwd.lock.json`. The pack includes the
+startup source, manifest and native fixture; the second link object has its own
+artifact identity. The 1,811,371-byte Wasm validates with the same 50 imports, 15 exports,
+seven-i32 exec signature and shared memory profile described below. Its SHA-256
+is `2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c`.
+The 1,812,678-byte WEBc has SHA-256
+`045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4`.
+The 10,447,539-byte source-materials archive remains
+`completeReleaseSourcePack: false`. No binary or archive is committed to Git.
+
+Verify this variant's pinned receipts and current executable source dependencies
+without external artifacts, or supply both paths to recheck complete inputs,
+both objects, artifacts, actual CRT/libc and the full Wasm inventory:
+
+```sh
+node runtimes/wasm-bash/bridge/producer/verify-startup-cwd-evidence.mjs
+
+node --disable-wasm-trap-handler --wasm-num-compilation-tasks=1 \
+  runtimes/wasm-bash/bridge/producer/verify-startup-cwd-evidence.mjs \
+  --artifact-root /private/startup-cwd-bash-build \
+  --input-cache /private/inputs
+```
+
+These readers never execute a guest. `runtimeQualified` remains false in the
+producer receipts, and common Container fd/VFS, command dispatch, foreground
+cancellation and the Clang/BusyBox shell scenario remain independent gates.
 
 The original build ran at application commit
 `74abe3922c5a248b57ef0cb2d38d2d9a86fa1fc5` on 2026-10-14 and finished with
@@ -68,9 +153,10 @@ cannot be provided as runtime metadata.
 
 The script extracts complete verified archives into a new private output. It
 uses the existing resource-directory/builtins setup, `make shell`, source epoch
-and upstream configure/Asyncify recipe. The one addition is an `execve.o` compiled
-for the WASIX wasm32 target with shared-memory features. A generated compiler
-wrapper adds that object to link invocations before the original arguments; it
+and upstream configure/Asyncify recipe. The `execve.o` and `startup_cwd.o`
+objects are compiled separately for the WASIX wasm32 target with shared-memory
+features. A generated compiler wrapper adds both objects to link invocations
+before the original arguments; it
 passes compilation, preprocessing, assembly and compiler metadata queries
 through unchanged. It never interprets a Bash command, replaces upstream parsing
 or returns fake syscall success. A Bash build that does not actually import
@@ -105,6 +191,7 @@ node runtimes/wasm-bash/bridge/producer/build.mjs \
 
 # Producer guard and argv/ABI unit checks; these do not qualify Bash execution.
 node --test runtimes/wasm-bash/bridge/producer/build.test.mjs
+node --test runtimes/wasm-bash/bridge/producer/startup-cwd.test.mjs
 ```
 
 Omit `--webc` to build only the raw Wasm candidate using four archives. `--download`
@@ -139,7 +226,8 @@ license and optional `bash-exec-shim.webc`. It is separate from every original
 `dist` or browser asset and is never automatically mounted, published or deployed.
 `source-materials.tar.gz` includes the complete original Bash source archive,
 GNU COPYING, the C/Rust bridge sources, five runtime patches, exact producer and
-lock, generated compiler wrapper/configuration and recorded build commands.
+both locks, startup initializer/native fixture, generated compiler
+wrapper/configuration and recorded build commands.
 It is a reviewable source-materials bundle, not a claim that all corresponding
 sources/notices for linked WASIX libc and runtime libraries are release-qualified.
 That license/source inventory remains a release gate.

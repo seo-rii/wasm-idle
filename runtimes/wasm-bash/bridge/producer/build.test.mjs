@@ -43,6 +43,12 @@ test('plan verifies pinned source dependencies, preserves all original archive p
 	assert.equal(plan.status, 'plan-only-no-download-no-build');
 	assert.equal(plan.inputs.length, 5);
 	assert.equal(plan.jobs, 1);
+	assert.equal(plan.startupCwd.profile, 'bash-wasix-startup-cwd-v1');
+	assert.deepEqual(plan.localFiles['startup_cwd.c'], {
+		bytes: plan.startupCwd.source.bytes,
+		sha256: plan.startupCwd.source.sha256
+	});
+	assert(plan.producerFiles['startup-cwd.lock.json']);
 	assert.deepEqual(
 		await readFile(new URL('../../scripts/prepare-runtime.mjs', import.meta.url)),
 		before
@@ -145,20 +151,20 @@ test('archive verification rejects symlinks without altering the referenced byte
 		assert.equal(await readFile(file, 'utf8'), 'immutable');
 	}));
 
-test('compiler wrapper injects only link object and preserves original arguments byte-for-byte', async () =>
+test('compiler wrapper injects both pinned link objects and preserves original arguments byte-for-byte', async () =>
 	fixture(async (directory) => {
 		// This is an argv protocol unit test, not compiler/Bash runtime evidence.
 		const compiler = path.join(directory, 'clang'),
 			wrapper = path.join(directory, 'wrapper');
 		const resource = path.join(directory, 'resource'),
-			object = path.join(directory, 'execve.o');
+			objects = [path.join(directory, 'execve.o'), path.join(directory, 'startup_cwd.o')];
 		const result = path.join(directory, 'argv.json');
 		await writeFile(
 			compiler,
 			`#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.PRODUCER_ARGV_FILE, JSON.stringify(process.argv.slice(2)));\n`
 		);
 		await chmod(compiler, 0o700);
-		await writeFile(wrapper, compilerWrapper(compiler, resource, object), { mode: 0o700 });
+		await writeFile(wrapper, compilerWrapper(compiler, resource, objects), { mode: 0o700 });
 		for (const [args, inject] of [
 			[['-c', 'space arg.c', '-o', 'object.o'], false],
 			[['--version'], false],
@@ -172,7 +178,7 @@ test('compiler wrapper injects only link object and preserves original arguments
 			assert.deepEqual(JSON.parse(await readFile(result)), [
 				'-resource-dir',
 				resource,
-				...(inject ? [object] : []),
+				...(inject ? objects : []),
 				...args
 			]);
 		}
