@@ -76,6 +76,7 @@ const installedSources = [
 	['sdk_host_command_pending.rs', 'wasmer-sdk', 'src/host_command_pending.rs'],
 	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs'],
 	['sdk_host_filesystem_lifetime.rs', 'wasmer-sdk', 'src/host_filesystem_lifetime.rs'],
+	['sdk_exit_status.rs', 'wasmer-sdk', 'src/host_exit_status.rs'],
 	['bounded_pipe.rs', 'virtual-fs', 'src/bounded_pipe.rs']
 ];
 const compileProbe = 'host_command_compile_probe.rs';

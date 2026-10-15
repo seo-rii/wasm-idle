@@ -694,6 +694,9 @@ Each running host command occupies one pooled service Worker until it completes.
 Patch 0016 adds [`Instance.waitForExit()`](STREAMING-EXIT.md) for caller-owned byte
 streams. It preserves the legacy capture API and never drains or closes a stream.
 Retain the stdin/stdout/stderr properties before consuming the instance with this method.
+Guest exits retain their original status. Runner setup failures and runtime traps reject
+the streaming completion promise; they cannot be mistaken for a guest exit 1. The
+legacy capture API keeps its historical code 1 projection for those failures.
 
 Patches 0017–0019 add a fixed 64 KiB byte queue for WASIX-created pipes and for the SDK's
 raw byte-stream command profile. The extra pinned producer input is `virtual-fs 0.601.0`

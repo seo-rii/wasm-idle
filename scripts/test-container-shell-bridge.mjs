@@ -36,7 +36,12 @@ try {
 		stdio: 'inherit',
 		env: { ...process.env, WASM_IDLE_EXEC_FRAME_FIXTURES: temporary }
 	});
-	for (const name of ['sdk_host_command_pending', 'sdk_host_filesystem_lifetime', 'bounded_pipe']) {
+	for (const name of [
+		'sdk_host_command_pending',
+		'sdk_host_filesystem_lifetime',
+		'bounded_pipe',
+		'sdk_exit_status'
+	]) {
 		const executable = join(temporary, name);
 		execFileSync(
 			process.env.RUSTC || 'rustc',
