@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance, readPinnedProbeInputs
+	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance,
+	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
 const bytes = (value) => [...new TextEncoder().encode(value)];
@@ -29,13 +30,34 @@ function result(run) {
 		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function interrupted() {
+	let seq = 0;
+	const timeline = [], counts = new Map();
+	for (const [path, status] of INTERRUPT_DISPATCHES) {
+		const occurrence = (counts.get(path) ?? 0) + 1;
+		counts.set(path, occurrence);
+		timeline.push({ seq: seq++, type: 'dispatch', path });
+		if (INTERRUPTS.some((plan) => plan.path === path && plan.occurrence === occurrence))
+			timeline.push({ seq: seq++, type: 'interrupt', path, interrupted: 1 });
+		timeline.push({ seq: seq++, type: 'dispatchEnd', path, status });
+	}
+	return {
+		type: 'result', backendCompleted: true,
+		result: { code: 0, stdout: bytes('spin=130\nclang=130\ndiscarded\nhello\n'), stderr: bytes(CLANG_TRIPLE_WARNING.repeat(2)) },
+		records: INTERRUPT_DISPATCHES.map(([path, status]) => ({ path, status })), timeline,
+		files: { '/workspace/demo/interrupted.wasm': { error: 'ENOENT' } },
+		artifact: { bytes: 1234, magic: [0, 97, 115, 109, 1, 0, 0, 0] }, containerProcesses: [],
+		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
 		initialWorkerTargets: 0, workersAfterContextClose: 0,
 		runs: [
 			{ run: 'cold', result: result('cold'), downloads: { start: counts(0), end: counts(1) } },
-			{ run: 'warm', result: result('warm'), downloads: { start: counts(1), end: counts(1) } }
+			{ run: 'warm', result: result('warm'), downloads: { start: counts(1), end: counts(1) } },
+			{ run: 'interrupt', result: interrupted(), downloads: { start: counts(1), end: counts(1) } }
 		]
 	};
 }
@@ -96,6 +118,23 @@ test('stderr may hold only the pinned Clang triple warning, once', () => {
 	assert.deepEqual(failed(value), ['cold:script', 'warm:script'], 'the warning proves Clang ran on the forwarded route');
 });
 
+test('an interrupt must stop the running command, keep Bash going and discard the compile', () => {
+	const value = receipt(), run = value.runs[2].result;
+	run.result.stdout = bytes('spin=0\nclang=130\nkept\nhello\n');
+	run.files['/workspace/demo/interrupted.wasm'] = [0, 97, 115, 109];
+	// An interrupt after the command had already finished proves nothing.
+	const late = run.timeline.findIndex((entry) => entry.type === 'interrupt');
+	run.timeline[late].seq = 1000;
+	run.records[2].status = 0;
+	assert.deepEqual(failed(value), ['interrupt:script', 'interrupt:supervisor-statuses', 'interrupt:interrupted-while-running',
+		'interrupt:interrupted-compile-discarded']);
+	const fresh = receipt();
+	fresh.runs[2].result.result.stderr = bytes(CLANG_TRIPLE_WARNING.repeat(3));
+	assert.deepEqual(failed(fresh), [], 'the interrupted compile may or may not have printed its warning');
+	fresh.runs[2].result.timeline.find((entry) => entry.type === 'interrupt').interrupted = 2;
+	assert.deepEqual(failed(fresh), ['interrupt:interrupted-while-running']);
+});
+
 test('browser errors and Workers that outlive their owner fail', () => {
 	const value = receipt();
 	value.runs[0].result.consoleErrors = ['boom'];
@@ -150,5 +189,47 @@ test('with host-command work off the scheduler thread, five consecutive runs pas
 		assert.equal(receipt.packageReceipt.sha256, 'ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85');
 		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total, receipt.shellAcceptancePassed], [30, 30, true]);
 		assert.equal((await archived(`service-run-${index}-process`)).exitCode, 0);
+	}
+});
+
+test('the archived interrupt run stops a running artifact and compile while Bash continues', async () => {
+	const receipt = await archived('interrupt-run-1');
+	assert.equal(receipt.applicationCommit, '6251c8b7882dc5a5719e82742c7ef141748be63b');
+	const interrupt = receipt.runs.find((run) => run.run === 'interrupt').result;
+	assert.equal(Buffer.from(interrupt.result.stdout).toString(), 'spin=130\nclang=130\ndiscarded\nhello\n');
+	assert.deepEqual(interrupt.records.map((record) => [record.status, record.result?.reason]),
+		[[0, 'exited'], [0, 'exited'], [130, 'terminated'], [130, 'terminated'], [0, 'exited'], [0, 'exited']]);
+	assert(receipt.qualification.checks.filter((check) => check.id.startsWith('interrupt:')).every((check) => check.passed));
+	// The cold run passed; the warm run stopped right after Clang completed, as in the earlier hangs.
+	assert(receipt.qualification.checks.filter((check) => check.id.startsWith('cold:')).every((check) => check.passed));
+	assert.equal(receipt.runs[1].result.type, 'timeout');
+});
+
+test('with the service SDK the interrupt run passes, and a late interrupt races a finishing compile', async () => {
+	const runs = await Promise.all([2, 3, 4].map((index) => archived(`interrupt-run-${index}`)));
+	for (const receipt of runs) {
+		assert.equal(receipt.applicationCommit, '465225776014a2724ff0b29b4821d44d4284616e');
+		assert(receipt.qualification.checks.filter((check) => !check.id.startsWith('interrupt:')).every((check) => check.passed));
+	}
+	assert.deepEqual([runs[0].qualification.passed, runs[0].qualification.total], [38, 38]);
+	for (const receipt of runs.slice(1)) {
+		assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id), [
+			'interrupt:script', 'interrupt:supervisor-statuses', 'interrupt:interrupted-while-running', 'interrupt:interrupted-compile-discarded'
+		]);
+		// One second after the snapshot adapter reported running, the compile was already completing.
+		const timeline = receipt.runs[2].result.timeline;
+		const late = timeline.filter((entry) => entry.type === 'interrupt')[1];
+		const end = timeline.find((entry) => entry.type === 'dispatchEnd' && entry.seq > late.seq);
+		assert.equal(end.status, 0);
+		assert(end.atMs - late.atMs <= 5);
+	}
+});
+
+test('with a 50 ms compile interrupt, three consecutive runs pass cold, warm and interrupt', async () => {
+	for (const index of [5, 6, 7]) {
+		const receipt = await archived(`interrupt-run-${index}`);
+		assert.equal(receipt.applicationCommit, '5c55b7b775cfe256928550c2875a158e0c229510');
+		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total, receipt.shellAcceptancePassed], [38, 38, true]);
+		assert.equal((await archived(`interrupt-run-${index}-process`)).exitCode, 0);
 	}
 });

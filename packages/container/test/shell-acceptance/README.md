@@ -102,6 +102,33 @@ pinned input it was derived from), `processSysrootReceipt`/`processSysrootReceip
 `processSysroot`,
 optional `chromium`, and a fresh `output` directory outside the checkout.
 
+## Interrupt run
+
+A third run in the same profile checks owner-initiated cancellation with a surviving shell.
+The owner calls the handler's `interrupt()` once the foreground command is actually running:
+
+```sh
+set -u
+mkdir -p /workspace/demo
+cd /workspace/demo
+printf 'int main(void){for(;;){}}\n' > spin.c
+clang spin.c -o spin.wasm
+./spin.wasm; printf 'spin=%d\n' "$?"
+printf '#include <stdio.h>\nint main(void){puts("hello");return 0;}\n' > main.c
+clang main.c -o interrupted.wasm; printf 'clang=%d\n' "$?"
+if [ -e interrupted.wasm ]; then echo kept; else echo discarded; fi
+clang main.c -o hello.wasm && ./hello.wasm
+```
+
+The first interrupt stops the running artifact one second after it starts. The second stops
+the second Clang compile 50 ms after the snapshot adapter reports it running: the adapter
+reports running only once its Worker is ready, and the compile itself then takes about a
+second, so a later interrupt can race its completion.
+Bash must print `spin=130`, `clang=130`, `discarded` and `hello`, the Supervisor records
+must be 0, 0, 130, 130, 0, 0, each interrupt must land between its command's dispatch and
+completion, the interrupted compile's output must not reach the workspace, and every
+process and Worker must retire.
+
 ## Results
 
 Every attempt's original browser and process receipts are archived under
@@ -116,6 +143,11 @@ Every attempt's original browser and process receipts are archived under
 | [`streamed-run-1`](evidence/streamed-run-1.json) | `04aac7e0` | **30/30: cold and warm pass** |
 | [`streamed-run-2`](evidence/streamed-run-2.json), [`-3`](evidence/streamed-run-3.json) | `04aac7e0` | Warm passes; cold stops right after Clang completes with status 0 |
 | [`service-run-1` … `service-run-5`](evidence/) | `1df732f1` | **All five pass 30/30, cold and warm**, with the SDK that keeps host-command WASIX work off the scheduler thread |
+
+| [`interrupt-run-1`](evidence/interrupt-run-1.json) | `6251c8b7` | **Interrupt run passes all 8 checks**; cold passes; warm stops right after Clang completes |
+| [`interrupt-run-2`](evidence/interrupt-run-2.json) | `46522577` | With the service SDK: **38/38**, cold, warm and interrupt |
+| [`interrupt-run-3`](evidence/interrupt-run-3.json), [`-4`](evidence/interrupt-run-4.json) | `46522577` | Cold and warm pass; the second interrupt arrived 1 ms before the compile completed with 0, so Bash printed `clang=0` and kept the output |
+| [`interrupt-run-5` … `-7`](evidence/) | `5c55b7b7` | **All three pass 38/38**, cold, warm and interrupt, with the 50 ms compile interrupt |
 
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.

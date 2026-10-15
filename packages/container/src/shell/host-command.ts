@@ -53,8 +53,18 @@ export interface HostCommandHandlerOptions {
 }
 /** Shell status conventions for results that are not an ordinary guest exit. */
 export const HOST_COMMAND_STATUS = Object.freeze({
-  cannotExecute: 126, notFound: 127, timeout: 124, filesystemConflict: 125, runtimeError: 134, terminated: 143
+  cannotExecute: 126, notFound: 127, timeout: 124, filesystemConflict: 125, runtimeError: 134, interrupted: 130, terminated: 143
 });
+/** A host-command handler whose running commands its owner can interrupt. */
+export interface HostCommandHandler {
+  (invocation: HostCommandInvocation): Promise<number>;
+  /**
+   * Stop every command this handler is running or starting, as a terminal's
+   * interrupt key stops the foreground job. Each completes with status 130 and
+   * the shell continues; returns how many were interrupted.
+   */
+  interrupt(): number;
+}
 
 function decodeEnvironment(entries: readonly Uint8Array[]): Record<string, string> {
   const decoder = new TextDecoder('utf-8', { fatal: true }), env: Record<string, string> = Object.create(null);
@@ -117,7 +127,7 @@ const normalizedDirectory = (path: unknown): path is string => typeof path === '
  * the shell child's own delegated descriptors. Only live adapters accept them.
  * The returned status follows the shell's exit-status conventions.
  */
-export function createHostCommandHandler(container: Container, options: HostCommandHandlerOptions): (invocation: HostCommandInvocation) => Promise<number> {
+export function createHostCommandHandler(container: Container, options: HostCommandHandlerOptions): HostCommandHandler {
   const routes = new Map<string, HostCommandRoute>();
   for (const [path, route] of Object.entries(options.routes)) {
     if (!path.startsWith('/') || !route || typeof route.command !== 'string' || route.args !== undefined && !Array.isArray(route.args) ||
@@ -130,29 +140,45 @@ export function createHostCommandHandler(container: Container, options: HostComm
     normalizedDirectory(path) && directories.some((directory) => path.startsWith(directory + '/'))
       ? { command: 'wasm-run', args: [path], stdio: 'delegated' } : undefined;
   const record = (value: HostCommandRecord) => { options.onRecord?.(Object.freeze(value)); return value.status; };
-  return async (invocation) => {
+  const running = new Set<AbortController>();
+  const handler = async (invocation: HostCommandInvocation): Promise<number> => {
     const route = routes.get(invocation.path) ?? moduleRoute(invocation.path), name = invocation.argv[0] || invocation.path;
     if (!route) {
       await diagnostic(invocation.stderr, `${name}: no container route\n`);
       return record({ path: invocation.path, status: HOST_COMMAND_STATUS.notFound, startError: 'COMMAND_NOT_FOUND' });
     }
     const forwarded = route.stdio === 'forwarded';
-    let process;
+    const controller = new AbortController();
+    running.add(controller);
     try {
-      process = await container.spawn(route.command, [...route.args!, ...invocation.argv.slice(1)], {
-        cwd: invocation.cwd, env: decodeEnvironment(invocation.env), timeoutMs: options.timeoutMs,
-        ...(forwarded ? {} : { stdio: { stdin: invocation.stdin, stdout: invocation.stdout, stderr: invocation.stderr } })
-      });
-    } catch (error) {
-      const code = error instanceof ContainerError ? error.code : (error as { code?: unknown })?.code;
-      await diagnostic(invocation.stderr, `${name}: ${error instanceof Error ? error.message : 'cannot start'}\n`);
-      return record({ path: invocation.path, status: code === 'COMMAND_NOT_FOUND' ? HOST_COMMAND_STATUS.notFound : HOST_COMMAND_STATUS.cannotExecute, startError: typeof code === 'string' ? code : 'STARTUP_FAILED' });
+      let process;
+      try {
+        process = await container.spawn(route.command, [...route.args!, ...invocation.argv.slice(1)], {
+          cwd: invocation.cwd, env: decodeEnvironment(invocation.env), timeoutMs: options.timeoutMs, signal: controller.signal,
+          ...(forwarded ? {} : { stdio: { stdin: invocation.stdin, stdout: invocation.stdout, stderr: invocation.stderr } })
+        });
+      } catch (error) {
+        const code = error instanceof ContainerError ? error.code : (error as { code?: unknown })?.code;
+        if (controller.signal.aborted) return record({ path: invocation.path, status: HOST_COMMAND_STATUS.interrupted, startError: 'ABORTED' });
+        await diagnostic(invocation.stderr, `${name}: ${error instanceof Error ? error.message : 'cannot start'}\n`);
+        return record({ path: invocation.path, status: code === 'COMMAND_NOT_FOUND' ? HOST_COMMAND_STATUS.notFound : HOST_COMMAND_STATUS.cannotExecute, startError: typeof code === 'string' ? code : 'STARTUP_FAILED' });
+      }
+      if (forwarded) {
+        await process.stdin.close().catch(() => {});
+        await Promise.all([forward(process.stdout, invocation.stdout), forward(process.stderr, invocation.stderr)]);
+      }
+      const result = await process.exited;
+      const status = controller.signal.aborted && result.reason === 'terminated' ? HOST_COMMAND_STATUS.interrupted : statusForResult(result);
+      return record({ path: invocation.path, pid: process.pid, result, status });
+    } finally {
+      running.delete(controller);
     }
-    if (forwarded) {
-      await process.stdin.close().catch(() => {});
-      await Promise.all([forward(process.stdout, invocation.stdout), forward(process.stderr, invocation.stderr)]);
-    }
-    const result = await process.exited;
-    return record({ path: invocation.path, pid: process.pid, result, status: statusForResult(result) });
   };
+  return Object.assign(handler, {
+    interrupt() {
+      const interrupted = [...running];
+      for (const controller of interrupted) controller.abort(new ContainerError('ABORTED', 'Interrupted by the shell owner'));
+      return interrupted.length;
+    }
+  });
 }

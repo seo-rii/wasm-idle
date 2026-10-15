@@ -114,7 +114,22 @@ globalThis.onmessage = async ({ data }) => {
 			container.fs.mountReadonly(SYSROOT, files);
 			return { sha256: await sha256(archive), entries: files.length, files: files.filter((file) => file.type === 'file').length };
 		};
+		// The owner's interrupt key: stop the foreground command once it is actually running.
+		const occurrences = new Map();
+		const interruptWhenRunning = async (plan) => {
+			const deadline = performance.now() + 120000;
+			while (!(await container.inspect()).processes.some((process) => process.state === 'running')) {
+				if (performance.now() > deadline) return mark({ type: 'interruptSkipped', path: plan.path });
+				await new Promise((done) => setTimeout(done, 20));
+			}
+			await new Promise((done) => setTimeout(done, plan.delayMs));
+			mark({ type: 'interrupt', path: plan.path, interrupted: handler.interrupt() });
+		};
 		const dispatch = async (invocation) => {
+			const occurrence = (occurrences.get(invocation.path) ?? 0) + 1;
+			occurrences.set(invocation.path, occurrence);
+			const plan = (data.interrupts ?? []).find((entry) => entry.path === invocation.path && entry.occurrence === occurrence);
+			if (plan) void interruptWhenRunning(plan);
 			invocations.push({ path: invocation.path, argv: [...invocation.argv], cwd: invocation.cwd,
 				descriptors: [invocation.stdin, invocation.stdout, invocation.stderr].map((d) => d?.fd ?? null) });
 			mark({ type: 'dispatch', path: invocation.path });
