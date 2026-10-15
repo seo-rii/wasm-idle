@@ -63,6 +63,9 @@ test('SDK streaming protocol preserves raw I/O and does not drain output in wait
     const session = await createWasixShellSession(f.options);
     assert.equal(f.state.stdoutPulls ?? 0, 0, 'startup/exit observer must not pull stdout');
     assert.equal(f.state.run.rawStdin, true);
+    assert(f.state.run.mount instanceof Object, 'pinned wasm-bindgen SDK rejects null-prototype mount records');
+    assert.deepEqual(Object.keys(f.state.run.mount), ['/workspace', '/tmp', '/home/user', '/usr/bin']);
+    assert(f.state.directories.every(filesystem => filesystem.stat('/').type === 'directory'));
     assert.deepEqual(f.state.loads, [['shell', 'sdk'], ['shell', 'webc']]);
     assert.equal(f.container.fs.stat('/usr/bin/tool').command, true);
     assert.throws(() => f.container.fs.readFile('/usr/bin/tool'), { code: 'ENOTSUP' });

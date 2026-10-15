@@ -137,7 +137,10 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
     options.container.fs.mountReadonlyPackages([...commandDirectories].map(([path, names]) => ({ path,
       entries: names.map(name => ({ path: name, type: 'file' as const, mode: 0o555, command: true as const, data: new Uint8Array() }))
     })));
-    const mount: Record<string, WasixDirectory> = Object.create(null);
+    // The pinned wasm-bindgen SDK checks this record with `instanceof Object`.
+    // Null-prototype records are silently treated as absent mounts. All keys
+    // above are canonical absolute paths, so none can target Object's setters.
+    const mount: Record<string, WasixDirectory> = {};
     for (const path of allMounts) {
       const filesystem = createShellFilesystem(options.container.fs, { root: path }); filesystems.push(filesystem);
       const directory = options.sdk.Directory.fromHostFileSystem(filesystem); directories.push(directory); mount[path] = directory;
