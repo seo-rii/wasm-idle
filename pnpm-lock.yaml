@@ -346,6 +346,9 @@ importers:
         specifier: workspace:*
         version: link:../llvm-core
     devDependencies:
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       playwright-core:
         specifier: ^1.63.0
         version: 1.63.0

@@ -18,9 +18,30 @@ applies per instance and is not an aggregate JS heap or browser memory budget.
 Original argv remains intact. An opt-in LLVM producer patch calls the synchronous
 `wasm_idle_tool_host.exec_v1` ABI to run its pinned linker. No diagnostic output is
 parsed to reconstruct commands. Configure the producer's linker path with its
-normal driver option (for example `--ld-path=/opt/toolchains/<id>/bin/wasm-ld`).
+normal driver option (for example `-fuse-ld=/opt/toolchains/<id>/bin/wasm-ld`).
+The pinned WebAssembly driver uses `-fuse-ld` for this selection; `--ld-path` does
+not select its linker. The host preserves both options as provided and leaves
+interpretation and diagnostics to Clang.
 Target, sysroot, resource directory and ABI defaults belong in an explicit pinned
 distribution profile; the host does not infer or silently replace user options.
+
+The selected C++20 fixture passes `-fno-exceptions` explicitly. The existing pinned
+sysroot does not link the exception allocation/throw symbols required by the same
+template fixture with exceptions enabled; those real linker diagnostics remain a
+recorded unsupported boundary. The adapter never inserts or ignores this flag,
+and the full selected-target headers and libraries are preserved.
+
+Both qualified modules retain `exec_v1`: LLD's optional error-handling script
+uses the same LLVM Support entry. The host supplies the import but rejects all
+LLD child requests with `-1`. Only top-level Clang may invoke the pinned linker;
+error-handling scripts and recursive linker execution are unsupported.
+
+For compile-and-link jobs, the pinned driver disables in-process cc1 and requests
+its own multicall compiler. The adapter opts in to the exact empty-program argv
+form `['', 'clang', '-cc1' | '-cc1as', ...]` and executes the same verified module
+with unchanged arguments. Only the root driver may start these jobs or its pinned
+linker; children cannot recurse. Very long child jobs serialized only as `@rsp`
+remain unsupported; ordinary root response files are handled by Clang itself.
 
 Non-root working directories require both modules to implement the
 `wasm_idle_process_v1.initial_cwd` startup contract and call real libc `chdir`.
@@ -33,5 +54,71 @@ The fixture `scripts/test-clang.mjs` takes `CONTAINER_CLANG_WASM` and
 `CONTAINER_CLANG_BRIDGE=1` to require actual driver-to-linker dispatch and artifact
 execution. It exercises `-c`, `-E`, `-S`, includes/defines, relative paths, spaces,
 response files and an invalid option with the real compiler. Tiny protocol tests
-do not qualify this CLI. Full C/C++ headers, browser execution and shell integration
-require their own recorded producer/browser receipts before release promotion.
+do not qualify this CLI. The producer's selected-header regression corpus requires
+its own recorded evidence before command-alpha promotion. Actual shell integration
+is a separate milestone.
+
+The opt-in `test:browser:clang` fixture bundles the current Container, Core and LLVM
+tool-host source with esbuild into three local modules. It therefore exercises
+the real Clang Worker without relying on a page import map or another checkout's
+`dist` directory. `node scripts/test-clang-browser.mjs --build-only` prepares those
+bundles and reports `qualification: not-run`; it does not launch Chromium, load
+compiler binaries, or qualify the adapter.
+
+For actual qualification, supply `CONTAINER_CLANG_WASM`, `CONTAINER_LLD_WASM` and
+`CONTAINER_SYSROOT` as in the Node fixture. The sysroot must match the full
+selected-target pin `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`
+(2,285 entries, 2,168 files). Additionally set:
+
+- `CONTAINER_PRODUCER_RECEIPT` and `CONTAINER_PRODUCER_RECEIPT_SHA256`: the completed
+  opt-in producer's `build-receipt.json` and independently reviewed digest.
+- `CONTAINER_PRODUCER_SMOKE` and `CONTAINER_PRODUCER_SMOKE_SHA256`: the producer's
+  successful `smoke-cli.mjs` receipt and digest, referencing the same build receipt
+  and exact Clang/LLD bytes.
+- `CONTAINER_EVIDENCE`: a new output file; an existing receipt is never overwritten.
+- Optional `CHROMIUM_PATH` and `CONTAINER_CLANG_TIMEOUT_MS` (default 120,000, maximum
+  300,000 per compiler invocation).
+
+Missing inputs, failed producer gates and integrity mismatches fail explicitly.
+The fixture starts a fresh loopback origin and Chromium context, applies CSP
+(`script-src 'self' 'wasm-unsafe-eval'`, local module Workers, same-origin fetch),
+COOP and COEP, and records browser/OS/source/bundle/asset identities. It uses no
+JavaScript `unsafe-eval`, Blob Workers, remote host code, or production deployment.
+Optional repository browser-test cookies are scoped to that local origin.
+
+The cold run checks metadata-only command lookup before any asset body request;
+real `-c/-E/-S`, relative include/define options, response files and paths containing
+spaces and Korean; separated raw diagnostic bytes; multi-object driver/linker
+dispatch; C stdio and C++20 template/header compilation; and all three generated
+artifacts through the WASI adapter. Both tools start in the real non-root cwd with
+a deliberately incorrect `PWD`. The C artifact reads binary stdin and preserves
+NUL, non-UTF-8 and UTF-8 bytes on separate stdout/stderr streams. A fresh page then
+runs `clang --version` using the verified persistent cache; this reload check does
+not repeat the full compilation corpus. The server requires exactly one body request per
+pinned asset across both pages with HTTP caching disabled. Worker/process cleanup
+and browser/CSP errors are checked after execution.
+
+Sysroot extraction is a trusted local fixture preparation step after the first
+command request. It preserves the complete pinned archive and mounts it readonly;
+it does not add general archive extraction to runtime distributions. The fixture
+only promotes its measured Chromium batch snapshot profile when every gate passes.
+It does not qualify a real shell, live filesystem, persistence, performance, all
+header combinations, or another browser.
+
+The original [Chromium receipt](test/fixtures/clang-browser-evidence.json) records
+a passing run on Chromium 153.0.8010.12/Linux x64 at application commit
+`fe5e3a85277e2dec02347d9d5362e5656ed3e5b7`. Its SHA-256 is
+`b04774f0181150e46a4121dccbcf14ecb584bcf968133af585cbcae7e256fb9a`;
+all 65 recorded source hashes match that tested snapshot. The cold page completed
+nine compiler invocations and three actual WASI artifact runs, including C binary
+stdio and the explicit exception-free C++20 profile. All 13 guest Workers across
+the cold and reload pages were reclaimed, process inspection was empty, and no
+browser/CSP errors were recorded.
+
+Boot and command metadata lookup downloaded zero asset bodies. Cold execution
+downloaded Clang gzip (16,270,174 bytes), LLD gzip (8,178,107 bytes), and the full
+sysroot tar (35,328,000 bytes) once each. Reloading the page and running the version
+command added no body requests with HTTP caching disabled. The independent
+[process supervision record](test/fixtures/clang-browser-process-evidence.json)
+reports exit 0 and all owned OS descendants reaped. These receipts retain their
+original tested identity when later documentation or evidence commits are added.
