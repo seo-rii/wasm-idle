@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { arch, platform, release } from 'node:os';
 import { chromium } from 'playwright-core';
 import { createBashExampleServer } from '../../../examples/container/serve-bash.mjs';
+import { selectClangProfile } from '../../../examples/container/clang-profile.mjs';
 import { EXAMPLE_CSP } from '../../../examples/container/serve.mjs';
 import { SCRIPT, SOURCE, CLANG_TRIPLE_WARNING, digest, identity } from '../../../scripts/probe-container-shell-acceptance-lib.mjs';
 
@@ -13,6 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /** The same browser gate accepts a verified immutable local host graph's server adapter. */
 export async function runProductShellBrowser({ configuration, output, application, configurationSha256 = digest(Buffer.from(JSON.stringify(configuration))) }) {
+  const clangProfile = selectClangProfile(configuration.clangFilesystem);
   assert(output && isAbsolute(output), 'CONTAINER_PRODUCT_SHELL_OUTPUT must be a new absolute evidence directory');
   await mkdir(output, { recursive: true, mode: 0o700 });
   assert.equal(await stat(resolve(output, 'product-shell-browser-evidence.json')).catch(error => { if (error.code === 'ENOENT') return undefined; throw error; }), undefined, 'Existing browser receipts are preserved; choose a new output directory');
@@ -23,6 +25,7 @@ export async function runProductShellBrowser({ configuration, output, applicatio
   const receipt = {
     schemaVersion: 1, kind: 'rendered-real-bash-container-workbench', complete: false, qualified: false,
     applicationCommit, startedAt: new Date().toISOString(), script: SCRIPT, scriptSha256: digest(Buffer.from(SCRIPT)),
+    clangFilesystem: clangProfile.filesystem,
     configurationSha256, packageReceiptSha256: configuration.packageReceiptSha256,
     producerReceiptSha256: configuration.clangProducerReceiptSha256, busyboxReceiptSha256: configuration.busyboxReceiptSha256,
     processSysrootReceiptSha256: configuration.processSysrootReceiptSha256,
@@ -33,6 +36,9 @@ export async function runProductShellBrowser({ configuration, output, applicatio
   };
   const saveEvidence = () => writeFile(resolve(output, 'product-shell-browser-evidence.json'), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
   try {
+    const clangCommand = JSON.parse(example.config.manifest).commands.find(command => command.name === 'clang');
+    assert.equal(clangCommand?.adapter, clangProfile.adapterId, 'Rendered evidence must use the explicitly selected compiler filesystem');
+    receipt.clangAdapterId = clangCommand.adapter;
     await saveEvidence();
     browser = await chromium.launch({ headless: true, executablePath: configuration.chromium ?? process.env.CHROMIUM_PATH, args: ['--no-sandbox'] });
     receipt.browser = await browser.version();
@@ -92,6 +98,8 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     assert.equal(await page.evaluate(() => crossOriginIsolated), true);
     assert.deepEqual(compilerDownloads(), { clang: 0, lld: 0, sysroot: 0 });
     assert.match(await page.locator('#profile').textContent(), /Real GNU Bash/u);
+    receipt.renderedProfile = await page.locator('#profile').textContent();
+    if (clangProfile.filesystem === 'live') assert.match(receipt.renderedProfile, /live Clang/u);
     receipt.checks.push('PRODUCT-SH-01: rendered actual Bash profile opens persistent workspace with no compiler body requests');
     receipt.phase = 'starting-cold-shell'; await saveEvidence();
     await start();
