@@ -418,6 +418,28 @@ public class Main {
 				expected: 'abc\n\u20ac\n'
 			},
 			{
+				// The javac SDK must expose @Rename'd class library methods under their Java names.
+				name: 'exception methods, getClass and collection clone',
+				code: `import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        try {
+            throw new IllegalStateException("boom");
+        } catch (RuntimeException e) {
+            System.out.println(e.getClass().getName() + ": " + e.getMessage());
+        }
+        Object list = new ArrayList<>(List.of(3, 1, 2));
+        System.out.println(list.getClass().getSimpleName());
+        ArrayList<Integer> original = new ArrayList<>(List.of(1, 2));
+        HashMap<String, Integer> map = new HashMap<>(Map.of("a", 1));
+        System.out.println(original.clone() + " " + map.clone());
+    }
+}`,
+				stdin: '',
+				expected: 'java.lang.IllegalStateException: boom\nArrayList\n[1, 2] {a=1}\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

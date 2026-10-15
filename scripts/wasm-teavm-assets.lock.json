@@ -129,6 +129,11 @@
 				"path": "scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch",
 				"bytes": 4446,
 				"sha256": "0e52f4dd5c1e7392eb3acfbced274bd1e0134b71804125a4c31615815ebc53ca"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-stdlib-rename.patch",
+				"bytes": 4680,
+				"sha256": "e6d9edfac544c09b1dea1bf8a7dc3691c3b98267cdb099f613bd5751c76e1414"
 			}
 		],
 		"commands": [
@@ -151,8 +156,8 @@
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
-				"bytes": 200621,
-				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+				"bytes": 200172,
+				"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f"
 			},
 			{
 				"path": "runtime-classlib-teavm.bin",
@@ -495,8 +500,8 @@
 			"sourcePath": "scripts/teavm/THIRD_PARTY_NOTICES.md",
 			"targetPath": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39743,
-			"sha256": "4fbf5538136d5b9b95c5df0a994ab31b59efe703a81521303734645197b98441"
+			"bytes": 39845,
+			"sha256": "d3bf2d35579afd34d13c1b797cf0b6ea00e93ea3e901be94298b8191c0e54ba8"
 		}
 	],
 	"outputs": [
@@ -527,13 +532,13 @@
 		{
 			"path": "compile-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 200621,
-			"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d",
+			"bytes": 200172,
+			"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f",
 			"storage": {
 				"path": "compile-classlib-teavm.bin",
 				"encoding": "identity",
-				"bytes": 200621,
-				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+				"bytes": 200172,
+				"sha256": "9a0d2b8928a0447d291431c9ae0abd1db3c136fd347e46ffbe4362e141dc139f"
 			}
 		},
 		{
