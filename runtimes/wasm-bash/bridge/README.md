@@ -605,3 +605,16 @@ unchanged. The handler, not WASIX, decides how to run the module; in the contain
 `wasm-run` on the live artifact adapter, whose import-profile check applies. Reading the
 magic is a four-byte read, not an execution. The file can change between that read and the
 handler's own read; the handler validates what it reads.
+
+### Actual SDK gate
+
+Commit `414a524f41306b5153597a950237b8f2c59beda7` (patches 0001–0012 plus directory
+routing) was prepared into a fresh physical copy with 584 pins and a unique target:
+typecheck 298.595 s, release 557.648 s, bindgen 1.763 s and static inspection 0.254 s.
+Each stage exited 0 with every process reaped. The bound Wasm is 9,191,476 bytes, SHA-256
+`647f97d834037cf66f1bd4e2ca02d43b4aeed75b05ba1f87b4a78b5e541d02ff`; binary receipt
+`8d8bad7cf82dcb629d5c0061f0ed5f92a51e5a55f0162a2572c86b88e47801a7`. Stage receipts are
+archived as `evidence.host-executables-*.json` with a
+[recheck](evidence.host-executables-sdk-binary-metadata.json). Local packaging produced
+receipt `c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44`. The shell
+acceptance script runs with this package on the wasm-idle shell branch.
