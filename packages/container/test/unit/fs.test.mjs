@@ -294,6 +294,97 @@ test('snapshot admission and parsing reject host handles, malformed trees, quota
   lease.discard();
 });
 
+test('snapshot-preserved descriptions keep inode identity, dup offsets and append flags', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('dir'); fs.writeFile('dir/log', bytes('old'));
+  const fd = fs.open('dir/log', { read: true, write: true, snapshot: 'preserve' });
+  const dup = fs.dup(fd), appender = fs.open('dir/log', { write: true, append: true, snapshot: 'preserve' });
+  const directory = fs.open('dir', { directory: true, snapshot: 'preserve' });
+  const inode = fs.fstat(fd).inode;
+  assert.equal(text(fs.read(dup, 1)), 'o');
+  const lease = fs.acquireSnapshot();
+  const guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('dir/log', bytes('changed')); guest.rename('dir', 'moved');
+  assert.equal(text(fs.pread(fd, 20, 0)), 'old', 'private changes are not visible before commit');
+  assert.throws(() => fs.write(fd, bytes('x')), error('EBUSY'));
+  assert.throws(() => fs.ftruncate(fd), error('EBUSY'));
+  assert.throws(() => fs.acquireLive(), error('EBUSY'));
+  assert.throws(() => fs.open('dir/log', { snapshot: 'preserve' }), error('EBUSY'));
+  lease.commit(guest.exportSnapshot());
+  assert.equal(fs.fstat(fd).inode, inode);
+  assert.equal(fs.tell(dup), 1, 'dup still shares the open description');
+  assert.equal(text(fs.read(fd, 2)), 'ha');
+  assert.equal(fs.tell(dup), 3);
+  assert.equal(fs.getDirectoryPath(directory), '/workspace/moved');
+  fs.write(appender, bytes('!'));
+  assert.equal(text(fs.readFile('moved/log')), 'changed!');
+  for (const handle of [fd, dup, appender, directory]) fs.close(handle);
+  fs.unlink('moved/log');
+  assert.equal(fs.byteLength, 0, 'published reference counts release after the final close');
+});
+
+test('snapshot removal of an open linked inode conflicts without publishing any changes', () => {
+  const fs = new MemoryFileSystem();
+  fs.writeFile('log', bytes('before'));
+  const fd = fs.open('log', { read: true, write: true, snapshot: 'preserve' });
+  const before = fs.exportSnapshot(), lease = fs.acquireSnapshot();
+  const guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('log', bytes('private')); guest.unlink('log'); guest.writeFile('new', bytes('private'));
+  assert.throws(() => lease.commit(guest.exportSnapshot()), error('ECONFLICT'));
+  assert.deepEqual(fs.exportSnapshot(), before);
+  assert.equal(text(fs.pread(fd, 20, 0)), 'before');
+  assert.throws(() => fs.write(fd, bytes('blocked')), error('EBUSY'));
+  // Closing the last host reference during a lease makes namespace removal safe.
+  fs.close(fd); lease.commit(guest.exportSnapshot());
+  assert.throws(() => fs.stat('log'), error('ENOENT'));
+  assert.equal(text(fs.readFile('new')), 'private');
+});
+
+test('snapshot commits account for previously unlinked retained descriptors and reject resurrection', () => {
+  const fs = new MemoryFileSystem({ maxBytes: 10 });
+  fs.writeFile('held', bytes('123456'));
+  const fd = fs.open('held', { snapshot: 'preserve' }), inode = fs.fstat(fd).inode;
+  fs.unlink('held');
+  const lease = fs.acquireSnapshot(), guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('new', bytes('12345'));
+  assert.throws(() => lease.commit(guest.exportSnapshot()), error('ENOSPC'));
+  assert.equal(fs.byteLength, 6); assert.equal(text(fs.pread(fd, 6, 0)), '123456');
+  const reused = structuredClone(lease.snapshot);
+  reused.entries.push({ inode, path: '/workspace/resurrected', type: 'file', mode: 0o644, data: bytes('x') });
+  assert.throws(() => lease.commit(reused), error('ECONFLICT'));
+  guest.writeFile('new', bytes('1234')); lease.commit(guest.exportSnapshot());
+  assert.equal(fs.byteLength, 10); assert.equal(text(fs.pread(fd, 6, 0)), '123456');
+  fs.close(fd); assert.equal(fs.byteLength, 4);
+});
+
+test('discard keeps snapshot-preserved handles usable and invalid policies cannot create files', () => {
+  const fs = new MemoryFileSystem();
+  fs.writeFile('log', bytes('original'));
+  const fd = fs.open('log', { read: true, write: true, snapshot: 'preserve' });
+  fs.seek(fd, 3);
+  const lease = fs.acquireSnapshot(), guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('log', bytes('private')); lease.discard(); lease.discard();
+  assert.equal(text(fs.read(fd, 2)), 'gi');
+  fs.write(fd, bytes('!')); assert.equal(text(fs.readFile('log')), 'origi!al');
+  fs.close(fd);
+  assert.throws(() => fs.open('invalid', { write: true, create: true, snapshot: 'anything' }), error('EINVAL'));
+  assert.throws(() => fs.stat('invalid'), error('ENOENT'));
+});
+
+test('snapshot inode quota includes retained unlinked handles until their final close', () => {
+  const fs = new MemoryFileSystem({ maxInodes: new MemoryFileSystem().inodeCount + 2 });
+  fs.writeFile('held', bytes('x'));
+  const fd = fs.open('held', { snapshot: 'preserve' }); fs.unlink('held');
+  const lease = fs.acquireSnapshot(), guest = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  guest.writeFile('one', bytes('1')); guest.writeFile('two', bytes('2'));
+  assert.throws(() => lease.commit(guest.exportSnapshot()), error('ENOSPC'));
+  assert.equal(text(fs.read(fd, 1)), 'x');
+  assert.throws(() => fs.stat('one'), error('ENOENT'));
+  fs.close(fd); lease.commit(guest.exportSnapshot());
+  assert.equal(text(fs.readFile('one')), '1');
+  assert.equal(text(fs.readFile('two')), '2');
+});
+
 test('independent filesystems never share mutable bytes or inode namespaces', () => {
   const first = new MemoryFileSystem();
   first.writeFile('same', bytes('first'));

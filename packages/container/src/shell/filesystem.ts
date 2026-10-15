@@ -93,7 +93,7 @@ export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesy
       if (handles.size >= maxHandles || nextHandle >= 0x7fffffff) throw new FsError('ENOSPC', 'Shell file handle budget exceeded');
       if (!flags || typeof flags !== 'object') throw new FsError('EINVAL', 'Invalid open flags');
       const fd = fs.open(local(path), { ...context, read: Boolean(flags.read), write: Boolean(flags.write), create: Boolean(flags.create),
-        exclusive: Boolean(flags.exclusive), truncate: Boolean(flags.truncate), append: Boolean(flags.append) });
+        exclusive: Boolean(flags.exclusive), truncate: Boolean(flags.truncate), append: Boolean(flags.append), snapshot: 'preserve' });
       const id = nextHandle++;
       handles.set(id, { fd, append: Boolean(flags.append) });
       return id;
