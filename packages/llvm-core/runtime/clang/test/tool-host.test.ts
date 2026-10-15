@@ -137,6 +137,44 @@ describe('LLVM low-level tool host', () => {
 			expect(result.provenance.invocations.map((entry) => entry.identity.executable)).toEqual(['clang', 'clang']); host.dispose();
 		}
 	});
+	it('snapshots exact resolved compiler aliases and preserves cc1 argv and bounded recursion', async () => {
+		for (const mode of ['-cc1', '-cc1as']) {
+			const compilerPaths = ['/usr/local/bin/clang'];
+			const argv = [compilerPaths[0]!, 'clang', mode, 'path with spaces.c'];
+			const contexts: LlvmToolBindingContext[] = [];
+			const pending = createLlvmToolHost({ allowClangCc1: true, compilerPaths, tools: fixtures(moduleBytes({ packet: packet({ program: compilerPaths[0], argv }) })), createBindings(context) {
+				contexts.push(context);
+				return { imports: {}, run(instance) { const code = (instance.exports._start as () => number)(); return { code: context.depth === 2 ? (code === -1 ? 23 : 99) : code }; }, dispose() {} };
+			} });
+			compilerPaths[0] = '/other/clang';
+			const host = await pending;
+			expect(host.run(invocation()).code).toBe(23);
+			expect(contexts.map(context => context.depth)).toEqual([1, 2]);
+			expect(contexts[1]).toMatchObject({ executable: 'clang', argv, cwd: '/workspace/a b', env: { TEST: '한 글' } });
+			expect(contexts[1]!.identity).toBe(contexts[0]!.identity); host.dispose();
+		}
+	});
+	it('requires valid explicit compiler aliases and matching native argv0', async () => {
+		for (const compilerPaths of [['relative'], ['/tmp/../clang'], ['/tmp//clang'], ['/tmp/clang/'], ['/tmp/clang\0'], ['/tmp/\ud800'], ['/usr/bin/wasm-ld'], Array(17).fill('/bin/clang')]) {
+			await expect(createLlvmToolHost({ allowClangCc1: true, compilerPaths, tools: fixtures(), createBindings: bindings() })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+		}
+		await expect(createLlvmToolHost({ compilerPaths: ['/bin/clang'], tools: fixtures(), createBindings: bindings() })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+		for (const [program, argv] of [
+			['/other/clang', ['/other/clang', 'clang', '-cc1']],
+			['/bin/clang', ['', 'clang', '-cc1']],
+			['/bin/clang', ['/other/clang', 'clang', '-cc1']],
+			['/bin/clang', ['/bin/clang', 'clang', 'main.c']],
+			['/bin/clang', ['/bin/clang', 'clang', '@response']],
+			['/bin/clang', ['/bin/clang', 'llvm', '-cc1']]
+		] as [string, string[]][]) {
+			let children = 0;
+			const host = await createLlvmToolHost({ allowClangCc1: true, compilerPaths: ['/bin/clang'], tools: fixtures(moduleBytes({ packet: packet({ program, argv }) })), createBindings(context) {
+				if (context.depth > 1) children++;
+				return { imports: {}, run(instance) { return { code: (instance.exports._start as () => number)() === -1 ? 0 : 99 }; }, dispose() {} };
+			} });
+			expect(host.run(invocation()).code).toBe(0); expect(children).toBe(0); host.dispose();
+		}
+	});
 	it('rejects unregistered or malformed compiler jobs and public empty argv0 before child bindings', async () => {
 		const packets = [
 			...[[''], ['', 'clang'], ['', 'clang', 'main.c'], ['', 'clang', '--version'], ['', 'clang', '-cc1gen-reproducer'], ['', 'clang', '-cc1evil'], ['', 'clang', '-CC1'], ['', 'llvm', 'clang', '-cc1'], ['clang', 'clang', '-cc1'], ['', '@response']].map((argv) => packet({ program: '', argv })),

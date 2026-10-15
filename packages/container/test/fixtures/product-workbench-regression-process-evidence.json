@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/scripts/test-product-browser.mjs"
+  ],
+  "startedAtUnix": 1792072028.575149,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 2520631,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2520817,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520822,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520828,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520830,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520704,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 17.779
+}

@@ -74,8 +74,24 @@ argument. Public `run()` still requires a nonempty argv0. Other empty-program jo
 arbitrary compiler paths, generic driver recursion, and child response-file-only
 packets are unsupported and rejected before child bindings are created. Compiler
 children cannot dispatch further commands; maximum execution depth remains two.
-This opt-in does not admit nonempty compiler self paths or other multicall tool
-names; those need their own trusted registration and actual fixture qualification.
+When the common filesystem exposes an executable command alias, the driver can
+resolve that alias as its self path. Trusted hosts can register up to sixteen exact
+canonical absolute aliases in `compilerPaths`, with `allowClangCc1: true`. The child
+must supply that exact path as both `program` and `argv[0]`, followed by `clang` and
+`-cc1` or `-cc1as`. It still executes the same pinned compiler bytes; filesystem
+contents are not loaded as code. Aliases are copied before asynchronous preparation
+and cannot overlap a linker identity. The container adapter additionally requires
+each alias to resolve to an executable entry on a readonly mount. Other multicall
+tool names and general driver recursion remain unsupported.
+
+The selected multicall producer uses `argv[0]` to select its entrypoint. A common
+command namespace must therefore expose its actual binary as `bin/llvm`, with the
+Clang command mapping `argv0: '/opt/toolchains/llvm/bin/llvm'` and a first prefix
+argument `clang`. Register that canonical binary path in `compilerPaths`. This
+keeps the producer's own `[binaryPath, 'clang', '-cc1', ...]` child calls intact.
+Using a canonical binary named `clang` with that multicall prefix selects the wrong
+entrypoint; the host does not repair or discard those arguments. The public shell
+name can remain `clang` through its registered virtual command entry.
 
 The bridge must be called from the initialized command execution path, after
 instantiation exposes memory. An instantiation-time start function cannot invoke

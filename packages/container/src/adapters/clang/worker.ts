@@ -24,6 +24,11 @@ scope.onmessage = async ({ data }) => {
       const linkerPath = fs.realpath(request.configuration.linkerPath);
       const mount = [...request.snapshot.mounts].sort((a, b) => b.path.length - a.path.length).find((mount) => linkerPath === mount.path || linkerPath.startsWith(mount.path === '/' ? '/' : `${mount.path}/`));
       if (!mount?.readonly) throw new Error('Linker must be mounted readonly');
+      for (const path of request.configuration.compilerPaths ?? []) {
+        const resolved = fs.realpath(path), entry = fs.stat(path);
+        const owner = [...request.snapshot.mounts].sort((a, b) => b.path.length - a.path.length).find(mount => resolved === mount.path || resolved.startsWith(mount.path === '/' ? '/' : `${mount.path}/`));
+        if (!owner?.readonly || entry.type !== 'file' || !(entry.mode & 0o111)) throw new Error('Compiler aliases must resolve to readonly executable entries');
+      }
       for (const bytes of [request.command.bytes, linker]) checkMemoryProfile(bytes, request.limits.maxMemoryBytes);
       const probe = createWasiHost({ ...request.invocation, fs, stdin: new Uint8Array(), maxOutputBytes: request.limits.maxOutputBytes });
       const importNames = new Set(Object.keys(probe.imports)); probe.dispose();
@@ -33,6 +38,7 @@ scope.onmessage = async ({ data }) => {
           'wasm-ld': { bytes: linker, sha256: request.configuration.linkerSha256 }
         },
         linkerPaths: [request.configuration.linkerPath],
+        compilerPaths: request.configuration.compilerPaths,
         allowClangCc1: true,
         validateModule(_executable, module) {
           for (const entry of WebAssembly.Module.imports(module)) {

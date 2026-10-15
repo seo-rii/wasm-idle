@@ -63,6 +63,9 @@ test('SDK streaming protocol preserves raw I/O and does not drain output in wait
     const session = await createWasixShellSession(f.options);
     assert.equal(f.state.stdoutPulls ?? 0, 0, 'startup/exit observer must not pull stdout');
     assert.equal(f.state.run.rawStdin, true);
+    assert(f.state.run.mount instanceof Object, 'pinned wasm-bindgen SDK rejects null-prototype mount records');
+    assert.deepEqual(Object.keys(f.state.run.mount), ['/workspace', '/tmp', '/home/user', '/usr/bin']);
+    assert(f.state.directories.every(filesystem => filesystem.stat('/').type === 'directory'));
     assert.deepEqual(f.state.loads, [['shell', 'sdk'], ['shell', 'webc']]);
     assert.equal(f.container.fs.stat('/usr/bin/tool').command, true);
     assert.throws(() => f.container.fs.readFile('/usr/bin/tool'), { code: 'ENOTSUP' });
@@ -85,6 +88,19 @@ test('SDK startup integrity failure releases worker group before shell execution
     assert.equal(f.state.run, undefined); assert.equal(f.workers.inspect().active, 0);
     assert.deepEqual(f.container.fs.readdir('/usr/bin'), []);
   } finally { await f.workers.dispose(); await f.container.dispose(); }
+});
+
+test('SDK non-guest exit failure remains a runtime error and wakes blocked output', async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), session = await createWasixShellSession(f.options);
+  const reader = session.stdout.getReader(), blocked = reader.read();
+  try {
+    f.exit.reject(new Error('WASI environment setup failed'));
+    assert.deepEqual(await session.exited, { code: null, reason: 'runtime-error' });
+    assert.equal((await blocked).done, true);
+    assert.equal(f.workers.inspect().active, 0);
+    await session.dispose();
+  } finally { reader.releaseLock(); await f.workers.dispose(); await f.container.dispose(); }
 });
 
 test('startup abort stops a pending asset request and leaves no SDK workers', async () => {
