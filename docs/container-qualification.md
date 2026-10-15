@@ -18,6 +18,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Rebuilt SDK/Bash Chromium probe                | [C-02 browser #195](https://github.com/seo-rii/wasm-idle/pull/195) (draft)      | #193 plus #192; ten SDK initializers return but guest instantiation fails with Noexec(45); raw failures preserved |
 | Actual SDK Worker import resolver              | [C-02 resolver #196](https://github.com/seo-rii/wasm-idle/pull/196) (draft)     | #189; actual fresh-source SDK check/release/bindgen passes; original receipts and complete pin rechecks archived |
 | Fixed SDK actual Bash execution                | [C-02 execution #197](https://github.com/seo-rii/wasm-idle/pull/197) (draft)    | #195 plus rebuilt #196 assets; ten real commands complete, 17/18 selected checks pass; startup cwd/redirect boundary remains |
+| Selected Bash libc startup cwd                 | [C-02 startup #198](https://github.com/seo-rii/wasm-idle/pull/198) (draft)      | #192; separately pinned constructor/second object and native guards pass; actual producer rebuild and unchanged browser contract remain pending |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -451,7 +452,8 @@ Four separate actual cwd comparisons complete collection in 7.133 seconds. Both 
 unchanged relative redirection and a parent builtin's relative write do not. The actual cwd
 guest still reports `/workspace`. This matches the pinned libc's separate legacy cwd used
 by relative `open`, which `getcwd` does not update and `chdir` synchronizes. Startup
-synchronization is the next selected Bash producer fix. Diagnostics always retain false
+synchronization is implemented on [#198](https://github.com/seo-rii/wasm-idle/pull/198),
+with actual producer rebuild and unchanged browser acceptance pending. Diagnostics retain false
 guest/shell qualification; they do not change or replace the original failing contract.
 Common Container fd/VFS, JavaScript command registry, foreground cancellation and actual
 Clang/BusyBox shell acceptance remain open.
