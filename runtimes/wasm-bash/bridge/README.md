@@ -91,7 +91,8 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
     child that is still running removed that child from the parent and reported its pid
     with no status, which wasix-libc `waitpid(pid, WNOHANG)` returns as an exit with
     status 0. The child now stays joinable and the call reports pid 0, so `waitpid`
-    returns 0 as POSIX requires. Blocking joins and finished children are unchanged.
+    returns 0 as POSIX requires. Blocking joins and finished children are unchanged. The
+    pinned Bash does not use this call; see below.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -476,16 +477,17 @@ packaging step produced package receipt
 
 ### Nonblocking join of a running child
 
-With patch 0009, two further actual runs each passed every
-status checks except one intermittent loss: Bash once observed 0 for the first host
-command of a shell while the Supervisor completed it with 23. Twenty consecutive
-dispatches in one shell then reproduced it on the first command only. In `proc_join`,
-the nonblocking path for a specific pid removes the child from the parent and writes its
-pid before checking completion; an unfinished child then yields `JoinStatusType::Nothing`
-with that pid, which wasix-libc turns into `*status = 0` and returns the pid. A host
-command's first dispatch (cold container Worker) is slow enough for Bash to poll it in that
-state; later commands usually finish first. Patch 0010 keeps such a child joinable and
-reports pid 0. It applies independently of 0009 with zero fuzz.
+With patch 0009, two further actual runs each passed every status check except one
+intermittent loss: Bash once observed 0 for the first host command of a shell while the
+Supervisor completed it with 23, and twenty consecutive dispatches reproduced it on the
+first command only. Patch 0010 was written for one candidate path: in `proc_join`, the
+nonblocking path for a specific pid removes the child and writes its pid before checking
+completion, so `waitpid(pid, WNOHANG)` on a running child reports an exit with status 0.
+That is a real POSIX violation and the fix stands on its own, but it is **not** the cause
+of the observed loss: the pinned Bash is built with `nojobs.c`, whose `wait_for` and
+`reap_zombie_children` only call `waitpid(-1, ...)`. The 0010 commit message states the
+opposite; this section supersedes it. `nojobs.c` turns an `ECHILD` from `waitpid(-1, ...)`
+into status 0, so a join that briefly finds no children is the next candidate to trace.
 
 The ten-patch SDK at source `959ea103b2535aacb04c6c69b2441e65a0203a47` (after disabling
 patch backup files) passed the same fresh-source gate with 583 pins: typecheck 441.463 s,
@@ -501,8 +503,8 @@ prepared source contained `proc_join.rs.orig`; it is not counted as a build resu
 
 In seven actual Chromium runs of the dispatch probe with this package, all twenty
 consecutive host-command statuses arrived intact every time, and statuses 126 and 134
-remained correct. Patch 0010 does not remove every status loss: in three of the seven
-runs, the first command of one shell still reported 0 while its Supervisor record held
-23, alongside an occasional hang before dispatch. Both appear when Bash's wait outlasts
-the WASIX 50 ms deep-sleep threshold; the remaining cause is open and is not claimed to be
-fixed here.
+remained correct. The first-command loss was not removed: in three of the seven runs the
+first command of one shell still reported 0 while its Supervisor record held 23, and two of
+those runs also hung once before any dispatch. A slow first command outlasts the WASIX
+50 ms deep-sleep threshold of Bash's `proc_join`, which makes the deep-sleep resume path a
+candidate; the cause is not yet traced and nothing here claims to fix it.
