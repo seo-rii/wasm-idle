@@ -67,6 +67,16 @@ asset-byte, index-count, path-depth and dependency-depth bounds are checked befo
 `maxTotalAssetBytes` counts both delivery and logical sizes conservatively; file sizes also
 count each file index entry, including aliases that use the same asset.
 
+For complete selected-target sysroots, `extractTarPackage(verifiedLogicalBytes, limits)`
+provides an explicit POSIX USTAR data profile. It validates all header checksums, UTF-8
+relative paths, duplicate/prefix collisions, file sizes, padding, two-block terminator,
+entry/inode counts and path depth before returning an unpublished readonly tree. Implicit
+parents are included. The initial profile rejects links, devices, GNU/PAX extensions and
+non-octal sizes; it never follows archive links or grants executable permission. File bytes
+are copied, and no mount is changed during parsing. Pass the completed tree to
+`fs.mountReadonly()` for atomic publication. Package identity/gzip verification happens
+first through the existing asset loader; extracting an archive does not authenticate it.
+
 Direct file assets support `identity` and file-level `gzip`. Delivery identities describe
 the body bytes returned by fetch after any HTTP content decoding. Logical identities describe
 the resulting file. Gzip delivered transparently by HTTP must therefore use `identity` when

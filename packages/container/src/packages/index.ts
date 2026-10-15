@@ -1,4 +1,6 @@
 export { DEFAULT_DISTRIBUTION_LIMITS, validateDistribution } from './distribution.js';
+export { extractTarPackage } from './archive.js';
+export type { TarPackageLimits } from './archive.js';
 export type {
   DistributionByteIdentity, DistributionAsset, DistributionFile, DistributionPackage,
   DistributionCommand, DistributionLimits, ValidatedDistribution, ValidateDistributionOptions
