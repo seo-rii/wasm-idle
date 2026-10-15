@@ -68,10 +68,21 @@ recorded results.
    the same way; runs 2, 6 and 7 each show the first-command 0 in HOST-STATUS; run 7 also
    had one Worker outlive the retirement window. All twenty repeated statuses and statuses
    126/134 were correct in every run.
+8. [`status-order-run-1` … `status-order-run-5`](evidence/), SDK with the host-command
+   status-order fix (`f5aa51b2`): **every run kept every status**, including the first
+   command's 23, and no case hung before dispatch. Runs 2, 4 and 5 pass all 45 checks.
+   Runs 1 and 3 pass 44: in one case each (`HOST-FAILURE`, and the builtin-only
+   `BASH-PIPESTATUS`), the probe's own owner Worker target was destroyed 5.03–5.13 s after
+   cleanup started, just past the five-second window. Every target was gone after context
+   close.
 
-The status loss is in the pinned WASIX `proc_join`, which writes the exit code through the
-`Errno` type and maps every non-errno value to 79. Bridge patch 0009 writes the raw status
-that wasix-libc `waitpid` reads. The empty `PIPESTATUS` and the failing redirections inside
+The status loss above 78 is in the pinned WASIX `proc_join`, which writes the exit code
+through the `Errno` type and maps every non-errno value to 79. Bridge patch 0009 writes the
+raw status that wasix-libc `waitpid` reads. The first-command 0 came from the bridge itself:
+Bash runs external commands with a full fork, and `HostCommandProcess::finish` signalled
+SIGQUIT to the forked process before publishing the status, so the waiting thread's default
+SIGQUIT published 0 first. The bridge README on #208 records the trace; the fix publishes
+the status before signalling. The empty `PIPESTATUS` and the failing redirections inside
 forked subshells are Bash/WASIX behaviors independent of host commands; they remain open
 shell gaps, recorded by the two diagnostic cases.
 
@@ -84,16 +95,12 @@ Real Bash dispatch into the container Supervisor works end to end:
 - `EPIPE`, PATH lookup, tail exec, start failure without native fallback;
 - Worker and process cleanup.
 
-It is **not** yet qualified as reliable. Three of seven final runs showed two intermittent
-defects that also appear without any host-command error:
-- **A lost first-command status.** Bash's `nojobs.c` `wait_for` maps an `ECHILD` from
-  `waitpid(-1)` to status 0. A slow first command outlasts the WASIX 50 ms deep-sleep
-  threshold of `proc_join`, which makes the deep-sleep resume path a candidate.
-- **An occasional hang before dispatch.**
-
-Both remain open together with Worker retirement timing. `hostCommandDispatchPassed` is
-true only for a complete run with no failed check. The archived receipts keep every
-outcome.
+With the status-order fix, five consecutive runs kept every status and none hung before
+dispatch. The earlier pre-dispatch hangs were not traced separately; they have not recurred
+since the fix. The remaining intermittent failure is Worker retirement timing (the owner
+Worker's target can take just over five seconds to disappear after termination), which is
+tracked separately and still fails a run. `hostCommandDispatchPassed` is true only for a
+complete run with no failed check. The archived receipts keep every outcome.
 
 ## Scope
 

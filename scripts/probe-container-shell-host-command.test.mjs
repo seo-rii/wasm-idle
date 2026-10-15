@@ -259,3 +259,26 @@ test('the seven archived ten-patch runs keep their recorded outcomes', async () 
 		}
 	}
 });
+
+test('the five archived status-order runs keep every status; two miss only the Worker retirement window', async () => {
+	const failures = [['owned-host-context-cleanup'], [], ['owned-host-context-cleanup'], [], []];
+	for (const [index, expected] of failures.entries()) {
+		const receipt = await archived(`status-order-run-${index + 1}`);
+		assert.equal(receipt.applicationCommit, 'f5aa51b24e83d2915b58b59b2f55822ddcfbe2ad');
+		assert.deepEqual(receipt.qualification.checks.filter((check) => !check.passed).map((check) => check.id), expected);
+		assert.equal((await archived(`status-order-run-${index + 1}-process`)).exitCode, expected.length ? 1 : 0);
+		const byId = Object.fromEntries(receipt.results.map((result) => [result.id, result]));
+		const text = (id) => Buffer.from(byId[id].result.stdout).toString();
+		// The first command's status reaches Bash in every run.
+		assert.equal(text('HOST-STATUS'), 'exit=23\ncrash=134\n');
+		assert.equal(text('HOST-STATUS-REPEAT'), `${Array(20).fill(23).join(' ')} \n`);
+		assert(receipt.results.every((result) => result.type === 'result'), 'no case hung before dispatch');
+		if (expected.length) {
+			// Only the probe's own owner Worker outlived the window, by a few milliseconds.
+			const late = receipt.results.filter((result) => result.remainingWorkerTargets);
+			assert.equal(late.length, 1);
+			assert.equal(late[0].workersAfterContextClose, 0);
+			assert.match(late[0].remainingWorkerTargetDetails[0].url, /\/harness\/sha256-[0-9a-f]{64}\/worker\.mjs$/);
+		}
+	}
+});
