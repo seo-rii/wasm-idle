@@ -224,3 +224,12 @@ test('with the service SDK the interrupt run passes, and a late interrupt races 
 		assert(end.atMs - late.atMs <= 5);
 	}
 });
+
+test('with a 50 ms compile interrupt, three consecutive runs pass cold, warm and interrupt', async () => {
+	for (const index of [5, 6, 7]) {
+		const receipt = await archived(`interrupt-run-${index}`);
+		assert.equal(receipt.applicationCommit, '5c55b7b775cfe256928550c2875a158e0c229510');
+		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total, receipt.shellAcceptancePassed], [38, 38, true]);
+		assert.equal((await archived(`interrupt-run-${index}-process`)).exitCode, 0);
+	}
+});

@@ -147,6 +147,7 @@ Every attempt's original browser and process receipts are archived under
 | [`interrupt-run-1`](evidence/interrupt-run-1.json) | `6251c8b7` | **Interrupt run passes all 8 checks**; cold passes; warm stops right after Clang completes |
 | [`interrupt-run-2`](evidence/interrupt-run-2.json) | `46522577` | With the service SDK: **38/38**, cold, warm and interrupt |
 | [`interrupt-run-3`](evidence/interrupt-run-3.json), [`-4`](evidence/interrupt-run-4.json) | `46522577` | Cold and warm pass; the second interrupt arrived 1 ms before the compile completed with 0, so Bash printed `clang=0` and kept the output |
+| [`interrupt-run-5` … `-7`](evidence/) | `5c55b7b7` | **All three pass 38/38**, cold, warm and interrupt, with the 50 ms compile interrupt |
 
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.
