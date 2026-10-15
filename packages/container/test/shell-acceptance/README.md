@@ -158,6 +158,32 @@ It must print `mkdir=126`, `retry=126`, `bad=1`, `no-artifact`, `missing=127` an
 - Bash reports the missing command itself (127) without a dispatch.
 - The Clang package is unaffected, so the last line compiles and runs.
 
+## Pipeline run
+
+A fifth run checks the descriptor juggling Bash does for a brace group or subshell in a
+pipeline, where descriptor 1 is the pipe:
+
+```sh
+set -u
+cd /workspace
+printf 'top\n' >&2
+{ printf 'group\n' >&2; } | cat
+{ printf 'file\n' > group-file; } | cat
+IFS= read -r g < group-file; printf 'file=%s\n' "$g"
+( printf 'sub\n' > sub-file ) | cat
+IFS= read -r s < sub-file; printf 'sub=%s\n' "$s"
+{ printf 'kept\n'; printf 'aside\n' >&2; } 2> err-file | grep kept
+```
+
+stdout must be `file=file`, `sub=sub` and `kept`, stderr exactly `top` and `group`, the
+three files must hold their bytes in the container VFS, and the BusyBox `cat`, `cat`, `cat`
+and `grep` processes must exit 0. Before bridge patch 0014, each of these redirections
+failed with `Invalid argument`.
+
+`PIPESTATUS` and `pipefail` are not checked: the pinned Bash is built without job control
+(`nojobs.c`), which records no per-command pipeline statuses. That is a property of the
+Bash build, not of WASIX.
+
 ## Results
 
 Every attempt's original browser and process receipts are archived under

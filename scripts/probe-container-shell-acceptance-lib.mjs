@@ -106,8 +106,22 @@ export const FAILURE_DISPATCHES = [
 	[`${BIN}/mkdir`, 126, 'INTEGRITY'], [`${BIN}/mkdir`, 126, 'INTEGRITY'], [`${BIN}/clang`, 1, 'exited'],
 	[`${BIN}/clang`, 0, 'exited'], ['/workspace/hello.wasm', 0, 'exited']
 ];
-export const RUNS = ['cold', 'warm', 'interrupt', 'failure'];
-export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT };
+// A fifth run: Bash saves and redirects descriptors inside a piped brace group or subshell,
+// where descriptor 1 is a pipe.
+export const PIPELINE_SCRIPT = [
+	'set -u',
+	'cd /workspace',
+	"printf 'top\\n' >&2",
+	"{ printf 'group\\n' >&2; } | cat",
+	"{ printf 'file\\n' > group-file; } | cat",
+	'IFS= read -r g < group-file; printf \'file=%s\\n\' "$g"',
+	"( printf 'sub\\n' > sub-file ) | cat",
+	'IFS= read -r s < sub-file; printf \'sub=%s\\n\' "$s"',
+	"{ printf 'kept\\n'; printf 'aside\\n' >&2; } 2> err-file | grep kept"
+].join('\n') + '\n';
+export const PIPELINE_DISPATCHES = [[`${BIN}/cat`, 0], [`${BIN}/cat`, 0], [`${BIN}/cat`, 0], [`${BIN}/grep`, 0]];
+export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline'];
+export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT, pipeline: PIPELINE_SCRIPT };
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -302,6 +316,27 @@ function judgeFailure(result, downloads, checks) {
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
 }
 
+/** Redirections inside piped groups and subshells: no `Invalid argument`, bytes land where asked. */
+function judgePipeline(result, checks) {
+	const check = (id, passed, observed) => checks.push({ id: `pipeline:${id}`, passed: Boolean(passed), observed });
+	const completed = result?.type === 'result' && result.backendCompleted === true;
+	const output = result?.result;
+	check('script', completed && output.code === 0 && decode(output.stdout) === 'file=file\nsub=sub\nkept\n' &&
+		decode(output.stderr) === 'top\ngroup\n',
+	{ type: result?.type, code: output?.code, stdout: decode(output?.stdout), stderr: decode(output?.stderr), error: result?.error });
+	check('workspace-files', decode(result?.files?.['/workspace/group-file']) === 'file\n' &&
+		decode(result?.files?.['/workspace/sub-file']) === 'sub\n' && decode(result?.files?.['/workspace/err-file']) === 'aside\n',
+	result?.files && Object.keys(result.files));
+	const records = result?.records ?? [];
+	check('supervisor-statuses', JSON.stringify(records.map((record) => [record.path, record.status])) === JSON.stringify(PIPELINE_DISPATCHES),
+		records.map(({ path, status }) => [path, status]));
+	check('processes-retired', completed && Array.isArray(result.containerProcesses) && !result.containerProcesses.length,
+		result?.containerProcesses?.length);
+	check('browser-errors', !result?.events?.some((event) => event.type === 'threadError') &&
+		!result?.blockedRequests?.length && !result?.consoleErrors?.length, result?.consoleErrors);
+	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
+}
+
 export function judgeShellAcceptance(receipt) {
 	const checks = [];
 	const assetPaths = ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
@@ -309,6 +344,7 @@ export function judgeShellAcceptance(receipt) {
 		const entry = receipt.runs?.find((candidate) => candidate.run === run);
 		if (run === 'interrupt') judgeInterrupt(entry?.result, checks);
 		else if (run === 'failure') judgeFailure(entry?.result, entry?.downloads ?? { start: {}, end: {} }, checks);
+		else if (run === 'pipeline') judgePipeline(entry?.result, checks);
 		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
 	}
 	checks.push({ id: 'context-cleanup', passed: receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,
