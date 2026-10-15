@@ -486,3 +486,23 @@ with that pid, which wasix-libc turns into `*status = 0` and returns the pid. A 
 command's first dispatch (cold container Worker) is slow enough for Bash to poll it in that
 state; later commands usually finish first. Patch 0010 keeps such a child joinable and
 reports pid 0. It applies independently of 0009 with zero fuzz.
+
+The ten-patch SDK at source `959ea103b2535aacb04c6c69b2441e65a0203a47` (after disabling
+patch backup files) passed the same fresh-source gate with 583 pins: typecheck 441.463 s,
+release 1,016.289 s, bindgen 3.28 s and static inspection 0.508 s on a loaded host, each
+exiting 0 with complete cleanup. The bound Wasm is 9,128,654 bytes, SHA-256
+`bc203bae677f9f658a2893d6bcc4336ff75a29cd1c82cef1ce54c28dd7e02dc1`; binary receipt
+`2b4d95ca3294dd059548b3c351adbe09444d79eada3125505f7981ada828d8c3` and stage receipts are
+archived as `evidence.wnohang-*.json` with a [recheck](evidence.wnohang-sdk-binary-metadata.json).
+Local packaging produced receipt
+`4b4de3258029c40f7c6db2feb1e342009ce647d683f4ecff87daf509d3b094bb`. An earlier attempt of
+this gate was stopped one minute into typechecking, before any output, because the
+prepared source contained `proc_join.rs.orig`; it is not counted as a build result.
+
+In seven actual Chromium runs of the dispatch probe with this package, all twenty
+consecutive host-command statuses arrived intact every time, and statuses 126 and 134
+remained correct. Patch 0010 does not remove every status loss: in three of the seven
+runs, the first command of one shell still reported 0 while its Supervisor record held
+23, alongside an occasional hang before dispatch. Both appear when Bash's wait outlasts
+the WASIX 50 ms deep-sleep threshold; the remaining cause is open and is not claimed to be
+fixed here.

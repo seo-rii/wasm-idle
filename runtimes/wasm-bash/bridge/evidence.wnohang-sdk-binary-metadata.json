@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-ten-patch-sdk-typecheck-release-web-glue-and-static-inspection-passed",
+  "runRoot": "/data/seorii-container-20261014/sdk-wnohang-gate-20261015T063450Z",
+  "binaryRunRoot": "/data/seorii-container-20261014/sdk-wnohang-gate-20261015T063450Z/sdk-wnohang-binary-20261015T063450Z",
+  "sourceCommit": "959ea103b2535aacb04c6c69b2441e65a0203a47",
+  "helperSourceCommit": "f9a5ce45996f7a6eeeabb922e82921924042a60e",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "originalReceipt": {
+    "sourceFile": "sdk-wnohang-binary-20261015T063450Z/receipt.json",
+    "archive": "evidence.wnohang-sdk-binary.json",
+    "bytes": 360658,
+    "sha256": "2b4d95ca3294dd059548b3c351adbe09444d79eada3125505f7981ada828d8c3"
+  },
+  "originalBytesPreserved": true,
+  "sourcePreparation": {
+    "sourceFile": "prepared-source/receipt.json",
+    "archive": "evidence.wnohang-source-preparation.json",
+    "bytes": 3278,
+    "sha256": "e98f8d4e5a62ba2be75ec827632b3bc89a9288dc54bad76197833706459a5827"
+  },
+  "sourcePolicy": {
+    "sourceFile": "source-policy.json",
+    "bytes": 145788,
+    "sha256": "d6f1391b338499d25837af5f9de069e047ea26d8ff53f50a2784580419c8181e"
+  },
+  "queueRecipe": {
+    "sourceFile": "queue.json",
+    "bytes": 2291,
+    "sha256": "9a3337eca2d8f690c2ffcce5c978e1ead83254cd7f211598565242707435c4ad"
+  },
+  "stageReceipts": [
+    {
+      "stage": "typecheck",
+      "sourceFile": "sdk-check.process.json",
+      "archive": "evidence.wnohang-typecheck-process.json",
+      "bytes": 659,
+      "sha256": "3e040977f6b2c619536673f750420f94b1cbe39e0281c1517052ad6edd026b73",
+      "wallSeconds": 441.463,
+      "exitCode": 0
+    },
+    {
+      "stage": "release",
+      "sourceFile": "sdk-wnohang-binary-20261015T063450Z/sdk-build.process.json",
+      "archive": "evidence.wnohang-sdk-build-process.json",
+      "bytes": 698,
+      "sha256": "093b8f1ef4bacacee7eceb682a6c0273a3ec6c6e9e99c6800251c581fbb97815",
+      "wallSeconds": 1016.289,
+      "exitCode": 0
+    },
+    {
+      "stage": "bindgen",
+      "sourceFile": "sdk-wnohang-binary-20261015T063450Z/bindgen.process.json",
+      "archive": "evidence.wnohang-sdk-bindgen-process.json",
+      "bytes": 877,
+      "sha256": "1e4e62e11e6a10e396145302bf5c4dc86d25856e8596f0960f32a3a931483e58",
+      "wallSeconds": 3.28,
+      "exitCode": 0
+    },
+    {
+      "stage": "inspect",
+      "sourceFile": "sdk-wnohang-binary-20261015T063450Z/inspect.process.json",
+      "archive": "evidence.wnohang-sdk-inspect-process.json",
+      "bytes": 1099,
+      "sha256": "88cbbc4f3aa57cb1bbf009704531e419c91c2b87644954459c183ec30eef84b2",
+      "wallSeconds": 0.508,
+      "exitCode": 0
+    }
+  ],
+  "archiveVerification": {
+    "checkedAtUtc": "2026-10-15T06:59:46.630906+00:00",
+    "sourcePolicyPins": 583,
+    "sourceInventories": {
+      "wasmer-sdk": 199,
+      "wasmer-wasix": 377
+    },
+    "queueInputPins": 5,
+    "outputArtifacts": 6,
+    "allRecordedHashesMatched": true,
+    "sourceInventoriesMatched": true,
+    "sourceSymlinksFound": false
+  },
+  "buildContext": {
+    "freshPhysicalSource": true,
+    "uniqueTargetForThisPhysicalCopy": true,
+    "copiedOrSharedCompiledArtifacts": false,
+    "samePhysicalCopyCheckedTargetReusedForRelease": true,
+    "releaseTimingIsNotAnIndependentCleanBuild": true,
+    "automaticRetry": false
+  },
+  "completedLogs": [
+    {
+      "stage": "typecheck",
+      "path": "/home/seorii/logs/sdk-wnohang-gate-20261015T063450Z-sdk-check.log",
+      "bytes": 29235,
+      "sha256": "0e724f3aeeb5f1187413c4ba87fd23a8c34aa8ccb78e8f6a7e89cf4bef55dc2d"
+    }
+  ],
+  "outputs": {
+    "artifacts/web/wasmer_js.d.ts": {
+      "bytes": 26146,
+      "sha256": "851216ddd30efac54dfedc5c6ca6e981f3a8e20da6490098ef14ba3b60b543ee"
+    },
+    "artifacts/web/wasmer_js_bg.wasm.d.ts": {
+      "bytes": 9972,
+      "sha256": "a25c15722d9e3e398496b5b11e3b34dfb3f5de4cf4ffd6edc4ca801eeae8b271"
+    },
+    "artifacts/web/wasmer_js_bg.wasm": {
+      "bytes": 9128654,
+      "sha256": "bc203bae677f9f658a2893d6bcc4336ff75a29cd1c82cef1ce54c28dd7e02dc1"
+    },
+    "artifacts/web/wasmer_js.js": {
+      "bytes": 109783,
+      "sha256": "fa4bb5f6bd5585b87afe0a5b9acec57505b7705ac1b30a128106acf640ff8a75"
+    },
+    "artifacts/raw/wasmer_js.wasm": {
+      "bytes": 10183855,
+      "sha256": "4d6df5707af4dc39af8129e899ff25e507f3b1fb9294e0758aba03c01996ed4b"
+    },
+    "prepared-source.tar.gz": {
+      "bytes": 5707045,
+      "sha256": "e7bacc7f76390cca2a07f13f33cd778ffc3af2ff1b7249ca671bf2845fcca045"
+    }
+  },
+  "qualification": {
+    "guestQualified": false,
+    "hostCommandDispatchQualified": false,
+    "joinExitStatusQualified": false,
+    "shellBackendReady": false,
+    "commonContainerFdVfsQualified": false,
+    "scope": "Real Rust SDK/runtime check with patches 0001-0010, release Wasm, matching web glue and static inspection; not a browser or shell result"
+  },
+  "remainingGates": [
+    "Local index/worker module packaging",
+    "Actual Bash host-command dispatch in Chromium",
+    "Common live VFS and non-stdio descriptors",
+    "Public cancellation of a running host command",
+    "BusyBox/Clang shell acceptance"
+  ]
+}
