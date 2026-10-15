@@ -6,3 +6,4 @@ export type { ContainerOptions } from './container.js';
 export { MemoryFileSystem, FsError } from './fs/index.js';
 export type * from './fs/types.js';
 export type * from './adapters/types.js';
+export * from './packages/index.js';
