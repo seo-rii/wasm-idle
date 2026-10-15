@@ -10,15 +10,16 @@ been implemented; unpassed promotion gates remain explicit.
 | ---------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scope and boundaries                           | [C-01 #128](https://github.com/seo-rii/wasm-idle/pull/128)                       | main at implementation start                                                                                                                            |
 | Real Bash probe and backend decision           | [C-02 #133](https://github.com/seo-rii/wasm-idle/pull/133)                       | C-01, independent experiment                                                                                                                            |
-| Pinned SDK bridge source experiment            | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft)     | C-02; source/protocol checks and #189 SDK typechecking pass; modified SDK execution pending                                                             |
-| Owned prepared-child command metadata          | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft)      | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; linked SDK/glue, JS dispatch and fd/FS bridge pending     |
+| Pinned SDK bridge source experiment            | [C-02 follow-up #149](https://github.com/seo-rii/wasm-idle/pull/149) (draft)     | C-02; source/protocol checks and #189 SDK typechecking pass; selected native WASIX execution passes on #199; JavaScript/common Container bridge remains pending |
+| Owned prepared-child command metadata          | [C-02 snapshot #189](https://github.com/seo-rii/wasm-idle/pull/189) (draft)      | #149; five source patch checks and genuine pinned SDK lib/external-example typechecking pass; binary/glue and selected native guest follow-ups below; JS dispatch and common fd/FS remain pending |
 | Pinned SDK Wasm/web-glue build gate            | [C-02 SDK build #191](https://github.com/seo-rii/wasm-idle/pull/191) (draft)     | #189; real SDK/bindgen/static inspection passes on a warm target; original timeout preserved; guest qualification pending |
-| Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; real source-pinned Bash build/import receipt passes; actual SDK/Bash execution pending |
+| Opt-in real Bash exec-shim producer            | [C-02 Bash producer #192](https://github.com/seo-rii/wasm-idle/pull/192) (draft) | #189; real source-pinned Bash build/import receipt passes; native SDK/Bash execution and startup cwd follow-ups on #197–199 |
 | Local SDK module/Worker packaging              | [C-02 SDK package #193](https://github.com/seo-rii/wasm-idle/pull/193) (draft)   | #191; actual pinned-esbuild package passes; first actual guest acceptance fails on #195 |
 | Rebuilt SDK/Bash Chromium probe                | [C-02 browser #195](https://github.com/seo-rii/wasm-idle/pull/195) (draft)      | #193 plus #192; ten SDK initializers return but guest instantiation fails with Noexec(45); raw failures preserved |
 | Actual SDK Worker import resolver              | [C-02 resolver #196](https://github.com/seo-rii/wasm-idle/pull/196) (draft)     | #189; actual fresh-source SDK check/release/bindgen passes; original receipts and complete pin rechecks archived |
-| Fixed SDK actual Bash execution                | [C-02 execution #197](https://github.com/seo-rii/wasm-idle/pull/197) (draft)    | #195 plus rebuilt #196 assets; ten real commands complete, 17/18 selected checks pass; startup cwd/redirect boundary remains |
-| Selected Bash libc startup cwd                 | [C-02 startup #198](https://github.com/seo-rii/wasm-idle/pull/198) (draft)      | #192; separately pinned constructor/second object and native guards pass; actual producer rebuild and unchanged browser contract remain pending |
+| Fixed SDK actual Bash execution                | [C-02 execution #197](https://github.com/seo-rii/wasm-idle/pull/197) (draft)    | #195 plus rebuilt #196 assets; historical 17/18 result and startup cwd/redirect failure preserved; unchanged contract passes on #199 |
+| Selected Bash libc startup cwd                 | [C-02 startup #198](https://github.com/seo-rii/wasm-idle/pull/198) (draft)      | #192; separately pinned constructor/second object, native guards and actual producer build/import verification pass; selected runtime evidence on #199 |
+| Startup cwd actual Bash execution              | [C-02 startup execution #199](https://github.com/seo-rii/wasm-idle/pull/199) (draft) | #197 plus #198 Bash bytes; unchanged ten real commands and 18/18 native WASIX checks pass, including relative redirect visibility; common Container bridge remains unqualified |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -173,7 +174,7 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD/CANCEL | Real pinned WASIX SDK 0.10.0 Bash can execute selected external Wasm, but loses empty arguments, has inconsistent exit propagation and incomplete host filesystem visibility; nested Worker ownership needs explicit cleanup                      | C-02 backend investigation; #189 prepared-child metadata passes genuine SDK/example typechecking; linked SDK/glue, JS dispatch and common fd/FS routing still need actual guest acceptance before C-15 |
+| G0-SHELL/FS/FD/CANCEL | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199, including empty arguments, exit status and relative redirect visibility, with all Workers retired; common Container bindings are not installed | C-02 JavaScript command registry, common live fd/VFS ownership, foreground cancellation/recovery and actual Clang/BusyBox shell acceptance before C-15; original Noexec and 17/18 failure receipts remain preserved |
 | G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
 | B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
 | P4 / shell MVP        | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent                                                                                                     | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users                                                                                                                   |
@@ -410,7 +411,7 @@ original worker's dynamic SDK import remains a trusted immutable host module
 graph; actual nested Worker ownership and the original unbounded pre-init
 queue remain unresolved, alongside command registry/fd/VFS.
 
-The [#195 browser layer](https://github.com/seo-rii/wasm-idle/pull/195) now runs the actual
+The first [#195 browser layer](https://github.com/seo-rii/wasm-idle/pull/195) runs the actual
 rebuilt SDK/Bash package together. Chromium 153.0.8010.12/Linux completes all ten observations
 in 10.183 seconds: the supplied-Module/shared-Memory SDK initializers return, but all ten
 SDK waits return WASIX Noexec (45), empty stdout/stderr and the console error
@@ -418,8 +419,8 @@ SDK waits return WASIX Noexec (45), empty stdout/stderr and the console error
 behavior is qualified by this run. The private `exec_v1` import was added to only one
 resolver; the actual Worker calls the separate `import_object_for_all_wasi_versions`,
 which omits `wasm_idle_shell_v1`. The [#196 resolver fix](https://github.com/seo-rii/wasm-idle/pull/196)
-passes six-patch/source guards; a new SDK typecheck and binary/package/browser receipt
-are the next gates. Original browser and process receipts are preserved unchanged;
+passes six-patch/source guards; completed SDK and native guest follow-ups are recorded below.
+Original browser and process receipts are preserved unchanged;
 their SHA-256 values are respectively
 `db4ee40be5021dfe47301931fc28aae14e529b833cbdf29096832584292a7ff1` and
 `3297aaf1d24d96ed22822f8c2916e537808b68411332c1f388f2488de57e9276`.
@@ -437,7 +438,7 @@ The bound Wasm is 9,071,791 bytes, SHA-256
 `326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551`.
 Local packaging of those bytes also passes and retains the original host/Worker semantics.
 
-The [#197 actual execution](https://github.com/seo-rii/wasm-idle/pull/197) now completes all
+The historical [#197 actual execution](https://github.com/seo-rii/wasm-idle/pull/197) completes all
 ten real Bash commands with code 0 on Chromium 153.0.8010.12/Linux. Seventeen of 18 selected
 checks pass: empty/LF/CR/UTF-8 argv, replaced and explicitly empty environment, actual cwd,
 raw stderr, status 23, tail exec, binary pipes and separate parent/guest/host file sharing.
@@ -451,12 +452,41 @@ Four separate actual cwd comparisons complete collection in 7.133 seconds. Both 
 `/workspace` redirect and an explicit initial `cd /workspace` publish the exact binary file;
 unchanged relative redirection and a parent builtin's relative write do not. The actual cwd
 guest still reports `/workspace`. This matches the pinned libc's separate legacy cwd used
-by relative `open`, which `getcwd` does not update and `chdir` synchronizes. Startup
-synchronization is implemented on [#198](https://github.com/seo-rii/wasm-idle/pull/198),
-with actual producer rebuild and unchanged browser acceptance pending. Diagnostics retain false
-guest/shell qualification; they do not change or replace the original failing contract.
-Common Container fd/VFS, JavaScript command registry, foreground cancellation and actual
-Clang/BusyBox shell acceptance remain open.
+by relative `open`, which `getcwd` does not update and `chdir` synchronizes. Diagnostics
+retain false guest/shell qualification; they do not change or replace the original failing
+contract.
+
+The [#198 startup synchronization](https://github.com/seo-rii/wasm-idle/pull/198) producer
+build at source `7d15375967ed557e724488e82bab75cb5c4b41cb` exits 0 in 129.466 seconds.
+The separately pinned constructor and second object are linked into real Bash, and import
+verification passes. All owned processes are reaped without cleanup errors or forced signals.
+This local observation does not establish cold/clean build performance; the producer receipt
+remains `built-imports-verified-not-runtime-qualified`.
+
+The stacked [#199 actual browser run](https://github.com/seo-rii/wasm-idle/pull/199), based on
+#197, uses application source `7c7c32c3dc3c8f6842dd59bd677457e5e9613032` and the new Bash
+bytes with the same SDK package receipt
+`9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525`. The original ten
+scripts and three real ABI fixture sources are unchanged. Chromium 153.0.8010.12/Linux
+completes all ten real commands with code 0 and passes all 18 selected checks in 15.812
+seconds. Relative redirection now publishes the host Directory's `/binary` with exactly
+`[0, 255, 226, 130, 172, 10, 13, 97, 98]`. All 60 dedicated Workers, including 50 nested
+Workers, retire to zero before host context close and remain absent afterward; all owned OS
+processes are reaped without errors or forced signals.
+
+The unchanged original browser receipt is 254,412 bytes, SHA-256
+`0e0afaea1bb34193260ce7fab29205a8f2e810be32a29491864a4cad6614f5b6`; the process receipt
+is 1,059 bytes, SHA-256
+`59b61cbc217d26eb3f8b3bfcd9c652d668105cd5f9cdfe90da1553438a094e24`. A prior local
+attempt stopped at memory admission before launching Chromium because available headroom
+was below 8 GiB. The successful fresh attempt met the unchanged policy after headroom
+recovered; it does not replace or relabel that admission failure.
+
+These results qualify only the selected native WASIX `Directory` observations.
+`commonContainerFdVfsQualified` and `shellBackendReady` remain false. Common Container live
+fd/VFS, JavaScript command registry, foreground cancellation/recovery and actual Clang/BusyBox
+shell acceptance remain open; the original #195 Noexec and #197 17/18 failures remain
+archived separately.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
