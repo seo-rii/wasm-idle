@@ -6,15 +6,16 @@ import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-c
 import { FULL_SYSROOT_SHA256, loadClangBrowserInputs } from '../packages/container/scripts/clang-browser-inputs.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
-// SDK with bridge patches 0001-0014: directory routing, host-command work off the scheduler thread, dup2 onto pipes.
+// SDK with bridge patches 0001-0019: registry/filesystem/pipe fixes, exit-only wait,
+// raw stdin and bounded native pipes. Browser qualification remains a separate gate.
 export const PACKAGE_RECEIPT = {
 	bytes: 2605,
-	sha256: '6caa501f847b306963536da9e25dbe4f1b52ace793bbf9c9102ecc62a044cb8e'
+	sha256: '5b0345ab59983015d325181fbc1946e0025290ac932fbb13e3ed6e13be5fb72f'
 };
-export const BINARY_RECEIPT_SHA256 = 'e2afce94a64e99658fc75090995753b6969aa57ffd04e0ce87ccf423843e88ad';
+export const BINARY_RECEIPT_SHA256 = '576b93bdadaeafff0a263bc2d4902984c507cd9fd4588a3b9cf1e6dcd729d99c';
 export const SDK_WASM = {
-	bytes: 9213387,
-	sha256: '19064ffc36cd534986029c75bbd852a13a785a970fc3e2cea7c82e6831d82c50'
+	bytes: 9266592,
+	sha256: '454832ce73ad3db7d3a9d29cee54cd1a00eaaddf1c66cd4e1d683782531c1567'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 // BusyBox B1, qualified live in runtimes/wasm-busybox/LIVE.md.
@@ -49,6 +50,7 @@ export const SOURCE = text('#include <stdio.h>\nint main(void){puts("hello");ret
 export const READ_FILES = ['/workspace/demo/main.c', '/workspace/demo/result.txt'];
 export const BIN = '/usr/local/bin';
 export const SYSROOT = '/usr/share/wasm-sysroot';
+export const LLVM_EXECUTABLE = '/opt/toolchains/llvm/bin/llvm';
 export const CLANG_PROFILE = Object.freeze([
 	'--target=wasm32-wasi', '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld', `--sysroot=${SYSROOT}`,
 	`-resource-dir=${SYSROOT}/lib/clang/22`, '-Wl,--max-memory=67108864'
@@ -120,8 +122,27 @@ export const PIPELINE_SCRIPT = [
 	"{ printf 'kept\\n'; printf 'aside\\n' >&2; } 2> err-file | grep kept"
 ].join('\n') + '\n';
 export const PIPELINE_DISPATCHES = [[`${BIN}/cat`, 0], [`${BIN}/cat`, 0], [`${BIN}/cat`, 0], [`${BIN}/grep`, 0]];
-export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline'];
-export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT, pipeline: PIPELINE_SCRIPT };
+// Public virtual metadata is exercised by actual Bash's PATH/stat/access checks.
+// Clang must start while real shell redirection descriptors remain open.
+export const REDIRECTION_SCRIPT = [
+	'set -eu', 'cd /workspace',
+	'command -v clang > command-path', `test -f ${BIN}/clang && test -x ${BIN}/clang`,
+	"printf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c",
+	'clang main.c -o hello.wasm > compile.out 2> compile.err',
+	'clang --version > version.txt 2>> compile.err',
+	'./hello.wasm',
+	"printf 'int main(void){' > bad.c", 'set +e',
+	'clang bad.c -o bad.wasm > failed.out 2> failed.err', 'status=$?', 'set -e',
+	'printf \'bad=%d\\n\' "$status"',
+	'cat hello.wasm > data.wasm', 'set +e', './data.wasm > denied.out 2> denied.err',
+	'status=$?', 'set -e', 'printf \'data=%d\\n\' "$status"',
+	'wasm-run data.wasm', 'set +e',
+	`cat ${BIN}/clang > virtual-body 2> virtual-error`, 'status=$?', 'set -e', 'printf \'virtual=%d\\n\' "$status"'
+].join('\n') + '\n';
+export const REDIRECTION_FILES = ['command-path', 'compile.out', 'compile.err', 'version.txt', 'failed.out', 'failed.err', 'bad.wasm', 'denied.out', 'virtual-body', 'virtual-error'].map(name => `/workspace/${name}`);
+export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline', 'redirection', 'startup-failure'];
+export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT, pipeline: PIPELINE_SCRIPT,
+	redirection: REDIRECTION_SCRIPT, 'startup-failure': "printf 'must-not-execute\\n'\n" };
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -198,7 +219,7 @@ export async function readPinnedProbeInputs(configuration) {
 	};
 }
 
-const decode = (bytes) => Buffer.from(bytes ?? []).toString('utf8');
+const decode = (bytes) => Buffer.from(Array.isArray(bytes) || bytes instanceof Uint8Array ? bytes : []).toString('utf8');
 const same = (actual, expected) => Array.isArray(actual) &&
 	actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
 
@@ -232,6 +253,9 @@ function judgeRun(run, result, downloads, assetPaths, checks) {
 		result?.containerProcesses?.length);
 	check('metadata-only-lookup', result?.assetsBeforeShell?.cachedEntries === 0 &&
 		result?.lookups?.clang === 'llvm' && ['cat', 'grep', 'mkdir'].every((name) => result.lookups[name] === 'busybox'), result?.lookups);
+	const clang = result?.clangCommand;
+	check('clang-multicall-profile', clang?.path === 'bin/llvm' && clang.argv0 === LLVM_EXECUTABLE &&
+		clang.package === 'llvm' && clang.adapter === 'llvm-clang-tool-host-v1' && same(clang.prefixArgs, ['clang', ...CLANG_PROFILE]), clang);
 	// Lazy loading: no asset is requested before the command that needs it.
 	const timeline = result?.timeline ?? [];
 	const first = (predicate) => timeline.find(predicate)?.seq ?? Infinity;
@@ -239,6 +263,8 @@ function judgeRun(run, result, downloads, assetPaths, checks) {
 	const dispatchOf = (path) => first((entry) => entry.type === 'dispatch' && entry.path === path);
 	const fetched = (name) => downloads.end[`/assets/${name}`] - downloads.start[`/assets/${name}`];
 	if (run === 'cold') {
+		check('shell-lazy', ['sdk', 'bash'].every(name => fetches(name).length === 1 && fetches(name)[0].seq > first(entry => entry.type === 'shellStart') && fetched(name) === 1) &&
+			result?.shellAssetsBefore?.cachedEntries === 0, { fetches: ['sdk', 'bash'].map(fetches), before: result?.shellAssetsBefore });
 		check('busybox-lazy', fetches('busybox').length === 1 && fetches('busybox')[0].seq > dispatchOf(`${BIN}/mkdir`) &&
 			fetched('busybox') === 1, { fetches: fetches('busybox'), mkdir: dispatchOf(`${BIN}/mkdir`) });
 		check('clang-lazy', ['clang', 'lld', 'sysroot'].every((name) => fetches(name).length === 1 &&
@@ -250,7 +276,10 @@ function judgeRun(run, result, downloads, assetPaths, checks) {
 	}
 	check('sysroot-closure', result?.sysroot?.entries === 2285 && result.sysroot.files === 2168, result?.sysroot);
 	check('public-api', result?.publicApi?.runtime?.includes('registerHostCommandDirectory') &&
-		result.publicApi.directory?.includes('fromHostFileSystem'), result?.publicApi);
+		result.publicApi.directory?.includes('fromHostFileSystem') && result.publicApi.session === 'createWasixShellSession', result?.publicApi);
+	check('virtual-command-metadata', Object.values(result?.virtualCommands ?? {}).length === 7 && Object.values(result.virtualCommands).every(stat => stat.command === true && stat.mode === 0o555 && stat.size === 0), result?.virtualCommands);
+	check('executable-artifact', (result?.artifact?.mode & 0o111) !== 0, result?.artifact?.mode);
+	check('sdk-group-retired', result?.workerGroup?.disposed === true && result.workerGroup.active === 0 && result.workerGroup.created === result.workerGroup.terminated, result?.workerGroup);
 	check('browser-errors', !result?.events?.some((event) => event.type === 'threadError') &&
 		!result?.blockedRequests?.length && !result?.consoleErrors?.length, result?.consoleErrors);
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
@@ -337,18 +366,50 @@ function judgePipeline(result, checks) {
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0, result?.remainingWorkerTargetDetails);
 }
 
+function judgeRedirection(result, checks) {
+	const check = (id, passed, observed) => checks.push({ id: `redirection:${id}`, passed: Boolean(passed), observed });
+	const output = result?.result, files = result?.files ?? {};
+	check('script', result?.type === 'result' && result.backendCompleted === true && output?.code === 0 &&
+		decode(output.stdout) === 'hello\nbad=1\ndata=126\nhello\nvirtual=1\n' && decode(output.stderr) === '', output);
+	check('path-stat-access', decode(files['/workspace/command-path']) === `${BIN}/clang\n`, files['/workspace/command-path']);
+	check('compiler-redirections', decode(files['/workspace/compile.out']) === '' &&
+		decode(files['/workspace/compile.err']).includes(CLANG_TRIPLE_WARNING) && /clang version/.test(decode(files['/workspace/version.txt'])) &&
+		decode(files['/workspace/failed.out']) === '' && /bad\.c:1:\d+: error:/.test(decode(files['/workspace/failed.err'])) &&
+		files['/workspace/bad.wasm']?.error === 'ENOENT', Object.keys(files));
+	check('artifact-mode-enforced', (result?.artifact?.mode & 0o111) !== 0 && result?.dataArtifactMode !== undefined && !(result.dataArtifactMode & 0o111) &&
+		decode(files['/workspace/denied.out']) === '' && result?.records?.some(record => record.path === `${BIN}/wasm-run` && record.status === 0),
+	{ artifactMode: result?.artifact?.mode, dataArtifactMode: result?.dataArtifactMode });
+	check('virtual-entry-has-no-body', decode(files['/workspace/virtual-body']) === '' && decode(files['/workspace/virtual-error']).length > 0,
+		files['/workspace/virtual-error']);
+	check('processes-retired', Array.isArray(result?.containerProcesses) && result.containerProcesses.length === 0 && result?.workerGroup?.active === 0 && result.workerGroup.disposed === true, result?.workerGroup);
+	check('browser-errors', !result?.blockedRequests?.length && !result?.consoleErrors?.length, result?.consoleErrors);
+	check('owned-workers-retired', result?.remainingWorkerTargets === 0 && !result?.ownedCleanup?.cleanupError, result?.remainingWorkerTargetDetails);
+}
+
 export function judgeShellAcceptance(receipt) {
 	const checks = [];
-	const assetPaths = ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
+	const assetPaths = ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
 	for (const run of RUNS) {
 		const entry = receipt.runs?.find((candidate) => candidate.run === run);
 		if (run === 'interrupt') judgeInterrupt(entry?.result, checks);
 		else if (run === 'failure') judgeFailure(entry?.result, entry?.downloads ?? { start: {}, end: {} }, checks);
 		else if (run === 'pipeline') judgePipeline(entry?.result, checks);
+		else if (run === 'redirection') judgeRedirection(entry?.result, checks);
+		else if (run === 'startup-failure') {
+			const result = entry?.result;
+			checks.push({ id: 'startup-failure:runtime-error', passed: result?.type === 'result' && result.backendCompleted === true &&
+				result.result?.code === null && result.result?.reason === 'runtime-error' && decode(result.result.stdout) === '' && decode(result.result.stderr) === '' &&
+				Array.isArray(result.records) && result.records.length === 0, observed: result?.result });
+			checks.push({ id: 'startup-failure:owned-cleanup', passed: result?.workerGroup?.disposed === true && result.workerGroup.active === 0 &&
+				result.workerGroup.created > 0 && result.workerGroup.created === result.workerGroup.terminated && result.remainingWorkerTargets === 0 &&
+				!result.ownedCleanup?.cleanupError && !result.consoleErrors?.length && !result.blockedRequests?.length, observed: result?.workerGroup });
+		}
 		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
 	}
 	checks.push({ id: 'context-cleanup', passed: receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,
 		observed: [receipt.initialWorkerTargets, receipt.workersAfterContextClose] });
+	if (receipt.diagnosticOptions?.omittedTmpMount === true) checks.push({ id: 'required-mount-profile', passed: false,
+		observed: 'Diagnostic run omitted the required common /tmp mount' });
 	return {
 		checks,
 		passed: checks.filter((entry) => entry.passed).length,

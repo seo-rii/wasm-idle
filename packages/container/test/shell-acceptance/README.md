@@ -13,24 +13,39 @@ clang main.c -o hello.wasm
 cat result.txt
 ```
 
-One owner Worker holds the patched SDK, one container Supervisor and one filesystem:
+One owner Worker uses the public `createWasixShellSession` and the same trusted
+`examples/container/bash-profile.mjs` as the product workbench. It holds the statically
+imported patched SDK, one container Supervisor and one filesystem:
 
-- Bash's `/workspace` is the container VFS through `Directory.fromHostFileSystem`.
-- `/usr/local/bin` holds placeholder files for Bash's PATH search only. Each path is
+- Bash's `/workspace`, `/tmp` and `/home/user` are separate capabilities on the
+  container VFS through `Directory.fromHostFileSystem`.
+- `/usr/local/bin` holds readonly virtual executable metadata with no readable body. Each path is
   registered with `Runtime.registerHostCommand` and routed by `createHostCommandHandler`:
     - `mkdir`, `grep`, `cat` (and `cp`, `mv`, `rm`) are BusyBox B1 package commands on the
       live adapter, with the shell child's descriptors delegated.
     - `clang` is the real Clang on its snapshot adapter with forwarded output.
 - `/workspace` is also registered with `registerHostCommandDirectory`. Bash's exec of
   `./hello.wasm` therefore runs the artifact as `wasm-run` on the live artifact adapter
-  instead of natively inside the Bash runtime.
+  instead of natively inside the Bash runtime. Direct dispatch requires executable
+  VFS metadata. The Clang adapter grants it only to successfully changed outputs
+  that qualify as bounded process-profile Wasm modules, never by filename alone.
+  `wasm-run` provides an explicit entry for a data file containing supported Wasm.
 
-Bash does its own parsing, lookup, fork/exec, pipe, redirections and waits. There is no
+Bash does its own parsing, lookup, fork/exec, pipe, redirections and waits. The public
+session uses raw stdin and `waitForExit()`; the test drains stdout and stderr concurrently
+under one 8 MiB capture bound. Its owned worker group and filesystem bindings are disposed
+before it reports completion. There is no
 shell parser, command-string interception or stdout protocol in JavaScript.
 
 ## Distribution profile
 
-The pinned distribution has two packages:
+The pinned distribution has three packages:
+
+- `shell`: the SDK Wasm and Bash WEBc, fetched and verified only on shell startup. The
+  actual Bash executable is separately checked against its immutable digest. The
+  statically imported SDK JavaScript and nested-worker module remain trusted app code.
+  The fixed SDK module URL is preserved as an external static import; inlining the
+  module would change its verified worker/bootstrap URL contract.
 
 - `busybox`: the B1 artifact and producer receipt qualified in `runtimes/wasm-busybox`.
 - `llvm`: Clang and LLD from the producer gates used by the Clang browser qualification
@@ -41,10 +56,22 @@ The pinned distribution has two packages:
   cwd `/`, and the live adapter correctly refuses to run such a module in
   `/workspace/demo`.
 
-Both are resolved from metadata only. A package's bodies are fetched when its first
-command is dispatched.
+Commands resolve from metadata only. BusyBox/LLVM bodies are fetched when their first
+command is dispatched. SDK and Bash assets use the same verified cache policy.
+The distribution identity covers the command, mount, asset URL and package policy;
+the separately supplied manifest digest remains the trust root.
 
-The distribution's `clang` command carries the target profile as `prefixArgs`, before the
+The producer's Clang artifact is an LLVM multicall executable. The distribution
+mounts those actual bytes at `/opt/toolchains/llvm/bin/llvm`, declares that full
+path as `argv0`, and prepends the `clang` subcommand. The real driver's canonical
+self-invocation therefore remains `[llvm, clang, -cc1, ...]`; naming the multicall
+binary `clang` would make its own dispatch consume that argv differently.
+`compilerPaths` allows only this canonical LLVM executable for the driver's own
+`-cc1`/`-cc1as` subprocess. Its original argv reaches the same pinned bytes without
+host argument rewriting. The shell's `/usr/local/bin/clang` remains a separate
+virtual dispatch entry and requires no compiler body before first use.
+
+After the multicall subcommand, `prefixArgs` carries the target profile before the
 user's arguments: `--target=wasm32-wasi`, the pinned linker, `--sysroot`, `-resource-dir`
 and a maximum artifact memory. A shipped toolchain would record these in a Clang
 configuration file. The pinned Clang 22 deprecates its own `wasm32-wasi` triple and prints
@@ -75,10 +102,13 @@ persistent cache. Each run requires:
 | artifact-in-supervisor | `/workspace/demo/hello.wasm` ran as a Supervisor process |
 | processes-retired | no container process after Bash exits |
 | metadata-only-lookup | commands resolve before any asset is cached |
+| clang-multicall-profile | the command names the actual LLVM executable and retains its `clang` subcommand and target profile |
 | busybox-lazy / clang-lazy (cold) | each body is fetched once, after its first command's dispatch |
 | verified-cache-reuse (warm) | no asset body request at all |
 | sysroot-closure | 2,285 entries, 2,168 files |
-| public-api / browser-errors / owned-workers-retired | as in the other shell probes |
+| virtual-command-metadata / executable-artifact | readonly command markers and executable metadata on the qualified artifact |
+| public-api / sdk-group-retired | public session used, group disposed, created and terminated worker counts match |
+| browser-errors / owned-workers-retired | no browser errors or remaining dedicated Workers |
 
 `shellBackendReady` and `commonContainerFdVfsQualified` stay false. Passing this script
 does not qualify descriptors beyond stdio, cancellation of a running shell command, job
@@ -102,10 +132,17 @@ pinned input it was derived from), `processSysrootReceipt`/`processSysrootReceip
 `processSysroot`,
 optional `chromium`, and a fresh `output` directory outside the checkout.
 
+For a failed startup, `sdkDiagnostics: true` records bounded SDK logs and actual
+host filesystem operations in the private receipt. The optional diagnostic-only
+`sdkDiagnosticsOmitTmp: true` isolates the SDK's default `/tmp` collision; every
+such receipt fails the required mount-profile gate even if its scripts pass.
+It does not alter the public session's mounts. The compiler and shell traces are
+fixture data; this logging is absent from the product owner.
+
 ## Interrupt run
 
 A third run in the same profile checks owner-initiated cancellation with a surviving shell.
-The owner calls the handler's `interrupt()` once the foreground command is actually running:
+The owner calls the session's `interrupt()` once the foreground command is actually running:
 
 ```sh
 set -u
@@ -183,6 +220,28 @@ failed with `Invalid argument`.
 `PIPESTATUS` and `pipefail` are not checked: the pinned Bash is built without job control
 (`nojobs.c`), which records no per-command pipeline statuses. That is a property of the
 Bash build, not of WASIX.
+
+## Compiler redirection and command metadata
+
+The sixth run uses real Bash `command -v`, `test -f` and `test -x` for the readonly
+Clang command, then compiles with `>compile.out 2>compile.err`. It invokes
+`clang --version` with stderr append and checks a failing compile's diagnostics in
+`failed.err`. These retain the shell's open descriptions across the snapshot lease;
+the compiler's normal failure must commit its diagnostic files without leaving an
+artifact or silently replacing the parent's descriptors.
+
+The successfully linked program runs directly. A byte-for-byte copy produced by
+`cat` is a data file: direct dispatch returns 126, while explicit `wasm-run` executes
+the same supported bytes. Reading the virtual Clang entry through BusyBox `cat`
+must fail without emitting a fabricated executable body. This qualifies dispatch
+policy and these actual lookup checks; it does not claim complete POSIX mode,
+chmod, signal or PTY semantics.
+
+The final run asks the real SDK to start with an absent initial cwd. Its environment
+setup fails before Bash executes. The public session must settle with a null code
+and `runtime-error`, preserve empty output, dispatch no command and retire all
+owned Workers. Converting this host failure into ordinary guest exit 1 fails the
+gate. This independently exercises the corrected SDK exit contract.
 
 ## Results
 

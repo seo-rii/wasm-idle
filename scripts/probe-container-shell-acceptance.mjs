@@ -5,13 +5,13 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { arch, platform, release, version } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import {
-	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
-	PACKAGE_RECEIPT, READ_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT,
+	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, LLVM_EXECUTABLE, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
+	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT,
 	digest, identity, judgeShellAcceptance, readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -21,7 +21,9 @@ const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-sr
 
 // Container, Core and LLVM tool-host source bundled into local modules, as the Clang browser
 // qualification does, so module Workers need no import map.
-async function bundles() {
+async function bundles(inputs) {
+	const sdkImport = `/sdk/${inputs.receipt.packageId}/index.mjs`;
+	const sourceBytes = new Map();
 	const result = await build({
 		absWorkingDir: root,
 		entryPoints: {
@@ -30,17 +32,33 @@ async function bundles() {
 			'live-worker': join(containerRoot, 'src/adapters/wasi-live/worker.ts')
 		},
 		alias: {
+			'@wasm-idle/container': join(root, 'packages/container/src/index.ts'),
+			'@wasm-idle/container/adapters/clang': join(root, 'packages/container/src/adapters/clang/index.ts'),
+			'@wasm-idle/container/adapters/wasi-live': join(root, 'packages/container/src/adapters/wasi-live/index.ts'),
+			'@wasm-idle/container/adapters/wasix': join(root, 'packages/container/src/adapters/wasix/index.ts'),
 			'@wasm-idle/core': join(root, 'packages/core/src/index.ts'),
 			'@wasm-idle/llvm-core/tool-host': join(root, 'packages/llvm-core/runtime/clang/src/tool-host.ts')
 		},
+		plugins: [{ name: 'pinned-sdk-module', setup(builder) {
+			builder.onResolve({ filter: /^@wasm-idle\/pinned-wasix-sdk$/ }, () => ({ path: sdkImport, external: true }));
+			builder.onLoad({ filter: /\.[cm]?[jt]s$/ }, async ({ path }) => {
+				const contents = await readFile(path), name = relative(root, path);
+				assert(!sourceBytes.has(name) || sourceBytes.get(name).equals(contents), `Source changed between bundle entrypoints: ${name}`);
+				sourceBytes.set(name, contents);
+				return { contents, loader: path.endsWith('.ts') ? 'ts' : 'js' };
+			});
+		} }],
 		bundle: true, format: 'esm', platform: 'browser', target: 'es2022',
 		outdir: '/bundle', write: false, metafile: true, logLevel: 'silent'
 	});
-	assert(Object.values(result.metafile.outputs).every((output) => output.imports.every((entry) => entry.external !== true || entry.kind === 'dynamic-import')),
-		'bundles must not leave static external imports');
+	assert(Object.values(result.metafile.outputs).every((output) => output.imports.every((entry) => entry.external !== true || entry.kind === 'dynamic-import' || entry.path === sdkImport)),
+		'only the exact pinned SDK may remain a static external import');
 	const modules = new Map(result.outputFiles.map((file) => [file.path.split('/').at(-1), Buffer.from(file.contents)]));
 	const sources = {};
-	for (const input of Object.keys(result.metafile.inputs).sort()) sources[input] = identity(await readFile(join(root, input)));
+	for (const input of Object.keys(result.metafile.inputs).sort()) {
+		assert(sourceBytes.has(input), `Bundle input was not recorded: ${input}`);
+		sources[input] = identity(sourceBytes.get(input));
+	}
 	return { modules, sources };
 }
 
@@ -58,19 +76,34 @@ export async function checkProbe(configuration) {
 	const { validateDistribution } = await import('../packages/container/dist/packages/distribution.js');
 	const bytes = Buffer.from(manifest('http://127.0.0.1:1', inputs));
 	await validateDistribution({ bytes, expectedSha256: digest(bytes), adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'],
-		allowedAssetURLs: ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `http://127.0.0.1:1/assets/${name}`) });
-	return { inputs, bundles: await bundles() };
+		allowedAssetURLs: ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map((name) => `http://127.0.0.1:1/assets/${name}`) });
+	return { inputs, bundles: await bundles(inputs) };
 }
 
 // `busyboxAsset` names the served BusyBox body; the failure run points it at corrupted bytes
 // while the manifest keeps the pinned digest.
-function manifest(origin, inputs, busyboxAsset = 'busybox') {
+export function manifest(origin, inputs, busyboxAsset = 'busybox') {
 	const busyboxIdentity = { ...identity(inputs.busybox), mediaType: 'application/wasm' };
 	const producer = inputs.clang.producer.source;
-	return JSON.stringify({
+	const llvmFiles = [
+		{ path: 'bin/llvm', asset: 'clang', executable: true },
+		{ path: 'bin/wasm-ld', asset: 'lld', executable: true },
+		{ path: 'sysroot.tar', asset: 'sysroot', executable: false }
+	];
+	const index = {
 		schemaVersion: 1,
-		distributionId: `shell-acceptance-${digest(Buffer.from(JSON.stringify([digest(inputs.busybox), inputs.clang.producerSha256, PROCESS_SYSROOT_RECEIPT_SHA256])))}`,
 		packages: [
+			{
+				id: 'shell', identity: `sha256:${digest(Buffer.from(JSON.stringify([inputs.receipt.packageId, digest(inputs.bash)])))}`,
+				dependencies: [], mount: '/opt/toolchains/bash',
+				producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: inputs.receipt.sourceCommit, receiptSha256: PACKAGE_RECEIPT.sha256 },
+				capabilities: ['wasix'],
+				assets: [['sdk', inputs.entries.get('wasmer_js_bg.wasm'), 'application/wasm'], ['bash', inputs.bash, 'application/octet-stream']].map(([id, bytes, mediaType]) => {
+					const pinned = { ...identity(bytes), mediaType };
+					return { id, url: `${origin}/assets/${id}`, encoding: 'identity', delivery: pinned, logical: pinned };
+				}),
+				files: [{ path: 'sdk.wasm', asset: 'sdk', executable: false }, { path: 'bash.webc', asset: 'bash', executable: false }]
+			},
 			{
 				id: 'busybox', identity: `sha256:${busyboxIdentity.sha256}`, dependencies: [], mount: '/opt/toolchains/busybox',
 				producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: BUSYBOX_PRODUCER_REVISION, receiptSha256: inputs.busyboxReceiptSha256 },
@@ -80,27 +113,27 @@ function manifest(origin, inputs, busyboxAsset = 'busybox') {
 			},
 			{
 				// Clang/LLD from their producer receipt, with the process-profile sysroot.
-				id: 'llvm', identity: `sha256:${digest(Buffer.from(JSON.stringify([inputs.clang.producerSha256, PROCESS_SYSROOT_RECEIPT_SHA256])))}`,
+				id: 'llvm', identity: `sha256:${digest(Buffer.from(JSON.stringify([inputs.clang.producerSha256, PROCESS_SYSROOT_RECEIPT_SHA256, llvmFiles])))}`,
 				dependencies: [], mount: '/opt/toolchains/llvm',
 				producer: { repository: producer.repository, revision: producer.revision, receiptSha256: inputs.clang.producerSha256 },
 				capabilities: ['wasi-preview1', 'llvm-tool-host-exec-v1'],
 				assets: Object.entries(inputs.clang.assets).map(([name, asset]) => ({ ...asset.metadata, url: `${origin}/assets/${name}` })),
-				files: [
-					{ path: 'bin/clang', asset: 'clang', executable: true },
-					{ path: 'bin/wasm-ld', asset: 'lld', executable: true },
-					{ path: 'sysroot.tar', asset: 'sysroot', executable: false }
-				]
+				files: llvmFiles
 			}
 		],
 		commands: [
 			...['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm'].map((name) => ({
 				name, package: 'busybox', adapter: 'wasi-preview1-live', path: 'bin/busybox', argv0: name, prefixArgs: []
 			})),
-			// The pinned profile: target, linker, process-profile sysroot and resource directory,
-			// before the user's arguments, as a toolchain's configuration file would supply them.
-			{ name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/clang', argv0: 'clang', prefixArgs: CLANG_PROFILE }
+			// This producer emits an LLVM multicall executable. Its canonical basename must
+			// remain llvm so the real driver can invoke [llvm, clang, -cc1, ...] unchanged.
+			// The target profile follows that subcommand, before the user's arguments.
+			{ name: 'clang', package: 'llvm', adapter: 'llvm-clang-tool-host-v1', path: 'bin/llvm', argv0: LLVM_EXECUTABLE, prefixArgs: ['clang', ...CLANG_PROFILE] }
 		]
-	});
+	};
+	// The ID identifies this complete immutable policy and layout. It is not its
+	// own trust root: consumers still require the independently pinned manifest hash.
+	return JSON.stringify({ ...index, distributionId: `shell-acceptance-${digest(Buffer.from(JSON.stringify(index)))}` });
 }
 
 export async function runProbe(configuration) {
@@ -117,6 +150,7 @@ export async function runProbe(configuration) {
 		packageReceipt: PACKAGE_RECEIPT,
 		packageId: prepared.inputs.receipt.packageId,
 		memory: MEMORY,
+		diagnosticOptions: { sdkDiagnostics: configuration.sdkDiagnostics === true, omittedTmpMount: configuration.sdkDiagnostics === true && configuration.sdkDiagnosticsOmitTmp === true },
 		bundles: Object.fromEntries([...prepared.bundles.modules].map(([name, bytes]) => [name, identity(bytes)])),
 		bundleSources: prepared.bundles.sources,
 		busybox: { receiptSha256: prepared.inputs.busyboxReceiptSha256, artifact: identity(prepared.inputs.busybox) },
@@ -142,15 +176,8 @@ export async function runProbe(configuration) {
 		const sdkBase = '/sdk/' + prepared.inputs.receipt.packageId;
 		for (const name of ['index.mjs', 'worker.mjs'])
 			served.set(`${sdkBase}/${name}`, { body: prepared.inputs.entries.get(name), type: 'text/javascript' });
-		const descriptions = [];
-		for (const [key, name, bytes] of [
-			['sdkWasm', 'sdk.wasm', prepared.inputs.entries.get('wasmer_js_bg.wasm')],
-			['bashWebc', 'bash.webc', prepared.inputs.bash]
-		]) {
-			const url = `/inputs/sha256-${digest(bytes)}/${name}`;
-			served.set(url, { body: bytes, type: 'application/octet-stream' });
-			descriptions.push({ key, url, ...identity(bytes) });
-		}
+		served.set('/assets/sdk', { body: prepared.inputs.entries.get('wasmer_js_bg.wasm'), type: 'application/wasm' });
+		served.set('/assets/bash', { body: prepared.inputs.bash, type: 'application/octet-stream' });
 		served.set('/assets/busybox', { body: prepared.inputs.busybox, type: 'application/wasm' });
 		// The same length with one flipped byte: only the pinned digest can reject it.
 		const corrupted = Buffer.from(prepared.inputs.busybox);
@@ -203,7 +230,7 @@ export async function runProbe(configuration) {
 		};
 		receipt.initialWorkerTargets = (await workers()).length;
 		context = await browser.newContext({ serviceWorkers: 'block' });
-		const consoleErrors = [], warnings = [], blockedRequests = [];
+		const consoleErrors = [], warnings = [], blockedRequests = [], sdkDiagnostics = [];
 		await context.route('**/*', (route) => {
 			const url = new URL(route.request().url());
 			if (url.origin === origin && !url.search && served.has(url.pathname)) return route.continue();
@@ -214,6 +241,7 @@ export async function runProbe(configuration) {
 		const page = await context.newPage();
 		page.on('pageerror', (error) => consoleErrors.push(String(error).slice(0, 2000)));
 		page.on('console', (message) => {
+			if (configuration.sdkDiagnostics && sdkDiagnostics.length < 2000) sdkDiagnostics.push({ type: message.type(), text: message.text().slice(0, 4000) });
 			if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 2000));
 			if (message.type() === 'warning') warnings.push(message.text().slice(0, 2000));
 		});
@@ -222,7 +250,7 @@ export async function runProbe(configuration) {
 			const start = { ...downloads }, started = Date.now(), errorsBefore = consoleErrors.length;
 			let result = {};
 			try {
-				result = await page.evaluate(({ descriptions, sdkBase, memory, bashWasmSha256, timeout, payload }) => new Promise((done) => {
+				result = await page.evaluate(({ sdkBase, memory, bashWasmSha256, timeout, payload }) => new Promise((done) => {
 					const events = [];
 					let worker, settled = false, cleanupResolve;
 					const finish = (value) => {
@@ -240,17 +268,6 @@ export async function runProbe(configuration) {
 					globalThis.ownerEvents = events;
 					(async () => {
 						if (!crossOriginIsolated) throw new Error('Cross-origin isolation required');
-						const inputs = {};
-						for (const entry of descriptions) {
-							const response = await fetch(entry.url, { credentials: 'same-origin', redirect: 'error' });
-							if (!response.ok) throw new Error(`Input HTTP ${response.status}`);
-							const bytes = await response.arrayBuffer();
-							const observed = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
-								(byte) => byte.toString(16).padStart(2, '0')).join('');
-							if (bytes.byteLength !== entry.bytes || observed !== entry.sha256) throw new Error(`Input identity mismatch: ${entry.key}`);
-							inputs[entry.key] = bytes;
-						}
-						const sdkModule = await WebAssembly.compile(inputs.sdkWasm);
 						worker = new Worker('/bundle/owner.js', { type: 'module' });
 						worker.onmessage = ({ data }) => {
 							events.push(data.type === 'result' ? { type: 'result' } : data);
@@ -258,18 +275,20 @@ export async function runProbe(configuration) {
 							if (['result', 'failure'].includes(data.type)) finish(data);
 						};
 						worker.onerror = (event) => finish({ type: 'error', backendCompleted: false, error: event.message });
-						worker.postMessage({ type: 'run', ...payload, bashWebc: inputs.bashWebc, sdkModule,
-							sdkMemory: new WebAssembly.Memory(memory), bashWasmSha256,
+						worker.postMessage({ type: 'run', ...payload, memory, bashWasmSha256,
 							sdkUrl: location.origin + sdkBase + '/index.mjs', sdkWorkerUrl: location.origin + sdkBase + '/worker.mjs',
 							liveWorkerUrl: location.origin + '/bundle/live-worker.js', clangWorkerUrl: location.origin + '/bundle/clang-worker.js' });
 					})().catch((error) => finish({ type: 'failure', backendCompleted: false, error: String(error) }));
 				}), {
-					descriptions, sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
+					sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
 					payload: {
+						sdkDiagnostics: configuration.sdkDiagnostics === true,
+						sdkDiagnosticsOmitTmp: configuration.sdkDiagnostics === true && configuration.sdkDiagnosticsOmitTmp === true,
 						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
+						cwd: run === 'startup-failure' ? '/workspace/missing-initial-directory' : '/workspace',
 						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm']
-							: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : READ_FILES,
-						artifactPath: run === 'failure' ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
+							: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : run === 'redirection' ? REDIRECTION_FILES : READ_FILES,
+						artifactPath: ['failure', 'redirection'].includes(run) ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
 						...(run === 'failure'
 							? { manifest: failureDistribution, manifestSha256: receipt.failureDistributionSha256, cacheNamespace: 'container-shell-acceptance-failure' }
 							: { manifest: distribution, manifestSha256: receipt.distributionSha256, cacheNamespace: 'container-shell-acceptance' }),
@@ -294,11 +313,12 @@ export async function runProbe(configuration) {
 			await save();
 		}
 		receipt.warnings = warnings;
+		if (configuration.sdkDiagnostics) receipt.sdkDiagnostics = sdkDiagnostics;
 		await context.close();
 		context = undefined;
 		receipt.workersAfterContextClose = (await retire()).length;
 		await readPinnedProbeInputs(configuration);
-		assert.deepEqual((await bundles()).sources, prepared.bundles.sources, 'bundle sources changed during the probe');
+		assert.deepEqual((await bundles(prepared.inputs)).sources, prepared.bundles.sources, 'bundle sources changed during the probe');
 		receipt.qualification = judgeShellAcceptance(receipt);
 		receipt.shellAcceptancePassed = receipt.qualification.shellAcceptancePassed;
 		receipt.complete = true;
