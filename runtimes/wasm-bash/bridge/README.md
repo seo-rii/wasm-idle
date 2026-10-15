@@ -674,9 +674,14 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - `HostCommandDescriptor.read` and `write` send a request to the service thread and
   return a promise. The service thread performs the operation, which may wait for locks,
   and returns the result in a new `SchedulerMessage` variant. Reads run as separate
-  tasks because they can wait for data; writes and closes keep their order.
-- `close()` stays synchronous and is ordered after earlier writes; like a close after
-  process exit, its outcome is not reported.
+  independently polled operations because reads and bounded writes may wait for data or
+  capacity. Writes to each descriptor keep FIFO order without blocking control requests.
+- `close()` stays synchronous, cancels that descriptor's unfinished and queued I/O, and
+  preserves bytes already accepted. Repeated close notifications are coalesced; its outcome
+  is not reported. Await each write before closing when all bytes must be delivered.
+- Admission allows at most 16 outstanding data requests per command, with writes limited
+  to 64 KiB each (at most 1 MiB of pending copied write bytes). Excess requests reject with
+  `EAGAIN` before copying data. Finish drops outstanding I/O before closing descriptors.
 - When the handler settles, its still-pending promises are rejected with `EBADF`, and the
   service thread completes the child exactly as before: it closes descriptors, publishes
   the status, then signals.
