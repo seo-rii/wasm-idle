@@ -78,6 +78,25 @@ class AdmissionTests(unittest.TestCase):
         self.options.typecheck_receipt_sha256 = builder.identity(self.check_path)["sha256"]
         self.rejected_without_tool_or_output()
 
+    def test_declared_virtual_fs_inventory_is_checked(self):
+        dependency = self.source / "virtual-fs"
+        dependency.mkdir()
+        source = dependency / "pipe.rs"
+        source.write_text("bounded pipe\n")
+        self.policy["sourceTrees"] = ["wasmer-sdk", "wasmer-wasix", "virtual-fs"]
+        self.policy["sourcePins"][str(source)] = builder.identity(source)
+        self.policy["stage"].update({"producerWorktree": str(self.source / "wasmer-sdk"),
+                                    "environment": {"CARGO_HOME": str(self.root / "cargo")}})
+        self.assertEqual(builder.verify_source(self.policy), self.source.resolve())
+        (dependency / "unlisted.rs").write_text("unlisted\n")
+        with self.assertRaisesRegex(ValueError, "source inventory changed"):
+            builder.verify_source(self.policy)
+
+    def test_undeclared_source_tree_is_rejected(self):
+        (self.source / "virtual-fs").mkdir()
+        with self.assertRaisesRegex(ValueError, "source tree inventory changed"):
+            builder.verify_source(self.policy)
+
 
 @unittest.skipUnless(sys.platform == "linux", "Linux process ownership")
 class OwnershipTests(unittest.TestCase):

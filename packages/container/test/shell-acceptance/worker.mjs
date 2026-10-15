@@ -84,6 +84,7 @@ globalThis.onmessage = async ({ data }) => {
 				createLiveWasiAdapter({ maxBlockedIoMs: 120000, workerFactory: () => new Worker(data.liveWorkerUrl, { type: 'module' }) }),
 				createClangAdapter({
 					clangSha256: data.clangSha256, linkerSha256: data.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
+					executableOutputProfile: 'wasi-preview1-process',
 					workerFactory: () => new Worker(data.clangWorkerUrl, { type: 'module' })
 				})
 			],

@@ -58,6 +58,13 @@ change is published. An empty list is a no-op. `mountReadonly()` delegates to th
 operation with one package. Identity-based repeated-mount policy belongs to the
 supervisor; an already mounted path is still rejected by the filesystem API.
 
+`mountCommands(path, names)` publishes explicit readonly virtual executable entries
+for a trusted backend registry. `stat`/`readdir` expose regular-file metadata with mode
+0555 and `command: true`; `open`/`readFile` reject `ENOTSUP` because no executable file
+body exists. The registered backend owns actual dispatch. These entries are shared by
+the shell and utility VFS, survive snapshots, and cannot be introduced on a writable
+mount or changed by a guest snapshot. They are not placeholder Wasm or script files.
+
 `acquireSnapshot()` obtains a global writer lease and returns a structured-clone
 snapshot plus `commit(result)` and `discard()`. Acquire rejects live users and ordinary
 open host descriptors; new descriptors and all mutations fail with `EBUSY` during the lease.

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { arch, platform, release } from 'node:os';
 import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -48,6 +49,34 @@ try {
         const directory = await blobDirectory(id);
         const handle = await directory.getFileHandle(await digest(encode(content)));
         const writer = await handle.createWritable(); await writer.write('corrupt'); await writer.close();
+      };
+      globalThis.addOrphan = async (id, content) => {
+        const directory = await blobDirectory(id), name = await digest(encode(content));
+        const writer = await (await directory.getFileHandle(name, { create: true })).createWritable();
+        await writer.write(encode(content)); await writer.close();
+        return name;
+      };
+      globalThis.hasBlob = async (id, name) => {
+        try { await (await blobDirectory(id)).getFileHandle(name); return true; }
+        catch (error) { if (error.name === 'NotFoundError') return false; throw error; }
+      };
+      globalThis.editJournal = async (id, edit) => {
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open(`wasm-idle-workspaces-v1:${id}`, 1);
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+        });
+        try {
+          const records = await new Promise((resolve, reject) => {
+            const transaction = db.transaction('roots', 'readonly'), request = transaction.objectStore('roots').getAll();
+            transaction.oncomplete = () => resolve(request.result); transaction.onabort = transaction.onerror = () => reject(transaction.error);
+          });
+          const replacement = await edit(records);
+          await new Promise((resolve, reject) => {
+            const transaction = db.transaction('roots', 'readwrite'), store = transaction.objectStore('roots');
+            store.clear(); for (const record of replacement) store.put(record);
+            transaction.oncomplete = resolve; transaction.onabort = transaction.onerror = () => reject(transaction.error);
+          });
+        } finally { db.close(); }
       };
     });
   };
@@ -316,6 +345,189 @@ try {
   assert.deepEqual(integration, { mismatch: 'INVALID_ARGUMENT', result: 23, dirty: 'new', saved: 'saved', profile: 'opfs', quota: 1024, data: 'saved', locked: 'BUSY', restored: 'saved' });
   checks.push('PERSIST-01: container guest writes, explicit flush, quotas and owner lifetime compose with persistence');
 
+  const garbageCollection = [];
+  const orphanCollection = await page.evaluate(async () => {
+    await owner.dispose();
+    owner = await persistence.openPersistentWorkspace({ id: 'interrupted' });
+    const invalidBudgets = [];
+    for (const options of [null, [], { maxScannedEntries: 0 }, { maxScannedEntries: 65537 },
+      { maxDeletedBlobs: -1 }, { maxDeletedBlobs: 4097 }, { maxDeletedBytes: -1 },
+      { maxDeletedBytes: 1024 ** 3 + 1 }, { maxReferencedBytes: 0 }, { maxReferencedBytes: NaN }]) {
+      try { await owner.collectGarbage(options); invalidBudgets.push('admitted'); }
+      catch (error) { invalidBudgets.push(error.code); }
+    }
+    const directory = await blobDirectory('interrupted'), orphan = await digest(encode('orphan'));
+    const note = await (await directory.getFileHandle('recovery-note.txt', { create: true })).createWritable();
+    await note.write('keep this unknown file'); await note.close();
+    await directory.getDirectoryHandle('a'.repeat(64), { create: true });
+    const neighbor = await persistence.openPersistentWorkspace({ id: 'gc-neighbor' });
+    neighbor.fs.writeFile('keep', encode('neighbor')); await neighbor.flush(); await neighbor.dispose();
+    await (await caches.open('gc-independent-cache')).put('/keep', new Response('asset cache'));
+    owner.fs.writeFile('unsaved', encode('editor revision'));
+    const before = owner.inspect(), limited = await owner.collectGarbage({ maxScannedEntries: 1 });
+    const afterLimited = await hasBlob('interrupted', orphan);
+    const dry = await owner.collectGarbage({ maxDeletedBlobs: 0 });
+    const collected = await owner.collectGarbage();
+    const again = await owner.collectGarbage(), after = owner.inspect();
+    const memory = decode(owner.fs.readFile('unsaved'));
+    const unknownFile = await (await directory.getFileHandle('recovery-note.txt')).getFile();
+    const unknownDirectory = (await directory.getDirectoryHandle('a'.repeat(64))).kind;
+    const cache = await (await (await caches.open('gc-independent-cache')).match('/keep')).text();
+    const other = await persistence.openPersistentWorkspace({ id: 'gc-neighbor' });
+    const otherText = decode(other.fs.readFile('keep')); await other.dispose();
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'interrupted' });
+    return { before, limited, afterLimited, dry, collected, again, after, memory, invalidBudgets,
+      orphanRemains: await hasBlob('interrupted', orphan), unknownBytes: unknownFile.size, unknownDirectory,
+      cache, otherText, restored: decode(owner.fs.readFile('file')) };
+  });
+  assert.equal(orphanCollection.limited.scanComplete, false); assert.equal(orphanCollection.limited.deletedBlobs, 0);
+  assert.deepEqual(orphanCollection.invalidBudgets, Array(10).fill('INVALID_ARGUMENT'));
+  assert.equal(orphanCollection.afterLimited, true); assert.equal(orphanCollection.dry.candidateBlobs, 1);
+  assert.equal(orphanCollection.dry.deletedBlobs, 0); assert.equal(orphanCollection.dry.complete, false);
+  assert.equal(orphanCollection.collected.deletedBlobs, 1); assert.equal(orphanCollection.collected.deletedBytes, 6);
+  assert.equal(orphanCollection.collected.retainedRoots, 1); assert.equal(orphanCollection.collected.skippedEntries, 2);
+  assert.equal(orphanCollection.collected.complete, true); assert.equal(orphanCollection.again.deletedBlobs, 0);
+  assert.equal(orphanCollection.orphanRemains, false); assert.equal(orphanCollection.memory, 'editor revision');
+  assert.equal(orphanCollection.before.generation, orphanCollection.after.generation);
+  assert.equal(orphanCollection.after.dirty, true); assert.equal(orphanCollection.unknownBytes, 22);
+  assert.equal(orphanCollection.unknownDirectory, 'directory'); assert.equal(orphanCollection.cache, 'asset cache');
+  assert.equal(orphanCollection.otherText, 'neighbor'); assert.equal(orphanCollection.restored, 'committed');
+  checks.push('GC: interrupted-flush orphan is collected explicitly; scan/dry-run bounds preserve data, unknown entries, other owners and caches');
+  garbageCollection.push({ fixture: 'orphan-and-scan-budgets', ...orphanCollection });
+
+  const retainedCollection = await page.evaluate(async () => {
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'gc-retained' });
+    for (const text of ['gc-one', 'gc-two', 'gc-three']) { owner.fs.writeFile('file', encode(text)); await owner.flush(); }
+    const extra = await addOrphan('gc-retained', 'gc-extra');
+    const tooSmall = await owner.collectGarbage({ maxDeletedBytes: 1 });
+    let validationLimit;
+    try { await owner.collectGarbage({ maxReferencedBytes: 1 }); } catch (error) { validationLimit = error.code; }
+    const old = await digest(encode('gc-one')), previous = await digest(encode('gc-two')), latest = await digest(encode('gc-three'));
+    const oldBefore = await hasBlob('gc-retained', old), result = await owner.collectGarbage({ maxDeletedBlobs: 1 });
+    const remaining = Number(await hasBlob('gc-retained', old)) + Number(await hasBlob('gc-retained', extra));
+    const second = await owner.collectGarbage();
+    const retained = [await hasBlob('gc-retained', previous), await hasBlob('gc-retained', latest)];
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'gc-retained' });
+    const current = decode(owner.fs.readFile('file'));
+    await owner.dispose(); await corruptBlob('gc-retained', 'gc-three');
+    owner = await persistence.openPersistentWorkspace({ id: 'gc-retained' });
+    const recovered = { text: decode(owner.fs.readFile('file')), state: owner.inspect() };
+    const orphan = await addOrphan('gc-retained', 'do not delete on a corrupt retained root');
+    let rejected;
+    try { await owner.collectGarbage(); } catch (error) { rejected = error.code; }
+    return { tooSmall, validationLimit, oldBefore, result, remaining, second, retained, oldAfter: await hasBlob('gc-retained', old),
+      current, recovered, rejected, orphanPreserved: await hasBlob('gc-retained', orphan) };
+  });
+  assert.equal(retainedCollection.tooSmall.deletedBlobs, 0); assert.equal(retainedCollection.tooSmall.complete, false);
+  assert.equal(retainedCollection.validationLimit, 'RESOURCE_LIMIT'); assert.equal(retainedCollection.oldBefore, true);
+  assert.equal(retainedCollection.result.retainedRoots, 2); assert.equal(retainedCollection.result.referencedBlobs, 2);
+  assert.equal(retainedCollection.result.complete, false); assert.equal(retainedCollection.remaining, 1);
+  assert.equal(retainedCollection.second.deletedBlobs, 1); assert.equal(retainedCollection.second.complete, true);
+  assert.equal(retainedCollection.result.deletedBlobs, 1); assert.equal(retainedCollection.oldAfter, false);
+  assert.deepEqual(retainedCollection.retained, [true, true]); assert.equal(retainedCollection.current, 'gc-three');
+  assert.equal(retainedCollection.recovered.text, 'gc-two'); assert.equal(retainedCollection.recovered.state.recovered, true);
+  assert.equal(retainedCollection.rejected, 'CORRUPT'); assert.equal(retainedCollection.orphanPreserved, true);
+  checks.push('GC: deletion/validation budgets preserve both retained roots; newest and fallback bytes remain restorable; corrupt retained blob prevents all deletion');
+  garbageCollection.push({ fixture: 'retained-recovery-roots', ...retainedCollection });
+
+  const journalCollection = await page.evaluate(async () => {
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'gc-journal' });
+    for (const text of ['journal-one', 'journal-two']) { owner.fs.writeFile('file', encode(text)); await owner.flush(); }
+    const orphan = await addOrphan('gc-journal', 'preserve orphan on invalid journal');
+    await editJournal('gc-journal', async records => {
+      globalThis.gcJournalOriginal = JSON.parse(JSON.stringify(records));
+      const older = records.find(record => record.sequence === 1), value = JSON.parse(older.manifest);
+      value.entries.find(entry => entry.type === 'file').path = '/tmp/escape';
+      older.manifest = JSON.stringify(value); older.sha256 = await digest(encode(older.manifest));
+      return records;
+    });
+    let invalid;
+    try { await owner.collectGarbage(); } catch (error) { invalid = error.code; }
+    const firstPreserved = await hasBlob('gc-journal', orphan);
+    await editJournal('gc-journal', () => gcJournalOriginal.filter(record => record.sequence === 2));
+    let missingPrevious;
+    try { await owner.collectGarbage(); } catch (error) { missingPrevious = error.code; }
+    await editJournal('gc-journal', () => gcJournalOriginal.filter(record => record.sequence === 1));
+    let missing;
+    try { await owner.collectGarbage(); } catch (error) { missing = error.code; }
+    return { invalid, missingPrevious, missing, firstPreserved, preserved: await hasBlob('gc-journal', orphan), memory: decode(owner.fs.readFile('file')) };
+  });
+  assert.deepEqual(journalCollection, { invalid: 'CORRUPT', missingPrevious: 'CORRUPT', missing: 'CORRUPT', firstPreserved: true, preserved: true, memory: 'journal-two' });
+  checks.push('GC: checksum-valid invalid older root and changed journal fail closed without deleting candidates or memory');
+  garbageCollection.push({ fixture: 'invalid-journal', ...journalCollection });
+
+  const storageCollection = await page.evaluate(async () => {
+    await owner.dispose(); let fail = true;
+    owner = await persistence.openPersistentWorkspace({ id: 'gc-storage', fault(point) {
+      if (point === 'before-garbage-delete' && fail) throw new Error('injected removal failure');
+    } });
+    owner.fs.writeFile('file', encode('keep committed')); await owner.flush();
+    const orphan = await addOrphan('gc-storage', 'removal retry');
+    let error;
+    try { await owner.collectGarbage(); } catch (cause) { error = cause.code; }
+    const preserved = await hasBlob('gc-storage', orphan), failed = owner.inspect();
+    fail = false; const result = await owner.collectGarbage(), retried = owner.inspect();
+    return { error, preserved, failed, result, retried, memory: decode(owner.fs.readFile('file')) };
+  });
+  assert.equal(storageCollection.error, 'STORAGE'); assert.equal(storageCollection.preserved, true);
+  assert.equal(storageCollection.failed.lastError, 'STORAGE'); assert.equal(storageCollection.result.deletedBlobs, 1);
+  assert.equal(storageCollection.retried.state, 'saved'); assert.equal(storageCollection.memory, 'keep committed');
+  checks.push('GC: failed explicit removal preserves candidates and committed bytes; an explicit retry clears only the maintenance error');
+  garbageCollection.push({ fixture: 'failed-removal-retry', ...storageCollection });
+
+  const collisions = await page.evaluate(async () => {
+    await owner.dispose(); let reached;
+    const entered = new Promise(resolve => { reached = resolve; });
+    globalThis.gcGate = new Promise(resolve => { globalThis.gcRelease = resolve; });
+    owner = await persistence.openPersistentWorkspace({ id: 'gc-collision', fault: async point => {
+      if (point === 'before-garbage-delete') { reached(); await gcGate; }
+    } });
+    owner.fs.writeFile('file', encode('kept')); await owner.flush(); await addOrphan('gc-collision', 'collect this');
+    globalThis.gcPending = owner.collectGarbage(); await entered;
+    let flush, collection;
+    try { await owner.flush(); } catch (error) { flush = error.code; }
+    try { await owner.collectGarbage(); } catch (error) { collection = error.code; }
+    const active = owner.inspect().maintenance;
+    globalThis.gcDisposed = false;
+    globalThis.gcDisposing = owner.dispose().then(() => { globalThis.gcDisposed = true; });
+    await Promise.resolve();
+    return { flush, collection, active, disposedWhilePaused: gcDisposed };
+  });
+  assert.deepEqual(collisions, { flush: 'BUSY', collection: 'BUSY', active: true, disposedWhilePaused: false });
+  assert.equal(await second.evaluate(async () => {
+    try { await persistence.openPersistentWorkspace({ id: 'gc-collision' }); return 'admitted'; }
+    catch (error) { return error.code; }
+  }), 'BUSY');
+  const finishedCollection = await page.evaluate(async () => {
+    gcRelease(); const result = await gcPending; await gcDisposing;
+    let disposed;
+    try { await owner.collectGarbage(); } catch (error) { disposed = error.code; }
+    owner = await persistence.openPersistentWorkspace({ id: 'gc-collision' });
+    return { result, disposed, memory: decode(owner.fs.readFile('file')) };
+  });
+  assert.equal(finishedCollection.result.deletedBlobs, 1); assert.equal(finishedCollection.disposed, 'DISPOSED');
+  assert.equal(finishedCollection.memory, 'kept');
+  checks.push('GC: collection excludes flush/second collection; disposal waits while retaining the cross-tab owner lock and then permits reopen');
+  garbageCollection.push({ fixture: 'maintenance-dispose-collision', ...collisions, ...finishedCollection });
+
+  const flushingCollection = await page.evaluate(async () => {
+    await owner.dispose(); let release, entered;
+    const gate = new Promise(resolve => { release = resolve; }), reached = new Promise(resolve => { entered = resolve; });
+    owner = await persistence.openPersistentWorkspace({ id: 'gc-flush', fault: async point => {
+      if (point === 'before-root-publish') { entered(); await gate; }
+    } });
+    owner.fs.writeFile('file', encode('publication')); const saving = owner.flush(); await reached;
+    let code;
+    try { await owner.collectGarbage(); } catch (error) { code = error.code; }
+    release(); await saving;
+    const result = await owner.collectGarbage();
+    return { code, result, state: owner.inspect().state };
+  });
+  assert.equal(flushingCollection.code, 'BUSY'); assert.equal(flushingCollection.result.deletedBlobs, 0);
+  assert.equal(flushingCollection.state, 'saved');
+  checks.push('GC: a pending flush rejects maintenance until its committed root is published');
+  garbageCollection.push({ fixture: 'flush-collision', ...flushingCollection });
+
   const irrecoverable = await page.evaluate(async () => {
     await owner.dispose();
     await corruptBlob('recovery', 'version-one'); await corruptBlob('recovery', 'version-three');
@@ -337,11 +549,15 @@ try {
     backupImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/backup.js'))).digest('hex'),
     saveBindingImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/save.js'))).digest('hex'),
     filesystemImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/fs/memory.js'))).digest('hex'),
+    sourceSha256: createHash('sha256').update(await readFile(resolve(root, 'src/fs/persistence/index.ts'))).digest('hex'),
+    fixtureScriptSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'),
+    os: { platform: platform(), release: release(), arch: arch() },
+    garbageCollection,
     results: checks, fixtureCount: checks.length
   };
   if (process.env.CONTAINER_PERSISTENCE_EVIDENCE) {
     const destination = resolve(process.env.CONTAINER_PERSISTENCE_EVIDENCE);
-    await mkdir(dirname(destination), { recursive: true }); await writeFile(destination, JSON.stringify(evidence, null, 2) + '\n');
+    await mkdir(dirname(destination), { recursive: true }); await writeFile(destination, JSON.stringify(evidence, null, 2) + '\n', { flag: 'wx' });
   }
   console.log(JSON.stringify(evidence, null, 2));
 } finally {

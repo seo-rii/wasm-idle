@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "browser": "153.0.8010.12",
+  "platform": "linux",
+  "applicationCommit": "fcd484f84cbb7b7ad58fccf7bd1e6a577015ba98",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "secureContext": true,
+  "isolatedProfileRequired": false,
+  "implementationSha256": "8fd8abe05e436c685722a0f483b6df88d22f8764487d11fd67f74c7a087edcc7",
+  "backupImplementationSha256": "89d85173407ecfec9e052fe87737acf01cf05b6ae8e558683fc855b8bc2624d6",
+  "saveBindingImplementationSha256": "7ba843aeef7b07b2b61355d282e36fb9b9371081f8ba5ca869e524bb75660208",
+  "filesystemImplementationSha256": "6df40e4219c2ed3b576c1d60e5e03706ce6a59f34d88294920017cb976effd70",
+  "sourceSha256": "4cf9405deaddb91e22e2c16620b7285d895c76a5928099ac14102e6961d0410e",
+  "fixtureScriptSha256": "f6f47e06ab24a23fc3ff07a3a860e0b2e0dd0ca6494154b83b9b96abdc5281a1",
+  "os": {
+    "platform": "linux",
+    "release": "6.1.0-53-cloud-amd64",
+    "arch": "x64"
+  },
+  "garbageCollection": [
+    {
+      "fixture": "orphan-and-scan-budgets",
+      "before": {
+        "id": "interrupted",
+        "state": "dirty",
+        "generation": 2,
+        "committedGeneration": 1,
+        "committedSequence": 1,
+        "dirty": true,
+        "recovered": false,
+        "maintenance": false
+      },
+      "limited": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 1,
+        "candidateBlobs": 0,
+        "skippedEntries": 1,
+        "deletedBlobs": 0,
+        "deletedBytes": 0,
+        "scanComplete": false,
+        "complete": false
+      },
+      "afterLimited": true,
+      "dry": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 4,
+        "candidateBlobs": 1,
+        "skippedEntries": 2,
+        "deletedBlobs": 0,
+        "deletedBytes": 0,
+        "scanComplete": true,
+        "complete": false
+      },
+      "collected": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 4,
+        "candidateBlobs": 1,
+        "skippedEntries": 2,
+        "deletedBlobs": 1,
+        "deletedBytes": 6,
+        "scanComplete": true,
+        "complete": true
+      },
+      "again": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 3,
+        "candidateBlobs": 0,
+        "skippedEntries": 2,
+        "deletedBlobs": 0,
+        "deletedBytes": 0,
+        "scanComplete": true,
+        "complete": true
+      },
+      "after": {
+        "id": "interrupted",
+        "state": "dirty",
+        "generation": 2,
+        "committedGeneration": 1,
+        "committedSequence": 1,
+        "dirty": true,
+        "recovered": false,
+        "maintenance": false
+      },
+      "memory": "editor revision",
+      "invalidBudgets": [
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT",
+        "INVALID_ARGUMENT"
+      ],
+      "orphanRemains": false,
+      "unknownBytes": 22,
+      "unknownDirectory": "directory",
+      "cache": "asset cache",
+      "otherText": "neighbor",
+      "restored": "committed"
+    },
+    {
+      "fixture": "retained-recovery-roots",
+      "tooSmall": {
+        "retainedRoots": 2,
+        "referencedBlobs": 2,
+        "scannedEntries": 4,
+        "candidateBlobs": 2,
+        "skippedEntries": 0,
+        "deletedBlobs": 0,
+        "deletedBytes": 0,
+        "scanComplete": true,
+        "complete": false
+      },
+      "validationLimit": "RESOURCE_LIMIT",
+      "oldBefore": true,
+      "result": {
+        "retainedRoots": 2,
+        "referencedBlobs": 2,
+        "scannedEntries": 4,
+        "candidateBlobs": 2,
+        "skippedEntries": 0,
+        "deletedBlobs": 1,
+        "deletedBytes": 6,
+        "scanComplete": true,
+        "complete": false
+      },
+      "remaining": 1,
+      "second": {
+        "retainedRoots": 2,
+        "referencedBlobs": 2,
+        "scannedEntries": 3,
+        "candidateBlobs": 1,
+        "skippedEntries": 0,
+        "deletedBlobs": 1,
+        "deletedBytes": 8,
+        "scanComplete": true,
+        "complete": true
+      },
+      "retained": [
+        true,
+        true
+      ],
+      "oldAfter": false,
+      "current": "gc-three",
+      "recovered": {
+        "text": "gc-two",
+        "state": {
+          "id": "gc-retained",
+          "state": "recovered",
+          "generation": 2,
+          "committedGeneration": 2,
+          "committedSequence": 2,
+          "dirty": false,
+          "recovered": true,
+          "maintenance": false
+        }
+      },
+      "rejected": "CORRUPT",
+      "orphanPreserved": true
+    },
+    {
+      "fixture": "invalid-journal",
+      "invalid": "CORRUPT",
+      "missingPrevious": "CORRUPT",
+      "missing": "CORRUPT",
+      "firstPreserved": true,
+      "preserved": true,
+      "memory": "journal-two"
+    },
+    {
+      "fixture": "failed-removal-retry",
+      "error": "STORAGE",
+      "preserved": true,
+      "failed": {
+        "id": "gc-storage",
+        "state": "error",
+        "generation": 1,
+        "committedGeneration": 1,
+        "committedSequence": 1,
+        "dirty": false,
+        "recovered": false,
+        "maintenance": false,
+        "lastError": "STORAGE"
+      },
+      "result": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 2,
+        "candidateBlobs": 1,
+        "skippedEntries": 0,
+        "deletedBlobs": 1,
+        "deletedBytes": 13,
+        "scanComplete": true,
+        "complete": true
+      },
+      "retried": {
+        "id": "gc-storage",
+        "state": "saved",
+        "generation": 1,
+        "committedGeneration": 1,
+        "committedSequence": 1,
+        "dirty": false,
+        "recovered": false,
+        "maintenance": false
+      },
+      "memory": "keep committed"
+    },
+    {
+      "fixture": "maintenance-dispose-collision",
+      "flush": "BUSY",
+      "collection": "BUSY",
+      "active": true,
+      "disposedWhilePaused": false,
+      "result": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 2,
+        "candidateBlobs": 1,
+        "skippedEntries": 0,
+        "deletedBlobs": 1,
+        "deletedBytes": 12,
+        "scanComplete": true,
+        "complete": true
+      },
+      "disposed": "DISPOSED",
+      "memory": "kept"
+    },
+    {
+      "fixture": "flush-collision",
+      "code": "BUSY",
+      "result": {
+        "retainedRoots": 1,
+        "referencedBlobs": 1,
+        "scannedEntries": 1,
+        "candidateBlobs": 0,
+        "skippedEntries": 0,
+        "deletedBlobs": 0,
+        "deletedBytes": 0,
+        "scanComplete": true,
+        "complete": true
+      },
+      "state": "saved"
+    }
+  ],
+  "results": [
+    "PERSIST-04: second tab cannot acquire the writer lock",
+    "PERSIST-01: reload restores binary data, symlinks, renamed inode IDs and only user files",
+    "PERSIST-03: CacheStorage deletion preserves workspace; dispose does not save dirty files",
+    "PERSIST-02: real page reload after blob close preserves previous root and leaves an unreferenced blob",
+    "PERSIST-02: a corrupt newest blob falls back to the previous verified committed root",
+    "PERSIST-02: post-publication fault reports failure and the already committed generation honestly",
+    "PERSIST-01: edits during flush remain dirty and concurrent publication is explicitly rejected",
+    "PERSIST-02: metadata budget failure preserves the previous root and unsaved in-memory files",
+    "C18: failed-save backup restores all unsaved files, stays dirty until flush, and leaves runtime cache/tmp intact",
+    "C18: corrupt backup cannot replace files; explicit flush/reopen retains the complete restored workspace",
+    "C18: manual save is default; opt-in autosave commits real OPFS/IDB changes and pauses on storage failure",
+    "C18: retry saves retained data; binding disposal releases watchers without flushing or disposing the owner",
+    "C18: saved-state consumer can immediately save a newer revision and reload its committed bytes",
+    "PERSIST-01: container guest writes, explicit flush, quotas and owner lifetime compose with persistence",
+    "GC: interrupted-flush orphan is collected explicitly; scan/dry-run bounds preserve data, unknown entries, other owners and caches",
+    "GC: deletion/validation budgets preserve both retained roots; newest and fallback bytes remain restorable; corrupt retained blob prevents all deletion",
+    "GC: checksum-valid invalid older root and changed journal fail closed without deleting candidates or memory",
+    "GC: failed explicit removal preserves candidates and committed bytes; an explicit retry clears only the maintenance error",
+    "GC: collection excludes flush/second collection; disposal waits while retaining the cross-tab owner lock and then permits reopen",
+    "GC: a pending flush rejects maintenance until its committed root is published",
+    "PERSIST-02: unrecoverable storage is preserved, fails explicitly, and releases ownership"
+  ],
+  "fixtureCount": 21
+}

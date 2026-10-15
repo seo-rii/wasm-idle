@@ -5,9 +5,10 @@ import type { ClangAdapterOptions } from './index.js';
 import { createWasiHost } from '../wasi/host.js';
 import { checkMemoryProfile } from '../wasi/profile.js';
 import { createBatchStdio, type BatchStdio } from '../wasi/stdio.js';
+import { qualifyExecutableOutputs } from './artifacts.js';
 
 type Request = Parameters<SnapshotCommandAdapter['start']>[0] & { configuration: ClangAdapterOptions };
-let prepared: { request: Request; fs: MemoryFileSystem; toolHost: LlvmToolHost } | undefined;
+let prepared: { request: Request; fs: MemoryFileSystem; toolHost: LlvmToolHost; importNames: ReadonlySet<string> } | undefined;
 let preparing = false, ran = false;
 let stdio: BatchStdio | undefined;
 const scope = globalThis as unknown as { onmessage: (event: MessageEvent) => void; postMessage: (message: unknown) => void };
@@ -51,16 +52,20 @@ scope.onmessage = async ({ data }) => {
           return { imports: { wasi_snapshot_preview1: host.imports, wasm_idle_process_v1: host.processImports }, run: host.run, dispose: host.dispose };
         }
       });
-      prepared = { request, fs, toolHost };
+      prepared = { request, fs, toolHost, importNames };
       scope.postMessage({ type: 'ready', version: 1, generation });
     } else if (data.type === 'run' && prepared && !ran && generation === prepared.request.generation) {
       ran = true;
-      const { request, fs, toolHost } = prepared;
+      const { request, fs, toolHost, importNames } = prepared;
       if (!(data.stdin instanceof Uint8Array) || data.stdin.length > request.limits.maxInputBytes) throw new Error('Invalid batch stdin');
       stdio = createBatchStdio(data.stdin, request.limits.maxOutputBytes);
       try {
         const result = toolHost.run({ executable: 'clang', argv: [request.command.argv0 ?? request.invocation.command, ...request.invocation.args], cwd: request.invocation.cwd, env: request.invocation.env });
-        scope.postMessage({ type: 'complete', version: 1, generation, ...result, ...stdio.capture(), snapshot: fs.exportSnapshot() });
+        let snapshot = fs.exportSnapshot();
+        if (request.configuration.executableOutputProfile === 'wasi-preview1-process') {
+          snapshot = qualifyExecutableOutputs(request.snapshot, snapshot, result.code, importNames, request.limits.maxMemoryBytes);
+        }
+        scope.postMessage({ type: 'complete', version: 1, generation, ...result, ...stdio.capture(), snapshot });
       } finally { toolHost.dispose(); }
     } else throw new Error('Invalid worker state');
   } catch (error) {

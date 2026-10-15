@@ -8,6 +8,16 @@ before starting the Worker. The linker must be mounted readonly. Compiler bytes
 and linker bytes are verified again by the LLVM tool host, and never fetched by
 the Worker.
 
+Shell applications may opt into `executableOutputProfile: 'wasi-preview1-process'`.
+After a successful compiler job, changed files below `/workspace` gain execute bits
+only when their actual module has bounded memory, supported imports, exported memory
+and `_start`, and the `initial_cwd` process ABI. Execute bits follow existing read bits.
+This publishes executable metadata with the same snapshot commit as the output bytes.
+Unchanged files, failed jobs, other targets and object/library outputs remain data;
+filenames and extensions do not grant execution rights. The execution adapter still
+checks the module and process policy at every launch. Without this option applications
+can use the explicit `wasm-run` command for otherwise supported artifacts.
+
 The adapter uses the common snapshot lease, memory/import admission, deadlines,
 and forced Worker termination. Driver and linker see the same private filesystem
 and share byte stdin/stdout/stderr. A normal nonzero exit commits the snapshot;
