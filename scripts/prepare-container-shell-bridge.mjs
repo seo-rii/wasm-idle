@@ -1,9 +1,10 @@
 // Offline source preparation only. No producer binary or supported backend is published.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { verifyShellWorkerImports } from './verify-container-shell-worker-imports.mjs';
 
@@ -63,6 +64,7 @@ const sdkPatches = [
 	'0008-dispatch-trusted-host-commands.patch',
 	'0011-mount-host-filesystems.patch',
 	'0013-serve-host-commands-off-the-scheduler.patch',
+	'0016-streaming-instance-exit.patch',
 	'0019-bound-raw-sdk-streams.patch'
 ];
 // Standalone new sources: [bridge file, crate, installed path].
@@ -115,19 +117,25 @@ if (verifyOnly) {
 	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
 	await verifySource(virtualFsSource, inputs[2].path, 'virtual-fs-0.601.0', virtualFsPatches);
 	const receipts = {};
-	// Each crate's patches apply independently to its pristine checkout.
+	// Check dependent patches in order on private copies, preserving the caller's sources.
 	for (const [names, cwd] of [
 		[patches, source],
 		[sdkPatches, sdkSource],
 		[virtualFsPatches, virtualFsSource]
 	]) {
-		for (const name of names) {
-			const path = join(bridge, 'patches', name);
-			execFileSync('patch', ['--dry-run', '--batch', '--fuzz=0', '-p1', '-i', path], {
-				cwd,
-				stdio: 'pipe'
-			});
-			receipts[name] = sha256(await readFile(path));
+		const temporary = await mkdtemp(join(tmpdir(), 'container-bridge-verify-'));
+		try {
+			const copy = join(temporary, 'source');
+			await cp(cwd, copy, { recursive: true });
+			for (const name of names) {
+				const path = join(bridge, 'patches', name);
+				execFileSync('patch', ['--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path], {
+					cwd: copy, stdio: 'pipe'
+				});
+				receipts[name] = sha256(await readFile(path));
+			}
+		} finally {
+			await rm(temporary, { recursive: true, force: true });
 		}
 	}
 	for (const [name] of installedSources) {

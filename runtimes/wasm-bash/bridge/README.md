@@ -208,16 +208,18 @@ node scripts/test-container-shell-bridge.mjs
 node scripts/prepare-container-shell-bridge.mjs --verify-only \
   --sdk-archive /path/to/wasmer-sdk.tgz \
   --wasix-archive /path/to/wasmer-wasix.tgz \
+  --virtual-fs-archive /path/to/virtual-fs-0.601.0.crate \
   --wasix-source /path/to/pristine/wasmer-wasix-0.601.0 \
+  --virtual-fs-source /path/to/pristine/virtual-fs-0.601.0 \
   --sdk-source /path/to/pristine/wasmer-sdk-93b8b738ebd3ee57e118da0f0eb795b97d5b999e
 ```
 
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
-modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --fuzz=0` against its own crate (0001–0007 WASIX, 0008 SDK), and checks
-source identity again. `--sdk-source` is required since the SDK gained its own patch. It creates no source copy and
-makes no changes to the supplied checkout. The original four-patch
+modified source file with its verified archive, applies each crate's dependent patches
+in order with `--fuzz=0` on a temporary private copy, and checks source identity again.
+The temporary copies are removed after verification; the supplied checkouts are unchanged.
+All three pinned archives and pristine source paths are required. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says
 `patches-apply-cleanly-not-built`. The five-patch
 [snapshot source receipt](evidence.snapshot-source-checks.json) separately records
@@ -683,6 +685,10 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 Each running host command occupies one pooled service Worker until it completes.
 
 ## Bounded native pipe profile
+
+Patch 0016 adds [`Instance.waitForExit()`](STREAMING-EXIT.md) for caller-owned byte
+streams. It preserves the legacy capture API and never drains or closes a stream.
+Retain the stdin/stdout/stderr properties before consuming the instance with this method.
 
 Patches 0017–0019 add a fixed 64 KiB byte queue for WASIX-created pipes and for the SDK's
 raw byte-stream command profile. The extra pinned producer input is `virtual-fs 0.601.0`
