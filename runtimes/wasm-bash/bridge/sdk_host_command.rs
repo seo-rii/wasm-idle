@@ -58,6 +58,10 @@ use wasmer_wasix::{
 
 use crate::{js_runtime::JsRuntime, tasks::ThreadPool, utils::Error};
 
+#[path = "host_command_pending.rs"]
+mod pending;
+use pending::PendingRequests;
+
 const MAX_PATH_BYTES: usize = 4096;
 const MAX_COMMANDS: usize = 1024;
 
@@ -463,13 +467,13 @@ type Settlers = (Function, Function);
 
 thread_local! {
     /// Pending descriptor promises on the scheduler thread, by request key.
-    static PENDING: RefCell<HashMap<u64, Settlers>> = RefCell::new(HashMap::new());
+    static PENDING: RefCell<PendingRequests<Settlers>> = RefCell::new(PendingRequests::default());
 }
 
 /// The scheduler thread's handle to one running command.
 struct CommandLink {
     requests: UnboundedSender<ServiceRequest>,
-    keys: RefCell<Vec<u64>>,
+    key: u64,
     finished: Cell<bool>,
 }
 
@@ -483,22 +487,17 @@ impl CommandLink {
             let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
             return promise;
         }
-        PENDING.with(|pending| pending.borrow_mut().insert(key, (resolve, reject)));
-        self.keys.borrow_mut().push(key);
+        PENDING.with(|pending| pending.borrow_mut().insert(self.key, key, (resolve, reject)));
         promise
     }
 
     /// Revoke the handler's endpoints and complete the child on its service thread.
     fn finish(&self, status: i32) {
         self.finished.set(true);
-        PENDING.with(|pending| {
-            let mut pending = pending.borrow_mut();
-            for key in self.keys.borrow_mut().drain(..) {
-                if let Some((_, reject)) = pending.remove(&key) {
-                    let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
-                }
-            }
-        });
+        let requests = PENDING.with(|pending| pending.borrow_mut().finish(self.key));
+        for (_, reject) in requests {
+            let _ = reject.call1(&JsValue::UNDEFINED, &errno_error(Errno::Badf));
+        }
         if self.requests.unbounded_send(ServiceRequest::Finish { status }).is_err() {
             tracing::warn!(status, "host command service already stopped");
         }
@@ -521,7 +520,7 @@ pub(crate) fn start(dispatch: HostCommandDispatch) {
     };
     let link = Rc::new(CommandLink {
         requests,
-        keys: RefCell::new(Vec::new()),
+        key: NEXT_KEY.fetch_add(1, Ordering::Relaxed),
         finished: Cell::new(false),
     });
     wasm_bindgen_futures::spawn_local(async move {
@@ -539,7 +538,7 @@ pub(crate) fn start(dispatch: HostCommandDispatch) {
 /// Settle one pending descriptor promise on the scheduler thread.
 pub(crate) fn complete(reply: HostCommandReply) {
     let HostCommandReply { key, result } = reply;
-    let Some((resolve, reject)) = PENDING.with(|pending| pending.borrow_mut().remove(&key)) else {
+    let Some((resolve, reject)) = PENDING.with(|pending| pending.borrow_mut().remove(key)) else {
         return;
     };
     let _ = match result {

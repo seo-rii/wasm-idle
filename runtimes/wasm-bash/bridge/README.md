@@ -101,7 +101,8 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
 13. `0013-serve-host-commands-off-the-scheduler.patch` plus `sdk_host_command.rs`: the SDK
     scheduler thread never touches WASIX state for a host command. A dedicated service
     thread performs descriptor operations and completion; see below.
-14. `0014-dup2-onto-a-pipe.patch`: `fd_renumber` (wasix-libc `dup2`) flushes the target
+14. `0014-preserve-live-append.patch`: preserve atomic append for existing live files.
+15. `0015-dup2-onto-a-pipe.patch`: `fd_renumber` (wasix-libc `dup2`) flushes the target
     descriptor before replacing it. When descriptor 1 or 2 is a pipe, as in a pipeline's
     child, that flush reports `Inval` because the pipe is not a file, and `dup2` failed.
     Bash saves and redirects descriptors this way for a brace group or subshell in a
@@ -565,6 +566,12 @@ How calls reach the delegate:
 - Operations on the owning thread itself run directly.
 - Delegates live in a thread-local table, and nothing is implemented as `Send`/`Sync` by
   hand.
+- A shared Rust registration belongs to the filesystem, every open file and each queued
+  request. The last release removes the delegate from its owner thread's table. Dropping
+  a file posts its close while retaining the registration, so queued closes complete
+  before release. Cleanup from a guest thread is posted without synchronously waiting
+  for the owner. `Directory.free()` therefore does not invalidate open files, and normal
+  completion in a long-lived SDK Worker does not retain disposed workspaces.
 - Every read, write, size and listing reaches the delegate; nothing is cached in the SDK.
 - Writes use explicit offsets. A file opened in append mode lets the delegate place each
   write at the current end.
@@ -581,6 +588,20 @@ covers the state WASIX caches itself:
 - `O_CREAT` without `O_EXCL` opens a file that another process created after the lookup,
   instead of failing with `EPERM`.
 - Host-command descriptors use the same live end-of-file rule.
+
+Patch 0014 also preserves append intent when opening an **existing** file on a live mount.
+The host file then sends one `append(handle, bytes)` operation to its owner. The earlier
+EOF seek remains an offset refresh; it does not choose the location of an append write.
+This avoids a separate EOF lookup and positional write overwriting another process's
+append. New-file opens already retain append intent. Ordinary non-append writes and
+non-live mounts retain their existing behavior. This correction has source/preparation
+checks; the previously published SDK binary predates it and needs rebuilding.
+
+`sdk_host_filesystem_lifetime.rs` is the JavaScript-free registration shared by the SDK
+filesystem and native lifecycle tests. These tests cover open files outliving a directory,
+pending close ownership, cross-thread final release and repeated registration teardown.
+They validate Rust ownership, not browser garbage-collector timing or abrupt termination
+of a Worker before Rust destructors run.
 
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
@@ -660,6 +681,10 @@ The rule is therefore that the scheduler thread never waits for a WASIX lock:
 - A request channel dropped without completion still completes the child with status 126.
 
 Each running host command occupies one pooled service Worker until it completes.
+Outstanding descriptor requests are indexed by command and removed on completion.
+Terminal cleanup rejects only that command's outstanding promises; completed request
+IDs are not retained for the lifetime of a long-running stream. The native bridge test
+also checks this request ownership and the host filesystem registration lifetime.
 
 ### Actual SDK gate
 
@@ -686,7 +711,8 @@ descriptor), and no file was written. In a pipeline's child, descriptor 1 is the
 Bash saves it with `F_DUPFD` and redirects it with `dup2`, which wasix-libc implements
 with `fd_renumber`. `fd_renumber` flushes the target first; for descriptor 1 or 2 that
 flush expects a file, so a pipe there reported `NotAFile` (`Inval`) and the renumber
-failed. Patch 0014 no longer fails the renumber on that result.
+failed. Patch 0015 no longer fails the renumber on that result. Historical receipts below
+used its previous name, `0014-dup2-onto-a-pipe.patch`.
 
 The gate on commit `7ab530473ff05377d3700656b9d044c723753025` passed in a fresh physical copy
 with 584 pins and a unique target: typecheck 287.298 s, release 514.598 s, bindgen 2.013 s

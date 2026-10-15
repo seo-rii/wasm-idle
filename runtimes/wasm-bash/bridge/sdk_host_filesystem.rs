@@ -40,6 +40,10 @@ use crate::{
     utils::Error,
 };
 
+#[path = "host_filesystem_lifetime.rs"]
+mod lifetime;
+use lifetime::{Link, Registration};
+
 /// Largest single read or write forwarded to the delegate.
 const MAX_IO_BYTES: usize = 1024 * 1024;
 
@@ -49,14 +53,9 @@ thread_local! {
     static DELEGATES: RefCell<HashMap<u64, JsValue>> = RefCell::new(HashMap::new());
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Link {
-    key: u64,
-    owner: u32,
-}
-
 #[derive(Debug)]
 enum Op {
+    Release,
     Stat {
         path: String,
         follow: bool,
@@ -126,6 +125,8 @@ pub(crate) struct HostFsCall {
     link: Link,
     op: Op,
     reply: Option<mpsc::SyncSender<Result<Reply, FsError>>>,
+    // Keep queued operations (especially the last Close) ahead of release.
+    registration: Option<Arc<Registration>>,
 }
 
 impl std::fmt::Debug for HostFsCall {
@@ -138,14 +139,20 @@ impl std::fmt::Debug for HostFsCall {
 
 /// Run on the delegate's thread for every forwarded request.
 pub(crate) fn serve(call: HostFsCall) {
-    let HostFsCall { link, op, reply } = call;
+    let HostFsCall {
+        link,
+        op,
+        reply,
+        registration: _registration,
+    } = call;
     let result = serve_op(link, op);
     if let Some(reply) = reply {
         let _ = reply.send(result);
     }
 }
 
-fn call(link: Link, op: Op) -> Result<Reply, FsError> {
+fn call(registration: &Arc<Registration>, op: Op) -> Result<Reply, FsError> {
+    let link = registration.link;
     if wasmer::js::current_thread_id() == link.owner {
         return serve_op(link, op);
     }
@@ -155,13 +162,22 @@ fn call(link: Link, op: Op) -> Result<Reply, FsError> {
         link,
         op,
         reply: Some(sender),
+        registration: Some(registration.clone()),
     })))
     .emit()
     .map_err(|_| FsError::IOError)?;
     receiver.recv().unwrap_or(Err(FsError::IOError))
 }
 
-fn post(link: Link, op: Op) {
+fn post(registration: &Arc<Registration>, op: Op) {
+    post_owned(registration.link, op, Some(registration.clone()));
+}
+
+fn release(link: Link) {
+    post_owned(link, Op::Release, None);
+}
+
+fn post_owned(link: Link, op: Op, registration: Option<Arc<Registration>>) {
     if wasmer::js::current_thread_id() == link.owner {
         let _ = serve_op(link, op);
         return;
@@ -170,6 +186,7 @@ fn post(link: Link, op: Op) {
         link,
         op,
         reply: None,
+        registration,
     })))
     .emit();
 }
@@ -265,6 +282,10 @@ fn serve_op(link: Link, op: Op) -> Result<Reply, FsError> {
     let text = |value: &str| JsValue::from_str(value);
     let int = |value: u64| JsValue::from_f64(value as f64);
     match op {
+        Op::Release => {
+            DELEGATES.with(|delegates| delegates.borrow_mut().remove(&link.key));
+            Ok(Reply::Unit)
+        }
         Op::Stat { path, follow } => {
             let name = if follow { "stat" } else { "lstat" };
             Ok(Reply::Stat(metadata(&invoke(
@@ -405,15 +426,17 @@ fn expect_number(reply: Reply) -> Result<u64, FsError> {
 }
 
 /// A WASIX filesystem whose every operation runs on the delegate's thread.
+/// The registration also belongs to open files and queued requests, so freeing
+/// the Directory cannot invalidate either of them.
 #[derive(Debug)]
 pub(crate) struct HostFileSystem {
-    link: Link,
+    registration: Arc<Registration>,
 }
 
 impl FileSystem for HostFileSystem {
     fn readlink(&self, path: &Path) -> virtual_fs::Result<PathBuf> {
         match call(
-            self.link,
+            &self.registration,
             Op::Readlink {
                 path: path_text(path)?,
             },
@@ -425,7 +448,7 @@ impl FileSystem for HostFileSystem {
 
     fn read_dir(&self, path: &Path) -> virtual_fs::Result<ReadDir> {
         match call(
-            self.link,
+            &self.registration,
             Op::Readdir {
                 path: path_text(path)?,
             },
@@ -445,7 +468,7 @@ impl FileSystem for HostFileSystem {
 
     fn create_dir(&self, path: &Path) -> virtual_fs::Result<()> {
         call(
-            self.link,
+            &self.registration,
             Op::Mkdir {
                 path: path_text(path)?,
             },
@@ -455,7 +478,7 @@ impl FileSystem for HostFileSystem {
 
     fn remove_dir(&self, path: &Path) -> virtual_fs::Result<()> {
         call(
-            self.link,
+            &self.registration,
             Op::Rmdir {
                 path: path_text(path)?,
             },
@@ -466,13 +489,13 @@ impl FileSystem for HostFileSystem {
     fn rename<'a>(&'a self, from: &'a Path, to: &'a Path) -> BoxFuture<'a, virtual_fs::Result<()>> {
         let result = path_text(from)
             .and_then(|from| Ok((from, path_text(to)?)))
-            .and_then(|(from, to)| call(self.link, Op::Rename { from, to }).map(|_| ()));
+            .and_then(|(from, to)| call(&self.registration, Op::Rename { from, to }).map(|_| ()));
         Box::pin(async move { result })
     }
 
     fn metadata(&self, path: &Path) -> virtual_fs::Result<Metadata> {
         expect_stat(call(
-            self.link,
+            &self.registration,
             Op::Stat {
                 path: path_text(path)?,
                 follow: true,
@@ -482,7 +505,7 @@ impl FileSystem for HostFileSystem {
 
     fn symlink_metadata(&self, path: &Path) -> virtual_fs::Result<Metadata> {
         expect_stat(call(
-            self.link,
+            &self.registration,
             Op::Stat {
                 path: path_text(path)?,
                 follow: false,
@@ -492,7 +515,7 @@ impl FileSystem for HostFileSystem {
 
     fn remove_file(&self, path: &Path) -> virtual_fs::Result<()> {
         call(
-            self.link,
+            &self.registration,
             Op::Unlink {
                 path: path_text(path)?,
             },
@@ -522,7 +545,7 @@ impl FileOpener for HostFileSystem {
     ) -> virtual_fs::Result<Box<dyn VirtualFile + Send + Sync + 'static>> {
         let path = path_text(path)?;
         let handle = expect_number(call(
-            self.link,
+            &self.registration,
             Op::Open {
                 path: path.clone(),
                 flags: conf.clone(),
@@ -530,7 +553,7 @@ impl FileOpener for HostFileSystem {
         )?)?;
         let handle = u32::try_from(handle).map_err(|_| FsError::InvalidData)?;
         Ok(Box::new(HostFile {
-            link: self.link,
+            registration: self.registration.clone(),
             handle,
             cursor: 0,
             append: conf.append,
@@ -543,7 +566,7 @@ impl FileOpener for HostFileSystem {
 /// append-mode writes let the delegate place them at the current end.
 #[derive(Debug)]
 struct HostFile {
-    link: Link,
+    registration: Arc<Registration>,
     handle: u32,
     cursor: u64,
     append: bool,
@@ -553,7 +576,7 @@ struct HostFile {
 impl HostFile {
     fn stat(&self) -> virtual_fs::Result<Metadata> {
         expect_stat(call(
-            self.link,
+            &self.registration,
             Op::Fstat {
                 handle: self.handle,
             },
@@ -564,7 +587,7 @@ impl HostFile {
 impl Drop for HostFile {
     fn drop(&mut self) {
         post(
-            self.link,
+            &self.registration,
             Op::Close {
                 handle: self.handle,
             },
@@ -583,7 +606,7 @@ impl AsyncRead for HostFile {
             return Poll::Ready(Ok(()));
         }
         let reply = call(
-            self.link,
+            &self.registration,
             Op::Read {
                 handle: self.handle,
                 offset: self.cursor,
@@ -624,7 +647,7 @@ impl AsyncWrite for HostFile {
                 bytes,
             }
         };
-        Poll::Ready(match call(self.link, op).and_then(expect_number) {
+        Poll::Ready(match call(&self.registration, op).and_then(expect_number) {
             Ok(written) => {
                 self.cursor += written;
                 Ok(written as usize)
@@ -683,7 +706,7 @@ impl VirtualFile for HostFile {
 
     fn set_len(&mut self, new_size: u64) -> virtual_fs::Result<()> {
         call(
-            self.link,
+            &self.registration,
             Op::Truncate {
                 handle: self.handle,
                 size: new_size,
@@ -694,7 +717,7 @@ impl VirtualFile for HostFile {
 
     fn unlink(&mut self) -> virtual_fs::Result<()> {
         call(
-            self.link,
+            &self.registration,
             Op::Unlink {
                 path: self.path.clone(),
             },
@@ -755,7 +778,8 @@ extern "C" {
 impl Directory {
     /// Mount a trusted synchronous filesystem owned by this thread. Commands
     /// using it must be started from this same thread. WASIX revalidates its
-    /// cached entries under such a mount on every lookup.
+    /// cached entries under such a mount on every lookup. The delegate is released
+    /// after the last directory, open file and queued operation has been dropped.
     #[wasm_bindgen(js_name = "fromHostFileSystem")]
     pub fn from_host_file_system(delegate: HostFileSystemDelegate) -> Result<Directory, Error> {
         let delegate: JsValue = delegate.into();
@@ -770,7 +794,7 @@ impl Directory {
         };
         DELEGATES.with(|delegates| delegates.borrow_mut().insert(link.key, delegate));
         Ok(Directory::from_filesystem(Arc::new(HostFileSystem {
-            link,
+            registration: Registration::new(link, release),
         })))
     }
 }
