@@ -1,0 +1,11 @@
+--- a/scripts/Makefile.build
++++ b/scripts/Makefile.build
+@@ -257,7 +257,7 @@
+ # If the list of objects to link is empty, just create an empty built-in.o
+ # -nostdlib is added to make "make LD=gcc ..." work (some people use that)
+ cmd_link_o_target = $(if $(strip $(obj-y)),\
+-		$(LD) -nostdlib $(ld_flags) -r -o $@ $(filter $(obj-y), $^),\
++		$(LD) $(if $(filter wasm32,$(ARCH)),,-nostdlib) $(ld_flags) -r -o $@ $(filter $(obj-y), $^),\
+ 		rm -f $@; $(AR) rcs $@)
+ 
+ $(builtin-target): $(obj-y) FORCE

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "runtime": "wasm-busybox",
+  "status": "producer-b0-candidate",
+  "profile": "wasm32-wasip1",
+  "source": {
+    "version": "1.37.0",
+    "directory": "busybox-1.37.0",
+    "filename": "busybox-1.37.0.tar.bz2",
+    "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
+    "checksumUrl": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2.sha256",
+    "size": 2565764,
+    "sha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4"
+  },
+  "toolchain": {
+    "name": "local wasi-sdk 33.0+m",
+    "llvmRevision": "4434dabb69916856b824f68a64b029c67175e532",
+    "wasiLibcRevision": "161b3195fc25",
+    "sdkConfigRevision": "f992bcc08219",
+    "files": {
+      "VERSION": "973b79c8f797edfede7db06753dddd2b8db3e85d4859fb8ef17e0929ca64470e",
+      "bin/clang": "6985ec66b1065976616156773f95ed318b1793f7761fe9e9f38f8e771571021c",
+      "bin/wasm-ld": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26",
+      "bin/llvm-ar": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9",
+      "bin/llvm-nm": "b3eea1506407d1c3d0d0a6512c6daac22050c305960122c4be19a8a611836455",
+      "bin/llvm-strip": "f020ba49404039ce48e0449bf38c763a5a8e65fd9cfe7e9a26c3d78e21a98ee4",
+      "bin/clang.cfg": "61c6cded13c3b915cf17bd2c3be30d23a9eba934c49d7ea55924c815ff7f9fce",
+      "lib/libclang-cpp.so.22.1-wasi-sdk": "8dc7afd0adeb98ede0e87333c8ab4508511503672d3ecf5fe467b93e26c9d2f8",
+      "lib/libLLVM.so.22.1-wasi-sdk": "3baf077cc63ee5c6a30dfd185330fdd84a8a8c6f2748ec7aa4a767f723288cce"
+    },
+    "trees": {
+      "share/wasi-sysroot/include/wasm32-wasip1": {
+        "sha256": "38206b73de93db14b04a13360aac9adfc22c14ff6ba473637a3e81f4215a8074",
+        "files": 3571
+      },
+      "share/wasi-sysroot/lib/wasm32-wasip1": {
+        "sha256": "0d15d178169e9853ae8d42bde25b21738a52b02e38aeb23813de9484115153fc",
+        "files": 62
+      },
+      "lib/clang/22": {
+        "sha256": "e87481dac7224eb96bf7802705d0943abfff37bdc49c6dadf70dfe8f0949f954",
+        "files": 272
+      }
+    }
+  },
+  "config": {
+    "path": "config/b0.config",
+    "sha256": "593f27cc56921406b13b6d3994f86d4f0f0f8e8e139dad5ce716da0fcc8aa751",
+    "method": "make allnoconfig; overlay config/b0.config; make oldconfig; assert B0/no-shell flags"
+  },
+  "patches": [
+    {
+      "path": "patches/0001-wasi-b0-declarations.patch",
+      "sha256": "7ff3457b045006066b32a7cd02ba8be023b9ff014067a6cc0019cd48c60dcc69",
+      "classification": "wasi-header-profile"
+    },
+    {
+      "path": "patches/0002-wasi-b0-libbb-exclusions.patch",
+      "sha256": "44e30fa7a3543b8bd6428ef1556ee982bf8b3ae4ba87fa3c90de4125a5e0a2ea",
+      "classification": "unused-libbb-feature-exclusion"
+    },
+    {
+      "path": "patches/0003-wasi-b0-build-closure.patch",
+      "sha256": "b1eb579cf59793ee8b864d1a1c82d0744e9390f7f76f22546617dc5044002281",
+      "classification": "minimal-build-closure"
+    },
+    {
+      "path": "patches/0004-wasm-partial-link.patch",
+      "sha256": "2d2c8cf3f7225afb3188eb67a042911e1457d6d389e92a32a24423873342589c",
+      "classification": "build-system-wasm-linker"
+    },
+    {
+      "path": "patches/0005-wasi-b0-help-output.patch",
+      "sha256": "a6b768687730002515907ad4997b8580165b7d275ee7e228394d3041be8410df",
+      "classification": "batch-help-stdio"
+    },
+    {
+      "path": "patches/0006-wasm-final-link.patch",
+      "sha256": "764a9f8fc29f37f6376ad61532fd491b7670fcceb2d890818b7f0bdc8eb0c4d0",
+      "classification": "build-system-wasm-final-link"
+    },
+    {
+      "path": "patches/0007-process-initial-cwd.patch",
+      "sha256": "975deca0bbef3948ab00fc32f1e90ba965ee388cb920f650c1978a967bde73db",
+      "classification": "process-initial-cwd-abi"
+    }
+  ],
+  "requestedApplets": [
+    "cat",
+    "echo",
+    "false",
+    "printf",
+    "pwd",
+    "true"
+  ],
+  "qualifiedWasiApplets": [],
+  "license": {
+    "expression": "GPL-2.0-only",
+    "source": "LICENSE in the pinned upstream tarball",
+    "notice": "https://busybox.net/license.html"
+  },
+  "buildCommand": "python3 scripts/probe.py --sdk <existing pinned SDK> --work-dir <new empty path> [--source-archive <pinned tarball>]",
+  "processAbi": {
+    "namespace": "wasm_idle_process_v1",
+    "function": "initial_cwd",
+    "signature": "(ptr:i32, capacity:i32)->i32",
+    "result": "UTF-8 cwd and NUL byte count; -1 for insufficient capacity or invalid memory range",
+    "constructorPriority": 101,
+    "bufferBytes": 4096,
+    "failureExitCode": 125,
+    "action": "validate result then call actual libc chdir before upstream main"
+  }
+}
