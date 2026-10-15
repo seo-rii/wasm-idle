@@ -153,7 +153,11 @@ export async function runProbe(configuration, cases = fixtures) {
 				observation.peakLive = Math.max(observation.peakLive, live.size);
 			}
 		});
-		cdp.on('Target.targetDestroyed', ({ targetId }) => live.delete(targetId));
+		cdp.on('Target.targetDestroyed', ({ targetId }) => {
+			if (observation && live.has(targetId))
+				observation.destroyed.push({ targetId, atMs: Date.now() - observation.startedAt });
+			live.delete(targetId);
+		});
 		await cdp.send('Target.setDiscoverTargets', { discover: true });
 		const workers = async () => (await cdp.send('Target.getTargets')).targetInfos.filter(isWorker);
 		const retire = async () => {
@@ -171,7 +175,7 @@ export async function runProbe(configuration, cases = fixtures) {
 			const consoleErrors = [], warnings = [], blockedRequests = [];
 			let page, result = {}, hostContextClosed = false;
 			const started = Date.now();
-			observation = { created: [], peakLive: 0 };
+			observation = { created: [], destroyed: [], peakLive: 0, startedAt: Date.now() };
 			const initialWorkers = await workers();
 			try {
 				await context.route('**/*', (route) => {
@@ -250,8 +254,12 @@ export async function runProbe(configuration, cases = fixtures) {
 				}), { fixture, descriptions, sdkBase, probeWorkerUrl, memory: MEMORY,
 					bashWasmSha256: BASH_WASM_SHA256, timeout: CASE_TIMEOUT_MS });
 				result.workersAtObservation = await workers();
+				result.cleanupStartedAtMs = Date.now() - observation.startedAt;
 				result.ownedCleanup = await page.evaluate(() => globalThis.cleanupProbeGroup());
-				result.remainingWorkerTargets = (await retire()).length;
+				const remaining = await retire();
+				result.remainingWorkerTargets = remaining.length;
+				// Diagnostic identities for a Worker that outlives the retirement window.
+				result.remainingWorkerTargetDetails = remaining.map(({ targetId, url, parentId }) => ({ targetId, url, parentId }));
 				result.events = await page.evaluate(() => globalThis.probeEvents);
 			} catch (error) {
 				result = { ...result, type: 'harness-error', error: String(error) };
@@ -270,6 +278,7 @@ export async function runProbe(configuration, cases = fixtures) {
 				// SDK descendants from the probe Worker created by the page.
 				createdNestedWorkerTargets: observation.created.filter(({ parentId }) =>
 					createdTargetIds.has(parentId)).length,
+				destroyedWorkerTargets: observation.destroyed,
 				peakLiveWorkerTargets: observation.peakLive,
 				hostContextClosed, workersAfterContextClose: afterContext.length,
 				remainingTargetsAfterContextClose: afterContext });
