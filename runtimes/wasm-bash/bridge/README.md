@@ -249,6 +249,21 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+The first real [SDK release-build receipt](evidence.sdk-build-timeout.json) records
+a failed 3,600-second attempt using the original helper commit
+`635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2`. The outer wall deadline killed
+Cargo, which exited -9 after 3,600.395 seconds; the supervisor's final status is 3. The [unchanged original process record](evidence.sdk-build-timeout-process.json)
+also records rustc child 4042242 subsequently reaped with exit 0 and no remaining
+entries or cleanup errors. That older guard's main-thread-only traversal could
+miss worker-thread children in process/RSS samples, so its `allReaped` result
+does not independently qualify every task-owned descendant. Separate read-only
+archival checks match all 580 source pins and report the known historical PIDs
+gone; they do not reconstruct missing observations. The completed log's inspected
+tail ends at `console_error_panic_hook` without a Rust compile error in that
+excerpt. No runnable SDK Wasm was produced. Web glue, static inventory, local
+module/Worker packaging, real Bash execution and browser gates remain unqualified;
+the source, locks and release profile retain their original identities.
+
 ## Remaining runtime gate
 
 The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and build-std; its
@@ -257,13 +272,16 @@ nightly; the recorded preparation attempt used an isolated installation of the e
 pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
 prefetch, offline validation and corrected Wasmer/SDK/example Rust typing now
 pass. Existing Bash source/sysroot
-artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
-and actual browser qualification still require a sequential resource budget. No memory
+artifacts were not found in the producer's configured cache roots during the initial
+investigation. The separate [Bash producer follow-up #192](https://github.com/seo-rii/wasm-idle/pull/192)
+now has a real build/import receipt for the exec-shim candidate; it does not qualify
+execution against the modified SDK. Full SDK linking and actual browser qualification
+still require a sequential resource budget. No memory
 or disk estimate is a measured producer requirement, and no previous or unrelated cache
 was deleted.
 
-Next, reserve a sequential build slot and private output budget, build the pinned SDK and
-real Bash with this shim, and verify actual imports and new artifact receipts. Then qualify
+Next, finish the pinned SDK build in a separately recorded attempt, preserving
+the earlier deadline failure. Then qualify the already built real Bash candidate's
 argv/env/cwd/exit, FD/FS visibility and Worker cleanup using the same real browser fixtures.
 Implement the trusted SDK command registry and Supervisor FS/fd bindings only behind that
 experimental profile. The first Clang-to-BusyBox pipeline, command-lazy verified loading,

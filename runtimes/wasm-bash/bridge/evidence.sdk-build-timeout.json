@@ -1,0 +1,295 @@
+{
+	"schemaVersion": 1,
+	"status": "actual-pinned-sdk-release-build-timed-out",
+	"passed": false,
+	"complete": false,
+	"guestQualified": false,
+	"runRoot": "/data/seorii-container-20261014/shell-sdk-binary-20261014",
+	"testedApplicationCommit": "de98d061435a308e8bbcd2ca195d29ac07401774",
+	"sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+	"runtimeCrate": "wasmer-wasix@0.601.0",
+	"toolchain": {
+		"channel": "nightly-2025-07-05",
+		"rustcCommit": "e3843659e9f65f589d184d1221ac6149d5fa07b5",
+		"cargoCommit": "930b4f62cfcd1f0eabdb30a56d91bf6844b739bf",
+		"target": "wasm32-unknown-unknown"
+	},
+	"buildHelper": {
+		"commit": "635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2",
+		"pullRequest": "https://github.com/seo-rii/wasm-idle/pull/191",
+		"originalSealedFiles": [
+			{
+				"repositoryPath": "scripts/prepare-container-shell-sdk-binary.py",
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/run.py",
+				"bytes": 17303,
+				"sha256": "f60f2010dd1ddddbe4aaf849a39d0bb9a3a9e766e577037b4b32f6b118b82a94"
+			},
+			{
+				"repositoryPath": "scripts/container_shell_sdk_build_guard.py",
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/container_shell_sdk_build_guard.py",
+				"bytes": 7281,
+				"sha256": "0632babd5bd3f425bcd64f15eb9075ecd2e7ebacf16230c7ee2763035fc39d3f"
+			},
+			{
+				"repositoryPath": "scripts/inspect-container-shell-sdk.mjs",
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/inspect.mjs",
+				"bytes": 2997,
+				"sha256": "b78c28b47ed60c609ef77bd53b7fecc058a74bbe8aaeca885df6e631e2caecb2"
+			}
+		],
+		"sealedFilesMatchOriginalCommit": true,
+		"processDiscovery": "Historical main-thread-only children traversal; child processes created by worker threads could be absent from sampled observations."
+	},
+	"sourcePreparation": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/receipt.json",
+		"bytes": 1650,
+		"sha256": "3994f0002ac2cfe3e1405cc03a95343393322c98dc5be1a36189ecf13a50757f"
+	},
+	"sdkManifest": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk/Cargo.toml",
+		"bytes": 4551,
+		"sha256": "2322dd551052f30d893c2e0f65476f21517140bffac5b3db9196912489f27e2b"
+	},
+	"sdkLock": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk/Cargo.lock",
+		"bytes": 114779,
+		"sha256": "234c4afcc75325358fb9fc7807b53b6b1e3db7526cf68c9954f191c7d548cd72"
+	},
+	"wasixLock": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-wasix/Cargo.lock",
+		"bytes": 124391,
+		"sha256": "4e897876b3433e746cdc99a355d0df4024fbc322455a880ead85c5b563c0ab02"
+	},
+	"sdkCargoConfig": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk/.cargo/config.toml",
+		"bytes": 557,
+		"sha256": "0169417b3aa2d8968f69a8cb60912c3ccced67235bef589393a81acef4de4f7e"
+	},
+	"sdkToolchainConfig": {
+		"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk/rust-toolchain.toml",
+		"bytes": 288,
+		"sha256": "e2c7838ea9e1ea9fb142b111463be41bfe2d320b392a031f91ffafc65894f8f8"
+	},
+	"stdLock": {
+		"path": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.lock",
+		"bytes": 10886,
+		"sha256": "207129d8edc2cb762f8556dce440012854d28ca2d8774852fb00ee0a32191fc5"
+	},
+	"sourcePolicy": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/checked-source-policy.json",
+		"bytes": 136003,
+		"sha256": "bb84df32cb7a564fac6c0f0b3cc79d5fdcb60edbecfd2d631d5c3e0debca0533"
+	},
+	"buildPlan": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/build-plan.json",
+		"bytes": 4213,
+		"sha256": "e1fd3f4cbbaffca06f114ba741790bdd338ad6a6e115138085c51fe797d8d1ce"
+	},
+	"preparedInputs": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/prepared-inputs.json",
+		"bytes": 802,
+		"sha256": "bef17deead0e0750fdd69a236d9724fb6afb45f652c2e88c50bc6fd6bd47b063"
+	},
+	"preparationContext": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/preparation-context.json",
+		"bytes": 1028,
+		"sha256": "4813ba8a114bf3f1a1023353c36bdca283ec7b7713c58ef1292f7aecf7cf8116"
+	},
+	"priorPassingTypecheck": {
+		"receipt": "evidence.sdk-typecheck.json",
+		"originalProcessReceipt": {
+			"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/sdk-typecheck.process.json",
+			"bytes": 1335,
+			"sha256": "a906d32e8b063520dd7aba2b002b84ddc067a52482434ec78ebeb7ded4e0d6b8"
+		},
+		"scope": "The earlier SDK/lib/external snapshot example typecheck remains a separate passing check; it produces no runnable SDK Wasm or web glue."
+	},
+	"command": [
+		"/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/bin/cargo",
+		"build",
+		"--locked",
+		"--offline",
+		"--target",
+		"wasm32-unknown-unknown",
+		"--lib",
+		"-j",
+		"1",
+		"--release"
+	],
+	"profile": "release",
+	"releaseProfilePreserved": true,
+	"optimization": "No additional wasm-opt or source/lock/profile edits",
+	"workingDirectory": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk",
+	"environment": {
+		"HOME": "/home/seorii",
+		"PATH": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/bin:/usr/bin:/bin",
+		"RUSTUP_HOME": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup",
+		"CARGO_HOME": "/home/seorii/.cargo",
+		"RUSTC": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/bin/rustc",
+		"CARGO_TARGET_DIR": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-target",
+		"CARGO_BUILD_BUILD_DIR": "/data/seorii-container-20261014/shell-sdk-binary-20261014/sdk-intermediate",
+		"CARGO_BUILD_JOBS": "1",
+		"CARGO_NET_OFFLINE": "true",
+		"RUSTUP_NO_UPDATE_CHECK": "1"
+	},
+	"checkedTargetReusedForSamePhysicalCopy": true,
+	"stageLimits": {
+		"wallSeconds": 3600,
+		"cpuSoftSeconds": 3000,
+		"cpuHardSeconds": 3060,
+		"addressSpaceBytes": 12884901888,
+		"minimumRemainingDiskBytes": 2147483648
+	},
+	"limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+	"admissionThresholds": {
+		"minimumAvailableMemoryBytes": 8589934592,
+		"minimumFreeDiskBytes": 8589934592
+	},
+	"finalStatus": 3,
+	"failure": {
+		"type": "RuntimeError",
+		"error": "outer stage wall deadline reached"
+	},
+	"sdkBuildExitCode": -9,
+	"termination": "outer-wall-timeout",
+	"wallSeconds": 3600.395,
+	"originalRunReceipt": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/receipt.json",
+		"bytes": 229,
+		"sha256": "cd0cac976fbbf8199d3bba1b92ae4806de8dad7098fa7623b0e4652fa061a7a5"
+	},
+	"finalStatusFile": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/final.status",
+		"bytes": 2,
+		"sha256": "1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2"
+	},
+	"processReceipt": "evidence.sdk-build-timeout-process.json",
+	"originalProcessReceipt": {
+		"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/sdk-build.process.json",
+		"bytes": 919,
+		"sha256": "0357fc969426b10597067ed8ab54cc38e785c83b466060a02698e5864737baa5"
+	},
+	"processReceiptBytes": 919,
+	"processReceiptSha256": "0357fc969426b10597067ed8ab54cc38e785c83b466060a02698e5864737baa5",
+	"processReceiptPreservedByteForByte": true,
+	"recordedCleanup": {
+		"allReaped": true,
+		"deadlineSeconds": 10,
+		"remaining": [],
+		"signaled": [
+			{
+				"pid": 3564687,
+				"startTicks": 18064113
+			}
+		],
+		"reaped": [
+			{
+				"pid": 3564687,
+				"exitCode": -9
+			},
+			{
+				"pid": 4042242,
+				"exitCode": 0
+			}
+		],
+		"errors": []
+	},
+	"cleanupScope": "The original receipt records Cargo killed at the outer wall deadline, rustc child 4042242 subsequently reaped with exit 0, and allReaped true with no remaining entries or errors. The older main-thread-only traversal does not independently qualify every task-owned descendant or provide complete process/RSS observations.",
+	"sampledObservations": {
+		"original": {
+			"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/sdk-build.observations.json",
+			"bytes": 215,
+			"sha256": "864e66ea9a19a49409886c622cdd8fd9853133aa200d2f64b86c54ab41400d93"
+		},
+		"recorded": {
+			"scope": "sampled summed RSS may double-count shared pages; not a measured peak or memory limit",
+			"sampledMaximumOwnedProcesses": 2,
+			"sampledMaximumSummedRssBytes": 119136256,
+			"elapsedSeconds": 3599.222
+		},
+		"scope": "Historical samples may omit children created by worker threads. These samples are not a measured peak, full process inventory, or aggregate memory limit."
+	},
+	"completedLog": {
+		"path": "/home/seorii/logs/shell-sdk-binary-20261014-sdk-build.log",
+		"bytes": 25633,
+		"sha256": "aab176d17d1e54a5cb6dbb65df353c862a1173da69415f785d96ae6ba9875105",
+		"inspection": "Only the last 35 lines of the completed log were inspected while archiving this receipt.",
+		"lastReportedCrate": "console_error_panic_hook v0.1.7",
+		"rustCompileErrorInInspectedTail": false,
+		"scope": "The recorded failure is the outer wall deadline. The bounded tail does not establish whole-log diagnostic coverage or a successful compilation."
+	},
+	"archivalVerification": {
+		"checkedAtUtc": "2026-10-14T23:24:38.105030+00:00",
+		"verifiedInputFiles": 580,
+		"sourcePinsUnchangedAtVerification": true,
+		"preparedInputsUnchangedAtVerification": true,
+		"sourceInventories": [
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk",
+				"files": 198,
+				"matchesPinnedInventory": true
+			},
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-wasix",
+				"files": 376,
+				"matchesPinnedInventory": true
+			}
+		],
+		"knownHistoricalPids": [
+			{
+				"pid": 3564687,
+				"procEntryAbsent": true
+			},
+			{
+				"pid": 3564645,
+				"procEntryAbsent": true
+			},
+			{
+				"pid": 3564611,
+				"procEntryAbsent": true
+			},
+			{
+				"pid": 4042242,
+				"procEntryAbsent": true
+			}
+		],
+		"expectedArtifacts": [
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-target/wasm32-unknown-unknown/release/wasmer_js.wasm",
+				"exists": false
+			},
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/artifacts/raw/wasmer_js.wasm",
+				"exists": false
+			},
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/artifacts/web/wasmer_js_bg.wasm",
+				"exists": false
+			},
+			{
+				"path": "/data/seorii-container-20261014/shell-sdk-binary-20261014/wasm-inventory.json",
+				"exists": false
+			}
+		],
+		"scope": "Read-only verification after the failed attempt; no processes were signaled, no historical receipt bytes were rewritten, and missing all-task observations are not reconstructed."
+	},
+	"stageResults": {
+		"sdkBuild": "timed-out",
+		"wasmBindgen": "not-run",
+		"staticWasmInspection": "not-run",
+		"localIndexAndThreadWorkerPackaging": "not-run",
+		"modifiedBashAndBrowserQualification": "not-run"
+	},
+	"qualification": {
+		"actualSdkWasmBinary": false,
+		"actualSdkWebGlue": false,
+		"staticWasmInventory": false,
+		"localNpmModuleGraphAndWorkerPackage": false,
+		"actualModifiedBashExecution": false,
+		"jsSupervisorRegistry": false,
+		"commonLiveFdAndFilesystem": false,
+		"browserGuestAcceptanceAndCleanup": false,
+		"shellMvp": false
+	},
+	"scope": "A single completed release-build timeout on the pinned prepared SDK source. No runnable SDK binary was produced, and build/glue/package/browser gates remain unqualified. No automatic retry or source/lock/profile change is part of this receipt."
+}
