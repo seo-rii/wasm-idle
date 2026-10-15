@@ -1,0 +1,98 @@
+--- a/src/fs/directory.rs
++++ b/src/fs/directory.rs
+@@ -157,6 +157,19 @@
+     }
+ }
+ 
++impl Directory {
++    pub(crate) fn from_filesystem(fs: Arc<dyn FileSystem>) -> Self {
++        Directory(fs)
++    }
++
++    /// Whether this directory is backed by a trusted host filesystem delegate.
++    pub(crate) fn is_host_filesystem(&self) -> bool {
++        self.0
++            .downcast_ref::<crate::host_filesystem::HostFileSystem>()
++            .is_some()
++    }
++}
++
+ impl Default for Directory {
+     fn default() -> Self {
+         Directory(Arc::new(virtual_fs::mem_fs::FileSystem::default()))
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -12,6 +12,7 @@
+ mod net;
+ mod options;
+ mod package_loader;
++mod host_filesystem;
+ pub mod registry;
+ mod run;
+ mod runtime;
+--- a/src/tasks/scheduler.rs
++++ b/src/tasks/scheduler.rs
+@@ -155,6 +155,10 @@
+                 // self.busy.clear();
+                 Ok(())
+             }
++            SchedulerMessage::HostFs(call) => {
++                crate::host_filesystem::serve(*call);
++                Ok(())
++            }
+             SchedulerMessage::SpawnAsync(task) => {
+                 self.post_message(PostMessagePayload::Async(AsyncJob::Thunk(task)))
+             }
+--- a/src/tasks/scheduler_message.rs
++++ b/src/tasks/scheduler_message.rs
+@@ -22,6 +22,8 @@
+ pub(crate) enum SchedulerMessage {
+     /// Close the scheduler.
+     Close,
++    /// Run a host filesystem delegate operation on the scheduler thread.
++    HostFs(Box<crate::host_filesystem::HostFsCall>),
+     /// Run a promise on a worker thread.
+     SpawnAsync(#[derivative(Debug(format_with = "crate::utils::hidden"))] AsyncTask),
+     /// Run a blocking operation on a worker thread.
+@@ -66,6 +68,10 @@
+         let de = Deserializer::new(value);
+ 
+         match de.ty()?.as_str() {
++            consts::TYPE_HOST_FS => {
++                let call = de.boxed(consts::PTR)?;
++                Ok(SchedulerMessage::HostFs(call))
++            }
+             consts::TYPE_SPAWN_ASYNC => {
+                 let task = de.boxed(consts::PTR)?;
+                 Ok(SchedulerMessage::SpawnAsync(task))
+@@ -134,6 +140,9 @@
+     pub(crate) fn into_js(self) -> Result<JsValue, Error> {
+         match self {
+             SchedulerMessage::Close => Serializer::new(consts::TYPE_CLOSE).finish(),
++            SchedulerMessage::HostFs(call) => Serializer::new(consts::TYPE_HOST_FS)
++                .boxed(consts::PTR, call)
++                .finish(),
+             SchedulerMessage::SpawnAsync(task) => Serializer::new(consts::TYPE_SPAWN_ASYNC)
+                 .boxed(consts::PTR, task)
+                 .finish(),
+@@ -181,6 +190,7 @@
+ 
+ mod consts {
+     pub const TYPE_CLOSE: &str = "close";
++    pub const TYPE_HOST_FS: &str = "host-fs";
+     pub const TYPE_SPAWN_ASYNC: &str = "spawn-async";
+     pub const TYPE_SPAWN_BLOCKING: &str = "spawn-blocking";
+     pub const TYPE_WORKER_IDLE: &str = "worker-idle";
+--- a/src/wasmer.rs
++++ b/src/wasmer.rs
+@@ -331,6 +331,10 @@
+     }
+ 
+     for (dest, dir) in options.mounted_directories()? {
++        // WASIX must revalidate its cached entries under a host-owned mount.
++        if dir.is_host_filesystem() {
++            wasmer_wasix::register_live_mount(&dest);
++        }
+         runner.with_mount(dest, Arc::new(dir));
+     }
+ 

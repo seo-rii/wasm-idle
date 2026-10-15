@@ -134,11 +134,21 @@ applies child cwd and fd operations first. Its cwd comes from the child's WASIX
 filesystem lookup, independently of parent state and `PWD`. The external SDK
 compile probe checks public accessibility without returning an execution or
 successful task handle. This does not export mutable runtime state or establish
-common live filesystem/fd capabilities; actual Rust compilation is a distinct gate.
+common live filesystem/fd capabilities.
 
 The initial prototype included only protocol tests and source-patch application checks.
 That source-only status is superseded by the concrete rebuild observations below. Applying
 patches alone still does not qualify candidate B as a production backend.
+
+The genuine pinned SDK library and external command-snapshot example now pass
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib --example
+container_command_snapshot_compile -j 1` at source
+`de98d061435a308e8bbcd2ca195d29ac07401774`, with all owned processes reaped and
+all 580 recorded source/toolchain/preparation pins unchanged. The
+[immutable metadata receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck.json)
+and [original process receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck-process.json)
+preserve that evidence. Earlier genuine Rust API errors and dependency-cache
+failures remain recorded separately.
 
 ## Rebuilt observations on 2026-10-15
 

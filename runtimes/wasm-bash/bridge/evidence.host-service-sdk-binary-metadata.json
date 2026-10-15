@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-thirteen-patch-host-command-service-sdk-typecheck-release-web-glue-and-static-inspection-passed",
+  "runRoot": "/data/seorii-container-20261014/sdk-host-service-gate-20261015T095559Z",
+  "binaryRunRoot": "/data/seorii-container-20261014/sdk-host-service-gate-20261015T095559Z/sdk-host-service-binary-20261015T095559Z",
+  "sourceCommit": "3ba1d35161722887ed21620039ca89d105c5499b",
+  "helperSourceCommit": "f9a5ce45996f7a6eeeabb922e82921924042a60e",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "originalReceipt": {
+    "sourceFile": "sdk-host-service-binary-20261015T095559Z/receipt.json",
+    "archive": "evidence.host-service-sdk-binary.json",
+    "bytes": 361675,
+    "sha256": "947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6"
+  },
+  "originalBytesPreserved": true,
+  "sourcePreparation": {
+    "sourceFile": "prepared-source/receipt.json",
+    "archive": "evidence.host-service-source-preparation.json",
+    "bytes": 3718,
+    "sha256": "176a7e887ba9ad6346f8955f2bf190db18e26dff8c1177786cdde505f60bff88"
+  },
+  "sourcePolicy": {
+    "sourceFile": "source-policy.json",
+    "bytes": 148977,
+    "sha256": "bd31387a08921c70522426ffc9142aec23034fd6c9f28c35aee7eceba6b5e02e"
+  },
+  "queueRecipe": {
+    "sourceFile": "queue.json",
+    "bytes": 2331,
+    "sha256": "53d75347da82dcf460bba7e3b5a4c4c5c9461e04f93cb7abbae43c0950e6d985"
+  },
+  "stageReceipts": [
+    {
+      "stage": "typecheck",
+      "sourceFile": "sdk-check.process.json",
+      "archive": "evidence.host-service-typecheck-process.json",
+      "bytes": 658,
+      "sha256": "4f47564e3304476de077ea870cf9fbcc8dfc1855b65ee0fa6d2cea0a0f2ea353",
+      "wallSeconds": 377.317,
+      "exitCode": 0
+    },
+    {
+      "stage": "release",
+      "sourceFile": "sdk-host-service-binary-20261015T095559Z/sdk-build.process.json",
+      "archive": "evidence.host-service-sdk-build-process.json",
+      "bytes": 698,
+      "sha256": "3a4a87c1187e86066a248197c3e1a410dd7058460e845b9dea1dd3146c11643b",
+      "wallSeconds": 726.224,
+      "exitCode": 0
+    },
+    {
+      "stage": "bindgen",
+      "sourceFile": "sdk-host-service-binary-20261015T095559Z/bindgen.process.json",
+      "archive": "evidence.host-service-sdk-bindgen-process.json",
+      "bytes": 900,
+      "sha256": "93b56731c917e27c35f1cf1ea1af270113e70f0a72f50c51280e9223cf1d9f41",
+      "wallSeconds": 2.012,
+      "exitCode": 0
+    },
+    {
+      "stage": "inspect",
+      "sourceFile": "sdk-host-service-binary-20261015T095559Z/inspect.process.json",
+      "archive": "evidence.host-service-sdk-inspect-process.json",
+      "bytes": 1140,
+      "sha256": "51a6011f3afa0465625d2f42f936e9c587b733a100193a22a37b1af1fada1366",
+      "wallSeconds": 0.255,
+      "exitCode": 0
+    }
+  ],
+  "archiveVerification": {
+    "checkedAtUtc": "2026-10-15T10:14:48.419553+00:00",
+    "sourcePolicyPins": 584,
+    "sourceInventories": {
+      "wasmer-sdk": 200,
+      "wasmer-wasix": 377
+    },
+    "queueInputPins": 5,
+    "outputArtifacts": 6,
+    "allRecordedHashesMatched": true,
+    "sourceInventoriesMatched": true,
+    "sourceSymlinksFound": false
+  },
+  "buildContext": {
+    "freshPhysicalSource": true,
+    "uniqueTargetForThisPhysicalCopy": true,
+    "copiedOrSharedCompiledArtifacts": false,
+    "samePhysicalCopyCheckedTargetReusedForRelease": true,
+    "releaseTimingIsNotAnIndependentCleanBuild": true,
+    "automaticRetry": false
+  },
+  "completedLogs": [
+    {
+      "stage": "typecheck",
+      "path": "/home/seorii/logs/sdk-host-service-gate-20261015T095559Z-sdk-check.log",
+      "bytes": 29350,
+      "sha256": "5994ef1a4c7c161fc2ea52346c995de5c278be06b2965eca6c01a67a7018e7bb"
+    }
+  ],
+  "outputs": {
+    "artifacts/web/wasmer_js.d.ts": {
+      "bytes": 28909,
+      "sha256": "b585cad7985a382a47367bc44c2d71a478c52008f8a1923bebe37a5616d94d99"
+    },
+    "artifacts/web/wasmer_js_bg.wasm.d.ts": {
+      "bytes": 10273,
+      "sha256": "190f512fde467b2d2b2ed47ef9ad384e231b5b334ff537543ecf6bd6bbe6fbc6"
+    },
+    "artifacts/web/wasmer_js_bg.wasm": {
+      "bytes": 9215380,
+      "sha256": "9fb4a0aced4526547a061599f3ad8522e22cef766f33a73e5566de85687661af"
+    },
+    "artifacts/web/wasmer_js.js": {
+      "bytes": 112105,
+      "sha256": "cb1dae1752715bbb6eb335ebabedfe6ed2e438f2db9a0d8393b3900b3e1b507c"
+    },
+    "artifacts/raw/wasmer_js.wasm": {
+      "bytes": 10271849,
+      "sha256": "f0ab7d3312651090c4d31b2f87b16198ff8d66f77475c03fc4eace711bf48835"
+    },
+    "prepared-source.tar.gz": {
+      "bytes": 5717894,
+      "sha256": "9f83c6f17524e9a0b053a56b34880177aa513b53cd98f4650d3ce4901f7e50ed"
+    }
+  },
+  "qualification": {
+    "guestQualified": false,
+    "hostCommandDispatchQualified": false,
+    "joinExitStatusQualified": false,
+    "shellBackendReady": false,
+    "commonContainerFdVfsQualified": false,
+    "scope": "Real Rust SDK/runtime check with patches 0001-0013 (host-command descriptor operations and completion on a dedicated service thread), release Wasm, matching web glue and static inspection; not a browser or shell result"
+  },
+  "remainingGates": [
+    "Local index/worker module packaging",
+    "Repeated shell acceptance in Chromium",
+    "Descriptors beyond stdio"
+  ]
+}

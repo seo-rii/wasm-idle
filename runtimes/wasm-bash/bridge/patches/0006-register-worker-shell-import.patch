@@ -1,0 +1,32 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -797,7 +797,7 @@
+ // TODO: split function into two variants, one for JS and one for sys.
+ // (this will make code less messy)
+ fn import_object_for_all_wasi_versions(
+-    _module: &wasmer::Module,
++    module: &wasmer::Module,
+     store: &mut impl AsStoreMut,
+     env: &FunctionEnv<WasiEnv>,
+ ) -> Imports {
+@@ -816,6 +816,20 @@
+         "wasix_32v1" => exports_wasix_32v1,
+         "wasix_64v1" => exports_wasix_64v1,
+     };
++
++    // SDK Worker instantiation uses this resolver instead of
++    // generate_import_object_from_env. Keep the private ABI wasm32-only.
++    if module
++        .imports()
++        .functions()
++        .any(|import| import.module() == "wasix_32v1")
++    {
++        let shell = namespace! {
++            "exec_v1" => wasmer::Function::new_typed_with_env(
++                &mut *store, env, syscalls::proc_exec_v1),
++        };
++        imports.extend(&imports! { "wasm_idle_shell_v1" => shell });
++    }
+ 
+     imports
+ }

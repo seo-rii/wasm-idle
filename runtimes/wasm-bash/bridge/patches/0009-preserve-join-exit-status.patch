@@ -1,0 +1,38 @@
+--- a/src/syscalls/wasix/proc_join.rs
++++ b/src/syscalls/wasix/proc_join.rs
+@@ -45,6 +45,7 @@
+     let ret_result = {
+         move |ctx: FunctionEnvMut<'_, WasiEnv>, status: JoinStatusResult| {
+             let mut ret = Errno::Success;
++            let mut exit_status = None;
+ 
+             let view = unsafe { ctx.data().memory_view(&ctx) };
+             let status = match status {
+@@ -59,10 +60,14 @@
+                     };
+                     pid_ptr.write(&view, option_pid).ok();
+ 
++                    // ExitCode -> Errno maps every status outside the errno range
++                    // to Errno::Unknown (79). The ABI field is a u16 that libc's
++                    // waitpid reads as the raw exit status, so write that value.
++                    exit_status = Some(exit_code.raw() as u16);
+                     JoinStatus {
+                         tag: JoinStatusType::ExitNormal,
+                         u: JoinStatusUnion {
+-                            exit_normal: exit_code.into(),
++                            exit_normal: Errno::Success,
+                         },
+                     }
+                 }
+@@ -75,6 +80,11 @@
+                 }
+             };
+             wasi_try_mem_ok!(status_ptr.write(&view, status));
++            if let Some(code) = exit_status {
++                let offset = std::mem::offset_of!(JoinStatus, u) as u8;
++                let field = wasi_try_mem_ok!(status_ptr.cast::<u8>().add_offset(offset.into()));
++                wasi_try_mem_ok!(field.cast::<u16>().write(&view, code));
++            }
+             Ok(ret)
+         }
+     };
