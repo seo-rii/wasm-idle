@@ -7,6 +7,8 @@ export interface ClangAdapterOptions {
   readonly linkerSha256: string;
   /** Absolute path to the verified linker in the prepared readonly package tree. */
   readonly linkerPath: string;
+  /** Trusted readonly executable aliases that Clang may resolve for its own cc1 jobs. */
+  readonly compilerPaths?: readonly string[];
   /** Mark changed workspace outputs executable only after validating this command ABI. */
   readonly executableOutputProfile?: 'wasi-preview1-process';
   readonly workerFactory?: () => CommandWorker;
@@ -20,8 +22,14 @@ export function createClangAdapter(options: ClangAdapterOptions) {
       options.executableOutputProfile !== undefined && options.executableOutputProfile !== 'wasi-preview1-process') {
     throw new ContainerError('INVALID_ARGUMENT', 'Clang requires pinned tool digests and a canonical readonly linker path');
   }
+  if (options.compilerPaths !== undefined && (!Array.isArray(options.compilerPaths) || options.compilerPaths.length > 16 || options.compilerPaths.some(path =>
+      typeof path !== 'string' || !path.startsWith('/') || path.includes('\0') || path.includes('\\') ||
+      path.slice(1).split('/').some(part => !part || part === '.' || part === '..') ||
+      new TextEncoder().encode(path).length > 4096 || new TextDecoder('utf-8', { fatal: true }).decode(new TextEncoder().encode(path)) !== path || path === options.linkerPath))) {
+    throw new ContainerError('INVALID_ARGUMENT', 'Compiler aliases must be bounded canonical absolute filesystem paths');
+  }
   const configuration = Object.freeze({ clangSha256: options.clangSha256, linkerSha256: options.linkerSha256,
-    linkerPath: options.linkerPath, executableOutputProfile: options.executableOutputProfile });
+    linkerPath: options.linkerPath, compilerPaths: Object.freeze([...(options.compilerPaths ?? [])]), executableOutputProfile: options.executableOutputProfile });
   return createSnapshotWorkerAdapter({
     id: 'llvm-clang-tool-host-v1', configuration,
     workerFactory: options.workerFactory ?? (() => new Worker(new URL('./worker.js', import.meta.url), { type: 'module', name: 'wasm-idle-clang' }))

@@ -40,6 +40,8 @@ export interface CreateLlvmToolHostOptions {
 	readonly createBindings: (context: LlvmToolBindingContext) => LlvmToolBindings;
 	/** Additional exact filesystem names for the same pinned linker, chosen by trusted host code. */
 	readonly linkerPaths?: readonly string[];
+	/** Exact resolved self paths for the same pinned compiler; requires allowClangCc1. */
+	readonly compilerPaths?: readonly string[];
 	/** Opt in to the pinned multicall producer's ['', 'clang', '-cc1'/'-cc1as', ...] child jobs. */
 	readonly allowClangCc1?: boolean;
 	/** Optional host profile admission before any instance can execute. */
@@ -120,6 +122,13 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 		if (typeof path !== 'string' || !path.startsWith('/') || path.includes('\0') || path.includes('\\') || path.slice(1).split('/').some((part) => !part || part === '.' || part === '..') || encoder.encode(path).length > 4096) invalid('Linker paths must be canonical absolute filesystem paths');
 		allowedLinkers.add(path);
 	}
+	if (options.compilerPaths !== undefined && (!Array.isArray(options.compilerPaths) || options.compilerPaths.length > 16 || !allowClangCc1)) invalid('Compiler paths require allowClangCc1 and at most 16 entries');
+	const allowedCompilers = new Set<string>();
+	for (const path of options.compilerPaths ?? []) {
+		const value = safeText(path, 'Compiler path');
+		if (!value.startsWith('/') || value.includes('\\') || value.slice(1).split('/').some((part) => !part || part === '.' || part === '..') || encoder.encode(value).length > 4096 || allowedLinkers.has(value)) invalid('Compiler paths must be distinct canonical absolute filesystem paths');
+		allowedCompilers.add(value);
+	}
 	// Copy every input before the first digest await, so caller mutation cannot replace a pin.
 	const pinned = tools.map((executable) => {
 		const tool = options.tools?.[executable];
@@ -191,10 +200,10 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 					if (flags !== 0 && flags !== 1) return -1;
 					const program = text(programPtr, programLen);
 					const argv = table(argvPtr, argc);
-					// The qualified fixture resolves no main-executable path. Its
-					// multicall driver requests these exact self jobs when it has more
-					// than one action. Preserve argv, including its empty first entry.
-					const compilerChild = allowClangCc1 && program === '' && argv[0] === '' && argv[1] === 'clang' && (argv[2] === '-cc1' || argv[2] === '-cc1as');
+					// The multicall driver uses an empty self path without a command
+					// namespace, or its exact resolved path when PATH contains one.
+					// Both forms execute the same pinned module and preserve native argv.
+					const compilerChild = allowClangCc1 && argv[0] === program && (program === '' || allowedCompilers.has(program)) && argv[1] === 'clang' && (argv[2] === '-cc1' || argv[2] === '-cc1as');
 					if (!compilerChild && !allowedLinkers.has(program)) return -1;
 					let env: Readonly<Record<string, string>>;
 					if (flags === 1) {
