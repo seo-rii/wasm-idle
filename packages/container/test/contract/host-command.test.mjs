@@ -5,6 +5,7 @@ import { createContainer } from '../../dist/container.js';
 import { createLiveWasiAdapter } from '../../dist/adapters/wasi-live/index.js';
 import { createWasiAdapter } from '../../dist/adapters/wasi/index.js';
 import { createHostCommandHandler, HOST_COMMAND_STATUS } from '../../dist/index.js';
+import { createPipe } from '../../dist/fd/pipe.js';
 import { workerFactory, command } from './node-worker.mjs';
 const live = new Uint8Array(readFileSync(new URL('../fixtures/live.wasm', import.meta.url)));
 const liveWorker = () => workerFactory('../../dist/adapters/wasi-live/worker.js');
@@ -262,5 +263,73 @@ test('interrupt stops running and starting commands with status 130 and keeps th
     assert(['ABORTED', undefined].includes(records[2].startError) && (records[2].startError || records[2].result?.reason === 'terminated'));
     assert.deepEqual([records[3].status, records[3].result?.reason], [0, 'exited']);
     assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
+
+for (const action of ['interrupt', 'dispose']) {
+  test(`${action} releases forwarded output after the snapshot process has exited`, { timeout: 30000 }, async () => {
+    const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { snap: { adapter: 'wasi-preview1', bytes: command } } });
+    const pipe = createPipe(1), records = [];
+    let writes = 0, closes = 0, rejected = 0, reached;
+    const blocked = new Promise(resolve => { reached = resolve; });
+    const output = {
+      write(bytes) {
+        if (++writes === 2) reached();
+        return pipe.writer.write(bytes).catch(error => { rejected++; throw error; });
+      },
+      close() { closes++; pipe.writer.close(); }
+    };
+    const input = reader(encode('unread'));
+    try {
+      const handler = createHostCommandHandler(c, {
+        routes: { '/bin/snap': { command: 'snap', stdio: 'forwarded' } }, onRecord: record => records.push(record)
+      });
+      const invocation = { path: '/bin/snap', argv: ['snap', 'roundtrip'], env: [], cwd: '/workspace', stdin: input, stdout: output, stderr: output };
+      const pending = handler(invocation);
+      await blocked;
+      assert.equal((await c.inspect()).processes.length, 0, 'the snapshot is committed before output forwarding');
+      if (action === 'interrupt') assert.equal(handler.interrupt(), 1);
+      else {
+        const disposal = c.dispose();
+        assert(c.disposalSignal.aborted, 'disposal is observable immediately');
+        assert.equal(c.dispose(), disposal, 'disposal remains idempotent');
+        await disposal;
+      }
+      assert.equal(await pending, action === 'interrupt' ? 130 : 143);
+      assert.equal(closes, 1, 'the same child stdout/stderr endpoint is closed once');
+      assert.equal(rejected, 1, 'closing the writer releases its blocked write');
+      assert.equal(writes, 2, 'no output is issued after cancellation');
+      assert.equal(input.closed, 0, 'the shell input remains owned and unconsumed');
+      assert.deepEqual(input.requests, []);
+      assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved', 'interrupt after commit does not roll back committed files');
+      assert.equal((await pipe.reader.read(1)).length, 1, 'already written bytes stay readable');
+      assert.equal((await pipe.reader.read(1)).length, 0, 'writer cancellation delivers EOF');
+      assert.equal(handler.interrupt(), 0);
+      assert.equal(records.length, 1, 'exactly one terminal record');
+      assert.equal(records[0].result.reason, 'exited', 'guest result remains distinguishable from forwarding cancellation');
+      if (action === 'interrupt') {
+        assert.equal(await handler({ ...invocation, stdout: writer(), stderr: writer() }), 0);
+      }
+    } finally { pipe.abort(); await c.dispose(); }
+  });
+}
+
+test('interrupt observes a late forwarded endpoint rejection without waiting for it', { timeout: 30000 }, async () => {
+  const c = createContainer({ adapters: [createWasiAdapter({ workerFactory })], commands: { snap: { adapter: 'wasi-preview1', bytes: command } } });
+  let entered, rejectWrite, closes = 0;
+  const blocked = new Promise(resolve => { entered = resolve; });
+  const output = {
+    write() { entered(); return new Promise((resolve, reject) => { rejectWrite = reject; }); },
+    close() { closes++; /* An external runtime may acknowledge close asynchronously. */ }
+  };
+  try {
+    const handler = createHostCommandHandler(c, { routes: { '/bin/snap': { command: 'snap', stdio: 'forwarded' } } });
+    const pending = handler({ path: '/bin/snap', argv: ['snap', 'roundtrip'], env: [], cwd: '/workspace', stdin: null, stdout: output, stderr: null });
+    await blocked;
+    handler.interrupt();
+    assert.equal(await pending, 130);
+    assert.equal(closes, 1);
+    rejectWrite(new Error('late child close acknowledgement'));
+    await new Promise(resolve => setImmediate(resolve));
   } finally { await c.dispose(); }
 });

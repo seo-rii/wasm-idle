@@ -145,6 +145,14 @@ stopped by it unless `set -e` applies. A live guest's Worker is terminated; a sn
 adapter discards its private changes. This is owner-initiated cancellation, not a guest
 `kill` or signal delivery.
 
+Forwarded output remains part of the handler invocation after the snapshot guest
+has exited. Interrupt also cancels pending forwarding and returns 130 at that stage;
+already committed filesystem changes remain. Cancellation closes the forwarded
+child's stdout/stderr endpoints once, leaves the shell's stdin untouched, and observes
+late write failures without waiting for them. Normal completion leaves those endpoints
+owned by the shell. `container.disposalSignal` aborts when `dispose()` starts; handlers
+use it to stop forwarding with status 143 even when no guest process remains.
+
 `createShellFilesystem(fs, { root })` exposes part of the container VFS to a trusted
 shell runtime as a synchronous delegate, such as the patched SDK's
 `Directory.fromHostFileSystem`. Paths are absolute inside the mount, and the root
