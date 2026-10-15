@@ -43,3 +43,19 @@ Use the same configuration shape and commands as the dispatch probe, with
 - **Preliminary package** ([receipt](evidence/preliminary-package.json), commit `368dc3c0`): 27 of 27 with
   directories created by the editor. This package was built from patches 0001–0012 before
   the host-command status-order fix, so it is not the final pin.
+
+- **Final** ([`final-run-1` … `final-run-3`](evidence/), commit `20d3f851`, package
+  `bc09b7e1…ac08e` from the gated 0001–0012 patches): **runs 2 and 3 pass all 27 checks.**
+  Run 1 passes 20: in FS-PIPELINE-RESULT, Bash started and then nothing was dispatched
+  before the 30-second timeout. The owner Worker did not answer the cleanup request within
+  two seconds and was terminated; every Worker was gone after context close. The other
+  four cases of that run passed.
+
+Earlier dispatch-probe hangs before the first dispatch left the owner responsive. This one
+did not, which points at the owner (SDK scheduler) thread being blocked while Bash waited.
+It is not yet traced and is tracked separately; it is why this probe is not called
+reliable yet.
+
+The recorded commits `1457a6c7` and `368dc3c0` predate rebasing this branch onto #209's
+status-order commits. The container sources, probe, worker and fixtures are byte-identical
+in the rebased commits `fd8f317e` and `59fe968d`; only #209's own pins and evidence differ.

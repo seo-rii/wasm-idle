@@ -77,3 +77,24 @@ test('the archived preliminary run keeps its mkdir failures and passing filesyst
 	assert.equal(text('FS-EXTERNAL-ENTRIES'), 'gone\na-gone\nb-present\nt-dir\n');
 	assert.equal(text('FS-LIVE-APPEND'), '12345X\nabsent\npresent\nnewmore\n');
 });
+
+test('the archived final runs keep two full passes and one hang before any dispatch', async () => {
+	const { readFile } = await import('node:fs/promises');
+	const archived = async (name) => JSON.parse(await readFile(new URL(`../packages/container/test/shell-filesystem/evidence/${name}.json`, import.meta.url)));
+	for (const index of [1, 2, 3]) {
+		const receipt = await archived(`final-run-${index}`);
+		assert.equal(receipt.applicationCommit, '20d3f85129da9afd4737d0256de4a21df0942733');
+		assert.equal(receipt.packageReceipt.sha256, 'bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e');
+		assert.equal((await archived(`final-run-${index}-process`)).exitCode, index === 1 ? 1 : 0);
+	}
+	for (const index of [2, 3]) assert.equal((await archived(`final-run-${index}`)).qualification.passed, 27);
+	const hung = await archived('final-run-1');
+	assert.deepEqual([hung.qualification.passed, hung.qualification.total], [20, 27]);
+	const result = hung.results.find((entry) => entry.id === 'FS-PIPELINE-RESULT');
+	// Bash started, then nothing was dispatched and the owner Worker did not answer cleanup.
+	assert.equal(result.type, 'timeout');
+	assert.deepEqual(result.events.map((event) => event.type), ['sdkInitialized', 'started']);
+	assert.equal(result.ownedCleanup.mode, 'forced-host-worker-termination');
+	assert.equal(result.workersAfterContextClose, 0);
+	assert(hung.results.filter((entry) => entry.id !== 'FS-PIPELINE-RESULT').every((entry) => entry.type === 'result'));
+});
