@@ -46,7 +46,8 @@ const patches = [
 	'0007-delegate-host-command-descriptors.patch',
 	'0009-preserve-join-exit-status.patch',
 	'0010-keep-running-child-on-wnohang.patch',
-	'0012-revalidate-live-mounts.patch'
+	'0012-revalidate-live-mounts.patch',
+	'0014-dup2-onto-a-pipe.patch'
 ];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = [

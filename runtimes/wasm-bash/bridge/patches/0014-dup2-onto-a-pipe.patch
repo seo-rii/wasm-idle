@@ -1,0 +1,14 @@
+--- a/src/syscalls/wasi/fd_renumber.rs
++++ b/src/syscalls/wasi/fd_renumber.rs
+@@ -56,7 +56,10 @@
+             );
+         }
+         match __asyncify_light(env, None, state.fs.flush(to))? {
+-            Ok(_) | Err(Errno::Isdir) | Err(Errno::Io) | Err(Errno::Access) => {}
++            // A pipe installed on descriptor 1 or 2, as in a shell pipeline's
++            // child, is not a file and reports `Inval`; it has nothing buffered,
++            // and dup2 must not fail because of it.
++            Ok(_) | Err(Errno::Isdir) | Err(Errno::Io) | Err(Errno::Access) | Err(Errno::Inval) => {}
+             Err(e) => {
+                 return Ok(e);
+             }

@@ -101,6 +101,13 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
 13. `0013-serve-host-commands-off-the-scheduler.patch` plus `sdk_host_command.rs`: the SDK
     scheduler thread never touches WASIX state for a host command. A dedicated service
     thread performs descriptor operations and completion; see below.
+14. `0014-dup2-onto-a-pipe.patch`: `fd_renumber` (wasix-libc `dup2`) flushes the target
+    descriptor before replacing it. When descriptor 1 or 2 is a pipe, as in a pipeline's
+    child, that flush reports `Inval` because the pipe is not a file, and `dup2` failed.
+    Bash saves and redirects descriptors this way for a brace group or subshell in a
+    pipeline (`{ cmd >&2; } | …`, `{ cmd > file; } | …`), so every such redirection failed
+    with `Invalid argument`. The flush result no longer fails the renumber; Linux `dup2`
+    does not flush at all.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
