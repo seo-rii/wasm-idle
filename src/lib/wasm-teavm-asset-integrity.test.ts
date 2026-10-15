@@ -127,7 +127,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 					// Annotation must not extend itself and SuppressWarnings needs value().
 					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' },
 					// Propagate cloned primitive array types to Object.clone().
-					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' },
+					// Deterministic class order and tags so compiler.wasm is byte-reproducible.
+					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,

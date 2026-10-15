@@ -64,6 +64,16 @@ browser compiler. The patch registers a listener that infers the static type of 
 reached methods and propagates primitive array types to `Object.clone()`. It changes only
 `compiler.wasm`.
 
+A sixth source patch, `scripts/teavm/patches/teavm-javac-reproducible-wasm.patch`, makes the
+`compiler.wasm` build byte-reproducible. TeaVM 0.13.1 keeps dependency-node domains in a `HashSet`
+of identity-hashed nodes (`TypeSet`), so the order in which classes are reached differs between JVM
+runs, and `TagRegistry` numbers the class tags used by `Class.isInstance`/`isAssignableFrom` range
+checks in that order; builds of identical sources produced `compiler.wasm` files that differed only
+in those `i32.const` tags. The patch puts copies of both classes with deterministic iteration (a
+`LinkedHashSet` domain and sorted class names) first on the classpath of the out-of-process TeaVM
+build daemon. They are not part of the compiled program, and the build fails if the TeaVM version
+changes.
+
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
 exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
