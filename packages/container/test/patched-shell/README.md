@@ -113,3 +113,35 @@ The binary receipt has SHA-256
 The unchanged local packaging helper produces the explicitly pinned package above.
 Its shared-memory profile remains 34/16,384 pages. New browser observations must
 be recorded separately; the original five-patch failure is retained unchanged.
+
+The new [original local-package receipt](evidence/worker-package.json) is archived
+unchanged beside its [process receipt](evidence/worker-package-process.json).
+Packaging exits 0 in 1.762 seconds with complete cleanup, and all five published
+entries pass independent byte/hash rechecks. [Metadata](evidence/worker-package-metadata.json)
+keeps that scope separate from guest execution; the original host-module graph
+and fixed SDK Worker URL policy are preserved.
+
+## Fixed resolver browser result: 17 of 18 selected checks pass
+
+At application `77c8dad608e642f5891d2bb389bbdabb41c2d7b8`, all ten real Bash
+runs reach guest execution and return code 0 in Chromium 153.0.8010.12/Linux.
+The outer gate completes in 17.671 seconds. Seventeen selected checks pass,
+including UTF-8/empty/LF/CR argv, explicit and empty environment, raw stderr,
+status 23, actual cwd, tail exec, binary pipes and the separate G0-FS sharing case.
+No browser errors or blocked requests occur. All 60 observed Workers (50 nested)
+retire to zero after owner cleanup and after closing the host context; all owned
+OS descendants are reaped without forced signals.
+
+The remaining check is **redirect-mount**: the actual pipeline returns the exact
+nine stdout bytes, but host `Directory.readFile('/binary')` reports
+`entry not found`. Successful pipe bytes do not establish that this redirect
+created a file in the intended mount. This fails guest acceptance: the outer
+process exits 1 and its supervisor exits 3. Full shell and common Container live
+fd/VFS qualification remain false.
+
+The [original browser receipt](evidence/worker-browser.json) and
+[process receipt](evidence/worker-browser-process.json) retain their exact bytes;
+[metadata](evidence/worker-browser-metadata.json) records source/binary/package,
+browser/OS and cleanup scope. The first Noexec failure remains separate. No
+assertion was removed to turn the missing file into a pass. Cancellation, public
+host-command dispatch and real Clang/BusyBox shell acceptance remain separate gates.
