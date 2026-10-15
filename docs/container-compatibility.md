@@ -1,8 +1,9 @@
 # Container compatibility ledger
 
-This ledger distinguishes tested components from release qualification. The new SDK remains
-experimental; P2 command alpha and P4 shell MVP have **not** passed their complete gates.
-Existing playground support is not evidence of container CLI support.
+This ledger distinguishes tested components and selected integration profiles from release
+qualification. The SDK remains experimental; release promotion requires the outstanding
+gates in the qualification ledger. Existing playground support is not evidence of container
+CLI support.
 
 | Capability | Implemented and tested | Remaining boundary |
 | --- | --- | --- |
@@ -15,7 +16,7 @@ Existing playground support is not evidence of container CLI support.
 | Command packages | Pinned manifest, graph/adapter allowlist, command-lazy verified assets, atomic readonly mounts; shared virtual executable command nodes for stat/access/PATH | Command nodes are typed capabilities with no readable fake executable body; general script/shebang dispatch remains unsupported |
 | Asset cache | Core CacheStorage/IndexedDB verification, independent cancellation, quota fallback; actual reload uses one body request with HTTP cache disabled | Browser eviction remains possible; no complete offline application bootstrap |
 | Workspace artifact | Explicit `wasm-run`; selected shell route additionally checks executable metadata, Wasm magic/import/memory profile. Successful changed Clang outputs can opt into the validated Preview 1 process profile | No filename-based execution permission, ELF/PE/components or automatic chmod of failed/unchanged outputs; actual public-session gate is recorded separately |
-| LLVM tool host | Pinned modified Clang/LLD, original argv/env/cwd, checked cc1/linker dispatch and separate byte fd binding; actual Node Worker and Chromium batch snapshot C/C++ compile/link/artifact checks with the unchanged full sysroot; the concrete 14-case selected header corpus verifies objects/dependencies and 1,050 header-byte identities per backend; reload reuses asset bodies | C++ profile requires explicit `-fno-exceptions`; reload runs only `--version`, not a warm full compile. Header checks are compile-only; exhaustive combinations and all header families' linked runtime support remain unqualified. Live compiler/shell integration and clean-build/release/performance gates remain; C-10 and producer/consumer C-11 stay draft |
+| LLVM tool host | Pinned modified Clang/LLD, original argv/env/cwd, checked cc1/linker dispatch and separate byte fd binding; actual Node/Chromium snapshot C/C++ and full selected-sysroot checks, plus 12 live checks per backend for compile/link/run, stdin, concurrent header visibility and cancellation; exact inode revisions guard executable output metadata | C++ requires explicit `-fno-exceptions`; the 14-case header corpus is compile-only. Actual live Bash composition, exhaustive header combinations and clean-build/release gates remain separate. Snapshot and live adapters have different visibility/cancellation contracts |
 | BusyBox | Separate producer/batch/live stacks: selected B0/B1 native, Node and Chromium differential/byte/file mutation checks; actual live cat/grep pipes and concurrent cp/file visibility | Selected applets/options only; grep `-a`/`-I` and encountered NUL bytes are rejected, while NUL-free non-UTF8 input is tested; no shell semantics implied |
 | Real Bash | Optional `adapters/wasix` session binds the actual pinned GNU Bash to common VFS and Supervisor commands. Raw byte streams, exit-only completion, bounded native queues and owner Worker lifetime pass 72/72 actual public-session checks; the actual UI additionally qualifies blocked-child interrupt and surviving-shell input | Routed foreground interrupt is host cancellation, not arbitrary POSIX signal/PTY/job-control support. The qualified compiler profile retains snapshot visibility and an exclusive writer lease |
 | Bash lifecycle | Public session owns registered command handlers, filesystem handles and a bounded SDK Worker group. Owner disposal retires its realm; late startup is cleaned up. Owner transport reports lost cleanup confirmation explicitly | One SDK owner realm per shell session; builtin CPU loops require whole-session termination. A new session needs a fresh owner; no full fork/PTY semantics |

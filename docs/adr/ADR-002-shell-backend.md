@@ -4,17 +4,23 @@ Status: candidate B implemented behind the optional WASIX adapter; public combin
 
 Decision date: 2026-10-14. Scope: C-02 and the pinned runtime below.
 
-## Current implementation (2026-10-15)
+## Current implementation (2026-10-16)
 
 Candidate B is implemented by the maintained SDK/WASIX bridge and the optional
 `@wasm-idle/container/adapters/wasix` entrypoint. Root container imports do not
 load WASIX. The original GNU Bash parser/evaluator determines command, redirect
 and pipeline behavior. Its prepared child argv/env/cwd and inherited stdio reach
 trusted registered Supervisor commands. `Directory.fromHostFileSystem` delegates
-the shell's live filesystem calls to the common VFS; Clang still uses the explicit
-snapshot writer-lease profile. Open shell output files survive a normal snapshot
+the shell's live filesystem calls to the common VFS. The default Clang route uses
+the explicit snapshot writer-lease profile. Open shell output files survive a normal snapshot
 commit with their inode, offset and append contract, including nonzero guest exit.
 Crashes/cancellation discard unpublished compiler changes.
+
+The optional `llvm-clang-tool-host-live-v1` command adapter delegates compiler file
+operations and byte descriptors to the same owner transport. It preserves completed
+writes on cancellation and supports concurrent file visibility. Its separate actual
+Node/Chromium command receipts pass 12 checks each; composing that profile with actual
+Bash requires its own acceptance gate. Neither profile changes the other's contract.
 
 The JavaScript owner never performs WASIX work that can wait for one of its own
 filesystem callbacks. Command preparation stays on the guest side, and a service

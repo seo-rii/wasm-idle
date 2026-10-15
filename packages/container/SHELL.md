@@ -89,11 +89,16 @@ executable; data files, objects, and unsupported modules remain data. An explici
 registered `wasm-run` route can support non-executable input without claiming
 direct execution support.
 
-Clang uses its snapshot adapter. Shell redirection descriptors opt into retaining
+The default Clang profile uses its snapshot adapter. Shell redirection descriptors opt into retaining
 their inode/offset across that snapshot. Writes and new opens are blocked while
 the writer lease is held; a commit removing a linked open inode reports a
 filesystem conflict. See [FS.md](FS.md). This does not make snapshot compilation
 concurrently writable or a live filesystem adapter.
+
+The optional `adapters/clang-live` entrypoint provides a separate compiler profile
+with live filesystem calls and delegated byte endpoints. Completed writes remain
+visible after cancellation. See [CLANG.md](CLANG.md) for its contract and actual
+command receipts; qualification of a shell using it is a separate integration gate.
 
 ## MessagePort owner API
 
