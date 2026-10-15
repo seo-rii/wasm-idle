@@ -6,15 +6,15 @@ import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-c
 import { FULL_SYSROOT_SHA256, loadClangBrowserInputs } from '../packages/container/scripts/clang-browser-inputs.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
-// SDK with bridge patches 0001-0012 and directory host-command routing; see the bridge README.
+// SDK with bridge patches 0001-0013: directory routing and host-command work off the scheduler thread.
 export const PACKAGE_RECEIPT = {
 	bytes: 2605,
-	sha256: 'c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44'
+	sha256: 'ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85'
 };
-export const BINARY_RECEIPT_SHA256 = '8d8bad7cf82dcb629d5c0061f0ed5f92a51e5a55f0162a2572c86b88e47801a7';
+export const BINARY_RECEIPT_SHA256 = '947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6';
 export const SDK_WASM = {
-	bytes: 9191476,
-	sha256: '647f97d834037cf66f1bd4e2ca02d43b4aeed75b05ba1f87b4a78b5e541d02ff'
+	bytes: 9215380,
+	sha256: '9fb4a0aced4526547a061599f3ad8522e22cef766f33a73e5566de85687661af'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 // BusyBox B1, qualified live in runtimes/wasm-busybox/LIVE.md.
