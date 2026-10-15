@@ -7,6 +7,39 @@ import type { DelegatedReader, DelegatedStdio, DelegatedWriter } from '../../typ
 import type { WasiFileSystem, WasiPathReference, WasiDirectoryEntry } from '../wasi/host.js';
 import type { WasiStdio } from '../wasi/stdio.js';
 
+// VFS descriptors never block, so a regular-file transfer larger than the RPC data
+// area repeats until complete, matching batch results. Bytes already transferred are
+// reported instead of a later chunk's errno, as a POSIX partial transfer would be.
+// Channel failures are never hidden.
+function readChunks(length: number, chunk: (offset: number, length: number) => Uint8Array): Uint8Array {
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < length) {
+      const requested = Math.min(length - total, RPC_BYTES), bytes = chunk(total, requested);
+      if (bytes.length > requested) throw new FsError('EIO', 'Live read exceeded its request');
+      parts.push(bytes); total += bytes.length;
+      if (bytes.length < requested) break;
+    }
+  } catch (error) { if (!total || !(error instanceof FsError)) throw error; }
+  if (parts.length === 1) return parts[0]!;
+  const result = new Uint8Array(total); let offset = 0;
+  for (const part of parts) { result.set(part, offset); offset += part.length; }
+  return result;
+}
+function writeChunks(bytes: Uint8Array, chunk: (offset: number, bytes: Uint8Array) => number): number {
+  let total = 0;
+  try {
+    while (total < bytes.length) {
+      const requested = bytes.subarray(total, total + RPC_BYTES), n = chunk(total, requested);
+      if (!Number.isSafeInteger(n) || n < 0 || n > requested.length) throw new FsError('EIO', 'Live write reported an invalid count');
+      total += n;
+      if (n < requested.length) break;
+    }
+  } catch (error) { if (!total || !(error instanceof FsError)) throw error; }
+  return total;
+}
+
 export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
   return {
     paths: {
@@ -26,10 +59,10 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
     lstat: (path, options) => call(Operation.Lstat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['lstat']>,
     fstat: (fd) => call(Operation.Fstat, [fd]).value as ReturnType<WasiFileSystem['fstat']>,
     getDirectoryPath: (fd) => call(Operation.DirectoryPath, [fd]).value as string,
-    read: (fd, length) => call(Operation.Read, [fd, Math.min(length, RPC_BYTES)]).bytes!,
-    pread: (fd, length, offset) => call(Operation.Pread, [fd, Math.min(length, RPC_BYTES), offset]).bytes!,
-    write: (fd, bytes) => call(Operation.Write, [fd], bytes.subarray(0, RPC_BYTES)).value as number,
-    pwrite: (fd, bytes, offset) => call(Operation.Pwrite, [fd, offset], bytes.subarray(0, RPC_BYTES)).value as number,
+    read: (fd, length) => readChunks(length, (_, n) => call(Operation.Read, [fd, n]).bytes!),
+    pread: (fd, length, offset) => readChunks(length, (done, n) => call(Operation.Pread, [fd, n, offset + done]).bytes!),
+    write: (fd, bytes) => writeChunks(bytes, (_, chunk) => call(Operation.Write, [fd], chunk).value as number),
+    pwrite: (fd, bytes, offset) => writeChunks(bytes, (done, chunk) => call(Operation.Pwrite, [fd, offset + done], chunk).value as number),
     seek: (fd, offset, whence) => call(Operation.Seek, [fd, offset, whence ?? 'set']).value as number,
     tell: (fd) => call(Operation.Tell, [fd]).value as number,
     ftruncate: (fd, size) => { call(Operation.Truncate, [fd, size]); },

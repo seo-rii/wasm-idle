@@ -42,8 +42,10 @@ The Supervisor owns the common filesystem and per-process descriptor mappings.
 Guest Workers issue synchronous RPC to that owner; only the guest Worker calls
 `Atomics.wait`. Control headers, metadata and byte payloads have fixed bounds.
 Version, process generation, monotonically increasing request ID, operation and
-lengths are checked on both sides. Large I/O repeats partial operations through a
-64 KiB data area. Directory-list metadata (names and inode statistics) must fit 64 KiB; larger
+lengths are checked on both sides. Each request carries at most 64 KiB of data.
+Regular-file reads and writes repeat those requests until the guest's request (at
+most 1 MiB per call) completes or reaches EOF, as in batch mode; standard-stream
+transfers can be partial. Directory-list metadata (names and inode statistics) must fit 64 KiB; larger
 listings return `ENOSPC` explicitly. No network or arbitrary host function RPC
 exists. Each channel can access only its own descriptor map in its container.
 
