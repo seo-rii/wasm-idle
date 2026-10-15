@@ -1,12 +1,12 @@
 import { MemoryFileSystem } from '../memory.js';
 import type { FileSystemSnapshot, MemoryFileSystemOptions, SnapshotEntry } from '../types.js';
 
-export type PersistentWorkspaceErrorCode = 'INVALID_ARGUMENT' | 'UNSUPPORTED' | 'BUSY' | 'CORRUPT' | 'STORAGE' | 'DISPOSED';
+export type PersistentWorkspaceErrorCode = 'INVALID_ARGUMENT' | 'UNSUPPORTED' | 'BUSY' | 'CORRUPT' | 'STORAGE' | 'DISPOSED' | 'RESOURCE_LIMIT';
 export class PersistentWorkspaceError extends Error {
   override readonly name = 'PersistentWorkspaceError';
   constructor(readonly code: PersistentWorkspaceErrorCode, message: string, options?: ErrorOptions) { super(message, options); }
 }
-export type PersistenceFaultPoint = 'after-blob-write' | 'before-root-publish' | 'after-root-publish';
+export type PersistenceFaultPoint = 'after-blob-write' | 'before-root-publish' | 'after-root-publish' | 'before-garbage-delete';
 export interface OpenPersistentWorkspaceOptions extends MemoryFileSystemOptions {
   readonly id: string;
   readonly maxMetadataBytes?: number;
@@ -21,7 +21,31 @@ export interface PersistentWorkspaceInspection {
   readonly committedSequence: number | null;
   readonly dirty: boolean;
   readonly recovered: boolean;
+  readonly maintenance: boolean;
   readonly lastError?: PersistentWorkspaceErrorCode;
+}
+export interface PersistentWorkspaceGarbageCollectionOptions {
+  /** Full directory enumeration is required before deletion; 1..65536, default 4096. */
+  readonly maxScannedEntries?: number;
+  /** 0..4096, default 128. Zero performs validation and a bounded scan without deletion. */
+  readonly maxDeletedBlobs?: number;
+  /** 0..1 GiB, default 64 MiB. A larger candidate remains untouched. */
+  readonly maxDeletedBytes?: number;
+  /** Unique retained content validated before any deletion; 1..1 GiB, default 128 MiB. */
+  readonly maxReferencedBytes?: number;
+}
+export interface PersistentWorkspaceGarbageCollectionResult {
+  readonly retainedRoots: number;
+  readonly referencedBlobs: number;
+  readonly scannedEntries: number;
+  readonly candidateBlobs: number;
+  readonly skippedEntries: number;
+  readonly deletedBlobs: number;
+  readonly deletedBytes: number;
+  /** False means enumeration exceeded its budget; in that case nothing was deleted. */
+  readonly scanComplete: boolean;
+  /** False means a scan or deletion budget left candidates for an explicit later call. */
+  readonly complete: boolean;
 }
 export interface PersistentWorkspace {
   readonly fs: MemoryFileSystem;
@@ -29,6 +53,8 @@ export interface PersistentWorkspace {
   inspect(): PersistentWorkspaceInspection;
   /** Includes unsaved /workspace content and inode identities, without toolchain/cache data. */
   exportSnapshot(): FileSystemSnapshot;
+  /** Explicit owner-locked maintenance; never runs automatically on flush or quota failure. */
+  collectGarbage(options?: PersistentWorkspaceGarbageCollectionOptions): Promise<PersistentWorkspaceGarbageCollectionResult>;
   /** Does not implicitly flush, delete files, or touch runtime asset caches. */
   dispose(): Promise<void>;
 }
@@ -146,9 +172,11 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
     let sequence = 0;
     let recovered = false;
     let lastError: PersistentWorkspaceErrorCode | undefined;
+    let maintenanceError: PersistentWorkspaceErrorCode | undefined;
     let disposed = false;
     let disposal: Promise<void> | undefined;
     let pending: Promise<PersistentWorkspaceInspection> | undefined;
+    let maintenance: Promise<PersistentWorkspaceGarbageCollectionResult> | undefined;
 
     const workspaceSnapshot = (): FileSystemSnapshot => {
       const snapshot = fs.exportSnapshot();
@@ -167,7 +195,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       if (await hash(bytes) !== identity.sha256) corrupt('Workspace blob digest does not match its root');
       return bytes;
     };
-    const restore = async (record: RootRecord): Promise<MemoryFileSystem> => {
+    const decodeRoot = async (record: RootRecord) => {
       if (!record || !Number.isSafeInteger(record.sequence) || record.sequence < 1 || typeof record.manifest !== 'string' || record.manifest.length > maxMetadataBytes || !digestPattern.test(record.sha256)) corrupt('Malformed workspace root record');
       const manifestBytes = encoder.encode(record.manifest);
       if (manifestBytes.length > maxMetadataBytes || await hash(manifestBytes) !== record.sha256) corrupt('Workspace root digest does not match');
@@ -194,6 +222,10 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       };
       // Check namespace, IDs, directory shape and metadata quotas before opening any blob.
       MemoryFileSystem.fromSnapshot(snapshot, policy);
+      return { value, records, snapshot };
+    };
+    const restore = async (record: RootRecord): Promise<MemoryFileSystem> => {
+      const { value, records, snapshot } = await decodeRoot(record);
       for (let i = 0; i < value.entries.length; i++) {
         const entry = value.entries[i]!;
         if (entry.type === 'file') records[i] = { ...records[i]!, data: await readBlob(entry.blob!) };
@@ -202,6 +234,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
     };
 
     const roots = await readRoots(database);
+    let retainedJournal = roots;
     for (const record of roots) {
       if (Number.isSafeInteger(record?.sequence) && record.sequence > sequence) sequence = record.sequence;
       try {
@@ -217,9 +250,9 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
     const inspect = (): PersistentWorkspaceInspection => {
       const dirty = committedGeneration === null || fs.generation !== committedGeneration;
       return Object.freeze({ id,
-        state: disposed ? 'disposed' : pending ? 'saving' : lastError ? 'error' : recovered ? 'recovered' : committedGeneration === null ? 'new' : dirty ? 'dirty' : 'saved',
+        state: disposed ? 'disposed' : pending ? 'saving' : lastError || maintenanceError ? 'error' : recovered ? 'recovered' : committedGeneration === null ? 'new' : dirty ? 'dirty' : 'saved',
         generation: fs.generation, committedGeneration, committedSequence: lastRoot?.sequence ?? null,
-        dirty, recovered, ...(lastError ? { lastError } : {}) });
+        dirty, recovered, maintenance: maintenance !== undefined, ...(lastError || maintenanceError ? { lastError: lastError ?? maintenanceError } : {}) });
     };
     const checkOpen = () => { if (disposed) throw new PersistentWorkspaceError('DISPOSED', 'Workspace persistence owner has been disposed'); };
     return Object.freeze({
@@ -228,7 +261,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       exportSnapshot() { return workspaceSnapshot(); },
       async flush() {
         checkOpen();
-        if (pending) return Promise.reject(new PersistentWorkspaceError('BUSY', 'A workspace flush is already in progress'));
+        if (pending || maintenance) return Promise.reject(new PersistentWorkspaceError('BUSY', 'Workspace storage work is already in progress'));
         if (sequence >= Number.MAX_SAFE_INTEGER - 1) return Promise.reject(new PersistentWorkspaceError('STORAGE', 'Workspace journal sequence exhausted'));
         const snapshot = workspaceSnapshot();
         const next = sequence + 1;
@@ -258,6 +291,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
           const record: RootRecord = { sequence: next, manifest, sha256: await hash(bytes) };
           await fault?.('before-root-publish');
           await publishRoot(database, record, lastRoot);
+          retainedJournal = lastRoot ? [record, lastRoot] : [record];
           lastRoot = record; committedGeneration = snapshot.generation; sequence = next; recovered = false;
           await fault?.('after-root-publish');
         };
@@ -268,11 +302,91 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
         });
         return pending;
       },
+      async collectGarbage(settings: PersistentWorkspaceGarbageCollectionOptions = {}) {
+        checkOpen();
+        if (pending || maintenance) throw new PersistentWorkspaceError('BUSY', 'Workspace storage work is already in progress');
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new PersistentWorkspaceError('INVALID_ARGUMENT', 'Invalid maintenance budgets');
+        const maxScannedEntries = settings.maxScannedEntries ?? 4096;
+        const maxDeletedBlobs = settings.maxDeletedBlobs ?? 128;
+        const maxDeletedBytes = settings.maxDeletedBytes ?? 64 * 1024 * 1024;
+        const maxReferencedBytes = settings.maxReferencedBytes ?? 128 * 1024 * 1024;
+        for (const [value, minimum, maximum] of [[maxScannedEntries, 1, 65536], [maxDeletedBlobs, 0, 4096],
+          [maxDeletedBytes, 0, 1024 * 1024 * 1024], [maxReferencedBytes, 1, 1024 * 1024 * 1024]] as const) {
+          if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new PersistentWorkspaceError('INVALID_ARGUMENT', 'Invalid maintenance budgets');
+        }
+        const collect = async (): Promise<PersistentWorkspaceGarbageCollectionResult> => {
+          const roots = await readRoots(database);
+          const references = new Map<string, { sha256: string; bytes: number }>();
+          let referenceBytes = 0;
+          // Every retained recovery root must be sound, including older roots that
+          // ordinary open does not need to restore after finding the latest one.
+          for (const record of roots) {
+            const { value } = await decodeRoot(record);
+            for (const entry of value.entries) {
+              if (entry.type !== 'file') continue;
+              const blob = entry.blob!, previous = references.get(blob.sha256);
+              if (previous && previous.bytes !== blob.bytes) corrupt('Retained roots disagree about a content blob');
+              if (!previous) {
+                referenceBytes += blob.bytes;
+                if (!Number.isSafeInteger(referenceBytes) || referenceBytes > maxReferencedBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Retained root validation exceeds its maintenance byte budget; no blobs were removed');
+                references.set(blob.sha256, blob);
+              }
+            }
+          }
+          // Losing either a current or recovery root is not evidence that its
+          // blobs are orphaned. The owner itself is the only admitted publisher.
+          if (roots.length !== retainedJournal.length || roots.some((record, index) => {
+            const known = retainedJournal[index]!;
+            return record.sequence !== known.sequence || record.manifest !== known.manifest || record.sha256 !== known.sha256;
+          })) {
+            corrupt('Workspace journal changed outside its persistence owner; no blobs were removed');
+          }
+          for (const blob of references.values()) {
+            try { await readBlob(blob); }
+            catch (cause) { throw new PersistentWorkspaceError('CORRUPT', 'A retained workspace blob could not be verified; no blobs were removed', { cause }); }
+          }
+          let scannedEntries = 0, skippedEntries = 0, deletedBlobs = 0, deletedBytes = 0;
+          const candidates: { name: string; bytes: number }[] = [];
+          const result = (scanComplete: boolean): PersistentWorkspaceGarbageCollectionResult => Object.freeze({
+            retainedRoots: roots.length, referencedBlobs: references.size, scannedEntries, candidateBlobs: candidates.length,
+            skippedEntries, deletedBlobs, deletedBytes, scanComplete, complete: scanComplete && deletedBlobs === candidates.length
+          });
+          // DOM async iteration is not present in every TypeScript DOM library.
+          const listing = directory as FileSystemDirectoryHandle & { entries(): AsyncIterableIterator<[string, FileSystemHandle]> };
+          for await (const [name, handle] of listing.entries()) {
+            if (scannedEntries === maxScannedEntries) return result(false);
+            scannedEntries++;
+            // Never recurse, remove journal records, or touch unknown owner files.
+            if (handle.kind !== 'file' || !digestPattern.test(name)) { skippedEntries++; continue; }
+            if (references.has(name)) continue;
+            const bytes = (await (await directory.getFileHandle(name)).getFile()).size;
+            if (!Number.isSafeInteger(bytes) || bytes < 0) corrupt('Invalid orphan blob size; no blobs were removed');
+            candidates.push({ name, bytes });
+          }
+          candidates.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+          for (const candidate of candidates) {
+            if (deletedBlobs === maxDeletedBlobs || candidate.bytes > maxDeletedBytes - deletedBytes) continue;
+            await fault?.('before-garbage-delete');
+            await directory.removeEntry(candidate.name);
+            deletedBlobs++; deletedBytes += candidate.bytes;
+          }
+          return result(true);
+        };
+        // Set the owner operation before the first await, excluding flush and
+        // other collectors. Disposal waits for this operation under the same lock.
+        maintenance = collect().then(result => { maintenance = undefined; maintenanceError = undefined; return result; }, (cause: unknown) => {
+          maintenance = undefined;
+          maintenanceError = cause instanceof PersistentWorkspaceError ? cause.code : 'STORAGE';
+          throw cause instanceof PersistentWorkspaceError ? cause : new PersistentWorkspaceError('STORAGE', 'Workspace maintenance failed; committed roots and current memory were preserved', { cause });
+        });
+        return maintenance;
+      },
       dispose() {
         if (disposal) return disposal;
         disposed = true;
         disposal = (async () => {
           try { await pending; } catch { /* Failure remains visible through inspect/export. */ }
+          try { await maintenance; } catch { /* Maintenance cannot make disposal lose its lock. */ }
           database.close(); await release();
         })();
         return disposal;

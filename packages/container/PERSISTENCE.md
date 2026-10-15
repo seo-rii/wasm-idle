@@ -51,11 +51,53 @@ a corrupt workspace with an empty one. Lowering memory or metadata limits can
 make a previously valid workspace unrecoverable under the new limits.
 
 There are at most two committed root records after publication. Orphan and retired
-blobs are currently retained: garbage collection and a user-facing deletion API
-are follow-up work. Repeated edits can therefore exhaust origin storage. Such a
-write failure rejects `flush()` without deleting committed roots or the current
-in-memory files. The default metadata limit is 16 MiB and is configurable up to
-64 MiB. Memory byte and inode budgets also apply during recovery.
+blobs remain until the host explicitly requests the bounded maintenance operation
+below. A write failure rejects `flush()` without deleting committed roots or the
+current in-memory files; collection is never an automatic response to quota errors.
+The default metadata limit is 16 MiB and is configurable up to 64 MiB. Memory byte
+and inode budgets also apply during recovery.
+
+## Explicit orphan collection
+
+```ts
+const result = await workspace.collectGarbage({
+  maxScannedEntries: 4096,
+  maxDeletedBlobs: 128,
+  maxDeletedBytes: 64 * 1024 * 1024,
+  maxReferencedBytes: 128 * 1024 * 1024,
+});
+```
+
+Collection holds the existing workspace owner lock and excludes concurrent flush
+or collection (`BUSY`). It first validates **every** retained journal root, their
+namespace/inode/metadata limits, and the size and digest of every uniquely
+referenced blob. This includes the previous recovery root, even when the current
+root is valid. An invalid root, missing/corrupt referenced blob, or change to the
+owner's known current or previous journal records fails with `CORRUPT` before deletion.
+Exceeding the referenced-byte validation budget fails with `RESOURCE_LIMIT`.
+Collection cannot repair a corrupt journal or discard a recovery root.
+
+Only regular files named by a lowercase SHA-256 digest directly inside this
+workspace's private OPFS directory can be candidates. References from all retained
+roots protect a blob. Unknown names and directories remain untouched; collection
+never recurses, edits root records, touches another workspace or runtime cache,
+modifies the in-memory VFS, or publishes dirty editor data.
+
+The entire bounded directory scan must finish before deletion starts. If more
+entries exist than `maxScannedEntries`, the result has `scanComplete: false` and
+zero deletions; at most one extra iterator entry is observed to detect overflow.
+The caller can explicitly retry with a larger scan budget. With a complete scan,
+only the deletion count/byte budget is spent, preserving larger or remaining
+candidates for another call. `maxDeletedBlobs: 0` is a validation-and-scan dry run.
+
+The frozen result reports retained roots, unique referenced blobs, scanned and
+skipped entries, candidates, deleted blobs/bytes, `scanComplete`, and `complete`.
+`complete` is true only when enumeration finished and every candidate was removed.
+Budgets allow 1–65,536 scanned entries, 0–4,096 deleted blobs, 0–1 GiB deleted bytes,
+and 1 byte–1 GiB of unique referenced content validation. Storage errors reject;
+earlier successful orphan deletions may remain, but committed data stays protected.
+An explicit successful retry clears the previous maintenance error while leaving
+an unrelated failed save visible.
 
 ## Ownership and save status
 
@@ -68,12 +110,13 @@ continue to access the in-memory filesystem.
 `inspect()` includes the current memory generation, the committed generation and
 journal sequence, `dirty`, `recovered`, save state, and the last typed error code.
 Mutations while a flush is pending are permitted. That flush publishes its initial
-snapshot and leaves the newer memory generation dirty. Concurrent `flush()` calls
-reject with `BUSY`. The generation is a VFS-wide revision, so changes to temporary
+snapshot and leaves the newer memory generation dirty. Concurrent storage operations
+reject with `BUSY`; `inspect().maintenance` reports an active collection. The generation
+is a VFS-wide revision, so changes to temporary
 or package mounts may conservatively mark the owner dirty even though those
 mounts are excluded from the saved root.
 
-`dispose()` is idempotent. It waits for a flush already in progress and releases
+`dispose()` is idempotent. It waits for flush or maintenance already in progress and releases
 ownership; it does not initiate a flush or delete files. Do not rely on asynchronous
 dispose or flush completing during page teardown. The retained memory filesystem
 and `exportSnapshot()` remain readable after disposal, while new flush calls fail
@@ -121,5 +164,17 @@ Passing conflicting container/owner quotas or a disposed owner fails explicitly.
 
 This is a persistence primitive with Chromium/Linux coverage, not qualification of
 the complete persistent container beta. Editor integration, autosave UI,
-export UI, orphan collection, broader browser coverage and process-crash
+export UI, broader browser coverage and process-crash
 testing during an active IndexedDB transaction remain separate work.
+
+The separate [maintenance receipt](test/fixtures/persistence-gc-browser-evidence.json)
+records 21 passing Chromium 153/Linux scenarios: the existing 15 persistence/save
+checks plus six explicit collection scenarios. They cover an actual interrupted
+flush orphan, dry-run/scan/count/byte/validation budgets, both retained recovery
+roots, invalid older metadata and referenced bytes, unknown files and directories,
+other workspaces/caches, failed-removal retry, and flush/dispose/cross-tab ownership
+collisions. The original [process record](test/fixtures/persistence-gc-browser-process-evidence.json)
+reports exit 0 in 2.550 seconds with every owned descendant reaped and no cleanup
+signals or errors. [Provenance](test/fixtures/persistence-gc-browser-metadata.json)
+distinguishes the run's base commit from its independently hashed working-tree
+source and preserves all input rechecks; earlier receipts remain unchanged.

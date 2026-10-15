@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "qualification": "Chromium OPFS/IndexedDB owner and explicit bounded orphan maintenance; not integrated shell or production deployment",
+  "originalRun": "/data/seorii-container-20261014/persistence-gc-browser-20261015T123324Z",
+  "priorPrivateRun": "/data/seorii-container-20261014/persistence-gc-browser-20261015T122728Z",
+  "originalEvidence": {
+    "persistence-gc-browser-evidence.json": {
+      "bytes": 9179,
+      "sha256": "7e7715b9015a4a2d578508629d40f3e72871d2b09ee52d993a0d1bf7db4cc12f"
+    },
+    "persistence-gc-browser-process-evidence.json": {
+      "bytes": 874,
+      "sha256": "2c461c683b1f65db66a9348e8ec674ad756691c29b2e86d4ab827d33dd497486"
+    }
+  },
+  "testedApplicationCommit": "fcd484f84cbb7b7ad58fccf7bd1e6a577015ba98",
+  "applicationCommitScope": "Existing base commit; the GC source and fixture were uncommitted during this run and are independently identified by their recorded hashes",
+  "testedPersistenceSourceSha256": "4cf9405deaddb91e22e2c16620b7285d895c76a5928099ac14102e6961d0410e",
+  "testedFixtureScriptSha256": "f6f47e06ab24a23fc3ff07a3a860e0b2e0dd0ca6494154b83b9b96abdc5281a1",
+  "inputPinsRecheckedAfterRun": true,
+  "inputPins": {
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/scripts/test-persistence-browser.mjs": {
+      "bytes": 40116,
+      "sha256": "f6f47e06ab24a23fc3ff07a3a860e0b2e0dd0ca6494154b83b9b96abdc5281a1"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/src/fs/persistence/index.ts": {
+      "bytes": 24285,
+      "sha256": "4cf9405deaddb91e22e2c16620b7285d895c76a5928099ac14102e6961d0410e"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/dist/fs/persistence/index.js": {
+      "bytes": 23851,
+      "sha256": "8fd8abe05e436c685722a0f483b6df88d22f8764487d11fd67f74c7a087edcc7"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/dist/fs/memory.js": {
+      "bytes": 49527,
+      "sha256": "6df40e4219c2ed3b576c1d60e5e03706ce6a59f34d88294920017cb976effd70"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/dist/workspace/backup.js": {
+      "bytes": 8360,
+      "sha256": "89d85173407ecfec9e052fe87737acf01cf05b6ae8e558683fc855b8bc2624d6"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/dist/workspace/save.js": {
+      "bytes": 5813,
+      "sha256": "7ba843aeef7b07b2b61355d282e36fb9b9371081f8ba5ca869e524bb75660208"
+    },
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/test/fixtures/command.wasm": {
+      "bytes": 2643,
+      "sha256": "d0677464798321b70268b0db86df56fc8e6c4a52d5c57f2a0950c5eab0f25982"
+    }
+  },
+  "processExitCode": 0,
+  "processCleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2374450,
+        "exitCode": 0
+      },
+      {
+        "pid": 2374452,
+        "exitCode": 0
+      },
+      {
+        "pid": 2374455,
+        "exitCode": 0
+      },
+      {
+        "pid": 2374456,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 2.55,
+  "fixtureCount": 21,
+  "garbageCollectionScenarios": 6,
+  "completedLog": "/home/seorii/logs/persistence-gc-browser-20261015T123324Z.log"
+}
