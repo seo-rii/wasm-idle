@@ -10,9 +10,14 @@ nor an import verifier result establishes a supported shell backend.
 The patched SDK library and external snapshot example have passed a real Rust
 typecheck, as recorded by the preceding source-bridge change. A built SDK binary,
 real guest exec/wait and common Supervisor fd/filesystem bindings remain separate
-gates. The original producer built a real Bash Wasm/WEBc candidate. The startup
-cwd addition requires a fresh producer build and actual browser qualification;
-the historical receipts below do not cover that addition.
+gates. Both the original producer and the startup cwd variant have built real
+Bash Wasm/WEBc candidates. Their distinct receipts below cover build/import
+inspection; actual browser qualification is recorded separately.
+
+The rebuilt SDK resolver on [#196](https://github.com/seo-rii/wasm-idle/pull/196)
+and this Bash variant pass all 18 selected actual Chromium observations on
+[#199](https://github.com/seo-rii/wasm-idle/pull/199). Those results cover native
+WASIX Directory/stdio only; common Container ownership and shell MVP remain open.
 
 ## Startup cwd compatibility
 
@@ -52,6 +57,47 @@ other WASIX command binaries, replace dirfd/path semantics or implement the
 trusted Supervisor command registry, common live fd/VFS or shell MVP.
 
 ## Archived real build and read-only verification
+
+The startup cwd variant was built offline from application commit
+`7d15375967ed557e724488e82bab75cb5c4b41cb` on 2026-10-15. Its unchanged
+[build receipt](evidence.startup-cwd-build.json) records all 14 successful
+commands and the separate 708-byte startup object with SHA-256
+`653f5b867e93d0a1a9059e2a60bf479d3e531ff6a0308d25bc9cc71cb4699a7a`.
+The [process receipt](evidence.startup-cwd-process.json) records exit 0,
+129.466 seconds and complete descendant cleanup with no cleanup errors or
+termination signals. `make shell` took 110.262 seconds in this local run.
+These observations do not establish clean/cold build performance or a speedup
+over the earlier build.
+
+The [recheck receipt](evidence.startup-cwd-recheck.json) preserves the original
+build/process digests, all 29 supervisor source/input/tool pins, complete input
+archive identities and all 25 source-materials file identities. The actual
+extracted libc and CRT match `startup-cwd.lock.json`. The pack includes the
+startup source, manifest and native fixture; the second link object has its own
+artifact identity. The 1,811,371-byte Wasm validates with the same 50 imports, 15 exports,
+seven-i32 exec signature and shared memory profile described below. Its SHA-256
+is `2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c`.
+The 1,812,678-byte WEBc has SHA-256
+`045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4`.
+The 10,447,539-byte source-materials archive remains
+`completeReleaseSourcePack: false`. No binary or archive is committed to Git.
+
+Verify this variant's pinned receipts and current executable source dependencies
+without external artifacts, or supply both paths to recheck complete inputs,
+both objects, artifacts, actual CRT/libc and the full Wasm inventory:
+
+```sh
+node runtimes/wasm-bash/bridge/producer/verify-startup-cwd-evidence.mjs
+
+node --disable-wasm-trap-handler --wasm-num-compilation-tasks=1 \
+  runtimes/wasm-bash/bridge/producer/verify-startup-cwd-evidence.mjs \
+  --artifact-root /private/startup-cwd-bash-build \
+  --input-cache /private/inputs
+```
+
+These readers never execute a guest. `runtimeQualified` remains false in the
+producer receipts, and common Container fd/VFS, command dispatch, foreground
+cancellation and the Clang/BusyBox shell scenario remain independent gates.
 
 The original build ran at application commit
 `74abe3922c5a248b57ef0cb2d38d2d9a86fa1fc5` on 2026-10-14 and finished with
