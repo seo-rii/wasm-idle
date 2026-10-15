@@ -264,3 +264,17 @@ test('with a 50 ms compile interrupt, three consecutive runs pass cold, warm and
 		assert.equal((await archived(`interrupt-run-${index}-process`)).exitCode, 0);
 	}
 });
+
+test('the failure runs: integrity, compile error and missing command stay contained', async () => {
+	const runs = await Promise.all([1, 2, 3].map((index) => archived(`failure-run-${index}`)));
+	for (const receipt of runs) {
+		assert.equal(receipt.applicationCommit, 'd7ae6f8cca75e430a29b3179def468455861624f');
+		assert(receipt.qualification.checks.filter((check) => check.id.startsWith('failure:') && check.id !== 'failure:owned-workers-retired').every((check) => check.passed));
+		const failure = receipt.runs.find((run) => run.run === 'failure').result;
+		assert.equal(Buffer.from(failure.result.stdout).toString(), 'mkdir=126\nretry=126\nbad=1\nno-artifact\nmissing=127\nhello\n');
+	}
+	assert.deepEqual(runs.map((receipt) => receipt.qualification.passed), [47, 47, 46]);
+	// The third run missed only the owner Worker's five-second retirement window.
+	assert.deepEqual(runs[2].qualification.checks.filter((check) => !check.passed).map((check) => check.id), ['failure:owned-workers-retired']);
+	assert.equal(runs[2].workersAfterContextClose, 0);
+});

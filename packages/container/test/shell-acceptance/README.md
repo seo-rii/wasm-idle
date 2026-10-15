@@ -177,6 +177,7 @@ Every attempt's original browser and process receipts are archived under
 | [`interrupt-run-2`](evidence/interrupt-run-2.json) | `46522577` | With the service SDK: **38/38**, cold, warm and interrupt |
 | [`interrupt-run-3`](evidence/interrupt-run-3.json), [`-4`](evidence/interrupt-run-4.json) | `46522577` | Cold and warm pass; the second interrupt arrived 1 ms before the compile completed with 0, so Bash printed `clang=0` and kept the output |
 | [`interrupt-run-5` … `-7`](evidence/) | `5c55b7b7` | **All three pass 38/38**, cold, warm and interrupt, with the 50 ms compile interrupt |
+| [`failure-run-1` … `-3`](evidence/) | `d7ae6f8c` | With the failure run: **47/47, 47/47**, and 46/47 where only the owner Worker outlived the five-second retirement window |
 
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.
