@@ -43,7 +43,10 @@ Filesystem string errors are translated separately by each guest ABI adapter.
 relative canonical entry paths. Directories must be present. It rejects duplicate
 paths, file/directory conflicts, quota overflow, symlink loops and capability
 escape, and publishes the entire tree only after validation. Existing mounts cannot
-overlap. Mount publication requires no host descriptors or active snapshot lease.
+overlap. Mount publication rejects an active snapshot lease. Live descriptors may
+remain open: additive publication preserves inode objects, shared offsets, and
+retained unlinked data. Quotas include those unlinked bytes and nodes. Publication
+is synchronous, so no guest sees a partially added dependency closure.
 It validates the tree shape, not asset hashes; the package loader must verify bytes
 before calling it.
 
@@ -56,13 +59,20 @@ operation with one package. Identity-based repeated-mount policy belongs to the
 supervisor; an already mounted path is still rejected by the filesystem API.
 
 `acquireSnapshot()` obtains a global writer lease and returns a structured-clone
-snapshot plus `commit(result)` and `discard()`. Acquire rejects open host
+snapshot plus `commit(result)` and `discard()`. Acquire rejects live users and open host
 descriptors; new descriptors and all mutations fail with `EBUSY` during the lease.
 Read-only path queries remain available. A Worker can restore a private filesystem
 with `MemoryFileSystem.fromSnapshot(snapshot)`, run a guest, then call
 `exportSnapshot()` for its result. Regular guest exit, including nonzero exit, may
 commit; runtime crash, cancellation and timeout must discard. The adapter makes
 that exit-policy decision. This is snapshot visibility, not live filesystem access.
+
+`acquireLive()` registers a live filesystem user and returns an idempotent
+`release()`. Multiple live users and editor operations share completed VFS
+operations immediately. An active snapshot rejects live acquisition with `EBUSY`.
+A live user excludes snapshots even after closing all its current descriptors;
+it may open more before exiting. The Supervisor releases this ownership only
+after runtime cleanup. Already published live writes remain after crash or cancel.
 
 Commit validates the entire candidate, verifies the generation and mount table,
 and rejects changes to readonly entries or mount-root metadata before publishing.

@@ -274,7 +274,8 @@ test('snapshot admission and parsing reject host handles, malformed trees, quota
   fs.writeFile('file', bytes('data'));
   const fd = fs.open('file');
   assert.throws(() => fs.acquireSnapshot(), error('EBUSY'));
-  assert.throws(() => fs.mountReadonly('/opt/pkg', []), error('EBUSY'));
+  fs.mountReadonly('/opt/pkg', []);
+  assert.deepEqual(fs.read(fd, 4), bytes('data'));
   fs.close(fd);
   const snapshot = fs.exportSnapshot();
   const mutate = (fn) => { const copy = structuredClone(snapshot); fn(copy); return copy; };

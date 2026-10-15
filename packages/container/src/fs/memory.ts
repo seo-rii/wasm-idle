@@ -72,6 +72,7 @@ export class MemoryFileSystem {
   private usedBytes = 0;
   private revision = 0;
   private lease: symbol | undefined;
+  private liveUsers = 0;
   readonly maxBytes: number;
   readonly maxInodes: number;
 
@@ -644,8 +645,16 @@ export class MemoryFileSystem {
     return fs;
   }
 
+  /** Live users share operations immediately; a private snapshot cannot replace their tree. */
+  acquireLive(): { release(): void } {
+    if (this.lease) throw new FsError('EBUSY', 'A snapshot process holds the filesystem writer lease');
+    this.liveUsers++;
+    let released = false;
+    return { release: () => { if (!released) { released = true; this.liveUsers--; } } };
+  }
+
   acquireSnapshot(): FileSystemLease {
-    if (this.lease || this.descriptors.size) throw new FsError('EBUSY', 'Snapshot requires no active lease or open host descriptors');
+    if (this.lease || this.descriptors.size || this.liveUsers) throw new FsError('EBUSY', 'Snapshot requires no live process, active lease or open host descriptors');
     const token = Symbol('filesystem-lease');
     const generation = this.revision;
     const snapshot = this.exportSnapshot();
@@ -702,7 +711,7 @@ export class MemoryFileSystem {
     if (!Array.isArray(packages)) throw new FsError('EINVAL', 'Packages must be an array');
     if (packages.length === 0) return;
     if (packages.length > this.maxInodes) throw new FsError('ENOSPC', 'Package count exceeds inode quota');
-    if (this.lease || this.descriptors.size) throw new FsError('EBUSY', 'Mount changes require no active lease or descriptors');
+    if (this.lease) throw new FsError('EBUSY', 'Mount changes require no snapshot lease');
     const original = this.exportSnapshot();
     const mounts = [...original.mounts];
     let nextInode = this.nextInode;
@@ -758,6 +767,23 @@ export class MemoryFileSystem {
         }
       }
     }
-    this.publish(candidate);
+    // Mounting is additive. Preserve inode objects and open descriptions, including
+    // unlinked open files that exportSnapshot deliberately does not serialize.
+    const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+    const retained = [...this.nodes].filter(node => !node.linked);
+    const retainedBytes = retained.reduce((total, node) => total + node.data.length + encoder.encode(node.target).length, 0);
+    if (candidate.nodes.size + retained.length > this.maxInodes || candidate.usedBytes + retainedBytes > this.maxBytes) throw new FsError('ENOSPC', 'Package exceeds quota including open unlinked files');
+    const adopted = new Map([...candidate.nodes].map(node => [node.inode, previous.get(node.inode) ?? node]));
+    const staged = [...candidate.nodes].map(node => ({
+      node: adopted.get(node.inode)!, mount: node.mount,
+      children: new Map([...node.children].map(([name, child]) => [name, adopted.get(child.inode)!]))
+    }));
+    const nodes = new Set([...adopted.values(), ...retained]);
+    // No allocation, await, or validation after publication begins.
+    for (const entry of staged) { entry.node.children = entry.children; entry.node.mount = entry.mount; }
+    this.root = adopted.get(candidate.root.inode)!;
+    this.nodes = nodes; this.mounts = candidate.mounts;
+    this.usedBytes = candidate.usedBytes + retainedBytes; this.nextInode = candidate.nextInode;
+    this.revision++;
   }
 }
