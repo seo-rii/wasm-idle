@@ -147,6 +147,20 @@ try {
   await save();
   checks.push('UI-09: invalid UTF-8 never replaces the existing editor buffer or corrupts binary workspace files');
 
+  const originalTextBytes = [239, 187, 191, 97, 13, 10, 98, 13, 10];
+  await page.evaluate(async bytes => {
+    const { client } = await (await import('/main.mjs')).application;
+    await client.fs.writeFile('/workspace/windows.txt', Uint8Array.from(bytes));
+  }, originalTextBytes);
+  await page.locator('#directory-form button').click(); await page.getByRole('button', { name: 'windows.txt', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#file-path').value === '/workspace/windows.txt');
+  assert.equal(await page.locator('#editor').inputValue(), '\ufeffa\nb\n');
+  assert.equal(await page.locator('#publish').isDisabled(), true);
+  await save(); assert.deepEqual(await read('/workspace/windows.txt'), originalTextBytes);
+  await page.getByRole('button', { name: 'main.c', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#file-path').value === '/workspace/main.c');
+  checks.push('UI-14: opening and saving an untouched UTF-8 BOM/CRLF file preserves its exact bytes despite browser text display normalization');
+
   await page.reload(); await ready(page); await page.locator('#start').click();
   await page.waitForFunction(() => document.querySelector('#terminal-status').textContent.startsWith('Running process'));
   await page.locator('#interrupt').click();
