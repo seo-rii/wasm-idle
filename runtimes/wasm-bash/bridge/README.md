@@ -508,3 +508,27 @@ first command of one shell still reported 0 while its Supervisor record held 23,
 those runs also hung once before any dispatch. A slow first command outlasts the WASIX
 50 ms deep-sleep threshold of Bash's `proc_join`, which makes the deep-sleep resume path a
 candidate; the cause is not yet traced and nothing here claims to fix it.
+
+### First-command status loss: SIGQUIT before the status
+
+A local diagnostic build traced the remaining loss. It applies the ten patches plus
+[`diagnostics/9999-host-status-diagnostics.patch`](diagnostics/9999-host-status-diagnostics.patch),
+which only adds `host_diag` debug records; it is not part of the patch set. The SDK logger
+forwards every thread's records to the owner, which captured them in Chromium. With that
+timing, 12 of 12 repeated `HOST-STATUS` scripts reported `exit=0`
+([receipt](diagnostics/status-trace-browser.json)). The records show:
+
+- **Bash uses a real fork.** It runs external commands with `proc_fork` and
+  `copy_memory = true`, not vfork. The forked child's guest thread therefore stays alive,
+  waiting in the non-vfork exec branch for the host command.
+- **The status is already 0 before the host command finishes.**
+  `HostCommandProcess::finish` copied `WasiEnv::on_exit` and called
+  `signal_process(SIGQUIT)` before `terminate(code)`. When the forked child's waiting
+  thread handled SIGQUIT first, its default disposition published status 0. The status is
+  set only once, so the trace records `process terminate code=23 already=Some(Some(0))`,
+  and Bash's `waitpid(-1)` then reports 0.
+
+`finish` now publishes the status first and signals afterwards. A native guest's
+`on_exit` runs on its only thread after `_start` returns, so it does not have this race.
+The earlier hypotheses (0010, deep sleep) did not explain the loss; deep sleep is not
+enabled for these runtimes.

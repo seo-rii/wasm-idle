@@ -142,10 +142,15 @@ impl HostCommandProcess {
         self.control.revoke();
         if !env.disable_fs_cleanup {
             env.state.fs.close_all().await;
-            env.process.signal_process(Signal::Sigquit);
         }
+        // Publish the status before signalling. A forked child's guest thread can
+        // still be waiting in exec; if it handled SIGQUIT first, the signal's
+        // default status 0 would become the process status, which is set once.
         env.process.terminate(code);
         env.thread.set_status_finished(Ok(code));
+        if !env.disable_fs_cleanup {
+            env.process.signal_process(Signal::Sigquit);
+        }
     }
 }
 
