@@ -20,6 +20,7 @@ been implemented; unpassed promotion gates remain explicit.
 | Fixed SDK actual Bash execution                | [C-02 execution #197](https://github.com/seo-rii/wasm-idle/pull/197) (draft)    | #195 plus rebuilt #196 assets; historical 17/18 result and startup cwd/redirect failure preserved; unchanged contract passes on #199 |
 | Selected Bash libc startup cwd                 | [C-02 startup #198](https://github.com/seo-rii/wasm-idle/pull/198) (draft)      | #192; separately pinned constructor/second object, native guards and actual producer build/import verification pass; selected runtime evidence on #199 |
 | Startup cwd actual Bash execution              | [C-02 startup execution #199](https://github.com/seo-rii/wasm-idle/pull/199) (draft) | #197 plus #198 Bash bytes; unchanged ten real commands and 18/18 native WASIX checks pass, including relative redirect visibility; common Container bridge remains unqualified |
+| Forced Bash backend owner cleanup              | [C-02 owner cancellation #200](https://github.com/seo-rii/wasm-idle/pull/200) (draft) | #199; 19/19 actual Chromium checks across CPU loop, blocked stdin and pending Bash download pass with fresh-backend recovery; public Container cancellation and surviving-shell interrupts remain unqualified |
 | Package/API                                    | [C-03 #135](https://github.com/seo-rii/wasm-idle/pull/135)                       | C-01                                                                                                                                                    |
 | VFS and writer leases                          | [C-04 #136](https://github.com/seo-rii/wasm-idle/pull/136)                       | C-03                                                                                                                                                    |
 | Byte pipes/fds                                 | [C-05 #137](https://github.com/seo-rii/wasm-idle/pull/137)                       | C-04                                                                                                                                                    |
@@ -174,7 +175,8 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD/CANCEL | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199, including empty arguments, exit status and relative redirect visibility, with all Workers retired; common Container bindings are not installed | C-02 JavaScript command registry, common live fd/VFS ownership, foreground cancellation/recovery and actual Clang/BusyBox shell acceptance before C-15; original Noexec and 17/18 failure receipts remain preserved |
+| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199, including empty arguments, exit status and relative redirect visibility, with all Workers retired; common Container bindings are not installed | C-02 JavaScript command registry, common live fd/VFS ownership and actual Clang/BusyBox shell acceptance before C-15; original Noexec and 17/18 failure receipts remain preserved |
+| G0-CANCEL | #200 passes 19/19 checks for forced trusted host Worker-group cleanup during actual CPU loop, blocked stdin and partial Bash download, followed by same-page fresh-backend recovery; all observed Workers retire | Public Container cancellation, surviving-shell foreground interruption, POSIX signals and the Container asset-service cancellation contract remain separate; this experiment does not complete the whole G0-CANCEL gate |
 | G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
 | B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
 | P4 / shell MVP        | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent                                                                                                     | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users                                                                                                                   |
@@ -484,9 +486,42 @@ recovered; it does not replace or relabel that admission failure.
 
 These results qualify only the selected native WASIX `Directory` observations.
 `commonContainerFdVfsQualified` and `shellBackendReady` remain false. Common Container live
-fd/VFS, JavaScript command registry, foreground cancellation/recovery and actual Clang/BusyBox
+fd/VFS, JavaScript command registry, public foreground cancellation and actual Clang/BusyBox
 shell acceptance remain open; the original #195 Noexec and #197 17/18 failures remain
 archived separately.
+
+The stacked [#200 forced owner cleanup](https://github.com/seo-rii/wasm-idle/pull/200), based
+on #199, reuses the same pinned SDK/Bash bytes at application source
+`266469ff21821f8e347fcc967bc32d3da8fb8437`. Chromium 153.0.8010.12/Linux passes all 19
+selected checks across three actual cases: a CPU loop, blocked stdin and a pending Bash
+asset response. The browser stage exits 0 in 19.216 seconds, and the supervisor also exits
+0; 14 focused unit/archive guards pass.
+
+The CPU/input guests publish actual `ready\n` bytes and their SDK waits remain pending for
+150 ms before cleanup. The blocked-input case holds its stdin writer locked and open.
+The trusted host owner explicitly calls `Worker.terminate()` on three SDK children in each
+of these cases, then the page terminates that owner. The three cases observe 21 Workers,
+including 15 nested Workers. Each case has zero remaining Workers before recovery and again
+before context close. Every OS descendant is reaped without cleanup errors or forced OS
+signals; this does not mean no JavaScript Worker was forcibly terminated.
+
+Each case recovers in the same page with a fresh owner and fresh SDK shared memory, runs
+real Bash `printf recovered`, and returns code 0. The download case aborts after receiving
+16,384 of the pinned 1,812,678 Bash WEBc bytes; the server records zero active responses,
+one aborted response and zero completed responses. Partial bytes are never executed.
+
+The original browser receipt is 36,426 bytes, SHA-256
+`d5fdbace414dc5fbca66cc748781c89c1c2495dad6e48bc7120fb36d04664036`; the original process
+receipt is 1,056 bytes, SHA-256
+`ec7502bd18708492db0ed5002b483e2549e158f993f4a8efa4b93e29730ecb58`. The unchanged
+18-check normal-execution evidence remains separate.
+
+This qualifies forced trusted host Worker-group cleanup and fresh-backend recovery only.
+It does not qualify public Container cancellation, POSIX signals, a surviving shell, PTY
+semantics or the Container asset service's cancellation contract. Common live fd/VFS,
+JavaScript command registry and actual Clang/BusyBox shell acceptance remain open;
+`guestSignalQualified`, `survivingShellQualified`, `commonContainerFdVfsQualified` and
+`shellBackendReady` remain false.
 
 The selected-target full sysroot remains intact: 35,328,000 logical bytes, 2,168 files plus
 117 directories, SHA-256 `91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402`.
