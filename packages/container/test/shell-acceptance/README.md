@@ -115,6 +115,7 @@ Every attempt's original browser and process receipts are archived under
 | [`cold-timeout-warm-pass`](evidence/cold-timeout-warm-pass.json) | `97a8e329` | **Warm run passes the whole script**; cold run timed out during Clang |
 | [`streamed-run-1`](evidence/streamed-run-1.json) | `04aac7e0` | **30/30: cold and warm pass** |
 | [`streamed-run-2`](evidence/streamed-run-2.json), [`-3`](evidence/streamed-run-3.json) | `04aac7e0` | Warm passes; cold stops right after Clang completes with status 0 |
+| [`service-run-1` … `service-run-5`](evidence/) | `1df732f1` | **All five pass 30/30, cold and warm**, with the SDK that keeps host-command WASIX work off the scheduler thread |
 
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.
@@ -133,15 +134,19 @@ In the passing runs, every check holds:
 The cold and warm script take 46 and 61 seconds in the passing run; nearly all of it is the
 Clang command.
 
-**The cold run is not reliable yet.** In three of four cold runs the shell stopped making
-progress. In the two streamed ones, Clang's host command completed with status 0, the owner
-posted one more heartbeat, and then it never posted again; `./hello.wasm` was never
-dispatched. The owner did not answer cleanup and its Worker outlived the run, which is
-why the following warm run also fails `owned-workers-retired`. This matches the
-unresponsive-owner hang seen once on the shared-filesystem probe. The owner thread is
-blocked right after a host command completes, which points at the completion path that
-runs on it (`HostCommandProcess::finish` and what follows), but it is not traced yet.
+**The hang and its fix.** With the earlier SDK, three of four cold runs (and one warm run
+of the interrupt attempt) stopped right after Clang's host command completed with status
+0: the owner posted one more heartbeat and then nothing, `./hello.wasm` was never
+dispatched, and the owner did not answer cleanup. A local diagnostic SDK that logs on
+every thread captured the cycle:
 
-Heartbeats also pause for 30–40 seconds while Clang runs in passing runs. Measuring the
-VFS snapshot alone (export 0.4 s, structured clone 0.5 s for this tree) does not explain
-that pause.
+- A Bash child resolving a path below the live `/workspace` held a directory inode's write
+  lock while waiting for the owner to serve a `stat`.
+- The owner was preparing the next host command's invocation, which needs the same lock.
+
+The SDK change on the stacked SDK branch moves all host-command WASIX work to a dedicated
+service thread. With it, five consecutive runs pass all 30 checks, cold and warm. The
+whole script now takes 8–11 seconds per run instead of 39–61, because the owner no longer
+stalls while Clang's output and completion are handled. Heartbeats still show the owner
+busy for a few seconds around Clang (snapshot export, transfer and commit of the
+toolchain-sized VFS), but never for more than one five-second interval.

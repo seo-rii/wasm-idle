@@ -142,3 +142,13 @@ test('the streamed runs: one full pass, and two cold runs that stop after Clang 
 		assert.equal(cold.ownedCleanup.mode, 'forced-host-worker-termination');
 	}
 });
+
+test('with host-command work off the scheduler thread, five consecutive runs pass cold and warm', async () => {
+	for (const index of [1, 2, 3, 4, 5]) {
+		const receipt = await archived(`service-run-${index}`);
+		assert.equal(receipt.applicationCommit, '1df732f1fb0cdc1d7f902454fea2e9e0635006ec');
+		assert.equal(receipt.packageReceipt.sha256, 'ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85');
+		assert.deepEqual([receipt.qualification.passed, receipt.qualification.total, receipt.shellAcceptancePassed], [30, 30, true]);
+		assert.equal((await archived(`service-run-${index}-process`)).exitCode, 0);
+	}
+});
