@@ -1,0 +1,70 @@
+{
+	"schemaVersion": 1,
+	"originalReceipts": {
+		"startup-cwd-browser.json": {
+			"original": "/data/seorii-container-20261014/startup-cwd-shell-chromium-20261015T040604Z/browser/receipt.json",
+			"bytes": 254412,
+			"sha256": "0e0afaea1bb34193260ce7fab29205a8f2e810be32a29491864a4cad6614f5b6"
+		},
+		"startup-cwd-browser-process.json": {
+			"original": "/data/seorii-container-20261014/startup-cwd-shell-chromium-20261015T040604Z/browser.process.json",
+			"bytes": 1059,
+			"sha256": "59b61cbc217d26eb3f8b3bfcd9c652d668105cd5f9cdfe90da1553438a094e24"
+		}
+	},
+	"applicationCommit": "7c7c32c3dc3c8f6842dd59bd677457e5e9613032",
+	"bashProducerSourceCommit": "7d15375967ed557e724488e82bab75cb5c4b41cb",
+	"sdkSourceCommit": "7ceef67180e047d4703936482006a69b814662d2",
+	"packageReceiptIdentity": {
+		"bytes": 2604,
+		"sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+	},
+	"browser": "153.0.8010.12",
+	"host": {
+		"node": "v24.21.0",
+		"platform": "linux",
+		"arch": "x64",
+		"kernelRelease": "6.1.0-53-cloud-amd64",
+		"osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+	},
+	"completeCollection": true,
+	"backendCompleteCases": 10,
+	"passedSelectedChecks": 18,
+	"totalSelectedChecks": 18,
+	"failedChecks": [],
+	"guestAcceptancePassed": true,
+	"shellBackendReady": false,
+	"commonContainerFdVfsQualified": false,
+	"stageExitCode": 0,
+	"supervisorExitCode": 0,
+	"wallSeconds": 15.812,
+	"createdWorkerTargets": 60,
+	"createdNestedWorkerTargets": 50,
+	"remainingWorkersAfterOwnedCleanup": 0,
+	"remainingWorkersAfterContextClose": 0,
+	"allOwnedProcessesReaped": true,
+	"allPrivateInputPinsRechecked": 14,
+	"unchangedOriginalFixtureSources": true,
+	"unchangedOriginalCaseScripts": true,
+	"unchangedSdkPackage": true,
+	"binaryRedirectBytes": [0, 255, 226, 130, 172, 10, 13, 97, 98],
+	"scope": "Actual GNU Bash and real WASI ABI guests under native WASIX Directory; no public Container fd/VFS or JavaScript command registry installed",
+	"remainingGates": [
+		"Trusted JavaScript host command registry",
+		"Common Container live fd/VFS",
+		"Foreground cancellation/recovery",
+		"Actual Clang/BusyBox shell acceptance",
+		"Full release and dependency license profile"
+	],
+	"priorAdmissionOnlyAttempt": {
+		"control": "/data/seorii-container-20261014/startup-cwd-shell-chromium-20261015T021429Z",
+		"status": 3,
+		"browserLaunched": false,
+		"availableMemoryBytes": 4604841984
+	},
+	"log": {
+		"path": "/home/seorii/logs/startup-cwd-shell-chromium-20261015T040604Z.log",
+		"bytes": 277,
+		"sha256": "0bb28d69db68fec3e33de146023a7010e46f686fc8be5ca38e9c19b534313ea4"
+	}
+}

@@ -1,0 +1,55 @@
+{
+  "argv": [
+    "/home/seorii/.cargo/bin/cargo",
+    "+nightly-2025-07-05",
+    "check",
+    "--locked",
+    "--offline",
+    "--target",
+    "wasm32-unknown-unknown",
+    "--lib",
+    "--example",
+    "container_command_snapshot_compile",
+    "-j",
+    "1"
+  ],
+  "startedAtUnix": 1791979988.6787055,
+  "exitCode": 0,
+  "pid": 2956093,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "remainingMayBeTruncated": false,
+    "signaled": [],
+    "reaped": [],
+    "errors": []
+  },
+  "wallSeconds": 412.428,
+  "observations": [
+    {
+      "pid": 2956093,
+      "startTicks": 17318124,
+      "state": "R",
+      "cpuSeconds": 3.83,
+      "virtualAddressSpaceBytes": 0,
+      "residentSetBytes": 0,
+      "sampledMaximumRssBytes": 119619584,
+      "sampledMaximumVszBytes": 336822272,
+      "sampledAtUnix": 1791980400.6052942
+    },
+    {
+      "pid": 2956134,
+      "startTicks": 17318170,
+      "state": "S",
+      "cpuSeconds": 0.0,
+      "virtualAddressSpaceBytes": 331898880,
+      "residentSetBytes": 32157696,
+      "sampledMaximumRssBytes": 32157696,
+      "sampledMaximumVszBytes": 331898880,
+      "sampledAtUnix": 1791979989.2309952
+    }
+  ],
+  "observationScope": "separate sampled process values; no aggregate memory limit or final/peak linker claim"
+}

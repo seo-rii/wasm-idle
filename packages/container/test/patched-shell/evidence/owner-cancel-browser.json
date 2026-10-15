@@ -1,0 +1,1123 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "forcedOwnerCancellationPassed": true,
+  "startedAt": "2026-10-15T04:15:46.994Z",
+  "applicationCommit": "266469ff21821f8e347fcc967bc32d3da8fb8437",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64"
+  },
+  "packageReceipt": {
+    "bytes": 2604,
+    "sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+  },
+  "packageId": "sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914",
+  "memory": {
+    "initial": 34,
+    "maximum": 16384,
+    "shared": true
+  },
+  "sources": {
+    "g0-shell/probe.c": {
+      "bytes": 3815,
+      "sha256": "cb1f2be3d277ae44cad53164a7d8eac74ad911e38642a30a670b6b194e34f6d0"
+    },
+    "patched-shell/cancel-worker.mjs": {
+      "bytes": 7230,
+      "sha256": "a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2"
+    },
+    "patched-shell/cancel-page.mjs": {
+      "bytes": 4414,
+      "sha256": "c1778ea2ad4e9a2480734bf1ac35bbf452661984b746c362aa5bd8b48b8245e6"
+    }
+  },
+  "commands": [
+    {
+      "command": "/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/clang-16",
+      "args": [
+        "--target=wasm32",
+        "-nostdlib",
+        "-O1",
+        "-fno-builtin",
+        "-fuse-ld=/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/wasm-ld",
+        "-Wl,--entry=_start",
+        "-Wl,--export-memory",
+        "-Wl,--max-memory=16777216",
+        "-Wl,-z,stack-size=65536",
+        "-o",
+        "/data/seorii-container-20261014/patched-shell-cancel-20261015T041544Z/browser/probe.wasm",
+        "/home/seorii/dev/hancomac/tmp/container-20261013/shell-cancel/packages/container/test/g0-shell/probe.c"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/pending/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    }
+  ],
+  "results": [
+    {
+      "id": "G0-CANCEL-CPU",
+      "script": "./probe.wasm loop",
+      "initialWorkers": 0,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "samePageRecovery": true,
+      "hostContextClosed": true,
+      "cancellation": {
+        "type": "cancelled",
+        "backendCompleted": false,
+        "pendingBeforeTermination": true,
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 3,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": false,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1,
+            "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c"
+          },
+          {
+            "type": "guestReady",
+            "bytes": [
+              114,
+              101,
+              97,
+              100,
+              121,
+              10
+            ]
+          },
+          {
+            "type": "pendingGuest",
+            "backendCompleted": false,
+            "stdinLocked": false
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": false,
+            "requestedWorkerTerminations": 3,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": false,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 1,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 0,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 1.8650000095367432
+      },
+      "workersBeforeRecovery": 0,
+      "retirementAfterAcknowledgementMs": 2044,
+      "recovery": {
+        "type": "result",
+        "backendCompleted": true,
+        "result": {
+          "code": 0,
+          "stdout": [
+            114,
+            101,
+            99,
+            111,
+            118,
+            101,
+            114,
+            101,
+            100
+          ],
+          "stderr": []
+        },
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": false,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1,
+            "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c"
+          },
+          {
+            "type": "result",
+            "backendCompleted": true,
+            "result": {
+              "code": 0,
+              "stdout": [
+                114,
+                101,
+                99,
+                111,
+                118,
+                101,
+                114,
+                101,
+                100
+              ],
+              "stderr": []
+            }
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": true,
+            "requestedWorkerTerminations": 0,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": false,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 2,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 1,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 4.839999973773956
+      },
+      "workersAfterRecovery": 0,
+      "workersAfterContextClose": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "4F99481B7F18D35CB5F6423E531328B6",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "DA114CF03BB73BEC2A9D76AD6DC62E92",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "4F99481B7F18D35CB5F6423E531328B6",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "C8917E500B55D8880384FC09E826549C",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "4F99481B7F18D35CB5F6423E531328B6",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "92D6AAD25C3C48E6E507BE3F21177237",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "4F99481B7F18D35CB5F6423E531328B6",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "16A6908BD506CB5ED796DCBD6DA83231",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "BE4FBFB0FE9B3E3E59E766182ADCA8B0",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "16A6908BD506CB5ED796DCBD6DA83231",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "AC103D294F1149D1300A50B9F1254E8D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "16A6908BD506CB5ED796DCBD6DA83231",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        },
+        {
+          "targetId": "9529FC0370B30A1607B6F5C93E5499CC",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "16A6908BD506CB5ED796DCBD6DA83231",
+          "canAccessOpener": false,
+          "parentFrameId": "194D02A7E21AF95128DC3B4387BB12E0",
+          "browserContextId": "2DDC693A44AD3745CE1860117FAF747C"
+        }
+      ],
+      "createdNestedWorkerTargets": 6,
+      "elapsedMs": 5269
+    },
+    {
+      "id": "G0-CANCEL-READ",
+      "script": "./probe.wasm blocked",
+      "initialWorkers": 0,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "samePageRecovery": true,
+      "hostContextClosed": true,
+      "cancellation": {
+        "type": "cancelled",
+        "backendCompleted": false,
+        "pendingBeforeTermination": true,
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 3,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": true,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1,
+            "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c"
+          },
+          {
+            "type": "guestReady",
+            "bytes": [
+              114,
+              101,
+              97,
+              100,
+              121,
+              10
+            ]
+          },
+          {
+            "type": "pendingGuest",
+            "backendCompleted": false,
+            "stdinLocked": true
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": false,
+            "requestedWorkerTerminations": 3,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": true,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 1,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 0,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 6.544999986886978
+      },
+      "workersBeforeRecovery": 0,
+      "retirementAfterAcknowledgementMs": 2044,
+      "recovery": {
+        "type": "result",
+        "backendCompleted": true,
+        "result": {
+          "code": 0,
+          "stdout": [
+            114,
+            101,
+            99,
+            111,
+            118,
+            101,
+            114,
+            101,
+            100
+          ],
+          "stderr": []
+        },
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": false,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1,
+            "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c"
+          },
+          {
+            "type": "result",
+            "backendCompleted": true,
+            "result": {
+              "code": 0,
+              "stdout": [
+                114,
+                101,
+                99,
+                111,
+                118,
+                101,
+                114,
+                101,
+                100
+              ],
+              "stderr": []
+            }
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": true,
+            "requestedWorkerTerminations": 0,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": false,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 2,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 1,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 0.26999998092651367
+      },
+      "workersAfterRecovery": 0,
+      "workersAfterContextClose": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "01FF9670AE72C924C5EB9FBF6E872224",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "328FDD337548C41838F959052E68E653",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "BD2B4C0B26525AEB9FA7E3FBF7214DCD",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "01FF9670AE72C924C5EB9FBF6E872224",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "8E3CA2FB280B030FEA229A566B1E32CD",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "01FF9670AE72C924C5EB9FBF6E872224",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "51965E9B968BF7C1858F58C2DE8DE177",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "01FF9670AE72C924C5EB9FBF6E872224",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "643481FEB2AA716D0FCC7CD36FC503C2",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "328FDD337548C41838F959052E68E653",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "654E035D0C4EADEF954251A29C288E5A",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "643481FEB2AA716D0FCC7CD36FC503C2",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "5301132EB21D15A9F348F01EEAB4A133",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "643481FEB2AA716D0FCC7CD36FC503C2",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        },
+        {
+          "targetId": "9292D226EE9784AD2712039D51DD362E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "643481FEB2AA716D0FCC7CD36FC503C2",
+          "canAccessOpener": false,
+          "parentFrameId": "328FDD337548C41838F959052E68E653",
+          "browserContextId": "3D8F141033FC21CDC8A9E832946FD6B4"
+        }
+      ],
+      "createdNestedWorkerTargets": 6,
+      "elapsedMs": 5818
+    },
+    {
+      "id": "G0-CANCEL-DOWNLOAD",
+      "script": ":",
+      "initialWorkers": 0,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "samePageRecovery": true,
+      "hostContextClosed": true,
+      "cancellation": {
+        "type": "cancelled",
+        "backendCompleted": false,
+        "pendingBeforeTermination": true,
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": false,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": false,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "downloadPending",
+            "receivedBytes": 16384,
+            "expectedBytes": 1812678
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": false,
+            "requestedWorkerTerminations": 0,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": false,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 1,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 0,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 0.8650000095367432
+      },
+      "workersBeforeRecovery": 0,
+      "retirementAfterAcknowledgementMs": 54,
+      "download": {
+        "active": 0,
+        "aborted": 1,
+        "completed": 0,
+        "sentBytes": 16384,
+        "expectedBytes": 1812678
+      },
+      "recovery": {
+        "type": "result",
+        "backendCompleted": true,
+        "result": {
+          "code": 0,
+          "stdout": [
+            114,
+            101,
+            99,
+            111,
+            118,
+            101,
+            114,
+            101,
+            100
+          ],
+          "stderr": []
+        },
+        "cleanup": {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0,
+          "hadLockedStdinWriter": false,
+          "scope": "forced-host-group"
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1,
+            "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c"
+          },
+          {
+            "type": "result",
+            "backendCompleted": true,
+            "result": {
+              "code": 0,
+              "stdout": [
+                114,
+                101,
+                99,
+                111,
+                118,
+                101,
+                114,
+                101,
+                100
+              ],
+              "stderr": []
+            }
+          },
+          {
+            "type": "ownerCleanup",
+            "backendCompleted": true,
+            "requestedWorkerTerminations": 0,
+            "remainingTrackedChildren": 0,
+            "hadLockedStdinWriter": false,
+            "scope": "forced-host-group"
+          }
+        ],
+        "generation": 2,
+        "hostSettlementCount": 1,
+        "workerTerminalMessageCount": 1,
+        "memoryDistinctFromPrevious": true,
+        "cancellationAcknowledgementMs": 2.794999986886978
+      },
+      "workersAfterRecovery": 0,
+      "workersAfterContextClose": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "3E266138F10A6F180282146361EFB43B",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "21644D3B6DAA52986B929AA876D85015",
+          "canAccessOpener": false,
+          "parentFrameId": "21644D3B6DAA52986B929AA876D85015",
+          "browserContextId": "DACE9162A0CBDA5A82F3BF0E492462A8"
+        },
+        {
+          "targetId": "6256E263A95FCCF45507CFB12CCE30E8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "21644D3B6DAA52986B929AA876D85015",
+          "canAccessOpener": false,
+          "parentFrameId": "21644D3B6DAA52986B929AA876D85015",
+          "browserContextId": "DACE9162A0CBDA5A82F3BF0E492462A8"
+        },
+        {
+          "targetId": "7FE29517C344FCF4521AADD52AB948A3",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "6256E263A95FCCF45507CFB12CCE30E8",
+          "canAccessOpener": false,
+          "parentFrameId": "21644D3B6DAA52986B929AA876D85015",
+          "browserContextId": "DACE9162A0CBDA5A82F3BF0E492462A8"
+        },
+        {
+          "targetId": "4F6F757A6E818C09C3EF8FC2D3D20215",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "6256E263A95FCCF45507CFB12CCE30E8",
+          "canAccessOpener": false,
+          "parentFrameId": "21644D3B6DAA52986B929AA876D85015",
+          "browserContextId": "DACE9162A0CBDA5A82F3BF0E492462A8"
+        },
+        {
+          "targetId": "DFB66A7B416DF6BBBD48529EC7698B92",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "6256E263A95FCCF45507CFB12CCE30E8",
+          "canAccessOpener": false,
+          "parentFrameId": "21644D3B6DAA52986B929AA876D85015",
+          "browserContextId": "DACE9162A0CBDA5A82F3BF0E492462A8"
+        }
+      ],
+      "createdNestedWorkerTargets": 3,
+      "elapsedMs": 2638
+    }
+  ],
+  "cancellationScope": "Forced trusted host Worker-group cleanup; recovery uses a new owner and SDK memory in the same page",
+  "filesystemScope": "Native WASIX Directory; no common Container fd/VFS installed",
+  "networkScope": "Approved local asset response only; not the Container asset-service cancellation contract",
+  "guestSignalQualified": false,
+  "survivingShellQualified": false,
+  "commonContainerFdVfsQualified": false,
+  "shellBackendReady": false,
+  "assets": {
+    "/assets/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm": {
+      "bytes": 3671,
+      "sha256": "c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad"
+    },
+    "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm": {
+      "bytes": 9071791,
+      "sha256": "326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551"
+    },
+    "/assets/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc": {
+      "bytes": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs": {
+      "bytes": 97650,
+      "sha256": "14c8629eb161a2625b7e6022fd737c86bc2cc7c035f40f5201f32991de63e20c"
+    },
+    "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs": {
+      "bytes": 2425,
+      "sha256": "dd9ac9a689ad88f9693f0147c41a6d430a588a4d49e5b4d57d30ca212669b2e8"
+    },
+    "/harness/sha256-a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2/cancel-worker.mjs": {
+      "bytes": 7230,
+      "sha256": "a83c40176bf4e6d1f62bab100e85bb4a111dca9ae66426ce720719f00402fde2"
+    },
+    "/": {
+      "bytes": 67,
+      "sha256": "6dff1712bc3fdfdb99a678adf240cd973a3460771ff58709f0f015c388d14473"
+    }
+  },
+  "slowBashAsset": {
+    "url": "/pending/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+    "bytes": 1812678,
+    "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+  },
+  "chromiumExecutable": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browser": "153.0.8010.12",
+  "qualification": {
+    "collectionComplete": true,
+    "forcedOwnerCancellationPassed": true,
+    "checks": [
+      {
+        "id": "G0-CANCEL-CPU:pending-operation",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-CPU:owner-acknowledged",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-CPU:single-terminal-result",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-CPU:workers-retired-before-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-CPU:same-page-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-CPU:clean-context",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:pending-operation",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:owner-acknowledged",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:single-terminal-result",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:workers-retired-before-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:same-page-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-READ:clean-context",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:pending-operation",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:owner-acknowledged",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:single-terminal-result",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:workers-retired-before-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:same-page-recovery",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:clean-context",
+        "status": "passed"
+      },
+      {
+        "id": "G0-CANCEL-DOWNLOAD:network-request-retired",
+        "status": "passed"
+      }
+    ],
+    "cancellationScope": "forced host-group termination; fresh SDK memory for recovery",
+    "guestSignalQualified": false,
+    "survivingShellQualified": false,
+    "commonContainerFdVfsQualified": false,
+    "shellBackendReady": false
+  },
+  "finishedAt": "2026-10-15T04:16:04.991Z"
+}
