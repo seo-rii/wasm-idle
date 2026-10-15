@@ -61,6 +61,13 @@ export async function runProductShellBrowser({ configuration, output, applicatio
       if (method === 'read') { const file = await client.fs.readFile(args[0]); return { ...file, bytes: Array.from(file.bytes), stat: await client.fs.stat(args[0]) }; }
       return client[method](...args);
     }, { method, args });
+    const waitForOwner = async (predicate, message) => {
+      const deadline = performance.now() + 30000;
+      while (!await predicate()) {
+        assert(performance.now() < deadline, message);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    };
     const send = async text => { await page.locator('#input').fill(text); await page.locator('#send').click(); await page.waitForFunction(() => !document.querySelector('#send').disabled || document.querySelector('#terminal-status').dataset.state === 'error'); };
     const start = async () => { await page.locator('#start').click(); await page.waitForFunction(() => document.querySelector('#terminal-status').textContent.startsWith('Running process') || document.querySelector('#terminal-status').dataset.state === 'error'); assert.match(await page.locator('#terminal-status').textContent(), /^Running process/u); };
     const finish = async () => { await page.locator('#eof').click(); await page.waitForFunction(() => document.querySelector('#terminal-status').textContent.includes('exit 0') || document.querySelector('#terminal-status').dataset.state === 'error'); assert.match(await page.locator('#terminal-status').textContent(), /^exited; exit 0/u); };
@@ -92,7 +99,13 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     const boundary = SCRIPT.indexOf('clang main.c'); assert(boundary > 0);
     const prefix = SCRIPT.slice(0, boundary), suffix = SCRIPT.slice(boundary); assert.equal(prefix + suffix, SCRIPT);
     await send(prefix);
-    await page.waitForFunction(async () => { try { const { client } = await (await import(new URL('./main.mjs', location.href).href)).application; const source = await client.fs.readFile('/workspace/demo/main.c'); return new TextDecoder().decode(source.bytes).includes('puts("hello")'); } catch { return false; } });
+    await waitForOwner(() => page.evaluate(async expected => {
+      try {
+        const { client } = await (await import(new URL('./main.mjs', location.href).href)).application;
+        const { bytes } = await client.fs.readFile('/workspace/demo/main.c');
+        return bytes.length === expected.length && bytes.every((byte, index) => byte === expected[index]);
+      } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    }, SOURCE), 'Actual Bash must publish the complete source before Clang is requested');
     assert.deepEqual(compilerDownloads(), { clang: 0, lld: 0, sysroot: 0 });
     receipt.checks.push('PRODUCT-SH-02: actual Bash creates source in common workspace before the first Clang request');
     receipt.phase = 'cold-compiler'; await saveEvidence();
@@ -140,9 +153,14 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     await saveEvidence();
 
     await page.reload(); await ready(); await start(); await send('cat\n');
-    await page.waitForFunction(async () => (await (await (await import(new URL('./main.mjs', location.href).href)).application).client.inspect()).processes.some(process => process.command === 'cat' && process.state === 'running'));
+    await waitForOwner(async () => (await client('inspect')).processes.some(process => process.command === 'cat' && process.state === 'running'), 'BusyBox cat must be running before interrupt');
     await page.locator('#interrupt').click();
-    await page.waitForFunction(async () => (await (await (await import(new URL('./main.mjs', location.href).href)).application).client.inspect()).processes.length === 0);
+    await page.waitForFunction(() => document.querySelector('#terminal-status').textContent === 'Interrupt delivered to 1 foreground commands.');
+    await waitForOwner(async () => (await client('inspect')).processes.length === 0, 'Interrupted command resources must be released');
+    // The process table can become empty before the SDK's child wait finishes.
+    // Observe this pinned real Bash prompt rather than treating that table as
+    // an acknowledgement that the shell has resumed reading commands.
+    await page.waitForFunction(() => document.querySelector('#stderr').textContent.endsWith('bash-dist# '));
     await send("printf 'shell-alive\\n'\n"); await finish();
     assert.equal(await page.locator('#stdout').textContent(), 'shell-alive\n');
     receipt.checks.push('PRODUCT-SH-06: UI foreground interrupt releases a real BusyBox command blocked on stdin while actual Bash survives and executes the next input');
