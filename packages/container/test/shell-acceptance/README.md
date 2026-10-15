@@ -1,5 +1,15 @@
 # Shell acceptance script
 
+The final SDK with patches 0001–0020 passes **72/72 checks across seven actual
+Chromium scenarios** through the public session and shared workbench profile:
+[full receipt](./evidence/public-session-0020.json) and
+[process cleanup](./evidence/public-session-0020-process.json). Cold/warm execution,
+foreground interruption, package/compiler failures, pipelines, redirections and
+startup failures are included. Every scenario retires all owned Workers; the warm
+run reuses all retained asset bodies. Total guarded time was 103.064 seconds on the
+recorded machine. This qualifies the selected snapshot-Clang shell profile, not
+PTY/job-control, live compiler visibility, or a production release.
+
 This opt-in Chromium probe runs the development plan's acceptance script, unchanged, in
 actual GNU Bash (`bash --noprofile --norc -c`):
 
