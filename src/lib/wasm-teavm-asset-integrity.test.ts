@@ -121,7 +121,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 				// Then apply @Rename when converting the javac SDK (upstream teavm-javac 199bed0).
 				sourcePatches: [
 					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' },
-					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' },
+					// Link enum values() for Class.getEnumConstants (EnumDependencySupport).
+					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,

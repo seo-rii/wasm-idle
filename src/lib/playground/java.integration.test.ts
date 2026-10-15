@@ -440,6 +440,37 @@ public class Main {
 				expected: 'java.lang.IllegalStateException: boom\nArrayList\n[1, 2] {a=1}\n'
 			},
 			{
+				// Enum reflection must link values(): getEnumConstants() was empty and valueOf,
+				// EnumSet and EnumMap trapped or printed Main$Color@...
+				name: 'enum reflection',
+				code: `import java.util.*;
+
+public class Main {
+    enum Color { RED, GREEN, BLUE }
+
+    enum Op {
+        ADD { int apply(int a, int b) { return a + b; } },
+        MUL { int apply(int a, int b) { return a * b; } };
+
+        abstract int apply(int a, int b);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(Color.class.getEnumConstants().length + " " + Color.valueOf("GREEN"));
+        System.out.println(EnumSet.allOf(Color.class) + " " + EnumSet.complementOf(EnumSet.of(Color.RED)));
+        EnumMap<Color, Integer> map = new EnumMap<>(Color.class);
+        map.put(Color.BLUE, 3);
+        map.put(Color.RED, 1);
+        System.out.println(map);
+        Op op = Enum.valueOf(Op.class, "MUL");
+        System.out.println(op + " " + op.apply(6, 7) + " " + EnumSet.allOf(Op.class));
+    }
+}`,
+				stdin: '',
+				expected:
+					'3 GREEN\n[RED, GREEN, BLUE] [GREEN, BLUE]\n{RED=1, BLUE=3}\nMUL 42 [ADD, MUL]\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 

@@ -1,0 +1,107 @@
+diff --git a/compiler/src/main/java/org/teavm/javac/Compiler.java b/compiler/src/main/java/org/teavm/javac/Compiler.java
+index 9b6b84c..3460c85 100644
+--- a/compiler/src/main/java/org/teavm/javac/Compiler.java
++++ b/compiler/src/main/java/org/teavm/javac/Compiler.java
+@@ -276,6 +276,7 @@ public final class Compiler {
+         new PlatformPlugin().install(teavm);
+         new JCLPlugin().install(teavm);
+         teavm.add(new PluggableDependencySupport());
++        teavm.add(new EnumConstantsDependencySupport());
+         teavm.setEntryPoint(mainClass);
+         target.setObfuscated(false);
+         target.setDebugInfoLocation(WasmDebugInfoLocation.EMBEDDED);
+diff --git a/compiler/src/main/java/org/teavm/javac/EnumConstantsDependencySupport.java b/compiler/src/main/java/org/teavm/javac/EnumConstantsDependencySupport.java
+new file mode 100644
+index 0000000..f11ab33
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/EnumConstantsDependencySupport.java
+@@ -0,0 +1,89 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import org.teavm.dependency.AbstractDependencyListener;
++import org.teavm.dependency.DependencyAgent;
++import org.teavm.dependency.DependencyNode;
++import org.teavm.dependency.MethodDependency;
++import org.teavm.model.CallLocation;
++import org.teavm.model.ElementModifier;
++import org.teavm.model.MethodDescriptor;
++import org.teavm.model.ValueType;
++
++/**
++ * Makes {@code Class.getEnumConstants()} work, which {@code Enum.valueOf}, {@code EnumSet} and {@code EnumMap}
++ * rely on.
++ * <p>
++ * This is what {@code org.teavm.platform.plugin.EnumDependencySupport} does. {@code PlatformPlugin} installs
++ * it only when TeaVM is not compiled by TeaVM, which is the case here, and the original class can't be reused,
++ * as it refers to {@code org.teavm.platform.Platform}, which is not supported by WebAssembly GC backend.
++ * Without it, {@code values()} of enums is not linked, so their constants are not reachable and are removed
++ * from the generated per-class enum constant tables, and elements of the returned array get no types.
++ * As a result, {@code getEnumConstants()} returns an empty array, and {@code Enum.valueOf()},
++ * {@code EnumSet.allOf()} or {@code EnumMap} fail at runtime.
++ */
++class EnumConstantsDependencySupport extends AbstractDependencyListener {
++    private static final String CLASS_SUPPORT = "org.teavm.classlib.impl.reflection.ClassSupport";
++    private DependencyNode allEnums;
++
++    @Override
++    public void started(DependencyAgent agent) {
++        allEnums = agent.createNode();
++    }
++
++    @Override
++    public void classReached(DependencyAgent agent, String className) {
++        var cls = agent.getClassSource().get(className);
++        if (cls == null || cls.getParent() == null || !cls.getParent().equals("java.lang.Enum")) {
++            return;
++        }
++        allEnums.propagate(agent.getType(ValueType.object(className)));
++        for (var innerClassName : cls.getInnerClasses()) {
++            var innerClass = agent.getClassSource().get(innerClassName);
++            if (innerClass != null && innerClass.hasModifier(ElementModifier.ENUM)) {
++                allEnums.propagate(agent.getType(ValueType.object(innerClassName)));
++            }
++        }
++    }
++
++    @Override
++    public void methodReached(DependencyAgent agent, MethodDependency method) {
++        var ref = method.getReference();
++        if (!ref.getClassName().equals(CLASS_SUPPORT) || !ref.getName().equals("getEnumConstants")) {
++            return;
++        }
++        allEnums.connect(method.getResult().getArrayItem());
++        allEnums.addConsumer(type -> {
++            if (type.getValueType() instanceof ValueType.Object) {
++                var className = ((ValueType.Object) type.getValueType()).getClassName();
++                var cls = agent.getClassSource().get(className);
++                var valuesMethod = cls.getMethod(new MethodDescriptor("values",
++                        ValueType.arrayOf(ValueType.object(cls.getName()))));
++                if (valuesMethod != null) {
++                    var valuesDep = agent.linkMethod(valuesMethod.getReference());
++                    valuesDep.addLocation(new CallLocation(ref));
++                    valuesDep.use();
++                }
++            }
++        });
++        method.getResult().propagate(agent.getType(ValueType.arrayOf(ValueType.object("java.lang.Enum"))));
++        for (var cls : agent.getReachableClasses()) {
++            classReached(agent, cls);
++        }
++    }
++}
