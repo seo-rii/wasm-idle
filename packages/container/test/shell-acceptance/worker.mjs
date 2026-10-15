@@ -3,11 +3,10 @@
 // container source by scripts/probe-container-shell-acceptance.mjs.
 import {
 	createContainer, createContainerPackageManager, createHostCommandHandler, createShellFilesystem,
-	validateDistribution
+	validateDistribution, extractTarPackage
 } from '../../src/index.ts';
 import { createClangAdapter } from '../../src/adapters/clang/index.ts';
 import { createLiveWasiAdapter } from '../../src/adapters/wasi-live/index.ts';
-import untar from '../../../llvm-core/runtime/core/src/tar.ts';
 
 const children = new Set();
 const NativeWorker = globalThis.Worker;
@@ -107,11 +106,7 @@ globalThis.onmessage = async ({ data }) => {
 		const prepareSysroot = async () => {
 			const prepared = await manager.prepare('llvm');
 			const archive = prepared.packages.find((pkg) => pkg.id === 'llvm').files.find((file) => file.path === 'sysroot.tar').bytes;
-			const files = [];
-			untar(archive, {
-				addDirectory(path) { files.push({ path: path.replace(/\/$/u, ''), type: 'directory', mode: 0o555 }); },
-				addFile(path, bytes) { files.push({ path, type: 'file', mode: 0o444, data: bytes }); }
-			});
+			const files = extractTarPackage(archive);
 			container.fs.mountReadonly(SYSROOT, files);
 			return { sha256: await sha256(archive), entries: files.length, files: files.filter((file) => file.type === 'file').length };
 		};
