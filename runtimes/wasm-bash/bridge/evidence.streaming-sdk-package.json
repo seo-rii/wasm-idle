@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "guestQualified": false,
+  "qualification": "Deterministic local SDK host/module/thread-worker packaging; no real SDK or guest execution",
+  "binaryReceiptIdentity": {
+    "bytes": 362375,
+    "sha256": "576b93bdadaeafff0a263bc2d4902984c507cd9fd4588a3b9cf1e6dcd729d99c"
+  },
+  "sourceCommit": "a63df2661046232190d43626267cf87c938e3185",
+  "buildProfile": "release",
+  "esbuildVersion": "0.28.2",
+  "tools": {
+    "/home/seorii/dev/hancomac/wasm-idle/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js": {
+      "bytes": 97463,
+      "sha256": "61ec0ba144ff93f4bf0e96ad6fab6f430ede0aa13e27ace8063ed63ba416b3cd"
+    },
+    "/home/seorii/dev/hancomac/wasm-idle/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/package.json": {
+      "bytes": 3980,
+      "sha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490"
+    },
+    "/home/seorii/dev/hancomac/wasm-idle/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/bin/esbuild": {
+      "bytes": 11427952,
+      "sha256": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100"
+    }
+  },
+  "packageId": "sha256-5bac28b856c6bb3201e9d608e1b03d5dc235e2c302d7d67b4ffcb6bcadcebbc5",
+  "entries": {
+    "LICENSE.sdk": {
+      "bytes": 1097,
+      "sha256": "76dc7d305458d07478bc62669fe53dbfd3b94b95c5e00fbb45af1f492cbd7284"
+    },
+    "index.mjs": {
+      "bytes": 104127,
+      "sha256": "50f8bd24f95810a82de022f1d94cbfb47a57e51c572b7cde32db4e691d90e2ab"
+    },
+    "wasmer_js.d.ts": {
+      "bytes": 29634,
+      "sha256": "3878a9a2b5e32eb00ba7bcfebdfe67cffe6f507ec91a3bf6c3740b18836c566c"
+    },
+    "wasmer_js_bg.wasm": {
+      "bytes": 9266592,
+      "sha256": "454832ce73ad3db7d3a9d29cee54cd1a00eaaddf1c66cd4e1d683782531c1567"
+    },
+    "worker.mjs": {
+      "bytes": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    }
+  },
+  "memoryProfile": {
+    "shared": true,
+    "minimumPages": 35,
+    "maximumPages": 16384
+  },
+  "initialization": "Caller-provided verified WebAssembly.Module and shared Memory; package-local index/worker URLs",
+  "runtimeHostImport": "Original thread-worker dynamic import of exact package-local index.mjs; normal trusted JS module-graph boundary, not per-worker asset-service verification",
+  "remainingGates": [
+    "Actual generated 0.2.101 initializer/browser acceptance",
+    "Pinned immutable host-module hosting/CSP",
+    "Descendant-worker ownership and cancellation",
+    "Trusted command registry and common live fd/VFS",
+    "Complete dependency source/license notices"
+  ]
+}

@@ -41,5 +41,14 @@ CONTAINER_SDK_SOURCE=/absolute/path/to/verified/wasmer-sdk \
 
 That command verifies application to the exact pinned source and unchanged legacy
 methods. It does not execute the Rust browser tests or qualify actual Bash. The
-combined SDK typecheck/build and shell streaming fixture must establish those
-separate gates before promotion.
+combined SDK typecheck/build and shell streaming fixture establish separate gates.
+
+The exact SDK/WASIX/virtual-fs source inventory at `a63df266` now passes the real
+offline Rust check, a clean release build, matching web bindings, static Wasm
+inspection, and local index/Worker packaging. See
+[`evidence.streaming-sdk-build.json`](./evidence.streaming-sdk-build.json) and its
+six process receipts. All owned build processes were reaped. The resulting shared
+module is 9,266,592 bytes, SHA-256
+`454832ce73ad3db7d3a9d29cee54cd1a00eaaddf1c66cd4e1d683782531c1567`.
+This build evidence does not claim that the Rust browser tests or actual Bash
+streaming fixture ran; the consumer PR records those execution gates separately.
