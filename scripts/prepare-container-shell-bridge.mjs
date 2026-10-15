@@ -94,13 +94,14 @@ if (verifyOnly) {
 	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
 	const receipts = {};
 	// Each crate's patches apply independently to its pristine checkout.
+	// --forward rejects reversed/already-applied patches instead of silently undoing them.
 	for (const [names, cwd] of [
 		[patches, source],
 		[sdkPatches, sdkSource]
 	]) {
 		for (const name of names) {
 			const path = join(bridge, 'patches', name);
-			execFileSync('patch', ['--dry-run', '--batch', '--fuzz=0', '-p1', '-i', path], {
+			execFileSync('patch', ['--dry-run', '--batch', '--forward', '--fuzz=0', '-p1', '-i', path], {
 				cwd,
 				stdio: 'pipe'
 			});
@@ -161,7 +162,7 @@ if (verifyOnly) {
 			// Sequential patches may apply at an offset; never leave *.orig backups.
 			execFileSync(
 				'patch',
-				['--batch', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
+				['--batch', '--forward', '--fuzz=0', '--no-backup-if-mismatch', '-p1', '-i', path],
 				{
 					cwd: join(output, crate),
 					stdio: 'pipe'

@@ -9,6 +9,7 @@
 int wasm_idle_test_execve(const char *, char *const [], char *const []);
 static const char *destination;
 static unsigned calls;
+static int result = ENOENT;
 int wasm_idle_shell_exec_v1(const char *path, uint32_t path_len,
         const void *argv, uint32_t argv_len, const void *env, uint32_t env_len,
         uint32_t flags) {
@@ -22,7 +23,7 @@ int wasm_idle_shell_exec_v1(const char *path, uint32_t path_len,
     f = fopen(file, "wb"); assert(f);
     assert(fwrite(env, 1, env_len, f) == env_len); assert(fclose(f) == 0);
     ++calls;
-    return ENOENT;
+    return result;
 }
 int main(int argc, char **argv) {
     assert(argc == 2); destination = argv[1];
@@ -40,8 +41,25 @@ int main(int argc, char **argv) {
     memset(large, 'x', 1024 * 1024); large[1024 * 1024] = 0;
     char *large_args[] = {large, NULL};
     assert(wasm_idle_test_execve("/usr/bin/probe", large_args, env) == -1);
-    assert(errno == E2BIG && calls == 2); free(large);
+    assert(errno == E2BIG && calls == 2);
     assert(wasm_idle_test_execve("", args, env) == -1);
     assert(errno == EINVAL && calls == 2);
+    /* Exactly 4,096 entries is the accepted vector boundary. */
+    char **boundary = calloc(4097, sizeof(char *)); assert(boundary);
+    for (unsigned i = 0; i < 4096; ++i) boundary[i] = "";
+    assert(wasm_idle_test_execve("/usr/bin/probe", boundary, NULL) == -1);
+    assert(errno == ENOENT && calls == 3); free(boundary);
+    /* Path (14) + argv frame (8 + n) + empty env frame (4) is accepted at exactly 1 MiB and
+     * rejected one byte later by the combined limit, while each frame alone still fits. */
+    large[1024 * 1024 - 26] = 0;
+    assert(wasm_idle_test_execve("/usr/bin/probe", large_args, NULL) == -1);
+    assert(errno == ENOENT && calls == 4);
+    large[1024 * 1024 - 26] = 'x'; large[1024 * 1024 - 25] = 0;
+    assert(wasm_idle_test_execve("/usr/bin/probe", large_args, NULL) == -1);
+    assert(errno == E2BIG && calls == 4); free(large);
+    /* An ordinary zero return from the import is not a successful exec. */
+    result = 0;
+    assert(wasm_idle_test_execve("/usr/bin/probe", args, env) == -1);
+    assert(errno == EIO && calls == 5);
     return 0;
 }
