@@ -57,3 +57,28 @@ false. No actual browser result is claimed until a separate receipt is recorded.
 The host reports its single settlement separately from the counted worker
 terminal messages. A result or failure racing with cancellation before the owner
 acknowledgement fails the gate; cleanup cannot conceal that earlier completion.
+
+## Actual Chromium result
+
+At application `266469ff21821f8e347fcc967bc32d3da8fb8437`, Chromium
+153.0.8010.12/Linux passes all 19 selected checks across the three cases. The
+[original browser receipt](evidence/owner-cancel-browser.json) preserves actual
+guest `ready\n` bytes, pending waits, the locked input writer, cleanup
+acknowledgements and successful real Bash recovery output in each same page.
+The download receives exactly 16,384 of the pinned 1,812,678 bytes before abort;
+the server observes one aborted response, zero complete responses and no active
+request. All observed Workers retire before recovery and again before context
+close. No page, console, tracked thread or blocked-request error occurs.
+
+The [original process receipt](evidence/owner-cancel-browser-process.json)
+records exit 0 in 19.216 seconds, with every OS descendant reaped and no forced
+OS signal or cleanup error. This is compatible with explicit JavaScript
+`Worker.terminate` calls: the CPU/input owners each request termination of three
+SDK Workers, then the page terminates the owner. [Metadata](evidence/owner-cancel-browser-metadata.json)
+keeps those two levels distinct, records observed per-case latency and verifies
+all 18 private source/input/tool pins after the run. These local timings are not
+a portable performance promise or a measurement of a guest signal handler.
+
+Common Container cancellation/fd/VFS, surviving-shell foreground interrupts,
+JavaScript host-command dispatch and real Clang/BusyBox shell acceptance remain
+unqualified. The original 18-check normal-execution suite remains unchanged.

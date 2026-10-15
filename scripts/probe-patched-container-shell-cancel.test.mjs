@@ -1,6 +1,7 @@
 // Protocol evaluator guards only; actual cancellation requires the browser receipt.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
 	cancellationFixtures,
 	judgeCancellationProbe
@@ -151,4 +152,22 @@ test('recovery requires a new generation and memory, real stdout, and one termin
 		alter(results[0]);
 		assert.equal(judgeCancellationProbe(results).forcedOwnerCancellationPassed, false);
 	}
+});
+
+test('actual rebuilt Bash cancellation archive qualifies only forced owner cleanup and fresh-backend recovery', async () => {
+	const evidence = new URL('../packages/container/test/patched-shell/evidence/', import.meta.url);
+	const receipt = JSON.parse(await readFile(new URL('owner-cancel-browser.json', evidence)));
+	const processReceipt = JSON.parse(
+		await readFile(new URL('owner-cancel-browser-process.json', evidence))
+	);
+	const judged = judgeCancellationProbe(receipt.results);
+	assert.equal(judged.forcedOwnerCancellationPassed, true);
+	assert.equal(judged.checks.filter(({ status }) => status === 'passed').length, 19);
+	assert.equal(judged.guestSignalQualified, false);
+	assert.equal(judged.survivingShellQualified, false);
+	assert.equal(judged.commonContainerFdVfsQualified, false);
+	assert.equal(judged.shellBackendReady, false);
+	assert.equal(processReceipt.exitCode, 0);
+	assert.equal(processReceipt.cleanup.allReaped, true);
+	assert.deepEqual(processReceipt.cleanup.signaled, []);
 });
