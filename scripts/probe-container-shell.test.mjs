@@ -27,6 +27,42 @@ test('exit zero cannot hide a lost empty argument', () => {
 	assert.equal(check([observed('G0-SHELL', prefix + 'arg=\0' + suffix)], 'argv-env'), 'passed');
 });
 
+test('ABI framing checks LF/CR boundaries and explicit environment replacement', () => {
+	assert.equal(
+		check(
+			[
+				observed(
+					'G0-ARGV-FRAME',
+					'arg=./probe.wasm\0arg=report\0arg=\0arg=line\nbreak\0arg=carriage\rreturn\0arg=\0G0=space 한글\0'
+				)
+			],
+			'argv-framing'
+		),
+		'passed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ARGV-FRAME', 'arg=./probe.wasm\0arg=report\0arg=line\0arg=break\0')],
+			'argv-framing'
+		),
+		'failed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ENV-UNSET', 'arg=./probe.wasm\0arg=report\0')],
+			'environment-replacement'
+		),
+		'passed'
+	);
+	assert.equal(
+		check(
+			[observed('G0-ENV-UNSET', 'arg=./probe.wasm\0arg=report\0G0=space 한글\0')],
+			'environment-replacement'
+		),
+		'failed'
+	);
+});
+
 test('a final external command needs its guest output, not only exit zero', () => {
 	assert.equal(check([observed('G0-TAIL-EXEC')], 'tail-exec'), 'failed');
 	assert.equal(check([{ id: 'G0-TAIL-EXEC', type: 'timeout' }], 'tail-exec'), 'failed');

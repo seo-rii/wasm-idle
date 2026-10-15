@@ -1,0 +1,12 @@
+--- a/src/syscalls/wasix/proc_exec2.rs
++++ b/src/syscalls/wasix/proc_exec2.rs
+@@ -40,6 +40,9 @@
+         WasmPtr::null(),
+         0u32.into(),
+     ) {
++        // Success can mean Asyncify is unwinding before the new image exits.
++        // Preserve that control flow; synthesizing Exit(0) races the real child.
++        Ok(Errno::Success) => Ok(()),
+         Ok(e) => Err(WasiError::Exit(e.into())),
+         Err(e) => Err(e),
+     }

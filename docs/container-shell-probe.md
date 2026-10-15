@@ -75,6 +75,8 @@ parse `clang -###`, invent linker commands, or substitute a high-level compiler 
 | ID                                       | Actual operation                                                                                                                                                                                       |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `G0-SHELL`                               | Bash invokes a Preview 1 guest with spaces, Korean and an empty argument; guest reports arguments/environment and raw stderr.                                                                          |
+| `G0-ARGV-FRAME`                          | Empty arguments and embedded LF/CR bytes pass through the actual Bash external exec path.                                                                                                              |
+| `G0-ENV-UNSET`                           | Bash removes an inherited variable before starting a real external guest.                                                                                                                              |
 | `G0-EXIT`                                | The child calls `proc_exit(23)`; Bash observes `$?`.                                                                                                                                                   |
 | `G0-CWD`                                 | Bash changes directory; a separate Wasm guest calls actual WASIX `getcwd`.                                                                                                                             |
 | `G0-TAIL-EXEC`                           | A script ends with an external command, without a trailing builtin to bypass the observed wait problem.                                                                                                |
@@ -93,3 +95,39 @@ This C-02 fixture does not implement BusyBox, a Supervisor exec callback, live c
 interactive terminal/job control, independent process cancellation inside a surviving shell,
 command-lazy compiler downloads, a persistent workspace or production origin/CSP qualification.
 Those remain separate gates in the development plan.
+
+## Optional syscall observations
+
+Set `WASM_IDLE_CONTAINER_TRACE_SYSCALLS=1` to wrap actual guest imports in the owned test
+Workers. The tracer records bounded raw guest bytes, call/return/throw phases and Worker/
+instance identities for exec, spawn, fork, join and exit. It reads memory at each observation,
+never changes guest memory, and returns or rethrows the original host function result. It
+does not parse shell source or synthesize commands. At most 1,000 events per Worker and
+4,096 bytes per inspected string are retained. Use only the fixed synthetic fixtures: the
+trace contains their argv and environment and is not operational telemetry.
+
+```sh
+WASM_IDLE_CONTAINER_TRACE_SYSCALLS=1 \
+WASM_IDLE_CONTAINER_PROBE_CASES=G0-SHELL,G0-ARGV-FRAME,G0-ENV-UNSET,G0-EXIT,G0-TAIL-EXEC \
+WASM_IDLE_CONTAINER_PROBE_OUTPUT=/tmp/container-shell-trace.json \
+  node scripts/probe-container-shell.mjs
+```
+
+The tracer is diagnostic and may perturb timing. Untraced receipts remain the baseline;
+a trace alone cannot qualify a timing-sensitive result. Source-pinned patch candidates and
+the exact remaining SDK/resource work are in the [bridge README](../runtimes/wasm-bash/bridge/README.md).
+The current producer lock and executable assets are unchanged.
+
+The [current five-case trace receipt](../packages/container/test/g0-shell/evidence.trace.chromium.json)
+reproduces lost empty arguments, LF/CR splitting, an unset variable retained in the child,
+a final external command timeout and a surviving Worker. Its exit case reports 23 correctly.
+The [earlier exit-only trace](../packages/container/test/g0-shell/evidence.trace.exit0.chromium.json)
+records the same real child calling `proc_exit(23)` while Bash receives zero from join. The
+earlier diagnostic bootstrap explicitly repeated the shared worker URL during nested SDK
+initialization; the current bootstrap leaves that existing shared setting untouched. Their
+harness hashes differ, and timing instrumentation is another reason not to treat either
+result as stable exit qualification. Existing untraced receipts also disagree on exit status.
+
+The five-case receipt was collected successfully, but `shellBackendReady` is false. Protocol
+unit tests and source-patch dry runs cannot turn these pre-patch observations into proof that
+the proposed SDK changes work. Rebuild and rerun remain required.
