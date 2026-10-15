@@ -1,0 +1,79 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "scripts/benchmark-container.mjs",
+    "--config",
+    "/data/seorii-container-fixes-20261015/public-shell-final-20261015T1441/configuration.json",
+    "--output",
+    "/data/seorii-container-fixes-20261015/container-benchmark-20261016-8kyu4ni1/results",
+    "--samples",
+    "3"
+  ],
+  "startedAtUnix": 1792076713.9127257,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 3088708,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 3090183,
+        "exitCode": 0
+      },
+      {
+        "pid": 3090202,
+        "exitCode": 0
+      },
+      {
+        "pid": 3090213,
+        "exitCode": 0
+      },
+      {
+        "pid": 3090215,
+        "exitCode": 0
+      },
+      {
+        "pid": 3118060,
+        "exitCode": 0
+      },
+      {
+        "pid": 3118062,
+        "exitCode": 0
+      },
+      {
+        "pid": 3118065,
+        "exitCode": 0
+      },
+      {
+        "pid": 3118066,
+        "exitCode": 0
+      },
+      {
+        "pid": 3143598,
+        "exitCode": 0
+      },
+      {
+        "pid": 3143600,
+        "exitCode": 0
+      },
+      {
+        "pid": 3143603,
+        "exitCode": 0
+      },
+      {
+        "pid": 3143604,
+        "exitCode": 0
+      },
+      {
+        "pid": 3089595,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 338.61
+}
