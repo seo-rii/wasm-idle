@@ -639,6 +639,20 @@ Registering a mount that is not live only costs extra metadata calls. Path symli
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
 against other processes keep their existing WASIX behavior. These remain gaps.
 
+### Actual SDK gate
+
+Commit `b0e740d17d107516f98c42862a61f98046fcd8b4` (patches 0001–0012, including #208's
+status-order fix) was prepared into a fresh physical copy with 584 pins (SDK 200 and WASIX
+377 files) and a unique target: typecheck 517.947 s, release 647.743 s, bindgen 2.017 s and
+static inspection 0.255 s. Each stage exited 0 with every process reaped. The bound Wasm is
+9,187,858 bytes, SHA-256 `8385617d56ffcdf261bb5af83061233bd302004a64f5d729c62791f0993b5ca3`;
+binary receipt `7bbb04175c6d94337ea9c64d7f0290cfaba912a6f1e4b491cd160ce0589215e7`. Stage
+receipts are archived as `evidence.host-filesystem-*.json` with a
+[recheck](evidence.host-filesystem-sdk-binary-metadata.json). Local packaging produced
+receipt `bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e`. An earlier
+gate of the same patches on the pre-fix base passed and only produced a preliminary
+package; its browser runs are recorded as preliminary on the shell branch.
+
 ## Workspace WebAssembly executables
 
 A shell runs programs it just built, such as `./hello.wasm`, from the workspace. With only
