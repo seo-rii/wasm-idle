@@ -178,7 +178,8 @@ describe('checked-in TeaVM runtime trust root', () => {
 					}
 				]
 			})),
-			// Console byte writes must invoke the pending flush and advance the source offset.
+			// Console byte writes must invoke the pending flush, advance the source offset, and keep an
+			// incomplete UTF-8 sequence pending across a flush instead of ending the decoder's input.
 			{
 				upstreamSourceEntry: `${consoleStream}.java`,
 				transforms: [
@@ -190,6 +191,11 @@ describe('checked-in TeaVM runtime trust root', () => {
 					{
 						from: '                buffer.put(b, off, count);\n                len -= count;',
 						to: '                buffer.put(b, off, count);\n                off += count;\n                len -= count;',
+						expectedOccurrences: 1
+					},
+					{
+						from: '            if (buffer.position() > 0) {\n                output(true);\n            }',
+						to: '            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }',
 						expectedOccurrences: 1
 					}
 				]

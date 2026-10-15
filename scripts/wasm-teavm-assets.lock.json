@@ -322,8 +322,8 @@
 				},
 				{
 					"sourcePath": "scripts/teavm/JsConsolePrintStream.java",
-					"sourceBytes": 5110,
-					"sourceSha256": "048c788702e494a9693da9122805a86558d64ae527c4d103bc266577ae5bae86",
+					"sourceBytes": 5210,
+					"sourceSha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2",
 					"upstreamSourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
 					"upstreamSourceBytes": 5042,
 					"upstreamSourceSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
@@ -336,6 +336,11 @@
 						{
 							"from": "                buffer.put(b, off, count);\n                len -= count;",
 							"to": "                buffer.put(b, off, count);\n                off += count;\n                len -= count;",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "            if (buffer.position() > 0) {\n                output(true);\n            }",
+							"to": "            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }",
 							"expectedOccurrences": 1
 						}
 					]
@@ -438,7 +443,7 @@
 					"canonicalClassBytes": 3634,
 					"canonicalClassSha256": "4f8db161a099a53146f1162de3939d9d1a1fcd58097a0fc0a78754cdd13f6fcf",
 					"classBytes": 3291,
-					"classSha256": "7b998cd8c4730eb1f3c68b4d41d43497adacbd746e2e58853f73bcca97a45954"
+					"classSha256": "05f574c8f74dca5bea3374aae23deeb372e3d4d0f6c6a8916b500343739cb97a"
 				},
 				{
 					"targetEntry": "org/teavm/classlib/java/util/TFormatter.class",
@@ -534,13 +539,13 @@
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2388980,
-			"sha256": "b2b7ce397700b65cab0beee8a365ef79fe8fb1ebfe7ccf19e189630cb3838bbe",
+			"bytes": 2388979,
+			"sha256": "8c669b3310e810072ecb1f3ffcf2f5173f13c1942beedca04dbb2818a744be69",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2353467,
-				"sha256": "6ac7125040dad57a4e86df8e67a4790a731cf25bb1ed8c23d6bd1ba8b71d9e56"
+				"bytes": 2353406,
+				"sha256": "59229c609562913d06a92d785fac35f563479c3099dcc6c87489b3e2a4470425"
 			}
 		}
 	]

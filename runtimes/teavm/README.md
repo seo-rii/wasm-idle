@@ -45,7 +45,10 @@ it runs.
 It also repairs two defects in the Wasm GC `System.out`/`System.err` byte path,
 `JsConsolePrintStream`: `flush()` cleared its pending action before invoking it, trapping with a
 null dereference on the first flush after a byte write (for example `BufferedWriter.flush()`), and
-`write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes.
+`write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes. Its
+`ByteEncoder.flush()` also decoded pending bytes as the end of input, so the next byte write threw
+`IllegalStateException` and a UTF-8 character split across a flush was replaced; it now keeps an
+incomplete sequence pending until the rest arrives.
 
 `TFormatter` handles `%n` and `%%` without consuming an argument, as `java.util.Formatter` does
 (TeaVM issue #1317): `%n` emits the line separator instead of throwing
