@@ -73,6 +73,15 @@ def verify_source(policy):
         expected = {name for name in policy["sourcePins"] if name.startswith(str(root) + "/")}
         if actual != expected:
             raise ValueError(f"source inventory changed: {root}")
+    # Cargo also merges config files from every ancestor of its working directory
+    # and from CARGO_HOME, outside both inventories. Only pinned files may apply.
+    sdk = Path(policy["stage"]["producerWorktree"]).resolve()
+    cargo_home = Path(policy["stage"]["environment"]["CARGO_HOME"]).resolve()
+    for directory in (*(path / ".cargo" for path in (sdk, *sdk.parents)), cargo_home):
+        for name in ("config", "config.toml"):
+            path = directory / name
+            if (path.exists() or path.is_symlink()) and str(path) not in policy["sourcePins"]:
+                raise ValueError(f"unpinned Cargo configuration rejected: {path}")
     return prepared
 
 
@@ -113,6 +122,10 @@ def prepare(arguments):
     for path in (cargo, rustc):
         if str(path) not in policy["sourcePins"]:
             raise ValueError("actual nightly executables must be pinned by the checked source policy")
+    # The pinned rustc launcher loads the driver/LLVM libraries, and this gate (unlike
+    # the type check) links with rust-lld. Record them so a later change is rejected.
+    compiler = [path for path in sorted((toolchain / "lib").iterdir()) if path.is_file() and not path.is_symlink()]
+    compiler = {str(path): identity(path) for path in (*compiler, toolchain / "lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld")}
     bindgen, node = arguments.bindgen.resolve(), arguments.node.resolve()
     for path, digest in ((bindgen, arguments.bindgen_sha256), (node, arguments.node_sha256)):
         if identity(path)["sha256"] != digest:
@@ -182,7 +195,7 @@ def prepare(arguments):
               "checkedTargetReusedForSamePhysicalCopy": arguments.reuse_checked_target,
               "cargoOutput": str(target / "wasm32-unknown-unknown" / ("release" if arguments.profile == "release" else "debug") / "wasmer_js.wasm"),
               "bindgenVersion": BINDGEN_VERSION, "stages": stages,
-              "inputPins": {str(bindgen): identity(bindgen), str(node): identity(node)},
+              "inputPins": {str(bindgen): identity(bindgen), str(node): identity(node), **compiler},
               "admission": {"minimumAvailableMemoryBytes": 8 * 1024**3, "minimumFreeDiskBytes": 8 * 1024**3},
               "limits": {"cpuSoftSeconds": 3000, "cpuHardSeconds": 3060, "addressSpaceBytes": 12 * 1024**3, "minimumRemainingDiskBytes": 2 * 1024**3},
               "supervisorLog": str(supervisor_log)}
@@ -213,9 +226,9 @@ def admitted(root, recipe):
 
 def run(root):
     status = 3
-    guard.enable_cleanup()
     receipt = {"schemaVersion": 1, "complete": False, "guestQualified": False, "startedAtUnix": time.time()}
     try:
+        guard.enable_cleanup()
         recipe, policy = checked_plan(root)
         if not (root / "started.json").is_file():
             raise ValueError("start only through --launch")

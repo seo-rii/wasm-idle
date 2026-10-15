@@ -29,10 +29,14 @@ class AdmissionTests(unittest.TestCase):
         for name in ("wasmer-sdk", "wasmer-wasix"):
             (self.source / name).mkdir(parents=True)
             (self.source / name / "source.rs").write_text("original source\n")
+        (self.source / "wasmer-sdk/.cargo").mkdir()
+        (self.source / "wasmer-sdk/.cargo/config.toml").write_text("[build]\ntarget = \"wasm32-unknown-unknown\"\n")
         argv = ["/trusted/cargo", "+nightly-2025-07-05", "check", "--locked", "--offline", "--target",
                 "wasm32-unknown-unknown", "--lib", "--example", "container_command_snapshot_compile", "-j", "1"]
         self.policy = {"preparedSource": str(self.source), "sourcePins": {
-            str(path): builder.identity(path) for path in self.source.rglob("*.rs")}, "stage": {"argv": argv}}
+            str(path): builder.identity(path) for path in self.source.rglob("*") if path.is_file()},
+            "stage": {"argv": argv, "producerWorktree": str(self.source / "wasmer-sdk"),
+                      "environment": {"CARGO_HOME": str(self.root / "cargo-home")}}}
         self.check = {"argv": argv, "exitCode": 0, "termination": "exited", "cleanup": {
             "allReaped": True, "signaled": [], "remaining": [], "errors": []}}
         self.policy_path, self.check_path = self.root / "policy.json", self.root / "check.json"
@@ -47,9 +51,9 @@ class AdmissionTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def rejected_without_tool_or_output(self):
+    def rejected_without_tool_or_output(self, reason=""):
         with patch.object(builder.subprocess, "check_output", side_effect=AssertionError("tool must not run")) as tool:
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, reason):
                 builder.prepare(self.options)
             tool.assert_not_called()
         self.assertFalse(self.options.output.exists())
@@ -97,6 +101,58 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source tree inventory changed"):
             builder.verify_source(self.policy)
 
+    def test_unpinned_cargo_configuration_before_tool_or_output(self):
+        # A prepared-root addition fails the source inventory first. Ancestor and
+        # CARGO_HOME configuration instead reaches the independent config pin gate.
+        for directory, reason in (
+            (self.source / ".cargo", "source tree inventory changed"),
+            (self.root / ".cargo", "unpinned Cargo configuration"),
+            (self.root / "cargo-home", "unpinned Cargo configuration"),
+        ):
+            with self.subTest(directory=directory):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "config.toml").write_text("[build]\nrustflags = [\"-Cdebuginfo=2\"]\n")
+                try:
+                    self.rejected_without_tool_or_output(reason)
+                finally:
+                    (directory / "config.toml").unlink()
+                    directory.rmdir()
+
+    def test_pinned_sdk_cargo_configuration_is_accepted(self):
+        self.assertEqual(builder.verify_source(self.policy), self.source.resolve())
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux process owner")
+    def test_prepared_plan_pins_compiler_libraries_and_linker(self):
+        toolchain = self.root / "rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu"
+        linker = toolchain / "lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld"
+        linker.parent.mkdir(parents=True)
+        (toolchain / "bin").mkdir()
+        for path in (toolchain / "bin/cargo", toolchain / "bin/rustc", toolchain / "lib/librustc_driver-test.so", linker):
+            path.write_text(path.name + "\n")
+        for name in ("cargo", "rustc"):
+            self.policy["sourcePins"][str(toolchain / "bin" / name)] = builder.identity(toolchain / "bin" / name)
+        (self.source / "receipt.json").write_text(json.dumps({"sdkSourceRevision": builder.SDK_REVISION}))
+        self.policy["stage"]["environment"]["RUSTUP_HOME"] = str(self.root / "rustup")
+        self.policy["sourceCommit"] = "0" * 40
+        self.policy_path.write_text(json.dumps(self.policy))
+        bindgen, node = self.root / "wasm-bindgen", self.root / "node"
+        bindgen.write_text("#!/bin/sh\necho 'wasm-bindgen 0.2.101'\n")
+        bindgen.chmod(0o700)
+        node.write_text("node\n")
+        self.options.__dict__.update(
+            source_policy_sha256=builder.identity(self.policy_path)["sha256"],
+            bindgen=bindgen, bindgen_sha256=builder.identity(bindgen)["sha256"],
+            node=node, node_sha256=builder.identity(node)["sha256"],
+            log_directory=self.root / "logs", profile="release", reuse_checked_target=False)
+        with patch("builtins.print"):
+            builder.prepare(self.options)
+        recipe, _ = builder.checked_plan(self.options.output)
+        for path in (toolchain / "lib/librustc_driver-test.so", linker):
+            self.assertIn(str(path), recipe["inputPins"])
+        linker.write_text("replaced linker\n")
+        with self.assertRaisesRegex(ValueError, "pinned input changed"):
+            builder.checked_plan(self.options.output)
+
 
 @unittest.skipUnless(sys.platform == "linux", "Linux process ownership")
 class OwnershipTests(unittest.TestCase):
@@ -139,6 +195,45 @@ except RuntimeError as error:(root/'error.txt').write_text(str(error))
     def test_zero_exit_with_detached_descendant_is_rejected_and_reaped(self):
         result = self.exercise("import os,time; child=os.fork(); os._exit(0) if child else None; os.setsid(); time.sleep(30)")
         self.assertEqual(result["exitCode"], 0)
+
+    def test_children_created_by_worker_threads_are_observed_and_reaped(self):
+        payload = """
+import json,os,subprocess,sys,threading
+sys.path.insert(0,sys.argv[1])
+import container_shell_sdk_build_guard as g
+g.enable_cleanup()
+ready,release=threading.Event(),threading.Event()
+children=[]
+def spawn_from_worker():
+    children.append(subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],
+        stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+        start_new_session=True))
+    ready.set()
+    release.wait(5)
+thread=threading.Thread(target=spawn_from_worker)
+thread.start()
+try:
+    assert ready.wait(5),'thread did not start its real child'
+    child=children[0]
+    observed=g.owned_processes()
+    assert any(value['pid']==child.pid for value in observed),'worker-thread child was omitted'
+    assert len({value['pid'] for value in observed})==len(observed),'duplicate process observation'
+    cleanup=g.cleanup(child)
+    assert cleanup['allReaped'] and not cleanup['remaining'] and not cleanup['errors']
+    assert any(value['pid']==child.pid for value in cleanup['signaled'])
+    assert any(value['pid']==child.pid for value in cleanup['reaped'])
+    print(json.dumps({'observed':observed,'cleanup':cleanup}))
+finally:
+    release.set()
+    for child in children:
+        if child.poll() is None:child.kill()
+        child.wait(timeout=3)
+    thread.join(timeout=3)
+"""
+        result = subprocess.run([sys.executable, "-c", payload, str(SCRIPTS)],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["cleanup"]["allReaped"])
 
     def test_actual_node_shared_memory_inspection_under_address_space_cap(self):
         node = os.environ.get("WASM_IDLE_SDK_INSPECTION_NODE", "node")

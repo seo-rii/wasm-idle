@@ -333,6 +333,23 @@ Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
 or browser cleanup. Earlier failure and source-only receipts retain their
 original results; no probe returns fabricated guest success.
 
+## Historical initial release-build timeout
+
+The first real [SDK release-build receipt](evidence.sdk-build-timeout.json) records
+a failed 3,600-second attempt using the original helper commit
+`635e2d7780c982ea4dc04d0c42cd0fbc50d8acd2`. The outer wall deadline killed
+Cargo, which exited -9 after 3,600.395 seconds; the supervisor's final status is 3. The [unchanged original process record](evidence.sdk-build-timeout-process.json)
+also records rustc child 4042242 subsequently reaped with exit 0 and no remaining
+entries or cleanup errors. That older guard's main-thread-only traversal could
+miss worker-thread children in process/RSS samples, so its `allReaped` result
+does not independently qualify every task-owned descendant. Separate read-only
+archival checks match all 580 source pins and report the known historical PIDs
+gone; they do not reconstruct missing observations. The completed log's inspected
+tail ends at `console_error_panic_hook` without a Rust compile error in that
+excerpt. No runnable SDK Wasm was produced. It did not qualify web glue, static inventory, local
+module/Worker packaging, real Bash execution or browser gates;
+the source, locks and release profile retain their original identities.
+
 ## Six-patch SDK check and binary gate
 
 The fresh six-patch candidate at source commit

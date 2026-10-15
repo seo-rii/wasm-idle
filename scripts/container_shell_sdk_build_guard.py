@@ -61,7 +61,13 @@ def owned_processes():
             continue
         seen.add(current)
         try:
-            pending.extend(int(x) for x in Path(f"/proc/{current}/task/{current}/children").read_text().split())
+            # A multithreaded build tool can create children from any task.
+            # Linux's children file lists only children of that specific task.
+            for task in Path(f"/proc/{current}/task").iterdir():
+                try:
+                    pending.extend(int(x) for x in (task / "children").read_text().split())
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
             if current != os.getpid():
                 values.append(read_process(current))
         except (FileNotFoundError, ProcessLookupError):

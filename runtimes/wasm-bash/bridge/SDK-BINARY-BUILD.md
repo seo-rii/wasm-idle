@@ -17,9 +17,17 @@ common filesystem/fd routing, or supported shell adapter is provided here.
 Supply the successful type-check process receipt and the source policy with
 independently known SHA-256 values. The policy contains the complete prepared
 SDK/WASIX source inventory, both locks and the actual private nightly executables.
+Those executables are only the `cargo`/`rustc` launchers, so preparation also
+records the toolchain's driver/LLVM libraries and the `rust-lld` linker that this
+gate newly uses. These are self-computed identities, not independent digests.
+The `rust-src` standard library compiled by build-std is identified only by its
+pinned lock/manifest and the toolchain channel.
 Every input hash and the exact source-file inventories are rechecked before
 preparation, launch and after each build stage. Failed checks, force-cleaned
 successful checks, unlisted source files and changed inputs are rejected.
+Cargo also reads `.cargo/config(.toml)` from every ancestor of the SDK
+directory and from `CARGO_HOME`; any such file not pinned by the policy (only
+the SDK's own configuration is expected) is rejected at the same points.
 
 | Input                         | Required identity                                                                                                                       |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -127,6 +135,36 @@ detached children, and records cleanup in each stage's process receipt. A zero
 exit leaving live descendants is rejected. A completed successful build has
 `final.status` 0 and `receipt.json` with `complete: true`, verified input hashes,
 artifact hashes and static inventory. `guestQualified` remains false.
+
+Process discovery enumerates the `children` file of every Linux task, recursively,
+so a child spawned by a Cargo worker thread is included. A real thread-spawn
+regression verifies observation, kill and reap; the fixture fails against the
+earlier main-thread-only traversal. Task exit races are tolerated and PID/start
+ticks are rechecked before signaling.
+
+Cleanup requires the supervisor to remain alive through its bounded cleanup
+loop. If the supervisor itself is killed or runs out of memory, its final
+receipt may be absent; inspect its owned process generations separately.
+
+Previously sealed attempts keep their original process-owner bytes. Their
+sampled process/RSS observations may omit children created by worker threads;
+an `allReaped` result from that older traversal does not independently qualify
+that boundary. Do not edit the running recipe or upgrade historical evidence
+to the corrected owner. After an older attempt exits, inspect every owned task's
+descendants and record any supplementary cleanup separately before using its
+output or starting another build.
+
+The [successful SDK binary receipt](evidence.sdk-binary.json) now records the
+actual release Wasm, generated web glue and static inventory for prepared source
+`de98d061435a308e8bbcd2ca195d29ac07401774`, using helper commit
+`d801882b518211eb0563cdda9f3f4369a30f8e6a`. The receipt and three stage process
+records retain their original bytes; [archive metadata](evidence.sdk-binary-metadata.json)
+links their identities and verifies all 580 source pins, six additional tool/compiler
+library pins and six outputs. SDK build, bindgen and inspection exited zero in
+100.969, 1.761 and 0.255 seconds, with complete cleanup and no signals. This manual
+follow-up reused the checked target for the same physical source copy; its timing
+is not a clean rebuild measurement. `guestQualified` remains false, and local
+module/Worker packaging, real Bash and browser behavior remain separate gates.
 
 ## Remaining gates
 
