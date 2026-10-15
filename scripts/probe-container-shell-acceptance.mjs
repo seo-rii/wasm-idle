@@ -53,6 +53,11 @@ export async function checkProbe(configuration) {
 	assert.equal(await realpath(dirname(configuration.output)), dirname(configuration.output),
 		'output parent must exist without symlink ancestors');
 	const inputs = await readPinnedProbeInputs(configuration);
+	// The container's own validator must accept the distribution before Chromium starts.
+	const { validateDistribution } = await import('../packages/container/dist/packages/distribution.js');
+	const bytes = Buffer.from(manifest('http://127.0.0.1:1', inputs));
+	await validateDistribution({ bytes, expectedSha256: digest(bytes), adapterIds: ['wasi-preview1-live', 'llvm-clang-tool-host-v1'],
+		allowedAssetURLs: ['busybox', 'clang', 'lld', 'sysroot'].map((name) => `http://127.0.0.1:1/assets/${name}`) });
 	return { inputs, bundles: await bundles() };
 }
 
@@ -60,7 +65,8 @@ function manifest(origin, inputs) {
 	const busyboxIdentity = { ...identity(inputs.busybox), mediaType: 'application/wasm' };
 	const producer = inputs.clang.producer.source;
 	return JSON.stringify({
-		schemaVersion: 1, distributionId: `shell-acceptance-${digest(inputs.busybox)}-${inputs.clang.producerSha256}`,
+		schemaVersion: 1,
+		distributionId: `shell-acceptance-${digest(Buffer.from(JSON.stringify([digest(inputs.busybox), inputs.clang.producerSha256, PROCESS_SYSROOT_RECEIPT_SHA256])))}`,
 		packages: [
 			{
 				id: 'busybox', identity: `sha256:${busyboxIdentity.sha256}`, dependencies: [], mount: '/opt/toolchains/busybox',
