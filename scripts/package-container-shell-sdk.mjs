@@ -105,8 +105,17 @@ export async function verifyBinaryInputs(configuration) {
 	for (const [name, expected] of Object.entries(policy.sourcePins).sort()) {
 		await pinnedFile(name, expected);
 	}
-	for (const name of ['wasmer-sdk', 'wasmer-wasix']) {
+	const sourceTrees = policy.sourceTrees ?? ['wasmer-sdk', 'wasmer-wasix'];
+	assert(Array.isArray(sourceTrees) && new Set(sourceTrees).size === sourceTrees.length &&
+		sourceTrees.includes('wasmer-sdk') && sourceTrees.includes('wasmer-wasix') &&
+		sourceTrees.every(name => ['wasmer-sdk', 'wasmer-wasix', 'virtual-fs'].includes(name)),
+		'Explicit supported source tree inventory');
+	const actualTrees = (await readdir(policy.preparedSource, { withFileTypes: true }))
+		.filter(entry => entry.isDirectory() || entry.isSymbolicLink()).map(entry => entry.name).sort();
+	assert.deepEqual(actualTrees, [...sourceTrees].sort(), 'No unlisted dependency source trees');
+	for (const name of sourceTrees) {
 		const directory = join(policy.preparedSource, name);
+		assert((await lstat(directory)).isDirectory(), 'Source tree must be a real directory');
 		assert.deepEqual(
 			await inventory(directory),
 			Object.keys(policy.sourcePins)
