@@ -5,6 +5,35 @@ experiments. Component and local integration results do not constitute a publish
 
 ## Current integration
 
+The final main integration was requalified at
+`b3305cccd734eb80bce31e9f66ae93066c88bb83`, including main baseline
+`af68215f26ffc72594bdee3e4481e8db0aecd010` and all 64 predecessor PR merge commits.
+It retains the current Core changes and the lifecycle, filesystem and I/O guards from
+the earlier side branches. These results have their own
+[raw receipts, cleanup records and source pins](../packages/container/test/shell-acceptance/evidence/stack-main-20261016/README.md).
+Core, LLVM host and container JavaScript/types were freshly compiled from that frozen
+source before execution; the existing pinned runtime binaries and complete sysroot were reused.
+
+| Final integrated-source gate | Result |
+| --- | --- |
+| Container unit/contracts | 246/246 |
+| Distribution, hosting and shell judges | 44/44 |
+| Existing Clang regressions | 220/220 |
+| Package verification | 35/35 |
+| Complete root script suite | 237 passed; one existing optional SDK-source check skipped |
+| Actual snapshot Bash, eight scenarios | 83/83 |
+| Actual live Bash, three scenarios | 50/50 |
+| Rendered live workbench, three runs | 6/6 |
+
+The fresh host-only npm package passes its 108-file boundary and zero-fetch root import.
+Every browser guard exits 0 and reaps all owned OS descendants without forced signals.
+Shell Workers retire before context closure; the rendered workbench retires its owner
+after explicit close. The initial live attempt stopped at disk admission before browser
+execution; its failure remains separate from the successful retry. The workspace CI job
+now builds its LLVM/container prerequisites and supplies the locked installed esbuild
+path to the unchanged root script tests. Source/license correspondence, clean producer
+rebuild provenance and production deployment remain separate release gates.
+
 The product stack combines the common resource contracts, verified package loading,
 real Bash adapter, actual Clang/BusyBox commands, persistent workspace and rendered
 workbench. Earlier statements that the shell bridge or UI was absent describe the
@@ -18,11 +47,10 @@ canonical LLVM multicall execution), #230 (shared real Bash profile), and #231
 (immutable workbench hosting), #232 (rebuilt SDK and actual workbench qualification),
 #233 (view transaction fixes), #234 (recorded performance baseline), #235 (product
 integration), #236 (optional live LLVM commands), and #237 (actual live Bash integration).
-The product integration merges
-the exact SDK source from #223; all 119 source/evidence blobs match that branch while
-preserving host-side build documentation.
+The product integration preserves the exact 20 SDK patches and ten compiled Rust source
+files reviewed in #223, together with the historical receipts and their original identities.
 
-The combined library gates pass 235 container unit/contract tests, 44 distribution,
+The pre-integration library gates recorded 235 container unit/contract tests, 44 distribution,
 hosting and shell-judge tests, 207 existing Clang tests, 18 source-material tests, and
 the host-only npm package boundary (108 files; zero root-import fetches). Real Chromium
 regressions also pass 34 live-I/O, 21 persistence and 14 workspace checks; all owned
@@ -103,9 +131,10 @@ The [live UI receipt](../packages/container/test/fixtures/product-live-shell-002
 records the selected live adapter. Its owner remains alive for editing and retires after
 explicit close. All three final guards exit 0 and reap every OS descendant without
 forced signals. These local live results do not change the earlier immutable snapshot lock.
-The final browser runs used `a8ff08b7`; subsequent commits add receipts, documentation
-and a test that verifies the archived identities and reapplies the current shell judges.
-They do not relabel the executed sources or change runtime behavior.
+Those historical browser runs used `a8ff08b7`; their evidence-only follow-ups add receipts,
+documentation and a test that verifies archived identities and reapplies the shell judges.
+The final main integration is independently requalified above. Original executed source
+identities remain unchanged in every historical receipt.
 
 Source packs preserve exact material identities while explicitly
 recording incomplete runtime source/notice correspondence. Production responses,
