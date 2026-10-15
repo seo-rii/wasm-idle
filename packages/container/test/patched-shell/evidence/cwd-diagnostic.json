@@ -1,0 +1,3821 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "guestAcceptancePassed": false,
+  "startedAt": "2026-10-15T01:27:13.016Z",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "applicationCommit": "71a1ce87e6b24bf7459f1c2a6a80ddf95eb619bc",
+  "packageReceipt": {
+    "bytes": 2604,
+    "sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+  },
+  "fixtureSet": "diagnostic-only",
+  "packageId": "sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914",
+  "memory": {
+    "initial": 34,
+    "maximum": 16384,
+    "shared": true
+  },
+  "compilerVersion": "clang version 16.0.0",
+  "fixtureSources": {
+    "g0-shell/probe.c": {
+      "bytes": 3815,
+      "sha256": "cb1f2be3d277ae44cad53164a7d8eac74ad911e38642a30a670b6b194e34f6d0"
+    },
+    "patched-shell/env-count.c": {
+      "bytes": 1089,
+      "sha256": "293ee1805c1c0b46718bbb4583d1ce9ef119f562a887d2c72fcf9350a185a7dd"
+    },
+    "patched-shell/worker.mjs": {
+      "bytes": 3780,
+      "sha256": "f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531"
+    }
+  },
+  "commands": [
+    {
+      "command": "/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/clang-16",
+      "args": [
+        "--target=wasm32",
+        "-nostdlib",
+        "-O1",
+        "-fno-builtin",
+        "-fuse-ld=/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/wasm-ld",
+        "-Wl,--entry=_start",
+        "-Wl,--export-memory",
+        "-Wl,--max-memory=16777216",
+        "-Wl,-z,stack-size=65536",
+        "-o",
+        "/data/seorii-container-20261014/worker-shell-cwd-20261015T012700Z/browser/fixtures/probe.wasm",
+        "/home/seorii/dev/hancomac/tmp/container-20261013/sdk-worker-browser/packages/container/test/g0-shell/probe.c"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": "/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/clang-16",
+      "args": [
+        "--target=wasm32",
+        "-nostdlib",
+        "-O1",
+        "-fno-builtin",
+        "-fuse-ld=/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/wasm-ld",
+        "-Wl,--entry=_start",
+        "-Wl,--export-memory",
+        "-Wl,--max-memory=16777216",
+        "-Wl,-z,stack-size=65536",
+        "-DG0_WASIX_CWD",
+        "-o",
+        "/data/seorii-container-20261014/worker-shell-cwd-20261015T012700Z/browser/fixtures/cwd.wasm",
+        "/home/seorii/dev/hancomac/tmp/container-20261013/sdk-worker-browser/packages/container/test/g0-shell/probe.c"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": "/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/clang-16",
+      "args": [
+        "--target=wasm32",
+        "-nostdlib",
+        "-O1",
+        "-fno-builtin",
+        "-fuse-ld=/data/seorii-container-20261014/bash-shim-build-20261014/work/wasi-sdk/bin/wasm-ld",
+        "-Wl,--entry=_start",
+        "-Wl,--export-memory",
+        "-Wl,--max-memory=16777216",
+        "-Wl,-z,stack-size=65536",
+        "-o",
+        "/data/seorii-container-20261014/worker-shell-cwd-20261015T012700Z/browser/fixtures/env-count.wasm",
+        "/home/seorii/dev/hancomac/tmp/container-20261013/sdk-worker-browser/packages/container/test/patched-shell/env-count.c"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "results": [
+    {
+      "id": "DIAG-CWD-RELATIVE",
+      "script": "/workspace/cwd.wasm cwd; printf \"\\n\"; ./probe.wasm copy | ./probe.wasm copy > relative; ./probe.wasm copy < relative",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          47,
+          119,
+          111,
+          114,
+          107,
+          115,
+          112,
+          97,
+          99,
+          101,
+          10,
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ],
+        "stderr": []
+      },
+      "files": {
+        "/relative": {
+          "error": "Error: entry not found"
+        }
+      },
+      "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+      "bashImports": [
+        {
+          "module": "wasm_idle_shell_v1",
+          "name": "exec_v1",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "clock_time_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_set_flags",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_readdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_renumber",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_seek",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_tell",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_rename",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_unlink_file",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "poll_oneoff",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "sched_yield",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "random_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_dup",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_pipe",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_set",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "getcwd",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "chdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "callback_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wait",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake_all",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_checkpoint",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_restore",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_raise_interval",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_fork",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_parent",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_join",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_connect",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname"
+        ],
+        "directory": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname",
+          "readDir",
+          "writeFile",
+          "readFile",
+          "readTextFile",
+          "createDir",
+          "removeDir",
+          "removeFile"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              47,
+              119,
+              111,
+              114,
+              107,
+              115,
+              112,
+              97,
+              99,
+              101,
+              10,
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ],
+            "stderr": []
+          },
+          "files": {
+            "/relative": {
+              "error": "Error: entry not found"
+            }
+          },
+          "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+          "bashImports": [
+            {
+              "module": "wasm_idle_shell_v1",
+              "name": "exec_v1",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            },
+            {
+              "module": "env",
+              "name": "memory",
+              "kind": "memory"
+            }
+          ],
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname"
+            ],
+            "directory": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname",
+              "readDir",
+              "writeFile",
+              "readFile",
+              "readTextFile",
+              "createDir",
+              "removeDir",
+              "removeFile"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "type": "worker",
+          "title": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "url": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "attached": true,
+          "parentId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1150,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        },
+        {
+          "targetId": "94D591FEBCA267F7BC1ED85C259092DF",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        },
+        {
+          "targetId": "ACCD20D90367A3035D4BB8554FE4D947",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        },
+        {
+          "targetId": "7C63506877582F2C581BB9756D87988D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        },
+        {
+          "targetId": "8196E571CAABD26FA9ADE921AB16D6AD",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        },
+        {
+          "targetId": "CA4F8197E9F961FAE7104192F79C2494",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "74B5F817BDDAB04D08CCCD178A3BE35E",
+          "canAccessOpener": false,
+          "parentFrameId": "23CC7D80E2385ACB9201D2E2BC51C9C0",
+          "browserContextId": "00B264D708C18403088A93CD75C7643F"
+        }
+      ],
+      "createdNestedWorkerTargets": 5,
+      "peakLiveWorkerTargets": 6,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "DIAG-CWD-ABSOLUTE",
+      "script": "./probe.wasm copy | ./probe.wasm copy > /workspace/absolute; ./probe.wasm copy < /workspace/absolute",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ],
+        "stderr": []
+      },
+      "files": {
+        "/absolute": [
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ]
+      },
+      "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+      "bashImports": [
+        {
+          "module": "wasm_idle_shell_v1",
+          "name": "exec_v1",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "clock_time_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_set_flags",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_readdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_renumber",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_seek",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_tell",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_rename",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_unlink_file",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "poll_oneoff",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "sched_yield",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "random_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_dup",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_pipe",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_set",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "getcwd",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "chdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "callback_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wait",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake_all",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_checkpoint",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_restore",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_raise_interval",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_fork",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_parent",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_join",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_connect",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname"
+        ],
+        "directory": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname",
+          "readDir",
+          "writeFile",
+          "readFile",
+          "readTextFile",
+          "createDir",
+          "removeDir",
+          "removeFile"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ],
+            "stderr": []
+          },
+          "files": {
+            "/absolute": [
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ]
+          },
+          "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+          "bashImports": [
+            {
+              "module": "wasm_idle_shell_v1",
+              "name": "exec_v1",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            },
+            {
+              "module": "env",
+              "name": "memory",
+              "kind": "memory"
+            }
+          ],
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname"
+            ],
+            "directory": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname",
+              "readDir",
+              "writeFile",
+              "readFile",
+              "readTextFile",
+              "createDir",
+              "removeDir",
+              "removeFile"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "7194953C1B3B7A64B94ECD932077105D",
+          "type": "worker",
+          "title": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "url": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "attached": true,
+          "parentId": "AB523A2A6870DA995E259C828477FF04",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 926,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "7194953C1B3B7A64B94ECD932077105D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "AB523A2A6870DA995E259C828477FF04",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "B117EE189B8026B4A7FBD778F19D1684",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "C490E926E85B8EFB4C7BA03779A18F38",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "A82952949266C1462118DE4D54D79AB8",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "DD20B79FD23E0ADF84ADA0833F70D9C3",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "C01617A001F51D5DA2E72D0ED5A12B65",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "9CA9A6E7F2C11AF9BDBB48774D6270E9",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        },
+        {
+          "targetId": "9B979100632420C36D39B1D9CF5FD9BB",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "7194953C1B3B7A64B94ECD932077105D",
+          "canAccessOpener": false,
+          "parentFrameId": "AB523A2A6870DA995E259C828477FF04",
+          "browserContextId": "D28C2A01B31EF6651976A7DC5437AEA4"
+        }
+      ],
+      "createdNestedWorkerTargets": 7,
+      "peakLiveWorkerTargets": 8,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "DIAG-CWD-CHDIR",
+      "script": "cd /workspace; ./probe.wasm copy | ./probe.wasm copy > after-chdir; ./probe.wasm copy < after-chdir",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ],
+        "stderr": []
+      },
+      "files": {
+        "/after-chdir": [
+          0,
+          255,
+          226,
+          130,
+          172,
+          10,
+          13,
+          97,
+          98
+        ]
+      },
+      "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+      "bashImports": [
+        {
+          "module": "wasm_idle_shell_v1",
+          "name": "exec_v1",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "clock_time_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_set_flags",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_readdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_renumber",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_seek",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_tell",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_rename",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_unlink_file",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "poll_oneoff",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "sched_yield",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "random_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_dup",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_pipe",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_set",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "getcwd",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "chdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "callback_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wait",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake_all",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_checkpoint",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_restore",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_raise_interval",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_fork",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_parent",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_join",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_connect",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname"
+        ],
+        "directory": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname",
+          "readDir",
+          "writeFile",
+          "readFile",
+          "readTextFile",
+          "createDir",
+          "removeDir",
+          "removeFile"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ],
+            "stderr": []
+          },
+          "files": {
+            "/after-chdir": [
+              0,
+              255,
+              226,
+              130,
+              172,
+              10,
+              13,
+              97,
+              98
+            ]
+          },
+          "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+          "bashImports": [
+            {
+              "module": "wasm_idle_shell_v1",
+              "name": "exec_v1",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            },
+            {
+              "module": "env",
+              "name": "memory",
+              "kind": "memory"
+            }
+          ],
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname"
+            ],
+            "directory": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname",
+              "readDir",
+              "writeFile",
+              "readFile",
+              "readTextFile",
+              "createDir",
+              "removeDir",
+              "removeFile"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "9E1EF156F360ECA2084F94682E0E0C0C",
+          "type": "worker",
+          "title": "worker-8",
+          "url": "http://127.0.0.1:39353/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+          "attached": true,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "CF9589531A294F8516E244DB0938E995",
+          "type": "worker",
+          "title": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "url": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "attached": true,
+          "parentId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 1023,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "CF9589531A294F8516E244DB0938E995",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "A78FF13C7FC8C649569B1519236F8EFF",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "CAC20034725E02CC0BE2A223160DF6E1",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "9E291930C1B48F5666FF831A962C91F6",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "15B54185976271ECB214067AD9819563",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "D846CC1C051229D348431C717EE6C7B0",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "0FFBB5DD4C7E514A35A67553FA8E8E96",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "7AFD78F9514B7B82AD04C0565ABA2E9D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        },
+        {
+          "targetId": "9E1EF156F360ECA2084F94682E0E0C0C",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "CF9589531A294F8516E244DB0938E995",
+          "canAccessOpener": false,
+          "parentFrameId": "93E340451CAC4FBC12CE50748E3DA1AB",
+          "browserContextId": "4792780A6DC21E2F1FAAAD5AF52D6FA4"
+        }
+      ],
+      "createdNestedWorkerTargets": 8,
+      "peakLiveWorkerTargets": 9,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    },
+    {
+      "id": "DIAG-CWD-PARENT",
+      "script": "printf \"from-parent\\n\" > parent; ./probe.wasm copy < parent",
+      "type": "result",
+      "backendCompleted": true,
+      "result": {
+        "code": 0,
+        "stdout": [
+          102,
+          114,
+          111,
+          109,
+          45,
+          112,
+          97,
+          114,
+          101,
+          110,
+          116,
+          10
+        ],
+        "stderr": []
+      },
+      "files": {
+        "/parent": {
+          "error": "Error: entry not found"
+        }
+      },
+      "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+      "bashImports": [
+        {
+          "module": "wasm_idle_shell_v1",
+          "name": "exec_v1",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "args_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "environ_sizes_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "clock_time_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_close",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_fdstat_set_flags",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_prestat_dir_name",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_read",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_readdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_renumber",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_seek",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_tell",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "fd_write",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_filestat_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_rename",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "path_unlink_file",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "poll_oneoff",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "proc_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "sched_yield",
+          "kind": "function"
+        },
+        {
+          "module": "wasi_snapshot_preview1",
+          "name": "random_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_dup",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "fd_pipe",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_get",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "tty_set",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "getcwd",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "chdir",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "callback_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wait",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "futex_wake_all",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "thread_exit",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_checkpoint",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "stack_restore",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_raise_interval",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_fork",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_id",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_parent",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_join",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "proc_signal",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_open",
+          "kind": "function"
+        },
+        {
+          "module": "wasix_32v1",
+          "name": "sock_connect",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "trackedWorkersAtBackendCompletion": 0,
+      "publicApi": {
+        "runtime": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname"
+        ],
+        "directory": [
+          "constructor",
+          "__destroy_into_raw",
+          "free",
+          "__getClassname",
+          "readDir",
+          "writeFile",
+          "readFile",
+          "readTextFile",
+          "createDir",
+          "removeDir",
+          "removeFile"
+        ]
+      },
+      "events": [
+        {
+          "type": "sdkInitialized",
+          "trackedChildren": 0
+        },
+        {
+          "type": "started",
+          "trackedChildren": 1
+        },
+        {
+          "type": "result",
+          "backendCompleted": true,
+          "result": {
+            "code": 0,
+            "stdout": [
+              102,
+              114,
+              111,
+              109,
+              45,
+              112,
+              97,
+              114,
+              101,
+              110,
+              116,
+              10
+            ],
+            "stderr": []
+          },
+          "files": {
+            "/parent": {
+              "error": "Error: entry not found"
+            }
+          },
+          "bashWasmSha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d",
+          "bashImports": [
+            {
+              "module": "wasm_idle_shell_v1",
+              "name": "exec_v1",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "args_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "environ_sizes_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "clock_time_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_close",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_fdstat_set_flags",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_prestat_dir_name",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_read",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_readdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_renumber",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_seek",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_tell",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "fd_write",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_filestat_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_rename",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "path_unlink_file",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "poll_oneoff",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "proc_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "sched_yield",
+              "kind": "function"
+            },
+            {
+              "module": "wasi_snapshot_preview1",
+              "name": "random_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_dup",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "fd_pipe",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_get",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "tty_set",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "getcwd",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "chdir",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "callback_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wait",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "futex_wake_all",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "thread_exit",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_checkpoint",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "stack_restore",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_raise_interval",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_fork",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_id",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_parent",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_join",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "proc_signal",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_open",
+              "kind": "function"
+            },
+            {
+              "module": "wasix_32v1",
+              "name": "sock_connect",
+              "kind": "function"
+            },
+            {
+              "module": "env",
+              "name": "memory",
+              "kind": "memory"
+            }
+          ],
+          "trackedWorkersAtBackendCompletion": 0,
+          "publicApi": {
+            "runtime": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname"
+            ],
+            "directory": [
+              "constructor",
+              "__destroy_into_raw",
+              "free",
+              "__getClassname",
+              "readDir",
+              "writeFile",
+              "readFile",
+              "readTextFile",
+              "createDir",
+              "removeDir",
+              "removeFile"
+            ]
+          }
+        },
+        {
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        }
+      ],
+      "workersAtObservation": [
+        {
+          "targetId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "type": "worker",
+          "title": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "url": "http://127.0.0.1:39353/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+          "attached": true,
+          "parentId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        }
+      ],
+      "ownedCleanup": {
+        "mode": "worker-owner-cleanup-acknowledged",
+        "type": "ownerCleanup",
+        "backendCompleted": true,
+        "requestedWorkerTerminations": 0,
+        "remainingTrackedChildren": 0
+      },
+      "remainingWorkerTargets": 0,
+      "elapsedMs": 836,
+      "consoleErrors": [],
+      "warnings": [
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ],
+      "blockedRequests": [],
+      "initialWorkerTargets": 0,
+      "createdWorkerTargets": [
+        {
+          "targetId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "2EDF4B74100E303F5207F822EB37595D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "B8192BD3CFB9C72002B7B73252866834",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "D4812E79E100BC4C676C89FD95D37B42",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "0928FFB31F3970643D73565C13EAF93D",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "9887EB3D53EE8F7EF6A3E11B66B25858",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        },
+        {
+          "targetId": "A66CEF4F6F2DB3468957569D81729D90",
+          "type": "worker",
+          "title": "",
+          "url": "",
+          "attached": false,
+          "parentId": "9ADA6835626A5D7CFF9A03CD86D8853B",
+          "canAccessOpener": false,
+          "parentFrameId": "F2CA5872F0117AA7A6F0A9F4718069C1",
+          "browserContextId": "00A14448FA80DF0946EC91A72BCEAAA0"
+        }
+      ],
+      "createdNestedWorkerTargets": 6,
+      "peakLiveWorkerTargets": 7,
+      "hostContextClosed": true,
+      "workersAfterContextClose": 0,
+      "remainingTargetsAfterContextClose": []
+    }
+  ],
+  "filesystemScope": "native WASIX Directory semantics; common Container fd/VFS not installed",
+  "networkScope": "Trusted local bootstrap and origin/asset allowlist; no guest/network security qualification",
+  "workerObservationScope": "All dedicated Workers in this exclusively owned Chromium browser",
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "assets": {
+    "/fixtures/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm": {
+      "bytes": 3671,
+      "sha256": "c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad"
+    },
+    "/fixtures/sha256-9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c/cwd.wasm": {
+      "bytes": 3951,
+      "sha256": "9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c"
+    },
+    "/fixtures/sha256-8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425/env-count.wasm": {
+      "bytes": 739,
+      "sha256": "8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425"
+    },
+    "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs": {
+      "bytes": 97650,
+      "sha256": "14c8629eb161a2625b7e6022fd737c86bc2cc7c035f40f5201f32991de63e20c"
+    },
+    "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs": {
+      "bytes": 2425,
+      "sha256": "dd9ac9a689ad88f9693f0147c41a6d430a588a4d49e5b4d57d30ca212669b2e8"
+    },
+    "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm": {
+      "bytes": 9071791,
+      "sha256": "326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551"
+    },
+    "/assets/sha256-67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9/bash.webc": {
+      "bytes": 1812328,
+      "sha256": "67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9"
+    },
+    "/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs": {
+      "bytes": 3780,
+      "sha256": "f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531"
+    },
+    "/": {
+      "bytes": 59,
+      "sha256": "72a75a40896968aaea0760669a7f570443433b204fc90c7b7c887cc3ff326f26"
+    }
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c/cwd.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425/env-count.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c/cwd.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425/env-count.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c/cwd.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425/env-count.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-c1e50b899bdb29a0a674465e96b2ecd64465887da94800121a98812017e947ad/probe.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-9b20244a5a1271e9f4327e7469dc3ecac12d52307b8949a936db4788749e997c/cwd.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/fixtures/sha256-8f8f470b5df22d626d716d341f6bc6de71e6d8a230769f936c2e2ec1b7011425/env-count.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-326b58090df4dbe3f0f3e4105b56b9cdbd0ebf40a5cecd437f503dac19ac7551/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sha256-67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9/bash.webc",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/harness/sha256-f3ecc4c3ad6f53f02474a523a15c42a51720a0143fa3dec9bb480b84544d0531/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/index.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-e2255f7f1890cc7c85cb29862af31cba5490ced491c21e141af221e7d2547914/worker.mjs",
+      "accepted": true
+    }
+  ],
+  "chromiumExecutable": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browser": "153.0.8010.12",
+  "qualification": {
+    "collectionComplete": false,
+    "guestAcceptancePassed": false,
+    "backendCompleteCases": 4,
+    "checks": [
+      {
+        "id": "argv-env",
+        "fixture": "G0-SHELL",
+        "status": "not-run",
+        "expectation": "Preserve spaces, UTF-8 and the empty argument, plus the exported environment."
+      },
+      {
+        "id": "argv-framing",
+        "fixture": "G0-ARGV-FRAME",
+        "status": "not-run",
+        "expectation": "Preserve empty arguments and embedded LF/CR as separate length-delimited values."
+      },
+      {
+        "id": "environment-replacement",
+        "fixture": "G0-ENV-UNSET",
+        "status": "not-run",
+        "expectation": "An explicit child environment must not retain a variable unset by the real shell."
+      },
+      {
+        "id": "stderr-bytes",
+        "fixture": "G0-SHELL",
+        "status": "not-run",
+        "expectation": "Keep stderr distinct and preserve NUL, invalid UTF-8 and multi-byte UTF-8."
+      },
+      {
+        "id": "nonzero-exit",
+        "fixture": "G0-EXIT",
+        "status": "not-run",
+        "expectation": "Preserve the real guest exit code 23."
+      },
+      {
+        "id": "cwd",
+        "fixture": "G0-CWD",
+        "status": "not-run",
+        "expectation": "Read the child cwd with wasix_32v1.getcwd after the real shell changes directory."
+      },
+      {
+        "id": "tail-exec",
+        "fixture": "G0-TAIL-EXEC",
+        "status": "not-run",
+        "expectation": "A script ending with an external command completes without a host timeout."
+      },
+      {
+        "id": "pipe-bytes",
+        "fixture": "G0-FD",
+        "status": "not-run",
+        "expectation": "Two real external commands preserve the pipe bytes and observe EOF."
+      },
+      {
+        "id": "redirect-mount",
+        "fixture": "G0-FD",
+        "status": "not-run",
+        "expectation": "The pipeline redirect creates the same file visible through the host Directory."
+      },
+      {
+        "id": "shared-files",
+        "fixture": "G0-FS",
+        "status": "not-run",
+        "expectation": "Shell writes, child reads/writes, and host/parent shell observe the same bytes."
+      },
+      {
+        "id": "resource-groups",
+        "status": "passed",
+        "expectation": "All observed Worker groups retire within five seconds and no external network request is attempted."
+      },
+      {
+        "id": "builtins-stdin",
+        "fixture": "PATCHED-BUILTINS",
+        "status": "not-run",
+        "expectation": "Actual Bash builtins consume stdin and preserve Korean output."
+      },
+      {
+        "id": "explicit-empty-environment",
+        "fixture": "PATCHED-ENV-EMPTY",
+        "status": "not-run",
+        "expectation": "Actual exec -c reaches a real Wasm environ_sizes_get reporting zero variables."
+      },
+      {
+        "id": "tail-argv",
+        "fixture": "G0-TAIL-EXEC",
+        "status": "not-run",
+        "expectation": "The final external command actually reports its complete argv/environment."
+      },
+      {
+        "id": "actual-backend-completion",
+        "status": "failed",
+        "expectation": "Every real instance.wait completes before host cleanup begins."
+      },
+      {
+        "id": "actual-sdk-initialization",
+        "status": "failed",
+        "expectation": "Every case observes the actual supplied Module/Memory SDK initializer return."
+      },
+      {
+        "id": "browser-errors",
+        "status": "failed",
+        "expectation": "No page, console or tracked SDK Worker error is hidden by guest stdout."
+      },
+      {
+        "id": "owned-host-context-cleanup",
+        "status": "failed",
+        "expectation": "The owned browser contexts close and CDP observes no remaining Worker targets."
+      }
+    ],
+    "filesystemScope": "native WASIX Directory semantics",
+    "commonContainerFdVfsQualified": false,
+    "shellBackendReady": false,
+    "originalG0Evaluation": {
+      "shellBackendReady": false,
+      "checks": [
+        {
+          "id": "argv-env",
+          "fixture": "G0-SHELL",
+          "status": "not-run",
+          "expectation": "Preserve spaces, UTF-8 and the empty argument, plus the exported environment."
+        },
+        {
+          "id": "argv-framing",
+          "fixture": "G0-ARGV-FRAME",
+          "status": "not-run",
+          "expectation": "Preserve empty arguments and embedded LF/CR as separate length-delimited values."
+        },
+        {
+          "id": "environment-replacement",
+          "fixture": "G0-ENV-UNSET",
+          "status": "not-run",
+          "expectation": "An explicit child environment must not retain a variable unset by the real shell."
+        },
+        {
+          "id": "stderr-bytes",
+          "fixture": "G0-SHELL",
+          "status": "not-run",
+          "expectation": "Keep stderr distinct and preserve NUL, invalid UTF-8 and multi-byte UTF-8."
+        },
+        {
+          "id": "nonzero-exit",
+          "fixture": "G0-EXIT",
+          "status": "not-run",
+          "expectation": "Preserve the real guest exit code 23."
+        },
+        {
+          "id": "cwd",
+          "fixture": "G0-CWD",
+          "status": "not-run",
+          "expectation": "Read the child cwd with wasix_32v1.getcwd after the real shell changes directory."
+        },
+        {
+          "id": "tail-exec",
+          "fixture": "G0-TAIL-EXEC",
+          "status": "not-run",
+          "expectation": "A script ending with an external command completes without a host timeout."
+        },
+        {
+          "id": "pipe-bytes",
+          "fixture": "G0-FD",
+          "status": "not-run",
+          "expectation": "Two real external commands preserve the pipe bytes and observe EOF."
+        },
+        {
+          "id": "redirect-mount",
+          "fixture": "G0-FD",
+          "status": "not-run",
+          "expectation": "The pipeline redirect creates the same file visible through the host Directory."
+        },
+        {
+          "id": "shared-files",
+          "fixture": "G0-FS",
+          "status": "not-run",
+          "expectation": "Shell writes, child reads/writes, and host/parent shell observe the same bytes."
+        },
+        {
+          "id": "cancel-cpu",
+          "fixture": "G0-CANCEL-CPU",
+          "status": "not-run",
+          "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+        },
+        {
+          "id": "cancel-read",
+          "fixture": "G0-CANCEL-READ",
+          "status": "not-run",
+          "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+        },
+        {
+          "id": "cancel-download",
+          "fixture": "G0-CANCEL-DOWNLOAD",
+          "status": "not-run",
+          "expectation": "Cancel an observed running guest or pending fetch, retire its Worker group, then start another real Bash group in the same page."
+        },
+        {
+          "id": "clang-version",
+          "fixture": "G0-CLANG-VERSION",
+          "status": "not-run",
+          "expectation": "The pinned real Clang binary reports its version under the Bash backend."
+        },
+        {
+          "id": "g0-clang-relative",
+          "fixture": "G0-CLANG-RELATIVE",
+          "status": "not-run",
+          "expectation": "The unmodified Clang argv succeeds and creates /main.o with Wasm magic."
+        },
+        {
+          "id": "g0-clang-compile",
+          "fixture": "G0-CLANG-COMPILE",
+          "status": "not-run",
+          "expectation": "The unmodified Clang argv succeeds and creates /main.o with Wasm magic."
+        },
+        {
+          "id": "g0-clang-link",
+          "fixture": "G0-CLANG-LINK",
+          "status": "not-run",
+          "expectation": "The unmodified Clang argv succeeds and creates /hello.wasm with Wasm magic."
+        },
+        {
+          "id": "clang-artifact-run",
+          "fixture": "G0-CLANG-LINK",
+          "status": "not-run",
+          "expectation": "Instantiate the linked freestanding artifact and execute its actual exported function."
+        },
+        {
+          "id": "resource-groups",
+          "status": "passed",
+          "expectation": "All observed Worker groups retire within five seconds and no external network request is attempted."
+        }
+      ]
+    }
+  },
+  "finishedAt": "2026-10-15T01:27:19.699Z"
+}

@@ -150,6 +150,18 @@ The fixed `probe-container-shell-cwd-diagnostic.mjs` comparisons use the same
 SDK/Bash bytes: unchanged relative redirect, absolute `/workspace` redirect,
 an explicit initial `cd /workspace`, and a parent builtin's relative write.
 Use its `--check`/`--run` interface with a fresh output configuration. It records
-`fixtureSet: diagnostic-only`; exit0 means collection completed, and diagnostics
+`fixtureSet: diagnostic-only`; exit 0 means collection completed, and diagnostics
 always retain false guest/backend qualification. They do not replace the failing
 original contract fixture.
+
+The [actual cwd comparison receipt](evidence/cwd-diagnostic.json) and
+[process receipt](evidence/cwd-diagnostic-process.json) complete collection in
+7.133 seconds with all four actual commands exiting 0 and complete cleanup.
+The host cwd guest reports `/workspace`, while relative pipeline and parent
+builtin files are absent from the host mount. Absolute `/workspace` and explicit
+initial `cd /workspace` both publish the exact nine binary bytes. The contrast
+matches the pinned libc's separate legacy cwd used by relative `open`; only
+`chdir` updates that state alongside WASIX cwd. [Metadata](evidence/cwd-diagnostic-metadata.json)
+records binary/object identities and the startup-boundary inference. A selected
+Bash producer initialization fix and a rerun of the unchanged contract are next;
+these diagnostic scripts are not a production workaround or shell qualification.
