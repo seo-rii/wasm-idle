@@ -60,6 +60,19 @@ node packages/container/scripts/test-product-shell-browser.mjs \
 
 Use the resulting receipt's actual browser, source hashes and checks to determine qualification. The presence of this example or a successful host bundle alone is not a passing real-shell gate.
 
+The explicit live profile passes **6/6 rendered-product checks across three runs**
+in actual Chromium: [receipt](../../packages/container/test/fixtures/product-live-shell-0020.json),
+[process cleanup](../../packages/container/test/fixtures/product-live-shell-0020-process.json)
+and [execution/source pins](../../packages/container/test/fixtures/product-live-shell-0020-metadata.json).
+Guarded time was 16.876 seconds. The unchanged acceptance script runs cold and
+warm, its source/result/executable survive OPFS save and owner reload, and the
+restored Wasm executes without new asset-body downloads. Foreground interruption
+releases an actual BusyBox command while Bash survives. The owner remains alive
+for editing and disappears on explicit close; all owned OS descendants are
+reaped. The receipt asserts and records the selected live manifest adapter and
+unchanged source hashes. This is a loopback live-profile result; the previously
+qualified immutable snapshot release remains unchanged.
+
 The live profile has an additional actual Bash gate:
 
 ```sh
