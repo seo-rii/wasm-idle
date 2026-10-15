@@ -30,6 +30,10 @@
     "./workspace": {
       "types": "./dist/workspace/index.d.ts",
       "import": "./dist/workspace/index.js"
+    },
+    "./terminal": {
+      "types": "./dist/terminal/index.d.ts",
+      "import": "./dist/terminal/index.js"
     }
   },
   "files": [
@@ -41,7 +45,8 @@
     "CLANG.md",
     "PERSISTENCE.md",
     "LIVE.md",
-    "WORKSPACE.md"
+    "WORKSPACE.md",
+    "TERMINAL.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -58,7 +63,8 @@
     "test:live": "pnpm run build && node scripts/test-live-browser.mjs",
     "test:workspace": "pnpm run build && node scripts/test-workspace-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
-    "test:persistence": "pnpm run build && node scripts/test-persistence-browser.mjs"
+    "test:persistence": "pnpm run build && node scripts/test-persistence-browser.mjs",
+    "test:terminal": "pnpm run build && node scripts/test-terminal-browser.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

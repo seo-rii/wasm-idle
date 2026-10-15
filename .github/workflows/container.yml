@@ -55,9 +55,13 @@ jobs:
       - run: node packages/container/scripts/test-workspace-browser.mjs
         env:
           CONTAINER_EVIDENCE: .codex/container-workspace.json
+      - run: node packages/container/scripts/test-terminal-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-terminal.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: container-browser-evidence
           path: .codex/container-*.json
-          if-no-files-found: ignore
+          include-hidden-files: true
+          if-no-files-found: error
