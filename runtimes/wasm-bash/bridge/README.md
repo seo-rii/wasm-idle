@@ -675,3 +675,27 @@ binary receipt `947691664652580593aacc4dd78861909dede3e0d0dd85501ea143b99e4220b6
 receipts are archived as `evidence.host-service-*.json` with a
 [recheck](evidence.host-service-sdk-binary-metadata.json). Local packaging produced receipt
 `ac5b9ce4cf673f3917775aa87fa95715794f61c0d6ff27b3fd05996d5d0dfc85`.
+
+## Duplicating onto a pipe
+
+The shell acceptance probe's pipeline run reproduced the long-standing redirection failure
+inside piped groups with the #220 SDK: `{ printf 'group\n' >&2; } | cat`,
+`{ printf 'file\n' > group-file; } | cat` and `( printf 'sub\n' > sub-file ) | cat` each
+printed `Invalid argument` (twice, for the redirection and for restoring the saved
+descriptor), and no file was written. In a pipeline's child, descriptor 1 is the pipe.
+Bash saves it with `F_DUPFD` and redirects it with `dup2`, which wasix-libc implements
+with `fd_renumber`. `fd_renumber` flushes the target first; for descriptor 1 or 2 that
+flush expects a file, so a pipe there reported `NotAFile` (`Inval`) and the renumber
+failed. Patch 0014 no longer fails the renumber on that result.
+
+The gate on commit `7ab530473ff05377d3700656b9d044c723753025` passed in a fresh physical copy
+with 584 pins and a unique target: typecheck 287.298 s, release 514.598 s, bindgen 2.013 s
+and static inspection 0.256 s, each exiting 0 with every process reaped. The bound Wasm is
+9,213,387 bytes, SHA-256 `19064ffc36cd534986029c75bbd852a13a785a970fc3e2cea7c82e6831d82c50`;
+binary receipt `e2afce94a64e99658fc75090995753b6969aa57ffd04e0ce87ccf423843e88ad`. Stage
+receipts are archived as `evidence.pipe-dup2-*.json` with a
+[recheck](evidence.pipe-dup2-sdk-binary-metadata.json). Local packaging produced receipt
+`6caa501f847b306963536da9e25dbe4f1b52ace793bbf9c9102ecc62a044cb8e`.
+
+`PIPESTATUS` and `pipefail` are a separate matter: the pinned Bash is configured without
+job control, and its `nojobs.c` records no per-command pipeline statuses.
