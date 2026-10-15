@@ -1,4 +1,4 @@
-import { MemoryFileSystem, FsError } from '../../fs/index.js';
+import { MemoryFileSystem, FsError, type FileStat } from '../../fs/index.js';
 import { createBatchStdio, type BatchStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
@@ -6,7 +6,7 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 10, EEXIST: 20, EFAULT: 21, EFBIG: 22, EINVAL: 28, EIO: 29, EISDIR: 31, ELOOP: 32, EMFILE: 33, ENOENT: 44, ENOMEM: 48, ENOSPC: 51, ENOSYS: 52, ENOTDIR: 54, ENOTEMPTY: 55, ENOTSUP: 58, EPERM: 63, EPIPE: 64, EROFS: 69, EXDEV: 75, ENOTCAPABLE: 76 };
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
-interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; }
+interface Handle { fd: number; root: string; label?: string; flags: number; rights: bigint; inherited: bigint; entries?: readonly { readonly name: string; readonly stat: FileStat }[]; }
 interface HostOptions { fs: MemoryFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: BatchStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : 4;
 const RIGHTS = (1n << 30n) - 1n;
@@ -124,7 +124,14 @@ export function createWasiHost(options: HostOptions) {
       v.setBigUint64(8, h?.rights ?? (fd === 0 ? 2n : 64n), true); v.setBigUint64(16, h?.inherited ?? 0n, true); return 0;
     },
     fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if ((base | h.rights) !== h.rights || (inherited | h.inherited) !== h.inherited) return 76; h.rights = base; h.inherited = inherited; return 0; },
-    fd_fdstat_set_flags: (fd, flags) => { const h = handle(fd, 8n); return flags === h.flags ? 0 : 58; },
+    fd_fdstat_set_flags: (fd, flags) => {
+      if (standard.has(fd)) return 58;
+      const h = handle(fd, 8n);
+      // Files/directories complete synchronously; NONBLOCK does not change I/O.
+      // APPEND is part of the open description and cannot be changed here yet.
+      if ((flags & ~5) || (flags & 1) !== (h.flags & 1)) return 58;
+      h.flags = flags; return 0;
+    },
     fd_filestat_get: (fd, ptr) => {
       if (!standard.has(fd)) return stat(ptr, options.fs.fstat(handle(fd, 1n << 21n).fd));
       span(ptr, 64).fill(0); view(ptr, 64).setUint8(16, 2); return 0;
@@ -133,7 +140,7 @@ export function createWasiHost(options: HostOptions) {
     fd_prestat_get: (fd, ptr) => { const h = handle(fd); if (h.label === undefined) return 8; span(ptr, 8).fill(0); put32(ptr + 4, encoder.encode(h.label).length); return 0; },
     fd_prestat_dir_name: (fd, ptr, length) => { const h = handle(fd); if (h.label === undefined) return 8; const bytes = encoder.encode(h.label); if ((length >>> 0) < bytes.length) return 37; span(ptr, bytes.length).set(bytes); return 0; },
     path_open: (fd, flags, ptr, len, oflags, rights, inherited, fdflags, result) => {
-      span(result, 4); if ((flags & ~1) || (oflags & ~15) || (fdflags & ~1)) return 58;
+      span(result, 4); if ((flags & ~1) || (oflags & ~15) || (fdflags & ~5)) return 58;
       const parent = handle(fd, 1n << 13n);
       if ((rights | parent.inherited) !== parent.inherited || (inherited | parent.inherited) !== parent.inherited) return 76;
       if ((oflags & 1) && !(parent.rights & (1n << 10n))) return 76;
@@ -157,12 +164,20 @@ export function createWasiHost(options: HostOptions) {
       options.fs.rename(`${parentA}/${a.path}`, `${parentB}/${b.path}`); return 0;
     },
     fd_readdir: (fd, ptr, length, cookie, result) => {
-      const h = handle(fd, 1n << 14n), path = options.fs.getDirectoryPath(h.fd);
+      const h = handle(fd, 1n << 14n);
       span(result, 4); const destination = span(ptr, length); let written = 0;
-      const entries = options.fs.readdir(path), start = safeOffset(cookie);
+      const start = safeOffset(cookie);
       if (start < 0) return 28;
+      if (!destination.length) { put32(result, 0); return 0; }
+      // Cookies index one listing owned by this open directory, not a re-sorted
+      // namespace after each mutation. Explicit rewind refreshes that listing.
+      if (start === 0 || !h.entries) {
+        const path = options.fs.getDirectoryPath(h.fd);
+        h.entries = options.fs.readdir(path).map(name => ({ name, stat: options.fs.lstat(`${path}/${name}`) }));
+      }
+      const entries = h.entries;
       for (let i = start; i < entries.length && written < destination.length; i++) {
-        const name = entries[i]!, encoded = encoder.encode(name), info = options.fs.lstat(`${path}/${name}`);
+        const { name, stat: info } = entries[i]!, encoded = encoder.encode(name);
         const record = new Uint8Array(24 + encoded.length), v = new DataView(record.buffer);
         v.setBigUint64(0, BigInt(i + 1), true); v.setBigUint64(8, BigInt(info.inode), true); v.setUint32(16, encoded.length, true); v.setUint8(20, filetype(info.type)); record.set(encoded, 24);
         const n = Math.min(record.length, destination.length - written); destination.set(record.subarray(0, n), written); written += n;
