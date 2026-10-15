@@ -113,3 +113,16 @@ are memory observations, and neither export nor commit is a durable flush.
 The `fs.test.mjs` suite covers FS-01 through FS-06 and the regular-file portions of
 FD-01/02. It is deterministic VFS evidence; it does not qualify a real compiler,
 WASI guest, BusyBox or shell adapter.
+
+Trusted owner adapters can capture an opaque `FileVersion` with
+`captureFileVersion(pathOrFd)`. It identifies one linked regular inode revision,
+including same-byte writes, unlink and rename. Renaming an ancestor directory
+invalidates descendant tokens even if the directory later moves back. Unrelated
+file edits and additive readonly mounts preserve a token. Snapshot publication
+invalidates prior tokens; revisions and tokens are not serialized or persisted.
+
+`readFileVersion(token)` returns a private copy only while that precise revision
+remains current. After validating that content, `grantExecutable(token)` atomically
+checks it again and derives execute bits from the existing read bits on a writable
+mount. Fabricated tokens and tokens from another filesystem fail. No guest syscall
+or RPC exposes these owner operations; they do not add guest chmod support.

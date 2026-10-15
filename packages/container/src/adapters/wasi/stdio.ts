@@ -1,4 +1,6 @@
 export interface WasiStdio {
+  /** Optional initial descriptor state for inherited bindings; batch defaults to 0/1/2. */
+  isOpen?(fd: number): boolean;
   read(length: number): Uint8Array;
   write(fd: 1 | 2, bytes: Uint8Array): number;
   close?(fd: number): void;

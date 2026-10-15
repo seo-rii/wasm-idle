@@ -2,7 +2,7 @@ import { FsError } from './errors.js';
 import { createFileSystemWatch } from './watch.js';
 import type {
   FileStat, FileSystemLease, FileSystemSnapshot, FileType, MemoryFileSystemOptions,
-  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions,
+  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions, FileVersion,
 } from './types.js';
 
 interface Inode {
@@ -18,6 +18,7 @@ interface Inode {
   mtimeMs: number;
   ctimeMs: number;
   command?: true;
+  version: FileVersion;
 }
 
 interface Description {
@@ -74,6 +75,8 @@ export class MemoryFileSystem {
   private nextFd = 3;
   private usedBytes = 0;
   private revision = 0;
+  private versionSequence = 0n;
+  private versions = new WeakMap<FileVersion, Inode>();
   private lease: symbol | undefined;
   private liveUsers = 0;
   private watchers = new Set<{ root: string; push(change: FileSystemChange): void }>();
@@ -153,10 +156,13 @@ export class MemoryFileSystem {
     if (this.nextInode >= Number.MAX_SAFE_INTEGER) throw new FsError('ENOSPC', 'Filesystem inode identities exhausted');
     checkMode(mode);
     const now = Date.now();
+    const inode = this.nextInode++;
     const node: Inode = {
-      inode: this.nextInode++, type, mode, mount, data: new Uint8Array(), target: '',
+      inode, type, mode, mount, data: new Uint8Array(), target: '',
       children: new Map(), references: 0, linked: true, mtimeMs: now, ctimeMs: now,
+      version: Object.freeze({ inode, revision: ++this.versionSequence }),
     };
+    this.versions.set(node.version, node);
     this.nodes.add(node);
     return node;
   }
@@ -176,7 +182,42 @@ export class MemoryFileSystem {
   private changed(...nodes: Inode[]): void {
     this.revision++;
     const now = Date.now();
-    for (const node of nodes) node.mtimeMs = node.ctimeMs = now;
+    for (const node of nodes) {
+      node.mtimeMs = node.ctimeMs = now;
+      this.invalidateVersion(node);
+    }
+  }
+
+  private invalidateVersion(node: Inode, descendants = false): void {
+    node.version = Object.freeze({ inode: node.inode, revision: ++this.versionSequence });
+    this.versions.set(node.version, node);
+    if (descendants) for (const child of node.children.values()) this.invalidateVersion(child, true);
+  }
+
+  /** Trusted owner bookkeeping. A token cannot be forged or used in another filesystem. */
+  captureFileVersion(pathOrFd: string | number, options: PathOptions = {}): FileVersion {
+    const node = typeof pathOrFd === 'number' ? this.descriptor(pathOrFd).node : this.resolve(pathOrFd, options).node;
+    this.file(node);
+    return node.version;
+  }
+
+  /** Returns a copy only while the exact linked inode revision remains current. */
+  readFileVersion(version: FileVersion): { path: string; mode: number; bytes: Uint8Array } | undefined {
+    const node = this.versions.get(version);
+    if (!node || !this.nodes.has(node) || !node.linked || node.version !== version || node.command) return;
+    const path = this.nodePath(node);
+    if (path === undefined) return;
+    return { path, mode: node.mode, bytes: node.data.slice() };
+  }
+
+  /** Owner-only post-validation grant; no guest chmod or RPC operation exposes this. */
+  grantExecutable(version: FileVersion): boolean {
+    const node = this.versions.get(version);
+    if (!node || !this.nodes.has(node) || !node.linked || node.version !== version || node.command) return false;
+    this.writable(node);
+    const mode = node.mode | ((node.mode & 0o444) >> 2);
+    if (mode !== node.mode) { node.mode = mode; this.changed(node); this.notifyFile(node); }
+    return true;
   }
 
   /** Walk components before reducing .. so symlink/../file has POSIX semantics. */
@@ -308,6 +349,11 @@ export class MemoryFileSystem {
     return node.data.slice();
   }
 
+  /** Resolved mount policy for trusted adapters; follows the same path capability. */
+  isReadonly(path: string, options: PathOptions = {}): boolean {
+    return this.mounts.get(this.resolve(path, options).node.mount) !== false;
+  }
+
   /** Validate capacity before replacing data; a failed write never truncates the old file. */
   writeFile(path: string, bytes: Uint8Array, options: PathOptions & { mode?: number } = {}): void {
     if (!(bytes instanceof Uint8Array)) throw new FsError('EINVAL', 'File content must be Uint8Array');
@@ -399,6 +445,7 @@ export class MemoryFileSystem {
     if (path.endsWith('/')) throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     parent.node.children.delete(parent.name);
     node.linked = false;
+    this.invalidateVersion(node);
     this.release(node);
     this.changed(parent.node);
     this.notify({ kind: 'remove', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
@@ -414,6 +461,7 @@ export class MemoryFileSystem {
     if (node.children.size) throw new FsError('ENOTEMPTY', 'Directory is not empty');
     parent.node.children.delete(parent.name);
     node.linked = false;
+    this.invalidateVersion(node);
     this.release(node);
     this.changed(parent.node);
     this.notify({ kind: 'remove', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
@@ -444,11 +492,14 @@ export class MemoryFileSystem {
       if (old.type !== 'directory' && node.type === 'directory') throw new FsError('ENOTDIR', 'Destination is not a directory');
       if (old.children.size) throw new FsError('ENOTEMPTY', 'Destination directory is not empty');
       old.linked = false;
+      this.invalidateVersion(old, true);
       this.release(old);
     }
     source.node.children.delete(source.name);
     destination.node.children.set(destination.name, node);
     this.changed(source.node, destination.node, node);
+    // Moving a directory away and back must invalidate captured descendant paths too.
+    for (const child of node.children.values()) this.invalidateVersion(child, true);
     this.notify({ kind: 'rename', path: `${destination.path === '/' ? '' : destination.path}/${destination.name}`, previousPath: sourcePath, inode: node.inode });
   }
 
@@ -639,6 +690,7 @@ export class MemoryFileSystem {
     adopt(candidate.root);
     // Every check and allocation above precedes publication. Rebinding retains
     // shared offsets/flags for dup(), and existing unlinked handles stay private.
+    for (const node of candidate.nodes) this.invalidateVersion(node);
     for (const { description, node } of rebound) description.node = node;
     this.root = candidate.root;
     this.nodes = nodes;
@@ -716,6 +768,7 @@ export class MemoryFileSystem {
       const node = fs.allocate(entry.type, mount, entry.mode);
       node.command = entry.command;
       node.inode = entry.inode;
+      fs.invalidateVersion(node);
       if (entry.mtimeMs !== undefined) node.mtimeMs = entry.mtimeMs;
       if (entry.ctimeMs !== undefined) node.ctimeMs = entry.ctimeMs;
       node.data = entry.data ? Uint8Array.from(entry.data) : new Uint8Array();
@@ -873,6 +926,7 @@ export class MemoryFileSystem {
     const retainedBytes = retained.reduce((total, node) => total + node.data.length + encoder.encode(node.target).length, 0);
     if (candidate.nodes.size + retained.length > this.maxInodes || candidate.usedBytes + retainedBytes > this.maxBytes) throw new FsError('ENOSPC', 'Package exceeds quota including open unlinked files');
     const adopted = new Map([...candidate.nodes].map(node => [node.inode, previous.get(node.inode) ?? node]));
+    for (const node of adopted.values()) if (!previous.has(node.inode)) this.invalidateVersion(node);
     const staged = [...candidate.nodes].map(node => ({
       node: adopted.get(node.inode)!, mount: node.mount,
       children: new Map([...node.children].map(([name, child]) => [name, adopted.get(child.inode)!]))
