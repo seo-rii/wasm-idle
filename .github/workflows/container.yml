@@ -52,6 +52,9 @@ jobs:
       - run: node packages/container/scripts/test-live-browser.mjs
         env:
           CONTAINER_EVIDENCE: .codex/container-live.json
+      - run: node packages/container/scripts/test-workspace-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-workspace.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
