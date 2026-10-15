@@ -1,0 +1,43 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "scripts/probe-container-shell-acceptance.mjs",
+    "--run",
+    "/data/seorii-container-fixes-20261015/public-shell-final-20261015T1441/configuration.json"
+  ],
+  "startedAtUnix": 1792075248.7619903,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 2793867,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2795059,
+        "exitCode": 0
+      },
+      {
+        "pid": 2795061,
+        "exitCode": 0
+      },
+      {
+        "pid": 2795070,
+        "exitCode": 0
+      },
+      {
+        "pid": 2795071,
+        "exitCode": 0
+      },
+      {
+        "pid": 2794129,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 103.064
+}

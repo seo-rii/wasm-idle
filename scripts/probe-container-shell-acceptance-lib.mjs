@@ -6,16 +6,16 @@ import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-c
 import { FULL_SYSROOT_SHA256, loadClangBrowserInputs } from '../packages/container/scripts/clang-browser-inputs.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
-// SDK with bridge patches 0001-0019: registry/filesystem/pipe fixes, exit-only wait,
-// raw stdin and bounded native pipes. Browser qualification remains a separate gate.
+// SDK with bridge patches 0001-0020: registry/filesystem/pipe fixes, exit-only wait,
+// raw stdin, bounded native pipes, explicit /tmp and retained setup/runtime errors.
 export const PACKAGE_RECEIPT = {
 	bytes: 2605,
-	sha256: '5b0345ab59983015d325181fbc1946e0025290ac932fbb13e3ed6e13be5fb72f'
+	sha256: 'ee74bc0dab416b3e1365f5380c0ab31abb45337fcbd45fa6fdb815459226f228'
 };
-export const BINARY_RECEIPT_SHA256 = '576b93bdadaeafff0a263bc2d4902984c507cd9fd4588a3b9cf1e6dcd729d99c';
+export const BINARY_RECEIPT_SHA256 = 'a5b2e417d78986d88dceeef65e111060d38f32456f29f4d65fc57dc4179e704d';
 export const SDK_WASM = {
-	bytes: 9266592,
-	sha256: '454832ce73ad3db7d3a9d29cee54cd1a00eaaddf1c66cd4e1d683782531c1567'
+	bytes: 9262448,
+	sha256: '11063fe5d9d5d16880cb1027e50a07841271e78709788de5b65cc6b9100ea34a'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 // BusyBox B1, qualified live in runtimes/wasm-busybox/LIVE.md.
