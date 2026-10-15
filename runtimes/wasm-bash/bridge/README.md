@@ -419,12 +419,12 @@ copy and pinned with all 583 source, toolchain and preparation identities (SDK 1
 WASIX 377 files). The unchanged pinned nightly, locks, atomics/build-std configuration and
 release profile were used, with a unique target and intermediate directory:
 
-| Stage | Command | Wall seconds |
-| --- | --- | --- |
-| Typecheck | `cargo check --locked --offline --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1` | 845.135 |
-| Release | unchanged release profile, reusing this copy's checked target | 889.651 |
-| Bindgen | `wasm-bindgen 0.2.101 --target web --weak-refs --no-demangle` | 2.013 |
-| Static inspection | one shared bounded memory, import/export inventory | 0.255 |
+| Stage             | Command                                                                                                                  | Wall seconds |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Typecheck         | `cargo check --locked --offline --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1` | 845.135      |
+| Release           | unchanged release profile, reusing this copy's checked target                                                            | 889.651      |
+| Bindgen           | `wasm-bindgen 0.2.101 --target web --weak-refs --no-demangle`                                                            | 2.013        |
+| Static inspection | one shared bounded memory, import/export inventory                                                                       | 0.255        |
 
 Every stage exited 0 with all owned processes reaped and no cleanup signal or error. The
 host was heavily shared during the run, so these times are not a benchmark. The bound
