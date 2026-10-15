@@ -5,8 +5,11 @@ import type { CommandAdapter, CommandDefinition, PreparedRuntime, RuntimeLimits 
 import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult } from './types.js';
 
 import type { ContainerPackageManager } from './packages/manager.js';
+import type { PersistentWorkspace } from './fs/persistence/index.js';
 
 export interface ContainerOptions extends MemoryFileSystemOptions {
+  /** Explicitly opened persistence owner. The injecting host retains its lifetime. */
+  readonly workspace?: PersistentWorkspace;
   readonly packages?: ContainerPackageManager;
   readonly commands?: Readonly<Record<string, CommandDefinition>>;
   readonly adapters?: readonly CommandAdapter[];
@@ -35,6 +38,7 @@ function byteOutput(bytes: Promise<Uint8Array>) {
 export class Container {
   readonly fs: MemoryFileSystem;
   readonly packages?: ContainerPackageManager;
+  readonly workspace?: PersistentWorkspace;
   #mountedPackages = new Set<string>();
   #commands = new Map<string, CommandDefinition>();
   #adapters = new Map<string, CommandAdapter>();
@@ -47,10 +51,14 @@ export class Container {
   constructor(options: ContainerOptions = {}) {
     this.packages = options.packages;
     if (this.packages?.resolveCommand('wasm-run')) throw new ContainerError('INVALID_ARGUMENT', 'wasm-run is a reserved command');
-    this.fs = new MemoryFileSystem({ maxBytes: options.maxBytes, maxInodes: options.maxInodes });
+    this.workspace = options.workspace;
+    if (this.workspace && (!(this.workspace.fs instanceof MemoryFileSystem) || this.workspace.inspect().state === 'disposed' ||
+        options.maxBytes !== undefined && options.maxBytes !== this.workspace.fs.maxBytes ||
+        options.maxInodes !== undefined && options.maxInodes !== this.workspace.fs.maxInodes)) throw new ContainerError('INVALID_ARGUMENT', 'Workspace owner and container quotas must agree');
+    this.fs = this.workspace?.fs ?? new MemoryFileSystem({ maxBytes: options.maxBytes, maxInodes: options.maxInodes });
     this.#limits = Object.freeze({
-      maxWorkspaceBytes: positive(options.maxBytes ?? 64 * 1024 * 1024, 'maxBytes', 2 ** 32),
-      maxWorkspaceInodes: positive(options.maxInodes ?? 16384, 'maxInodes', 1000000),
+      maxWorkspaceBytes: positive(this.fs.maxBytes, 'maxBytes', 2 ** 32),
+      maxWorkspaceInodes: positive(this.fs.maxInodes, 'maxInodes', 1000000),
       maxMemoryBytes: positive(options.maxMemoryBytes ?? 64 * 1024 * 1024, 'maxMemoryBytes', 2 ** 32),
       maxInputBytes: positive(options.maxInputBytes ?? 8 * 1024 * 1024, 'maxInputBytes', 256 * 1024 * 1024),
       maxOutputBytes: positive(options.maxOutputBytes ?? 8 * 1024 * 1024, 'maxOutputBytes', 256 * 1024 * 1024)
@@ -71,6 +79,7 @@ export class Container {
   async spawn(command: string, args: readonly string[] = [], options: SpawnOptions = {}): Promise<ContainerProcess> {
     const invocation = snapshotInvocation(command, args, options);
     if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
+    if (this.workspace?.inspect().state === 'disposed') throw new ContainerError('DISPOSED', 'Workspace owner has been disposed');
     if (invocation.signal?.aborted) throw new ContainerError('ABORTED', 'Command aborted before startup');
     if (new TextEncoder().encode(JSON.stringify([command, invocation.args, invocation.env])).length > 1024 * 1024) throw new ContainerError('RESOURCE_LIMIT', 'Invocation exceeds one MiB');
     if (this.#processes.size >= this.#maxProcesses || this.#nextPid >= Number.MAX_SAFE_INTEGER) throw new ContainerError('RESOURCE_LIMIT', 'Process admission limit reached');
@@ -218,9 +227,16 @@ export class Container {
     } catch (error) { await process.terminate(); throw error; }
   }
   async inspect(): Promise<ContainerInspection> {
-    return { disposed: this.#disposed, profile: 'batch', persistence: 'memory', processes: [...this.#processes].map(([pid, p]) => ({ pid, generation: pid, command: p.command, state: p.lifecycle.state })) };
+    return { disposed: this.#disposed, profile: 'batch', persistence: this.workspace ? 'opfs' : 'memory',
+      ...(this.workspace ? { workspace: this.workspace.inspect() } : {}),
+      ...(this.packages ? { packages: this.packages.inspect() } : {}), limits: this.#limits,
+      processes: [...this.#processes].map(([pid, p]) => ({ pid, generation: pid, command: p.command, state: p.lifecycle.state })) };
   }
-  async flush(): Promise<void> { throw new ContainerError('UNSUPPORTED_PROFILE', 'This workspace is memory-only; persistence is not qualified'); }
+  async flush(): Promise<void> {
+    if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
+    if (!this.workspace) throw new ContainerError('UNSUPPORTED_PROFILE', 'This workspace is memory-only; open a persistence owner explicitly');
+    await this.workspace.flush();
+  }
   dispose(): Promise<void> {
     if (!this.#disposal) {
       this.#disposed = true;

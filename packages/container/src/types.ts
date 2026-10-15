@@ -1,3 +1,7 @@
+import type { RuntimeLimits } from './adapters/types.js';
+import type { PersistentWorkspaceInspection } from './fs/persistence/index.js';
+import type { PackageManagerInspection } from './packages/manager.js';
+
 export type ProcessExitReason =
   | 'exited' | 'terminated' | 'timeout' | 'runtime-error' | 'filesystem-conflict';
 export interface ProcessResult {
@@ -39,5 +43,8 @@ export interface ContainerInspection {
   readonly disposed: boolean;
   readonly processes: readonly ProcessInspection[];
   readonly profile: 'batch' | 'isolated';
-  readonly persistence: 'memory';
+  readonly persistence: 'memory' | 'opfs';
+  readonly limits: RuntimeLimits;
+  readonly workspace?: PersistentWorkspaceInspection;
+  readonly packages?: PackageManagerInspection;
 }
