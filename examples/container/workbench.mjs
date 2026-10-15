@@ -48,16 +48,18 @@ export function mountContainerWorkbench(element, client, options = {}) {
   node('profile').textContent = options.profileLabel ?? 'Explicit host-provided runtime profile';
   node('terminal-description').textContent = options.terminalDescription ?? 'Raw byte streams with UTF-8 display. This binding does not provide a PTY or job control.';
   const status = (id, message, error = false) => { node(id).textContent = message; node(id).dataset.state = error ? 'error' : 'ready'; };
-  let disposed = false, disconnected = false, closing, terminal, session, started = false, inputClosed = false, terminalRunning = false;
+  let disposed = false, disconnected = false, closing, terminal, session, started = false, inputClosed = false, inputSending = false, terminalRunning = false;
   let base, baseText = '', editorPath, editorBusy = false, inspection, refreshing;
   const events = new AbortController();
   const listen = (id, event, work) => node(id).addEventListener(event, work, { signal: events.signal });
   const modified = () => base !== undefined && node('editor').value !== baseText;
+  const restoreControls = () => { node('restore').disabled = disposed || disconnected || editorBusy || !node('replace').checked || !node('restore-file').files?.length; };
   const editorControls = () => {
     node('editor').disabled = disposed || editorBusy || !base;
     node('publish').disabled = disposed || disconnected || editorBusy || !modified();
     node('reload').disabled = disposed || disconnected || editorBusy;
     node('export-buffer').disabled = disposed || !base;
+    restoreControls();
   };
   const download = async (name, bytes) => {
     if (options.onDownload) return options.onDownload(name, bytes.slice());
@@ -158,21 +160,20 @@ export function mountContainerWorkbench(element, client, options = {}) {
     catch (error) { status('backup-status', errorText(error), true); }
     finally { node('backup').disabled = disposed || disconnected; }
   });
-  const restoreControls = () => { node('restore').disabled = disposed || disconnected || !node('replace').checked || !node('restore-file').files?.length; };
   listen('replace', 'change', restoreControls); listen('restore-file', 'change', restoreControls);
   listen('restore', 'click', async () => {
     const file = node('restore-file').files?.[0];
-    if (!file || !node('replace').checked || disposed) return;
+    if (!file || !node('replace').checked || disposed || disconnected || editorBusy) return;
     if (file.size > maxBackupBytes) { status('backup-status', 'Backup exceeds the 32 MiB limit.', true); return; }
     if (modified()) { status('backup-status', 'Export or explicitly discard your unpublished editor buffer before replacing the workspace.', true); return; }
-    node('restore').disabled = true;
+    editorBusy = true; editorControls();
     try {
       await client.restore(new Uint8Array(await file.arrayBuffer()), { replace: true });
       if (disposed) return;
       base = undefined; editorPath = undefined; baseText = ''; node('editor').value = ''; node('file-path').value = ''; editorControls();
       node('replace').checked = false; status('backup-status', 'Backup restored to published memory. Save the workspace to commit it.'); await listFiles(); await refresh();
-    } catch (error) { status('backup-status', `${errorText(error)}. Published files were not replaced.`, true); }
-    finally { restoreControls(); }
+    } catch (error) { status('backup-status', `${errorText(error)}. The editor buffer was preserved; inspect published files before retrying.`, true); }
+    finally { editorBusy = false; editorControls(); }
   });
   listen('clear-cache', 'click', async () => {
     node('clear-cache').disabled = true;
@@ -188,7 +189,8 @@ export function mountContainerWorkbench(element, client, options = {}) {
   });
   const terminalControls = running => {
     terminalRunning = running;
-    for (const id of ['input', 'send', 'eof']) node(id).disabled = !running || inputClosed || disposed || disconnected;
+    for (const id of ['input', 'send']) node(id).disabled = !running || inputClosed || inputSending || disposed || disconnected;
+    node('eof').disabled = !running || inputClosed || disposed || disconnected;
     for (const id of ['interrupt', 'stop']) node(id).disabled = !running || disposed || disconnected;
     node('start').disabled = started || disposed || disconnected;
   };
@@ -211,11 +213,11 @@ export function mountContainerWorkbench(element, client, options = {}) {
     } catch (error) { if (!disposed) status('terminal-status', errorText(error), true); if (session) await session.dispose().catch(() => {}); }
   });
   listen('send', 'click', async () => {
-    if (!terminal || inputClosed || disposed) return;
-    node('send').disabled = true;
+    if (!terminal || inputClosed || inputSending || disposed || disconnected) return;
+    inputSending = true; terminalControls(terminalRunning);
     try { await terminal.write(encoder.encode(node('input').value)); node('input').value = ''; }
     catch (error) { if (!disposed) status('terminal-status', errorText(error), true); }
-    finally { if (!disposed) node('send').disabled = disconnected || inputClosed || !terminalRunning; }
+    finally { inputSending = false; if (!disposed) terminalControls(terminalRunning); }
   });
   listen('eof', 'click', async () => {
     inputClosed = true; terminalControls(true);

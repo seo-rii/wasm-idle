@@ -20,6 +20,8 @@ The editor reads UTF-8 files up to 8 MiB. A publish compares the original inode 
 
 Workspace backups are bounded to 32 MiB and validated before replacing files. Restore requires a selected file and explicit replacement checkbox, and refuses to discard a staged editor buffer. Restored memory is still dirty until saved. Save failure pauses autosave and leaves retry/export available. Browser storage is subject to quota, eviction and interruption; a successful save publishes a validated root using the browser's storage APIs, not an unlimited durability guarantee.
 
+The editor and publication controls pause for the complete restore transaction, including reading the selected backup. A pending terminal input write pauses its text field and Send button until the bytes are accepted; EOF, interrupt and Stop remain available. This prevents a completed operation from clearing text typed while it was waiting.
+
 “Clear downloaded assets” clears only this example's Core asset-cache namespace. It does not clear OPFS, workspace journals, another host's caches or loaded in-memory executable bytes. “Collect orphan workspace blobs” is explicit bounded maintenance that preserves every retained recovery root. Neither action deletes a workspace to fix a storage error.
 
 Streams are bytes until the terminal binding decodes them for display. stdout and stderr remain separate and render through `textContent`, capped at 32,768 code units per channel. Input is UTF-8, capped by the binding's 64 KiB pending-byte budget; no shell parser, ANSI interpreter, PTY, job-control or global stdout/stderr ordering is supplied by this view. The default byte-guest profile's interrupt terminates that guest; an actual Bash profile supplies its own foreground-interrupt semantics.

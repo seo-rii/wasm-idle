@@ -86,8 +86,30 @@ try {
 
   await page.locator('#start').click(); await page.waitForFunction(() => document.querySelector('#terminal-status').textContent.startsWith('Running process'));
   assert.equal(bodyRequests(), 1);
-  const input = '<img src=x onerror="globalThis.injected=true">\n한글\u0000' + 'z'.repeat(40000);
-  await page.locator('#input').fill(input); await page.locator('#send').click();
+  const pausedInput = 'paused-write\n';
+  await page.evaluate(text => {
+    const original = WritableStreamDefaultWriter.prototype.write;
+    let release, paused = false;
+    const gate = new Promise(resolve => { release = resolve; });
+    WritableStreamDefaultWriter.prototype.write = function (bytes) {
+      if (!paused && bytes instanceof Uint8Array && new TextDecoder().decode(bytes) === text) {
+        paused = true; globalThis.__workbenchWritePaused = true;
+        globalThis.__resumeWorkbenchWrite = () => { WritableStreamDefaultWriter.prototype.write = original; release(); };
+        return gate.then(() => original.call(this, bytes));
+      }
+      return original.call(this, bytes);
+    };
+  }, pausedInput);
+  await page.locator('#input').fill(pausedInput); await page.locator('#send').click();
+  await page.waitForFunction(() => globalThis.__workbenchWritePaused === true);
+  assert.equal(await page.locator('#input').isDisabled(), true); assert.equal(await page.locator('#send').isDisabled(), true);
+  for (const id of ['eof', 'interrupt', 'stop']) assert.equal(await page.locator(`#${id}`).isEnabled(), true);
+  assert.equal(await page.locator('#input').inputValue(), pausedInput);
+  await page.evaluate(() => globalThis.__resumeWorkbenchWrite());
+  await page.waitForFunction(() => !document.querySelector('#input').disabled && document.querySelector('#input').value === '');
+  checks.push('UI-15: a pending real stdin write freezes input and Send while EOF, interrupt and Stop remain available; acceptance clears only the frozen submitted text');
+  const remainingInput = '<img src=x onerror="globalThis.injected=true">\n한글\u0000' + 'z'.repeat(40000), input = pausedInput + remainingInput;
+  await page.locator('#input').fill(remainingInput); await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#stdout').textContent.endsWith('z'.repeat(1024)));
   assert.equal((await page.locator('#stdout').textContent()).length, 32768);
   assert.equal(await page.locator('#stdout img').count(), 0); assert.equal(await page.evaluate(() => globalThis.injected), undefined);
@@ -108,15 +130,32 @@ try {
   await page.locator('#replace').check(); await page.locator('#restore').click();
   await page.waitForFunction(() => document.querySelector('#backup-status').dataset.state === 'error');
   assert.equal(new TextDecoder().decode(Uint8Array.from(await read('/workspace/main.c'))), 'replace this newer published version\n');
+  assert.equal(await page.locator('#editor').isEnabled(), true);
   await page.locator('#restore-file').setInputFiles(backupFile);
   await page.locator('#editor').fill('unpublished must block restore'); await page.locator('#restore').click();
   await page.waitForFunction(() => document.querySelector('#backup-status').textContent.includes('unpublished editor buffer'));
   await page.locator('#reload').click();
   await page.waitForFunction(() => document.querySelector('#editor').value === 'replace this newer published version\n');
-  await page.locator('#restore').click(); await page.waitForFunction(() => document.querySelector('#backup-status').textContent.startsWith('Backup restored'));
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    File.prototype.arrayBuffer = function () {
+      File.prototype.arrayBuffer = original; globalThis.__workbenchBackupReadPaused = true;
+      globalThis.__resumeWorkbenchBackupRead = () => release();
+      return gate.then(() => original.call(this));
+    };
+  });
+  await page.locator('#restore').click(); await page.waitForFunction(() => globalThis.__workbenchBackupReadPaused === true);
+  for (const id of ['editor', 'publish', 'reload']) assert.equal(await page.locator(`#${id}`).isDisabled(), true);
+  assert.equal(await page.locator('#editor').inputValue(), 'replace this newer published version\n');
+  await page.locator('#replace').uncheck(); await page.locator('#replace').check(); assert.equal(await page.locator('#restore').isDisabled(), true);
+  await page.evaluate(() => globalThis.__resumeWorkbenchBackupRead());
+  await page.waitForFunction(() => document.querySelector('#backup-status').textContent.startsWith('Backup restored'));
   assert.equal(new TextDecoder().decode(Uint8Array.from(await read('/workspace/main.c'))), 'autosave failure must retain this file\n');
   await save();
   checks.push('UI-06: export downloads actual checksummed backup; explicit replacement rejects corrupt backups and protects unpublished buffers');
+  checks.push('UI-16: restore locks editor, publication and reload before awaiting the selected file; replacement changes cannot reenter it, and a failed restore thaws the preserved buffer');
 
   await page.reload(); await ready(page);
   assert.equal(await page.locator('#editor').inputValue(), 'autosave failure must retain this file\n');
