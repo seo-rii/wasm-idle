@@ -26,6 +26,10 @@
     "./persistence": {
       "types": "./dist/fs/persistence/index.d.ts",
       "import": "./dist/fs/persistence/index.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace/index.d.ts",
+      "import": "./dist/workspace/index.js"
     }
   },
   "files": [
@@ -36,7 +40,8 @@
     "DISTRIBUTIONS.md",
     "CLANG.md",
     "PERSISTENCE.md",
-    "LIVE.md"
+    "LIVE.md",
+    "WORKSPACE.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -51,6 +56,7 @@
     "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
     "test:browser": "pnpm run build && node scripts/test-browser.mjs",
     "test:live": "pnpm run build && node scripts/test-live-browser.mjs",
+    "test:workspace": "pnpm run build && node scripts/test-workspace-browser.mjs",
     "test:clang": "pnpm run build && node scripts/test-clang.mjs",
     "test:browser:clang": "node scripts/test-clang-browser.mjs",
     "test:clang:headers": "node scripts/test-clang-headers.mjs",

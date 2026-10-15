@@ -4,10 +4,11 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const coreRoot = resolve(root, '../core/dist');
+const coreRoot = dirname(fileURLToPath(import.meta.resolve('@wasm-idle/core')));
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -198,12 +199,101 @@ try {
     try { await owner.flush(); } catch (error) { code = error.code; }
     const memoryFiles = owner.fs.readdir('/workspace').length;
     const failed = owner.inspect();
+    const { createWorkspaceBackup } = await import('/dist/workspace/index.js');
+    globalThis.unsavedBackup = await createWorkspaceBackup(owner.fs);
     await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'metadata-budget', maxMetadataBytes: 1024 });
     return { code, failed, memoryFiles, storedFiles: owner.fs.readdir('/workspace'), text: decode(owner.fs.readFile('/workspace/file')) };
   });
   assert.equal(budget.code, 'STORAGE'); assert.equal(budget.failed.dirty, true);
   assert.equal(budget.memoryFiles, 11); assert.deepEqual(budget.storedFiles, ['file']); assert.equal(budget.text, 'baseline');
   checks.push('PERSIST-02: metadata budget failure preserves the previous root and unsaved in-memory files');
+
+  const imported = await page.evaluate(async () => {
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'backup-restore' });
+    const { createWorkspaceBackup, restoreWorkspaceBackup } = await import('/dist/workspace/index.js');
+    owner.fs.writeFile('previous', encode('previous')); await owner.flush();
+    owner.fs.writeFile('/tmp/keep', encode('temporary'));
+    await (await caches.open('independent-runtime-cache')).put('/asset', new Response('verified asset'));
+    const before = owner.inspect().committedSequence;
+    const restored = await restoreWorkspaceBackup(owner.fs, unsavedBackup, { replace: true });
+    const dirty = owner.inspect();
+    const corrupt = unsavedBackup.slice(); corrupt[corrupt.length - 33] ^= 1;
+    let rejected;
+    try { await restoreWorkspaceBackup(owner.fs, corrupt, { replace: true }); } catch (error) { rejected = error.code; }
+    const preserved = owner.fs.readdir('/workspace').length;
+    const cache = await (await (await caches.open('independent-runtime-cache')).match('/asset')).text();
+    const temporary = decode(owner.fs.readFile('/tmp/keep'));
+    await owner.flush(); await owner.dispose();
+    const exportAfterDispose = (await createWorkspaceBackup(owner.fs)).length;
+    owner = await persistence.openPersistentWorkspace({ id: 'backup-restore' });
+    return { before, restored, dirty, rejected, preserved, cache, temporary, exportAfterDispose, files: owner.fs.readdir('/workspace'), baseline: decode(owner.fs.readFile('file')) };
+  });
+  assert.equal(imported.dirty.dirty, true); assert.equal(imported.dirty.committedSequence, imported.before);
+  assert.equal(imported.restored.entries, 12); assert.equal(imported.rejected, 'INTEGRITY'); assert.equal(imported.preserved, 11);
+  assert.equal(imported.cache, 'verified asset'); assert.equal(imported.temporary, 'temporary');
+  assert.ok(imported.exportAfterDispose > 44); assert.equal(imported.files.length, 11); assert.equal(imported.baseline, 'baseline');
+  checks.push('C18: failed-save backup restores all unsaved files, stays dirty until flush, and leaves runtime cache/tmp intact');
+  checks.push('C18: corrupt backup cannot replace files; explicit flush/reopen retains the complete restored workspace');
+
+  const saveBinding = await page.evaluate(async () => {
+    await owner.dispose(); let fail = false, attempts = 0;
+    owner = await persistence.openPersistentWorkspace({ id: 'save-binding', fault(point) {
+      if (point === 'before-root-publish') { attempts++; if (fail) throw new Error('injected storage failure'); }
+    } });
+    const { createWorkspaceSaveController } = await import('/dist/workspace/index.js');
+    const binding = createWorkspaceSaveController(owner, { delayMs: 20, maxWaitMs: 100 }), reader = binding.updates.getReader();
+    const until = async predicate => { for (;;) { const { value, done } = await reader.read(); if (done) throw new Error('Save stream ended early'); if (predicate(value)) return value; } };
+    owner.fs.writeFile('a', encode('manual')); await new Promise(resolve => setTimeout(resolve, 40));
+    const initial = binding.inspect();
+    await binding.save(); const manual = owner.inspect();
+    binding.setAutosave(true); owner.fs.writeFile('a', encode('automatic'));
+    const automatic = await until(value => value.workspace.state === 'saved' && value.workspace.generation === owner.fs.generation);
+    fail = true; owner.fs.writeFile('a', encode('unsaved after failure'));
+    const failure = await until(value => value.pausedAfterError), failedAttempts = attempts;
+    owner.fs.writeFile('b', encode('still unsaved')); await new Promise(resolve => setTimeout(resolve, 60));
+    const didNotRetry = attempts === failedAttempts;
+    fail = false; await binding.save(); const recovered = binding.inspect();
+    owner.fs.writeFile('unflushed', encode('keep only in memory')); await binding.dispose(); reader.releaseLock();
+    const retained = { state: owner.inspect().state, watchers: owner.fs.watcherCount, file: decode(owner.fs.readFile('unflushed')) };
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'save-binding' });
+    const restored = { a: decode(owner.fs.readFile('a')), b: decode(owner.fs.readFile('b')), files: owner.fs.readdir('/workspace') };
+    return { initial, manual, automatic, failure, didNotRetry, recovered, retained, restored, attempts };
+  });
+  assert.equal(saveBinding.initial.workspace.committedGeneration, null); assert.equal(saveBinding.initial.autosave, false);
+  assert.equal(saveBinding.manual.state, 'saved'); assert.equal(saveBinding.automatic.workspace.dirty, false);
+  assert.equal(saveBinding.failure.workspace.state, 'error'); assert.equal(saveBinding.failure.workspace.dirty, true); assert.equal(saveBinding.didNotRetry, true);
+  assert.equal(saveBinding.recovered.workspace.state, 'saved'); assert.equal(saveBinding.recovered.pausedAfterError, false);
+  assert.deepEqual(saveBinding.retained, { state: 'dirty', watchers: 0, file: 'keep only in memory' });
+  assert.deepEqual(saveBinding.restored, { a: 'unsaved after failure', b: 'still unsaved', files: ['a', 'b'] }); assert.equal(saveBinding.attempts, 4);
+  checks.push('C18: manual save is default; opt-in autosave commits real OPFS/IDB changes and pauses on storage failure');
+  checks.push('C18: retry saves retained data; binding disposal releases watchers without flushing or disposing the owner');
+
+  const saveCompletion = await page.evaluate(async () => {
+    await owner.dispose(); let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    owner = await persistence.openPersistentWorkspace({ id: 'save-completion', fault: async point => {
+      if (point === 'before-root-publish') await gate;
+    } });
+    const { createWorkspaceSaveController } = await import('/dist/workspace/index.js');
+    const binding = createWorkspaceSaveController(owner), reader = binding.updates.getReader();
+    await reader.read();
+    const first = binding.save();
+    for (;;) { if ((await reader.read()).value.workspace.state === 'saving') break; }
+    let target, next;
+    const observed = reader.read().then(({ value }) => {
+      if (value.workspace.state !== 'saved') throw new Error('Expected completed save notification');
+      owner.fs.writeFile('after-notification', encode('new revision')); target = owner.fs.generation;
+      next = binding.save();
+    });
+    release(); await first; await observed; const result = await next;
+    await binding.dispose(); reader.releaseLock(); const watchers = owner.fs.watcherCount;
+    await owner.dispose(); owner = await persistence.openPersistentWorkspace({ id: 'save-completion' });
+    return { target, result, watchers, text: decode(owner.fs.readFile('after-notification')) };
+  });
+  assert.ok(saveCompletion.result.committedGeneration >= saveCompletion.target);
+  assert.equal(saveCompletion.result.dirty, false); assert.equal(saveCompletion.watchers, 0);
+  assert.equal(saveCompletion.text, 'new revision');
+  checks.push('C18: saved-state consumer can immediately save a newer revision and reload its committed bytes');
 
   const integration = await page.evaluate(async () => {
     await owner.dispose();
@@ -241,8 +331,12 @@ try {
   const implementation = await readFile(resolve(root, 'dist/fs/persistence/index.js'));
   const evidence = {
     schemaVersion: 1, browser: await browser.version(), platform: process.platform,
+    applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     userAgent: initial.userAgent, secureContext: initial.secure, isolatedProfileRequired: false,
     implementationSha256: createHash('sha256').update(implementation).digest('hex'),
+    backupImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/backup.js'))).digest('hex'),
+    saveBindingImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/save.js'))).digest('hex'),
+    filesystemImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/fs/memory.js'))).digest('hex'),
     results: checks, fixtureCount: checks.length
   };
   if (process.env.CONTAINER_PERSISTENCE_EVIDENCE) {
