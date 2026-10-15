@@ -97,8 +97,14 @@ concurrently writable or a live filesystem adapter.
 
 The optional `adapters/clang-live` entrypoint provides a separate compiler profile
 with live filesystem calls and delegated byte endpoints. Completed writes remain
-visible after cancellation. See [CLANG.md](CLANG.md) for its contract and actual
-command receipts; qualification of a shell using it is a separate integration gate.
+visible after cancellation. The repository workbench selects it with the trusted local
+configuration `clangFilesystem: 'live'`; its fixed adapter/Worker route and distribution
+identity change together. Omitted configuration keeps the snapshot profile.
+The actual live Bash gate passes 50 checks, and its rendered persistence/reload/interrupt
+gate passes six. The full default snapshot gate independently passes 83 checks.
+See [the shell receipts](test/shell-acceptance/README.md) and [CLANG.md](CLANG.md) for
+the separate profiles, exact source identities and compiler limitations. Live compilation
+does not freeze source revisions; applications requiring a fixed revision must arrange it.
 
 ## MessagePort owner API
 

@@ -19,8 +19,13 @@ Crashes/cancellation discard unpublished compiler changes.
 The optional `llvm-clang-tool-host-live-v1` command adapter delegates compiler file
 operations and byte descriptors to the same owner transport. It preserves completed
 writes on cancellation and supports concurrent file visibility. Its separate actual
-Node/Chromium command receipts pass 12 checks each; composing that profile with actual
-Bash requires its own acceptance gate. Neither profile changes the other's contract.
+Node/Chromium command receipts pass 14 checks each, including the real compiler's
+closed-stdin repair through the null device. Actual Bash composition passes 50 checks,
+and the rendered live workbench passes six. A trusted local application setting selects
+the fixed adapter, Worker and stdio route; its manifest identity changes with the profile.
+The default snapshot distribution separately passes all 83 checks across eight scenarios.
+Neither profile changes the other's visibility/cancellation contract. These are local
+Chromium qualifications; production deployment and source/notice review remain separate.
 
 The JavaScript owner never performs WASIX work that can wait for one of its own
 filesystem callbacks. Command preparation stays on the guest side, and a service

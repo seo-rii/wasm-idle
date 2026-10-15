@@ -17,17 +17,19 @@ and archive validation), #228 (workbench and owned sessions), #229 (source mater
 canonical LLVM multicall execution), #230 (shared real Bash profile), and #231
 (immutable workbench hosting), #232 (rebuilt SDK and actual workbench qualification),
 #233 (view transaction fixes), #234 (recorded performance baseline), #235 (product
-integration), and #236 (optional live LLVM commands). The product integration merges
+integration), #236 (optional live LLVM commands), and #237 (actual live Bash integration).
+The product integration merges
 the exact SDK source from #223; all 119 source/evidence blobs match that branch while
 preserving host-side build documentation.
 
-The combined library gates pass 230 container unit/contract tests, 207 existing Clang
-tests, 18 source-material tests, and the host-only npm package boundary (108 files;
-zero root-import fetches). Real Chromium regressions also pass 34 live-I/O, 21 persistence and 14 workspace
-checks; all owned Workers and OS descendants are reclaimed. The subsequent initial
-closed-stdio correction has a real Wasm fixture covering all eight inherited descriptor
-masks and passes 33 focused checks, the complete 230-test container suite and the
-34-check live browser regression; EOF remains an open descriptor.
+The combined library gates pass 235 container unit/contract tests, 44 distribution,
+hosting and shell-judge tests, 207 existing Clang tests, 18 source-material tests, and
+the host-only npm package boundary (108 files; zero root-import fetches). Real Chromium
+regressions also pass 34 live-I/O, 21 persistence and 14 workspace checks; all owned
+Workers and OS descendants are reclaimed. A real Wasm fixture covers all eight initial
+stdio masks; closed descriptors remain distinct from EOF. A builtin null character
+device and lowest-free guest descriptor allocation let real LLVM reopen closed stdin.
+Reserved inode 0 preserves existing positive workspace inode identities across reloads.
 The real compiler self-path fixture records compile/link exit 0, generated command
 exit 0 with `hello\n`, executable output metadata and zero remaining Workers:
 [runner and evidence](../packages/container/test/fixtures/clang-self-path/).
@@ -35,13 +37,17 @@ The workbench regression has 16 actual Chromium checks, including input and rest
 transactions that preserve pending view buffers; the persistence owner has
 21 actual browser checks including recovery-preserving orphan collection.
 
-The final SDK with patches 0001–0020 passes 72/72 checks across seven actual Chromium
-scenarios through the public Bash session. The unchanged acceptance script compiles,
+The final SDK with patches 0001–0020 passes 83/83 checks across all eight actual Chromium
+snapshot scenarios at `a8ff08b7` through the public Bash session. The unchanged acceptance script compiles,
 runs and pipes its output into the same workspace; a fresh warm owner reuses every
 asset body. Foreground interruption, package/compiler errors, pipeline redirection and
-startup failure each reclaim all owned Workers. See the preserved
-[full receipt](../packages/container/test/shell-acceptance/evidence/public-session-0020.json)
-and [process cleanup](../packages/container/test/shell-acceptance/evidence/public-session-0020-process.json).
+startup failure each reclaim all owned Workers. The fixture owner closes after completed
+cleanup and acknowledgment; parent termination and the zero-CDP-target assertion remain
+in place. Every scenario retires its Workers before the next scenario starts. See the
+[eight-scenario receipt](../packages/container/test/shell-acceptance/evidence/public-session-0020-full8.json)
+and [metadata/earlier failure](../packages/container/test/shell-acceptance/evidence/public-session-0020-full8-metadata.json).
+The earlier [72-check receipt](../packages/container/test/shell-acceptance/evidence/public-session-0020.json)
+retains its original seven-scenario scope.
 
 The actual Bash workbench additionally passes 6/6 checks across three runs: cold
 compile/pipe, persistent reload of source/result/executable metadata and direct execution,
@@ -60,7 +66,7 @@ The independent syntax-only gate passes 12/12 actual Bash/BusyBox checks for quo
 empty/Korean arguments, exported fixture environment values, cwd, conditional commands,
 command substitution and redirection ordering. It never downloads Clang, LLD or the
 sysroot. Its [receipt](../packages/container/test/shell-acceptance/evidence/syntax-0020.json)
-does not relabel the earlier seven-scenario receipt or count an unrun combined gate.
+retains its independent scope; the later complete eight-scenario gate is recorded above.
 
 The immutable local release separately passes all six actual workbench checks across
 three runs under the restrictive CSP and isolation headers. Its independent lock is
@@ -71,14 +77,35 @@ all Workers/OS descendants are reclaimed. See the
 [immutable hosting evidence](../examples/container/IMMUTABLE.md). This is local
 qualification; `deployed: false` and `sourceClosureReviewed: false` remain explicit.
 
-The optional `llvm-clang-tool-host-live-v1` adapter separately passes 12 actual Node
-checks and 12 isolated Chromium checks. Real Clang/LLD compile, link and execute the
+The optional `llvm-clang-tool-host-live-v1` adapter separately passes 14 actual Node
+checks and 14 isolated Chromium checks. Real Clang/LLD compile, link and execute the
 result; a compiler blocked on stdin observes a changed header, and cancellation preserves
 already visible partial output. Exact inode revisions prevent unrelated or concurrently
-changed files from acquiring executable metadata. All seven Workers per backend retire.
-The [live compiler receipts](../packages/container/test/fixtures/clang-live/README.md)
-retain their tested source hashes and cleanup records. Actual Bash composition of this
-profile has its own gate; the snapshot shell evidence above does not qualify it.
+changed files from acquiring executable metadata. All nine Workers per backend retire.
+The [closed-input compiler receipts](../packages/container/test/fixtures/clang-live/null-device/README.md)
+retain their tested source hashes, baseline failure and cleanup records. Repairing several
+simultaneously closed standard descriptors remains an upstream producer limitation.
+
+Actual Bash using the live compiler passes 50/50 checks across three scenarios at the
+same application commit. The unchanged script passes cold and warm. A real Bash
+producer feeds Clang stdin through a pipe while the owner edits an included header and
+a concurrent BusyBox command reads that change. Clang observes the new header, writes
+through the real pipeline, and repairs initially closed stdin through `/dev/null`.
+Diagnostics are checked as exact bytes for each compiler phase; original argv and
+stderr are preserved. See the [live session receipt](../packages/container/test/shell-acceptance/evidence/live-session-0020.json)
+and [metadata/earlier failure](../packages/container/test/shell-acceptance/evidence/live-session-0020-metadata.json).
+
+The rendered live workbench separately passes 6/6 checks across three runs: source exists
+before Clang is downloaded; the same script compiles, executes and pipes; saved source,
+result and executable metadata survive reload; warm compilation adds no asset body;
+and interrupting a blocked real `cat` leaves Bash available for another command.
+The [live UI receipt](../packages/container/test/fixtures/product-live-shell-0020.json)
+records the selected live adapter. Its owner remains alive for editing and retires after
+explicit close. All three final guards exit 0 and reap every OS descendant without
+forced signals. These local live results do not change the earlier immutable snapshot lock.
+The final browser runs used `a8ff08b7`; subsequent commits add receipts, documentation
+and a test that verifies the archived identities and reapplies the current shell judges.
+They do not relabel the executed sources or change runtime behavior.
 
 Source packs preserve exact material identities while explicitly
 recording incomplete runtime source/notice correspondence. Production responses,
@@ -269,12 +296,12 @@ profile. Later documentation changes do not relabel these receipts as a differen
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD | The public pinned SDK/Bash session passes 72/72 checks across seven scenarios; a separate 12-case real syntax gate covers quoting, conditionals, substitution and redirection ordering. All observed Workers retire | Descriptors beyond inherited stdio, unlisted shell features, PTY/termios and job control remain unsupported |
+| G0-SHELL/FS/FD | The public pinned SDK/Bash session passes 83/83 checks across all eight snapshot scenarios, including syntax; the selected live compiler profile passes 50/50 across three scenarios. All observed Workers retire before context closure | Descriptors beyond inherited stdio, unlisted shell features, PTY/termios and job control remain unsupported |
 | G0-CANCEL | Forced backend CPU-loop, blocked-input and pending-download cleanup is recorded separately. Public session gates and the rendered workbench verify foreground interruption, surviving Bash input, startup failure and complete cleanup | Host cancellation is not POSIX signal delivery. Builtin loops require a fresh owner; lost owner transport reports unconfirmed cleanup |
-| G0-CLANG / CLI-01–03 | Real C/C++ snapshot CLI and the selected 14-case header corpus pass. Optional live LLVM has 12 Node and 12 Chromium checks, including concurrent header visibility and partial-output cancellation | The selected C++ profile requires `-fno-exceptions`; exhaustive header combinations, clean producer rebuild and source-to-binary release correspondence remain separate |
+| G0-CLANG / CLI-01–03 | Real C/C++ snapshot CLI and the selected 14-case header corpus pass. Optional live LLVM has 14 Node and 14 Chromium checks, including concurrent header visibility, partial-output cancellation and closed-stdin repair | The selected C++ profile requires `-fno-exceptions`; live C++ coverage, several simultaneously closed standard descriptors, exhaustive header combinations, clean producer rebuild and source-to-binary release correspondence remain separate |
 | B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, 17 live checks per backend and actual Bash/BusyBox pipelines pass | Support remains limited to recorded applets/options; no full BusyBox or GNU utility compatibility claim |
-| P4 / shell MVP | Actual Bash, BusyBox, workspace artifacts and snapshot Clang pass the original acceptance script; independent live LLVM commands also pass | Actual Bash with the optional live compiler is a separate pending gate. The default snapshot compiler holds an exclusive writer lease |
-| P5 / product beta | Rendered editor/terminal/save/backup/restore integration, actual shell reload and recovery-preserving orphan GC are implemented. Real browser evidence covers 21 persistence, 16 view and 6 actual workbench checks | Browser eviction, fixed release environments and wider browser qualification remain separate; no simultaneous workspace writers or implicit save-on-dispose |
+| P4 / shell MVP | Actual Bash, BusyBox, workspace artifacts and both selected Clang profiles pass the original acceptance script. The live profile additionally shares compiler stdin and completed header edits with concurrent utilities | Snapshot remains the default and holds an exclusive writer lease. Live compilation can observe concurrent edits and retains completed writes after cancellation; no broad POSIX/PTY claim |
+| P5 / product beta | Rendered editor/terminal/save/backup/restore integration, actual shell reload and recovery-preserving orphan GC are implemented. Real browser evidence covers 21 persistence, 16 view and six actual workbench checks per selected compiler profile | Browser eviction, fixed release environments and wider browser qualification remain separate; no simultaneous workspace writers or implicit save-on-dispose |
 | C-19 / deployment | A separately locked 33-file local distribution passes all six actual workbench checks under restrictive CSP/isolation | Production responses, exact source/notice applicability and clean-build provenance remain open; no deployment or release promotion |
 | C-20 / measurement | Three recorded snapshot suites pass 216 checks with zero warm asset body downloads and separate cold/warm timing observations | No L1/L2 optimization or performance promise; the measurements are from a shared host |
 
