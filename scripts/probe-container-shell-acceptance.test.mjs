@@ -191,3 +191,16 @@ test('with host-command work off the scheduler thread, five consecutive runs pas
 		assert.equal((await archived(`service-run-${index}-process`)).exitCode, 0);
 	}
 });
+
+test('the archived interrupt run stops a running artifact and compile while Bash continues', async () => {
+	const receipt = await archived('interrupt-run-1');
+	assert.equal(receipt.applicationCommit, '6251c8b7882dc5a5719e82742c7ef141748be63b');
+	const interrupt = receipt.runs.find((run) => run.run === 'interrupt').result;
+	assert.equal(Buffer.from(interrupt.result.stdout).toString(), 'spin=130\nclang=130\ndiscarded\nhello\n');
+	assert.deepEqual(interrupt.records.map((record) => [record.status, record.result?.reason]),
+		[[0, 'exited'], [0, 'exited'], [130, 'terminated'], [130, 'terminated'], [0, 'exited'], [0, 'exited']]);
+	assert(receipt.qualification.checks.filter((check) => check.id.startsWith('interrupt:')).every((check) => check.passed));
+	// The cold run passed; the warm run stopped right after Clang completed, as in the earlier hangs.
+	assert(receipt.qualification.checks.filter((check) => check.id.startsWith('cold:')).every((check) => check.passed));
+	assert.equal(receipt.runs[1].result.type, 'timeout');
+});

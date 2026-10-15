@@ -141,6 +141,8 @@ Every attempt's original browser and process receipts are archived under
 | [`streamed-run-2`](evidence/streamed-run-2.json), [`-3`](evidence/streamed-run-3.json) | `04aac7e0` | Warm passes; cold stops right after Clang completes with status 0 |
 | [`service-run-1` … `service-run-5`](evidence/) | `1df732f1` | **All five pass 30/30, cold and warm**, with the SDK that keeps host-command WASIX work off the scheduler thread |
 
+| [`interrupt-run-1`](evidence/interrupt-run-1.json) | `6251c8b7` | **Interrupt run passes all 8 checks**; cold passes; warm stops right after Clang completes |
+
 The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
 existing entry under a read-only parent now report `EEXIST`, as on Linux.
 
