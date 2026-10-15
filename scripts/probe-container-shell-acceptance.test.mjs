@@ -6,7 +6,7 @@ import {
 	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
 	SYNTAX_COMMANDS, SYNTAX_CONTENTS, SYNTAX_DIRECTORY, SYNTAX_ENVIRONMENT,
 	judgeShellAcceptance, judgeLiveShellAcceptance,
-	readPinnedProbeInputs
+	readPinnedProbeInputs, identity
 } from './probe-container-shell-acceptance-lib.mjs';
 
 const bytes = (value) => [...new TextEncoder().encode(value)];
@@ -490,4 +490,40 @@ test('the failure runs: integrity, compile error and missing command stay contai
 	// The third run missed only the owner Worker's five-second retirement window.
 	assert.deepEqual(runs[2].qualification.checks.filter((check) => !check.passed).map((check) => check.id), ['failure:owned-workers-retired']);
 	assert.equal(runs[2].workersAfterContextClose, 0);
+});
+
+test('the final real snapshot, live shell and rendered live receipts retain their qualification and identities', async () => {
+	const { readFile } = await import('node:fs/promises');
+	for (const [prefix, folder, mode] of [
+		['public-session-0020-full8', '../packages/container/test/shell-acceptance/evidence/', 'snapshot'],
+		['live-session-0020', '../packages/container/test/shell-acceptance/evidence/', 'live'],
+		['product-live-shell-0020', '../packages/container/test/fixtures/', 'ui']
+	]) {
+		const directory = new URL(folder, import.meta.url);
+		const metadata = JSON.parse(await readFile(new URL(`${prefix}-metadata.json`, directory)));
+		const receiptBytes = await readFile(new URL(`${prefix}.json`, directory));
+		const processBytes = await readFile(new URL(`${prefix}-process.json`, directory));
+		assert.deepEqual(metadata.receipt, { file: `${prefix}.json`, ...identity(receiptBytes) });
+		assert.deepEqual(metadata.processReceipt, { file: `${prefix}-process.json`, ...identity(processBytes) });
+		const receipt = JSON.parse(receiptBytes), process = JSON.parse(processBytes);
+		assert.equal(receipt.applicationCommit, 'a8ff08b7eb1cf34c13fedb8369ae3bd0df64873c');
+		assert.equal(metadata.applicationCommit, receipt.applicationCommit);
+		assert.equal(metadata.sourcePinsRecheckedAfterRun, true);
+		assert.equal(metadata.status.exitCode, 0); assert.equal(process.exitCode, 0);
+		assert.equal(process.cleanup.allReaped, true); assert.deepEqual(process.cleanup.remaining, []); assert.deepEqual(process.cleanup.signaled, []);
+		if (mode === 'ui') {
+			assert.equal(receipt.qualified, true); assert.equal(receipt.complete, true);
+			assert.equal(receipt.clangFilesystem, 'live'); assert.equal(receipt.clangAdapterId, 'llvm-clang-tool-host-live-v1');
+			assert.equal(receipt.checks.length, 6); assert.equal(receipt.runs.length, 3);
+			assert.deepEqual(receipt.workerTargets.afterOwnerClosed, []); assert.equal(receipt.sourcesRecheckedAfterRun, true);
+		} else {
+			const judged = mode === 'snapshot' ? judgeShellAcceptance(receipt) : judgeLiveShellAcceptance(receipt);
+			// Published JSON omits optional undefined diagnostic fields.
+			assert.deepEqual(JSON.parse(JSON.stringify(judged)), receipt.qualification);
+			assert.deepEqual([judged.passed, judged.total], mode === 'snapshot' ? [83, 83] : [50, 50]);
+			assert.equal(receipt.clangFilesystem, mode);
+			assert.equal(receipt.shellAcceptancePassed, mode === 'snapshot');
+			assert.equal(receipt.liveShellAcceptancePassed, mode === 'live');
+		}
+	}
 });
