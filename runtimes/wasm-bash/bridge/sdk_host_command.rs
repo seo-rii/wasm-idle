@@ -1,8 +1,10 @@
 //! Trusted host-command registry and dispatch for real WASIX guests.
 //!
-//! JavaScript registers exact normalized absolute paths on a `Runtime`. When
-//! a guest execs or spawns a registered path, WASIX hands the prepared child
-//! to `HostCommandBridge` on the guest's Worker. The bridge never touches a
+//! JavaScript registers exact normalized absolute paths on a `Runtime`, and
+//! optionally directories whose WebAssembly modules it executes itself. When
+//! a guest execs or spawns a registered path, or a normalized path below a
+//! registered directory whose file starts with the Wasm magic, WASIX hands the
+//! prepared child to `HostCommandBridge` on the guest's Worker. The bridge never touches a
 //! JavaScript value there: it moves the owned child to the scheduler thread
 //! with a `SchedulerMessage`, where the handler registered on that same
 //! thread runs. Handler functions never leave their thread-local table.
@@ -16,15 +18,19 @@ use std::{
     any::Any,
     cell::RefCell,
     collections::HashMap,
+    pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, RwLock,
     },
+    task::{Context, Poll},
 };
 
 use js_sys::{Array, Function, Object, Promise, Reflect, Uint8Array};
 use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
 use wasm_bindgen_futures::{future_to_promise, JsFuture};
+use tokio::io::{AsyncRead, ReadBuf};
+use virtual_fs::FileSystem;
 use wasmer::FunctionEnvMut;
 use wasmer_wasix::{
     os::{command::VirtualCommand, task::TaskJoinHandle},
@@ -50,23 +56,44 @@ struct Registration {
     thread: u32,
 }
 
-/// Exact path registrations shared by every clone of one SDK `Runtime`.
+/// Exact path and directory registrations shared by every clone of one SDK
+/// `Runtime`.
 #[derive(Debug, Default)]
 pub(crate) struct HostCommands {
     entries: RwLock<HashMap<String, Registration>>,
+    directories: RwLock<HashMap<String, Registration>>,
 }
 
 impl HostCommands {
-    /// Metadata-only lookup on the guest's thread. Nothing is fetched or run.
+    /// Lookup on the guest's thread. Nothing is fetched or run. An exact
+    /// registration wins; otherwise the longest registered directory that
+    /// contains `path` is selected, and only normalized paths can match it.
     pub(crate) fn lookup(
         &self,
         pool: &Arc<ThreadPool>,
         path: &str,
     ) -> Option<Arc<dyn VirtualCommand + Send + Sync>> {
-        let registration = *self.entries.read().ok()?.get(path)?;
+        let (registration, wasm_only) = match self.entries.read().ok()?.get(path) {
+            Some(registration) => (*registration, false),
+            None => {
+                validate_path(path).ok()?;
+                let directories = self.directories.read().ok()?;
+                let registration = directories
+                    .iter()
+                    .filter(|(directory, _)| {
+                        path.len() > directory.len()
+                            && path.starts_with(directory.as_str())
+                            && path.as_bytes()[directory.len()] == b'/'
+                    })
+                    .max_by_key(|(directory, _)| directory.len())?
+                    .1;
+                (*registration, true)
+            }
+        };
         Some(Arc::new(HostCommandBridge {
             path: path.to_string(),
             registration,
+            wasm_only,
             pool: pool.clone(),
         }))
     }
@@ -77,13 +104,15 @@ impl Drop for HostCommands {
         // Handlers registered on another thread are unreachable from here and
         // are released when that thread's table is dropped.
         let thread = wasmer::js::current_thread_id();
-        if let Ok(entries) = self.entries.get_mut() {
-            let _ = HANDLERS.try_with(|handlers| {
-                let mut handlers = handlers.borrow_mut();
-                for registration in entries.values().filter(|r| r.thread == thread) {
-                    handlers.remove(&registration.key);
-                }
-            });
+        for table in [&mut self.entries, &mut self.directories] {
+            if let Ok(entries) = table.get_mut() {
+                let _ = HANDLERS.try_with(|handlers| {
+                    let mut handlers = handlers.borrow_mut();
+                    for registration in entries.values().filter(|r| r.thread == thread) {
+                        handlers.remove(&registration.key);
+                    }
+                });
+            }
         }
     }
 }
@@ -141,6 +170,50 @@ extern "C" {
     pub type HostCommandHandler;
 }
 
+fn register(
+    table: &RwLock<HashMap<String, Registration>>,
+    path: String,
+    handler: HostCommandHandler,
+) -> Result<(), Error> {
+    let handler: Function = handler
+        .dyn_into()
+        .map_err(|_| registry_error("host command handler must be a function"))?;
+    validate_path(&path)?;
+    let mut entries = table
+        .write()
+        .map_err(|_| registry_error("host command registry is poisoned"))?;
+    if entries.contains_key(&path) {
+        return Err(registry_error("host command path is already registered"));
+    }
+    if entries.len() >= MAX_COMMANDS {
+        return Err(registry_error("host command registry is full"));
+    }
+    let registration = Registration {
+        key: NEXT_KEY.fetch_add(1, Ordering::Relaxed),
+        thread: wasmer::js::current_thread_id(),
+    };
+    HANDLERS.with(|handlers| handlers.borrow_mut().insert(registration.key, handler));
+    entries.insert(path, registration);
+    Ok(())
+}
+
+fn unregister(table: &RwLock<HashMap<String, Registration>>, path: &str) -> Result<bool, Error> {
+    let mut entries = table
+        .write()
+        .map_err(|_| registry_error("host command registry is poisoned"))?;
+    let Some(registration) = entries.get(path).copied() else {
+        return Ok(false);
+    };
+    if registration.thread != wasmer::js::current_thread_id() {
+        return Err(registry_error(
+            "host command must be unregistered on its registering thread",
+        ));
+    }
+    entries.remove(path);
+    HANDLERS.with(|handlers| handlers.borrow_mut().remove(&registration.key));
+    Ok(true)
+}
+
 #[wasm_bindgen(js_class = "Runtime")]
 impl JsRuntime {
     /// Route a guest's exec or spawn of exactly `path` to `handler`. The
@@ -153,51 +226,57 @@ impl JsRuntime {
         path: String,
         handler: HostCommandHandler,
     ) -> Result<(), Error> {
-        let handler: Function = handler
-            .dyn_into()
-            .map_err(|_| registry_error("host command handler must be a function"))?;
-        validate_path(&path)?;
-        let mut entries = self
-            .host_commands()
-            .entries
-            .write()
-            .map_err(|_| registry_error("host command registry is poisoned"))?;
-        if entries.contains_key(&path) {
-            return Err(registry_error("host command path is already registered"));
-        }
-        if entries.len() >= MAX_COMMANDS {
-            return Err(registry_error("host command registry is full"));
-        }
-        let registration = Registration {
-            key: NEXT_KEY.fetch_add(1, Ordering::Relaxed),
-            thread: wasmer::js::current_thread_id(),
-        };
-        HANDLERS.with(|handlers| handlers.borrow_mut().insert(registration.key, handler));
-        entries.insert(path, registration);
-        Ok(())
+        register(&self.host_commands().entries, path, handler)
     }
 
     /// Remove a registration made on this thread. Commands already dispatched
     /// keep running; later lookups fall back to the ordinary resolver.
     #[wasm_bindgen(js_name = "unregisterHostCommand")]
     pub fn unregister_host_command(&self, path: String) -> Result<bool, Error> {
-        let mut entries = self
-            .host_commands()
-            .entries
-            .write()
-            .map_err(|_| registry_error("host command registry is poisoned"))?;
-        let Some(registration) = entries.get(&path).copied() else {
-            return Ok(false);
-        };
-        if registration.thread != wasmer::js::current_thread_id() {
-            return Err(registry_error(
-                "host command must be unregistered on its registering thread",
-            ));
-        }
-        entries.remove(&path);
-        HANDLERS.with(|handlers| handlers.borrow_mut().remove(&registration.key));
-        Ok(true)
+        unregister(&self.host_commands().entries, &path)
     }
+
+    /// Route a guest's exec or spawn of a WebAssembly module below
+    /// `directory` to `handler`, with the same thread rule as
+    /// `registerHostCommand`. Only a normalized absolute path strictly below
+    /// the directory whose first four bytes, read through the guest's own
+    /// filesystem, are the Wasm magic is routed. Other files, such as
+    /// scripts, and unnormalized paths use the ordinary resolver. An exact
+    /// registration and a longer registered directory take precedence.
+    #[wasm_bindgen(js_name = "registerHostCommandDirectory")]
+    pub fn register_host_command_directory(
+        &self,
+        directory: String,
+        handler: HostCommandHandler,
+    ) -> Result<(), Error> {
+        register(&self.host_commands().directories, directory, handler)
+    }
+
+    /// Remove a directory registration made on this thread.
+    #[wasm_bindgen(js_name = "unregisterHostCommandDirectory")]
+    pub fn unregister_host_command_directory(&self, directory: String) -> Result<bool, Error> {
+        unregister(&self.host_commands().directories, &directory)
+    }
+}
+
+/// Whether `path` in the guest's filesystem starts with the Wasm magic. Only
+/// four bytes are read; a file that cannot be read synchronously does not match.
+fn has_wasm_magic(env: &WasiEnv, path: &str) -> bool {
+    let Ok(mut file) = env.fs_root().new_open_options().read(true).open(path) else {
+        return false;
+    };
+    let mut magic = [0u8; 4];
+    let mut filled = 0;
+    let waker = futures::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    while filled < magic.len() {
+        let mut buffer = ReadBuf::new(&mut magic[filled..]);
+        match Pin::new(&mut file).poll_read(&mut context, &mut buffer) {
+            Poll::Ready(Ok(())) if !buffer.filled().is_empty() => filled += buffer.filled().len(),
+            _ => return false,
+        }
+    }
+    magic == *b"\0asm"
 }
 
 /// The owned child and its registration, moved from the guest's Worker to the
@@ -213,6 +292,8 @@ pub(crate) struct HostCommandDispatch {
 struct HostCommandBridge {
     path: String,
     registration: Registration,
+    /// Set for a directory registration, which only claims Wasm modules.
+    wasm_only: bool,
     pool: Arc<ThreadPool>,
 }
 
@@ -227,10 +308,17 @@ impl VirtualCommand for HostCommandBridge {
 
     fn exec(
         &self,
-        _parent_ctx: &FunctionEnvMut<'_, WasiEnv>,
+        parent_ctx: &FunctionEnvMut<'_, WasiEnv>,
         path: &str,
         config: &mut Option<WasiEnv>,
     ) -> Result<TaskJoinHandle, SpawnError> {
+        // Before the child is taken, so a non-module falls back to the
+        // ordinary resolver and the guest sees its usual exec result.
+        if self.wasm_only && !has_wasm_magic(parent_ctx.data(), path) {
+            return Err(SpawnError::BinaryNotFound {
+                binary: path.to_string(),
+            });
+        }
         let handle = config
             .as_ref()
             .ok_or(SpawnError::UnknownError)?

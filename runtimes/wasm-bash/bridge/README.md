@@ -619,3 +619,46 @@ receipts are archived as `evidence.host-filesystem-*.json` with a
 receipt `bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e`. An earlier
 gate of the same patches on the pre-fix base passed and only produced a preliminary
 package; its browser runs are recorded as preliminary on the shell branch.
+
+## Workspace WebAssembly executables
+
+A shell runs programs it just built, such as `./hello.wasm`, from the workspace. With only
+exact registrations, WASIX would execute such a file natively inside the Bash runtime,
+outside the Supervisor's process table and import-profile checks.
+`Runtime.registerHostCommandDirectory(directory, handler)` routes those modules to a trusted
+handler instead. It takes the same handler and thread rule as `registerHostCommand`, and
+needs no patch: it is part of the SDK's `host_command.rs`.
+
+```js
+runtime.registerHostCommandDirectory('/workspace', (invocation) => runModule(invocation));
+```
+
+Lookup on the guest's thread:
+
+1. An exact registration wins.
+2. Otherwise the longest registered directory strictly containing the path is selected.
+   Only a normalized absolute path can match. WASIX turns `./name` into one by prefixing
+   the cwd; relative names with `..` keep the ordinary resolver.
+3. Before the child is taken, the first four bytes are read through the guest's own
+   filesystem. Only the Wasm magic `\0asm` is routed. Any other file (a script, text,
+   a missing or unreadable file) returns "not found" to WASIX, which then uses its ordinary
+   resolver, so Bash keeps its usual `ENOEXEC`/script or `ENOENT` behavior.
+
+`invocation.path` is the matched absolute path and `invocation.argv` the guest's argv
+unchanged. The handler, not WASIX, decides how to run the module; in the container it is
+`wasm-run` on the live artifact adapter, whose import-profile check applies. Reading the
+magic is a four-byte read, not an execution. The file can change between that read and the
+handler's own read; the handler validates what it reads.
+
+### Actual SDK gate
+
+Commit `414a524f41306b5153597a950237b8f2c59beda7` (patches 0001–0012 plus directory
+routing) was prepared into a fresh physical copy with 584 pins and a unique target:
+typecheck 298.595 s, release 557.648 s, bindgen 1.763 s and static inspection 0.254 s.
+Each stage exited 0 with every process reaped. The bound Wasm is 9,191,476 bytes, SHA-256
+`647f97d834037cf66f1bd4e2ca02d43b4aeed75b05ba1f87b4a78b5e541d02ff`; binary receipt
+`8d8bad7cf82dcb629d5c0061f0ed5f92a51e5a55f0162a2572c86b88e47801a7`. Stage receipts are
+archived as `evidence.host-executables-*.json` with a
+[recheck](evidence.host-executables-sdk-binary-metadata.json). Local packaging produced
+receipt `c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44`. The shell
+acceptance script runs with this package on the wasm-idle shell branch.
