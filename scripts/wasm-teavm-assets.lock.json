@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v2",
+	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v3",
 	"provenanceLevel": "source-build-and-compatibility-overlay-reproduced",
 	"licenseExpression": "Apache-2.0 AND GPL-2.0-only WITH Classpath-exception-2.0 AND BSD-3-Clause AND Unicode-3.0",
 	"source": {
@@ -124,7 +124,15 @@
 				"sha256": "76b77c43f97a7c4cf60917e24c5e212faaf8ca664e433759ef98d12f268b6b49"
 			}
 		},
+		"sourcePatches": [
+			{
+				"path": "scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch",
+				"bytes": 4446,
+				"sha256": "0e52f4dd5c1e7392eb3acfbced274bd1e0134b71804125a4c31615815ebc53ca"
+			}
+		],
 		"commands": [
+			"git apply <source-patches>",
 			"./gradlew --no-daemon clean :javac:downloadJDK",
 			"./gradlew --no-daemon :compiler:createDist",
 			"javac --release 17 <locked-classpath> <overlay-sources>",
@@ -138,8 +146,8 @@
 			},
 			{
 				"path": "compiler.wasm",
-				"bytes": 4299273,
-				"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6"
+				"bytes": 4313700,
+				"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
@@ -154,8 +162,8 @@
 		],
 		"overlay": {
 			"utilityPath": "scripts/teavm/ApplyRuntimeClasslibOverlay.java",
-			"utilityBytes": 5304,
-			"utilitySha256": "4079ea0092b2d5f79af0971ce7dfebeec02b0b1c985a39cad156a0df544a6493",
+			"utilityBytes": 6477,
+			"utilitySha256": "c87ea6f280752b21233da8361fc4ab1cbf90c85f6855ba4e59c57ba9622ac085",
 			"release": 17,
 			"archiveEntryCount": 2141,
 			"canonicalRuntime": {
@@ -331,6 +339,41 @@
 							"expectedOccurrences": 1
 						}
 					]
+				},
+				{
+					"sourcePath": "scripts/teavm/TFormatter.java",
+					"sourceBytes": 25582,
+					"sourceSha256": "59673e6ff79b84755730661a6fe2cc5ca83210e6d665693785604ee671c55c98",
+					"upstreamSourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
+					"upstreamSourceBytes": 24170,
+					"upstreamSourceSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
+					"transforms": [
+						{
+							"from": "                char specifier = parseFormatSpecifier();\n                configureFormat();\n",
+							"to": "                char specifier = parseFormatSpecifier();\n                // %n and %% do not correspond to any argument\n                if (specifier == 'n') {\n                    formatLineSeparator();\n                    continue;\n                }\n                if (specifier == '%') {\n                    formatPercent();\n                    continue;\n                }\n                configureFormat();\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "                case '%':\n                    out.append(\"%\");\n                    break;\n",
+							"to": "",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
+							"to": "        private void formatLineSeparator() throws IOException {\n            if (flags != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags));\n            }\n            if (width != -1) {\n                throw new TIllegalFormatWidthException(width);\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            out.append(System.lineSeparator());\n        }\n\n        private void formatPercent() throws IOException {\n            if ((flags & ~TFormattableFlags.LEFT_JUSTIFY) != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags & ~TFormattableFlags.LEFT_JUSTIFY));\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width == -1) {\n                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));\n            }\n            formatGivenString(false, \"%\");\n        }\n\n        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "import java.math.BigDecimal;\n",
+							"to": "import java.math.BigDecimal;\nimport java.math.RoundingMode;\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "            format.setMinimumFractionDigits(precision);\n",
+							"to": "            format.setMinimumFractionDigits(precision);\n            format.setRoundingMode(RoundingMode.HALF_UP);\n",
+							"expectedOccurrences": 1
+						}
+					]
 				}
 			],
 			"classes": [
@@ -396,6 +439,34 @@
 					"canonicalClassSha256": "4f8db161a099a53146f1162de3939d9d1a1fcd58097a0fc0a78754cdd13f6fcf",
 					"classBytes": 3291,
 					"classSha256": "7b998cd8c4730eb1f3c68b4d41d43497adacbd746e2e58853f73bcca97a45954"
+				},
+				{
+					"targetEntry": "org/teavm/classlib/java/util/TFormatter.class",
+					"canonicalClassBytes": 3594,
+					"canonicalClassSha256": "f5ea2dffc2dc8df5961102ff89fa66565830b1d17e95ae85e0a983d45964a727",
+					"classBytes": 2899,
+					"classSha256": "5bae6b47e4fce709e9f655dd27f3ce8cc4f8521a3b79d0261aa1e34555551d7c"
+				},
+				{
+					"targetEntry": "org/teavm/classlib/java/util/TFormatter$FormatWriter.class",
+					"canonicalClassBytes": 13376,
+					"canonicalClassSha256": "714ab8ce856032d688853f12ffd860c6c7970849b1eab05e5c142be970162985",
+					"classBytes": 12323,
+					"classSha256": "8be01c2606a2221b5af4a7a15059ab352815e78b4463c2b23be7c3690dd028ff"
+				}
+			],
+			"addedSources": [
+				{
+					"sourcePath": "scripts/teavm/TIllegalFormatWidthException.java",
+					"sourceBytes": 611,
+					"sourceSha256": "5242e1c00b4433885ef95776d80ae62ff070e43926c10a8f51c12919553360b8"
+				}
+			],
+			"addedClasses": [
+				{
+					"targetEntry": "org/teavm/classlib/java/util/TIllegalFormatWidthException.class",
+					"classBytes": 874,
+					"classSha256": "0c440a6516fc12871502cb2f239a2d55a0fcd973c47a4a5991c0492786693b4a"
 				}
 			]
 		}
@@ -404,8 +475,8 @@
 		"files": [
 			{
 				"path": "scripts/sync-wasm-teavm.mjs",
-				"bytes": 37190,
-				"sha256": "78a865f1cd385283ac5c3282cdd320e4c07b684d99c171e20c125debd6dce206"
+				"bytes": 39219,
+				"sha256": "46a1c37d363ffb11b7a1cc8020c2091f7acf89b2720b1c96bc693567389efb3c"
 			},
 			{
 				"path": "scripts/sync-wasm-teavm.d.mts",
@@ -419,8 +490,8 @@
 			"sourcePath": "scripts/teavm/THIRD_PARTY_NOTICES.md",
 			"targetPath": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39496,
-			"sha256": "320e5719bcdafa147af73651e7173d22ce15c059a370ea03890b179ff9f05afa"
+			"bytes": 39743,
+			"sha256": "4fbf5538136d5b9b95c5df0a994ab31b59efe703a81521303734645197b98441"
 		}
 	],
 	"outputs": [
@@ -439,13 +510,13 @@
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4299273,
-			"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6",
+			"bytes": 4313700,
+			"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1678507,
-				"sha256": "5f46653e00fb5832e0bb2daba4fe49bf3e7bce369a3d16fcb30025fb7ed96bf2"
+				"bytes": 1683774,
+				"sha256": "94980cdb4eae7ba057845108c7f890b5115ea318f119119427c6c52b0605ba45"
 			}
 		},
 		{
@@ -463,13 +534,13 @@
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2389701,
-			"sha256": "3a2245e2177dcf70bf8c61d48ef806b9e29375a552edb61be5c6ca3d7232819b",
+			"bytes": 2388980,
+			"sha256": "b2b7ce397700b65cab0beee8a365ef79fe8fb1ebfe7ccf19e189630cb3838bbe",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2354686,
-				"sha256": "991fdd83b9fbd436a0facb88db60da049ee5679e5bf878cd17686b447c97a336"
+				"bytes": 2353467,
+				"sha256": "6ac7125040dad57a4e86df8e67a4790a731cf25bb1ed8c23d6bd1ba8b71d9e56"
 			}
 		}
 	]

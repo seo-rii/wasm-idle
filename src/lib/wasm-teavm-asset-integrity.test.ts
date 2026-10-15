@@ -44,6 +44,7 @@ interface TeaVmRuntimeManifest {
 	};
 	build: {
 		jdk: { version: string };
+		sourcePatches: Array<{ path: string }>;
 		gradle: { version: string; verificationMetadata: { sha256: string } };
 		overlay: {
 			archiveEntryCount: number;
@@ -52,6 +53,8 @@ interface TeaVmRuntimeManifest {
 				transforms: Array<{ from: string; to: string; expectedOccurrences: number }>;
 			}>;
 			classes: Array<{ targetEntry: string }>;
+			addedSources: Array<{ sourcePath: string }>;
+			addedClasses: Array<{ targetEntry: string }>;
 		};
 	};
 	producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
@@ -98,7 +101,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v2',
+			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3',
 			provenanceLevel: 'source-build-and-compatibility-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',
@@ -114,7 +117,22 @@ describe('checked-in TeaVM runtime trust root', () => {
 			build: {
 				jdk: { version: '25.0.3+9' },
 				gradle: { version: '9.1.0' },
-				overlay: { archiveEntryCount: 2141 }
+				// Apply @PluggableDependency plugins in the browser compiler (TeaVM #1322).
+				sourcePatches: [
+					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' }
+				],
+				overlay: {
+					archiveEntryCount: 2141,
+					addedSources: [
+						{ sourcePath: 'scripts/teavm/TIllegalFormatWidthException.java' }
+					],
+					addedClasses: [
+						{
+							targetEntry:
+								'org/teavm/classlib/java/util/TIllegalFormatWidthException.class'
+						}
+					]
+				}
 			},
 			producer: {
 				files: [
@@ -135,11 +153,20 @@ describe('checked-in TeaVM runtime trust root', () => {
 			['Double', 'Float64Array']
 		];
 		const consoleStream = 'org/teavm/classlib/impl/console/JsConsolePrintStream';
+		const formatter = 'org/teavm/classlib/java/util/TFormatter';
+		const formatterSource = manifest.build.overlay.sources.at(-1)!;
+		// %n and %% must not consume an argument (TeaVM #1317); %f rounds half up (TeaVM #1323).
+		expect(formatterSource.upstreamSourceEntry).toBe(`${formatter}.java`);
+		expect(formatterSource.transforms.map(({ to }) => to).join('\n')).toMatch(
+			/formatLineSeparator\(\)[\s\S]*formatPercent\(\)[\s\S]*setRoundingMode\(RoundingMode\.HALF_UP\)/
+		);
 		expect(
-			manifest.build.overlay.sources.map(({ upstreamSourceEntry, transforms }) => ({
-				upstreamSourceEntry,
-				transforms
-			}))
+			manifest.build.overlay.sources
+				.slice(0, -1)
+				.map(({ upstreamSourceEntry, transforms }) => ({
+					upstreamSourceEntry,
+					transforms
+				}))
 		).toEqual([
 			...nioBuffers.map(([buffer, typedArray]) => ({
 				upstreamSourceEntry: `org/teavm/classlib/java/nio/T${buffer}Buffer.java`,
@@ -171,7 +198,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest.build.overlay.classes.map(({ targetEntry }) => targetEntry)).toEqual([
 			...nioBuffers.map(([buffer]) => `org/teavm/classlib/java/nio/T${buffer}Buffer.class`),
 			`${consoleStream}.class`,
-			`${consoleStream}$ByteEncoder.class`
+			`${consoleStream}$ByteEncoder.class`,
+			`${formatter}.class`,
+			`${formatter}$FormatWriter.class`
 		]);
 		expect(manifest.assets.map((file) => file.path)).toEqual(TEAVM_RUNTIME_ASSET_NAMES);
 
@@ -226,11 +255,17 @@ describe('checked-in TeaVM runtime trust root', () => {
 		) as {
 			build: {
 				gradle: { verificationMetadata: { path: string; bytes: number; sha256: string } };
+				sourcePatches: Array<{ path: string; bytes: number; sha256: string }>;
 				overlay: {
 					utilityPath: string;
 					utilityBytes: number;
 					utilitySha256: string;
 					sources: Array<{
+						sourcePath: string;
+						sourceBytes: number;
+						sourceSha256: string;
+					}>;
+					addedSources: Array<{
 						sourcePath: string;
 						sourceBytes: number;
 						sourceSha256: string;
@@ -247,7 +282,8 @@ describe('checked-in TeaVM runtime trust root', () => {
 		const receipts = [
 			...lock.producer.files,
 			lock.build.gradle.verificationMetadata,
-			...lock.build.overlay.sources.map(
+			...lock.build.sourcePatches,
+			...[...lock.build.overlay.sources, ...lock.build.overlay.addedSources].map(
 				({ sourcePath: path, sourceBytes, sourceSha256 }) => ({
 					path,
 					bytes: sourceBytes,

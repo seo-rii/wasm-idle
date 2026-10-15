@@ -645,10 +645,23 @@ export async function produceWasmTeaVmAssets(options) {
 	const overlayClasses = overlay.classes.map((entry) =>
 		requireObject(entry, 'overlay class metadata')
 	);
+	// wasm-idle-authored classes that the canonical archive does not contain.
+	if (
+		(overlay.addedSources !== undefined && !Array.isArray(overlay.addedSources)) ||
+		(overlay.addedClasses !== undefined && !Array.isArray(overlay.addedClasses))
+	) {
+		throw new Error('TeaVM producer lock has invalid added overlay sources or classes');
+	}
+	const addedOverlaySources = (overlay.addedSources ?? []).map((entry) =>
+		requireObject(entry, 'added overlay source metadata')
+	);
+	const addedOverlayClasses = (overlay.addedClasses ?? []).map((entry) =>
+		requireObject(entry, 'added overlay class metadata')
+	);
 	for (const [entries, field] of [
-		[overlaySources, 'sourcePath'],
+		[[...overlaySources, ...addedOverlaySources], 'sourcePath'],
 		[overlaySources, 'upstreamSourceEntry'],
-		[overlayClasses, 'targetEntry']
+		[[...overlayClasses, ...addedOverlayClasses], 'targetEntry']
 	]) {
 		if (
 			entries.some((entry) => typeof entry[field] !== 'string') ||
@@ -657,7 +670,7 @@ export async function produceWasmTeaVmAssets(options) {
 			throw new Error(`TeaVM producer lock has invalid or duplicate overlay ${field}`);
 		}
 	}
-	for (const entry of overlaySources) {
+	for (const entry of [...overlaySources, ...addedOverlaySources]) {
 		await verifyFileReceipt(
 			path.resolve(
 				repoRoot,
@@ -698,6 +711,26 @@ export async function produceWasmTeaVmAssets(options) {
 		validateReceipt(verificationMetadata, 'TeaVM Gradle verification metadata'),
 		'TeaVM Gradle verification metadata'
 	);
+	// wasm-idle patches applied to the teavm-javac source before it is built.
+	if (build.sourcePatches !== undefined && !Array.isArray(build.sourcePatches)) {
+		throw new Error('TeaVM producer lock has invalid source patches');
+	}
+	const sourcePatchPaths = [];
+	for (const sourcePatch of build.sourcePatches ?? []) {
+		if (!isObject(sourcePatch) || typeof sourcePatch.path !== 'string') {
+			throw new Error('TeaVM producer lock has an invalid source patch');
+		}
+		const sourcePatchPath = path.resolve(
+			repoRoot,
+			validateRelativePath(sourcePatch.path, 'TeaVM source patch path')
+		);
+		await verifyFileReceipt(
+			sourcePatchPath,
+			validateReceipt(sourcePatch, `TeaVM source patch ${sourcePatch.path}`),
+			`TeaVM source patch ${sourcePatch.path}`
+		);
+		sourcePatchPaths.push(sourcePatchPath);
+	}
 	if (!Array.isArray(producer.files) || producer.files.length === 0) {
 		throw new Error('TeaVM producer lock is missing producer file receipts');
 	}
@@ -747,6 +780,13 @@ export async function produceWasmTeaVmAssets(options) {
 			cwd: temporaryRoot,
 			env: process.env
 		});
+		for (const sourcePatchPath of sourcePatchPaths) {
+			// The ceiling keeps git from treating an enclosing repository as the patch root.
+			await run('git', ['apply', '--verbose', sourcePatchPath], {
+				cwd: buildRoot,
+				env: { ...process.env, GIT_CEILING_DIRECTORIES: temporaryRoot }
+			});
+		}
 		await run('tar', ['-xzf', jdkArchivePath, '-C', jdkExtractRoot], {
 			cwd: temporaryRoot,
 			env: process.env
@@ -951,25 +991,29 @@ export async function produceWasmTeaVmAssets(options) {
 				classpath.join(path.delimiter),
 				'-d',
 				overlayClassRoot,
-				...overlaySources.map((entry) => path.resolve(repoRoot, entry.sourcePath))
+				...[...overlaySources, ...addedOverlaySources].map((entry) =>
+					path.resolve(repoRoot, entry.sourcePath)
+				)
 			],
 			{ cwd: temporaryRoot, env: buildEnvironment }
 		);
-		// Nested classes compile to separate entries; every emitted class must be replaced.
+		// Nested classes compile to separate entries; every emitted class must be locked.
 		const compiledOverlayClasses = (await readdir(overlayClassRoot, { recursive: true }))
 			.filter((entry) => entry.endsWith('.class'))
 			.map((entry) => entry.split(path.sep).join('/'))
 			.sort();
 		if (
 			JSON.stringify(compiledOverlayClasses) !==
-			JSON.stringify(overlayClasses.map((entry) => entry.targetEntry).sort())
+			JSON.stringify(
+				[...overlayClasses, ...addedOverlayClasses].map((entry) => entry.targetEntry).sort()
+			)
 		) {
 			throw new Error(
 				`TeaVM overlay classes do not match javac output: ${compiledOverlayClasses.join(', ')}`
 			);
 		}
 		const overlayReplacementArgs = [];
-		for (const entry of overlayClasses) {
+		for (const entry of [...overlayClasses, ...addedOverlayClasses]) {
 			const overlayClassPath = path.join(overlayClassRoot, ...entry.targetEntry.split('/'));
 			await verifyFileReceipt(
 				overlayClassPath,
@@ -982,7 +1026,8 @@ export async function produceWasmTeaVmAssets(options) {
 			overlayReplacementArgs.push(
 				entry.targetEntry,
 				overlayClassPath,
-				entry.canonicalClassSha256,
+				// '-' asks the utility to append an entry the canonical archive must not contain.
+				addedOverlayClasses.includes(entry) ? '-' : entry.canonicalClassSha256,
 				entry.classSha256
 			);
 		}

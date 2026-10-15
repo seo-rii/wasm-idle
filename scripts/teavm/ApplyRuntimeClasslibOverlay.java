@@ -31,13 +31,17 @@ public final class ApplyRuntimeClasslibOverlay {
     private ApplyRuntimeClasslibOverlay() {
     }
 
+    // An input SHA-256 of "-" appends an entry that the canonical archive must not contain.
     private record Replacement(String inputSha256, byte[] bytes) {
+        boolean isAddition() {
+            return inputSha256.equals("-");
+        }
     }
 
     public static void main(String[] args) throws Exception {
         if (args.length < 7 || (args.length - 3) % 4 != 0) {
             throw new IllegalArgumentException(
-                    "usage: <input> <output> <entry-count> (<entry> <replacement-class> <input-sha256> <replacement-sha256>)...");
+                    "usage: <input> <output> <entry-count> (<entry> <replacement-class> <input-sha256|-> <replacement-sha256>)...");
         }
         Path input = Path.of(args[0]);
         Path output = Path.of(args[1]);
@@ -78,6 +82,9 @@ public final class ApplyRuntimeClasslibOverlay {
                 byte[] data = readExactly(archiveInput, dataLength, name);
                 Replacement replacement = replacements.get(name);
                 if (replacement != null) {
+                    if (replacement.isAddition()) {
+                        throw new IOException("TeaVM archive already contains added entry " + name);
+                    }
                     if (!replaced.add(name)) {
                         throw new IOException("duplicate TeaVM archive entry " + name);
                     }
@@ -90,11 +97,26 @@ public final class ApplyRuntimeClasslibOverlay {
                 archiveOutput.write(data);
                 entries++;
             }
+            for (Map.Entry<String, Replacement> addition : replacements.entrySet()) {
+                if (addition.getValue().isAddition()) {
+                    byte[] nameBytes = addition.getKey().getBytes(StandardCharsets.UTF_8);
+                    archiveOutput.writeShort(nameBytes.length);
+                    archiveOutput.write(nameBytes);
+                    archiveOutput.writeInt(addition.getValue().bytes().length);
+                    archiveOutput.write(addition.getValue().bytes());
+                }
+            }
         }
-        if (!replaced.equals(replacements.keySet())) {
+        Set<String> expectedReplacements = new HashSet<>();
+        for (Map.Entry<String, Replacement> replacement : replacements.entrySet()) {
+            if (!replacement.getValue().isAddition()) {
+                expectedReplacements.add(replacement.getKey());
+            }
+        }
+        if (!replaced.equals(expectedReplacements)) {
             Files.deleteIfExists(output);
             throw new IOException(
-                    "expected TeaVM archive overlay targets " + replacements.keySet() + ", found " + replaced);
+                    "expected TeaVM archive overlay targets " + expectedReplacements + ", found " + replaced);
         }
         if (entries != expectedEntryCount) {
             Files.deleteIfExists(output);

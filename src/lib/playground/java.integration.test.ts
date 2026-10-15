@@ -247,7 +247,7 @@ public class Main {
 		expect(outputs.join('')).toBe('49\n');
 	}, 60_000);
 
-	it('compiles and runs character stream and typed NIO buffer programs under Wasm GC', async () => {
+	it('compiles and runs character stream, NIO buffer and Formatter programs under Wasm GC', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		// Readers and Writers reach CharBuffer.allocate/wrap. The bundled runtime classlib must
 		// not retain their JS-only @JSByRef typed array paths.
@@ -323,6 +323,79 @@ public class Main {
 }`,
 				stdin: '',
 				expected: `${Array.from({ length: 20 }, (_, i) => `line ${i} 한글\n`).join('')}pw\nend\n`
+			},
+			{
+				// %n and %% do not consume an argument (TeaVM #1317)
+				name: 'Formatter line separator and escaped percent',
+				code: `public class Main {
+    public static void main(String[] args) {
+        System.out.printf("%d%n", 7);
+        System.out.print(String.format("%d%% of %s|%% %d|%5%|%-5%|%n", 50, "x", 5));
+        try {
+            String.format("%5n");
+        } catch (RuntimeException e) {
+            System.out.println("rejected: " + e);
+        }
+    }
+}`,
+				stdin: '',
+				expected:
+					'7\n50% of x|% 5|    %|%    |\nrejected: java.util.IllegalFormatWidthException: Illegal width: 5\n'
+			},
+			{
+				// Dependency plugins must run in the browser compiler (TeaVM #1322): without them a clone()
+				// result loses its type, so virtual calls on it (including inside Formatter's %f) trap.
+				name: 'cloned objects and floating-point formatting',
+				code: `public class Main {
+    static abstract class Shape implements Cloneable {
+        abstract double area();
+
+        Shape copy() {
+            try {
+                return (Shape) super.clone();
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    static class Square extends Shape {
+        double side = 3;
+
+        double area() {
+            return side * side;
+        }
+    }
+
+    static class Circle extends Shape {
+        double r = 1;
+
+        double area() {
+            return 3 * r * r;
+        }
+    }
+
+    public static void main(String[] args) {
+        for (Shape shape : new Shape[] { new Square(), new Circle() }) {
+            System.out.println(shape.copy().area());
+        }
+        System.out.println(String.format("%.2f", 1.5));
+        System.out.printf("%.3f|%8.2f|%n", 2.0 / 3, -12.346);
+    }
+}`,
+				stdin: '',
+				expected: '9.0\n3.0\n1.50\n0.667|  -12.35|\n'
+			},
+			{
+				// %f rounds half up on the shortest decimal representation (TeaVM #1323)
+				name: 'Formatter half-up rounding',
+				code: `public class Main {
+    public static void main(String[] args) {
+        System.out.println(String.format("%.1f %.2f %.0f %.2f %.2f %8.2f|", 0.25, 0.125, 2.5, 1.005, 2.675, -12.345));
+    }
+}`,
+				stdin: '',
+				expected: '0.3 0.13 3 1.01 2.68   -12.35|\n'
 			},
 			{
 				name: 'typed NIO buffers',
