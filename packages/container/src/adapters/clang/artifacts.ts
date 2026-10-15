@@ -1,6 +1,16 @@
 import type { FileSystemSnapshot } from '../../fs/types.js';
 import { checkMemoryProfile } from '../wasi/profile.js';
 
+/** Common ABI qualification after the caller has verified a module's memory profile. */
+export function isProcessCommand(module: WebAssembly.Module, wasiImports: ReadonlySet<string>): boolean {
+  const imports = WebAssembly.Module.imports(module), exports = WebAssembly.Module.exports(module);
+  return imports.some(item => item.module === 'wasm_idle_process_v1' && item.name === 'initial_cwd') &&
+    imports.every(item => item.kind === 'function' && (item.module === 'wasi_snapshot_preview1' && wasiImports.has(item.name) ||
+      item.module === 'wasm_idle_process_v1' && item.name === 'initial_cwd')) &&
+    exports.some(item => item.name === 'memory' && item.kind === 'memory') &&
+    exports.some(item => item.name === '_start' && item.kind === 'function');
+}
+
 /** Qualify changed compiler outputs without inferring execution rights from a filename. */
 export function qualifyExecutableOutputs(previous: FileSystemSnapshot, result: FileSystemSnapshot,
   exitCode: number, wasiImports: ReadonlySet<string>, maxMemoryBytes: number): FileSystemSnapshot {
@@ -15,12 +25,7 @@ export function qualifyExecutableOutputs(previous: FileSystemSnapshot, result: F
     try {
       checkMemoryProfile(entry.data, maxMemoryBytes);
       const module = new WebAssembly.Module(entry.data as Uint8Array<ArrayBuffer>);
-      const imports = WebAssembly.Module.imports(module), exports = WebAssembly.Module.exports(module);
-      if (!imports.some(item => item.module === 'wasm_idle_process_v1' && item.name === 'initial_cwd') ||
-        imports.some(item => item.kind !== 'function' || !(item.module === 'wasi_snapshot_preview1' && wasiImports.has(item.name) ||
-          item.module === 'wasm_idle_process_v1' && item.name === 'initial_cwd')) ||
-        !exports.some(item => item.name === 'memory' && item.kind === 'memory') ||
-        !exports.some(item => item.name === '_start' && item.kind === 'function')) return entry;
+      if (!isProcessCommand(module, wasiImports)) return entry;
       // Preserve the compiler's read/write policy and grant execute only to readers.
       return { ...entry, mode: entry.mode | ((entry.mode & 0o444) >> 2) };
     } catch {

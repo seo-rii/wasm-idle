@@ -31,7 +31,7 @@ export function createWasiHost(options: HostOptions) {
   let memory: WebAssembly.Memory;
   const stdio: WasiStdio = options.stdio ?? createBatchStdio(options.stdin, options.maxOutputBytes);
   const handles = new Map<number, Handle>();
-  const standard = new Set([0, 1, 2]);
+  const standard = new Set([0, 1, 2].filter(fd => stdio.isOpen?.(fd) ?? true));
   let nextFd = 3;
   // Real relative file access is rooted at cwd. Absolute paths use the root preopen.
   for (const [label, path] of [['.', options.cwd], ['/', '/']] as const) {
