@@ -44,7 +44,8 @@ const patches = [
 	'0005-owned-command-snapshot.patch',
 	'0006-register-worker-shell-import.patch',
 	'0007-delegate-host-command-descriptors.patch',
-	'0009-preserve-join-exit-status.patch'
+	'0009-preserve-join-exit-status.patch',
+	'0010-keep-running-child-on-wnohang.patch'
 ];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = ['0008-dispatch-trusted-host-commands.patch'];

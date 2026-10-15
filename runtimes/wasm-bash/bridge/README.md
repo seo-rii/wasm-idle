@@ -87,6 +87,11 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    runtime now writes the raw exit status there. Statuses 0–78 are unchanged; 79–255
    (for example 126, 127 and 128+n) are no longer reported to Bash as 79. It applies to
    native children and host commands alike.
+10. `0010-keep-running-child-on-wnohang.patch`: a nonblocking `proc_join` for a specific
+    child that is still running removed that child from the parent and reported its pid
+    with no status, which wasix-libc `waitpid(pid, WNOHANG)` returns as an exit with
+    status 0. The child now stays joinable and the call reports pid 0, so `waitpid`
+    returns 0 as POSIX requires. Blocking joins and finished children are unchanged.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -468,3 +473,16 @@ are archived unchanged as `evidence.exit-status-*.json` with a
 [post-run recheck](evidence.exit-status-sdk-binary-metadata.json). The unchanged local
 packaging step produced package receipt
 `21c82836f8cbce9a2d07133c35dca7c177944ebb9abf3ef2b25b74374803fbae` in 1.511 seconds.
+
+### Nonblocking join of a running child
+
+With patch 0009, two further actual runs of the unchanged eight cases each passed all
+status checks except one intermittent loss: Bash once observed 0 for the first host
+command of a shell while the Supervisor completed it with 23. Twenty consecutive
+dispatches in one shell then reproduced it on the first command only. In `proc_join`,
+the nonblocking path for a specific pid removes the child from the parent and writes its
+pid before checking completion; an unfinished child then yields `JoinStatusType::Nothing`
+with that pid, which wasix-libc turns into `*status = 0` and returns the pid. A host
+command's first dispatch (cold container Worker) is slow enough for Bash to poll it in that
+state; later commands usually finish first. Patch 0010 keeps such a child joinable and
+reports pid 0. It applies independently of 0009 with zero fuzz.
