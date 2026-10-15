@@ -32,7 +32,7 @@ The current [JavaScript documentation](https://docs.wasmer.io/runtime/js/) descr
 `sandboxes.create` API. Its examples do not establish that the pinned SDK exposes the same hooks.
 The similarly named old `v0.10.0` Git tag is not the npm package's git revision either.
 
-## Observed boundary
+## Original unmodified runtime observations
 
 | Contract                | Observation with the pinned runtime                                                                                                                                                                                                                            |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -108,8 +108,53 @@ compile probe checks public accessibility without returning an execution or
 successful task handle. This does not export mutable runtime state or establish
 common live filesystem/fd capabilities; actual Rust compilation is a distinct gate.
 
-Only protocol tests and source-patch application checks are included at this stage. SDK Rust
-typechecking and actual SDK/Bash rebuild remain pending under the current resource budget.
-No producer lock or npm runtime dependency changes; no shell support promotion follows from
-patches applying cleanly. Repeat the original real Bash gates with rebuilt, pinned artifacts
-before accepting candidate B as a production backend.
+The initial prototype included only protocol tests and source-patch application checks.
+That source-only status is superseded by the concrete rebuild observations below. Applying
+patches alone still does not qualify candidate B as a production backend.
+
+## Rebuilt observations on 2026-10-15
+
+The actual Worker uses a second WASI import resolver. The first five-patch SDK/Bash run on
+[#195](https://github.com/seo-rii/wasm-idle/pull/195) therefore fails with Noexec(45) before
+guest entry. The sixth patch on [#196](https://github.com/seo-rii/wasm-idle/pull/196) registers
+the private exec import on that real path; fresh-source SDK typechecking, release generation,
+matching bindgen and local module/Worker packaging pass. The generated SDK entrypoint and
+Worker graph retain fixed trusted local URLs and caller-supplied verified Module/Memory.
+
+The [#197](https://github.com/seo-rii/wasm-idle/pull/197) actual browser run then passes 17
+of 18 selected native WASIX checks. The remaining relative redirect writes outside the host
+workspace because the pinned libc's legacy relative-open cwd remains `/` while WASIX cwd is
+`/workspace`. Actual absolute-path/explicit-chdir comparisons isolate this startup boundary.
+The separately pinned constructor on [#198](https://github.com/seo-rii/wasm-idle/pull/198)
+synchronizes those states before Bash main; its real offline producer build/import inspection
+passes. It does not rewrite scripts, arguments or the Bash parser.
+
+At application `7c7c32c3dc3c8f6842dd59bd677457e5e9613032`,
+[#199](https://github.com/seo-rii/wasm-idle/pull/199) runs the same ten scripts and ABI
+fixture sources with the same SDK package and new Bash bytes: all 18 checks pass in Chromium
+153.0.8010.12/Linux. The host sees the exact nine redirected binary bytes; all 60 Workers
+retire. Original Noexec and 17/18 receipts remain unchanged beside the successful receipt.
+This improves candidate A's native-child observations; it does not exercise a JavaScript
+Supervisor command resolver or replace native `Directory` with the common Container VFS.
+
+The separate [#200 cancellation probe](https://github.com/seo-rii/wasm-idle/pull/200), at
+application `266469ff21821f8e347fcc967bc32d3da8fb8437`, passes 19 selected checks for actual
+CPU-loop, blocked-input and pending-download cancellation plus same-page Bash recovery.
+The trusted owner explicitly terminates its SDK Worker group; the next command uses a fresh
+owner and shared memory, reusing only verified immutable bytes and the compiled SDK module.
+All 21 observed Workers retire before recovery and context closure. The partial pinned WEBc
+request is aborted after 16,384 bytes; the server observes no active response. This is forced
+host-group cleanup, not a new SDK termination method, guest signal, surviving-shell interrupt,
+PTY or Container asset-service cancellation contract. The pending wait is observed before
+cleanup, and a late worker failure cannot be treated as successful cancellation.
+
+All current `shellBackendReady` and `commonContainerFdVfsQualified` fields remain false.
+The production backend decision stays deferred. Candidate B's next required experiment is
+actual Bash external dispatch through a trusted host-command registration into a small real
+WASI command, with prepared-child argv/env/cwd, inherited fd endpoints and common live files.
+The source-pinned Rust `Runtime::host_command`/`VirtualCommand::exec` seam supplies the
+extension point; the current SDK JavaScript runtime still inherits no implementation.
+`HostCommandSnapshot` grants metadata only. It cannot be treated as file/fd authority, and a
+JavaScript callback must remain on its owning Worker rather than being marked `Send + Sync`.
+Clang and BusyBox integration, verified command-lazy loading and public process cancellation
+must pass their actual common-resource fixtures before candidate B or a shell MVP is promoted.
