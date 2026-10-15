@@ -1,0 +1,50 @@
+--- a/src/runtime/mod.rs
++++ b/src/runtime/mod.rs
+@@ -55,6 +55,17 @@
+ 
+     /// Retrieve the active [`VirtualTaskManager`].
+     fn task_manager(&self) -> &Arc<dyn VirtualTaskManager>;
++
++    /// Optional trusted host command, selected by its resolved executable path.
++    /// This is metadata-only: implementations must not fetch/execute here. The
++    /// returned VirtualCommand owns child start, inherited fd bindings, wait,
++    /// cancellation and cleanup through the existing TaskJoinHandle contract.
++    fn host_command(
++        &self,
++        _path: &str,
++    ) -> Option<Arc<dyn crate::os::command::VirtualCommand + Send + Sync>> {
++        None
++    }
+ 
+     /// A package loader.
+     fn package_loader(&self) -> Arc<dyn PackageLoader + Send + Sync> {
+@@ -552,6 +563,13 @@
+ }
+ 
+ impl Runtime for OverriddenRuntime {
++    fn host_command(
++        &self,
++        path: &str,
++    ) -> Option<Arc<dyn crate::os::command::VirtualCommand + Send + Sync>> {
++        self.inner.host_command(path)
++    }
++
+     fn networking(&self) -> &DynVirtualNetworking {
+         if let Some(net) = self.networking.as_ref() {
+             net
+--- a/src/bin_factory/mod.rs
++++ b/src/bin_factory/mod.rs
+@@ -107,6 +107,13 @@
+         parent_ctx: Option<&FunctionEnvMut<'_, WasiEnv>>,
+         builder: &mut Option<WasiEnv>,
+     ) -> Result<TaskJoinHandle, SpawnError> {
++        // Give the trusted runtime the already resolved child execution
++        // context. The host lookup cannot be supplied by package JavaScript.
++        if let Some(parent_ctx) = parent_ctx {
++            if let Some(command) = self.runtime.host_command(&name) {
++                return command.exec(parent_ctx, &name, builder);
++            }
++        }
+         // We check for built in commands
+         if let Some(parent_ctx) = parent_ctx {
+             if self.commands.exists(name.as_str()) {
