@@ -60,4 +60,5 @@ jobs:
         with:
           name: container-browser-evidence
           path: .codex/container-*.json
-          if-no-files-found: ignore
+          include-hidden-files: true
+          if-no-files-found: error
