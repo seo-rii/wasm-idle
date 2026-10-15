@@ -575,6 +575,14 @@ covers the state WASIX caches itself:
   instead of failing with `EPERM`.
 - Host-command descriptors use the same live end-of-file rule.
 
+Patch 0014 also preserves append intent when opening an **existing** file on a live mount.
+The host file then sends one `append(handle, bytes)` operation to its owner. The earlier
+EOF seek remains an offset refresh; it does not choose the location of an append write.
+This avoids a separate EOF lookup and positional write overwriting another process's
+append. New-file opens already retain append intent. Ordinary non-append writes and
+non-live mounts retain their existing behavior. This correction has source/preparation
+checks; the previously published SDK binary predates it and needs rebuilding.
+
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
 against other processes keep their existing WASIX behavior. These remain gaps.
