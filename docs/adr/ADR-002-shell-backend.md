@@ -1,10 +1,38 @@
 # ADR-002: keep the shell backend behind the G0 gate
 
-Status: accepted for staged development; candidate B selected for a source-pinned porting prototype; production shell backend deferred.
+Status: candidate B implemented behind the optional WASIX adapter; public combined-artifact/browser and production qualification are recorded separately.
 
 Decision date: 2026-10-14. Scope: C-02 and the pinned runtime below.
 
-## Decision
+## Current implementation (2026-10-15)
+
+Candidate B is implemented by the maintained SDK/WASIX bridge and the optional
+`@wasm-idle/container/adapters/wasix` entrypoint. Root container imports do not
+load WASIX. The original GNU Bash parser/evaluator determines command, redirect
+and pipeline behavior. Its prepared child argv/env/cwd and inherited stdio reach
+trusted registered Supervisor commands. `Directory.fromHostFileSystem` delegates
+the shell's live filesystem calls to the common VFS; Clang still uses the explicit
+snapshot writer-lease profile. Open shell output files survive a normal snapshot
+commit with their inode, offset and append contract, including nonzero guest exit.
+Crashes/cancellation discard unpublished compiler changes.
+
+The JavaScript owner never performs WASIX work that can wait for one of its own
+filesystem callbacks. Command preparation stays on the guest side, and a service
+thread owns child descriptor I/O/completion. Bounded per-descriptor queues preserve
+write ordering while control and other descriptors continue. The raw stream profile
+uses bounded native pipes and `Instance.waitForExit()`; it does not invoke the legacy
+SDK capture API. An isolated owner realm tracks and retires its SDK Worker group,
+including late startup. Public owner transport reports unconfirmed cleanup if that
+realm is lost. Routed foreground cancellation can leave Bash alive; a builtin loop
+requires ending the session and opening a fresh owner.
+
+The original observations below are historical experiment results, not descriptions
+of the current implementation. The [qualification ledger](../container-qualification.md)
+records exact artifact and browser gates. Descriptors beyond inherited stdio, arbitrary
+signals, PTY/termios and job control remain unsupported. There is no Linux, WASIX-wide,
+or general POSIX compatibility promise.
+
+## Original staged decision
 
 Continue the independent command-container API and common resource contracts. Do not make
 `@wasm-idle/container` depend on WASIX, and do not call the command API a shell MVP.

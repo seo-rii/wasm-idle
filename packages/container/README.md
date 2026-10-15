@@ -67,10 +67,14 @@ its own consumers. Dispose the manager separately when all users have finished.
 
 `wasm-run <path> [args...]` executes a workspace artifact through `wasi-preview1` by default;
 set `artifactAdapter` to another registered adapter such as `wasi-preview1-live` to select
-its execution profile explicitly. Profile validation still applies. It does not require executable mode metadata. Direct
-`./artifact.wasm`, shell PATH/stat/exec nodes and shebang interpretation are not yet supported;
-no placeholder `/usr/bin` executables are created. Local host command registrations cannot
-replace pinned package commands or the reserved `wasm-run` name.
+its execution profile explicitly. Profile validation still applies. It does not require
+executable mode metadata. The base command API does not interpret shell paths or shebangs.
+The optional [actual Bash session](./SHELL.md) binds readonly virtual command entries to
+the shell's PATH/stat/exec operations and supports direct workspace Wasm execution after
+checking executable metadata and the selected module profile. These entries have no fake
+readable binary body. Local host registrations cannot replace pinned package commands or
+the reserved `wasm-run` name. Start that profile with `createWasixShellSession`; registering
+or resolving `bash` through the base command API is a separate host decision.
 
 The separate [Clang adapter](./CLANG.md) uses the optional LLVM tool-host entrypoint.
 Root imports do not load it or compiler bytes.

@@ -1,10 +1,60 @@
 # Container qualification evidence
 
-Recorded 2026-10-15. This is a component evidence ledger, not a released command alpha, shell
-MVP or persistent beta. Work that can proceed independently of the blocked shell bridge has
-been implemented; unpassed promotion gates remain explicit.
+Updated 2026-10-16. This ledger retains both successful evidence and earlier failed
+experiments. Component and local integration results do not constitute a published release.
 
-## Review order
+## Current integration
+
+The product stack combines the common resource contracts, verified package loading,
+real Bash adapter, actual Clang/BusyBox commands, persistent workspace and rendered
+workbench. Earlier statements that the shell bridge or UI was absent describe the
+revision recorded in those sections. Current capabilities are tracked in the
+[compatibility ledger](./container-compatibility.md).
+
+The follow-up stack is #223 (bounded SDK streams and startup errors), #224 (pipeline
+fixtures), #225 (combined base), #226 (resource contracts), #227 (immutable distribution
+and archive validation), #228 (workbench and owned sessions), #229 (source materials and
+canonical LLVM multicall execution), #230 (shared real Bash profile), and #231
+(immutable workbench hosting). SDK and host
+branches remain separate until a consumer pins the rebuilt package.
+
+The reviewed integration passes 215 container unit/contract tests, 207 existing Clang
+tests, 11 distribution/server tests, 18 source-material tests, and the host-only npm
+package boundary (96 files, 450,744 unpacked bytes; zero root-import fetches).
+The real compiler self-path fixture records compile/link exit 0, generated command
+exit 0 with `hello\n`, executable output metadata and zero remaining Workers:
+[runner and evidence](../packages/container/test/fixtures/clang-self-path/).
+The workbench regression has 16 actual Chromium checks, including input and restore
+transactions that preserve pending view buffers; the persistence owner has
+21 actual browser checks including recovery-preserving orphan collection.
+
+The final SDK with patches 0001–0020 passes 72/72 checks across seven actual Chromium
+scenarios through the public Bash session. The unchanged acceptance script compiles,
+runs and pipes its output into the same workspace; a fresh warm owner reuses every
+asset body. Foreground interruption, package/compiler errors, pipeline redirection and
+startup failure each reclaim all owned Workers. See the preserved
+[full receipt](../packages/container/test/shell-acceptance/evidence/public-session-0020.json)
+and [process cleanup](../packages/container/test/shell-acceptance/evidence/public-session-0020-process.json).
+
+The actual Bash workbench additionally passes 6/6 checks across three runs: cold
+compile/pipe, persistent reload of source/result/executable metadata and direct execution,
+warm compile without another asset body, and interrupting a blocked real `cat` followed
+by another command in the surviving Bash. Its awaited owner-state polling observes the
+running child before interrupting it and Bash's resumed prompt before sending new input.
+These results qualify the snapshot compiler profile. Its
+[browser receipt](../packages/container/test/fixtures/product-shell-browser-evidence.json)
+and [process record](../packages/container/test/fixtures/product-shell-browser-process-evidence.json)
+retain the exact tested sources. Later view changes, the optional live compiler and
+immutable hosting each retain their own evidence. The three-sample
+[snapshot baseline](./container-benchmarks.md) additionally passes all 216 acceptance
+checks with zero warm asset body downloads; timings are observations on a shared host.
+
+Source packs preserve exact material identities while explicitly
+recording incomplete runtime source/notice correspondence. Production responses,
+clean compiler rebuild provenance, fixed OS image and source applicability remain
+release qualification requirements; none is inferred from a local byte hash.
+
+## Earlier stack and experiment history
 
 | Work                                           | PR                                                                               | Base / dependency                                                                                                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -610,7 +660,8 @@ failure of a whole package, a compile error and a missing command each fail alon
 Bash and the other package keep working; two of three runs pass all 47 checks and the
 third misses only the five-second Worker retirement window.
 
-Separately, redirections inside forked Bash pipeline subshells fail with `Invalid
+In that earlier dispatch experiment, redirections inside forked Bash pipeline subshells failed with `Invalid
 argument`, and `PIPESTATUS` stays empty even for builtins. Every attempt's original
-receipts are archived on #209. The shell's WASIX `Directory` and the container VFS remain
-separate namespaces. `commonContainerFdVfsQualified` and `shellBackendReady` stay false.
+receipts are archived on #209. Its readiness flags remain false in those preserved
+receipts. Later common-VFS and pipe work is assessed independently; this historical
+failure is not the status of every subsequent integration.
