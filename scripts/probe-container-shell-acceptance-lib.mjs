@@ -508,7 +508,8 @@ export function judgeLiveShellAcceptance(receipt) {
 			record.status === 0 && record.result?.reason === 'exited' && record.result.code === 0 && Number.isSafeInteger(record.pid)), records);
 	check('live-io:closed-input-command', invocations.some(call => call.path === `${BIN}/clang` && same(call.argv?.slice(1), ['--version']) &&
 		call.descriptors?.[0] === null) && decode(result?.files?.[LIVE_CLANG_FILES[2]]).startsWith('clang version ') &&
-		decode(result?.files?.[LIVE_CLANG_FILES[3]]) === '', result?.files?.[LIVE_CLANG_FILES[2]]);
+		decode(result?.files?.[LIVE_CLANG_FILES[3]]) === CLANG_TRIPLE_WARNING,
+		{ stdout: result?.files?.[LIVE_CLANG_FILES[2]], stderr: result?.files?.[LIVE_CLANG_FILES[3]] });
 	check('live-io:verified-cache-reuse', assets.every(path => Number.isSafeInteger(entry?.downloads?.start?.[path]) &&
 		entry.downloads.start[path] === entry.downloads.end?.[path]) &&
 		result?.assetsBeforeShell?.cachedEntries === 0, entry?.downloads);

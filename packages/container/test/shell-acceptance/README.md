@@ -186,6 +186,8 @@ Preprocessing preserves the complete driver profile and its exact stderr: the
 target warning followed by the unused linker-memory and linker-path warnings.
 The compile/link runs still require only the original target warning. The gate
 does not filter either phase's diagnostics or drop driver arguments.
+The closed-input version command also retains its target warning, redirected
+separately into `version.err`; its version output must be in `version.txt`.
 
 This receipt reports `scenario: "live-only"` and its independent
 `liveShellAcceptancePassed`/`liveCompilerFilesystemQualified` flags. It does not

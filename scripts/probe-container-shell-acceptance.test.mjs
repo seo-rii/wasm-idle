@@ -136,7 +136,7 @@ function liveReceipt() {
 	value.runs.push({ run: 'live-io', downloads: structuredClone(value.runs[1].downloads), result: {
 		type: 'result', backendCompleted: true, result: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: bytes(CLANG_PREPROCESS_WARNINGS) },
 		files: { '/workspace/live/live.h': bytes('after_editor\n'), '/workspace/live/preprocessed.txt': bytes('after_editor\n'),
-			'/workspace/live/version.txt': bytes('clang version 22\n'), '/workspace/live/version.err': [] },
+			'/workspace/live/version.txt': bytes('clang version 22\n'), '/workspace/live/version.err': bytes(CLANG_TRIPLE_WARNING) },
 		liveIo: { compilerPid: 2, compilerRunningBeforeEdit: true, compilerRunningAfterUtility: true,
 			headerBefore: bytes('before_editor\n'), headerAfter: bytes('after_editor\n'),
 			utility: { code: 0, reason: 'exited', stdout: bytes('after_editor\n'), stderr: [] } },
@@ -209,6 +209,13 @@ test('live preprocessing retains exact phase-specific diagnostics without filter
 	for (const stderr of [CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS + CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS.replace("'linker' input", "'other' input")]) {
 		const value = liveReceipt(); value.runs[2].result.result.stderr = bytes(stderr);
 		assert.deepEqual(judgeLiveShellAcceptance(value).checks.filter(check => !check.passed).map(check => check.id), ['live-io:actual-script-and-pipe-bytes']);
+	}
+});
+
+test('closed-input version retains its own exact redirected diagnostic bytes', () => {
+	for (const stderr of ['', CLANG_TRIPLE_WARNING.repeat(2), CLANG_PREPROCESS_WARNINGS]) {
+		const value = liveReceipt(); value.runs[2].result.files['/workspace/live/version.err'] = bytes(stderr);
+		assert.deepEqual(judgeLiveShellAcceptance(value).checks.filter(check => !check.passed).map(check => check.id), ['live-io:closed-input-command']);
 	}
 });
 
