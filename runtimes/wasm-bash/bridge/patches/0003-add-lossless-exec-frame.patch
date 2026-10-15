@@ -53,7 +53,7 @@
 +    // Only the wasm32 shell profile accepts these 32-bit pointers.
 +    if matches!(version, WasiVersion::Wasix32v1) {
 +        let shell = namespace! {
-+            "exec_v1" => Function::new_typed_with_env(
++            "exec_v1" => wasmer::Function::new_typed_with_env(
 +                &mut *store, ctx, syscalls::proc_exec_v1),
 +        };
 +        imports.extend(&imports! { "wasm_idle_shell_v1" => shell });

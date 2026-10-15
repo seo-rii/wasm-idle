@@ -52,6 +52,14 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    The selected `VirtualCommand::exec` receives the existing parent context and child
    `WasiEnv` builder, and returns the existing `TaskJoinHandle`. A trusted SDK integration
    must still implement the hook and its lifetime contract.
+5. `0005-owned-command-snapshot.patch`: allow an external SDK `VirtualCommand` to
+   call `host_command_snapshot()` on its prepared child `WasiEnv`. The returned
+   `HostCommandSnapshot` owns argv, raw `name=value` environment bytes and the cwd
+   from that child's WASIX filesystem directory lookup. Its fields are private;
+   read-only accessors retain no guest pointers, locks, mutable state or fd/FS
+   capabilities. Automatic Rust `Send + Sync` on owned values requires no unsafe
+   implementation or JS callback assertion. This metadata accessor does not
+   supply descriptor routing or the trusted JavaScript command registry.
 
 No speculative change to signal ordering is included. No libc API returns fake success,
 no stdout marker is interpreted as an exec request, and no shell string is parsed by host code.
@@ -86,6 +94,22 @@ The C encoder and pure Rust decoder tests verify only the protocol and local bou
 do not instantiate Wasmer, validate its Rust types, or prove the Asyncify integration.
 
 ## Supervisor, filesystem and fd ownership
+
+The snapshot is taken from the child in `VirtualCommand::exec`'s builder, after
+the runtime prepares it. Both ordinary exec and vfork exec call `_prepare_wasi`
+before `try_built_in`. `proc_spawn2` prepares argv/environment and applies fd
+operations, including `chdir`/`fchdir`, before that call. `proc_spawn` sets child
+cwd and stdio before dispatch. The parent context or a `PWD` environment entry
+cannot stand in for the prepared child's actual cwd. Calling the accessor on a
+concurrently running environment does not freeze its threads or establish an
+atomic transaction across those state locks.
+
+`host_command_compile_probe.rs` is an external SDK example for the public
+snapshot boundary. It reads the prepared builder and verifies that the owned
+value is automatically `Send + Sync + 'static`. Its `VirtualCommand::exec`
+returns `Unsupported` after the metadata check; it never starts a guest,
+registers a command, or returns a fabricated `TaskJoinHandle`. A successful
+compile of this probe establishes Rust accessibility and types only.
 
 The planned owner remains the container Supervisor. Each dedicated guest Worker uses its
 own bounded control channel and 64 KiB data SAB to synchronously request operations; the
@@ -132,24 +156,111 @@ and removes that directory after completion. The verification command compares e
 modified source file with its verified archive, runs each independent patch with
 `patch --dry-run --forward --fuzz=0`, and checks source identity again. A reversed or already
 applied patch fails instead of being silently applied in reverse. It creates no source copy and
-makes no changes to the supplied checkout. The [checked-in receipt](evidence.source-checks.json) says `patches-apply-cleanly-not-built`.
+makes no changes to the supplied checkout. The original four-patch
+[checked-in receipt](evidence.source-checks.json) remains historical and says
+`patches-apply-cleanly-not-built`. The five-patch
+[snapshot source receipt](evidence.snapshot-source-checks.json) separately records
+the current actual dry run and the compile probe as `not-run`.
+It predates the first genuine SDK Rust diagnostics. The distinct
+[memory-API correction source receipt](evidence.sdk-typefix-source-checks.json)
+records the later five-patch dry run after qualifying the Wasmer `Function`
+reference and using pinned `WasmSlice::read_to_vec()` for owned argv/environment
+bytes. The original frame ABI, limits and decoder remain unchanged. These local
+source/protocol checks do not establish a passing SDK/example typecheck.
 The report classifier passed 6 Node tests; the native C/Rust protocol passed 5 Rust tests
 (including frames emitted by the actual C encoder). These are bounded local checks only.
 
 To prepare a fresh private source tree later, omit `--verify-only`/`--wasix-source` and use
 `--output /new/private/path`. The helper refuses an existing output directory, verifies the
 archives, extracts them, applies the patches, installs the new runtime sources and records
-the patch hashes. It does not build, download dependencies or modify an active checkout.
-This full preparation path has not been used for the checked-in evidence.
+the patch and compile-probe hashes. It installs the probe as the SDK example
+`container_command_snapshot_compile`. It does not build, download dependencies
+or modify an active checkout. The dry-run receipt is not full preparation or
+SDK compile evidence.
+
+After provisioning the pinned nightly and `rust-src`, prefetch all locked
+dependency targets for both the SDK and the pinned standard-library source
+workspace. Run from the prepared SDK directory, using the private toolchain
+home and distinct physical target/intermediate directories for this source
+copy. Keep the SDK's atomics/build-std configuration intact:
+
+```sh
+export RUSTUP_HOME=/private/prerequisites/rustup
+export CARGO_TARGET_DIR=/private/run/sdk-target
+export CARGO_BUILD_BUILD_DIR=/private/run/sdk-intermediate
+export CARGO_PROFILE_DEV_DEBUG=0
+
+cargo +nightly-2025-07-05 fetch --locked
+cargo +nightly-2025-07-05 fetch --locked \
+  --manifest-path "$RUSTUP_HOME/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.toml"
+
+cargo +nightly-2025-07-05 check --locked --offline \
+  --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1
+```
+
+Omit `--target` in both prefetch steps; retain it for the offline check. The
+exact pinned Cargo [fetch implementation](https://github.com/rust-lang/cargo/blob/930b4f62cfcd1f0eabdb30a56d91bf6844b739bf/src/cargo/ops/cargo_fetch.rs)
+filters explicit fetch targets, while its [check download filtering](https://github.com/rust-lang/cargo/blob/930b4f62cfcd1f0eabdb30a56d91bf6844b739bf/src/cargo/core/package.rs)
+also considers the host. The unfiltered fetch includes every platform in the
+locked graph even when SDK `build.target` is set. Preserve both lockfile hashes;
+do not update dependency versions or substitute a different nightly to fill a
+cache miss.
+
+The example is an external crate target, so crate-private runtime state would
+cause a real Rust privacy failure. Missing dependencies or toolchain are not a
+passing compile check. Use a sequential bounded background process with private
+log/status files; full rebuild and real Bash/browser gates remain separate.
+
+The separate [SDK preparation receipt](evidence.sdk-check-preparation.json)
+records the first supervised check attempt. Both wasm-targeted fetches exited
+zero, but the offline check exited 101 before Rust typing because locked
+`corosensei@0.3.0` had not been downloaded. All three owned process groups were
+reaped. This records incomplete dependency preparation, not a snapshot type
+failure or a successful SDK compile. The original five-patch dry-run receipt
+remains unchanged and does not cover this later attempt.
+
+After complete locked prefetch, a subsequent supervised SDK check reached Rust
+typing and exited 101 with three prototype errors: one unqualified `Function`
+reference and two unsupported `WasmSliceAccess::to_vec()` calls. The source
+correction uses `wasmer::Function` and the pinned memory slice's fallible owned
+byte copy before dispatch. It adds no guest-memory view or lock to the command
+snapshot. The old failed source tree, log and process receipt remain separate;
+the corrected full SDK/example check has a separate receipt below. Absence of a snapshot
+API diagnostic in the failed run does not establish that the example passes.
+The separate [Rust typing failure receipt](evidence.sdk-typecheck-errors.json)
+records the exact source/toolchain, all three diagnostics, the 342.205-second
+execution and complete process cleanup. The corrected five-patch source checks
+are recorded in [their own receipt](evidence.sdk-typefix-source-checks.json).
+
+The genuine corrected [SDK typecheck receipt](evidence.sdk-typecheck.json) passes
+the full patched runtime/SDK library and the external
+`container_command_snapshot_compile` example at source commit
+`de98d061435a308e8bbcd2ca195d29ac07401774`. The exact pinned nightly performs
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib
+--example container_command_snapshot_compile -j 1` in fresh physical sources and
+unique target/intermediate directories. All 580 source/toolchain/preparation
+identities stay unchanged. The [original supervision record](evidence.sdk-typecheck-process.json)
+reports exit 0 in 412.428 seconds and all owned processes reaped.
+
+This proves Rust typing and external access to owned prepared-child metadata,
+including the snapshot's automatic `Send + Sync` traits. `cargo check` produces
+metadata, not a runnable SDK Wasm/JavaScript distribution. It does not execute
+Bash or qualify an exec/wait path, a JS Supervisor registry, common live fd/FS,
+or browser cleanup. Earlier failure and source-only receipts retain their
+original results; no probe returns fabricated guest success.
 
 ## Remaining runtime gate
 
 The SDK requires `nightly-2025-07-05`, `rust-src`, shared wasm32 memory and build-std; its
-Cargo lock contains 457 packages. The required nightly was not installed in the inspected
-build environment. Existing Bash source/sysroot artifacts were not found in the producer's
-configured cache roots. Full SDK/Bash rebuild and Wasmer typechecking were deferred because
-of shared-host memory/IO load and limited private output space. No memory or disk estimate
-is a measured producer requirement, and no previous or unrelated cache was deleted.
+Cargo lock contains 457 packages. The earlier source inspection lacked the required
+nightly; the recorded preparation attempt used an isolated installation of the exact
+pinned nightly and `rust-src`, without changing the default toolchain. Complete locked
+prefetch, offline validation and corrected Wasmer/SDK/example Rust typing now
+pass. Existing Bash source/sysroot
+artifacts were not found in the producer's configured cache roots. Full SDK/Bash rebuild
+and actual browser qualification still require a sequential resource budget. No memory
+or disk estimate is a measured producer requirement, and no previous or unrelated cache
+was deleted.
 
 Next, reserve a sequential build slot and private output budget, build the pinned SDK and
 real Bash with this shim, and verify actual imports and new artifact receipts. Then qualify
