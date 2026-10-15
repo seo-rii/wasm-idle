@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, SCRIPT, SOURCE, judgeShellAcceptance,
+	BIN, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
+	judgeShellAcceptance,
 	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -64,6 +65,15 @@ function failing() {
 		events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function piped() {
+	return {
+		type: 'result', backendCompleted: true,
+		result: { code: 0, stdout: bytes('file=file\nsub=sub\nkept\n'), stderr: bytes('top\ngroup\n') },
+		records: PIPELINE_DISPATCHES.map(([path, status]) => ({ path, status })),
+		files: { '/workspace/group-file': bytes('file\n'), '/workspace/sub-file': bytes('sub\n'), '/workspace/err-file': bytes('aside\n') },
+		containerProcesses: [], events: [], consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
@@ -74,7 +84,8 @@ function receipt() {
 			{ run: 'interrupt', result: interrupted(), downloads: { start: counts(1), end: counts(1) } },
 			{ run: 'failure', result: failing(), downloads: {
 				start: { ...counts(1), '/assets/busybox-corrupt': 0 }, end: { ...counts(1), '/assets/clang': 2, '/assets/lld': 2, '/assets/sysroot': 2, '/assets/busybox-corrupt': 2 }
-			} }
+			} },
+			{ run: 'pipeline', result: piped(), downloads: { start: counts(1), end: counts(1) } }
 		]
 	};
 }
@@ -164,6 +175,15 @@ test('a failure must stay contained: integrity, compile error and a missing comm
 	const fresh = receipt();
 	fresh.runs[3].result.result.stdout = bytes('mkdir=0\nretry=0\nbad=1\nno-artifact\nmissing=127\nhello\n');
 	assert.deepEqual(failed(fresh), ['failure:script']);
+});
+
+test('redirections inside a piped group must not fail with Invalid argument', () => {
+	const value = receipt(), run = value.runs[4].result;
+	// The pre-0014 behavior: each redirection failed and the file was never written.
+	run.result.stderr = bytes('top\nbash: line 1: 2: Invalid argument\nbash: line 1: 6: Invalid argument\n');
+	run.result.stdout = bytes('file=\nsub=sub\nkept\n');
+	delete run.files['/workspace/group-file'];
+	assert.deepEqual(failed(value), ['pipeline:script', 'pipeline:workspace-files']);
 });
 
 test('browser errors and Workers that outlive their owner fail', () => {

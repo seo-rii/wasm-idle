@@ -267,7 +267,8 @@ export async function runProbe(configuration) {
 					descriptions, sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
 					payload: {
 						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
-						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm'] : READ_FILES,
+						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm']
+							: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : READ_FILES,
 						artifactPath: run === 'failure' ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
 						...(run === 'failure'
 							? { manifest: failureDistribution, manifestSha256: receipt.failureDistributionSha256, cacheNamespace: 'container-shell-acceptance-failure' }
