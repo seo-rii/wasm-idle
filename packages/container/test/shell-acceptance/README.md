@@ -176,6 +176,16 @@ fixture data; this logging is absent from the product owner.
 
 ## Live compiler filesystem and stdin
 
+The explicit live profile passes **50/50 checks across three actual Chromium
+scenarios**: [receipt](./evidence/live-session-0020.json),
+[process cleanup](./evidence/live-session-0020-process.json) and
+[execution/source pins](./evidence/live-session-0020-metadata.json).
+Guarded time was 12.843 seconds. Every scenario retires all Worker targets before
+the next starts, with all owned OS descendants reaped. The new host includes a
+real `/dev/null` device and lowest-free guest descriptor reuse, so LLVM can repair
+its initially closed stdin itself. The first failed 47/50 receipt remains
+preserved; its diagnostics and closed-input failure have not been relabeled.
+
 ```sh
 node scripts/probe-container-shell-acceptance.mjs --run-live /absolute/live-config.json
 ```

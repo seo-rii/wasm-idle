@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "scope": "Explicit live Clang real Bash gate: unchanged script cold/warm and concurrent streamed compiler/header/utility plus closed-input version",
+  "receipt": {
+    "file": "live-session-0020.json",
+    "bytes": 128425,
+    "sha256": "d602df56ec5128fa779383c684d6564267a44d975f652c2c7dcbeba2a02cbe5b"
+  },
+  "processReceipt": {
+    "file": "live-session-0020-process.json",
+    "bytes": 971,
+    "sha256": "913c5635b7b1d2992db9ef332ec37d747578c3843fb7df7f05eb3feaeb39ae5e"
+  },
+  "configuration": {
+    "bytes": 2008,
+    "sha256": "063ed1ceee9dfaa7e2f788fe855616163c244ad94abf9aef34dc48f5b7d4ab71"
+  },
+  "applicationCommit": "a8ff08b7eb1cf34c13fedb8369ae3bd0df64873c",
+  "sourcePinsAsExecuted": {
+    "scripts/probe-container-shell-acceptance.mjs": {
+      "bytes": 24912,
+      "sha256": "fe94cc6fc859cb42833a5721d72deb37b1172d2b2a013b6508e89d32997b5f52"
+    },
+    "scripts/probe-container-shell-acceptance-lib.mjs": {
+      "bytes": 41862,
+      "sha256": "08935cdb3a2cb3112e04e7b528f001649294b5f63c447e5adb1e13fadec72813"
+    },
+    "scripts/probe-container-shell-acceptance.test.mjs": {
+      "bytes": 32027,
+      "sha256": "a7b849333b3a017e0c3f3f114a342cb965586a14b0c606e0671c39a5f334d2d4"
+    },
+    "packages/container/test/shell-acceptance/worker.mjs": {
+      "bytes": 11541,
+      "sha256": "5cca870ad144f210a8da58c3eb6879fa26529710937d374d8b9f2242c3c9418b"
+    },
+    "packages/container/scripts/test-product-shell-browser.mjs": {
+      "bytes": 17637,
+      "sha256": "c859b6cadca5d4fc9817524ae505597db25959aef3f55395dd5f7d36130565bf"
+    },
+    "examples/container/bash-profile.mjs": {
+      "bytes": 6484,
+      "sha256": "017dc8b0dd980a5a0a1dfa8db3f38631e64cf22b54975abc53d22f6f86c87278"
+    },
+    "examples/container/clang-profile.mjs": {
+      "bytes": 733,
+      "sha256": "d84f36dc8bd370ada4984d736bd7d041e876b47f0a00b21fffdc1ba8104e16b7"
+    },
+    "examples/container/serve-bash.mjs": {
+      "bytes": 6569,
+      "sha256": "c714c0a138f01222b35359a124d0d2956b263bc361527875931a61e51999bd7a"
+    },
+    "examples/container/serve.mjs": {
+      "bytes": 9138,
+      "sha256": "04de401a9b5c4d5edb72a02a946808312cd2ef0172516245727fc8da1f83dd71"
+    }
+  },
+  "sourcePinsRecheckedAfterRun": true,
+  "guard": {
+    "bytes": 7281,
+    "sha256": "0632babd5bd3f425bcd64f15eb9075ecd2e7ebacf16230c7ee2763035fc39d3f"
+  },
+  "runner": {
+    "bytes": 2150,
+    "sha256": "6a0975f767825aefc10fd38b78eb131b68ba7199cf0a33df38ff3f0fd3e5de21"
+  },
+  "policy": {
+    "workingDirectory": "/home/seorii/dev/hancomac/tmp/container-20261013/product",
+    "stage": {
+      "name": "live-v2",
+      "argv": [
+        "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+        "scripts/probe-container-shell-acceptance.mjs",
+        "--run-live",
+        "/data/container-shell-profiles-20261016-t2rbk7_j/live-v2-configuration.json"
+      ],
+      "log": "/home/seorii/logs/container-final-profiles-20261015T162816Z-live-v2.log",
+      "wallSeconds": 900,
+      "configuration": "/data/container-shell-profiles-20261016-t2rbk7_j/live-v2-configuration.json",
+      "temporaryDirectory": "/data/cx-p-nqo7xjt4",
+      "output": "/data/container-shell-profiles-20261016-t2rbk7_j/live-v2-browser",
+      "extraEnv": {},
+      "supervisorLog": "/home/seorii/logs/container-final-profiles-20261015T162816Z-live-v2-supervisor.log"
+    },
+    "limits": {
+      "cpuSoftSeconds": 720,
+      "cpuHardSeconds": 780,
+      "addressSpaceBytes": 140737488355328,
+      "minimumRemainingDiskBytes": 536870912
+    },
+    "minimumAvailableMemoryBytes": 2147483648
+  },
+  "status": {
+    "exitCode": 0,
+    "finishedAtUnix": 1792082249.8034358
+  },
+  "supervisorLog": "/home/seorii/logs/container-final-profiles-20261015T162816Z-live-v2-supervisor.log",
+  "qualificationBoundary": "Loopback Chromium qualification only. No production upload/deployment, PTY/job-control/POSIX conformance, arbitrary adapter or complete source/license closure claim. Historical immutable snapshot release remains unchanged.",
+  "supersededFailedAttempt": {
+    "receipt": "/data/container-shell-profiles-20261016-t2rbk7_j/live-browser/receipt.json",
+    "bytes": 118855,
+    "sha256": "d5e226ab540a92ed9c2b82662ee902356408917816d9af0ad8b9fc47d07f7a2e",
+    "passed": 47,
+    "total": 50,
+    "qualified": false,
+    "failedReceiptPreservedUnchanged": true,
+    "cause": "Closed stdin could not be repaired by real LLVM before genuine null device and lowest-free fd allocation; phase-specific warnings were initially under-specified."
+  }
+}
