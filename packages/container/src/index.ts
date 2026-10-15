@@ -9,3 +9,5 @@ export type * from './adapters/types.js';
 export * from './packages/index.js';
 export { createHostCommandHandler, statusForResult, HOST_COMMAND_STATUS } from './shell/host-command.js';
 export type { HostCommandInvocation, HostCommandRoute, HostCommandRecord, HostCommandHandlerOptions } from './shell/host-command.js';
+export { createShellFilesystem } from './shell/filesystem.js';
+export type { ShellFilesystem, ShellFileStat, ShellOpenFlags, ShellFilesystemOptions } from './shell/filesystem.js';
