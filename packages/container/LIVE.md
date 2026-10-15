@@ -107,6 +107,14 @@ once. The returned stream for a delegated channel is already closed. Delegated o
 not captured, so the combined output budget does not apply to it. Only live adapters
 accept `stdio`; `run` and `spawnPipeline` reject it.
 
+The owner snapshots which standard descriptors are initially open when preparing
+the Worker. A delegated `null` channel returns `EBADF` from fdstat/filestat,
+zero-length I/O and close as well as ordinary I/O. An omitted channel remains an
+owned open pipe; closing its stdin writer sends EOF and does not make fd 0 absent.
+Nested live LLVM tools inherit the same descriptor state. The real no-libc
+`closed-stdio.c` fixture checks all eight initial fd masks and unchanged batch
+defaults; its source/binary/compiler identity is in `closed-stdio.json`.
+
 `createHostCommandHandler(container, { routes })` turns this into a trusted shell
 host-command handler. It accepts the structural invocation of the patched WASIX SDK's
 `Runtime.registerHostCommand` (path, argv, raw environment bytes, actual cwd and

@@ -1,0 +1,31 @@
+--- a/src/syscalls/wasix/proc_join.rs
++++ b/src/syscalls/wasix/proc_join.rs
+@@ -162,6 +162,8 @@
+         process
+     };
+ 
++    let was_child = process.is_some();
++
+     // Otherwise it could be the case that we are waiting for a process
+     // that is not a child of this process but may still be running
+     if process.is_none() {
+@@ -183,6 +185,19 @@
+                 let exit_code = status.unwrap_or_else(|_| Errno::Child.into());
+                 ret_result(ctx, JoinStatusResult::ExitNormal(pid, exit_code))
+             } else {
++                // A running child is neither reaped nor reported: keep it joinable
++                // and report pid 0, so wasix-libc waitpid returns 0 as POSIX
++                // WNOHANG requires instead of this pid with a zero status.
++                if was_child {
++                    ctx.data().process.lock().children.push(process);
++                }
++                wasi_try_mem_ok!(pid_ptr.write(
++                    &memory,
++                    OptionPid {
++                        tag: OptionTag::Some,
++                        pid: 0,
++                    }
++                ));
+                 ret_result(ctx, JoinStatusResult::Nothing)
+             }
+         } else {

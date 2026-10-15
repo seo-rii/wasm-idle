@@ -76,8 +76,15 @@ globalThis.onmessage = async ({ data }) => {
         const plan = (data.interrupts ?? []).find(entry => entry.path === invocation.path && entry.occurrence === occurrence);
         if (plan) void interruptWhenRunning(plan).catch(error => mark({ type: 'interruptError', error: String(error) }));
         // Test fixture provenance only; production does not collect these fields.
+				// This fixed allowlist records only SH-02's explicit fixture value.
+				// It is not a general environment/credential diagnostic facility.
+				const fixtureEnvironment = data.recordSyntaxEnvironment ? Object.fromEntries(invocation.env
+					.map(bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+					.filter(entry => entry.startsWith('CONTAINER_SYNTAX_VALUE='))
+					.map(entry => ['CONTAINER_SYNTAX_VALUE', entry.slice('CONTAINER_SYNTAX_VALUE='.length)])) : undefined;
         invocations.push({ path: invocation.path, argv: [...invocation.argv], cwd: invocation.cwd,
-          descriptors: [invocation.stdin, invocation.stdout, invocation.stderr].map(endpoint => endpoint?.fd ?? null) });
+					descriptors: [invocation.stdin, invocation.stdout, invocation.stderr].map(endpoint => endpoint?.fd ?? null),
+					...(fixtureEnvironment ? { fixtureEnvironment } : {}) });
         mark({ type: 'dispatch', path: invocation.path });
       },
       onRecord(record) {

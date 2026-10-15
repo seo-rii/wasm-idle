@@ -1,0 +1,14 @@
+--- a/src/wasmer.rs
++++ b/src/wasmer.rs
+@@ -326,6 +326,11 @@
+     }
+
+     for (dest, dir) in options.mounted_directories()? {
++        // An explicit /tmp supplies that mount. Creating the default /tmp
++        // first would make the runner reject it with AlreadyExists.
++        if std::path::Path::new(&dest) == std::path::Path::new("/tmp") {
++            runner.with_tmp_mapped(true);
++        }
+         // WASIX must revalidate its cached entries under a host-owned mount.
+         if dir.is_host_filesystem() {
+             wasmer_wasix::register_live_mount(&dest);

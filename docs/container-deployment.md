@@ -107,10 +107,13 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-That test asserts `crossOriginIsolated` and verifies lazy Worker/assets under those headers.
-It does not qualify an interactive profile: the live SAB bridge, shared fd scheduling and
-actual shell integration are still absent. Cross-origin CDN CORS/CORP, redirects, nested shell
-workers, iframe embedding and the production application's complete CSP require later tests.
+That batch test asserts `crossOriginIsolated` and verifies lazy Worker/assets under those
+headers. Live WASI and the optional actual Bash session have independent fixtures; batch
+results alone do not qualify them. The workbench's selected Bash profile uses a fixed static
+SDK module graph, common filesystem mounts and tracked nested Workers. Its local immutable
+release gate is described in [the workbench deployment guide](../examples/container/IMMUTABLE.md).
+Cross-origin CDN CORS/CORP, redirects, iframe embedding and production responses require
+qualification on the actual deployment.
 
 ## Reproduce and preserve evidence
 
@@ -138,7 +141,9 @@ It does not prove that an app, its module graph or all worker bootstraps can sta
 Workspace persistence has a separate storage namespace and explicit owner lifetime. Cache
 cleanup never deletes the workspace. Successful `flush()` publishes a verified root within
 browser API guarantees; eviction, quota, teardown and orphan accumulation remain relevant.
-Hosts must expose save failures and user-controlled export before claiming a persistent IDE.
+The workbench exposes save failures, manual retry, buffer export and workspace backup.
+Owner-controlled garbage collection preserves the root generations needed for recovery;
+storage durability is still limited by browser guarantees.
 
 Production promotion still requires the actual Clang CLI/header corpus, BusyBox B1 source and
 notice closure, real shell acceptance, live cancellation/pipe tests, lifecycle UI and the

@@ -1,0 +1,174 @@
+--- a/src/pipe.rs
++++ b/src/pipe.rs
+@@ -18,6 +18,10 @@
+
+ use crate::{ArcFile, FsError, VirtualFile};
+
++#[path = "bounded_pipe.rs"]
++mod bounded;
++use bounded::{BoundedRx, BoundedTx};
++
+ // Each pipe end is separately cloneable. The overall pipe
+ // remains open as long as at least one tx end and one rx
+ // end are still alive.
+@@ -33,6 +37,7 @@
+
+ #[derive(Debug, Clone)]
+ pub struct PipeTx {
++    bounded: Option<BoundedTx>,
+     /// Sends bytes down the pipe
+     tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
+     rx_end: Weak<Mutex<PipeReceiver>>,
+@@ -40,6 +45,7 @@
+
+ #[derive(Debug, Clone)]
+ pub struct PipeRx {
++    bounded: Option<BoundedRx>,
+     /// Receives bytes from the pipe
+     /// Also, buffers the last read message from the pipe while its being consumed
+     rx: Option<Arc<Mutex<PipeReceiver>>>,
+@@ -69,10 +75,13 @@
+     }
+
+     pub fn close(&mut self) {
++        self.bounded.take();
+         _ = self.rx.take();
+     }
+
+     pub fn try_read(&mut self, buf: &mut [u8]) -> Option<usize> {
++        if let Some(rx) = &self.bounded { return rx.try_read(buf); }
++        if buf.is_empty() { return Some(0); }
+         let Some(ref mut rx) = self.rx else {
+             return Some(0);
+         };
+@@ -101,6 +110,7 @@
+     }
+
+     pub fn poll_read_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<usize>> {
++        if let Some(rx) = &self.bounded { return rx.poll_ready(cx).map(Ok); }
+         let Some(ref rx) = self.rx else {
+             return Poll::Ready(Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -165,11 +175,28 @@
+         }));
+         Pipe {
+             send: PipeTx {
++                bounded: None,
+                 tx: Some(tx),
+                 rx_end: Arc::downgrade(&recv),
+             },
+-            recv: PipeRx { rx: Some(recv) },
+-        }
++            recv: PipeRx { rx: Some(recv), bounded: None },
++        }
++    }
++
++    /// A fixed-capacity pipe. Async writes wait for room; synchronous writes
++    /// return WouldBlock when full so a JavaScript owner thread cannot block.
++    pub fn bounded(capacity: usize) -> Self {
++        let mut pipe = Self::new();
++        let (tx, rx) = bounded::pipe(capacity);
++        pipe.send.bounded = Some(tx);
++        pipe.recv.bounded = Some(rx);
++        pipe
++    }
++
++    pub fn bounded_channel(capacity: usize) -> (Pipe, Pipe) {
++        let (tx1, rx1) = Pipe::bounded(capacity).split();
++        let (tx2, rx2) = Pipe::bounded(capacity).split();
++        (Pipe::combine(tx1, rx2), Pipe::combine(tx2, rx1))
+     }
+
+     pub fn channel() -> (Pipe, Pipe) {
+@@ -215,10 +242,17 @@
+
+ impl PipeTx {
+     pub fn close(&mut self) {
++        self.bounded.take();
+         _ = self.tx.take();
+     }
+
++    pub fn poll_write_ready_with(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<usize>> {
++        if let Some(tx) = &self.bounded { return tx.poll_ready(Some(cx)); }
++        self.poll_write_ready()
++    }
++
+     pub fn poll_write_ready(self: Pin<&mut Self>) -> Poll<io::Result<usize>> {
++        if let Some(tx) = &self.bounded { return tx.poll_ready(None); }
+         let Some(ref tx) = self.tx else {
+             return Poll::Ready(Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -269,6 +303,8 @@
+
+ impl Read for PipeRx {
+     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
++        if let Some(rx) = &self.bounded { return Ok(rx.read(buf)); }
++        if buf.is_empty() { return Ok(0); }
+         let Some(ref mut rx) = self.rx else {
+             return Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -321,6 +357,12 @@
+
+ impl std::io::Write for PipeTx {
+     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
++        if let Some(tx) = &self.bounded {
++            let written = tx.try_write(buf)?;
++            if written > 0 { self.mark_other_end_readable(); }
++            return Ok(written);
++        }
++        if buf.is_empty() { return Ok(0); }
+         let Some(ref tx) = self.tx else {
+             return Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -405,9 +447,15 @@
+ impl AsyncWrite for PipeTx {
+     fn poll_write(
+         self: Pin<&mut Self>,
+-        _cx: &mut Context<'_>,
++        cx: &mut Context<'_>,
+         buf: &[u8],
+     ) -> Poll<io::Result<usize>> {
++        if let Some(tx) = &self.bounded {
++            let result = tx.poll_write(cx, buf);
++            if matches!(result, Poll::Ready(Ok(n)) if n > 0) { self.mark_other_end_readable(); }
++            return result;
++        }
++        if buf.is_empty() { return Poll::Ready(Ok(0)); }
+         let Some(ref tx) = self.tx else {
+             return Poll::Ready(Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -453,6 +501,13 @@
+         cx: &mut Context<'_>,
+         buf: &mut tokio::io::ReadBuf<'_>,
+     ) -> Poll<io::Result<()>> {
++        if let Some(rx) = &self.bounded {
++            return match rx.poll_read(cx, buf.initialize_unfilled()) {
++                Poll::Ready(count) => { buf.advance(count); Poll::Ready(Ok(())) }
++                Poll::Pending => Poll::Pending,
++            };
++        }
++        if buf.remaining() == 0 { return Poll::Ready(Ok(())); }
+         let Some(ref mut rx) = self.rx else {
+             return Poll::Ready(Err(std::io::Error::new(
+                 std::io::ErrorKind::BrokenPipe,
+@@ -517,6 +572,7 @@
+     /// Indicates if the file is opened or closed. This function must not block
+     /// Defaults to a status of being constantly open
+     fn is_open(&self) -> bool {
++        if let Some(tx) = &self.send.bounded { return tx.is_open(); }
+         self.send
+             .tx
+             .as_ref()
+@@ -532,10 +588,10 @@
+     /// Polls the file for when it is available for writing
+     fn poll_write_ready(
+         mut self: Pin<&mut Self>,
+-        _cx: &mut Context<'_>,
++        cx: &mut Context<'_>,
+     ) -> Poll<io::Result<usize>> {
+-        Pin::new(&mut self.send).poll_write_ready()
++        Pin::new(&mut self.send).poll_write_ready_with(cx)
+     }
+ }
+
+ /// A pair of pipes that are connected together.

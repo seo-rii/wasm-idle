@@ -3,6 +3,7 @@ import test from 'node:test';
 import { manifest } from './probe-container-shell-acceptance.mjs';
 import {
 	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
+	SYNTAX_COMMANDS, SYNTAX_CONTENTS, SYNTAX_DIRECTORY, SYNTAX_ENVIRONMENT,
 	judgeShellAcceptance,
 	readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
@@ -92,6 +93,19 @@ function redirected() {
 		containerProcesses: [], workerGroup: { disposed: true, active: 0 }, consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
 	};
 }
+function syntax() {
+	return {
+		type: 'result', backendCompleted: true,
+		result: { code: 0, reason: 'exited', stdout: bytes('retained\nsyntax-ok\n'), stderr: [] },
+		files: Object.fromEntries(Object.entries(SYNTAX_CONTENTS).map(([name, value]) => [`${SYNTAX_DIRECTORY}/${name}`, bytes(value)])),
+		invocations: SYNTAX_COMMANDS.map(([name, args], index) => ({ path: `${BIN}/${name}`, argv: [name, ...args],
+			cwd: index === 0 ? '/workspace' : SYNTAX_DIRECTORY, fixtureEnvironment: index === 0 ? {} : { ...SYNTAX_ENVIRONMENT } })),
+		records: SYNTAX_COMMANDS.map(([name, , status], index) => ({ path: `${BIN}/${name}`, status, pid: index + 1, result: { code: status, reason: 'exited' } })),
+		publicApi: { session: 'createWasixShellSession', runtime: ['registerHostCommand'], directory: ['fromHostFileSystem'] },
+		sysroot: null, timeline: [], containerProcesses: [], workerGroup: { disposed: true, active: 0, created: 13, terminated: 13 },
+		consoleErrors: [], blockedRequests: [], remainingWorkerTargets: 0
+	};
+}
 function receipt() {
 	const counts = (value) => Object.fromEntries(assets.map((path) => [path, value]));
 	return {
@@ -106,7 +120,8 @@ function receipt() {
 			{ run: 'pipeline', result: piped(), downloads: { start: counts(1), end: counts(1) } },
 			{ run: 'redirection', result: redirected(), downloads: { start: counts(1), end: counts(1) } },
 			{ run: 'startup-failure', result: { type: 'result', backendCompleted: true, result: { code: null, reason: 'runtime-error', stdout: [], stderr: [] },
-				records: [], workerGroup: { disposed: true, active: 0, created: 1, terminated: 1 }, remainingWorkerTargets: 0, consoleErrors: [], blockedRequests: [] } }
+				records: [], workerGroup: { disposed: true, active: 0, created: 1, terminated: 1 }, remainingWorkerTargets: 0, consoleErrors: [], blockedRequests: [] } },
+			{ run: 'syntax', result: syntax(), downloads: { start: counts(1), end: counts(1) } }
 		]
 	};
 }
@@ -186,6 +201,41 @@ test('a diagnostic profile cannot qualify after omitting a required real mount',
 	const value = receipt(); value.diagnosticOptions = { sdkDiagnostics: true, omittedTmpMount: true };
 	assert.deepEqual(failed(value), ['required-mount-profile']);
 	assert.equal(judgeShellAcceptance(value).shellAcceptancePassed, false);
+});
+
+test('syntax-only qualification never implies the compiler or complete shell gate passed', () => {
+	const value = receipt(); value.scenario = 'syntax-only'; value.runs = value.runs.filter(run => run.run === 'syntax');
+	const result = judgeShellAcceptance(value);
+	assert.equal(result.shellSyntaxPassed, true);
+	assert.equal(result.shellAcceptancePassed, false);
+	assert.equal(result.total, 12);
+	assert(result.checks.every(check => check.passed));
+});
+
+test('syntax acceptance requires exact quoted arguments, exported child environment and actual cwd', () => {
+	const value = receipt(), syntax = value.runs.at(-1).result;
+	syntax.invocations[3].argv.splice(1, 1);
+	syntax.invocations[2].fixtureEnvironment = {};
+	syntax.invocations[8].cwd = '/workspace';
+	assert.deepEqual(failed(value), ['syntax:quoted-argv', 'syntax:export-and-cwd']);
+});
+
+test('syntax acceptance distinguishes conditional exit, substitution and redirection bytes', () => {
+	const value = receipt(), syntax = value.runs.at(-1).result;
+	syntax.records[5].status = 0;
+	syntax.files[`${SYNTAX_DIRECTORY}/substitution.out`] = bytes('<space value\n한글 값\n>\n');
+	syntax.files[`${SYNTAX_DIRECTORY}/append.out`] = bytes('discard\nspace value\n한글 값\ntail\n');
+	syntax.files[`${SYNTAX_DIRECTORY}/split.out`] = bytes(SYNTAX_CONTENTS['merged.out']);
+	assert.deepEqual(failed(value), ['syntax:conditional-statuses', 'syntax:command-substitution', 'syntax:stdin-truncate-append', 'syntax:redirection-order']);
+});
+
+test('syntax-only execution requires zero compiler body downloads and full worker cleanup', () => {
+	const value = receipt(); value.scenario = 'syntax-only';
+	value.runs.at(-1).downloads.end['/assets/clang']++;
+	value.runs.at(-1).result.workerGroup.active = 1;
+	assert.deepEqual(failed(value), ['syntax:compiler-not-loaded', 'syntax:owned-cleanup']);
+	value.diagnosticOptions = { omittedTmpMount: true };
+	assert.equal(judgeShellAcceptance(value).shellSyntaxPassed, false);
 });
 
 test('a natively executed artifact, wrong order, nonzero exit or leaked process fails', () => {

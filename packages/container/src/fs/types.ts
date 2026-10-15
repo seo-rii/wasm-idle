@@ -12,6 +12,12 @@ export interface FileStat {
   readonly command?: true;
 }
 
+/** Owner-only identity for one inode revision; never serialized into guest messages. */
+export interface FileVersion {
+  readonly inode: number;
+  readonly revision: bigint;
+}
+
 export interface PathOptions {
   /** Absolute working directory. Defaults to /workspace (or root for a narrower capability). */
   cwd?: string;

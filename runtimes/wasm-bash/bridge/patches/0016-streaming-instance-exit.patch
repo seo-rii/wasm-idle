@@ -1,0 +1,255 @@
+--- a/src/instance.rs
++++ b/src/instance.rs
+@@ -4,6 +4,10 @@
+ use wasmer_wasix::WasiRuntimeError;
+
+ use crate::utils::Error;
++
++#[path = "host_exit_status.rs"]
++mod exit_status;
++pub(crate) use exit_status::ExitCondition;
+
+ /// A handle connected to a running WASIX program.
+ #[derive(Debug)]
+@@ -30,6 +34,24 @@
+         let output = self.wait().await?;
+         Ok(output.into())
+     }
++
++    /// Wait only for the process exit status, without closing stdin or reading
++    /// stdout/stderr. Like `wait`, this consumes the Instance. Retain its stream
++    /// properties first; the caller owns EOF, draining and stream cleanup.
++    /// Setup failures and runtime traps reject; guest exit codes resolve.
++    /// Cancellation and the Worker group's lifetime remain owner responsibilities.
++    #[wasm_bindgen(js_name = "waitForExit")]
++    pub async fn js_wait_for_exit(self) -> Result<JsExitStatus, Error> {
++        let code = self.exit.await.map_err(Error::from)?
++            .into_streaming_code()
++            .map_err(|message| Error::from(anyhow::anyhow!(message)))?;
++        let status = js_sys::Object::new();
++        js_sys::Reflect::set(&status, &JsValue::from_str("code"), &JsValue::from(code))
++            .map_err(Error::js)?;
++        js_sys::Reflect::set(&status, &JsValue::from_str("ok"), &JsValue::from(code == 0))
++            .map_err(Error::js)?;
++        Ok(js_sys::Object::freeze(&status).unchecked_into())
++    }
+ }
+
+ impl Instance {
+@@ -71,8 +93,9 @@
+
+         // Note: this relies on the underlying instance closing stdout and
+         // stderr when it exits. Failing to do this will block forever.
+-        let (_, _, ExitCondition(code)) =
++        let (_, _, condition) =
+             futures::try_join!(stdout_done, stderr_done, exit.map_err(Error::from))?;
++        let code = condition.legacy_code();
+
+         let output = Output {
+             code,
+@@ -97,29 +120,19 @@
+     Ok(())
+ }
+
+-#[derive(Debug)]
+-pub(crate) struct ExitCondition(i32);
+-
+ impl ExitCondition {
+     pub(crate) fn from_result(result: Result<(), anyhow::Error>) -> Self {
+-        let err = match result {
+-            Ok(_) => return ExitCondition(0),
+-            Err(e) => e,
+-        };
+-
+-        // looks like some sort of error occurred.
+-        let error_code = err
+-            .chain()
+-            .find_map(|e| e.downcast_ref::<WasiRuntimeError>())
+-            .and_then(|runtime_error| runtime_error.as_exit_code());
+-
+-        match error_code {
+-            Some(code) => ExitCondition(code.raw()),
+-            None => {
++        Self::from_classified(result.map_err(|err| {
++            let error_code = err
++                .chain()
++                .find_map(|e| e.downcast_ref::<WasiRuntimeError>())
++                .and_then(|runtime_error| runtime_error.as_exit_code())
++                .map(|code| code.raw());
++            if error_code.is_none() {
+                 tracing::debug!(error = &*err, "Process exited unexpectedly");
+-                ExitCondition(1)
+             }
+-        }
++            (error_code, format!("{err:#}"))
++        }))
+     }
+ }
+
+@@ -135,6 +148,8 @@
+ extern "C" {
+     #[wasm_bindgen(typescript_type = "Output")]
+     pub type JsOutput;
++    #[wasm_bindgen(typescript_type = "ExitStatus")]
++    pub type JsExitStatus;
+ }
+
+ impl From<Output> for JsOutput {
+@@ -208,6 +223,15 @@
+ }
+ "#;
+
++#[wasm_bindgen(typescript_custom_section)]
++const EXIT_STATUS_TYPE_DEFINITION: &str = r#"
++/** Exit-only completion. Setup/trap errors reject; the caller owns byte streams. */
++export type ExitStatus = {
++    readonly code: number;
++    readonly ok: boolean;
++};
++"#;
++
+ #[cfg(test)]
+ mod tests {
+     use futures::channel::oneshot;
+@@ -240,7 +264,7 @@
+         // Now, we pretend the WASIX process exited
+         stdout.close();
+         stderr.close();
+-        sender.send(ExitCondition(42)).unwrap();
++        sender.send(ExitCondition::Exited(42)).unwrap();
+
+         // and wait for the result
+         let output = instance.wait().await.unwrap();
+@@ -259,4 +283,131 @@
+         let bytes_read = stdin.read_to_end(&mut buffer).await.unwrap();
+         assert_eq!(bytes_read, 0);
+     }
+-}
++
++    #[wasm_bindgen_test]
++    async fn exit_only_preserves_unlocked_streams_without_waiting_for_output_eof() {
++        for code in [0, 23, 126, 255] {
++            let (mut guest_stdin, stdin) = crate::streams::input_pipe();
++            let (mut guest_stdout, stdout) = crate::streams::output_pipe();
++            let (mut guest_stderr, stderr) = crate::streams::output_pipe();
++            let (sender, exit) = oneshot::channel();
++            let instance = Instance {
++                stdin: Some(stdin.clone()),
++                stdout: stdout.clone(),
++                stderr: stderr.clone(),
++                exit,
++            };
++            let bytes = [0, 255, 226, 130, 172];
++            guest_stdout.write_all(&bytes).await.unwrap();
++            guest_stderr.write_all(&bytes).await.unwrap();
++            // Neither output is closed and no caller has locked stdin. Legacy
++            // wait() would close input and wait for the output EOFs here.
++            sender.send(ExitCondition::Exited(code)).unwrap();
++            let status: JsValue = instance.js_wait_for_exit().await.unwrap().into();
++            assert_eq!(
++                js_sys::Reflect::get(&status, &"code".into())
++                    .unwrap()
++                    .as_f64(),
++                Some(code as f64)
++            );
++            assert_eq!(
++                js_sys::Reflect::get(&status, &"ok".into())
++                    .unwrap()
++                    .as_bool(),
++                Some(code == 0)
++            );
++            assert!(js_sys::Reflect::get(&status, &"stdoutBytes".into())
++                .unwrap()
++                .is_undefined());
++            assert!(!stdin.locked());
++            assert!(!stdout.locked());
++            assert!(!stderr.locked());
++
++            // Exit observation did not close input or consume buffered output.
++            let writer = web_sys::WritableStreamDefaultWriter::new(&stdin).unwrap();
++            let chunk = Uint8Array::from(bytes.as_slice());
++            wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&chunk))
++                .await
++                .unwrap();
++            let mut input = [0u8; 5];
++            guest_stdin.read_exact(&mut input).await.unwrap();
++            assert_eq!(input, bytes);
++            wasm_bindgen_futures::JsFuture::from(writer.close())
++                .await
++                .unwrap();
++            writer.release_lock();
++            for stream in [&stdout, &stderr] {
++                let reader = web_sys::ReadableStreamDefaultReader::new(stream).unwrap();
++                let result = wasm_bindgen_futures::JsFuture::from(reader.read())
++                    .await
++                    .unwrap();
++                let value = js_sys::Reflect::get(&result, &"value".into()).unwrap();
++                assert_eq!(Uint8Array::new(&value).to_vec(), bytes);
++                reader.release_lock();
++            }
++            guest_stdout.close();
++            guest_stderr.close();
++        }
++    }
++
++    #[wasm_bindgen_test]
++    async fn exit_only_accepts_caller_owned_readers_and_reports_a_lost_exit_channel() {
++        let (mut guest_stdin, stdin) = crate::streams::input_pipe();
++        let (mut guest_stdout, stdout) = crate::streams::output_pipe();
++        let (mut guest_stderr, stderr) = crate::streams::output_pipe();
++        let reader = web_sys::ReadableStreamDefaultReader::new(&stdout).unwrap();
++        let error_reader = web_sys::ReadableStreamDefaultReader::new(&stderr).unwrap();
++        let writer = web_sys::WritableStreamDefaultWriter::new(&stdin).unwrap();
++        let (sender, exit) = oneshot::channel();
++        let instance = Instance {
++            stdin: Some(stdin),
++            stdout,
++            stderr,
++            exit,
++        };
++        sender.send(ExitCondition::Exited(37)).unwrap();
++        let status: JsValue = instance.js_wait_for_exit().await.unwrap().into();
++        assert_eq!(
++            js_sys::Reflect::get(&status, &"code".into())
++                .unwrap()
++                .as_f64(),
++            Some(37.0)
++        );
++        writer.release_lock();
++        reader.release_lock();
++        error_reader.release_lock();
++        guest_stdin.close();
++        guest_stdout.close();
++        guest_stderr.close();
++
++        let (mut guest_stdout, stdout) = crate::streams::output_pipe();
++        let (mut guest_stderr, stderr) = crate::streams::output_pipe();
++        let (sender, exit) = oneshot::channel();
++        let instance = Instance {
++            stdin: None,
++            stdout,
++            stderr,
++            exit,
++        };
++        drop(sender);
++        assert!(instance.js_wait_for_exit().await.is_err());
++        guest_stdout.close();
++        guest_stderr.close();
++    }
++    #[wasm_bindgen_test]
++    async fn streaming_wait_rejects_a_runner_setup_failure() {
++        let (mut guest_stdout, stdout) = crate::streams::output_pipe();
++        let (mut guest_stderr, stderr) = crate::streams::output_pipe();
++        let (sender, exit) = oneshot::channel();
++        let instance = Instance { stdin: None, stdout, stderr, exit };
++        sender.send(ExitCondition::from_result(Err(anyhow::anyhow!("fixture cwd setup failed")))).unwrap();
++        let error = match instance.js_wait_for_exit().await {
++            Err(error) => error,
++            Ok(_) => panic!("runner error became a guest exit"),
++        };
++        assert!(error.to_string().contains("fixture cwd setup failed"));
++        guest_stdout.close();
++        guest_stderr.close();
++    }
++
++}

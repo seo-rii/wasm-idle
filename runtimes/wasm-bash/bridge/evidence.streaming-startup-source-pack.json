@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "37775cd3cd21f73945826bfd0e995170a2dc2db7",
+  "runRoot": "/data/seorii-container-fixes-20261015/source-pack-20261015-v4",
+  "receipt": {
+    "bytes": 477,
+    "sha256": "0cc137c162b353406d08670760658c4ccfaee666d9adaa0bc3cedc7140cad85f"
+  },
+  "manifest": {
+    "bytes": 743624,
+    "sha256": "f3f5edec9d88006394a532fe54d83dede71cb1ae107d3da335d28444b3b6c46c"
+  },
+  "missingNoticeTexts": 7,
+  "notices": {
+    "bytes": 68624,
+    "sha256": "54b1d39f58d978515fbe912d9c3cec249cb04a6b4dade88ead861fa979b172eb"
+  },
+  "pack": {
+    "bytes": 262158588,
+    "sha256": "2f98e3c740131f8b09e52301e443691761bf2330c5dd4deb307faaa6d77493a1"
+  },
+  "registryPackages": 477,
+  "sourceStatus": "incomplete",
+  "sourcePolicy": {
+    "bytes": 157245,
+    "sha256": "943e7e3fa194ea6a0450d0a4430bf39fc147309472d3455c63d7ad91698cb37b"
+  },
+  "sourceAvailability": "verified-materials-for-listed-inputs",
+  "dependencyScope": "complete SDK and supplied Rust library Cargo.lock superset, including unused targets and development packages",
+  "remainingGaps": [
+    "Bash release sysroot source correspondence is tied to its release commit and gitlinks, not a reproduced binary build; the historical release workflow used mutable tool packages.",
+    "Both sysroot and WASI SDK20 compiler-rt source lineages are included; an actual linker input inventory must identify which builtin archive is linked into the selected Bash.",
+    "Per-file license applicability and third-party notice completeness require review of the preserved sources; a declared SPDX expression alone does not establish this.",
+    "Some published crate archives omit notice texts: exact publicly accessible VCS notices were recovered where available; missing texts remain listed individually, including unused target packages in this lockfile superset.",
+    "Some source archives have no separately identified notice text; inspect their embedded source: crunchy-0.2.2, r-efi-5.3.0, r-efi-alloc-2.1.0, wai-parser-0.2.3, webc-10.0.1, winapi-i686-pc-windows-gnu-0.4.0, winapi-x86_64-pc-windows-gnu-0.4.0",
+    "Source-to-binary correspondence and notice applicability still require release review; source availability does not establish either"
+  ],
+  "rust": {
+    "archive": {
+      "bytes": 3465880,
+      "sha256": "8f43ecd89129ffa4af2147f99a9fe0ec383be7391c8c61c586059e47b94be52b"
+    },
+    "lockPackages": 53,
+    "status": "installed-source-matches-pinned-component",
+    "verifiedInstalledFiles": 2192
+  },
+  "bashSourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+  "completeReleaseSourcePack": false
+}

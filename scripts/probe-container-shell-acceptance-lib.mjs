@@ -140,9 +140,49 @@ export const REDIRECTION_SCRIPT = [
 	`cat ${BIN}/clang > virtual-body 2> virtual-error`, 'status=$?', 'set -e', 'printf \'virtual=%d\\n\' "$status"'
 ].join('\n') + '\n';
 export const REDIRECTION_FILES = ['command-path', 'compile.out', 'compile.err', 'version.txt', 'failed.out', 'failed.err', 'bad.wasm', 'denied.out', 'virtual-body', 'virtual-error'].map(name => `/workspace/${name}`);
-export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline', 'redirection', 'startup-failure'];
+// SH-02/SH-03: the real parser/evaluator and real BusyBox commands, without LLVM.
+export const SYNTAX_DIRECTORY = '/workspace/syntax 한글';
+export const SYNTAX_ENVIRONMENT = Object.freeze({ CONTAINER_SYNTAX_VALUE: 'value with spaces 한글' });
+export const SYNTAX_SCRIPT = String.raw`set -eu
+mkdir -p '/workspace/syntax 한글'
+cd '/workspace/syntax 한글'
+export CONTAINER_SYNTAX_VALUE='value with spaces 한글'
+printf '%s\n' 'space value' '한글 값' > 'input file'
+cp 'input file' 'copy 한글'
+cat 'copy 한글' > quoted.out
+grep '' 'copy 한글' > empty.out
+grep '^space value$' 'copy 한글' > logic.out && printf 'and\n' >> logic.out
+grep 'absent' 'copy 한글' >> logic.out || printf 'or\n' >> logic.out
+grep 'absent' 'copy 한글' >> logic.out && printf 'unexpected\n' >> logic.out || printf 'fallback\n' >> logic.out
+value="$(cat 'input file')"
+printf '<%s>\n' "$value" > substitution.out
+printf '%s|%s\n' "$CONTAINER_SYNTAX_VALUE" "$PWD" > environment.out
+cat < 'input file' > input.out
+printf 'discard\n' > append.out
+cat 'input file' > append.out
+printf 'tail\n' >> append.out
+{ cat 'input file'; printf 'merged\n' >&2; } > merged.out 2>&1
+{ cat 'input file'; printf 'retained\n' >&2; } 2>&1 > split.out
+printf 'syntax-ok\n'
+`;
+const syntaxInput = 'space value\n한글 값\n';
+export const SYNTAX_CONTENTS = Object.freeze({
+	'input file': syntaxInput, 'copy 한글': syntaxInput, 'quoted.out': syntaxInput, 'empty.out': syntaxInput,
+	'logic.out': 'space value\nand\nor\nfallback\n', 'substitution.out': `<${syntaxInput.trimEnd()}>\n`,
+	'environment.out': `${SYNTAX_ENVIRONMENT.CONTAINER_SYNTAX_VALUE}|${SYNTAX_DIRECTORY}\n`,
+	'input.out': syntaxInput, 'append.out': `${syntaxInput}tail\n`, 'merged.out': `${syntaxInput}merged\n`, 'split.out': syntaxInput
+});
+export const SYNTAX_FILES = Object.keys(SYNTAX_CONTENTS).map(name => `${SYNTAX_DIRECTORY}/${name}`);
+export const SYNTAX_COMMANDS = [
+	['mkdir', ['-p', SYNTAX_DIRECTORY], 0], ['cp', ['input file', 'copy 한글'], 0],
+	['cat', ['copy 한글'], 0], ['grep', ['', 'copy 한글'], 0],
+	['grep', ['^space value$', 'copy 한글'], 0], ['grep', ['absent', 'copy 한글'], 1],
+	['grep', ['absent', 'copy 한글'], 1], ['cat', ['input file'], 0], ['cat', [], 0],
+	['cat', ['input file'], 0], ['cat', ['input file'], 0], ['cat', ['input file'], 0]
+];
+export const RUNS = ['cold', 'warm', 'interrupt', 'failure', 'pipeline', 'redirection', 'startup-failure', 'syntax'];
 export const RUN_SCRIPTS = { cold: SCRIPT, warm: SCRIPT, interrupt: INTERRUPT_SCRIPT, failure: FAILURE_SCRIPT, pipeline: PIPELINE_SCRIPT,
-	redirection: REDIRECTION_SCRIPT, 'startup-failure': "printf 'must-not-execute\\n'\n" };
+	redirection: REDIRECTION_SCRIPT, 'startup-failure': "printf 'must-not-execute\\n'\n", syntax: SYNTAX_SCRIPT };
 
 async function pinned(file, expected) {
 	assert(path.isAbsolute(file), 'absolute input paths required');
@@ -386,15 +426,51 @@ function judgeRedirection(result, checks) {
 	check('owned-workers-retired', result?.remainingWorkerTargets === 0 && !result?.ownedCleanup?.cleanupError, result?.remainingWorkerTargetDetails);
 }
 
+/** Only real Bash decides these expansions, conditionals and redirection orders. */
+function judgeSyntax(result, downloads, checks) {
+	const check = (id, passed, observed) => checks.push({ id: `syntax:${id}`, passed: Boolean(passed), observed });
+	const output = result?.result, files = result?.files ?? {}, invocations = result?.invocations ?? [], records = result?.records ?? [];
+	const content = name => same(files[`${SYNTAX_DIRECTORY}/${name}`], text(SYNTAX_CONTENTS[name]));
+	check('script', result?.type === 'result' && result.backendCompleted === true && output?.code === 0 && output.reason === 'exited' &&
+		decode(output.stdout) === 'retained\nsyntax-ok\n' && decode(output.stderr) === '', output);
+	check('quoted-argv', invocations.length === SYNTAX_COMMANDS.length && SYNTAX_COMMANDS.every(([name, args], index) =>
+		invocations[index]?.path === `${BIN}/${name}` && same(invocations[index]?.argv?.slice(1), args)),
+		invocations.map(({ path, argv }) => ({ path, argv })));
+	check('quoted-files', ['input file', 'copy 한글', 'quoted.out', 'empty.out'].every(content), Object.keys(files));
+	check('export-and-cwd', invocations.length === SYNTAX_COMMANDS.length && invocations.every((invocation, index) =>
+		invocation.cwd === (index === 0 ? '/workspace' : SYNTAX_DIRECTORY) &&
+		JSON.stringify(invocation.fixtureEnvironment) === JSON.stringify(index === 0 ? {} : SYNTAX_ENVIRONMENT)) && content('environment.out'),
+		invocations.map(({ cwd, fixtureEnvironment }) => ({ cwd, fixtureEnvironment })));
+	check('conditional-statuses', content('logic.out') && records.length === SYNTAX_COMMANDS.length && SYNTAX_COMMANDS.every(([name, , status], index) =>
+		records[index]?.path === `${BIN}/${name}` && records[index].status === status && records[index].result?.reason === 'exited' &&
+		records[index].result.code === status && Number.isSafeInteger(records[index].pid) && records[index].pid > 0),
+		records.map(({ path, status, result, pid }) => ({ path, status, result, pid })));
+	check('command-substitution', content('substitution.out'), files[`${SYNTAX_DIRECTORY}/substitution.out`]);
+	check('stdin-truncate-append', ['input.out', 'append.out'].every(content), ['input.out', 'append.out'].map(name => files[`${SYNTAX_DIRECTORY}/${name}`]));
+	check('redirection-order', ['merged.out', 'split.out'].every(content) && decode(output?.stdout) === 'retained\nsyntax-ok\n' && decode(output?.stderr) === '',
+		['merged.out', 'split.out'].map(name => files[`${SYNTAX_DIRECTORY}/${name}`]));
+	const compilerPaths = ['clang', 'lld', 'sysroot'].map(name => `/assets/${name}`);
+	check('compiler-not-loaded', compilerPaths.every(path => Number.isSafeInteger(downloads.start[path]) && downloads.end[path] === downloads.start[path]) &&
+		result?.sysroot === null && !(result.timeline ?? []).some(entry => entry.type === 'fetch' && compilerPaths.some(path => entry.url.endsWith(path))), downloads);
+	check('public-session', result?.publicApi?.session === 'createWasixShellSession' && result.publicApi.runtime?.includes('registerHostCommand') &&
+		result.publicApi.directory?.includes('fromHostFileSystem'), result?.publicApi);
+	check('owned-cleanup', Array.isArray(result?.containerProcesses) && result.containerProcesses.length === 0 && result?.workerGroup?.disposed === true &&
+		result.workerGroup.active === 0 && result.workerGroup.created > 0 && result.workerGroup.created === result.workerGroup.terminated &&
+		result.remainingWorkerTargets === 0 && !result.ownedCleanup?.cleanupError && !result.consoleErrors?.length && !result.blockedRequests?.length,
+		{ processes: result?.containerProcesses, workerGroup: result?.workerGroup, remainingWorkerTargets: result?.remainingWorkerTargets });
+}
+
 export function judgeShellAcceptance(receipt) {
 	const checks = [];
+	const syntaxOnly = receipt.scenario === 'syntax-only';
 	const assetPaths = ['sdk', 'bash', 'busybox', 'clang', 'lld', 'sysroot'].map((name) => `/assets/${name}`);
-	for (const run of RUNS) {
+	for (const run of syntaxOnly ? ['syntax'] : RUNS) {
 		const entry = receipt.runs?.find((candidate) => candidate.run === run);
 		if (run === 'interrupt') judgeInterrupt(entry?.result, checks);
 		else if (run === 'failure') judgeFailure(entry?.result, entry?.downloads ?? { start: {}, end: {} }, checks);
 		else if (run === 'pipeline') judgePipeline(entry?.result, checks);
 		else if (run === 'redirection') judgeRedirection(entry?.result, checks);
+		else if (run === 'syntax') judgeSyntax(entry?.result, entry?.downloads ?? { start: {}, end: {} }, checks);
 		else if (run === 'startup-failure') {
 			const result = entry?.result;
 			checks.push({ id: 'startup-failure:runtime-error', passed: result?.type === 'result' && result.backendCompleted === true &&
@@ -414,7 +490,8 @@ export function judgeShellAcceptance(receipt) {
 		checks,
 		passed: checks.filter((entry) => entry.passed).length,
 		total: checks.length,
-		shellAcceptancePassed: checks.every((entry) => entry.passed),
+		shellAcceptancePassed: !syntaxOnly && checks.every((entry) => entry.passed),
+		shellSyntaxPassed: checks.filter(entry => entry.id.startsWith('syntax:') || entry.id === 'context-cleanup' || entry.id === 'required-mount-profile').every(entry => entry.passed),
 		commonContainerFdVfsQualified: false,
 		shellBackendReady: false
 	};

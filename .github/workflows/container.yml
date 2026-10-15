@@ -38,7 +38,7 @@ jobs:
       - run: pnpm --dir packages/llvm-core build
       - run: pnpm --dir packages/container build
       - run: node --test packages/container/test/unit/*.test.mjs packages/container/test/contract/*.test.mjs
-      - run: node --test scripts/container-distribution.test.mjs
+      - run: node --test scripts/container-distribution.test.mjs scripts/container-release-server.test.mjs
       - run: pnpm --dir packages/llvm-core exec vitest run runtime/clang/test --maxWorkers=2
       - run: pnpm --dir packages/container verify:package-boundary
       - run: pnpm --dir packages/container exec playwright-core install --with-deps chromium

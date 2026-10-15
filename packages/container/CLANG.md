@@ -132,3 +132,73 @@ command added no body requests with HTTP caching disabled. The independent
 [process supervision record](test/fixtures/clang-browser-process-evidence.json)
 reports exit 0 and all owned OS descendants reaped. These receipts retain their
 original tested identity when later documentation or evidence commits are added.
+
+## Optional live filesystem and byte streams
+
+`createLiveClangAdapter` from `@wasm-idle/container/adapters/clang-live` registers
+the separate `llvm-clang-tool-host-live-v1` profile. It requires a secure isolated
+browser, SharedArrayBuffer, and the same pinned compiler/linker process ABI. It
+does not change the snapshot adapter or the previously qualified Bash distribution.
+Registration remains metadata-only; the command resolver prepares verified bytes
+and the complete readonly sysroot before starting this adapter's Worker.
+
+The live adapter accepts the snapshot adapter's pins, `linkerPath`, `compilerPaths`
+and output qualification option, plus `pipeBytes` and `maxBlockedIoMs` from the
+live WASI profile. `workerFactory` must create the live Clang worker. The canonical
+paths must identify real readonly executable files. For the selected multicall
+producer, mount the compiler at `/opt/toolchains/llvm/bin/llvm`, use that exact
+`argv0` and `compilerPaths` alias, and prefix the original user arguments with
+`clang` and the pinned target/sysroot/resource/linker defaults. The driver then
+resolves its own cc1 job to the same multicall executable without rewriting argv.
+Other `compilerPaths` remain explicit trusted host aliases: dispatch uses the
+configured pinned compiler module, rather than loading code from the alias file.
+
+Each actual driver, cc1 and linker file operation reaches the common owner VFS.
+Other live processes and the editor can observe completed writes while compilation
+continues. There is no writer lease or implicit rollback: normal errors, crashes
+and cancellation retain changes already made visible, subject to the compiler's
+own file cleanup. Concurrent source edits can affect a compilation; callers that
+need a fixed input revision should keep using the snapshot profile or arrange an
+explicit source revision themselves.
+
+Stdin, stdout and stderr use separate bounded byte endpoints. The default capacity
+is 64 KiB per endpoint; output must be drained concurrently. Child LLVM invocations
+inherit descriptor references and cannot close the parent's remaining reference.
+No output is retained inside the tool worker. Worker generations, blocked-I/O
+deadlines and forced cancellation use the same owner transport as live WASI. One
+compiler invocation per adapter instance is admitted; each nested tool has its
+own linear memory. These are per-instance limits, not an aggregate heap/RSS bound.
+
+With `executableOutputProfile: 'wasi-preview1-process'`, the owner records actual
+create/truncate/write/rename operations from this compiler invocation. On exit 0
+it asynchronously validates each current `/workspace` output's memory/imports and
+command ABI before granting read-derived execute bits. It uses inode revision
+tokens, not editor watcher delivery or filename extensions. A foreign write,
+unlink, rename away and back, or ancestor directory move invalidates an earlier
+token; an intervening edit between compiler writes permanently disqualifies that
+invocation's output. An edit or cancellation during asynchronous validation also
+prevents the grant. Browser module compilation itself has no cancellation API;
+an already pending validation can finish later but cannot publish after disposal.
+Temporary regular-file rename is tracked, while moving an
+entire output directory conservatively leaves its descendants unqualified.
+The journal is bounded by the invocation's inode budget, including subsequently
+unlinked outputs; exhausting it disables the automatic grant for that invocation.
+Existing execute permissions are not revoked by this mechanism. A valid file
+left as data can still run through explicit `wasm-run` after normal ABI checks.
+
+`test:clang:live --node|--browser --config /absolute/configuration.json --output
+/fresh/absolute/directory` runs the same fixture against actual pinned Clang/LLD
+and the full process sysroot. The configuration uses the existing producer,
+producer-smoke and process-sysroot receipt fields from shell acceptance; SDK/Bash
+assets are not loaded. The fixture covers native cc1/linker dispatch, generated
+artifact execution, streamed stdin reading a changed header, cancellation after
+a file write becomes visible, and a concurrent same-byte output edit. It records
+the exact bundled source hashes, rechecks them after execution and accounts for
+all owned Workers. Neither tiny WASI tests nor a successful bundle build qualifies
+this compiler profile.
+
+The [live LLVM qualification records](test/fixtures/clang-live/README.md) record
+12 passing real-compiler checks in both Node Workers and Chromium, seven retired
+guest Workers in each, and 228 passing unit/contract tests at commit `66ac18fa`.
+That evidence is specific to this opt-in command profile; the separate snapshot
+Bash distribution retains its own manifest and qualification history.

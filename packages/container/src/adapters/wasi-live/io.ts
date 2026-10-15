@@ -1,4 +1,4 @@
-import { FsError, type FsErrorCode, type MemoryFileSystem, type PathOptions, type OpenOptions } from '../../fs/index.js';
+import { FsError, type FsErrorCode, type MemoryFileSystem, type PathOptions, type OpenOptions, type FileVersion } from '../../fs/index.js';
 import { createPipe, pipeReadable, PipeError } from '../../fd/pipe.js';
 import { ContainerError } from '../../errors.js';
 import { Operation, RPC_BYTES, type RpcCall, type RpcReply } from '../../transport/rpc.js';
@@ -44,11 +44,16 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
   };
 }
 
-export function createRemoteStdio(call: RpcCall): WasiStdio {
+export function createRemoteStdio(call: RpcCall, initialOpen: readonly number[] = [0, 1, 2]): WasiStdio {
+  if (!Array.isArray(initialOpen) || initialOpen.length > 3 || new Set(initialOpen).size !== initialOpen.length ||
+      initialOpen.some(fd => !Number.isInteger(fd) || fd < 0 || fd > 2)) throw new FsError('EINVAL', 'Invalid initial stdio descriptors');
+  const open = new Set(initialOpen);
+  const check = (fd: number) => { if (!open.has(fd)) throw new FsError('EBADF', 'Standard descriptor is closed'); };
   return {
-    read: (length) => call(Operation.Stdin, [Math.min(length, RPC_BYTES)]).bytes!,
-    write: (fd, bytes) => call(Operation.Stdout, [fd], bytes.subarray(0, RPC_BYTES)).value as number,
-    close: (fd) => { call(Operation.StdioClose, [fd]); },
+    isOpen: fd => open.has(fd),
+    read: (length) => { check(0); return call(Operation.Stdin, [Math.min(length, RPC_BYTES)]).bytes!; },
+    write: (fd, bytes) => { check(fd); return call(Operation.Stdout, [fd], bytes.subarray(0, RPC_BYTES)).value as number; },
+    close: (fd) => { check(fd); open.delete(fd); call(Operation.StdioClose, [fd]); },
     capture: () => ({ stdout: new Uint8Array(), stderr: new Uint8Array() })
   };
 }
@@ -61,7 +66,8 @@ function delegatedError(error: unknown): FsError {
 }
 
 /** All descriptors and pending I/O belong to this invocation, even in a shared VFS. */
-export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capacity: number, onFailure: (error: unknown) => void, stdio?: DelegatedStdio) {
+export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capacity: number, onFailure: (error: unknown) => void, stdio?: DelegatedStdio,
+  onFileChange?: (kind: 'write' | 'rename', version: FileVersion, previous?: FileVersion) => void) {
   const input = createPipe(capacity), output = createPipe(capacity), errorOutput = createPipe(capacity);
   const descriptors = new Map<number, { fd: number; root: string }>(), closedStdio = new Set<number>();
   // Caller-owned endpoints replace the container pipe for that channel.
@@ -122,8 +128,23 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
       try { if (fs.lstat(name, flags).type === 'symlink') throw new FsError('ELOOP', 'Final symlink requires follow permission'); }
       catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
     }
+    let before: FileVersion | undefined;
+    if (onFileChange && !flags.directory && (flags.create || flags.truncate)) {
+      try { before = fs.captureFileVersion(name, flags); }
+      catch (error) { if (!(error instanceof FsError) || !['ENOENT', 'EISDIR'].includes(error.code)) throw error; }
+    }
     const opened = fs.open(name, flags), local = nextFd++;
-    descriptors.set(local, { fd: opened, root }); return local;
+    descriptors.set(local, { fd: opened, root });
+    if (onFileChange && !flags.directory && (flags.create || flags.truncate) && fs.fstat(opened).type === 'file') {
+      const after = fs.captureFileVersion(opened);
+      if (after !== before) onFileChange('write', after, before);
+    }
+    return local;
+  };
+  const fileVersion = (name: string, context: PathOptions) => onFileChange && fs.lstat(name, context).type === 'file'
+    ? fs.captureFileVersion(name, context) : undefined;
+  const renamed = (name: string, context: PathOptions, before?: FileVersion) => {
+    if (before) onFileChange!('rename', fs.captureFileVersion(name, context), before);
   };
   const length = (n: unknown) => { const size = number(n); if (size > RPC_BYTES) throw new FsError('EINVAL', 'I/O exceeds channel'); return size; };
   const stdout = pipeReadable(output.reader), stderr = pipeReadable(errorOutput.reader);
@@ -144,6 +165,8 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
   }, { highWaterMark: 1 });
   return {
     stdin, stdout, stderr,
+    /** Only an explicitly null delegated endpoint starts closed; stdin EOF stays open. */
+    openStdio: Object.freeze([0, 1, 2].filter(fd => !closedStdio.has(fd))),
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -183,13 +206,24 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.DirectoryPath: value = fs.getDirectoryPath(fd(a)); break;
           case Operation.Read: return { bytes: fs.read(fd(a), length(b)) };
           case Operation.Pread: return { bytes: fs.pread(fd(a), length(b), number(c)) };
-          case Operation.Write: value = fs.write(fd(a), bytes); break;
-          case Operation.Pwrite: value = fs.pwrite(fd(a), bytes, number(b)); break;
+          case Operation.Write: {
+            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
+            value = fs.write(fd(a), bytes);
+            if (value) onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+          }
+          case Operation.Pwrite: {
+            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
+            value = fs.pwrite(fd(a), bytes, number(b));
+            if (value) onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+          }
           case Operation.Seek:
             if (c !== 'set' && c !== 'cur' && c !== 'end') throw new FsError('EINVAL', 'Invalid seek origin');
             value = fs.seek(fd(a), number(b, true), c); break;
           case Operation.Tell: value = fs.tell(fd(a)); break;
-          case Operation.Truncate: fs.ftruncate(fd(a), number(b)); break;
+          case Operation.Truncate: {
+            const before = onFileChange ? fs.captureFileVersion(fd(a)) : undefined;
+            fs.ftruncate(fd(a), number(b)); onFileChange?.('write', fs.captureFileVersion(fd(a)), before); break;
+          }
           case Operation.Realpath: value = fs.realpath(path(a), options(b)); break;
           case Operation.Readdir: {
             const entries = fs.readdir(path(a), options(b));
@@ -203,7 +237,11 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.Rmdir: fs.rmdir(path(a), options(b)); break;
           case Operation.Readlink: value = fs.readlink(path(a), options(b)); break;
           case Operation.Symlink: fs.symlink(path(a), path(b), options(c)); break;
-          case Operation.Rename: fs.rename(path(a), path(b), options(c) as PathOptions); break;
+          case Operation.Rename: {
+            const context = options(c) as PathOptions;
+            const before = fileVersion(path(a), context);
+            fs.rename(path(a), path(b), context); renamed(path(b), context, before); break;
+          }
           // Resolve the owned descriptor and complete the filesystem operation
           // synchronously on this owner. Never return a path for a later syscall.
           case Operation.PathOpen: {
@@ -221,7 +259,10 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.PathRename: {
             const from = reference(a), to = reference(b);
             if (from.root !== to.root) throw new FsError('EACCES', 'Rename requires a common root capability');
-            fs.rename(`${from.cwd}/${from.path}`, `${to.cwd}/${to.path}`, { root: from.root, cwd: from.root }); break;
+            const context = { root: from.root, cwd: from.root };
+            const before = fileVersion(`${from.cwd}/${from.path}`, context);
+            fs.rename(`${from.cwd}/${from.path}`, `${to.cwd}/${to.path}`, context);
+            renamed(`${to.cwd}/${to.path}`, context, before); break;
           }
           case Operation.DirectoryEntries: {
             const owner = descriptor(a), cwd = fs.getDirectoryPath(owner.fd), context = { cwd, root: owner.root };

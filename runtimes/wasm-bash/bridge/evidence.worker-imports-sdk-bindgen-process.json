@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "/data/seorii-container-20261014/shell-bindgen-cli-20261014/tools/bin/wasm-bindgen",
+    "--target",
+    "web",
+    "--weak-refs",
+    "--out-dir",
+    "/data/seorii-container-20261014/sdk-worker-imports-gate-20261015T002222Z/sdk-worker-imports-binary-20261015T002222Z/artifacts/web",
+    "--out-name",
+    "wasmer_js",
+    "/data/seorii-container-20261014/sdk-worker-imports-gate-20261015T002222Z/sdk-worker-imports-binary-20261015T002222Z/artifacts/raw/wasmer_js.wasm",
+    "--no-demangle"
+  ],
+  "startedAtUnix": 1792024944.1302166,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 1131417,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [],
+    "errors": []
+  },
+  "wallSeconds": 1.762
+}

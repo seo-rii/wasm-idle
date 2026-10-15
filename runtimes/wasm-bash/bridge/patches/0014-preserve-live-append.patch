@@ -1,0 +1,8 @@
+--- a/src/syscalls/wasix/path_open2.rs
++++ b/src/syscalls/wasix/path_open2.rs
+@@ -237 +237,4 @@
+-                    .append(false)
++                    // A live mount must place an append atomically on its owner.
++                    // Seeking to EOF in fd_write is insufficient when another
++                    // process can grow the file before the following write.
++                    .append(crate::fs::is_live_path(path) && minimum_rights.append)

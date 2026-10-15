@@ -1,10 +1,91 @@
 # Container qualification evidence
 
-Recorded 2026-10-15. This is a component evidence ledger, not a released command alpha, shell
-MVP or persistent beta. Work that can proceed independently of the blocked shell bridge has
-been implemented; unpassed promotion gates remain explicit.
+Updated 2026-10-16. This ledger retains both successful evidence and earlier failed
+experiments. Component and local integration results do not constitute a published release.
 
-## Review order
+## Current integration
+
+The product stack combines the common resource contracts, verified package loading,
+real Bash adapter, actual Clang/BusyBox commands, persistent workspace and rendered
+workbench. Earlier statements that the shell bridge or UI was absent describe the
+revision recorded in those sections. Current capabilities are tracked in the
+[compatibility ledger](./container-compatibility.md).
+
+The follow-up stack is #223 (bounded SDK streams and startup errors), #224 (pipeline
+fixtures), #225 (combined base), #226 (resource contracts), #227 (immutable distribution
+and archive validation), #228 (workbench and owned sessions), #229 (source materials and
+canonical LLVM multicall execution), #230 (shared real Bash profile), and #231
+(immutable workbench hosting), #232 (rebuilt SDK and actual workbench qualification),
+#233 (view transaction fixes), #234 (recorded performance baseline), #235 (product
+integration), and #236 (optional live LLVM commands). The product integration merges
+the exact SDK source from #223; all 119 source/evidence blobs match that branch while
+preserving host-side build documentation.
+
+The combined library gates pass 230 container unit/contract tests, 207 existing Clang
+tests, 18 source-material tests, and the host-only npm package boundary (108 files;
+zero root-import fetches). Real Chromium regressions also pass 34 live-I/O, 21 persistence and 14 workspace
+checks; all owned Workers and OS descendants are reclaimed. The subsequent initial
+closed-stdio correction has a real Wasm fixture covering all eight inherited descriptor
+masks and passes 33 focused checks, the complete 230-test container suite and the
+34-check live browser regression; EOF remains an open descriptor.
+The real compiler self-path fixture records compile/link exit 0, generated command
+exit 0 with `hello\n`, executable output metadata and zero remaining Workers:
+[runner and evidence](../packages/container/test/fixtures/clang-self-path/).
+The workbench regression has 16 actual Chromium checks, including input and restore
+transactions that preserve pending view buffers; the persistence owner has
+21 actual browser checks including recovery-preserving orphan collection.
+
+The final SDK with patches 0001–0020 passes 72/72 checks across seven actual Chromium
+scenarios through the public Bash session. The unchanged acceptance script compiles,
+runs and pipes its output into the same workspace; a fresh warm owner reuses every
+asset body. Foreground interruption, package/compiler errors, pipeline redirection and
+startup failure each reclaim all owned Workers. See the preserved
+[full receipt](../packages/container/test/shell-acceptance/evidence/public-session-0020.json)
+and [process cleanup](../packages/container/test/shell-acceptance/evidence/public-session-0020-process.json).
+
+The actual Bash workbench additionally passes 6/6 checks across three runs: cold
+compile/pipe, persistent reload of source/result/executable metadata and direct execution,
+warm compile without another asset body, and interrupting a blocked real `cat` followed
+by another command in the surviving Bash. Its awaited owner-state polling observes the
+running child before interrupting it and Bash's resumed prompt before sending new input.
+These results qualify the snapshot compiler profile. Its
+[browser receipt](../packages/container/test/fixtures/product-shell-browser-evidence.json)
+and [process record](../packages/container/test/fixtures/product-shell-browser-process-evidence.json)
+retain the exact tested sources. Later view changes, the optional live compiler and
+immutable hosting each retain their own evidence. The three-sample
+[snapshot baseline](./container-benchmarks.md) additionally passes all 216 acceptance
+checks with zero warm asset body downloads; timings are observations on a shared host.
+
+The independent syntax-only gate passes 12/12 actual Bash/BusyBox checks for quoting,
+empty/Korean arguments, exported fixture environment values, cwd, conditional commands,
+command substitution and redirection ordering. It never downloads Clang, LLD or the
+sysroot. Its [receipt](../packages/container/test/shell-acceptance/evidence/syntax-0020.json)
+does not relabel the earlier seven-scenario receipt or count an unrun combined gate.
+
+The immutable local release separately passes all six actual workbench checks across
+three runs under the restrictive CSP and isolation headers. Its independent lock is
+`e7392ffb2ec6af345f848ae675d2eecf890e2536cffa9cf9ce051d40801c201b`;
+33 verified files occupy 596,775,617 bytes, including host modules, runtime assets and
+source/notice materials. All six asset bodies are served once across the reloads and
+all Workers/OS descendants are reclaimed. See the
+[immutable hosting evidence](../examples/container/IMMUTABLE.md). This is local
+qualification; `deployed: false` and `sourceClosureReviewed: false` remain explicit.
+
+The optional `llvm-clang-tool-host-live-v1` adapter separately passes 12 actual Node
+checks and 12 isolated Chromium checks. Real Clang/LLD compile, link and execute the
+result; a compiler blocked on stdin observes a changed header, and cancellation preserves
+already visible partial output. Exact inode revisions prevent unrelated or concurrently
+changed files from acquiring executable metadata. All seven Workers per backend retire.
+The [live compiler receipts](../packages/container/test/fixtures/clang-live/README.md)
+retain their tested source hashes and cleanup records. Actual Bash composition of this
+profile has its own gate; the snapshot shell evidence above does not qualify it.
+
+Source packs preserve exact material identities while explicitly
+recording incomplete runtime source/notice correspondence. Production responses,
+clean compiler rebuild provenance, fixed OS image and source applicability remain
+release qualification requirements; none is inferred from a local byte hash.
+
+## Earlier stack and experiment history
 
 | Work                                           | PR                                                                               | Base / dependency                                                                                                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -184,17 +265,18 @@ filesystem/persistence/backup/save implementation hashes. The receipts contain 3
 15 persistence and 14 workspace checks, zero retained guest Workers, and the actual browser
 profile. Later documentation changes do not relabel these receipts as a different execution.
 
-## Blocked or incomplete gates
+## Current qualification boundaries
 
 | Gate                  | Observed boundary                                                                                                                                                                                                                                 | Next experiment / owner                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0-SHELL/FS/FD | Rebuilt pinned SDK/Bash passes 18/18 selected native WASIX Directory checks on #199. #205/#208/#209 add the trusted JavaScript host-command registry: real Bash dispatches registered paths to container live guests with its own descriptors 0–2 delegated; argv/env/cwd, binary pipes, shell redirections, exact stdin consumption, EPIPE, statuses (including >= 79 after #208), PATH lookup and tail exec pass in Chromium. With the status-order SDK every status holds in 5 runs; 3 pass all 45 checks. #212/#213 make Bash's `/workspace` the container VFS; #214/#216 route BusyBox, Clang and workspace modules; #217 passes the plan's acceptance script 30/30 (cold and warm) once; #219 interrupts running commands with Bash continuing. #220 fixes the owner deadlock behind the intermittent hangs; with it the acceptance script passes 5 of 5 runs and the #213/#209 probes pass when re-run | Worker retirement timing; descriptors beyond stdio; guest signals/job control; pipeline-subshell redirection and PIPESTATUS |
-| G0-CANCEL | #200 passes 19/19 checks for forced trusted host Worker-group cleanup during actual CPU loop, blocked stdin and partial Bash download, followed by same-page fresh-backend recovery; all observed Workers retire | Public Container cancellation, surviving-shell foreground interruption, POSIX signals and the Container asset-service cancellation contract remain separate; this experiment does not complete the whole G0-CANCEL gate |
-| G0-CLANG / CLI-01–03  | Modified raw links, eight actual Node WASI CLI commands, common VFS Node Worker acceptance, Chromium batch C/C++ compile/link/artifacts and the 14-case selected-target header corpus pass; reload reuses the verified full-sysroot asset closure | #159 retains a snapshot-only, explicit exception-free C++ profile; #188 closes the concrete selected corpus gate, while exhaustive combinations, live binding and release promotion remain separate    |
-| B1 / P3               | Selected producer, 128 batch Node/256 Chromium invocations, and 17 live checks per backend pass                                                                                                                                                   | Keep support limited to the recorded applets/options; real shell acceptance is still separate                                                                                                          |
-| P4 / shell MVP        | C-14 supplies live WASI VFS/SAB I/O and pipeline admission; actual shell dispatch/common WASIX fd ownership and full acceptance remain absent                                                                                                     | C-15 after backend and real compiler gates; snapshot Clang cannot overlap live users                                                                                                                   |
-| P5 / product beta     | Persistence, editor/watch, terminal, backup/restore and save SDK bindings have component evidence; rendered integration and orphan GC remain separate                                                                                             | Product failure UI/lifecycle and full shell-based reload matrix                                                                                                                                        |
-| C-19/20               | Local Chromium component evidence, including the selected header corpus; no production release or performance baseline                                                                                                                            | Real immutable hosting/receipt/license closure and clean-origin acceptance, then measured optimizations                                                                                                |
+| G0-SHELL/FS/FD | The public pinned SDK/Bash session passes 72/72 checks across seven scenarios; a separate 12-case real syntax gate covers quoting, conditionals, substitution and redirection ordering. All observed Workers retire | Descriptors beyond inherited stdio, unlisted shell features, PTY/termios and job control remain unsupported |
+| G0-CANCEL | Forced backend CPU-loop, blocked-input and pending-download cleanup is recorded separately. Public session gates and the rendered workbench verify foreground interruption, surviving Bash input, startup failure and complete cleanup | Host cancellation is not POSIX signal delivery. Builtin loops require a fresh owner; lost owner transport reports unconfirmed cleanup |
+| G0-CLANG / CLI-01–03 | Real C/C++ snapshot CLI and the selected 14-case header corpus pass. Optional live LLVM has 12 Node and 12 Chromium checks, including concurrent header visibility and partial-output cancellation | The selected C++ profile requires `-fno-exceptions`; exhaustive header combinations, clean producer rebuild and source-to-binary release correspondence remain separate |
+| B1 / P3 | Selected producer, 128 batch Node/256 Chromium invocations, 17 live checks per backend and actual Bash/BusyBox pipelines pass | Support remains limited to recorded applets/options; no full BusyBox or GNU utility compatibility claim |
+| P4 / shell MVP | Actual Bash, BusyBox, workspace artifacts and snapshot Clang pass the original acceptance script; independent live LLVM commands also pass | Actual Bash with the optional live compiler is a separate pending gate. The default snapshot compiler holds an exclusive writer lease |
+| P5 / product beta | Rendered editor/terminal/save/backup/restore integration, actual shell reload and recovery-preserving orphan GC are implemented. Real browser evidence covers 21 persistence, 16 view and 6 actual workbench checks | Browser eviction, fixed release environments and wider browser qualification remain separate; no simultaneous workspace writers or implicit save-on-dispose |
+| C-19 / deployment | A separately locked 33-file local distribution passes all six actual workbench checks under restrictive CSP/isolation | Production responses, exact source/notice applicability and clean-build provenance remain open; no deployment or release promotion |
+| C-20 / measurement | Three recorded snapshot suites pass 216 checks with zero warm asset body downloads and separate cold/warm timing observations | No L1/L2 optimization or performance promise; the measurements are from a shared host |
 
 The opt-in producer's small real LLVM Support ABI fixture passed five dispatch cases, and a
 real wasi-libc constructor fixture confirmed `getcwd`, relative reads, bad-cwd rejection and
@@ -610,7 +692,8 @@ failure of a whole package, a compile error and a missing command each fail alon
 Bash and the other package keep working; two of three runs pass all 47 checks and the
 third misses only the five-second Worker retirement window.
 
-Separately, redirections inside forked Bash pipeline subshells fail with `Invalid
+In that earlier dispatch experiment, redirections inside forked Bash pipeline subshells failed with `Invalid
 argument`, and `PIPESTATUS` stays empty even for builtins. Every attempt's original
-receipts are archived on #209. The shell's WASIX `Directory` and the container VFS remain
-separate namespaces. `commonContainerFdVfsQualified` and `shellBackendReady` stay false.
+receipts are archived on #209. Its readiness flags remain false in those preserved
+receipts. Later common-VFS and pipe work is assessed independently; this historical
+failure is not the status of every subsequent integration.

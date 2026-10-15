@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import {
 	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, LLVM_EXECUTABLE, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
-	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT,
+	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT, SYNTAX_FILES, SYNTAX_SCRIPT,
 	digest, identity, judgeShellAcceptance, readPinnedProbeInputs
 } from './probe-container-shell-acceptance-lib.mjs';
 
@@ -136,15 +136,18 @@ export function manifest(origin, inputs, busyboxAsset = 'busybox') {
 	return JSON.stringify({ ...index, distributionId: `shell-acceptance-${digest(Buffer.from(JSON.stringify(index)))}` });
 }
 
-export async function runProbe(configuration) {
+export async function runProbe(configuration, { syntaxOnly = false } = {}) {
+	assert.equal(typeof syntaxOnly, 'boolean', 'syntaxOnly must be explicit boolean');
 	const prepared = await checkProbe(configuration);
 	await mkdir(configuration.output, { mode: 0o700 });
 	const receipt = {
-		schemaVersion: 1, complete: false, shellAcceptancePassed: false,
+		schemaVersion: 1, complete: false, shellAcceptancePassed: false, shellSyntaxPassed: false,
+		scenario: syntaxOnly ? 'syntax-only' : 'full',
 		startedAt: new Date().toISOString(),
 		host: { node: process.version, platform: platform(), arch: arch(), kernelRelease: release(), osVersion: version() },
 		applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-		script: SCRIPT,
+		script: syntaxOnly ? SYNTAX_SCRIPT : SCRIPT,
+		syntaxScript: SYNTAX_SCRIPT,
 		interruptScript: RUN_SCRIPTS.interrupt,
 		interrupts: INTERRUPTS,
 		packageReceipt: PACKAGE_RECEIPT,
@@ -246,7 +249,7 @@ export async function runProbe(configuration) {
 			if (message.type() === 'warning') warnings.push(message.text().slice(0, 2000));
 		});
 		await page.goto(origin, { timeout: 10000 });
-		for (const run of RUNS) {
+			for (const run of syntaxOnly ? ['syntax'] : RUNS) {
 			const start = { ...downloads }, started = Date.now(), errorsBefore = consoleErrors.length;
 			let result = {};
 			try {
@@ -280,14 +283,15 @@ export async function runProbe(configuration) {
 							liveWorkerUrl: location.origin + '/bundle/live-worker.js', clangWorkerUrl: location.origin + '/bundle/clang-worker.js' });
 					})().catch((error) => finish({ type: 'failure', backendCompleted: false, error: String(error) }));
 				}), {
-					sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: RUN_TIMEOUT_MS,
+						sdkBase, memory: MEMORY, bashWasmSha256: BASH_WASM_SHA256, timeout: syntaxOnly ? 60000 : RUN_TIMEOUT_MS,
 					payload: {
 						sdkDiagnostics: configuration.sdkDiagnostics === true,
 						sdkDiagnosticsOmitTmp: configuration.sdkDiagnostics === true && configuration.sdkDiagnosticsOmitTmp === true,
 						script: RUN_SCRIPTS[run], interrupts: run === 'interrupt' ? INTERRUPTS : [],
+							recordSyntaxEnvironment: run === 'syntax',
 						cwd: run === 'startup-failure' ? '/workspace/missing-initial-directory' : '/workspace',
 						readFiles: run === 'interrupt' ? ['/workspace/demo/interrupted.wasm'] : run === 'failure' ? ['/workspace/bad.wasm']
-							: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : run === 'redirection' ? REDIRECTION_FILES : READ_FILES,
+								: run === 'pipeline' ? ['/workspace/group-file', '/workspace/sub-file', '/workspace/err-file'] : run === 'redirection' ? REDIRECTION_FILES : run === 'syntax' ? SYNTAX_FILES : READ_FILES,
 						artifactPath: ['failure', 'redirection'].includes(run) ? '/workspace/hello.wasm' : '/workspace/demo/hello.wasm',
 						...(run === 'failure'
 							? { manifest: failureDistribution, manifestSha256: receipt.failureDistributionSha256, cacheNamespace: 'container-shell-acceptance-failure' }
@@ -295,7 +299,7 @@ export async function runProbe(configuration) {
 						assetURLs: Object.keys(downloads).map((path) => origin + path),
 						clangSha256: prepared.inputs.clang.assets.clang.metadata.logical.sha256,
 						linkerSha256: prepared.inputs.clang.assets.lld.metadata.logical.sha256,
-						commandTimeoutMs: COMMAND_TIMEOUT_MS
+							commandTimeoutMs: syntaxOnly ? 30000 : COMMAND_TIMEOUT_MS
 					}
 				});
 				result.workersAtObservation = (await workers()).length;
@@ -321,6 +325,7 @@ export async function runProbe(configuration) {
 		assert.deepEqual((await bundles(prepared.inputs)).sources, prepared.bundles.sources, 'bundle sources changed during the probe');
 		receipt.qualification = judgeShellAcceptance(receipt);
 		receipt.shellAcceptancePassed = receipt.qualification.shellAcceptancePassed;
+			receipt.shellSyntaxPassed = receipt.qualification.shellSyntaxPassed;
 		receipt.complete = true;
 	} catch (error) {
 		receipt.error = String(error);
@@ -333,14 +338,14 @@ export async function runProbe(configuration) {
 		await save();
 	}
 	return { output: configuration.output, receipt: receiptPath, complete: receipt.complete,
-		shellAcceptancePassed: receipt.shellAcceptancePassed, shellBackendReady: false };
+		shellAcceptancePassed: receipt.shellAcceptancePassed, shellSyntaxPassed: receipt.shellSyntaxPassed, shellBackendReady: false };
 }
 
 const invoked = process.argv[1] && (await realpath(process.argv[1]).catch(() => null));
 if (invoked === (await realpath(fileURLToPath(import.meta.url)))) {
 	try {
-		assert(process.argv.length === 4 && ['--check', '--run'].includes(process.argv[2]),
-			'usage: probe-container-shell-acceptance.mjs --check|--run /absolute/config.json');
+		assert(process.argv.length === 4 && ['--check', '--run', '--run-syntax'].includes(process.argv[2]),
+			'usage: probe-container-shell-acceptance.mjs --check|--run|--run-syntax /absolute/config.json');
 		assert(isAbsolute(process.argv[3]), 'absolute configuration path required');
 		const configuration = JSON.parse(await readFile(process.argv[3]));
 		if (process.argv[2] === '--check') {
@@ -348,9 +353,10 @@ if (invoked === (await realpath(fileURLToPath(import.meta.url)))) {
 			console.log(JSON.stringify({ checked: true, browserLaunched: false, packageId: checked.inputs.receipt.packageId,
 				bundles: Object.fromEntries([...checked.bundles.modules].map(([name, bytes]) => [name, bytes.length])) }));
 		} else {
-			const result = await runProbe(configuration);
+			const syntaxOnly = process.argv[2] === '--run-syntax';
+			const result = await runProbe(configuration, { syntaxOnly });
 			console.log(JSON.stringify(result));
-			if (!result.complete || !result.shellAcceptancePassed) process.exitCode = 1;
+			if (!result.complete || !(syntaxOnly ? result.shellSyntaxPassed : result.shellAcceptancePassed)) process.exitCode = 1;
 		}
 	} catch (error) {
 		console.error(String(error));

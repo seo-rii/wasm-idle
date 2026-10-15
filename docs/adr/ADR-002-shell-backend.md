@@ -1,10 +1,44 @@
 # ADR-002: keep the shell backend behind the G0 gate
 
-Status: accepted for staged development; candidate B selected for a source-pinned porting prototype; production shell backend deferred.
+Status: candidate B implemented behind the optional WASIX adapter; public combined-artifact/browser and production qualification are recorded separately.
 
 Decision date: 2026-10-14. Scope: C-02 and the pinned runtime below.
 
-## Decision
+## Current implementation (2026-10-16)
+
+Candidate B is implemented by the maintained SDK/WASIX bridge and the optional
+`@wasm-idle/container/adapters/wasix` entrypoint. Root container imports do not
+load WASIX. The original GNU Bash parser/evaluator determines command, redirect
+and pipeline behavior. Its prepared child argv/env/cwd and inherited stdio reach
+trusted registered Supervisor commands. `Directory.fromHostFileSystem` delegates
+the shell's live filesystem calls to the common VFS. The default Clang route uses
+the explicit snapshot writer-lease profile. Open shell output files survive a normal snapshot
+commit with their inode, offset and append contract, including nonzero guest exit.
+Crashes/cancellation discard unpublished compiler changes.
+
+The optional `llvm-clang-tool-host-live-v1` command adapter delegates compiler file
+operations and byte descriptors to the same owner transport. It preserves completed
+writes on cancellation and supports concurrent file visibility. Its separate actual
+Node/Chromium command receipts pass 12 checks each; composing that profile with actual
+Bash requires its own acceptance gate. Neither profile changes the other's contract.
+
+The JavaScript owner never performs WASIX work that can wait for one of its own
+filesystem callbacks. Command preparation stays on the guest side, and a service
+thread owns child descriptor I/O/completion. Bounded per-descriptor queues preserve
+write ordering while control and other descriptors continue. The raw stream profile
+uses bounded native pipes and `Instance.waitForExit()`; it does not invoke the legacy
+SDK capture API. An isolated owner realm tracks and retires its SDK Worker group,
+including late startup. Public owner transport reports unconfirmed cleanup if that
+realm is lost. Routed foreground cancellation can leave Bash alive; a builtin loop
+requires ending the session and opening a fresh owner.
+
+The original observations below are historical experiment results, not descriptions
+of the current implementation. The [qualification ledger](../container-qualification.md)
+records exact artifact and browser gates. Descriptors beyond inherited stdio, arbitrary
+signals, PTY/termios and job control remain unsupported. There is no Linux, WASIX-wide,
+or general POSIX compatibility promise.
+
+## Original staged decision
 
 Continue the independent command-container API and common resource contracts. Do not make
 `@wasm-idle/container` depend on WASIX, and do not call the command API a shell MVP.
@@ -106,11 +140,21 @@ applies child cwd and fd operations first. Its cwd comes from the child's WASIX
 filesystem lookup, independently of parent state and `PWD`. The external SDK
 compile probe checks public accessibility without returning an execution or
 successful task handle. This does not export mutable runtime state or establish
-common live filesystem/fd capabilities; actual Rust compilation is a distinct gate.
+common live filesystem/fd capabilities.
 
 The initial prototype included only protocol tests and source-patch application checks.
 That source-only status is superseded by the concrete rebuild observations below. Applying
 patches alone still does not qualify candidate B as a production backend.
+
+The genuine pinned SDK library and external command-snapshot example now pass
+`cargo check --locked --offline --target wasm32-unknown-unknown --lib --example
+container_command_snapshot_compile -j 1` at source
+`de98d061435a308e8bbcd2ca195d29ac07401774`, with all owned processes reaped and
+all 580 recorded source/toolchain/preparation pins unchanged. The
+[immutable metadata receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck.json)
+and [original process receipt](../../runtimes/wasm-bash/bridge/evidence.sdk-typecheck-process.json)
+preserve that evidence. Earlier genuine Rust API errors and dependency-cache
+failures remain recorded separately.
 
 ## Rebuilt observations on 2026-10-15
 
