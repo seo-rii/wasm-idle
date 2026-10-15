@@ -402,6 +402,31 @@ test('snapshot inode quota includes retained unlinked handles until their final 
   assert.equal(text(fs.readFile('two')), '2');
 });
 
+test('cwd-relative creation and directory moves keep canonical paths snapshot-representable', () => {
+  const fs = new MemoryFileSystem();
+  const longDirectory = `/workspace/${'a'.repeat(4000)}`;
+  fs.mkdir(longDirectory);
+  const before = fs.exportSnapshot();
+  const longName = 'b'.repeat(200);
+  assert.throws(() => fs.writeFile(longName, bytes('x'), { cwd: longDirectory }), error('EINVAL'));
+  assert.throws(() => fs.mkdir(longName, { cwd: longDirectory }), error('EINVAL'));
+  assert.throws(() => fs.symlink('target', longName, { cwd: longDirectory }), error('EINVAL'));
+  assert.throws(() => fs.open(longName, { cwd: longDirectory, create: true, write: true }), error('EINVAL'));
+  assert.deepEqual(fs.exportSnapshot(), before);
+  const deep = Array(100).fill('d').join('/');
+  fs.mkdir(`/workspace/x/${deep}`, { recursive: true });
+  fs.mkdir(`/workspace/y/${deep}`, { recursive: true });
+  fs.writeFile('/workspace/moved', bytes('file'));
+  assert.throws(() => fs.rename('/workspace/x', `/workspace/y/${deep}/x`), error('EINVAL'));
+  assert.throws(() => fs.rename('/workspace/moved', `${longDirectory}/${longName}`), error('EINVAL'));
+  assert.equal(fs.stat(`/workspace/x/${deep}`).type, 'directory');
+  assert.equal(text(fs.readFile('/workspace/moved')), 'file');
+  fs.rename('/workspace/x', `/workspace/y/${Array(20).fill('d').join('/')}/x`);
+  const lease = fs.acquireSnapshot();
+  const worker = MemoryFileSystem.fromSnapshot(lease.snapshot);
+  lease.commit(worker.exportSnapshot());
+});
+
 test('independent filesystems never share mutable bytes or inode namespaces', () => {
   const first = new MemoryFileSystem();
   first.writeFile('same', bytes('first'));
