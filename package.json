@@ -196,7 +196,8 @@
 		"sync:wasm-golfscript": "node scripts/sync-wasm-golfscript.mjs",
 		"prepare:container-distribution": "node scripts/prepare-container-distribution.mjs",
 		"verify:container-distribution": "node scripts/verify-container-distribution.mjs",
-		"test:container-distribution": "node --test scripts/container-distribution.test.mjs"
+		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
+		"benchmark:container": "node scripts/benchmark-container.mjs"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",
