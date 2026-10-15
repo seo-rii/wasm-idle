@@ -7,7 +7,7 @@ import { createRemoteFileSystem, createRemoteStdio } from '../wasi-live/io.js';
 import type { validateClangOptions } from '../clang/configuration.js';
 import { createToolStdio } from './stdio.js';
 
-type Request = LiveStartRequest & { buffer: SharedArrayBuffer; maxBlockedIoMs: number;
+type Request = LiveStartRequest & { buffer: SharedArrayBuffer; maxBlockedIoMs: number; openStdio: readonly number[];
   configuration: ReturnType<typeof validateClangOptions> & { linker: Uint8Array } };
 let prepared: { request: Request; toolHost: LlvmToolHost } | undefined;
 let preparing = false, ran = false;
@@ -21,7 +21,7 @@ scope.onmessage = async ({ data }) => {
       const request = data as Request;
       for (const bytes of [request.command.bytes, request.configuration.linker]) checkMemoryProfile(bytes, request.limits.maxMemoryBytes);
       const call = createRpcClient(request.buffer, generation, notice => scope.postMessage(notice), request.maxBlockedIoMs);
-      const fs = createRemoteFileSystem(call), stdio = createToolStdio(createRemoteStdio(call));
+      const fs = createRemoteFileSystem(call), stdio = createToolStdio(createRemoteStdio(call, request.openStdio));
       const probe = createWasiHost({ ...request.invocation, args: [], fs, stdin: new Uint8Array(), maxOutputBytes: 0 });
       const importNames = new Set(Object.keys(probe.imports)); probe.dispose();
       const toolHost = await createLlvmToolHost({

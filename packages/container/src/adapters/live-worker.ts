@@ -88,7 +88,7 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
         worker.onmessageerror = () => fail(new ContainerError('STARTUP_FAILED', 'Live worker message could not be decoded'));
         request.signal.addEventListener('abort', abort, { once: true });
         if (request.signal.aborted) abort();
-        if (!dead) worker.postMessage({ type: 'prepare', version: 1, generation: request.generation, command: request.command, invocation: request.invocation, limits: request.limits, buffer, maxBlockedIoMs, configuration: setup?.configuration });
+        if (!dead) worker.postMessage({ type: 'prepare', version: 1, generation: request.generation, command: request.command, invocation: request.invocation, limits: request.limits, buffer, maxBlockedIoMs, openStdio: io.openStdio, configuration: setup?.configuration });
         await ready;
         return {
           stdin: io.stdin, stdout: io.stdout, stderr: io.stderr,
