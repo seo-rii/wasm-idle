@@ -93,6 +93,11 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
     status 0. The child now stays joinable and the call reports pid 0, so `waitpid`
     returns 0 as POSIX requires. Blocking joins and finished children are unchanged. The
     pinned Bash does not use this call; see below.
+11. `0011-mount-host-filesystems.patch` plus `sdk_host_filesystem.rs`: the SDK can mount a
+    trusted synchronous JavaScript filesystem owned by one thread
+    (`Directory.fromHostFileSystem(delegate)`), and registers that mount as live with WASIX.
+12. `0012-revalidate-live-mounts.patch`: WASIX revalidates cached inodes below live mounts
+    and reads a live file's size from its handle where the cached stat would be stale.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -562,3 +567,55 @@ archived as `evidence.status-order-*.json` with a
 [recheck](evidence.status-order-sdk-binary-metadata.json). Local packaging produced receipt
 `1826ec2bcb5abf51dee6a740d96fb02b644de38d0e0f64b21626051f45be039a`. Browser results with
 this package are recorded on the dispatch branch.
+
+## Trusted host filesystem mounts
+
+Patches 0011 and 0012 let Bash use the common container filesystem instead of a private
+WASIX `Directory`. `Directory.fromHostFileSystem(delegate)` takes a synchronous delegate
+owned by the calling thread. In the container this is `createShellFilesystem(container.fs)`
+on the Supervisor's thread. The delegate's operations are `stat`, `lstat`, `readdir`,
+`mkdir`, `rmdir`, `unlink`, `rename`, `readlink`, `open`, `read`, `write`, `append`, `fstat`,
+`truncate` and `close`, on paths absolute inside the mount and on delegate-owned handles.
+
+How calls reach the delegate:
+
+- Guest threads never call JavaScript. Each filesystem operation is posted as a new
+  `SchedulerMessage` variant to the SDK scheduler thread, which owns the delegate.
+- The guest thread then blocks on an owned reply channel.
+- Operations on the owning thread itself run directly.
+- Delegates live in a thread-local table, and nothing is implemented as `Send`/`Sync` by
+  hand.
+- Every read, write, size and listing reaches the delegate; nothing is cached in the SDK.
+- Writes use explicit offsets. A file opened in append mode lets the delegate place each
+  write at the current end.
+
+Mounting such a directory registers its path with WASIX as a live mount, and patch 0012
+covers the state WASIX caches itself:
+
+- A cached child below a live mount is checked with `symlink_metadata` on every lookup:
+    - a missing entry is evicted, and the lookup then fails with `ENOENT`;
+    - an entry whose type changed is evicted and rediscovered;
+    - otherwise its stat is refreshed.
+- `fd_filestat_get` and `path_open` refresh a live file's size and times from its handle.
+- An `O_APPEND` write seeks to the handle's actual end, not WASIX's cached size.
+- `O_CREAT` without `O_EXCL` opens a file that another process created after the lookup,
+  instead of failing with `EPERM`.
+- Host-command descriptors use the same live end-of-file rule.
+
+Registering a mount that is not live only costs extra metadata calls. Path symlinks,
+hard links, directory listing cookies across concurrent changes, and rename/rmdir races
+against other processes keep their existing WASIX behavior. These remain gaps.
+
+### Actual SDK gate
+
+Commit `b0e740d17d107516f98c42862a61f98046fcd8b4` (patches 0001–0012, including #208's
+status-order fix) was prepared into a fresh physical copy with 584 pins (SDK 200 and WASIX
+377 files) and a unique target: typecheck 517.947 s, release 647.743 s, bindgen 2.017 s and
+static inspection 0.255 s. Each stage exited 0 with every process reaped. The bound Wasm is
+9,187,858 bytes, SHA-256 `8385617d56ffcdf261bb5af83061233bd302004a64f5d729c62791f0993b5ca3`;
+binary receipt `7bbb04175c6d94337ea9c64d7f0290cfaba912a6f1e4b491cd160ce0589215e7`. Stage
+receipts are archived as `evidence.host-filesystem-*.json` with a
+[recheck](evidence.host-filesystem-sdk-binary-metadata.json). Local packaging produced
+receipt `bc09b7e1649f68a2b7d08d15ab8c382ca8122d099626012198c1d645a18ac08e`. An earlier
+gate of the same patches on the pre-fix base passed and only produced a preliminary
+package; its browser runs are recorded as preliminary on the shell branch.
