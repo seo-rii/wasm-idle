@@ -118,8 +118,10 @@ describe('checked-in TeaVM runtime trust root', () => {
 				jdk: { version: '25.0.3+9' },
 				gradle: { version: '9.1.0' },
 				// Apply @PluggableDependency plugins in the browser compiler (TeaVM #1322).
+				// Then apply @Rename when converting the javac SDK (upstream teavm-javac 199bed0).
 				sourcePatches: [
-					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' },
+					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,

@@ -21,16 +21,23 @@ Gradle, dependency-verification, local-overlay, storage, and license metadata. A
 loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
 replacement receipt set.
 
-The compiler is built from that revision with one source patch,
-`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch` (TeaVM issue #1322). TeaVM skips
-`@PluggableDependency` dependency plugins when TeaVM itself is compiled by TeaVM, as it is in the
-browser compiler, so `Object.clone()` results lost their types: `String.format("%.2f", x)` and
-virtual calls on other cloned objects trapped with "dereferencing a null pointer". The patch
+The compiler is built from that revision with source patches. The first,
+`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`, addresses TeaVM issue #1322:
+TeaVM skips `@PluggableDependency` dependency plugins when TeaVM itself is compiled by TeaVM, as it
+is in the browser compiler, so `Object.clone()` results lost their types: `String.format("%.2f", x)`
+and virtual calls on other cloned objects trapped with "dereferencing a null pointer". The patch
 registers a dependency listener that applies the declared plugins. Enum reflection
 (`Enum.valueOf`, `EnumSet`, `EnumMap`) is still broken in this TeaVM 0.13.1 generation because its
 Wasm GC backend resolves enum constants through a different path. Only `compiler.wasm` changes;
 the producer applies the patch with `git apply` before the Gradle build, and `upstreamOutputs`
 records the receipts of that patched build.
+
+A second source patch, `scripts/teavm/patches/teavm-javac-stdlib-rename.patch`, backports upstream
+teavm-javac commit `199bed0` ("When converting TeaVM's class library methods, apply `@Rename`
+annotation properly"). Without it the javac SDK (`compile-classlib-teavm.bin`) exposed TeaVM's
+implementation names (`Throwable.getMessage0`, `Object.getClass0`, `ArrayList.clone0`), so
+`e.getMessage()`, `x.getClass()` and `list.clone()` did not compile. It changes only
+`compile-classlib-teavm.bin`.
 
 The runtime class library intentionally carries one wasm-idle compatibility overlay for character
 and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
