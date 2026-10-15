@@ -107,3 +107,38 @@ test('browser errors and Workers that outlive their owner fail', () => {
 test('pinned inputs reject a wrong package receipt digest before reading files', async () => {
 	await assert.rejects(readPinnedProbeInputs({ packageReceipt: '/nonexistent', packageReceiptSha256: '1'.repeat(64) }));
 });
+
+const archived = async (name) => JSON.parse(await (await import('node:fs/promises')).readFile(
+	new URL(`../packages/container/test/shell-acceptance/evidence/${name}.json`, import.meta.url)));
+
+test('the archived attempts keep their recorded failures', async () => {
+	assert.match((await archived('distribution-id')).runs[0].result.error, /distributionId must be a bounded string/);
+	const text = (receipt, run) => Buffer.from(receipt.runs[run].result.result.stderr).toString();
+	assert.equal(text(await archived('mkdir-root-einval'), 0), "mkdir: can't create directory '/': Invalid argument\n");
+	assert.equal(text(await archived('mkdir-workspace-erofs'), 0), "mkdir: can't create directory '/workspace/': Read-only file system\n");
+	// The first warm pass: the cold run timed out during its Clang command.
+	const first = await archived('cold-timeout-warm-pass');
+	assert.deepEqual(first.runs.map((run) => run.result.type), ['timeout', 'result']);
+	assert.deepEqual(first.qualification.checks.filter((check) => check.id.startsWith('warm:') && !check.passed).map((check) => check.id),
+		['warm:owned-workers-retired'], 'only the cold owner Worker outliving its run failed the warm checks');
+});
+
+test('the streamed runs: one full pass, and two cold runs that stop after Clang completes', async () => {
+	const pass = await archived('streamed-run-1');
+	assert.equal(pass.applicationCommit, '04aac7e061607f9b8621c62a98e22ec3fd7a676c');
+	assert.deepEqual([pass.qualification.passed, pass.qualification.total, pass.shellAcceptancePassed], [30, 30, true]);
+	for (const name of ['streamed-run-2', 'streamed-run-3']) {
+		const receipt = await archived(name);
+		assert.equal(receipt.applicationCommit, pass.applicationCommit);
+		const [cold, warm] = receipt.runs.map((run) => run.result);
+		assert.equal(cold.type, 'timeout');
+		assert.equal(warm.type, 'result');
+		assert.equal(Buffer.from(warm.result.stdout).toString(), 'hello\n');
+		// Clang completed with status 0; the owner then stopped posting anything.
+		const marks = cold.events.filter((event) => ['dispatch', 'dispatchEnd', 'heartbeat'].includes(event.type));
+		const end = marks.findIndex((event) => event.type === 'dispatchEnd' && event.path === '/usr/local/bin/clang');
+		assert.equal(marks[end].status, 0);
+		assert.deepEqual(marks.slice(end + 1).map((event) => event.type), ['heartbeat']);
+		assert.equal(cold.ownedCleanup.mode, 'forced-host-worker-termination');
+	}
+});

@@ -101,3 +101,47 @@ The configuration names absolute paths and independently reviewed digests:
 pinned input it was derived from), `processSysrootReceipt`/`processSysrootReceiptSha256`,
 `processSysroot`,
 optional `chromium`, and a fresh `output` directory outside the checkout.
+
+## Results
+
+Every attempt's original browser and process receipts are archived under
+[`evidence/`](evidence/).
+
+| Attempt | Commit | Result |
+| --- | --- | --- |
+| [`distribution-id`](evidence/distribution-id.json) | `5717ae7b` | Failed before Bash: the distribution id joined two digests and exceeded the 128-byte bound |
+| [`mkdir-root-einval`](evidence/mkdir-root-einval.json) | `a9a8cf3b` | BusyBox loaded lazily on `mkdir`; `mkdir -p /workspace/demo` failed because the VFS answered `mkdir("/")` with `EINVAL` |
+| [`mkdir-workspace-erofs`](evidence/mkdir-workspace-erofs.json) | `7ccad493` | Then `mkdir("/workspace/")` gave `EROFS`: the read-only root was checked before existence |
+| [`cold-timeout-warm-pass`](evidence/cold-timeout-warm-pass.json) | `97a8e329` | **Warm run passes the whole script**; cold run timed out during Clang |
+| [`streamed-run-1`](evidence/streamed-run-1.json) | `04aac7e0` | **30/30: cold and warm pass** |
+| [`streamed-run-2`](evidence/streamed-run-2.json), [`-3`](evidence/streamed-run-3.json) | `04aac7e0` | Warm passes; cold stops right after Clang completes with status 0 |
+
+The two VFS defects are fixed in this branch: `mkdir` of the root, `.` or `..` and of an
+existing entry under a read-only parent now report `EEXIST`, as on Linux.
+
+In the passing runs, every check holds:
+
+- stdout `hello\n` and only the one Clang triple warning on stderr;
+- `main.c` and `result.txt` in the container VFS, and `hello.wasm` starting with the Wasm magic;
+- five Supervisor processes with pids, all exiting 0, including
+  `/workspace/demo/hello.wasm` run through the module directory route;
+- BusyBox fetched once after the `mkdir` dispatch, and Clang, LLD and the sysroot fetched
+  once after the `clang` dispatch;
+- no asset body request at all in the warm run;
+- every Worker retired.
+
+The cold and warm script take 46 and 61 seconds in the passing run; nearly all of it is the
+Clang command.
+
+**The cold run is not reliable yet.** In three of four cold runs the shell stopped making
+progress. In the two streamed ones, Clang's host command completed with status 0, the owner
+posted one more heartbeat, and then it never posted again; `./hello.wasm` was never
+dispatched. The owner did not answer cleanup and its Worker outlived the run, which is
+why the following warm run also fails `owned-workers-retired`. This matches the
+unresponsive-owner hang seen once on the shared-filesystem probe. The owner thread is
+blocked right after a host command completes, which points at the completion path that
+runs on it (`HostCommandProcess::finish` and what follows), but it is not traced yet.
+
+Heartbeats also pause for 30–40 seconds while Clang runs in passing runs. Measuring the
+VFS snapshot alone (export 0.4 s, structured clone 0.5 s for this tree) does not explain
+that pause.
