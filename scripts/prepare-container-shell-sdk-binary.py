@@ -51,8 +51,19 @@ def verify_pins(pins):
 def verify_source(policy):
     verify_pins(policy["sourcePins"])
     prepared = Path(policy["preparedSource"]).resolve()
-    for name in ("wasmer-sdk", "wasmer-wasix"):
+    trees = policy.get("sourceTrees", ["wasmer-sdk", "wasmer-wasix"])
+    if (not isinstance(trees, list) or any(not isinstance(name, str) for name in trees)
+            or len(set(trees)) != len(trees)
+            or not {"wasmer-sdk", "wasmer-wasix"}.issubset(trees)
+            or not set(trees).issubset({"wasmer-sdk", "wasmer-wasix", "virtual-fs"})):
+        raise ValueError("invalid prepared source tree inventory")
+    actual_trees = {path.name for path in prepared.iterdir() if path.is_dir()}
+    if actual_trees != set(trees):
+        raise ValueError("prepared source tree inventory changed")
+    for name in trees:
         root = prepared / name
+        if root.is_symlink() or not root.is_dir():
+            raise ValueError(f"source tree must be a real directory: {root}")
         actual = set()
         for path in root.rglob("*"):
             if path.is_symlink():
