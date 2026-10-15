@@ -137,6 +137,14 @@ Two route kinds reach commands that delegated live stdio cannot:
   path, not the shell's spelling. The module is read from the container VFS and passes the
   adapter's import-profile checks. An exact route takes precedence.
 
+The returned handler's `interrupt()` aborts every command it is running or
+starting, as a terminal's interrupt key stops the foreground job. Each completes with
+status 130 (`128 + SIGINT`) and no diagnostic, and the shell continues with that status:
+Bash sees an ordinary exit, not a signal death, so a non-interactive script is not
+stopped by it unless `set -e` applies. A live guest's Worker is terminated; a snapshot
+adapter discards its private changes. This is owner-initiated cancellation, not a guest
+`kill` or signal delivery.
+
 `createShellFilesystem(fs, { root })` exposes part of the container VFS to a trusted
 shell runtime as a synchronous delegate, such as the patched SDK's
 `Directory.fromHostFileSystem`. Paths are absolute inside the mount, and the root

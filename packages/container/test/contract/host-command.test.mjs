@@ -221,3 +221,46 @@ test('modules below a registered directory run with wasm-run on the live artifac
     assert.equal((await c.inspect()).processes.length, 0);
   } finally { await c.dispose(); }
 });
+
+test('interrupt stops running and starting commands with status 130 and keeps the handler usable', { timeout: 30000 }, async () => {
+  const c = createContainer({
+    adapters: [createLiveWasiAdapter({ workerFactory: liveWorker }), createWasiAdapter({ workerFactory })], maxProcesses: 4,
+    commands: { probe: { adapter: 'wasi-preview1-live', bytes: command }, snap: { adapter: 'wasi-preview1', bytes: command } }
+  });
+  const records = [];
+  try {
+    const handler = createHostCommandHandler(c, {
+      routes: { '/bin/probe': { command: 'probe' }, '/bin/snap': { command: 'snap', stdio: 'forwarded' } },
+      onRecord: (record) => records.push(record)
+    });
+    assert.equal(handler.interrupt(), 0, 'nothing to interrupt');
+    const base = { cwd: '/workspace', env: [], stdin: null };
+    const started = async () => {
+      while (!(await c.inspect()).processes.some((process) => process.state === 'running')) await new Promise((done) => setTimeout(done, 10));
+    };
+    // A live CPU loop with delegated stdio, and a snapshot loop on a forwarded route.
+    for (const path of ['/bin/probe', '/bin/snap']) {
+      const stdout = writer(), stderr = writer();
+      const pending = handler({ ...base, path, argv: [path, 'loop'], stdout, stderr });
+      await started();
+      assert.equal(handler.interrupt(), 1);
+      assert.equal(await pending, HOST_COMMAND_STATUS.interrupted);
+      assert.equal(stderr.bytes.length, 0, 'no diagnostic for an interrupt');
+      assert.equal((await c.inspect()).processes.length, 0);
+    }
+    // Interrupted while starting, before the guest runs.
+    const early = handler({ ...base, path: '/bin/probe', argv: ['probe', 'loop'], stdout: writer(), stderr: writer() });
+    assert.equal(handler.interrupt(), 1);
+    assert.equal(await early, HOST_COMMAND_STATUS.interrupted);
+    // An interrupted snapshot never commits, and the handler keeps running later commands.
+    assert.throws(() => c.fs.readFile('/workspace/out.bin'), { code: 'ENOENT' });
+    const after = writer();
+    assert.equal(await handler({ ...base, path: '/bin/snap', argv: ['snap', 'roundtrip'], stdout: after, stderr: writer() }), 0);
+    assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved');
+    assert.deepEqual(records.slice(0, 2).map((record) => [record.status, record.result?.reason]), [[130, 'terminated'], [130, 'terminated']]);
+    assert.equal(records[2].status, 130);
+    assert(['ABORTED', undefined].includes(records[2].startError) && (records[2].startError || records[2].result?.reason === 'terminated'));
+    assert.deepEqual([records[3].status, records[3].result?.reason], [0, 'exited']);
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
