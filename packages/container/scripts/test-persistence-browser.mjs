@@ -544,6 +544,7 @@ try {
   const evidence = {
     schemaVersion: 1, browser: await browser.version(), platform: process.platform,
     applicationCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+    kernel: release(), image: process.env.ImageVersion, arch: process.arch,
     userAgent: initial.userAgent, secureContext: initial.secure, isolatedProfileRequired: false,
     implementationSha256: createHash('sha256').update(implementation).digest('hex'),
     backupImplementationSha256: createHash('sha256').update(await readFile(resolve(root, 'dist/workspace/backup.js'))).digest('hex'),

@@ -71,5 +71,6 @@ jobs:
           path: |
             .codex/container-*.json
             .codex/container-product/*.json
+          # The receipts live in a dot directory, which upload-artifact skips by default.
           include-hidden-files: true
           if-no-files-found: error
