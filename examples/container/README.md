@@ -33,3 +33,23 @@ node packages/container/scripts/test-product-browser.mjs
 ```
 
 The suite exercises actual owner RPC, Workers, Wasm, OPFS/IndexedDB, conflicts, downloads, restore, cache cold/warm reuse, cancellation and writer ownership. Its fixture profile is not evidence that Bash, BusyBox or Clang passed their separate release gates.
+
+For the actual Bash/BusyBox/Clang profile, provide the explicit local shell configuration used by the producer acceptance tools:
+
+```sh
+node examples/container/serve-bash.mjs /absolute/path/to/pinned-shell-config.json
+```
+
+This server reuses the existing receipt and artifact verifier. The configuration supplies local SDK package, Bash WEBc, BusyBox receipt/bytes, Clang producer/smoke receipts and compressed modules, and the complete process-profile sysroot with its derivation receipt. SDK pins must match the reviewed SDK profile in the repository. It does not build LLVM, find a mutable “latest” package, upload files or deploy infrastructure. The SDK remains a fixed static module import of the pinned host package; it is not inlined into a different module URL. Manifests select only pre-registered runtime adapters and verified data assets.
+
+`bash-profile.mjs` is the trusted shared host setup for the browser acceptance owner and `bash-owner.mjs`. The workbench's Bash owner adds the OPFS workspace, save controller and distinct cache callback. The initial shell is `/bin/bash --noprofile --norc`, reading real script input from the process streams. It exposes only the qualified BusyBox applets, Clang profile and explicit `wasm-run` route. The current compiler filesystem is a snapshot adapter with a writer lease; live utility/artifact execution uses the common workspace directly. This profile does not promise a PTY, full POSIX compatibility, job control or a persistent SDK instance across page reloads.
+
+The separate product gate sends the development plan's unchanged acceptance script through the rendered terminal, checks that source exists before Clang starts downloading, saves the output, reloads the owner, directly reruns the persisted executable, repeats a warm compile, and interrupts a real foreground command blocked on stdin. Its evidence is distinct from the small byte-guest UI regression:
+
+```sh
+CONTAINER_PRODUCT_SHELL_OUTPUT=/path/to/new-real-shell-evidence \
+node packages/container/scripts/test-product-shell-browser.mjs \
+  /absolute/path/to/pinned-shell-config.json
+```
+
+Use the resulting receipt's actual browser, source hashes and checks to determine qualification. The presence of this example or a successful host bundle alone is not a passing real-shell gate.
