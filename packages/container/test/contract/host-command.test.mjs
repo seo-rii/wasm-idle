@@ -1,0 +1,159 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { createContainer } from '../../dist/container.js';
+import { createLiveWasiAdapter } from '../../dist/adapters/wasi-live/index.js';
+import { createWasiAdapter } from '../../dist/adapters/wasi/index.js';
+import { createHostCommandHandler, HOST_COMMAND_STATUS } from '../../dist/index.js';
+import { workerFactory, command } from './node-worker.mjs';
+const live = new Uint8Array(readFileSync(new URL('../fixtures/live.wasm', import.meta.url)));
+const liveWorker = () => workerFactory('../../dist/adapters/wasi-live/worker.js');
+const make = () => createContainer({
+  adapters: [createLiveWasiAdapter({ workerFactory: liveWorker }), createWasiAdapter({ workerFactory })],
+  maxProcesses: 8,
+  commands: {
+    tool: { adapter: 'wasi-preview1-live', bytes: live },
+    probe: { adapter: 'wasi-preview1-live', bytes: command },
+    batch: { adapter: 'wasi-preview1', bytes: live }
+  }
+});
+const encode = (value) => new TextEncoder().encode(value), decode = (value) => new TextDecoder().decode(value);
+const concat = (chunks) => {
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0)); let offset = 0;
+  for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+  return out;
+};
+// Caller-owned endpoints that record every request, like a shell child's descriptors.
+function reader(data) {
+  let offset = 0;
+  const endpoint = {
+    requests: [], closed: 0,
+    async read(max) { endpoint.requests.push(max); const end = Math.min(data.length, offset + max); const out = data.slice(offset, end); offset = end; return out; },
+    close() { endpoint.closed++; },
+    get remaining() { return data.length - offset; }
+  };
+  return endpoint;
+}
+function writer({ limit = Infinity, failure } = {}) {
+  const endpoint = {
+    chunks: [], requests: [], closed: 0,
+    async write(bytes) {
+      endpoint.requests.push(bytes.length);
+      if (failure) throw failure;
+      const n = Math.min(bytes.length, limit); endpoint.chunks.push(bytes.slice(0, n)); return n;
+    },
+    close() { endpoint.closed++; },
+    get bytes() { return concat(endpoint.chunks); }
+  };
+  return endpoint;
+}
+
+test('delegated stdin is read on demand, never past the guest request', { timeout: 30000 }, async () => {
+  const c = make();
+  try {
+    const input = reader(encode('xyz')), output = writer();
+    const p = await c.spawn('tool', ['one'], { stdio: { stdin: input, stdout: output, stderr: writer() } });
+    assert.equal((await p.exited).code, 0);
+    assert.deepEqual(input.requests, [1]);
+    assert.equal(input.remaining, 2);
+    assert.equal(decode(output.bytes), 'x');
+    assert.equal(input.closed + output.closed, 0, 'the caller keeps ownership after exit');
+  } finally { await c.dispose(); }
+});
+
+test('delegated binary copy follows partial writes and exact end of file', { timeout: 30000 }, async () => {
+  const c = make();
+  try {
+    const data = Uint8Array.from({ length: 200003 }, (_, i) => (i * 7) % 256);
+    const input = reader(data), output = writer({ limit: 4093 });
+    const p = await c.spawn('tool', [], { stdio: { stdin: input, stdout: output } });
+    assert.equal((await p.exited).code, 0);
+    assert.deepEqual(output.bytes, data);
+    assert(input.requests.every(n => n > 0 && n <= 65536));
+    assert(output.requests.every(n => n > 0 && n <= 65536));
+    // Delegated channels are no longer container streams; stderr stays container-owned.
+    assert.equal((await p.stdout.getReader().read()).done, true);
+    await assert.rejects(p.stdin.getWriter().write(new Uint8Array([1])));
+    assert.equal((await new Response(p.stderr).arrayBuffer()).byteLength, 0);
+  } finally { await c.dispose(); }
+});
+
+test('delegated EPIPE reaches the guest as its own errno', { timeout: 30000 }, async () => {
+  const c = make();
+  try {
+    const output = writer({ failure: Object.assign(new Error('closed reader'), { code: 'EPIPE' }) });
+    const p = await c.spawn('tool', ['yes'], { stdio: { stdout: output } });
+    assert.deepEqual(await p.exited, { code: 64, reason: 'exited' });
+    const unknown = writer({ failure: new Error('opaque') });
+    const q = await c.spawn('tool', ['yes'], { stdio: { stdout: unknown } });
+    assert.deepEqual(await q.exited, { code: 29, reason: 'exited' }, 'unknown endpoint failures become EIO');
+  } finally { await c.dispose(); }
+});
+
+test('guest fd_close closes the delegated endpoint once and null starts closed', { timeout: 30000 }, async () => {
+  const c = make();
+  try {
+    const output = writer(), input = reader(new Uint8Array());
+    const p = await c.spawn('tool', ['close-output'], { stdio: { stdin: input, stdout: output } });
+    assert.equal((await p.exited).code, 0);
+    assert.equal(decode(output.bytes), 'eof');
+    assert.equal(output.closed, 1); assert.equal(input.closed, 0);
+    const q = await c.spawn('tool', ['flood'], { stdio: { stdout: null } });
+    assert.deepEqual(await q.exited, { code: 8, reason: 'exited' }, 'EBADF from a closed stdout');
+  } finally { await c.dispose(); }
+});
+
+test('delegated stdio is limited to live spawn', { timeout: 30000 }, async () => {
+  const c = make();
+  try {
+    await assert.rejects(c.spawn('batch', [], { stdio: { stdout: writer() } }), { code: 'UNSUPPORTED_PROFILE' });
+    await assert.rejects(c.run('tool', [], { stdio: {} }), { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(c.spawnPipeline([{ command: 'tool' }, { command: 'tool' }], { stdio: {} }), { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(c.spawn('tool', [], { stdio: { stdout: { write() {} } } }), { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(c.spawn('tool', [], { stdio: { other: null } }), { code: 'INVALID_ARGUMENT' });
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});
+
+test('host command handler runs the routed command with shell argv, environment and stdio', { timeout: 30000 }, async () => {
+  const c = make(), records = [];
+  try {
+    const handler = createHostCommandHandler(c, {
+      routes: { '/opt/host/bin/probe': { command: 'probe' }, '/opt/host/bin/tool': { command: 'tool' } },
+      onRecord: (record) => records.push(record)
+    });
+    const stdout = writer(), stderr = writer();
+    const status = await handler({
+      path: '/opt/host/bin/probe', argv: ['probe', 'roundtrip', 'space arg', '한글', ''], cwd: '/workspace',
+      env: [encode('A=1'), encode('EMPTY='), encode('KO=값')], stdin: reader(new Uint8Array()), stdout, stderr
+    });
+    assert.equal(status, 0);
+    assert.deepEqual(decode(stdout.bytes).split('\0'), ['probe', 'roundtrip', 'space arg', '한글', '', '']);
+    assert.deepEqual(decode(stderr.bytes).split('\0').filter(Boolean).sort(), ['A=1', 'EMPTY=', 'KO=값']);
+    assert.equal(decode(c.fs.readFile('/workspace/out.bin')), 'saved');
+    const exit = await handler({ path: '/opt/host/bin/probe', argv: ['probe', 'exit'], cwd: '/workspace', env: [], stdin: null, stdout: writer(), stderr: writer() });
+    assert.equal(exit, 23);
+    const crash = await handler({ path: '/opt/host/bin/tool', argv: ['tool', 'crash'], cwd: '/workspace', env: [], stdin: null, stdout: writer(), stderr: writer() });
+    assert.equal(crash, HOST_COMMAND_STATUS.runtimeError);
+    assert.deepEqual(records.map(r => [r.status, r.result?.reason]), [[0, 'exited'], [23, 'exited'], [134, 'runtime-error']]);
+  } finally { await c.dispose(); }
+});
+
+test('host command start failures keep the shell alive with a status and diagnostic', { timeout: 30000 }, async () => {
+  const c = make(), records = [];
+  try {
+    const handler = createHostCommandHandler(c, { routes: { '/opt/host/bin/tool': { command: 'tool' }, '/opt/host/bin/gone': { command: 'missing' } }, onRecord: (record) => records.push(record) });
+    const base = { cwd: '/workspace', env: [], stdin: null, stdout: writer() };
+    const unrouted = writer();
+    assert.equal(await handler({ ...base, path: '/opt/host/bin/other', argv: ['other'], stderr: unrouted }), 127);
+    assert.match(decode(unrouted.bytes), /^other: /);
+    assert.equal(await handler({ ...base, path: '/opt/host/bin/gone', argv: ['gone'], stderr: writer() }), 127);
+    assert.equal(await handler({ ...base, path: '/opt/host/bin/tool', argv: ['tool'], env: [new Uint8Array([0x41, 0x3d, 0xff])], stderr: writer() }), 126);
+    assert.equal(await handler({ ...base, path: '/opt/host/bin/tool', argv: ['tool'], env: [encode('A=1'), encode('A=2')], stderr: writer() }), 126);
+    const missing = writer();
+    assert.equal(await handler({ ...base, path: '/opt/host/bin/tool', argv: ['tool'], cwd: '/workspace/absent', stderr: missing }), 126);
+    assert.match(decode(missing.bytes), /^tool: /);
+    assert.deepEqual(records.map(r => r.startError), ['COMMAND_NOT_FOUND', 'COMMAND_NOT_FOUND', 'INVALID_ARGUMENT', 'INVALID_ARGUMENT', 'ENOENT']);
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { await c.dispose(); }
+});

@@ -90,6 +90,37 @@ Intermediate stdout streams are owned by the pipeline. It does not parse shell
 strings, choose POSIX pipeline exit status, redirect files, provide job control,
 or qualify WASIX/Bash/BusyBox compatibility.
 
+## Delegated stdio and shell host commands
+
+`spawn(command, args, { stdio })` lets a trusted caller hand a live guest its own
+descriptors instead of container streams. Each of `stdin`, `stdout` and `stderr` may be
+omitted (container stream), `null` (closed from the start, so guest use is `EBADF`) or a
+caller-owned endpoint: `{ read(maxBytes), close() }` for stdin and
+`{ write(bytes), close() }` for outputs. The guest's `fd_read`, `fd_write` and
+`fd_close` on that descriptor call the endpoint directly through the same Supervisor
+RPC: a read never asks for more than the guest requested, a write may be partial and
+reports the endpoint's exact count, and a zero-length request does not call it. Endpoint
+failures reach the guest as their `code` when it is one of `EINVAL`, `EBADF`, `EACCES`,
+`EISDIR`, `ENOTSUP`, `EPIPE` or `EIO`; anything else becomes `EIO`. The container never
+closes a delegated endpoint when the process exits; the guest's own `fd_close` closes it
+once. The returned stream for a delegated channel is already closed. Delegated output is
+not captured, so the combined output budget does not apply to it. Only live adapters
+accept `stdio`; `run` and `spawnPipeline` reject it.
+
+`createHostCommandHandler(container, { routes })` turns this into a trusted shell
+host-command handler. It accepts the structural invocation of the patched WASIX SDK's
+`Runtime.registerHostCommand` (path, argv, raw environment bytes, actual cwd and
+descriptors 0–2) without importing that SDK. Each exact registered path maps to one
+container command; the shell's `argv[1..]` follow the route's `args`, and the container
+supplies argv0. Environment entries must be unique UTF-8 `name=value` pairs. The guest
+runs with the shell child's descriptors delegated as above and the shell's cwd, which
+must also exist in this container's VFS: the shell's WASIX filesystem is not the
+container filesystem yet. Results map to shell statuses: an exit code keeps its low
+eight bits, a timeout is 124, a filesystem conflict 125, a runtime failure 134 and a
+termination 143. A missing route or command is 127 and any other start failure is 126,
+each with a one-line diagnostic on the delegated stderr. `onRecord` observes outcomes
+without argv, environment or byte contents. This is not a shell, PTY or signal mapping.
+
 Validation uses real no-libc Wasm fixtures (`test/fixtures/live.c` and `path.c`), including
 two live guests sharing files, byte counts beyond the ring/RPC bounds, early reader
 exit, cancellation during read/write/CPU execution, crash visibility, and restart.

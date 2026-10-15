@@ -158,3 +158,35 @@ extension point; the current SDK JavaScript runtime still inherits no implementa
 JavaScript callback must remain on its owning Worker rather than being marked `Send + Sync`.
 Clang and BusyBox integration, verified command-lazy loading and public process cancellation
 must pass their actual common-resource fixtures before candidate B or a shell MVP is promoted.
+
+## Trusted host-command dispatch (candidate B, first layer)
+
+Bridge patches 0007/0008 ([#205](https://github.com/seo-rii/wasm-idle/pull/205)) implement
+the `Runtime::host_command` seam in the SDK:
+- a registered exact path takes the prepared child out of the WASIX builder;
+- the SDK moves that child to the scheduler thread;
+- the JavaScript handler registered there receives the snapshot plus descriptors 0–2;
+- JavaScript values never cross threads.
+
+On the C-15 integration branch, `createHostCommandHandler` runs container live guests with
+those descriptors delegated directly. The guest's own `fd_read`/`fd_write`/`fd_close` call
+Bash's child descriptors through the Supervisor RPC, with no relay buffer.
+
+Actual Chromium runs confirm:
+- argv, environment and cwd fidelity;
+- binary pipes and shell redirections;
+- exact stdin consumption;
+- `EPIPE`, PATH lookup, tail exec, start failure and cleanup.
+
+[#208](https://github.com/seo-rii/wasm-idle/pull/208) fixes two WASIX `proc_join` status
+defects. Statuses of 79 and above were reported as 79, and WNOHANG reported a running child as
+exited 0. An intermittent first-command status loss and a rare hang before dispatch remain
+open; see `packages/container/test/host-command-shell/README.md`.
+
+This layer does not join the filesystems. The shell keeps its WASIX `Directory`, and the
+guest uses the container VFS. `commonContainerFdVfsQualified` and `shellBackendReady`
+remain false. The next layers are:
+- a live shell filesystem backed by the container VFS, including WASIX cache revalidation;
+- descriptors beyond stdio;
+- public cancellation of a running host command;
+- BusyBox/Clang dispatch.

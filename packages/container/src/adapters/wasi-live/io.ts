@@ -1,8 +1,9 @@
-import { FsError, type MemoryFileSystem, type PathOptions, type OpenOptions } from '../../fs/index.js';
+import { FsError, type FsErrorCode, type MemoryFileSystem, type PathOptions, type OpenOptions } from '../../fs/index.js';
 import { createPipe, pipeReadable, PipeError } from '../../fd/pipe.js';
 import { ContainerError } from '../../errors.js';
 import { Operation, RPC_BYTES, type RpcCall, type RpcReply } from '../../transport/rpc.js';
 import type { RuntimeLimits } from '../types.js';
+import type { DelegatedReader, DelegatedStdio, DelegatedWriter } from '../../types.js';
 import type { WasiFileSystem, WasiPathReference, WasiDirectoryEntry } from '../wasi/host.js';
 import type { WasiStdio } from '../wasi/stdio.js';
 
@@ -52,17 +53,40 @@ export function createRemoteStdio(call: RpcCall): WasiStdio {
   };
 }
 
+const delegatedCodes = new Set<string>(['EINVAL', 'EBADF', 'EACCES', 'EISDIR', 'ENOTSUP', 'EPIPE', 'EIO']);
+/** Report a caller endpoint failure to the guest as one of its own errno values. */
+function delegatedError(error: unknown): FsError {
+  const code = (error as { code?: unknown } | null)?.code;
+  return new FsError(typeof code === 'string' && delegatedCodes.has(code) ? code as FsErrorCode : 'EIO', 'Delegated descriptor failed');
+}
+
 /** All descriptors and pending I/O belong to this invocation, even in a shared VFS. */
-export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capacity: number, onFailure: (error: unknown) => void) {
+export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capacity: number, onFailure: (error: unknown) => void, stdio?: DelegatedStdio) {
   const input = createPipe(capacity), output = createPipe(capacity), errorOutput = createPipe(capacity);
   const descriptors = new Map<number, { fd: number; root: string }>(), closedStdio = new Set<number>();
+  // Caller-owned endpoints replace the container pipe for that channel.
+  const delegated = new Map<number, DelegatedReader | DelegatedWriter>();
   let nextFd = 3, disposed = false, inputClosed = false, inputBytes = 0, outputBytes = 0;
   const closeInput = () => { if (!inputClosed) { inputClosed = true; input.writer.close(); } };
   const closeStdio = (fd: number) => {
     if (closedStdio.has(fd)) throw new FsError('EBADF', 'Standard descriptor closed');
     closedStdio.add(fd);
+    const endpoint = delegated.get(fd);
+    if (endpoint) {
+      delegated.delete(fd);
+      try { endpoint.close(); } catch (error) { throw delegatedError(error); }
+      return;
+    }
     if (fd === 0) input.reader.close(); else (fd === 1 ? output : errorOutput).writer.close();
   };
+  for (const [fd, name] of [[0, 'stdin'], [1, 'stdout'], [2, 'stderr']] as const) {
+    if (!stdio || !(name in stdio)) continue;
+    const endpoint = stdio[name];
+    // The container stream for this channel ends immediately; the guest uses the endpoint.
+    if (fd === 0) { inputClosed = true; input.writer.close(); input.reader.close(); }
+    else (fd === 1 ? output : errorOutput).writer.close();
+    if (endpoint) delegated.set(fd, endpoint); else closedStdio.add(fd);
+  }
   const number = (n: unknown, signed = false) => {
     if (typeof n !== 'number' || !Number.isSafeInteger(n) || !signed && n < 0) throw new FsError('EINVAL', 'Invalid I/O number');
     return n;
@@ -123,6 +147,10 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
     dispose() {
       if (disposed) return;
       disposed = true;
+      // Delegated endpoints remain open: their caller owns them. Their
+      // container pipe ends were already closed when the channel was delegated.
+      for (const fd of delegated.keys()) closedStdio.add(fd);
+      delegated.clear();
       for (const n of [0, 1, 2]) if (!closedStdio.has(n)) closeStdio(n);
       for (const descriptor of descriptors.values()) fs.close(descriptor.fd);
       descriptors.clear();
@@ -206,11 +234,27 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
             }
             value = entries; break;
           }
-          case Operation.Stdin:
+          case Operation.Stdin: {
             if (closedStdio.has(0)) throw new FsError('EBADF', 'stdin is closed');
-            return { bytes: await input.reader.read(length(a)) };
+            const size = length(a), endpoint = delegated.get(0) as DelegatedReader | undefined;
+            if (!endpoint) return { bytes: await input.reader.read(size) };
+            if (!size) return { bytes: new Uint8Array() };
+            let data: unknown;
+            try { data = await endpoint.read(size); } catch (error) { throw delegatedError(error); }
+            if (!(data instanceof Uint8Array) || data.length > size) throw new FsError('EIO', 'Delegated stdin returned invalid bytes');
+            return { bytes: data.slice() };
+          }
           case Operation.Stdout: {
             if (a !== 1 && a !== 2 || closedStdio.has(a)) throw new FsError('EBADF', 'Output descriptor is closed');
+            const endpoint = delegated.get(a) as DelegatedWriter | undefined;
+            if (endpoint) {
+              // Delegated output is not captured here, so the capture budget does not apply.
+              if (!bytes.length) { value = 0; break; }
+              let written: unknown;
+              try { written = await endpoint.write(bytes.slice()); } catch (error) { throw delegatedError(error); }
+              if (typeof written !== 'number' || !Number.isSafeInteger(written) || written < 0 || written > bytes.length) throw new FsError('EIO', 'Delegated output returned an invalid count');
+              value = written; break;
+            }
             if (outputBytes + bytes.length > limits.maxOutputBytes) throw new ContainerError('RESOURCE_LIMIT', 'Live stdout/stderr exceed configured limit');
             value = await (a === 1 ? output : errorOutput).writer.write(bytes); outputBytes += value as number; break;
           }

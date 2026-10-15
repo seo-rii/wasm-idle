@@ -7,3 +7,5 @@ export { MemoryFileSystem, FsError } from './fs/index.js';
 export type * from './fs/types.js';
 export type * from './adapters/types.js';
 export * from './packages/index.js';
+export { createHostCommandHandler, statusForResult, HOST_COMMAND_STATUS } from './shell/host-command.js';
+export type { HostCommandInvocation, HostCommandRoute, HostCommandRecord, HostCommandHandlerOptions } from './shell/host-command.js';

@@ -31,7 +31,7 @@ export function createLiveWasiAdapter(options: LiveWasiAdapterOptions = {}): Liv
       void result.catch(() => {});
       let worker: CommandWorker | undefined, dead = false, running = false, isReady = false;
       let disposal: Promise<void> | undefined;
-      const io = createLiveIo(request.fs, request.limits, pipeBytes, (error) => fail(error));
+      const io = createLiveIo(request.fs, request.limits, pipeBytes, (error) => fail(error), request.stdio);
       const server = createRpcServer(buffer, request.generation, io.dispatch);
       const dispose = () => disposal ??= (async () => {
         dead = true; server.stop(); io.dispose();

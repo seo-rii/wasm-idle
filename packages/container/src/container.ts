@@ -3,7 +3,7 @@ import { MemoryFileSystem, type FileSystemLease, type MemoryFileSystemOptions, t
 import { ProcessLifecycle, snapshotInvocation } from './process/lifecycle.js';
 import type { CommandAdapter, CommandDefinition, PreparedRuntime, PreparedLiveRuntime, RuntimeLimits } from './adapters/types.js';
 import { PipeError } from './fd/pipe.js';
-import type { CapturedProcessResult, ContainerInspection, ContainerProcess, RunOptions, SpawnOptions, ProcessResult, PipelineCommand, ContainerPipeline } from './types.js';
+import type { CapturedProcessResult, ContainerInspection, ContainerProcess, DelegatedStdio, RunOptions, SpawnOptions, ProcessResult, PipelineCommand, ContainerPipeline } from './types.js';
 
 import type { ContainerPackageManager } from './packages/manager.js';
 import type { PersistentWorkspace } from './fs/persistence/index.js';
@@ -25,6 +25,20 @@ const positive = (value: number, name: string, max: number) => {
   if (!Number.isSafeInteger(value) || value < 1 || value > max) throw new ContainerError('INVALID_ARGUMENT', `Invalid ${name}`);
   return value;
 };
+function delegatedStdio(value: unknown): DelegatedStdio | undefined {
+  if (value === undefined) return undefined;
+  const invalid = () => new ContainerError('INVALID_ARGUMENT', 'Invalid delegated stdio');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const channels = { stdin: 'read', stdout: 'write', stderr: 'write' } as const;
+  const result: Record<string, unknown> = {};
+  for (const [name, endpoint] of Object.entries(value)) {
+    if (!(name in channels)) throw invalid();
+    const method = channels[name as keyof typeof channels];
+    if (endpoint !== null && (!endpoint || typeof endpoint !== 'object' || typeof endpoint[method] !== 'function' || typeof endpoint.close !== 'function')) throw invalid();
+    result[name] = endpoint;
+  }
+  return Object.freeze(result) as DelegatedStdio;
+}
 function byteOutput(bytes: Promise<Uint8Array>) {
   let offset = 0;
   return new ReadableStream<Uint8Array>({
@@ -88,6 +102,7 @@ export class Container {
   }
   async #spawn(command: string, args: readonly string[], options: SpawnOptions, reservation?: { remaining: number }): Promise<ContainerProcess> {
     const invocation = snapshotInvocation(command, args, options);
+    const stdio = delegatedStdio(options.stdio);
     if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
     if (this.workspace?.inspect().state === 'disposed') throw new ContainerError('DISPOSED', 'Workspace owner has been disposed');
     if (invocation.signal?.aborted) throw new ContainerError('ABORTED', 'Command aborted before startup');
@@ -107,6 +122,7 @@ export class Container {
     if (!this.#adapters.has(adapterId)) throw new ContainerError('UNSUPPORTED_PROFILE', `Adapter is not registered: ${adapterId}`);
     if (this.fs.stat(invocation.cwd).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'cwd must name a directory');
     const adapter = this.#adapters.get(adapterId)!;
+    if (stdio && adapter.filesystem !== 'live') throw new ContainerError('UNSUPPORTED_PROFILE', 'Delegated stdio requires a live adapter');
     const pid = this.#nextPid++, lifecycle = new ProcessLifecycle(), controller = new AbortController();
     let runtime: PreparedRuntime | PreparedLiveRuntime | undefined, lease: FileSystemLease | undefined, finishing: Promise<void> | undefined;
     let liveLease: { release(): void } | undefined;
@@ -176,7 +192,7 @@ export class Container {
       let liveRuntime: PreparedLiveRuntime | undefined;
       if (adapter.filesystem === 'live') {
         liveLease = this.fs.acquireLive();
-        runtime = liveRuntime = await adapter.start({ ...start, fs: this.fs });
+        runtime = liveRuntime = await adapter.start({ ...start, fs: this.fs, ...(stdio ? { stdio } : {}) });
       } else {
         lease = this.fs.acquireSnapshot();
         runtime = await adapter.start({ ...start, snapshot: lease.snapshot });
@@ -231,6 +247,7 @@ export class Container {
   async spawnPipeline(commands: readonly PipelineCommand[], options: SpawnOptions = {}): Promise<ContainerPipeline> {
     if (this.#disposed) throw new ContainerError('DISPOSED', 'Container has been disposed');
     if (!Array.isArray(commands) || commands.length < 2) throw new ContainerError('INVALID_ARGUMENT', 'A pipeline requires at least two commands');
+    if (options.stdio !== undefined) throw new ContainerError('INVALID_ARGUMENT', 'Pipelines own their stdio');
     if (commands.length > this.#maxProcesses - this.#processes.size - this.#reservedProcesses) throw new ContainerError('RESOURCE_LIMIT', 'Cannot reserve all pipeline processes');
     const invocations = commands.map(entry => {
       if (!entry || typeof entry !== 'object') throw new ContainerError('INVALID_ARGUMENT', 'Invalid pipeline command');
@@ -262,6 +279,7 @@ export class Container {
   async run(command: string, args: readonly string[] = [], options: RunOptions = {}): Promise<CapturedProcessResult> {
     const max = positive(options.maxCaptureBytes ?? 8 * 1024 * 1024, 'maxCaptureBytes', 256 * 1024 * 1024);
     if (options.stdin !== undefined && !(options.stdin instanceof Uint8Array)) throw new ContainerError('INVALID_ARGUMENT', 'stdin requires bytes');
+    if (options.stdio !== undefined) throw new ContainerError('INVALID_ARGUMENT', 'run captures its own stdio; use spawn to delegate it');
     const bytes = options.stdin?.slice();
     const process = await this.spawn(command, args, options);
     let captured = 0;
