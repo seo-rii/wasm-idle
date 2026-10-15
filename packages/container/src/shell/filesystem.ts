@@ -39,6 +39,10 @@ export interface ShellFilesystem {
   truncate(handle: number, size: number): void;
   close(handle: number): void;
 }
+export interface ShellFilesystemBinding extends ShellFilesystem {
+  /** Close every owned descriptor after the backend stops; idempotent. */
+  dispose(): void;
+}
 export interface ShellFilesystemOptions {
   /** Absolute container directory exposed as the mount root. Default `/workspace`. */
   readonly root?: string;
@@ -55,14 +59,16 @@ const statOf = (stat: FileStat): ShellFileStat => Object.freeze({ type: stat.typ
  * Operations run directly on the VFS, like editor writes; there is no snapshot
  * or copy. A snapshot adapter's writer lease makes mutations fail with `EBUSY`.
  */
-export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesystemOptions = {}): ShellFilesystem {
+export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesystemOptions = {}): ShellFilesystemBinding {
   const root = options.root ?? '/workspace', maxIo = options.maxIoBytes ?? 1024 * 1024, maxHandles = options.maxHandles ?? 1024;
   if (typeof root !== 'string' || !root.startsWith('/') || !Number.isSafeInteger(maxIo) || maxIo < 1 || maxIo > 16 * 1024 * 1024 ||
       !Number.isSafeInteger(maxHandles) || maxHandles < 1 || maxHandles > 4096) throw new ContainerError('INVALID_ARGUMENT', 'Invalid shell filesystem options');
   if (fs.stat(root).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'Shell filesystem root must be a directory');
   const context = { cwd: root, root };
+  let disposed = false;
   // The root capability confines every path and symlink to the mount.
   const local = (path: unknown) => {
+    if (disposed) throw new FsError('EBADF', 'Shell filesystem binding is disposed');
     if (typeof path !== 'string' || !path.startsWith('/') || path.includes('\0') || path.length > 4096) throw new FsError('EINVAL', 'Invalid shell path');
     return '.' + path;
   };
@@ -77,7 +83,7 @@ export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesy
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > max) throw new FsError('EINVAL', 'Invalid shell I/O number');
     return value;
   };
-  const delegate: ShellFilesystem = {
+  const delegate: ShellFilesystemBinding = {
     stat: (path) => statOf(fs.stat(local(path), context)),
     lstat: (path) => statOf(fs.lstat(local(path), context)),
     readdir: (path) => {
@@ -111,7 +117,15 @@ export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesy
     },
     fstat: (id) => statOf(fs.fstat(handle(id).fd)),
     truncate: (id, size) => { fs.ftruncate(handle(id).fd, integer(size, Number.MAX_SAFE_INTEGER)); },
-    close: (id) => { const entry = handle(id); handles.delete(id); fs.close(entry.fd); }
+    close: (id) => { const entry = handle(id); handles.delete(id); fs.close(entry.fd); },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      const errors: unknown[] = [];
+      for (const entry of handles.values()) { try { fs.close(entry.fd); } catch (error) { errors.push(error); } }
+      handles.clear();
+      if (errors.length) throw new AggregateError(errors, 'Shell filesystem descriptor cleanup failed');
+    }
   };
   return Object.freeze(delegate);
 }

@@ -114,3 +114,18 @@ test('bounded I/O and handle budgets are enforced', () => {
   assert.throws(() => shell.read(a, -1, 1), code('EINVAL'));
   assert.throws(() => createShellFilesystem(fs, { maxIoBytes: 0 }), code('INVALID_ARGUMENT'));
 });
+
+test('disposing a shell binding closes only its descriptors and frees unlinked storage', () => {
+  const fs = new MemoryFileSystem({ maxBytes: 8 }), shell = createShellFilesystem(fs);
+  fs.writeFile('/workspace/held', encode('12345678'));
+  const handle = shell.open('/held', flags({}));
+  const other = fs.open('/workspace/other', { read: true, write: true, create: true });
+  fs.unlink('/workspace/held');
+  assert.throws(() => fs.writeFile('/workspace/new', encode('x')), code('ENOSPC'));
+  shell.dispose(); shell.dispose();
+  assert.throws(() => shell.read(handle, 0, 1), code('EBADF'));
+  assert.throws(() => shell.stat('/other'), code('EBADF'));
+  fs.writeFile('/workspace/new', encode('12345678'));
+  assert.equal(fs.fstat(other).size, 0, 'descriptors owned outside the binding remain open');
+  fs.close(other);
+});
