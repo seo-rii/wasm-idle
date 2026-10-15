@@ -36,6 +36,8 @@ export interface MemoryFileSystemOptions {
 }
 
 export interface SnapshotEntry {
+  /** Stable identity within this filesystem; restores must not renumber a moved inode. */
+  readonly inode: number;
   /** Canonical absolute path in snapshots, relative path in mountReadonly input. */
   readonly path: string;
   readonly type: FileType;
@@ -46,6 +48,8 @@ export interface SnapshotEntry {
 
 export interface FileSystemSnapshot {
   readonly generation: number;
+  /** Monotonic allocation high-water mark, including identities deleted before export. */
+  readonly nextInode: number;
   readonly mounts: readonly { readonly path: string; readonly readonly: boolean }[];
   readonly entries: readonly SnapshotEntry[];
 }

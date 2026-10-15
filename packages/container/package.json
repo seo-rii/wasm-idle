@@ -10,12 +10,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./adapters/wasi": {
+      "types": "./dist/adapters/wasi/index.d.ts",
+      "import": "./dist/adapters/wasi/index.js"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "FS.md"
   ],
   "publishConfig": {
     "access": "public",
@@ -26,9 +31,12 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && node --test test/unit/*.test.mjs",
     "verify:package-boundary": "node scripts/verify-package-boundary.mjs",
-    "prepack": "pnpm run build && pnpm run verify:package-boundary"
+    "prepack": "pnpm run build && pnpm run verify:package-boundary",
+    "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
+    "test:browser": "pnpm run build && node scripts/test-browser.mjs"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "playwright-core": "^1.63.0"
   }
 }

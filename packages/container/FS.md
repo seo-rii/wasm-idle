@@ -60,9 +60,14 @@ Commit validates the entire candidate, verifies the generation and mount table,
 and rejects changes to readonly entries or mount-root metadata before publishing.
 On rejection the original namespace is intact and the lease remains held until
 discard or a valid commit. Discard is idempotent. Successful publication increments
-the host generation once. Unchanged paths of the same type retain inode numbers;
-renames across a snapshot boundary are reconstructed as a diff and do not promise
-inode identity. No open host handles cross that boundary. Timestamps and generation
+the host generation once. Snapshots carry unique positive safe-integer inode IDs
+and a monotonic `nextInode` allocation mark. Restore preserves them, and commit
+matches identities rather than paths: renamed files/directories retain IDs, while
+replacement paths receive new IDs. Deleted identities are never recycled, even
+after a restore. Missing/duplicate IDs, a rewound allocation mark, reuse of retired
+IDs and changes to an existing inode's type or mount fail validation. Readonly
+mount input has no inode IDs; publication allocates those locally. No open host
+handles cross the snapshot boundary. Timestamps and generation
 are memory observations, and neither export nor commit is a durable flush.
 
 The `fs.test.mjs` suite covers FS-01 through FS-06 and the regular-file portions of
