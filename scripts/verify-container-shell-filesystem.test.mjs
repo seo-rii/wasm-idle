@@ -25,3 +25,18 @@ test('live existing-file opens preserve append intent through the delegate bound
 	assert.match(append, /"append",\s*&\[int\(handle as u64\), data\.into\(\)\]/);
 	assert.doesNotMatch(append, /"write"|"fstat"|offset/);
 });
+
+test('queued filesystem calls retain their registration and release on its owner', async () => {
+	const [filesystem, prepare] = await Promise.all([
+		readFile(new URL('sdk_host_filesystem.rs', bridge), 'utf8'),
+		readFile(new URL('./prepare-container-shell-bridge.mjs', import.meta.url), 'utf8')
+	]);
+	assert.match(prepare, /'sdk_host_filesystem_lifetime\.rs', 'wasmer-sdk', 'src\/host_filesystem_lifetime\.rs'/);
+	assert.match(filesystem, /struct HostFsCall\s*\{[^}]*registration: Option<Arc<Registration>>/s);
+	assert.match(filesystem, /struct HostFileSystem\s*\{\s*registration: Arc<Registration>/);
+	assert.match(filesystem, /struct HostFile\s*\{\s*registration: Arc<Registration>/);
+	assert.match(filesystem, /registration: Some\(registration\.clone\(\)\)/);
+	assert.match(filesystem, /post_owned\(registration\.link, op, Some\(registration\.clone\(\)\)\)/);
+	assert.match(filesystem, /fn release\(link: Link\)\s*\{\s*post_owned\(link, Op::Release, None\)/);
+	assert.match(filesystem, /Op::Release =>\s*\{\s*DELEGATES\.with\(\|delegates\| delegates\.borrow_mut\(\)\.remove\(&link\.key\)\)/);
+});

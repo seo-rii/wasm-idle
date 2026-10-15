@@ -61,7 +61,8 @@ const installedSources = [
 	['proc_exec_v1.rs', 'wasmer-wasix', 'src/syscalls/wasix/proc_exec_v1.rs'],
 	['host_command_io.rs', 'wasmer-wasix', 'src/state/host_command_io.rs'],
 	['sdk_host_command.rs', 'wasmer-sdk', 'src/host_command.rs'],
-	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs']
+	['sdk_host_filesystem.rs', 'wasmer-sdk', 'src/host_filesystem.rs'],
+	['sdk_host_filesystem_lifetime.rs', 'wasmer-sdk', 'src/host_filesystem_lifetime.rs']
 ];
 const compileProbe = 'host_command_compile_probe.rs';
 const sdkExample = 'container_command_snapshot_compile';

@@ -558,6 +558,12 @@ How calls reach the delegate:
 - Operations on the owning thread itself run directly.
 - Delegates live in a thread-local table, and nothing is implemented as `Send`/`Sync` by
   hand.
+- A shared Rust registration belongs to the filesystem, every open file and each queued
+  request. The last release removes the delegate from its owner thread's table. Dropping
+  a file posts its close while retaining the registration, so queued closes complete
+  before release. Cleanup from a guest thread is posted without synchronously waiting
+  for the owner. `Directory.free()` therefore does not invalidate open files, and normal
+  completion in a long-lived SDK Worker does not retain disposed workspaces.
 - Every read, write, size and listing reaches the delegate; nothing is cached in the SDK.
 - Writes use explicit offsets. A file opened in append mode lets the delegate place each
   write at the current end.
@@ -582,6 +588,12 @@ This avoids a separate EOF lookup and positional write overwriting another proce
 append. New-file opens already retain append intent. Ordinary non-append writes and
 non-live mounts retain their existing behavior. This correction has source/preparation
 checks; the previously published SDK binary predates it and needs rebuilding.
+
+`sdk_host_filesystem_lifetime.rs` is the JavaScript-free registration shared by the SDK
+filesystem and native lifecycle tests. These tests cover open files outliving a directory,
+pending close ownership, cross-thread final release and repeated registration teardown.
+They validate Rust ownership, not browser garbage-collector timing or abrupt termination
+of a Worker before Rust destructors run.
 
 Registering a mount that is not live only costs extra metadata calls. Path symlinks,
 hard links, directory listing cookies across concurrent changes, and rename/rmdir races
