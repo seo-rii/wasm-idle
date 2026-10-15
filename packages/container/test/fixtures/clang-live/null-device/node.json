@@ -1,0 +1,348 @@
+{
+  "schemaVersion": 1,
+  "passed": true,
+  "mode": "node-worker",
+  "profile": "llvm-clang-tool-host-live-v1",
+  "applicationCommit": "b31093ce43140ee88e58821511078443315c5993",
+  "node": "v24.21.0",
+  "platform": "linux",
+  "arch": "x64",
+  "sourceHashes": {
+    "packages/container/scripts/test-live-clang.mjs": "173566f4c06a517bb186c50feb87a1769dfae33d5d97b260ca4a45d986479db8",
+    "packages/container/scripts/clang-browser-inputs.mjs": "1241b2d7d7fb688efb8db8b5cd979b32e548b12e7a05b128485026e188657eb2",
+    "packages/container/test/contract/node-worker-entry.mjs": "d6f9a46de0bdcccd940ed95be51a43ac6824c6ab99128f0f38cf78278c424193",
+    "scripts/probe-container-shell-acceptance-lib.mjs": "81397f371b07419d35df28974e3b65d7315f437b5339242c9318d09f1ad6ca05",
+    "scripts/browser-test-cookies.mjs": "8998dd018bff34a5967cffe9d2fd79c891db566cd01a16b3c3af3716d153afe9",
+    "packages/container/test/fixtures/clang-live/fixture.mjs": "0555b7223af5e0b430876234ef0a75c2a5c9cdbb1de299ba8fcf9e60c5e2d48b",
+    "packages/container/src/adapters/wasi-live/worker.ts": "e5e64037e3daf496030ff9a60b5f160fe1cb4d957e6f47c8c314dd6f8e7ea73f",
+    "packages/container/src/adapters/clang-live/worker.ts": "6832bb2265fb4a58ab3b50550c00b1d78f642dbb5aaed6a490ea982eee8e829f",
+    "packages/container/src/transport/rpc.ts": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900",
+    "packages/container/src/adapters/wasi-live/io.ts": "6a5a1b71606f35dca151d8d609e075bb130969c627994d72827366708447f42e",
+    "packages/container/src/adapters/wasi/host.ts": "27602242eb5d61f1c9ad6c389c158c164ee99af4f97cb57e9a02e2cb2b25b347",
+    "packages/container/src/adapters/wasi/profile.ts": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4",
+    "packages/container/src/adapters/clang-live/stdio.ts": "27e01ed84a4851c9fb7fdbece814075748e2229e17e7f59b42fd61933206d34d",
+    "packages/llvm-core/runtime/clang/src/tool-host.ts": "d6951c231f6394ffc54cb060609b5af63f5f48d690320a84f97618560e66b324",
+    "packages/container/src/adapters/wasi-live/index.ts": "eb37c42792422a9895bad54d7a1101e3a7435dcc5a5f532bd80009dc7f4fdadf",
+    "packages/container/src/index.ts": "70885c9ecfa88127adbe4b86bde1da040a0ab86f015c61cb1fdf6b1584942f46",
+    "packages/container/src/adapters/clang-live/index.ts": "4480928a4a2806dce66a73546355577047b5a0302456407edfd767ad47ac70d2",
+    "packages/container/src/fs/index.ts": "2f6ea6db34574ff767f9ee6b970a4aa107c58f8918331d2d5051dde655858820",
+    "packages/container/src/shell/filesystem.ts": "4104ce201b64ea2d448bf580a15d6a9feedb574f1e6f6c2ad0bc9aaea2ea5793",
+    "packages/container/src/errors.ts": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8",
+    "packages/container/src/container.ts": "388749c5204be57deb5f43982dff3f8ad79531a3ee7660c402eca105799edc61",
+    "packages/container/src/shell/host-command.ts": "bf4da8d6ba5023f761971d6cba78f59d2a05b490e6c8ea9f610d3ccb01168623",
+    "packages/container/src/packages/index.ts": "1f98a17d5f63fc817848260ab4e375958833ccb2823609aede587ecf478f645f",
+    "packages/container/src/adapters/live-worker.ts": "a5c397e4bddb33b74fb33acfa51fa6ac056968ae0f2444cdcc3c4d0f8c4bc6d5",
+    "packages/container/src/fs/errors.ts": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a",
+    "packages/container/src/fs/memory.ts": "3fb932a1c522c3c9af5ff5d8f79b06ddec697ea34fd58ba8d34d988f630da6f1",
+    "packages/container/src/adapters/clang/configuration.ts": "c6a51026fb090b29444d6098c19ae16144f7d0c2583753a2cded2837b0d4646c",
+    "packages/container/src/adapters/clang-live/outputs.ts": "bda0fc71c0bd3993d57569165b1311c79d65caa61520c9f271ce234da63a8f33",
+    "packages/container/src/packages/manager.ts": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c",
+    "packages/container/src/packages/distribution.ts": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7",
+    "packages/container/src/packages/archive.ts": "eb42bef7796e427271de6e1a58e3827771aa0f9c976260fe21f40604aa0e3fa0",
+    "packages/container/src/packages/assets.ts": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5",
+    "packages/core/src/index.ts": "90ca280f189ca60d7f0faf02564f1b24ef5b3ae9789dd03e2e807cd7fccc33b0",
+    "packages/container/src/fd/pipe.ts": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646",
+    "packages/container/src/adapters/wasi/stdio.ts": "c1df62c017fe8f5543354c66652a4051376541654babae367412bd0f8f984690",
+    "packages/container/src/adapters/clang/artifacts.ts": "a673bccb7d2b545179c1ed0f24d006d407a71ade2caf6452bd5882ccdd374905",
+    "packages/container/src/process/lifecycle.ts": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b",
+    "packages/core/src/pinned-asset-fetch.ts": "6c7d1159934396792c56211e622b5ce5ec9136ed11bd666bb92b1eeeac72314f",
+    "packages/core/src/asset-delivery-budget.ts": "cc4f834054234a28eccd5220defd3874e43181c32498ce615fbe7757b39637f1",
+    "packages/core/src/persistent-asset-cache.ts": "d26a6d21d95a49dbe07b22cfa65efc3c81432e0a02a92698994ddf38cd0c0777",
+    "packages/core/src/capabilities.ts": "9c0d0086c4ade511ce11ba06229f9a24023ad213a9965ee83cfd561f0b0cc83d",
+    "packages/core/src/runtime-assets.ts": "a043ce58da41d619a88e58e4b6274f5c015b60643eaeb10e9765fb3eca111f5e",
+    "packages/core/src/runtime-asset-lock.ts": "8a6e7f01d32136a52fc17340322ca52d68a4073b18c3c97a76bb83163fd60846",
+    "packages/core/src/runtime-activation.ts": "f87317deced45fd48929cd970bd85f36ff3c8449d21e340a8b3ce8d3ad37dd07",
+    "packages/core/src/runtime-preflight.ts": "7bb2b19dacdfe57bbad1cef72694b00ad14623b0106524321e5cea7cfb382041",
+    "packages/core/src/awk-runtime.ts": "b222301246f57e24eca67d30c5ca0cd9427f9db310bab8cf9476a27e0df78e69",
+    "packages/core/src/runtime-manifest.ts": "ecc5882de5d03f32e366a6e055deb31b441731baa82d3e0eecfb5e22766b916d",
+    "packages/core/src/protocol.ts": "2b3bba1657ef9c6b65fbb37ad2d94233250381c22dc666397a885e6d6c282f00",
+    "packages/core/src/asset-integrity.ts": "bab908b33160ac19846073ecfa0488b73065dfe0d0a2f795d9f981dee18cb928",
+    "packages/core/src/sandbox.ts": "afcd88c161f37004ba8f64416545b2b23abe9f6d990ceaacfe0e158a3b57c79e",
+    "packages/core/src/haskell-runtime.ts": "6cf202244afebccea6d84f9da5c255b794a80cfa406d3acf9c9ae301dfe48bc2",
+    "packages/core/src/teavm-runtime.ts": "a611d0bac9635935b6aece558cdcfc0e1fb63570baaa31a037f5c3a998066354",
+    "packages/core/src/prolog-runtime.ts": "33277db40269ff0b153170bff98838b14b1f0ef3995de63833c9fe27de35ad5a",
+    "packages/core/src/languages.ts": "073e932aa5c1e8c3e4a39c482dde3540627d397a3338a30ea243d37faca3c6e9",
+    "packages/core/src/progress.ts": "8fb4edba74dcd1b59f7cb5b5eeaff200defe3979b98b78ae75b703b9697b11e9",
+    "packages/core/src/errors.ts": "36affaa3329c850181848c5a58f09438386837b22ee263092157f65ccb98e0f4",
+    "packages/core/src/execution.ts": "179aacde14a70e6cef71a6a48e0794c10b25b9460502571e01d8fa2add10ecb0",
+    "packages/core/src/runtime-preflight-activation.ts": "3a7a6e89a71809a7a723be1a3a3888a1ffa5218abc257a6bbcf9bf035fa3548d",
+    "packages/core/src/ruby-runtime.ts": "e44b347fd1bdabae5112707566fa9ebd3c79b2eb6ad84638157d75fed1a49944",
+    "packages/core/src/julia-runtime.ts": "6db37d220fe390eb95448c3b614bae86674ee0ef374fa0e1630980e0cfb24fe8",
+    "packages/core/src/lisp-runtime.ts": "5c24735877a926426604eb0c34957830dc1c54c46de7fe229adebcb36ed2c01e",
+    "packages/core/src/nim-runtime.ts": "fca15f0d89aaefa445038bf5bcd7332f720c7b50bee20662fd6c9f7e31c24c10",
+    "packages/core/src/bash-runtime.ts": "d4aa2f8bc8bc23b64aa23d88e17674eccebff5862e445f72d4b3327f0777db6a",
+    "packages/core/src/pascal-runtime.ts": "adc2cdac9ba1404e3b1e4dd82ee11e29f0eecc6ee1588bcde809f27dca076343",
+    "packages/core/src/worker-lifetime.ts": "59ea60d2fe9ed606e669e98f105c71a23e79ebde61f7c19d6771e08e56b35310",
+    "packages/core/src/resource-budget.ts": "9cec36db9aa8690586e666ee8fb3df594e49a3f71f77db51bd9b3221aa070a1d",
+    "packages/core/src/tcl-runtime.ts": "5fe706b4ee4a518ce7cb381f25ed182e8bdc798a5aaf75e88d8a07be9ad4b9f1",
+    "packages/core/src/workspace.ts": "0fae86a0c2fd467801f868ac464dc400fff59c4a6cbad7c080e50f6144f68f1c",
+    "packages/core/src/ruby-split.ts": "0ef1b6eb50af947daa7b1fd1fc6052f12e5511c8cedb5fd5d672fcf42510e8c7",
+    "packages/core/src/runtime-asset-lock.generated.ts": "fd79a006b706a1f38feeee8826692dfe98b3882942cc9e879367a17f0922e94f",
+    "packages/core/src/module-asset-rewrite.ts": "8a8142851271559b6b5f0b3319788faa955e6a5350bf0b91254a4f3897ad0e46",
+    "packages/core/src/janet-runtime.ts": "4a93f4eee32ea7b11b7b68fe8fbe15689b207da2ca05d1a4ec593beef6430eba",
+    "packages/core/src/perl-runtime.ts": "ba40ee0598f28cf0a3280af5ac73a12ce2d0ecfbe151ebc0e2ac77a6cf60f409",
+    "packages/container/src/fs/watch.ts": "df7d0c1e3bc72b87d1e19fed986afcf36e3f63034e8764bc731269a7479b58cc",
+    "packages/core/src/teavm-runtime.generated.ts": "74c901c64fa6f2d576a93fec5d6e3f8e0ff73b41dcbea4439a9effab6a134d79",
+    "packages/core/src/haskell-runtime.generated.ts": "85237d1eccd8f9fa939c3884701e3f95ff9968e6109b922f1c779520aff6c554",
+    "packages/core/src/prewarm.ts": "9bddede2dfeff380e891c3bd4b862c5502986e7ff97989aa35c4c99a3fc357c1",
+    "packages/core/src/ruby-split.generated.ts": "4a9ee0e9274d1074318fdc6ab38fbd9ad1d781e636307b476a579e3674b591ac",
+    "packages/core/src/ruby-runtime.generated.ts": "382d80a250688b34cd3ac7473d83ddad49e9b875234d30d425a165643ee22a2b"
+  },
+  "producerReceiptSha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd",
+  "producerSmokeSha256": "f7895ec00fd05cb224b42e085873beb75fd5899cf238acf8f3833aeb2f9bded5",
+  "processSysrootReceiptSha256": "105089044738721b7177c1846454d8132578d79292100d6413c56b09fd27304c",
+  "assets": {
+    "clang": {
+      "bytes": 51965041,
+      "sha256": "e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3",
+      "mediaType": "application/wasm"
+    },
+    "linker": {
+      "bytes": 24938493,
+      "sha256": "3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a",
+      "mediaType": "application/wasm"
+    },
+    "sysroot": {
+      "bytes": 35328000,
+      "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f"
+    }
+  },
+  "faults": [],
+  "bundles": {
+    "bundle/harness.mjs": "ee96cf777a4422d13bbac02897108b894bb4d943eb45334ebde8b54e94d64f9f",
+    "bundle/clang-worker.mjs": "84346c1c832a14c6897ca332d75a0b7c1c3a98250325df11e6c705cc94caafc3",
+    "bundle/wasi-worker.mjs": "3fcabad9f673d0fced4053ebb4eb0586791eff615df3e1b1b284ddc8c146d279"
+  },
+  "result": {
+    "profile": "llvm-clang-tool-host-live-v1",
+    "passed": true,
+    "checks": [
+      {
+        "id": "full-selected-target-sysroot",
+        "passed": true
+      },
+      {
+        "id": "version-with-owned-input-eof",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "reason": "exited",
+          "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+        }
+      },
+      {
+        "id": "real-driver-reopens-closed-stdin-as-null",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "reason": "exited",
+          "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+        }
+      },
+      {
+        "id": "real-driver-cc1-linker-exit",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "reason": "exited",
+          "stdout": "",
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+        }
+      },
+      {
+        "id": "actual-command-executable-metadata",
+        "passed": true,
+        "observed": {
+          "bytes": 191817,
+          "mode": 493,
+          "sha256": "0b8ed5d137b1f871fc4d4b43d2b70d27e7c075ee034e8e30e89aee0eb08b3f2a"
+        }
+      },
+      {
+        "id": "generated-command-execution",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "reason": "exited",
+          "stdout": "hello live\n",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "streamed-input-before-eof",
+        "passed": true
+      },
+      {
+        "id": "live-header-editor-visibility",
+        "passed": true,
+        "observed": {
+          "stdout": "after_editor\n\n",
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nclang: warning: -Wl,--max-memory=67108864: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld' [-Wunused-command-line-argument]\n",
+          "preprocessing": {
+            "code": 0,
+            "reason": "exited"
+          }
+        }
+      },
+      {
+        "id": "live-partial-file-before-exit",
+        "passed": true,
+        "observed": {
+          "exit": {
+            "code": null,
+            "reason": "terminated"
+          },
+          "fileEvents": [
+            {
+              "kind": "create",
+              "path": "/workspace/한글 project/partial-dd25689d.i.tmp"
+            },
+            {
+              "kind": "modify",
+              "path": "/workspace/한글 project/partial-dd25689d.i.tmp"
+            }
+          ],
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nclang: warning: -Wl,--max-memory=67108864: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld' [-Wunused-command-line-argument]\n",
+          "partial": {
+            "path": "/workspace/한글 project/partial-dd25689d.i.tmp",
+            "bytes": 3,
+            "running": true
+          }
+        }
+      },
+      {
+        "id": "cancel-keeps-already-visible-writes",
+        "passed": true,
+        "observed": {
+          "code": null,
+          "reason": "terminated"
+        }
+      },
+      {
+        "id": "restart-after-compiler-cancel",
+        "passed": true
+      },
+      {
+        "id": "foreign-edit-does-not-grant-executable",
+        "passed": true,
+        "observed": {
+          "bytes": 65536,
+          "revisionChanged": true,
+          "running": true
+        }
+      },
+      {
+        "id": "explicit-run-retains-valid-output",
+        "passed": true,
+        "observed": {
+          "code": 0,
+          "reason": "exited",
+          "stdout": "hello live\n",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "processes-retired",
+        "passed": true
+      }
+    ],
+    "commands": [
+      {
+        "args": [
+          "--version"
+        ],
+        "code": 0,
+        "reason": "exited",
+        "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+      },
+      {
+        "args": [
+          "--version"
+        ],
+        "stdin": "closed",
+        "code": 0,
+        "reason": "exited",
+        "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+      },
+      {
+        "args": [
+          "main source.c",
+          "-o",
+          "hello.wasm"
+        ],
+        "code": 0,
+        "reason": "exited",
+        "stdout": "",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+      },
+      {
+        "args": [
+          "-E",
+          "-P",
+          "-x",
+          "c",
+          "-"
+        ],
+        "code": 0,
+        "reason": "exited",
+        "stdout": "after_editor\n\n",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nclang: warning: -Wl,--max-memory=67108864: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld' [-Wunused-command-line-argument]\n"
+      },
+      {
+        "args": [
+          "--version"
+        ],
+        "code": 0,
+        "reason": "exited",
+        "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+      },
+      {
+        "args": [
+          "main source.c",
+          "-o",
+          "edited.wasm"
+        ],
+        "code": 0,
+        "reason": "exited",
+        "stdout": "",
+        "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+      }
+    ],
+    "createdWorkers": 9,
+    "activeWorkers": 0,
+    "artifact": {
+      "bytes": 191817,
+      "mode": 493,
+      "sha256": "0b8ed5d137b1f871fc4d4b43d2b70d27e7c075ee034e8e30e89aee0eb08b3f2a"
+    },
+    "cancelled": {
+      "exit": {
+        "code": null,
+        "reason": "terminated"
+      },
+      "fileEvents": [
+        {
+          "kind": "create",
+          "path": "/workspace/한글 project/partial-dd25689d.i.tmp"
+        },
+        {
+          "kind": "modify",
+          "path": "/workspace/한글 project/partial-dd25689d.i.tmp"
+        }
+      ],
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nclang: warning: -Wl,--max-memory=67108864: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld' [-Wunused-command-line-argument]\n",
+      "partial": {
+        "path": "/workspace/한글 project/partial-dd25689d.i.tmp",
+        "bytes": 3,
+        "running": true
+      }
+    },
+    "activeWorkersAfterDispose": 0
+  },
+  "nodeWorkersAfterDispose": 0
+}

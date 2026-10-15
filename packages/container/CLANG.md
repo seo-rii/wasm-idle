@@ -210,3 +210,9 @@ The [live LLVM qualification records](test/fixtures/clang-live/README.md) record
 guest Workers in each, and 228 passing unit/contract tests at commit `66ac18fa`.
 That evidence is specific to this opt-in command profile; the separate snapshot
 Bash distribution retains its own manifest and qualification history.
+
+The [closed-input follow-up](test/fixtures/clang-live/null-device/README.md) at
+`29435e8a` records 14 passing checks in each environment and 235 unit/contract
+tests. Both real version invocations return the same output, and each environment
+retires all nine guest Workers. Its source attestation maps the captured source
+hashes to the committed fix; the original qualification records stay unchanged.
