@@ -1,4 +1,5 @@
 import type { FileSystemSnapshot, MemoryFileSystem } from '../fs/index.js';
+import type { DelegatedStdio } from '../types.js';
 
 export interface CommandDefinition {
   readonly adapter: string;
@@ -50,7 +51,7 @@ export interface PreparedLiveRuntime {
 export interface LiveCommandAdapter {
   readonly id: string;
   readonly filesystem: 'live';
-  start(request: StartRequest & { fs: MemoryFileSystem }): Promise<PreparedLiveRuntime>;
+  start(request: StartRequest & { fs: MemoryFileSystem; stdio?: DelegatedStdio }): Promise<PreparedLiveRuntime>;
 }
 /** Trusted local adapter code, never supplied by a distribution URL. */
 export type CommandAdapter = SnapshotCommandAdapter | LiveCommandAdapter;
