@@ -131,7 +131,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 					// Deterministic class order and tags so compiler.wasm is byte-reproducible.
 					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' },
 					// ServiceLoader and runtime annotations skipped by JCLPlugin in the bootstrap.
-					{ path: 'scripts/teavm/patches/teavm-javac-bootstrap-services.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-bootstrap-services.patch' },
+					// Methods the TeaVM 0.13.1 class library lacks, merged into the SDK and the runtime.
+					{ path: 'scripts/teavm/patches/teavm-javac-classlib-supplements.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,

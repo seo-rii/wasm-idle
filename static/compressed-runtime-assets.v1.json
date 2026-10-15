@@ -213,7 +213,7 @@
     "pyodide/pyodide.asm.mjs": 1250344,
     "pyodide/pyodide.asm.wasm": 9598218,
     "teavm/compiler.wasm": 4334204,
-    "teavm/runtime-classlib-teavm.bin": 2388979,
+    "teavm/runtime-classlib-teavm.bin": 2392921,
     "wasm-assemblyscript/chunks/asc-BRewbG4u.mjs": 13567562,
     "wasm-awk/goawk.wasm": 4697052,
     "wasm-bash/bash.webc": 1808682,
