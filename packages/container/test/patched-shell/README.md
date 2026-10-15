@@ -7,9 +7,9 @@ that calls `environ_sizes_get` so `exec -c` must demonstrate an actually empty
 environment. No JavaScript shell evaluator or substitute guest is included.
 
 The independently supplied local package receipt is 2,604 bytes with SHA-256
-`86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34`.
+`9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525`.
 It binds the successful binary receipt, the exact generated 0.2.101 host graph
-and 9,044,795-byte SDK Wasm. Package entries and the real Bash WEBc are verified
+and 9,071,791-byte SDK Wasm. Package entries and the real Bash WEBc are verified
 before execution. The native Clang 16/lld digests match their complete pinned
 WASI SDK 20.0 archive members; no build or download of those tools is performed.
 
@@ -22,7 +22,7 @@ provide an absolute configuration file containing:
 ```json
 {
   "packageReceipt": "/private/sdk-local-package/receipt.json",
-  "packageReceiptSha256": "86b7993253952a735f0260edb693f217c26bd4e409cfd181c90b23ecfca50b34",
+  "packageReceiptSha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525",
   "bashWebc": "/private/bash-build/candidate/bash-exec-shim.webc",
   "clang": "/private/bash-build/work/wasi-sdk/bin/clang-16",
   "output": "/private/new-patched-shell-probe"
@@ -100,3 +100,16 @@ required `exec_v1` import on this path; instantiation failure maps to WASIX
 `Errno::Noexec` (45). Fixing and rebuilding the actual resolver is the next gate.
 The completed binary, local package and producer receipts remain valid for their
 limited build/packaging scope.
+
+## Worker resolver candidate
+
+The current probe pins the six-patch SDK at application source
+`7ceef67180e047d4703936482006a69b814662d2` on
+[#196](https://github.com/seo-rii/wasm-idle/pull/196). Its actual fresh-source
+typecheck completes in 373.991 seconds and release build in 586.098 seconds;
+matching bindgen/static inspection also pass with complete owned-process cleanup.
+The binary receipt has SHA-256
+`e8d02ef4041beb868393f0f5c72c6a8858cdf1b9d43f57337044b8ab88dad08a`.
+The unchanged local packaging helper produces the explicitly pinned package above.
+Its shared-memory profile remains 34/16,384 pages. New browser observations must
+be recorded separately; the original five-patch failure is retained unchanged.
