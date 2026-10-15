@@ -1,0 +1,27 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -85,6 +85,10 @@
+ pub use virtual_net;
+ pub use virtual_net::{UnsupportedVirtualNetworking, VirtualNetworking};
+ 
++pub use crate::state::{
++    HostCommandDescriptor, HostCommandProcess, HOST_COMMAND_FAILURE_STATUS, HOST_COMMAND_IO_BYTES,
++};
++
+ #[cfg(feature = "host-vnet")]
+ pub use virtual_net::{
+     host::{LocalNetworking, LocalTcpListener, LocalTcpStream, LocalUdpSocket},
+--- a/src/state/mod.rs
++++ b/src/state/mod.rs
+@@ -54,6 +54,11 @@
+ pub(crate) use handles::*;
+ pub(crate) use linker::*;
+ 
++mod host_command_io;
++pub use self::host_command_io::{
++    HostCommandDescriptor, HostCommandProcess, HOST_COMMAND_FAILURE_STATUS, HOST_COMMAND_IO_BYTES,
++};
++
+ /// all the rights enabled
+ pub const ALL_RIGHTS: Rights = Rights::all();
+ 

@@ -42,13 +42,23 @@ const patches = [
 	'0003-add-lossless-exec-frame.patch',
 	'0004-expose-host-command-hook.patch',
 	'0005-owned-command-snapshot.patch',
-	'0006-register-worker-shell-import.patch'
+	'0006-register-worker-shell-import.patch',
+	'0007-delegate-host-command-descriptors.patch'
+];
+// SDK patches apply to the extracted SDK before its Cargo path override.
+const sdkPatches = ['0008-dispatch-trusted-host-commands.patch'];
+// Standalone new sources: [bridge file, crate, installed path].
+const installedSources = [
+	['exec_frame.rs', 'wasmer-wasix', 'src/syscalls/wasix/exec_frame.rs'],
+	['proc_exec_v1.rs', 'wasmer-wasix', 'src/syscalls/wasix/proc_exec_v1.rs'],
+	['host_command_io.rs', 'wasmer-wasix', 'src/state/host_command_io.rs'],
+	['sdk_host_command.rs', 'wasmer-sdk', 'src/host_command.rs']
 ];
 const compileProbe = 'host_command_compile_probe.rs';
 const sdkExample = 'container_command_snapshot_compile';
-const verifySource = async (source, archive) => {
+const verifySource = async (source, archive, prefix, patchNames) => {
 	const seen = new Set();
-	for (const patch of patches) {
+	for (const patch of patchNames) {
 		const text = await readFile(join(bridge, 'patches', patch), 'utf8');
 		for (const match of text.matchAll(/^--- (a\/.+|\/dev\/null)\n\+\+\+ b\/(.+)$/gm)) {
 			const file = match[2];
@@ -64,11 +74,7 @@ const verifySource = async (source, archive) => {
 			assert.equal(match[1], `a/${file}`, `${file}: patch source/destination identity`);
 			if (seen.has(file)) continue;
 			seen.add(file);
-			const expected = execFileSync('tar', [
-				'-xOzf',
-				archive,
-				`wasmer-wasix-0.601.0/${file}`
-			]);
+			const expected = execFileSync('tar', ['-xOzf', archive, `${prefix}/${file}`]);
 			assert.equal(
 				sha256(await readFile(join(source, file))),
 				sha256(expected),
@@ -77,24 +83,36 @@ const verifySource = async (source, archive) => {
 		}
 	}
 };
+const wasixPrefix = 'wasmer-wasix-0.601.0';
+const sdkPrefix = 'wasmer-sdk-93b8b738ebd3ee57e118da0f0eb795b97d5b999e';
 if (verifyOnly) {
 	const source = option('--wasix-source');
-	await verifySource(source, inputs[1].path);
+	const sdkSource = option('--sdk-source');
+	await verifySource(source, inputs[1].path, wasixPrefix, patches);
+	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
 	const receipts = {};
-	for (const name of patches) {
-		const path = join(bridge, 'patches', name);
-		execFileSync('patch', ['--dry-run', '--batch', '--fuzz=0', '-p1', '-i', path], {
-			cwd: source,
-			stdio: 'pipe'
-		});
-		receipts[name] = sha256(await readFile(path));
+	// Each crate's patches apply independently to its pristine checkout.
+	for (const [names, cwd] of [
+		[patches, source],
+		[sdkPatches, sdkSource]
+	]) {
+		for (const name of names) {
+			const path = join(bridge, 'patches', name);
+			execFileSync('patch', ['--dry-run', '--batch', '--fuzz=0', '-p1', '-i', path], {
+				cwd,
+				stdio: 'pipe'
+			});
+			receipts[name] = sha256(await readFile(path));
+		}
 	}
-	for (const name of ['exec_frame.rs', 'proc_exec_v1.rs', 'execve.c']) {
+	for (const [name] of installedSources) {
 		receipts[name] = sha256(await readFile(join(bridge, name)));
 	}
+	receipts['execve.c'] = sha256(await readFile(join(bridge, 'execve.c')));
 	receipts[compileProbe] = sha256(await readFile(join(bridge, compileProbe)));
-	// Dry-run must preserve the supplied pristine checkout.
-	await verifySource(source, inputs[1].path);
+	// Dry-run must preserve the supplied pristine checkouts.
+	await verifySource(source, inputs[1].path, wasixPrefix, patches);
+	await verifySource(sdkSource, inputs[0].path, sdkPrefix, sdkPatches);
 	console.log(
 		JSON.stringify(
 			{
@@ -110,7 +128,7 @@ if (verifyOnly) {
 				},
 				limitations: [
 					'No Wasmer typecheck, SDK rebuild or patched Bash/browser qualification',
-					'No JS Supervisor fd/VFS implementation or public package API'
+					'No common Container fd/VFS ownership or public package API'
 				]
 			},
 			null,
@@ -132,16 +150,23 @@ if (verifyOnly) {
 		);
 	}
 	const receipts = {};
-	for (const name of patches) {
-		const path = join(bridge, 'patches', name);
-		execFileSync('patch', ['--batch', '--fuzz=0', '-p1', '-i', path], {
-			cwd: join(output, 'wasmer-wasix'),
-			stdio: 'pipe'
-		});
-		receipts[name] = sha256(await readFile(path));
+	for (const [names, crate] of [
+		[patches, 'wasmer-wasix'],
+		[sdkPatches, 'wasmer-sdk']
+	]) {
+		for (const name of names) {
+			const path = join(bridge, 'patches', name);
+			execFileSync('patch', ['--batch', '--fuzz=0', '-p1', '-i', path], {
+				cwd: join(output, crate),
+				stdio: 'pipe'
+			});
+			receipts[name] = sha256(await readFile(path));
+		}
 	}
-	for (const name of ['exec_frame.rs', 'proc_exec_v1.rs']) {
-		await cp(join(bridge, name), join(output, 'wasmer-wasix/src/syscalls/wasix', name));
+	for (const [name, crate, destination] of installedSources) {
+		const target = join(output, crate, destination);
+		assert.equal(await stat(target).catch(() => null), null, `${destination} must be new`);
+		await cp(join(bridge, name), target);
 		receipts[name] = sha256(await readFile(join(bridge, name)));
 	}
 	const workerImports = await verifyShellWorkerImports(join(output, 'wasmer-wasix'));
@@ -178,7 +203,7 @@ if (verifyOnly) {
 		},
 		limitations: [
 			'No SDK rebuild or patched Bash/browser qualification',
-			'No JS Supervisor fd/VFS implementation or public package API'
+			'Host commands receive descriptors 0-2 only; no common Container fd/VFS ownership'
 		]
 	};
 	await writeFile(join(output, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n');
