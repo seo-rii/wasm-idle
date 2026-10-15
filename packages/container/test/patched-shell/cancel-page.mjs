@@ -44,6 +44,7 @@ export async function installCancellationSession(configuration) {
 				settled = false;
 			let cancelRequestedAt,
 				memoryDistinctFromPrevious = false;
+			let hostSettlementCount = 0;
 			const finish = (value) => {
 				if (settled) return;
 				settled = true;
@@ -55,7 +56,10 @@ export async function installCancellationSession(configuration) {
 					...value,
 					events,
 					generation: currentGeneration,
-					terminalResultCount: 1,
+					hostSettlementCount: ++hostSettlementCount,
+					workerTerminalMessageCount: events.filter(({ type }) =>
+						['result', 'failure', 'error'].includes(type)
+					).length,
 					memoryDistinctFromPrevious,
 					...(cancelRequestedAt === undefined
 						? {}

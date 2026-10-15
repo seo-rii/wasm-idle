@@ -16,7 +16,8 @@ const observations = () =>
 			backendCompleted: false,
 			pendingBeforeTermination: true,
 			generation: 1,
-			terminalResultCount: 1,
+			hostSettlementCount: 1,
+			workerTerminalMessageCount: 0,
 			events: fixture.slowDownload
 				? [{ type: 'downloadPending', receivedBytes: 16, expectedBytes: 100 }]
 				: [
@@ -35,7 +36,8 @@ const observations = () =>
 			type: 'result',
 			backendCompleted: true,
 			generation: 2,
-			terminalResultCount: 1,
+			hostSettlementCount: 1,
+			workerTerminalMessageCount: 1,
 			memoryDistinctFromPrevious: true,
 			events: [],
 			result: { code: 0, stdout: bytes('recovered'), stderr: [] }
@@ -133,10 +135,16 @@ test('recovery requires a new generation and memory, real stdout, and one termin
 			value.recovery.result.stdout = [];
 		},
 		(value) => {
-			value.cancellation.terminalResultCount = 2;
+			value.cancellation.hostSettlementCount = 2;
 		},
 		(value) => {
 			value.recovery.events = [{ type: 'threadError' }];
+		},
+		(value) => {
+			value.cancellation.events.push({ type: 'failure', backendCompleted: false });
+		},
+		(value) => {
+			value.cancellation.workerTerminalMessageCount = 1;
 		}
 	]) {
 		const results = observations();

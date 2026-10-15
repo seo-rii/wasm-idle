@@ -52,7 +52,10 @@ export function judgeCancellationProbe(results) {
 		);
 		check(
 			'single-terminal-result',
-			cancelled?.terminalResultCount === 1 && value?.recovery?.terminalResultCount === 1
+			cancelled?.hostSettlementCount === 1 &&
+				value?.recovery?.hostSettlementCount === 1 &&
+				cancelled?.workerTerminalMessageCount === 0 &&
+				value?.recovery?.workerTerminalMessageCount === 1
 		);
 		check('workers-retired-before-recovery', value?.workersBeforeRecovery === 0);
 		check(
@@ -74,8 +77,12 @@ export function judgeCancellationProbe(results) {
 				value.hostContextClosed === true &&
 				value.consoleErrors?.length === 0 &&
 				value.blockedRequests?.length === 0 &&
-				!cancelled?.events?.some(({ type }) => type === 'threadError') &&
-				!value.recovery?.events?.some(({ type }) => type === 'threadError')
+				!cancelled?.events?.some(({ type }) =>
+					['threadError', 'result', 'failure', 'error'].includes(type)
+				) &&
+				!value.recovery?.events?.some(({ type }) =>
+					['threadError', 'failure', 'error'].includes(type)
+				)
 		);
 		if (fixture.slowDownload)
 			check(

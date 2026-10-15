@@ -53,3 +53,7 @@ latency, request closure, recovery output, browser/OS/source/asset identities
 and Worker targets. It always leaves `guestSignalQualified`,
 `survivingShellQualified`, `commonContainerFdVfsQualified` and `shellBackendReady`
 false. No actual browser result is claimed until a separate receipt is recorded.
+
+The host reports its single settlement separately from the counted worker
+terminal messages. A result or failure racing with cancellation before the owner
+acknowledgement fails the gate; cleanup cannot conceal that earlier completion.
