@@ -44,6 +44,8 @@ This server reuses the existing receipt and artifact verifier. The configuration
 
 `bash-profile.mjs` is the trusted shared host setup for the browser acceptance owner and `bash-owner.mjs`. The workbench's Bash owner adds the OPFS workspace, save controller and distinct cache callback. The initial shell is `/bin/bash --noprofile --norc`, reading real script input from the process streams. It exposes only the qualified BusyBox applets, Clang profile and explicit `wasm-run` route. The current compiler filesystem is a snapshot adapter with a writer lease; live utility/artifact execution uses the common workspace directly. This profile does not promise a PTY, full POSIX compatibility, job control or a persistent SDK instance across page reloads.
 
+The pinned SDK reports terminal descriptors, so this Bash invocation emits its real prompts and readline input echo on stderr. The raw text view preserves those bytes, including any carriage returns and backspaces; it does not emulate a screen or remove prompts from captured diagnostics. Compiler diagnostics remain on stderr, and pipe/file bytes do not pass through this display handling.
+
 The separate product gate sends the development plan's unchanged acceptance script through the rendered terminal, checks that source exists before Clang starts downloading, saves the output, reloads the owner, directly reruns the persisted executable, repeats a warm compile, and interrupts a real foreground command blocked on stdin. Its evidence is distinct from the small byte-guest UI regression:
 
 ```sh

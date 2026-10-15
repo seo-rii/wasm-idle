@@ -66,6 +66,13 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     const finish = async () => { await page.locator('#eof').click(); await page.waitForFunction(() => document.querySelector('#terminal-status').textContent.includes('exit 0') || document.querySelector('#terminal-status').dataset.state === 'error'); assert.match(await page.locator('#terminal-status').textContent(), /^exited; exit 0/u); };
     const save = async () => { await page.locator('#save').click(); await page.waitForFunction(() => document.querySelector('#save-status').textContent.startsWith('saved') || document.querySelector('#save-status').dataset.state === 'error'); assert.match(await page.locator('#save-status').textContent(), /^saved/u); };
     const compilerDownloads = () => Object.fromEntries(['clang', 'lld', 'sysroot'].map(name => [name, example.downloads[example.assetPaths?.[name] ?? `/assets/${name}`] ?? 0]));
+    const compilerStderr = async () => {
+      const stderr = await page.locator('#stderr').textContent();
+      // The pinned SDK exposes terminal descriptors even with rawStdin. Keep
+      // actual Bash prompts/readline echo intact; they are not compiler output.
+      assert.equal(stderr.split(CLANG_TRIPLE_WARNING).length - 1, 1, 'The original compiler diagnostic must appear exactly once on stderr');
+      return stderr;
+    };
     const checkWorkspace = async () => {
       const source = await client('read', '/workspace/demo/main.c'), result = await client('read', '/workspace/demo/result.txt'), artifact = await client('read', '/workspace/demo/hello.wasm');
       assert.deepEqual(source.bytes, SOURCE); assert.equal(Buffer.from(result.bytes).toString(), 'hello\n');
@@ -91,13 +98,13 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     receipt.phase = 'cold-compiler'; await saveEvidence();
     const coldStart = { ...example.downloads }, coldAt = performance.now();
     await send(suffix); await finish();
-    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); assert.equal(await page.locator('#stderr').textContent(), CLANG_TRIPLE_WARNING);
+    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); const coldStderr = await compilerStderr();
     const coldFiles = await checkWorkspace();
     assert.deepEqual(compilerDownloads(), { clang: 1, lld: 1, sysroot: 1 });
     assert.equal((await client('inspect')).processes.length, 0);
     receipt.workerTargets.afterColdShell = await waitWorkers(1);
     await save();
-    receipt.runs.push({ id: 'cold-unchanged-plan-script', elapsedMs: performance.now() - coldAt, inputSha256: digest(Buffer.from(prefix + suffix)), stdout: 'hello\n', stderr: CLANG_TRIPLE_WARNING, files: coldFiles, downloads: { start: coldStart, end: { ...example.downloads } }, inspection: await client('inspect') });
+    receipt.runs.push({ id: 'cold-unchanged-plan-script', elapsedMs: performance.now() - coldAt, inputSha256: digest(Buffer.from(prefix + suffix)), stdout: 'hello\n', stderr: coldStderr, files: coldFiles, downloads: { start: coldStart, end: { ...example.downloads } }, inspection: await client('inspect') });
     receipt.checks.push('PRODUCT-SH-03: unchanged plan script runs actual Bash→Clang→artifact→BusyBox pipe/redirect; all files and executable metadata are committed');
     receipt.phase = 'persisted-artifact-reload';
     await saveEvidence();
@@ -113,21 +120,21 @@ export async function runProductShellBrowser({ configuration, output, applicatio
     await start();
     const restartScript = 'set -eu\ncd /workspace/demo\n./hello.wasm | grep hello > restored.txt\ncat restored.txt\n';
     await send(restartScript); await finish();
-    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); assert.equal(await page.locator('#stderr').textContent(), '');
+    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); const restoredStderr = await page.locator('#stderr').textContent(); assert.equal(restoredStderr.includes(CLANG_TRIPLE_WARNING), false);
     assert.equal(Buffer.from((await client('read', '/workspace/demo/restored.txt')).bytes).toString(), 'hello\n');
     assert.deepEqual(example.downloads, restartStart); await save();
     receipt.workerTargets.afterRestoredArtifactShell = await waitWorkers(1);
-    receipt.runs.push({ id: 'reload-reexecute-persisted-artifact', script: restartScript, files: await checkWorkspace(), downloads: { start: restartStart, end: { ...example.downloads } }, inspection: await client('inspect') });
+    receipt.runs.push({ id: 'reload-reexecute-persisted-artifact', script: restartScript, stdout: 'hello\n', stderr: restoredStderr, files: await checkWorkspace(), downloads: { start: restartStart, end: { ...example.downloads } }, inspection: await client('inspect') });
     receipt.checks.push('PRODUCT-SH-04: new owner restores source/result/executable Wasm and directly reruns it through real BusyBox without body downloads');
     receipt.phase = 'warm-compiler'; await saveEvidence();
 
     await page.reload(); await ready(); const warmStart = { ...example.downloads }, warmAt = performance.now();
     await start(); await send(SCRIPT); await finish();
-    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); assert.equal(await page.locator('#stderr').textContent(), CLANG_TRIPLE_WARNING);
+    assert.equal(await page.locator('#stdout').textContent(), 'hello\n'); const warmStderr = await compilerStderr();
     const warmFiles = await checkWorkspace(); assert.equal(warmFiles.artifact.sha256, coldFiles.artifact.sha256);
     assert.deepEqual(example.downloads, warmStart); await save();
     receipt.workerTargets.afterWarmShell = await waitWorkers(1);
-    receipt.runs.push({ id: 'warm-unchanged-plan-script', elapsedMs: performance.now() - warmAt, inputSha256: digest(Buffer.from(SCRIPT)), files: warmFiles, downloads: { start: warmStart, end: { ...example.downloads } }, inspection: await client('inspect') });
+    receipt.runs.push({ id: 'warm-unchanged-plan-script', elapsedMs: performance.now() - warmAt, inputSha256: digest(Buffer.from(SCRIPT)), stdout: 'hello\n', stderr: warmStderr, files: warmFiles, downloads: { start: warmStart, end: { ...example.downloads } }, inspection: await client('inspect') });
     receipt.checks.push('PRODUCT-SH-05: a fresh owner repeats the unchanged real compiler workflow using verified persistent bytes with zero repeated body downloads');
     receipt.phase = 'foreground-interrupt';
     await saveEvidence();
