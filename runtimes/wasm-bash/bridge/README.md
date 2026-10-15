@@ -1,9 +1,11 @@
 # Source-pinned shell bridge candidate
 
 This directory contains a source-pinned experimental port for the real Bash/WASIX backend.
-The six-patch SDK now passes real typechecking and release/bindgen generation. It does
-not produce a supported SDK, replace the existing Bash distribution, or expose a public
-container adapter. The existing upstream Bash parser and evaluator remain the shell.
+The six-patch SDK passes real typechecking and release/bindgen generation. Patches 0007
+and 0008 add a trusted JavaScript host-command registry; their separate gates are recorded
+under [trusted host-command dispatch](#trusted-host-command-dispatch). None of this produces
+a supported SDK, replaces the existing Bash distribution, or exposes a public container
+adapter. The existing upstream Bash parser and evaluator remain the shell.
 See [ADR-002](../../../docs/adr/ADR-002-shell-backend.md) and the
 [real pre-patch probe](../../../docs/container-shell-probe.md).
 
@@ -70,6 +72,15 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
    `wasix_32v1` function, matching the existing wasm32 profile. A pure WASI
    or WASIX64 module does not gain this private import. The original patch
    and its historical receipts remain unchanged.
+
+7. `0007-delegate-host-command-descriptors.patch` plus `host_command_io.rs`: an external
+   `VirtualCommand` may take ownership of its prepared child as `HostCommandProcess`.
+   The owner reads the existing metadata snapshot, obtains byte endpoints only for
+   descriptors it names, and completes the child exactly once. See below.
+8. `0008-dispatch-trusted-host-commands.patch` plus `sdk_host_command.rs`: the SDK
+   `Runtime` implements `Runtime::host_command` from an exact-path registry and moves the
+   owned child to the scheduler thread, where the JavaScript handler registered on that
+   thread runs. This is the only SDK-side patch; `src-js` is unchanged.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -169,14 +180,16 @@ node scripts/test-container-shell-bridge.mjs
 node scripts/prepare-container-shell-bridge.mjs --verify-only \
   --sdk-archive /path/to/wasmer-sdk.tgz \
   --wasix-archive /path/to/wasmer-wasix.tgz \
-  --wasix-source /path/to/pristine/wasmer-wasix-0.601.0
+  --wasix-source /path/to/pristine/wasmer-wasix-0.601.0 \
+  --sdk-source /path/to/pristine/wasmer-sdk-93b8b738ebd3ee57e118da0f0eb795b97d5b999e
 ```
 
 The protocol test creates small native fixture binaries in a private temporary directory
 and removes that directory after completion. The verification command compares every
 modified source file with its verified archive, runs each independent patch with
-`patch --dry-run --forward --fuzz=0`, and checks source identity again. A reversed or already
-applied patch fails instead of being silently applied in reverse. It creates no source copy and
+`patch --dry-run --forward --fuzz=0` against its own crate (0001–0007 WASIX, 0008 SDK), and checks
+source identity again. Reversed or already applied patches fail. `--sdk-source` is
+required since the SDK gained its own patch. It creates no source copy and
 makes no changes to the supplied checkout. The original four-patch
 [checked-in receipt](evidence.source-checks.json) remains historical and says
 `patches-apply-cleanly-not-built`. The five-patch
@@ -356,3 +369,94 @@ fixtures; preserve the previous failure and each subsequent observation separate
 Implement the trusted SDK command registry and Supervisor FS/fd bindings only behind that
 experimental profile. The first Clang-to-BusyBox pipeline, command-lazy verified loading,
 foreground cancellation and common live workspace remain required shell MVP gates.
+
+## Trusted host-command dispatch
+
+Patches 0007 and 0008 connect the existing `Runtime::host_command` seam to JavaScript.
+They are the SDK half of candidate B; they do not make Bash use the common Container
+filesystem or descriptors, and both `shellBackendReady` and
+`commonContainerFdVfsQualified` remain false.
+
+```js
+const runtime = new Runtime({ registry: null });
+runtime.registerHostCommand('/opt/host/bin/tool', async (invocation) => {
+	// invocation.argv, invocation.env (raw bytes), invocation.cwd,
+	// invocation.stdin / stdout / stderr: HostCommandDescriptor | null
+	return 0; // integer exit status 0..255
+});
+```
+
+Registration is trusted host code. A path must be normalized and absolute, at most
+4,096 bytes; at most 1,024 paths may be registered per runtime. Lookup is an exact string
+match on the path WASIX passes to `try_built_in` after Bash's own command search, so the
+guest must still find the file in its filesystem. Registered paths take precedence over
+the file's bytes, which are never executed for that path. Nothing is fetched during lookup.
+
+Lookup and `VirtualCommand::exec` run on the guest's Worker. `exec` takes the prepared
+child out of the WASIX builder as `HostCommandProcess`, returns the child's join handle,
+and posts the owned child to the SDK scheduler thread in a new `SchedulerMessage` variant.
+JavaScript functions stay in a thread-local table on the registering thread; no
+JavaScript value crosses threads and no `Send`/`Sync` implementation was added. The
+handler runs only when that thread is also the command's scheduler thread, which is the
+thread that called `Command.run`.
+
+The handler receives a frozen object: the matched path, the prepared argv, raw
+`name=value` environment bytes and the child's actual WASIX cwd from
+`HostCommandSnapshot`, plus descriptors 0, 1 and 2 as `HostCommandDescriptor` objects
+(`null` when closed in the child). No filesystem capability is delegated. A descriptor
+offers:
+
+- `read(maxBytes)`: at most 65,536 bytes, never consuming more than requested; an empty
+  array is end of file and `maxBytes` 0 is `EINVAL`.
+- `write(bytes)`: copies at most 65,536 leading bytes and resolves with the accepted
+  count, which can be partial. A closed WASIX pipe reader yields `EPIPE`; no signal is
+  raised in the child.
+- `close()`: closes the descriptor in the child, as its own `fd_close` would.
+
+Operations look up the child's descriptor table on every call and follow its rights,
+shared offset and append flag like `fd_read`/`fd_write`, including files opened by shell
+redirections and WASIX pipes created by Bash. They fail with a JavaScript `Error` whose
+`code` is the WASI errno name (for example `EPIPE`) and whose `errno` is its number. The
+descriptor's nonblocking flag is not emulated, and WASIX pipes remain unbounded as before.
+
+The handler's promise resolves with an integer status from 0 to 255. Throwing, returning a
+non-promise, rejecting or resolving with anything else completes the child with status 126.
+Completion revokes every endpoint and cancels pending operations, closes the child's
+descriptors as process exit does, then publishes the status to the exec/spawn caller. If
+the owned child is dropped before completion, including when the scheduler has closed, it
+completes synchronously with status 126 instead of falling back to native execution.
+
+Out of scope: guest signals to a running host command, foreground interruption with a
+surviving shell, PTY semantics, descriptors other than 0–2, and any filesystem sharing
+with the Container VFS. A host command keeps running if its parent shell exits; it is
+cancelled only by the trusted owner or forced owner cleanup.
+
+### Actual SDK gate
+
+Source commit `b2c6c07f37a7d22e97f0e19addc349dc020cfb53` was prepared into a fresh physical
+copy and pinned with all 583 source, toolchain and preparation identities (SDK 199 and
+WASIX 377 files). The unchanged pinned nightly, locks, atomics/build-std configuration and
+release profile were used, with a unique target and intermediate directory:
+
+| Stage             | Command                                                                                                                  | Wall seconds |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| Typecheck         | `cargo check --locked --offline --target wasm32-unknown-unknown --lib --example container_command_snapshot_compile -j 1` | 845.135      |
+| Release           | unchanged release profile, reusing this copy's checked target                                                            | 889.651      |
+| Bindgen           | `wasm-bindgen 0.2.101 --target web --weak-refs --no-demangle`                                                            | 2.013        |
+| Static inspection | one shared bounded memory, import/export inventory                                                                       | 0.255        |
+
+Every stage exited 0 with all owned processes reaped and no cleanup signal or error. The
+host was heavily shared during the run, so these times are not a benchmark. The bound
+Wasm is 9,139,276 bytes, SHA-256
+`57d07dc2378e211e4c02667dab927a06e58426c3706f1efaccefe1f6cdeb4367`; its shared memory
+grows from 34 to 35 initial pages (maximum 16,384). The generated declarations export
+`Runtime.registerHostCommand`, `Runtime.unregisterHostCommand`, `HostCommandDescriptor`,
+`HostCommandInvocation` and `HostCommandHandler`. The original binary receipt (SHA-256
+`1e85d0d18925ab2817cb2acfa77f394ecbb2be3fa78d84f1d576ea2ca45696ac`), the preparation
+receipt and the four stage receipts are archived unchanged as `evidence.host-command-*.json`.
+[Metadata](evidence.host-command-sdk-binary-metadata.json) records the post-run recheck of
+every pin and output. Unchanged local packaging with the corrected all-thread guard then
+produced package receipt
+`83d26e215890f98470a837e34d40a42b25b20b511d5c00f2f7694c8a1ea2ec55` (1.51 seconds).
+
+This is a build and static gate. Actual Bash dispatch is qualified separately in Chromium.
