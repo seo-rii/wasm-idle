@@ -98,6 +98,9 @@ It preserves the existing Cargo lock except for changing this one crate to a loc
     (`Directory.fromHostFileSystem(delegate)`), and registers that mount as live with WASIX.
 12. `0012-revalidate-live-mounts.patch`: WASIX revalidates cached inodes below live mounts
     and reads a live file's size from its handle where the cached stat would be stale.
+13. `0013-serve-host-commands-off-the-scheduler.patch` plus `sdk_host_command.rs`: the SDK
+    scheduler thread never touches WASIX state for a host command. A dedicated service
+    thread performs descriptor operations and completion; see below.
 
 The [first actual Chromium probe](https://github.com/seo-rii/wasm-idle/pull/195)
 of the rebuilt five-patch SDK and shim-linked
@@ -618,3 +621,35 @@ archived as `evidence.host-executables-*.json` with a
 [recheck](evidence.host-executables-sdk-binary-metadata.json). Local packaging produced
 receipt `c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44`. The shell
 acceptance script runs with this package on the wasm-idle shell branch.
+
+## Keeping WASIX state off the scheduler thread
+
+The shell acceptance probe hung in about half of its runs right after a Clang host command
+completed. A local diagnostic build that logs on every thread captured the cycle:
+
+- A Bash child resolving a path below the live `/workspace` mount holds the directory
+  inode's write lock while it asks the scheduler thread to `stat` the entry, because the
+  delegate is served there. WASIX takes that lock for every lookup step, so this is not
+  specific to revalidation.
+- At the same time, the scheduler thread was preparing the next host command
+  (`./hello.wasm`): it read the child's snapshot and descriptors, which needs that same
+  inode lock. It blocked in `Atomics.wait`, so nobody served the `stat`.
+
+Neither thread can proceed, and the scheduler thread stops answering every other message.
+The rule is therefore that the scheduler thread never waits for a WASIX lock:
+
+- `HostCommandBridge::exec`, on the guest's own thread, records argv, environment, cwd and
+  which of descriptors 0–2 are open. It moves the child to a dedicated service thread
+  (`task_dedicated`) and sends only that owned metadata to the scheduler thread.
+- `HostCommandDescriptor.read` and `write` send a request to the service thread and
+  return a promise. The service thread performs the operation, which may wait for locks,
+  and returns the result in a new `SchedulerMessage` variant. Reads run as separate
+  tasks because they can wait for data; writes and closes keep their order.
+- `close()` stays synchronous and is ordered after earlier writes; like a close after
+  process exit, its outcome is not reported.
+- When the handler settles, its still-pending promises are rejected with `EBADF`, and the
+  service thread completes the child exactly as before: it closes descriptors, publishes
+  the status, then signals.
+- A request channel dropped without completion still completes the child with status 126.
+
+Each running host command occupies one pooled service Worker until it completes.

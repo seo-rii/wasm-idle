@@ -51,7 +51,8 @@ const patches = [
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = [
 	'0008-dispatch-trusted-host-commands.patch',
-	'0011-mount-host-filesystems.patch'
+	'0011-mount-host-filesystems.patch',
+	'0013-serve-host-commands-off-the-scheduler.patch'
 ];
 // Standalone new sources: [bridge file, crate, installed path].
 const installedSources = [
