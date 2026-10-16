@@ -6,7 +6,11 @@ import { beforeEach, describe, it, vi } from 'vitest';
 
 const startup = vi.hoisted(() => ({
 	memfsReady: Promise.resolve(),
-	memfsOptions: [] as Array<{ signal?: AbortSignal; maxAssetBytes?: number }>,
+	memfsOptions: [] as Array<{
+		signal?: AbortSignal;
+		maxAssetBytes?: number;
+		fetchImpl?: typeof fetch;
+	}>,
 	compile: vi.fn(),
 	readBuffer: vi.fn(),
 	untar: vi.fn(),
@@ -105,6 +109,28 @@ describe('Clang parallel sysroot startup', () => {
 		startup.untar.mockReset();
 		startup.installHeaders.mockReset();
 		startup.installCompatibility.mockReset();
+	});
+
+	it('uses its fetch provider for compiler, linker, MemFS and all sysroot profiles', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		const runtime = new Clang({ runtimeBaseUrl, manifest: profileManifest, fetchImpl });
+		await runtime.ready;
+		await runtime.getModule(runtime.assetUrls.lld);
+		runtime.run = vi.fn(async () => null);
+		await runtime.compile({
+			code: 'int main() {}',
+			input: 'main.cpp',
+			obj: 'main.o',
+			language: 'CPP'
+		});
+		assert.equal(startup.memfsOptions[0].fetchImpl, fetchImpl);
+		assert(startup.compile.mock.calls.length >= 2);
+		for (const call of startup.compile.mock.calls) assert.equal(call[4], fetchImpl);
+		assert.deepEqual(
+			startup.readBuffer.mock.calls.map(([url]) => url),
+			[cSysrootUrl, cppAddonUrl]
+		);
+		for (const call of startup.readBuffer.mock.calls) assert.equal(call[4], fetchImpl);
 	});
 
 	it('starts exactly one sysroot download before MemFS is ready', async () => {

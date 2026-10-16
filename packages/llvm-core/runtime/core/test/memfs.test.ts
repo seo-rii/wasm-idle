@@ -46,6 +46,32 @@ describe('MemFS', () => {
 		instantiate.mockRestore();
 	});
 
+	it('passes its fetch provider to the module loader', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		const memory = new WebAssembly.Memory({ initial: 1 });
+		vi.mocked(compile).mockResolvedValue({} as WebAssembly.Module);
+		const instantiate = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+			exports: { init: vi.fn(), memory }
+		} as WebAssembly.Instance);
+		try {
+			await new MemFS({
+				moduleUrl: 'https://example.test/custom-memfs.zip',
+				stdin: () => '',
+				stdout: vi.fn(),
+				fetchImpl
+			}).ready;
+			expect(compile).toHaveBeenCalledWith(
+				'https://example.test/custom-memfs.zip',
+				undefined,
+				undefined,
+				undefined,
+				fetchImpl
+			);
+		} finally {
+			instantiate.mockRestore();
+		}
+	});
+
 	it('forwards a pre-aborted startup signal without instantiating MemFS', async () => {
 		const controller = new AbortController();
 		const reason = new Error('stop MemFS startup');

@@ -274,13 +274,15 @@ describe('GnuCOBOL llvm-core runtime', () => {
 			'https://cdn.test/cobol/cobc.wasm.gz',
 			undefined,
 			controller.signal,
-			128 * 1024 * 1024
+			128 * 1024 * 1024,
+			fetchImpl
 		);
 		expect(readBuffer).toHaveBeenCalledWith(
 			'https://cdn.test/cobol/rootfs.tar.gz',
 			undefined,
 			128 * 1024 * 1024,
-			controller.signal
+			controller.signal,
+			fetchImpl
 		);
 
 		controller.abort(reason);

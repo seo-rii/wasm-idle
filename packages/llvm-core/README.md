@@ -14,6 +14,13 @@ const compiler = await createClangCompiler({
 });
 ```
 
+Clang, V and COBOL compiler options accept `fetchImpl` for both manifests and every binary or
+archive asset, including the shared Clang host used by V and COBOL. The provider remains responsible
+for any host-specific pinning and verification. In-memory byte and module caches are scoped to the
+fetch function identity as well as the asset URL and byte limit. Reuse one provider within a fixed
+asset scope; use a different provider for a different storage or verification scope. Assets within
+one scope must retain immutable URLs. Loads with an abort signal remain uncached.
+
 The corresponding compiler patches, source pins, and reproducible asset producers are maintained
 in the `wasm-llvm` repository. This package does not read files from that repository or its npm
 package.
