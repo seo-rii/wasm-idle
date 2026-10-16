@@ -114,6 +114,13 @@ frozen `command` metadata, an independently owned `executable` byte array and it
 `executablePath`. Only the receiving adapter may instantiate those bytes; it must validate
 the actual Wasm/import/memory profile and must not re-fetch an executable by URL.
 
+After a container atomically mounts a verified closure, all indexed commands in those
+packages can reuse its readonly files, including multicall aliases, other executables,
+and commands from dependencies. Each command retains its own adapter, `argv0` and prefix
+arguments. This reuse does not require either asset cache or another network request.
+Commands outside that closure still require preparation; failed mounts publish no command
+readiness. The manager's standalone preparation API does not own or inspect container mounts.
+
 The manager checks host capability IDs and reserves preparation count/file-byte budgets
 before downloading. Byte accounting covers prepared file copies and a command executable
 copy. This is an admission budget, not a browser JS heap/RSS hard limit; delivery buffers,
