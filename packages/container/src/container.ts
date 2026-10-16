@@ -100,7 +100,8 @@ export class Container {
       snapshotInvocation(name, [], {});
       if (!(command.bytes instanceof Uint8Array) || !this.#adapters.has(command.adapter)) throw new ContainerError('INVALID_ARGUMENT', `Invalid command: ${name}`);
       if (command.argv0 !== undefined) snapshotInvocation(command.argv0, []);
-      this.#commands.set(name, Object.freeze({ ...command, bytes: command.bytes.slice() }));
+      // Buffer is a Uint8Array too, but its slice() still aliases caller storage.
+      this.#commands.set(name, Object.freeze({ ...command, bytes: Uint8Array.from(command.bytes) }));
     }
   }
   spawn(command: string, args: readonly string[] = [], options: SpawnOptions = {}): Promise<ContainerProcess> {
@@ -220,7 +221,7 @@ export class Container {
             controller.abort(); throw new ContainerError('RESOURCE_LIMIT', 'Batch stdin exceeds configured limit');
           }
           if (!bytes.length) return;
-          inputChunks.push(bytes.slice()); inputSize += bytes.length;
+          inputChunks.push(Uint8Array.from(bytes)); inputSize += bytes.length;
         },
         close: () => {
           if (inputClosed) return;
@@ -293,7 +294,7 @@ export class Container {
     const max = positive(options.maxCaptureBytes ?? 8 * 1024 * 1024, 'maxCaptureBytes', 256 * 1024 * 1024);
     if (options.stdin !== undefined && !(options.stdin instanceof Uint8Array)) throw new ContainerError('INVALID_ARGUMENT', 'stdin requires bytes');
     if (options.stdio !== undefined) throw new ContainerError('INVALID_ARGUMENT', 'run captures its own stdio; use spawn to delegate it');
-    const bytes = options.stdin?.slice();
+    const bytes = options.stdin === undefined ? undefined : Uint8Array.from(options.stdin);
     const process = await this.spawn(command, args, options);
     let captured = 0;
     const drain = async (stream: ReadableStream<Uint8Array>) => {
