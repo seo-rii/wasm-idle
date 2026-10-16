@@ -29,6 +29,8 @@ export interface PathOptions {
 export interface OpenOptions extends PathOptions {
   read?: boolean;
   write?: boolean;
+  /** Allow ftruncate without granting byte writes. Inapplicable to directories/devices. */
+  resize?: boolean;
   create?: boolean;
   exclusive?: boolean;
   truncate?: boolean;

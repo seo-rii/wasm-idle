@@ -136,7 +136,7 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
     for (const [key, item] of Object.entries(value)) {
       if (!anchored && (key === 'cwd' || key === 'root')) path(item);
       else if (open && key === 'mode') number(item);
-      else if (open && ['read', 'write', 'create', 'exclusive', 'truncate', 'append', 'directory'].includes(key) && typeof item === 'boolean') continue;
+      else if (open && ['read', 'write', 'resize', 'create', 'exclusive', 'truncate', 'append', 'directory'].includes(key) && typeof item === 'boolean') continue;
       else throw new FsError('EINVAL', 'Unsupported path option');
     }
     return value as OpenOptions;

@@ -200,7 +200,9 @@ export function createWasiHost(options: HostOptions) {
       if ((oflags & 8) && (!(parent.rights & (1n << 19n)) || !(rights & 64n))) return 76;
       const p = relative(fd, ptr, len);
       let newFd = 0; while (handles.has(newFd) || standard.has(newFd)) newFd++; if (newFd >= 256) return 33;
-      const opened = paths.open(p, { read: Boolean(rights & 2n) || !(rights & 64n), write: Boolean(rights & 64n), create: Boolean(oflags & 1), directory: Boolean(oflags & 2), exclusive: Boolean(oflags & 4), truncate: Boolean(oflags & 8), append: Boolean(fdflags & 1) }, Boolean(flags & 1));
+      // Resize is independent of byte writes and does not turn directory opens into writable files.
+      const write = Boolean(rights & 64n), resize = Boolean(rights & (1n << 22n));
+      const opened = paths.open(p, { read: Boolean(rights & 2n) || !(write || resize), write, resize, create: Boolean(oflags & 1), directory: Boolean(oflags & 2), exclusive: Boolean(oflags & 4), truncate: Boolean(oflags & 8), append: Boolean(fdflags & 1) }, Boolean(flags & 1));
       handles.set(newFd, { fd: opened, root: parent.root, flags: fdflags, rights, inherited }); put32(result, newFd); return 0;
     },
     path_filestat_get: (fd, flags, ptr, len, result) => { span(result, 64); if (flags & ~1) return 28; const p = relative(fd, ptr, len, 1n << 18n); return stat(result, paths.stat(p, Boolean(flags & 1))); },

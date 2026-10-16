@@ -26,6 +26,7 @@ interface Description {
   offset: number;
   read: boolean;
   write: boolean;
+  resize: boolean;
   append: boolean;
   root: string;
   preserveSnapshot: boolean;
@@ -537,9 +538,10 @@ export class MemoryFileSystem {
   open(path: string, options: OpenOptions = {}): number {
     if (this.lease) throw new FsError('EBUSY', 'Host descriptors cannot open during a snapshot writer lease');
     if (options.snapshot !== undefined && options.snapshot !== 'preserve') throw new FsError('EINVAL', 'Invalid snapshot descriptor policy');
-    const read = options.read ?? !options.write;
+    const read = options.read ?? !(options.write || options.resize);
     const write = options.write ?? false;
-    if (!read && !write) throw new FsError('EINVAL', 'Open must request read or write access');
+    const resize = options.resize ?? false;
+    if (!read && !write && !resize) throw new FsError('EINVAL', 'Open must request read, write or resize access');
     if ((options.truncate || options.append) && !write) throw new FsError('EINVAL', 'Truncate/append require write access');
     const { root } = this.context(options);
     if (options.create && options.exclusive) {
@@ -563,10 +565,11 @@ export class MemoryFileSystem {
     if (node.command) throw new FsError('ENOTSUP', 'Virtual commands execute through the registered backend');
     if (options.directory && node.type !== 'directory') throw new FsError('ENOTDIR', 'A directory descriptor was requested');
     if (write && node.type !== 'character-device') { this.writable(node); this.file(node); }
+    if (resize && node.type === 'file') this.writable(node);
     if (options.truncate && node.type !== 'character-device') this.resize(node, 0);
     const fd = this.nextFd++;
     node.references++;
-    this.descriptors.set(fd, { node, offset: 0, read, write, append: options.append ?? false, root, preserveSnapshot: options.snapshot === 'preserve' });
+    this.descriptors.set(fd, { node, offset: 0, read, write, resize, append: options.append ?? false, root, preserveSnapshot: options.snapshot === 'preserve' });
     return fd;
   }
 
@@ -673,7 +676,7 @@ export class MemoryFileSystem {
   truncate(path: string, length = 0, options: PathOptions = {}): void { this.resize(this.resolve(path, options).node, length); }
   ftruncate(fd: number, length = 0): void {
     const description = this.descriptor(fd);
-    if (!description.write) throw new FsError('EBADF', 'Descriptor is not writable');
+    if (!description.write && !description.resize) throw new FsError('EBADF', 'Descriptor cannot resize files');
     this.resize(description.node, length);
   }
 
