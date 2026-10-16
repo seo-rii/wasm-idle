@@ -24,7 +24,12 @@ count against quota. Directory descriptors can report their current path after
 rename; an unlinked directory cannot resolve new paths. Mount roots cannot move.
 
 `open` returns an integer descriptor starting at 3. Options select read/write,
-create/exclusive, truncate, append or directory access. `dup` shares the open
+create/exclusive, truncate, append or directory access. `resize: true` separately
+permits `ftruncate` on regular files without granting byte reads or writes. Read
+access defaults to true only when neither write nor resize access was requested.
+Resize access checks the regular file's readonly mount at open time; including
+it in a directory open does not request byte-write access to that directory.
+The `truncate` and `append` open options still require write access. `dup` shares the open
 description and its offset. `pread` and `pwrite` use an explicit offset and never
 change it; `pwrite` ignores append mode. `write` in append mode chooses EOF for
 each nonempty write. Reads can be short and return empty bytes at EOF. Empty reads
