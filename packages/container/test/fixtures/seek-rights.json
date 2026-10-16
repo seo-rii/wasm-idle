@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "profile": "wasi-preview1-process",
+  "purpose": "Preview1 seek/tell implication, positioned I/O permission, rights reduction and delegation in snapshot and live Workers",
+  "specification": "https://github.com/WebAssembly/WASI/blob/snapshot-01/phases/snapshot/docs.md#rights",
+  "compiler": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)",
+  "command": [
+    "clang",
+    "--target=wasm32",
+    "-nostdlib",
+    "-O0",
+    "-Wl,--no-entry",
+    "-Wl,--export-memory",
+    "-Wl,--initial-memory=131072",
+    "-Wl,--max-memory=8388608",
+    "seek-rights.c",
+    "-o",
+    "seek-rights.wasm"
+  ],
+  "files": {
+    "seek-rights.c": {
+      "bytes": 6933,
+      "sha256": "ac00d7e2bc956b8330d25e11bb1e5134433e85cd0cfee517fd8426fda0bf4489"
+    },
+    "seek-rights.wasm": {
+      "bytes": 5892,
+      "sha256": "4e3e421ca5f54f4590ae872f23137154cf9154a75710598a859b9b96039510b9"
+    }
+  }
+}
