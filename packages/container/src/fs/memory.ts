@@ -252,13 +252,16 @@ export class MemoryFileSystem {
       if (!child) throw new FsError('ENOENT', 'Path does not exist');
       if (child.type === 'symlink' && (followFinal || queue.length > 0 || path.endsWith('/'))) {
         if (++hops > 40) throw new FsError('ELOOP', 'Too many symbolic links');
+        const target = components(child.target);
+        // A slash in the target requires that target to resolve to a directory,
+        // even through another symlink and before any remaining caller suffix.
+        if (child.target.endsWith('/')) target.push('.');
         if (child.target.startsWith('/')) {
-          const target = components(child.target);
           if (floor.some((name, i) => target[i] !== name)) throw new FsError('EACCES', 'Symlink escapes the directory capability');
           names.length = 0;
           stack.length = 1;
-          queue.unshift(...target);
-        } else queue.unshift(...components(child.target));
+        }
+        queue.unshift(...target);
       } else { names.push(part); stack.push(child); }
     }
     const node = stack[stack.length - 1]!;
@@ -304,11 +307,13 @@ export class MemoryFileSystem {
   private createParent(path: string, options: PathOptions): { node: Inode; path: string; name: string } {
     let candidate = path;
     let context = options;
+    let requiresDirectory = false;
     for (let hops = 0; hops <= 40; hops++) {
+      requiresDirectory ||= candidate.endsWith('/');
       const parent = this.parent(candidate, context);
       const existing = parent.node.children.get(parent.name);
       if (existing?.type !== 'symlink') {
-        if (!existing && candidate.endsWith('/')) throw new FsError('ENOTDIR', 'File destination has a trailing slash');
+        if (!existing && requiresDirectory) throw new FsError('ENOTDIR', 'File destination has a trailing slash');
         return parent;
       }
       candidate = existing.target;
