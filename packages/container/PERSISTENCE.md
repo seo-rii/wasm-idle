@@ -46,13 +46,17 @@ storage permission or claim indefinite retention.
 On reopen, root digests, structure, inode identities, namespace limits and every
 referenced blob are validated. An invalid latest root can fall back to the
 previous verified root, with `recovered: true`. Only evidence about the stored data
-selects that fallback: a digest, size, structure or limit mismatch, or a missing blob.
+selects that fallback: a digest, size or structure mismatch, or a missing blob.
 Because the next flush retires every root except the loaded one, a storage access
 failure such as an unreadable blob instead fails opening with `STORAGE` and leaves both
 roots untouched for a retry. If neither retained root validates,
 opening fails with `CORRUPT` and leaves the stored data untouched. It never replaces
-a corrupt workspace with an empty one. Lowering memory or metadata limits can
-make a previously valid workspace unrecoverable under the new limits.
+a corrupt workspace with an empty one. If the newest candidate exceeds the current
+byte, inode or metadata budget, opening fails with `RESOURCE_LIMIT` and releases
+the writer lock. It does not select an older root or modify either committed root
+or its blobs. Retry with sufficient limits to reopen the latest save. Byte budgets
+include both file content and symlink targets; inode budgets include the recreated
+base namespace as well as the saved workspace entries.
 
 There are at most two committed root records after publication. Orphan and retired
 blobs remain until the host explicitly requests the bounded maintenance operation
@@ -151,7 +155,8 @@ version, platform, module hash and fixture outcomes. No compiler assets are used
 The suite covers binary/symlink/inode restoration after reload, exclusive ownership
 from a second tab, cache deletion, unsaved export and disposal, a real page reload
 after a blob has closed but before root publication, last-good recovery after blob
-corruption, post-publication failure status, edits during flush, metadata budget
+corruption, lowered byte/inode/metadata admission budgets without fallback or journal
+changes, post-publication failure status, edits during flush, metadata budget
 failure and unrecoverable
 storage. Fault hooks receive only named commit boundaries, never file contents.
 Throwing after root publication can reject a flush whose data has already committed;
