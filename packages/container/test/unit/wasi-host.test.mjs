@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MemoryFileSystem } from '../../dist/fs/index.js';
+import { MemoryFileSystem, FsError } from '../../dist/fs/index.js';
 import { createWasiHost } from '../../dist/adapters/wasi/host.js';
 
 function hostTest(run, fs = new MemoryFileSystem(), stdio) {
@@ -155,4 +155,50 @@ test('initial_cwd writes the exact NUL-terminated cwd and rejects short or out-o
       assert.equal(view[expected.length], 7);
     } } });
   } finally { host.dispose(); }
+});
+
+test('vectored stdout/stderr report prior progress on EPIPE and preserve errors before progress', () => {
+  for (const fd of [1, 2]) {
+    const output = [];
+    const stdio = {
+      read: () => new Uint8Array(),
+      write(channel, bytes) {
+        assert.equal(channel, fd);
+        if (output.length) throw new FsError('EPIPE', 'Reader closed');
+        output.push(Uint8Array.from(bytes)); return bytes.length;
+      },
+      capture: () => ({ stdout: new Uint8Array(), stderr: new Uint8Array() })
+    };
+    hostTest((w, memory) => {
+      const bytes = new Uint8Array(memory.buffer), view = new DataView(memory.buffer);
+      bytes.set([0, 255, 195, 169], 256);
+      view.setUint32(128, 256, true); view.setUint32(132, 2, true);
+      view.setUint32(136, 258, true); view.setUint32(140, 2, true);
+      view.setUint32(144, 0xdeadbeef, true);
+      assert.equal(w.fd_write(fd, 128, 2, 144), 0);
+      assert.equal(view.getUint32(144, true), 2);
+      assert.deepEqual(output, [new Uint8Array([0, 255])]);
+      view.setUint32(144, 0xdeadbeef, true);
+      assert.equal(w.fd_write(fd, 136, 1, 144), 64);
+      assert.equal(view.getUint32(144, true), 0xdeadbeef);
+      assert.deepEqual(output, [new Uint8Array([0, 255])]);
+    }, new MemoryFileSystem(), stdio);
+  }
+});
+
+test('vectored stdio does not hide fatal host failures after accepted bytes', () => {
+  let calls = 0;
+  const failure = new Error('Host channel failed');
+  const stdio = {
+    read: () => new Uint8Array(),
+    write(_fd, bytes) { if (calls++) throw failure; return bytes.length; },
+    capture: () => ({ stdout: new Uint8Array(), stderr: new Uint8Array() })
+  };
+  hostTest((w, memory) => {
+    const view = new DataView(memory.buffer);
+    view.setUint32(128, 256, true); view.setUint32(132, 2, true);
+    view.setUint32(136, 258, true); view.setUint32(140, 2, true);
+    assert.throws(() => w.fd_write(1, 128, 2, 144), error => error === failure);
+    assert.equal(calls, 2);
+  }, new MemoryFileSystem(), stdio);
 });

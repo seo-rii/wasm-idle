@@ -148,16 +148,23 @@ export function createWasiHost(options: HostOptions) {
     const output = (fd === 1 || fd === 2) && standard.has(fd);
     const h = output ? undefined : handle(fd, FD_WRITE | (offset === undefined ? 0n : FD_SEEK));
     if (output && offset !== undefined) throw new WasiFault(70);
-    for (const buffer of buffers) {
-      const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
-      if (!bytes.length) { if (total === 1024 * 1024) break; continue; }
-      if (output) {
-        const n = stdio.write(fd as 1 | 2, bytes);
-        total += n; if (n < bytes.length) break;
-      } else {
-        const n = offset === undefined ? options.fs.write(h!.fd, bytes) : options.fs.pwrite(h!.fd, bytes, safeOffset(offset) + total);
-        total += n; if (n < bytes.length) break;
+    try {
+      for (const buffer of buffers) {
+        const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
+        if (!bytes.length) { if (total === 1024 * 1024) break; continue; }
+        if (output) {
+          const n = stdio.write(fd as 1 | 2, bytes);
+          total += n; if (n < bytes.length) break;
+        } else {
+          const n = offset === undefined ? options.fs.write(h!.fd, bytes) : options.fs.pwrite(h!.fd, bytes, safeOffset(offset) + total);
+          total += n; if (n < bytes.length) break;
+        }
       }
+    } catch (error) {
+      // Earlier iovecs are already committed. Report that progress so the guest
+      // can retry the remainder; only guest I/O errno may become a short write.
+      // Fatal host/channel failures must still terminate the invocation.
+      if (!total || !(error instanceof FsError)) throw error;
     }
     put32(result, total); return 0;
   };
