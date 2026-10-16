@@ -91,7 +91,7 @@ export function createRemoteStdio(call: RpcCall, initialOpen: readonly number[] 
   };
 }
 
-const delegatedCodes = new Set<string>(['EINVAL', 'EBADF', 'EACCES', 'EISDIR', 'ENOTSUP', 'EPIPE', 'EIO']);
+const delegatedCodes = new Set<string>(['EINVAL', 'EBADF', 'EACCES', 'EISDIR', 'ENOTSUP', 'ENOSPC', 'EPIPE', 'EIO']);
 /** Report a caller endpoint failure to the guest as one of its own errno values. */
 function delegatedError(error: unknown): FsError {
   const code = (error as { code?: unknown } | null)?.code;

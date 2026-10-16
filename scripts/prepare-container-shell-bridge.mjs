@@ -56,9 +56,10 @@ const patches = [
 	'0012-revalidate-live-mounts.patch',
 	'0014-preserve-live-append.patch',
 	'0015-dup2-onto-a-pipe.patch',
-	'0018-use-bounded-pipes.patch'
+	'0018-use-bounded-pipes.patch',
+	'0022-preserve-filesystem-wasi-errno.patch'
 ];
-const virtualFsPatches = ['0017-bound-native-pipes.patch'];
+const virtualFsPatches = ['0017-bound-native-pipes.patch', '0021-retain-filesystem-io-errors.patch'];
 // SDK patches apply to the extracted SDK before its Cargo path override.
 const sdkPatches = [
 	'0008-dispatch-trusted-host-commands.patch',

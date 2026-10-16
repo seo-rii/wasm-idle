@@ -91,6 +91,29 @@ test('delegated EPIPE reaches the guest as its own errno', { timeout: 30000 }, a
   } finally { await c.dispose(); }
 });
 
+test('a full workspace reports ENOSPC through delegated redirection to the real guest', { timeout: 30000 }, async () => {
+  const c = createContainer({ maxBytes: 128,
+    adapters: [createLiveWasiAdapter({ workerFactory: liveWorker })],
+    commands: { tool: { adapter: 'wasi-preview1-live', bytes: live } }
+  });
+  const shell = createShellFilesystem(c.fs);
+  const handle = shell.open('/out', { read: false, write: true, create: true, exclusive: false, truncate: true, append: false });
+  const errors = [];
+  try {
+    const p = await c.spawn('tool', ['flood'], { stdio: { stdout: {
+      write(bytes) {
+        try { return shell.write(handle, 0, bytes); }
+        catch (error) { errors.push(error.code); throw error; }
+      },
+      close() { shell.close(handle); }
+    } } });
+    assert.deepEqual(await p.exited, { code: 51, reason: 'exited' });
+    assert.deepEqual(errors, ['ENOSPC']);
+    assert.equal(c.fs.stat('/workspace/out').size, 0);
+    assert.equal((await c.inspect()).processes.length, 0);
+  } finally { shell.dispose(); await c.dispose(); }
+});
+
 test('guest fd_close closes the delegated endpoint once and null starts closed', { timeout: 30000 }, async () => {
   const c = make();
   try {
