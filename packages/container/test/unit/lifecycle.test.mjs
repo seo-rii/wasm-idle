@@ -31,7 +31,10 @@ test('invalid API inputs fail before startup', () => {
     () => snapshotInvocation('x', [], { timeoutMs: Infinity }),
     () => snapshotInvocation('x', new Array(1)),
     () => snapshotInvocation('x', ['a', , 'b']),
-    () => snapshotInvocation('x', [], null)
+    () => snapshotInvocation('x', [], null),
+    ...[null, false, 1, {}, { aborted: false }, { aborted: false, addEventListener() {} },
+      { aborted: false, removeEventListener() {} }, { aborted: 'false', addEventListener() {}, removeEventListener() {} }]
+      .map(signal => () => snapshotInvocation('x', [], { signal }))
   ]) assert.throws(invoke, { code: 'INVALID_ARGUMENT' });
 });
 
@@ -57,4 +60,13 @@ test('argv is read once, so a getter cannot swap a value after validation', () =
   const snapshot = snapshotInvocation('x', args);
   assert.deepEqual(snapshot.args, ['ok']);
   assert.equal(reads, 1);
+});
+
+test('the invocation reads the caller signal once and preserves live cancellation', () => {
+  const controller = new AbortController(); let reads = 0;
+  const options = { get signal() { reads++; return reads === 1 ? controller.signal : {}; } };
+  const snapshot = snapshotInvocation('x', [], options);
+  assert.equal(reads, 1); assert.equal(snapshot.signal, controller.signal);
+  controller.abort('cancelled');
+  assert.equal(snapshot.signal.aborted, true); assert.equal(snapshot.signal.reason, 'cancelled');
 });

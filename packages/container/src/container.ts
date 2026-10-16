@@ -145,7 +145,9 @@ export class Container {
     const stderr = byteOutput(new Promise<Uint8Array>((resolve) => { stderrResolve = resolve; }));
     const cleanup = (result: ProcessResult, output?: { stdout: Uint8Array; stderr: Uint8Array }) => finishing ??= (async () => {
       if (timer !== undefined) clearTimeout(timer);
-      invocation.signal?.removeEventListener('abort', abort);
+      // Caller-owned event methods may throw; cleanup must still retire this generation.
+      try { invocation.signal?.removeEventListener('abort', abort); }
+      catch { result = { code: null, reason: 'runtime-error' }; }
       controller.signal.removeEventListener('abort', onAbort);
       inputClosed = true; inputChunks.length = 0;
       inputReject(new ContainerError('ABORTED', 'Command stopped'));
@@ -166,10 +168,10 @@ export class Container {
     const stop = async () => { controller.abort(); if (returned) await cleanup({ code: null, reason }); else await lifecycle.exited; };
     if (reservation) { reservation.remaining--; this.#reservedProcesses--; }
     this.#processes.set(pid, { command, lifecycle, stop });
-    invocation.signal?.addEventListener('abort', abort, { once: true });
-    if (invocation.signal?.aborted) abort();
-    if (invocation.timeoutMs !== undefined) timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, invocation.timeoutMs);
     try {
+      invocation.signal?.addEventListener('abort', abort, { once: true });
+      if (invocation.signal?.aborted) abort();
+      if (invocation.timeoutMs !== undefined) timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, invocation.timeoutMs);
       lifecycle.transition('resolving'); controller.signal.throwIfAborted();
       lifecycle.transition('preparing');
       const mounted = packageCommand && this.#mountedCommands.get(packageCommand.name);
