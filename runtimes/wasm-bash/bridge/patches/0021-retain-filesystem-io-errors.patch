@@ -1,0 +1,48 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -553,6 +553,10 @@
+ 
+ impl From<io::Error> for FsError {
+     fn from(io_error: io::Error) -> Self {
++        // The host mount retains its exact filesystem error across async I/O.
++        if let Some(error) = io_error.get_ref().and_then(|error| error.downcast_ref::<FsError>()) {
++            return *error;
++        }
+         match io_error.kind() {
+             io::ErrorKind::AddrInUse => FsError::AddressInUse,
+             io::ErrorKind::AddrNotAvailable => FsError::AddressNotAvailable,
+@@ -613,7 +617,8 @@
+             // NOTE: Add this once the "io_error_more" Rust feature is stabilized
+             // FsError::StorageFull => io::ErrorKind::StorageFull,
+         };
+-        kind.into()
++        // Keep errors such as StorageFull whose portable kind is only Other.
++        io::Error::new(kind, val)
+     }
+ }
+ 
+@@ -770,3 +775,24 @@
+         None
+     }
+ }
++
++#[cfg(test)]
++mod container_filesystem_error_tests {
++    use super::*;
++
++    #[test]
++    fn exact_filesystem_errors_survive_async_io() {
++        for error in [FsError::StorageFull, FsError::InvalidFd, FsError::BaseNotDirectory,
++            FsError::DirectoryNotEmpty, FsError::WouldBlock, FsError::Unsupported] {
++            let io: io::Error = error.into();
++            assert_eq!(io.get_ref().unwrap().downcast_ref::<FsError>(), Some(&error));
++            assert_eq!(FsError::from(io), error);
++        }
++    }
++
++    #[test]
++    fn ordinary_io_errors_keep_their_existing_mapping() {
++        assert_eq!(FsError::from(io::Error::from(io::ErrorKind::Other)), FsError::IOError);
++        assert_eq!(FsError::from(io::Error::from(io::ErrorKind::WouldBlock)), FsError::WouldBlock);
++    }
++}

@@ -145,3 +145,6 @@ and create a fresh owner before restarting.
 - `test/shell-acceptance`: real Bash, BusyBox, Clang and generated artifacts in
   Chromium. Its receipt must identify the current SDK and sources to qualify
   this optional backend; protocol tests alone do not establish shell support.
+- `test/shell-quota`: real Bash/SDK descriptor and WASI guest quota errors. The
+  gate requires an SDK rebuilt with the filesystem errno producer patches;
+  see [its configuration and scope](test/shell-quota/README.md).
