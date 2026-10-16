@@ -1,0 +1,139 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "packages/container/scripts/test-clang-browser.mjs"
+  ],
+  "startedAtUnix": 1791955112.9365234,
+  "exitCode": 0,
+  "pid": 2213684,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "remainingMayBeTruncated": false,
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2214182,
+        "exitCode": 0
+      },
+      {
+        "pid": 2214049,
+        "exitCode": 0
+      },
+      {
+        "pid": 2214050,
+        "exitCode": 0
+      },
+      {
+        "pid": 2213819,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 185.736,
+  "observations": [
+    {
+      "pid": 2213684,
+      "startTicks": 14830550,
+      "state": "S",
+      "cpuSeconds": 2.4,
+      "virtualAddressSpaceBytes": 1702359040,
+      "residentSetBytes": 224382976,
+      "sampledMaximumRssBytes": 268419072,
+      "sampledMaximumVszBytes": 1757097984,
+      "sampledAtUnix": 1791955298.171141
+    },
+    {
+      "pid": 2213817,
+      "startTicks": 14830753,
+      "state": "R",
+      "cpuSeconds": 0.0,
+      "virtualAddressSpaceBytes": 7532544,
+      "residentSetBytes": 1150976,
+      "sampledMaximumRssBytes": 1150976,
+      "sampledMaximumVszBytes": 7532544,
+      "sampledAtUnix": 1791955114.986291
+    },
+    {
+      "pid": 2213819,
+      "startTicks": 14830756,
+      "state": "S",
+      "cpuSeconds": 0.48,
+      "virtualAddressSpaceBytes": 1371099136,
+      "residentSetBytes": 32141312,
+      "sampledMaximumRssBytes": 54800384,
+      "sampledMaximumVszBytes": 1371099136,
+      "sampledAtUnix": 1791955298.1711528
+    },
+    {
+      "pid": 2214024,
+      "startTicks": 14830961,
+      "state": "S",
+      "cpuSeconds": 0.97,
+      "virtualAddressSpaceBytes": 56256229376,
+      "residentSetBytes": 155955200,
+      "sampledMaximumRssBytes": 183971840,
+      "sampledMaximumVszBytes": 56258326528,
+      "sampledAtUnix": 1791955298.1711442
+    },
+    {
+      "pid": 2214050,
+      "startTicks": 14830994,
+      "state": "S",
+      "cpuSeconds": 0.03,
+      "virtualAddressSpaceBytes": 56078352384,
+      "residentSetBytes": 41877504,
+      "sampledMaximumRssBytes": 41877504,
+      "sampledMaximumVszBytes": 56078352384,
+      "sampledAtUnix": 1791955298.1711464
+    },
+    {
+      "pid": 2214049,
+      "startTicks": 14830994,
+      "state": "S",
+      "cpuSeconds": 0.02,
+      "virtualAddressSpaceBytes": 56078352384,
+      "residentSetBytes": 41586688,
+      "sampledMaximumRssBytes": 41586688,
+      "sampledMaximumVszBytes": 56078352384,
+      "sampledAtUnix": 1791955298.17115
+    },
+    {
+      "pid": 2214079,
+      "startTicks": 14831051,
+      "state": "S",
+      "cpuSeconds": 0.07,
+      "virtualAddressSpaceBytes": 1554545020928,
+      "residentSetBytes": 77205504,
+      "sampledMaximumRssBytes": 77205504,
+      "sampledMaximumVszBytes": 1554545020928,
+      "sampledAtUnix": 1791955118.4939563
+    },
+    {
+      "pid": 2214070,
+      "startTicks": 14831029,
+      "state": "S",
+      "cpuSeconds": 0.13,
+      "virtualAddressSpaceBytes": 56397361152,
+      "residentSetBytes": 111947776,
+      "sampledMaximumRssBytes": 112017408,
+      "sampledMaximumVszBytes": 56397496320,
+      "sampledAtUnix": 1791955298.1711514
+    },
+    {
+      "pid": 2214182,
+      "startTicks": 14831093,
+      "state": "R",
+      "cpuSeconds": 133.72,
+      "virtualAddressSpaceBytes": 1556836220928,
+      "residentSetBytes": 2000056320,
+      "sampledMaximumRssBytes": 2448310272,
+      "sampledMaximumVszBytes": 1556836220928,
+      "sampledAtUnix": 1791955298.1711485
+    }
+  ],
+  "observationScope": "separate sampled process values; no aggregate memory limit or final/peak linker claim"
+}

@@ -1,0 +1,121 @@
+--- a/libbb/copy_file.c
++++ b/libbb/copy_file.c
+@@ -87,6 +87,16 @@
+ 	smallint dest_exists = 0;
+ 	smallint ovr;
+ 
++#if defined(BB_WASI_B1)
++	/* Refuse unimplemented semantics before touching the destination. */
++	if (flags & (FILEUTILS_RECUR | FILEUTILS_PRESERVE_STATUS
++	 | FILEUTILS_MAKE_HARDLINK | FILEUTILS_MAKE_SOFTLINK)) {
++		errno = ENOTSUP;
++		bb_simple_perror_msg("recursive, preserving, and link copy modes");
++		return -1;
++	}
++#endif
++
+ /* Inverse of cp -d ("cp without -d") */
+ #define FLAGS_DEREF (flags & (FILEUTILS_DEREFERENCE + FILEUTILS_DEREFERENCE_L0))
+ 
+@@ -98,6 +108,15 @@
+ 		bb_perror_msg("can't stat '%s'", source);
+ 		return -1;
+ 	}
++
++#if defined(BB_WASI_B1)
++	if (!S_ISREG(source_stat.st_mode) && !S_ISLNK(source_stat.st_mode)
++	 && !S_ISDIR(source_stat.st_mode)) {
++		errno = ENOTSUP;
++		bb_perror_msg("can't copy special file '%s'", source);
++		return -1;
++	}
++#endif
+ 
+ 	if (lstat(dest, &dest_stat) < 0) {
+ 		if (errno != ENOENT) {
+@@ -135,6 +154,10 @@
+ #endif
+ 
+ 	if (S_ISDIR(source_stat.st_mode)) {
++#if defined(BB_WASI_B1)
++		bb_error_msg("omitting directory '%s'", source);
++		return -1;
++#else
+ 		DIR *dp;
+ 		const char *tp;
+ 		struct dirent *d;
+@@ -215,6 +238,7 @@
+ 			/* retval = -1; - WRONG! copy *WAS* made */
+ 		}
+ 		goto preserve_mode_ugid_time;
++#endif
+ 	}
+ 
+ 	if (dest_exists) {
+@@ -399,9 +423,11 @@
+ 				return -1;
+ 			}
+ 			free(lpath);
++#if !defined(BB_WASI_B1)
+ 			if (flags & FILEUTILS_PRESERVE_STATUS)
+ 				if (lchown(dest, source_stat.st_uid, source_stat.st_gid) < 0)
+ 					bb_perror_msg("can't preserve %s of '%s'", "ownership", dest);
++#endif
+ 		}
+ 		/* _Not_ jumping to preserve_mode_ugid_time:
+ 		 * symlinks don't have those */
+@@ -410,16 +436,23 @@
+ 	if (S_ISBLK(source_stat.st_mode) || S_ISCHR(source_stat.st_mode)
+ 	 || S_ISSOCK(source_stat.st_mode) || S_ISFIFO(source_stat.st_mode)
+ 	) {
++#if defined(BB_WASI_B1)
++		errno = ENOTSUP;
++		bb_perror_msg("can't copy special file '%s'", source);
++		return -1;
++#else
+ 		if (mknod(dest, source_stat.st_mode, source_stat.st_rdev) < 0) {
+ 			bb_perror_msg("can't create '%s'", dest);
+ 			return -1;
+ 		}
++#endif
+ 	} else {
+ 		bb_error_msg("unrecognized file '%s' with mode %x", source, source_stat.st_mode);
+ 		return -1;
+ 	}
+ 
+  preserve_mode_ugid_time:
++#if !defined(BB_WASI_B1)
+ 
+ 	if (flags & FILEUTILS_PRESERVE_STATUS
+ 	/* Cannot happen: */
+@@ -440,6 +473,7 @@
+ 			bb_perror_msg("can't preserve %s of '%s'", "permissions", dest);
+ 	}
+ 
++#endif
+  verb_and_exit:
+ 	if (flags & FILEUTILS_VERBOSE) {
+ 		printf("'%s' -> '%s'\n", source, dest);
+--- a/coreutils/mv.c
++++ b/coreutils/mv.c
+@@ -135,6 +135,11 @@
+ 		}
+ 
+ 		if (rename(*argv, dest) < 0) {
++#if defined(BB_WASI_B1)
++			/* Cross-mount fallback needs metadata preservation. Do not unlink
++			 * the destination or partially copy before rejecting that path. */
++			bb_perror_msg("can't rename '%s'", *argv);
++#else
+ 			int source_exists;
+ 
+ 			if (errno != EXDEV
+@@ -175,6 +180,8 @@
+ 					goto RET_0;
+ 				}
+ 			}
++
++#endif
+  RET_1:
+ 			status = 1;
+ 		}

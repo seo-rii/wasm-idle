@@ -1,0 +1,1672 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "shellAcceptancePassed": false,
+  "startedAt": "2026-10-15T08:53:37.418Z",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "applicationCommit": "04aac7e061607f9b8621c62a98e22ec3fd7a676c",
+  "script": "set -eu\nmkdir -p /workspace/demo\ncd /workspace/demo\nprintf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c\nclang main.c -o hello.wasm\n./hello.wasm | grep hello > result.txt\ncat result.txt\n",
+  "packageReceipt": {
+    "bytes": 2605,
+    "sha256": "c26676d7b65a5c42534324cf26f2e14ad49c49e3537b01155f1568c595f1fc44"
+  },
+  "packageId": "sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1",
+  "memory": {
+    "initial": 35,
+    "maximum": 16384,
+    "shared": true
+  },
+  "bundles": {
+    "owner.js": {
+      "bytes": 768588,
+      "sha256": "e32bfd336b7b082656fe22acb547672e7cd393a5e3e91f763a8f625422b045df"
+    },
+    "clang-worker.js": {
+      "bytes": 681543,
+      "sha256": "21230494be79d4f27457358c9667af5bccf8f6c57be72672c413860a2203bf67"
+    },
+    "live-worker.js": {
+      "bytes": 29261,
+      "sha256": "00143255f0cef303ea6007d487e24f1d331016053a997af9a38a5dfcce8b9b32"
+    }
+  },
+  "bundleSources": {
+    "packages/container/src/adapters/clang/index.ts": {
+      "bytes": 1542,
+      "sha256": "31e63a6b6ba0ca7f9b42dba6728839d23792ccd83cb07c28ef5194dbc3412bae"
+    },
+    "packages/container/src/adapters/clang/worker.ts": {
+      "bytes": 5086,
+      "sha256": "0326166a2d00e3e31bd6652fe621f966e2c77fb02396a5e093f2800a3664b9b5"
+    },
+    "packages/container/src/adapters/wasi-live/index.ts": {
+      "bytes": 5267,
+      "sha256": "6064a7744ef40616cc53e24eaa66dd47a514f8ea5a69beb3607d296f4c0e3375"
+    },
+    "packages/container/src/adapters/wasi-live/io.ts": {
+      "bytes": 18177,
+      "sha256": "b4625b01571994c948581c2f163aa9f56d67a4d47cfe52cfda4b5a2ed3f12441"
+    },
+    "packages/container/src/adapters/wasi-live/worker.ts": {
+      "bytes": 3538,
+      "sha256": "e8138c73712ec29c29f4a4f055f7061a61def6d03116a1af4b01d7ec15b6e21a"
+    },
+    "packages/container/src/adapters/wasi/host.ts": {
+      "bytes": 18439,
+      "sha256": "ff196cca4f99044f417f6c6864618c6bf7f4d6a04877bf6b181ed12640cbc7b7"
+    },
+    "packages/container/src/adapters/wasi/profile.ts": {
+      "bytes": 1710,
+      "sha256": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4"
+    },
+    "packages/container/src/adapters/wasi/stdio.ts": {
+      "bytes": 1420,
+      "sha256": "e6ae9fee901d4e68393553463372eab33b06f5da755daff9ff86aa446973ef4e"
+    },
+    "packages/container/src/adapters/worker-adapter.ts": {
+      "bytes": 4234,
+      "sha256": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e"
+    },
+    "packages/container/src/container.ts": {
+      "bytes": 22188,
+      "sha256": "e340c972a6bfff92f6a6ec0e59232eeba5a12a8576a3638e56c187077fd752a2"
+    },
+    "packages/container/src/errors.ts": {
+      "bytes": 560,
+      "sha256": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8"
+    },
+    "packages/container/src/fd/pipe.ts": {
+      "bytes": 4180,
+      "sha256": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646"
+    },
+    "packages/container/src/fs/errors.ts": {
+      "bytes": 520,
+      "sha256": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a"
+    },
+    "packages/container/src/fs/index.ts": {
+      "bytes": 297,
+      "sha256": "9a3f65468cd2c80ee539b2d63d4bbbc50d3055f6d739748111bde39d07c01443"
+    },
+    "packages/container/src/fs/memory.ts": {
+      "bytes": 39901,
+      "sha256": "573486dd166e22f06d5378e73d70c690df0ec6e0b16624d2269f9d1e4d1d0354"
+    },
+    "packages/container/src/index.ts": {
+      "bytes": 845,
+      "sha256": "accfd04399a420da982f38609dcd8fe32be3d7c30e7dcf454a7f7d85cc41a8b7"
+    },
+    "packages/container/src/packages/assets.ts": {
+      "bytes": 10988,
+      "sha256": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5"
+    },
+    "packages/container/src/packages/distribution.ts": {
+      "bytes": 16417,
+      "sha256": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7"
+    },
+    "packages/container/src/packages/index.ts": {
+      "bytes": 758,
+      "sha256": "8cbc81e19bf2a5009331e9fe4bac2bb401e3827c655215bfcf7356fbfa1ac0b1"
+    },
+    "packages/container/src/packages/manager.ts": {
+      "bytes": 9776,
+      "sha256": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c"
+    },
+    "packages/container/src/process/lifecycle.ts": {
+      "bytes": 2712,
+      "sha256": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b"
+    },
+    "packages/container/src/shell/filesystem.ts": {
+      "bytes": 6199,
+      "sha256": "97d6e9680e1f86bb5d2750829e6d659f1db27fbd6a5207e70bc8a51095e585fe"
+    },
+    "packages/container/src/shell/host-command.ts": {
+      "bytes": 8314,
+      "sha256": "d28df621a36bfa11edbb08b9d0556f1c1988341dac036333be72c0c29c9fd268"
+    },
+    "packages/container/src/transport/rpc.ts": {
+      "bytes": 7569,
+      "sha256": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900"
+    },
+    "packages/container/test/shell-acceptance/worker.mjs": {
+      "bytes": 9503,
+      "sha256": "31faa72e1603a043f52a1e1de81eb74ae6528b9b3ed34b53eb9a35d23b50dcfe"
+    },
+    "packages/core/src/asset-delivery-budget.ts": {
+      "bytes": 10458,
+      "sha256": "cc4f834054234a28eccd5220defd3874e43181c32498ce615fbe7757b39637f1"
+    },
+    "packages/core/src/asset-integrity.ts": {
+      "bytes": 6273,
+      "sha256": "bab908b33160ac19846073ecfa0488b73065dfe0d0a2f795d9f981dee18cb928"
+    },
+    "packages/core/src/awk-runtime.ts": {
+      "bytes": 36998,
+      "sha256": "b222301246f57e24eca67d30c5ca0cd9427f9db310bab8cf9476a27e0df78e69"
+    },
+    "packages/core/src/bash-runtime.ts": {
+      "bytes": 45961,
+      "sha256": "d4aa2f8bc8bc23b64aa23d88e17674eccebff5862e445f72d4b3327f0777db6a"
+    },
+    "packages/core/src/capabilities.ts": {
+      "bytes": 14736,
+      "sha256": "9c0d0086c4ade511ce11ba06229f9a24023ad213a9965ee83cfd561f0b0cc83d"
+    },
+    "packages/core/src/errors.ts": {
+      "bytes": 7914,
+      "sha256": "36affaa3329c850181848c5a58f09438386837b22ee263092157f65ccb98e0f4"
+    },
+    "packages/core/src/execution.ts": {
+      "bytes": 11839,
+      "sha256": "179aacde14a70e6cef71a6a48e0794c10b25b9460502571e01d8fa2add10ecb0"
+    },
+    "packages/core/src/haskell-runtime.generated.ts": {
+      "bytes": 663,
+      "sha256": "85237d1eccd8f9fa939c3884701e3f95ff9968e6109b922f1c779520aff6c554"
+    },
+    "packages/core/src/haskell-runtime.ts": {
+      "bytes": 2332,
+      "sha256": "6cf202244afebccea6d84f9da5c255b794a80cfa406d3acf9c9ae301dfe48bc2"
+    },
+    "packages/core/src/index.ts": {
+      "bytes": 14699,
+      "sha256": "90ca280f189ca60d7f0faf02564f1b24ef5b3ae9789dd03e2e807cd7fccc33b0"
+    },
+    "packages/core/src/janet-runtime.ts": {
+      "bytes": 37171,
+      "sha256": "4a93f4eee32ea7b11b7b68fe8fbe15689b207da2ca05d1a4ec593beef6430eba"
+    },
+    "packages/core/src/julia-runtime.ts": {
+      "bytes": 45602,
+      "sha256": "6db37d220fe390eb95448c3b614bae86674ee0ef374fa0e1630980e0cfb24fe8"
+    },
+    "packages/core/src/languages.ts": {
+      "bytes": 6635,
+      "sha256": "073e932aa5c1e8c3e4a39c482dde3540627d397a3338a30ea243d37faca3c6e9"
+    },
+    "packages/core/src/lisp-runtime.ts": {
+      "bytes": 20462,
+      "sha256": "5c24735877a926426604eb0c34957830dc1c54c46de7fe229adebcb36ed2c01e"
+    },
+    "packages/core/src/module-asset-rewrite.ts": {
+      "bytes": 2373,
+      "sha256": "8a8142851271559b6b5f0b3319788faa955e6a5350bf0b91254a4f3897ad0e46"
+    },
+    "packages/core/src/nim-runtime.ts": {
+      "bytes": 50618,
+      "sha256": "fca15f0d89aaefa445038bf5bcd7332f720c7b50bee20662fd6c9f7e31c24c10"
+    },
+    "packages/core/src/pascal-runtime.ts": {
+      "bytes": 43200,
+      "sha256": "adc2cdac9ba1404e3b1e4dd82ee11e29f0eecc6ee1588bcde809f27dca076343"
+    },
+    "packages/core/src/perl-runtime.ts": {
+      "bytes": 40832,
+      "sha256": "ba40ee0598f28cf0a3280af5ac73a12ce2d0ecfbe151ebc0e2ac77a6cf60f409"
+    },
+    "packages/core/src/persistent-asset-cache.ts": {
+      "bytes": 27536,
+      "sha256": "d26a6d21d95a49dbe07b22cfa65efc3c81432e0a02a92698994ddf38cd0c0777"
+    },
+    "packages/core/src/pinned-asset-fetch.ts": {
+      "bytes": 10488,
+      "sha256": "6c7d1159934396792c56211e622b5ce5ec9136ed11bd666bb92b1eeeac72314f"
+    },
+    "packages/core/src/prewarm.ts": {
+      "bytes": 4864,
+      "sha256": "9bddede2dfeff380e891c3bd4b862c5502986e7ff97989aa35c4c99a3fc357c1"
+    },
+    "packages/core/src/progress.ts": {
+      "bytes": 5764,
+      "sha256": "8fb4edba74dcd1b59f7cb5b5eeaff200defe3979b98b78ae75b703b9697b11e9"
+    },
+    "packages/core/src/prolog-runtime.ts": {
+      "bytes": 34547,
+      "sha256": "33277db40269ff0b153170bff98838b14b1f0ef3995de63833c9fe27de35ad5a"
+    },
+    "packages/core/src/protocol.ts": {
+      "bytes": 18047,
+      "sha256": "2b3bba1657ef9c6b65fbb37ad2d94233250381c22dc666397a885e6d6c282f00"
+    },
+    "packages/core/src/resource-budget.ts": {
+      "bytes": 7222,
+      "sha256": "9cec36db9aa8690586e666ee8fb3df594e49a3f71f77db51bd9b3221aa070a1d"
+    },
+    "packages/core/src/ruby-runtime.generated.ts": {
+      "bytes": 1802,
+      "sha256": "382d80a250688b34cd3ac7473d83ddad49e9b875234d30d425a165643ee22a2b"
+    },
+    "packages/core/src/ruby-runtime.ts": {
+      "bytes": 57704,
+      "sha256": "e44b347fd1bdabae5112707566fa9ebd3c79b2eb6ad84638157d75fed1a49944"
+    },
+    "packages/core/src/ruby-split.generated.ts": {
+      "bytes": 1794,
+      "sha256": "4a9ee0e9274d1074318fdc6ab38fbd9ad1d781e636307b476a579e3674b591ac"
+    },
+    "packages/core/src/ruby-split.ts": {
+      "bytes": 19902,
+      "sha256": "0ef1b6eb50af947daa7b1fd1fc6052f12e5511c8cedb5fd5d672fcf42510e8c7"
+    },
+    "packages/core/src/runtime-activation.ts": {
+      "bytes": 7232,
+      "sha256": "f87317deced45fd48929cd970bd85f36ff3c8449d21e340a8b3ce8d3ad37dd07"
+    },
+    "packages/core/src/runtime-asset-lock.generated.ts": {
+      "bytes": 542773,
+      "sha256": "fd79a006b706a1f38feeee8826692dfe98b3882942cc9e879367a17f0922e94f"
+    },
+    "packages/core/src/runtime-asset-lock.ts": {
+      "bytes": 2952,
+      "sha256": "8a6e7f01d32136a52fc17340322ca52d68a4073b18c3c97a76bb83163fd60846"
+    },
+    "packages/core/src/runtime-assets.ts": {
+      "bytes": 50367,
+      "sha256": "a043ce58da41d619a88e58e4b6274f5c015b60643eaeb10e9765fb3eca111f5e"
+    },
+    "packages/core/src/runtime-manifest.ts": {
+      "bytes": 21610,
+      "sha256": "ecc5882de5d03f32e366a6e055deb31b441731baa82d3e0eecfb5e22766b916d"
+    },
+    "packages/core/src/runtime-preflight-activation.ts": {
+      "bytes": 9654,
+      "sha256": "3a7a6e89a71809a7a723be1a3a3888a1ffa5218abc257a6bbcf9bf035fa3548d"
+    },
+    "packages/core/src/runtime-preflight.ts": {
+      "bytes": 27324,
+      "sha256": "7bb2b19dacdfe57bbad1cef72694b00ad14623b0106524321e5cea7cfb382041"
+    },
+    "packages/core/src/sandbox.ts": {
+      "bytes": 27171,
+      "sha256": "afcd88c161f37004ba8f64416545b2b23abe9f6d990ceaacfe0e158a3b57c79e"
+    },
+    "packages/core/src/tcl-runtime.ts": {
+      "bytes": 47762,
+      "sha256": "5fe706b4ee4a518ce7cb381f25ed182e8bdc798a5aaf75e88d8a07be9ad4b9f1"
+    },
+    "packages/core/src/teavm-runtime.generated.ts": {
+      "bytes": 805,
+      "sha256": "74c901c64fa6f2d576a93fec5d6e3f8e0ff73b41dcbea4439a9effab6a134d79"
+    },
+    "packages/core/src/teavm-runtime.ts": {
+      "bytes": 2240,
+      "sha256": "a611d0bac9635935b6aece558cdcfc0e1fb63570baaa31a037f5c3a998066354"
+    },
+    "packages/core/src/worker-lifetime.ts": {
+      "bytes": 4672,
+      "sha256": "59ea60d2fe9ed606e669e98f105c71a23e79ebde61f7c19d6771e08e56b35310"
+    },
+    "packages/core/src/workspace.ts": {
+      "bytes": 10290,
+      "sha256": "0fae86a0c2fd467801f868ac464dc400fff59c4a6cbad7c080e50f6144f68f1c"
+    },
+    "packages/llvm-core/runtime/clang/src/tool-host.ts": {
+      "bytes": 14358,
+      "sha256": "eec9124d638dbc2fbfdcf1da6d8f9b1a0e7136af7b9f4e995ee809e9d7f3996a"
+    },
+    "packages/llvm-core/runtime/core/src/encode.ts": {
+      "bytes": 694,
+      "sha256": "046de5bdb3479bae546df05520acfdc7e0344c388437aa8478efa8e7a786564f"
+    },
+    "packages/llvm-core/runtime/core/src/tar.ts": {
+      "bytes": 2442,
+      "sha256": "9d8a5b5ff5c4e35acdb35d9aee1f473ce67a1b590d740970c0a34f258e5126fe"
+    }
+  },
+  "busybox": {
+    "receiptSha256": "95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51",
+    "artifact": {
+      "bytes": 447557,
+      "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade"
+    }
+  },
+  "processSysroot": {
+    "receiptSha256": "105089044738721b7177c1846454d8132578d79292100d6413c56b09fd27304c",
+    "producerCommit": "e8f0f732bc01e27b5f86055aad5445c6a9de6099",
+    "derivedFrom": "91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402",
+    "crt1": {
+      "bytes": 2453,
+      "sha256": "a791a2e67e75d6911b435ce63e210a3cc6422a6c62f604aef8f5616ba58a5527"
+    }
+  },
+  "clang": {
+    "producerReceiptSha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd",
+    "producerSmokeSha256": "f7895ec00fd05cb224b42e085873beb75fd5899cf238acf8f3833aeb2f9bded5",
+    "assets": {
+      "clang": {
+        "id": "clang",
+        "encoding": "gzip",
+        "delivery": {
+          "bytes": 16270174,
+          "sha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba",
+          "mediaType": "application/gzip"
+        },
+        "logical": {
+          "bytes": 51965041,
+          "sha256": "e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3",
+          "mediaType": "application/wasm"
+        }
+      },
+      "lld": {
+        "id": "lld",
+        "encoding": "gzip",
+        "delivery": {
+          "bytes": 8178107,
+          "sha256": "dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d",
+          "mediaType": "application/gzip"
+        },
+        "logical": {
+          "bytes": 24938493,
+          "sha256": "3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a",
+          "mediaType": "application/wasm"
+        }
+      },
+      "sysroot": {
+        "id": "sysroot",
+        "encoding": "identity",
+        "delivery": {
+          "bytes": 35328000,
+          "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+          "mediaType": "application/x-tar"
+        },
+        "logical": {
+          "bytes": 35328000,
+          "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+          "mediaType": "application/x-tar"
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "run": "cold",
+      "result": {
+        "type": "timeout",
+        "backendCompleted": false,
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "shellStart",
+            "seq": 0,
+            "atMs": 279
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1
+          },
+          {
+            "type": "dispatch",
+            "seq": 1,
+            "atMs": 893,
+            "path": "/usr/local/bin/mkdir"
+          },
+          {
+            "type": "fetch",
+            "seq": 2,
+            "atMs": 918,
+            "url": "http://127.0.0.1:38127/assets/busybox"
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 3,
+            "atMs": 1121,
+            "path": "/usr/local/bin/mkdir",
+            "status": 0
+          },
+          {
+            "type": "dispatch",
+            "seq": 4,
+            "atMs": 1260,
+            "path": "/usr/local/bin/clang"
+          },
+          {
+            "type": "fetch",
+            "seq": 5,
+            "atMs": 1263,
+            "url": "http://127.0.0.1:38127/assets/clang"
+          },
+          {
+            "type": "fetch",
+            "seq": 6,
+            "atMs": 2305,
+            "url": "http://127.0.0.1:38127/assets/lld"
+          },
+          {
+            "type": "fetch",
+            "seq": 7,
+            "atMs": 3075,
+            "url": "http://127.0.0.1:38127/assets/sysroot"
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 6607
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 10104
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 8,
+            "atMs": 25229,
+            "path": "/usr/local/bin/clang",
+            "status": 0
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 25233
+          }
+        ],
+        "workersAtObservation": 5,
+        "ownedCleanup": {
+          "mode": "forced-host-worker-termination"
+        },
+        "remainingWorkerTargets": 1,
+        "remainingWorkerTargetDetails": [
+          {
+            "targetId": "24BAC722A35ADE722EB3B5EA0F31DEDD",
+            "url": "http://127.0.0.1:38127/bundle/owner.js",
+            "parentId": "84CD8D2494B89DCE326A6CED1599791C"
+          }
+        ],
+        "consoleErrors": [],
+        "blockedRequests": []
+      },
+      "downloads": {
+        "start": {
+          "/assets/busybox": 0,
+          "/assets/clang": 0,
+          "/assets/lld": 0,
+          "/assets/sysroot": 0
+        },
+        "end": {
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        }
+      },
+      "elapsedMs": 307118,
+      "bin": "/usr/local/bin"
+    },
+    {
+      "run": "warm",
+      "result": {
+        "type": "result",
+        "backendCompleted": true,
+        "result": {
+          "code": 0,
+          "stdout": [
+            104,
+            101,
+            108,
+            108,
+            111,
+            10
+          ],
+          "stderr": [
+            99,
+            108,
+            97,
+            110,
+            103,
+            58,
+            32,
+            119,
+            97,
+            114,
+            110,
+            105,
+            110,
+            103,
+            58,
+            32,
+            97,
+            114,
+            103,
+            117,
+            109,
+            101,
+            110,
+            116,
+            32,
+            39,
+            45,
+            45,
+            116,
+            97,
+            114,
+            103,
+            101,
+            116,
+            61,
+            119,
+            97,
+            115,
+            109,
+            51,
+            50,
+            45,
+            119,
+            97,
+            115,
+            105,
+            39,
+            32,
+            105,
+            115,
+            32,
+            100,
+            101,
+            112,
+            114,
+            101,
+            99,
+            97,
+            116,
+            101,
+            100,
+            44,
+            32,
+            117,
+            115,
+            101,
+            32,
+            45,
+            45,
+            116,
+            97,
+            114,
+            103,
+            101,
+            116,
+            61,
+            119,
+            97,
+            115,
+            109,
+            51,
+            50,
+            45,
+            119,
+            97,
+            115,
+            105,
+            112,
+            49,
+            32,
+            105,
+            110,
+            115,
+            116,
+            101,
+            97,
+            100,
+            32,
+            91,
+            45,
+            87,
+            100,
+            101,
+            112,
+            114,
+            101,
+            99,
+            97,
+            116,
+            101,
+            100,
+            93,
+            10
+          ]
+        },
+        "files": {
+          "/workspace/demo/main.c": [
+            35,
+            105,
+            110,
+            99,
+            108,
+            117,
+            100,
+            101,
+            32,
+            60,
+            115,
+            116,
+            100,
+            105,
+            111,
+            46,
+            104,
+            62,
+            10,
+            105,
+            110,
+            116,
+            32,
+            109,
+            97,
+            105,
+            110,
+            40,
+            118,
+            111,
+            105,
+            100,
+            41,
+            123,
+            112,
+            117,
+            116,
+            115,
+            40,
+            34,
+            104,
+            101,
+            108,
+            108,
+            111,
+            34,
+            41,
+            59,
+            114,
+            101,
+            116,
+            117,
+            114,
+            110,
+            32,
+            48,
+            59,
+            125,
+            10
+          ],
+          "/workspace/demo/result.txt": [
+            104,
+            101,
+            108,
+            108,
+            111,
+            10
+          ]
+        },
+        "artifact": {
+          "bytes": 191813,
+          "magic": [
+            0,
+            97,
+            115,
+            109,
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        "invocations": [
+          {
+            "path": "/usr/local/bin/mkdir",
+            "argv": [
+              "mkdir",
+              "-p",
+              "/workspace/demo"
+            ],
+            "cwd": "/workspace",
+            "descriptors": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "path": "/usr/local/bin/clang",
+            "argv": [
+              "clang",
+              "main.c",
+              "-o",
+              "hello.wasm"
+            ],
+            "cwd": "/workspace/demo",
+            "descriptors": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "path": "/workspace/demo/hello.wasm",
+            "argv": [
+              "./hello.wasm"
+            ],
+            "cwd": "/workspace/demo",
+            "descriptors": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "path": "/usr/local/bin/grep",
+            "argv": [
+              "grep",
+              "hello"
+            ],
+            "cwd": "/workspace/demo",
+            "descriptors": [
+              0,
+              1,
+              2
+            ]
+          },
+          {
+            "path": "/usr/local/bin/cat",
+            "argv": [
+              "cat",
+              "result.txt"
+            ],
+            "cwd": "/workspace/demo",
+            "descriptors": [
+              0,
+              1,
+              2
+            ]
+          }
+        ],
+        "records": [
+          {
+            "path": "/usr/local/bin/mkdir",
+            "pid": 1,
+            "result": {
+              "code": 0,
+              "reason": "exited"
+            },
+            "status": 0
+          },
+          {
+            "path": "/usr/local/bin/clang",
+            "pid": 2,
+            "result": {
+              "code": 0,
+              "reason": "exited"
+            },
+            "status": 0
+          },
+          {
+            "path": "/workspace/demo/hello.wasm",
+            "pid": 3,
+            "result": {
+              "code": 0,
+              "reason": "exited"
+            },
+            "status": 0
+          },
+          {
+            "path": "/usr/local/bin/grep",
+            "pid": 4,
+            "result": {
+              "code": 0,
+              "reason": "exited"
+            },
+            "status": 0
+          },
+          {
+            "path": "/usr/local/bin/cat",
+            "pid": 5,
+            "result": {
+              "code": 0,
+              "reason": "exited"
+            },
+            "status": 0
+          }
+        ],
+        "timeline": [
+          {
+            "seq": 0,
+            "atMs": 185,
+            "type": "shellStart"
+          },
+          {
+            "seq": 1,
+            "atMs": 707,
+            "type": "dispatch",
+            "path": "/usr/local/bin/mkdir"
+          },
+          {
+            "seq": 2,
+            "atMs": 822,
+            "type": "dispatchEnd",
+            "path": "/usr/local/bin/mkdir",
+            "status": 0
+          },
+          {
+            "seq": 3,
+            "atMs": 916,
+            "type": "dispatch",
+            "path": "/usr/local/bin/clang"
+          },
+          {
+            "seq": 4,
+            "atMs": 32545,
+            "type": "dispatchEnd",
+            "path": "/usr/local/bin/clang",
+            "status": 0
+          },
+          {
+            "seq": 5,
+            "atMs": 33100,
+            "type": "dispatch",
+            "path": "/workspace/demo/hello.wasm"
+          },
+          {
+            "seq": 6,
+            "atMs": 33264,
+            "type": "dispatch",
+            "path": "/usr/local/bin/grep"
+          },
+          {
+            "seq": 7,
+            "atMs": 33326,
+            "type": "dispatchEnd",
+            "path": "/workspace/demo/hello.wasm",
+            "status": 0
+          },
+          {
+            "seq": 8,
+            "atMs": 33398,
+            "type": "dispatchEnd",
+            "path": "/usr/local/bin/grep",
+            "status": 0
+          },
+          {
+            "seq": 9,
+            "atMs": 33414,
+            "type": "dispatch",
+            "path": "/usr/local/bin/cat"
+          },
+          {
+            "seq": 10,
+            "atMs": 33524,
+            "type": "dispatchEnd",
+            "path": "/usr/local/bin/cat",
+            "status": 0
+          },
+          {
+            "seq": 11,
+            "atMs": 33530,
+            "type": "shellEnd",
+            "code": 0
+          }
+        ],
+        "lookups": {
+          "cat": "busybox",
+          "cp": "busybox",
+          "grep": "busybox",
+          "mkdir": "busybox",
+          "mv": "busybox",
+          "rm": "busybox",
+          "clang": "llvm"
+        },
+        "assetsBeforeShell": {
+          "pendingRequests": 0,
+          "consumers": 0,
+          "cachedEntries": 0,
+          "cachedBytes": 0,
+          "memoryCacheHits": 0
+        },
+        "assetsAfterShell": {
+          "pendingRequests": 0,
+          "consumers": 0,
+          "cachedEntries": 4,
+          "cachedBytes": 112679091,
+          "memoryCacheHits": 5
+        },
+        "sysroot": {
+          "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+          "entries": 2285,
+          "files": 2168
+        },
+        "containerProcesses": [],
+        "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+        "cacheNames": [
+          "wasm-idle-assets-v1:container-shell-acceptance"
+        ],
+        "trackedWorkersAtBackendCompletion": 0,
+        "publicApi": {
+          "runtime": [
+            "constructor",
+            "__destroy_into_raw",
+            "free",
+            "registerHostCommand",
+            "unregisterHostCommand",
+            "registerHostCommandDirectory",
+            "unregisterHostCommandDirectory",
+            "__getClassname"
+          ],
+          "directory": [
+            "length",
+            "name",
+            "prototype",
+            "__wrap",
+            "fromHostFileSystem"
+          ]
+        },
+        "events": [
+          {
+            "type": "sdkInitialized",
+            "trackedChildren": 0
+          },
+          {
+            "type": "shellStart",
+            "seq": 0,
+            "atMs": 185
+          },
+          {
+            "type": "started",
+            "trackedChildren": 1
+          },
+          {
+            "type": "dispatch",
+            "seq": 1,
+            "atMs": 707,
+            "path": "/usr/local/bin/mkdir"
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 2,
+            "atMs": 822,
+            "path": "/usr/local/bin/mkdir",
+            "status": 0
+          },
+          {
+            "type": "dispatch",
+            "seq": 3,
+            "atMs": 916,
+            "path": "/usr/local/bin/clang"
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 7255
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 10086
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 4,
+            "atMs": 32545,
+            "path": "/usr/local/bin/clang",
+            "status": 0
+          },
+          {
+            "type": "heartbeat",
+            "atMs": 32546
+          },
+          {
+            "type": "dispatch",
+            "seq": 5,
+            "atMs": 33100,
+            "path": "/workspace/demo/hello.wasm"
+          },
+          {
+            "type": "dispatch",
+            "seq": 6,
+            "atMs": 33264,
+            "path": "/usr/local/bin/grep"
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 7,
+            "atMs": 33326,
+            "path": "/workspace/demo/hello.wasm",
+            "status": 0
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 8,
+            "atMs": 33398,
+            "path": "/usr/local/bin/grep",
+            "status": 0
+          },
+          {
+            "type": "dispatch",
+            "seq": 9,
+            "atMs": 33414,
+            "path": "/usr/local/bin/cat"
+          },
+          {
+            "type": "dispatchEnd",
+            "seq": 10,
+            "atMs": 33524,
+            "path": "/usr/local/bin/cat",
+            "status": 0
+          },
+          {
+            "type": "shellEnd",
+            "seq": 11,
+            "atMs": 33530,
+            "code": 0
+          },
+          {
+            "type": "result"
+          }
+        ],
+        "workersAtObservation": 2,
+        "ownedCleanup": {
+          "mode": "worker-owner-cleanup-acknowledged",
+          "type": "ownerCleanup",
+          "backendCompleted": true,
+          "requestedWorkerTerminations": 0,
+          "remainingTrackedChildren": 0
+        },
+        "remainingWorkerTargets": 1,
+        "remainingWorkerTargetDetails": [
+          {
+            "targetId": "24BAC722A35ADE722EB3B5EA0F31DEDD",
+            "url": "http://127.0.0.1:38127/bundle/owner.js",
+            "parentId": "84CD8D2494B89DCE326A6CED1599791C"
+          }
+        ],
+        "consoleErrors": [],
+        "blockedRequests": []
+      },
+      "downloads": {
+        "start": {
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        },
+        "end": {
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        }
+      },
+      "elapsedMs": 39025,
+      "bin": "/usr/local/bin"
+    }
+  ],
+  "scope": "One container Supervisor and filesystem; Bash /workspace is that filesystem; BusyBox and the artifact run live with delegated stdio; Clang runs on its snapshot adapter with forwarded output",
+  "cacheScope": "Asset responses are no-store; the warm run is a new owner Worker, container and package manager in the same browser profile",
+  "networkScope": "Trusted local bootstrap and origin/asset allowlist; no guest/network security qualification",
+  "workerObservationScope": "All dedicated Workers in this exclusively owned Chromium browser",
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/",
+      "accepted": true,
+      "atMs": 1792054421037
+    },
+    {
+      "method": "GET",
+      "path": "/inputs/sha256-647f97d834037cf66f1bd4e2ca02d43b4aeed75b05ba1f87b4a78b5e541d02ff/sdk.wasm",
+      "accepted": true,
+      "atMs": 1792054421292
+    },
+    {
+      "method": "GET",
+      "path": "/inputs/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true,
+      "atMs": 1792054421411
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/owner.js",
+      "accepted": true,
+      "atMs": 1792054421515
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054421639
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054421823
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054421865
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054421915
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054421969
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054422282
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054422328
+    },
+    {
+      "method": "GET",
+      "path": "/assets/busybox",
+      "accepted": true,
+      "atMs": 1792054422449
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/live-worker.js",
+      "accepted": true,
+      "atMs": 1792054422554
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054422657
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054422712
+    },
+    {
+      "method": "GET",
+      "path": "/assets/clang",
+      "accepted": true,
+      "atMs": 1792054422790
+    },
+    {
+      "method": "GET",
+      "path": "/assets/lld",
+      "accepted": true,
+      "atMs": 1792054423837
+    },
+    {
+      "method": "GET",
+      "path": "/assets/sysroot",
+      "accepted": true,
+      "atMs": 1792054424606
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/clang-worker.js",
+      "accepted": true,
+      "atMs": 1792054427523
+    },
+    {
+      "method": "GET",
+      "path": "/inputs/sha256-647f97d834037cf66f1bd4e2ca02d43b4aeed75b05ba1f87b4a78b5e541d02ff/sdk.wasm",
+      "accepted": true,
+      "atMs": 1792054728364
+    },
+    {
+      "method": "GET",
+      "path": "/inputs/sha256-045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+      "accepted": true,
+      "atMs": 1792054728578
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/owner.js",
+      "accepted": true,
+      "atMs": 1792054728751
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054728854
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054728956
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054729001
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054729032
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054729080
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054729251
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054729326
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/live-worker.js",
+      "accepted": true,
+      "atMs": 1792054729512
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054729588
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054729627
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/clang-worker.js",
+      "accepted": true,
+      "atMs": 1792054735608
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/worker.mjs",
+      "accepted": true,
+      "atMs": 1792054761831
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/live-worker.js",
+      "accepted": true,
+      "atMs": 1792054761865
+    },
+    {
+      "method": "GET",
+      "path": "/sdk/sha256-79d6fbc1e71875dbe68120b86c176054fd5b21c30c84411581a6006658df88b1/index.mjs",
+      "accepted": true,
+      "atMs": 1792054761919
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/live-worker.js",
+      "accepted": true,
+      "atMs": 1792054762030
+    },
+    {
+      "method": "GET",
+      "path": "/bundle/live-worker.js",
+      "accepted": true,
+      "atMs": 1792054762181
+    }
+  ],
+  "distributionSha256": "927c54eb36e3a80aa341b198353d592d276e558a0553f09cb08b14205ade208a",
+  "chromiumExecutable": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browser": "153.0.8010.12",
+  "initialWorkerTargets": 0,
+  "warnings": [
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "using deprecated parameters for the initialization function; pass a single object instead"
+  ],
+  "workersAfterContextClose": 0,
+  "qualification": {
+    "checks": [
+      {
+        "id": "cold:script",
+        "passed": false,
+        "observed": {
+          "type": "timeout",
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "cold:workspace-files",
+        "passed": false
+      },
+      {
+        "id": "cold:artifact",
+        "passed": false
+      },
+      {
+        "id": "cold:dispatch-order",
+        "passed": false,
+        "observed": []
+      },
+      {
+        "id": "cold:shared-cwd",
+        "passed": false,
+        "observed": []
+      },
+      {
+        "id": "cold:supervisor-exits",
+        "passed": false,
+        "observed": []
+      },
+      {
+        "id": "cold:artifact-in-supervisor",
+        "passed": false,
+        "observed": []
+      },
+      {
+        "id": "cold:processes-retired",
+        "passed": false
+      },
+      {
+        "id": "cold:metadata-only-lookup",
+        "passed": false
+      },
+      {
+        "id": "cold:busybox-lazy",
+        "passed": false,
+        "observed": {
+          "fetches": [],
+          "mkdir": null
+        }
+      },
+      {
+        "id": "cold:clang-lazy",
+        "passed": false,
+        "observed": {
+          "clang": null,
+          "fetches": [
+            [],
+            [],
+            []
+          ]
+        }
+      },
+      {
+        "id": "cold:sysroot-closure",
+        "passed": false
+      },
+      {
+        "id": "cold:public-api",
+        "passed": false
+      },
+      {
+        "id": "cold:browser-errors",
+        "passed": true,
+        "observed": []
+      },
+      {
+        "id": "cold:owned-workers-retired",
+        "passed": false,
+        "observed": [
+          {
+            "targetId": "24BAC722A35ADE722EB3B5EA0F31DEDD",
+            "url": "http://127.0.0.1:38127/bundle/owner.js",
+            "parentId": "84CD8D2494B89DCE326A6CED1599791C"
+          }
+        ]
+      },
+      {
+        "id": "warm:script",
+        "passed": true,
+        "observed": {
+          "type": "result",
+          "code": 0,
+          "stdout": "hello\n",
+          "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+        }
+      },
+      {
+        "id": "warm:workspace-files",
+        "passed": true,
+        "observed": [
+          "/workspace/demo/main.c",
+          "/workspace/demo/result.txt"
+        ]
+      },
+      {
+        "id": "warm:artifact",
+        "passed": true,
+        "observed": {
+          "bytes": 191813,
+          "magic": [
+            0,
+            97,
+            115,
+            109,
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "warm:dispatch-order",
+        "passed": true,
+        "observed": [
+          "/usr/local/bin/mkdir",
+          "/usr/local/bin/clang",
+          "/workspace/demo/hello.wasm",
+          "/usr/local/bin/grep",
+          "/usr/local/bin/cat"
+        ]
+      },
+      {
+        "id": "warm:shared-cwd",
+        "passed": true,
+        "observed": [
+          [
+            "/usr/local/bin/mkdir",
+            "/workspace"
+          ],
+          [
+            "/usr/local/bin/clang",
+            "/workspace/demo"
+          ],
+          [
+            "/workspace/demo/hello.wasm",
+            "/workspace/demo"
+          ],
+          [
+            "/usr/local/bin/grep",
+            "/workspace/demo"
+          ],
+          [
+            "/usr/local/bin/cat",
+            "/workspace/demo"
+          ]
+        ]
+      },
+      {
+        "id": "warm:supervisor-exits",
+        "passed": true,
+        "observed": [
+          [
+            "/usr/local/bin/mkdir",
+            0,
+            1
+          ],
+          [
+            "/usr/local/bin/clang",
+            0,
+            2
+          ],
+          [
+            "/workspace/demo/hello.wasm",
+            0,
+            3
+          ],
+          [
+            "/usr/local/bin/grep",
+            0,
+            4
+          ],
+          [
+            "/usr/local/bin/cat",
+            0,
+            5
+          ]
+        ]
+      },
+      {
+        "id": "warm:artifact-in-supervisor",
+        "passed": true,
+        "observed": [
+          "/usr/local/bin/mkdir",
+          "/usr/local/bin/clang",
+          "/workspace/demo/hello.wasm",
+          "/usr/local/bin/grep",
+          "/usr/local/bin/cat"
+        ]
+      },
+      {
+        "id": "warm:processes-retired",
+        "passed": true,
+        "observed": 0
+      },
+      {
+        "id": "warm:metadata-only-lookup",
+        "passed": true,
+        "observed": {
+          "cat": "busybox",
+          "cp": "busybox",
+          "grep": "busybox",
+          "mkdir": "busybox",
+          "mv": "busybox",
+          "rm": "busybox",
+          "clang": "llvm"
+        }
+      },
+      {
+        "id": "warm:verified-cache-reuse",
+        "passed": true,
+        "observed": {
+          "downloads": {
+            "start": {
+              "/assets/busybox": 1,
+              "/assets/clang": 1,
+              "/assets/lld": 1,
+              "/assets/sysroot": 1
+            },
+            "end": {
+              "/assets/busybox": 1,
+              "/assets/clang": 1,
+              "/assets/lld": 1,
+              "/assets/sysroot": 1
+            }
+          },
+          "assetsBeforeShell": {
+            "pendingRequests": 0,
+            "consumers": 0,
+            "cachedEntries": 0,
+            "cachedBytes": 0,
+            "memoryCacheHits": 0
+          }
+        }
+      },
+      {
+        "id": "warm:sysroot-closure",
+        "passed": true,
+        "observed": {
+          "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+          "entries": 2285,
+          "files": 2168
+        }
+      },
+      {
+        "id": "warm:public-api",
+        "passed": true,
+        "observed": {
+          "runtime": [
+            "constructor",
+            "__destroy_into_raw",
+            "free",
+            "registerHostCommand",
+            "unregisterHostCommand",
+            "registerHostCommandDirectory",
+            "unregisterHostCommandDirectory",
+            "__getClassname"
+          ],
+          "directory": [
+            "length",
+            "name",
+            "prototype",
+            "__wrap",
+            "fromHostFileSystem"
+          ]
+        }
+      },
+      {
+        "id": "warm:browser-errors",
+        "passed": true,
+        "observed": []
+      },
+      {
+        "id": "warm:owned-workers-retired",
+        "passed": false,
+        "observed": [
+          {
+            "targetId": "24BAC722A35ADE722EB3B5EA0F31DEDD",
+            "url": "http://127.0.0.1:38127/bundle/owner.js",
+            "parentId": "84CD8D2494B89DCE326A6CED1599791C"
+          }
+        ]
+      },
+      {
+        "id": "context-cleanup",
+        "passed": true,
+        "observed": [
+          0,
+          0
+        ]
+      }
+    ],
+    "passed": 15,
+    "total": 30,
+    "shellAcceptancePassed": false,
+    "commonContainerFdVfsQualified": false,
+    "shellBackendReady": false
+  },
+  "finishedAt": "2026-10-15T08:59:30.116Z"
+}

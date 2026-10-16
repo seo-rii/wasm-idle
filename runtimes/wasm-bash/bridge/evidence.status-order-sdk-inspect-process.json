@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "--disable-wasm-trap-handler",
+    "--wasm-num-compilation-tasks=1",
+    "/data/seorii-container-20261014/sdk-status-order-gate-20261015T074221Z/sdk-status-order-binary-20261015T074221Z/inspect.mjs",
+    "/data/seorii-container-20261014/sdk-status-order-gate-20261015T074221Z/sdk-status-order-binary-20261015T074221Z/artifacts/raw/wasmer_js.wasm",
+    "/data/seorii-container-20261014/sdk-status-order-gate-20261015T074221Z/sdk-status-order-binary-20261015T074221Z/artifacts/web/wasmer_js_bg.wasm",
+    "/data/seorii-container-20261014/sdk-status-order-gate-20261015T074221Z/sdk-status-order-binary-20261015T074221Z/wasm-inventory.json"
+  ],
+  "startedAtUnix": 1792051218.845051,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 798034,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [],
+    "errors": []
+  },
+  "wallSeconds": 0.282
+}

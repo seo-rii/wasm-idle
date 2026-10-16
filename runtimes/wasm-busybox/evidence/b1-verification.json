@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "producerVerification": {
+    "producer": "passed",
+    "browser": "not-qualified",
+    "artifact": {
+      "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+      "size": 447557
+    },
+    "nativeB0Cases": 20,
+    "wasiB0Cases": 24,
+    "b1Cases": 108,
+    "sourcePack": {
+      "path": "busybox-source-pack.tar.gz",
+      "sha256": "ca68639e0a6a159e55000594011e6b60f4850248e8edd5918d10b225e0afe818",
+      "size": 2580335
+    }
+  },
+  "verificationExitCode": 0,
+  "artifactTamper": {
+    "exitCode": 1,
+    "gate": "artifact SHA-256 mismatch",
+    "mutatedSha256": "fe08e7ca12c07d72a22b6ad435c46b93bd4a035cb42f4b21ef281aeab81a57f8"
+  },
+  "nativeContinuation": {
+    "reason": "single-worker native build exceeded the initial 240-second deadline under shared-host load",
+    "previousReceiptPreserved": true,
+    "sourceTreeReconstructedAndCompared": true,
+    "continuationExitCode": 0
+  },
+  "qualification": "Producer/native/Node WASI only; browser qualification is separate."
+}

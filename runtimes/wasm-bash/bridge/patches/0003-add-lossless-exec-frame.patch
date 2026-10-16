@@ -1,0 +1,63 @@
+--- a/src/syscalls/wasix/proc_exec3.rs
++++ b/src/syscalls/wasix/proc_exec3.rs
+@@ -82,6 +82,22 @@
+         None
+     };
+ 
++    drop(memory);
++    proc_exec_decoded(ctx, name, args, envs, search_path, path, path_len)
++}
++
++// Common execution path after the ABI-specific decoder. Own all request values
++// before scheduling a child; do not retain guest pointers across the spawn.
++pub(crate) fn proc_exec_decoded<M: MemorySize>(
++    mut ctx: FunctionEnvMut<'_, WasiEnv>,
++    mut name: String,
++    args: Vec<String>,
++    envs: Option<Vec<(String, String)>>,
++    search_path: Bool,
++    path: WasmPtr<u8, M>,
++    path_len: M::Offset,
++) -> Result<Errno, WasiError> {
++    let memory = unsafe { ctx.data().memory_view(&ctx) };
+     // Convert relative paths into absolute paths
+     if search_path == Bool::True && !name.contains('/') {
+         let path_str;
+--- a/src/syscalls/wasix/mod.rs
++++ b/src/syscalls/wasix/mod.rs
+@@ -35,6 +35,8 @@
+ mod proc_exec;
+ mod proc_exec2;
+ mod proc_exec3;
++mod proc_exec_v1;
++mod exec_frame;
+ mod proc_fork;
+ mod proc_id;
+ mod proc_join;
+@@ -122,6 +124,7 @@
+ pub use proc_exec::*;
+ pub use proc_exec2::*;
+ pub use proc_exec3::*;
++pub use proc_exec_v1::*;
+ pub use proc_fork::*;
+ pub use proc_id::*;
+ pub use proc_join::*;
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -382,6 +382,16 @@
+     };
+ 
+     imports.extend(&imports_wasi_generic);
++
++    // Private versioned host-port ABI. Existing WASIX namespaces are unchanged.
++    // Only the wasm32 shell profile accepts these 32-bit pointers.
++    if matches!(version, WasiVersion::Wasix32v1) {
++        let shell = namespace! {
++            "exec_v1" => wasmer::Function::new_typed_with_env(
++                &mut *store, ctx, syscalls::proc_exec_v1),
++        };
++        imports.extend(&imports! { "wasm_idle_shell_v1" => shell });
++    }
+ 
+     imports
+ }

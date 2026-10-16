@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-six-patch-sdk-typecheck-release-web-glue-and-static-inspection-passed",
+  "runRoot": "/data/seorii-container-20261014/sdk-worker-imports-gate-20261015T002222Z",
+  "binaryRunRoot": "/data/seorii-container-20261014/sdk-worker-imports-gate-20261015T002222Z/sdk-worker-imports-binary-20261015T002222Z",
+  "sourceCommit": "7ceef67180e047d4703936482006a69b814662d2",
+  "helperSourceCommit": "f9a5ce45996f7a6eeeabb922e82921924042a60e",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "originalReceipt": {
+    "archive": "evidence.worker-imports-sdk-binary.json",
+    "sourceFile": "receipt.json",
+    "bytes": 357696,
+    "sha256": "e8d02ef4041beb868393f0f5c72c6a8858cdf1b9d43f57337044b8ab88dad08a"
+  },
+  "originalBytesPreserved": true,
+  "sourcePolicy": {
+    "sourceFile": "source-policy.json",
+    "bytes": 148781,
+    "sha256": "9e2848762169b313f957c79704bbdd4afab5d2d5dbafee9e04f564ebbf73ca1c"
+  },
+  "buildPlan": {
+    "sourceFile": "build-plan.json",
+    "bytes": 5915,
+    "sha256": "86d940bceffa05308d305cd2b8e9a9e49a4f84fbb3236ab8a987af68a65fe404"
+  },
+  "preparedInputs": {
+    "sourceFile": "prepared-inputs.json",
+    "bytes": 801,
+    "sha256": "f760f2a0df2240f58922a38e06abaa272398dde944ae52f625411d416c9b69b3"
+  },
+  "queueRecipe": {
+    "sourceFile": "queue.json",
+    "bytes": 2347,
+    "sha256": "ecacffeaa4c0ce5fba3d417cc977f54a114e170dc4c345b1617eb39e0921e393"
+  },
+  "stageReceipts": [
+    {
+      "stage": "typecheck",
+      "sourceFile": "sdk-check.process.json",
+      "archive": "evidence.worker-imports-typecheck-process.json",
+      "bytes": 659,
+      "sha256": "bfd5cf2fa81deadcb386a4ac7d14bc1db9fda42ef4620b649b4226ff789de697",
+      "exitCode": 0,
+      "wallSeconds": 373.991,
+      "allReaped": true,
+      "signalsSent": false
+    },
+    {
+      "stage": "sdk-build",
+      "sourceFile": "sdk-worker-imports-binary-20261015T002222Z/sdk-build.process.json",
+      "archive": "evidence.worker-imports-sdk-build-process.json",
+      "bytes": 698,
+      "sha256": "793862cec11e52d3886e84a4baab07e8fcacddcc7318865399bf20e825042259",
+      "exitCode": 0,
+      "wallSeconds": 586.098,
+      "allReaped": true,
+      "signalsSent": false
+    },
+    {
+      "stage": "bindgen",
+      "sourceFile": "sdk-worker-imports-binary-20261015T002222Z/bindgen.process.json",
+      "archive": "evidence.worker-imports-sdk-bindgen-process.json",
+      "bytes": 908,
+      "sha256": "53c629b25b637d32e528db13312e1ace8e1f02dacd9a26f6b26b6fcd36c3ee92",
+      "exitCode": 0,
+      "wallSeconds": 1.762,
+      "allReaped": true,
+      "signalsSent": false
+    },
+    {
+      "stage": "inspect",
+      "sourceFile": "sdk-worker-imports-binary-20261015T002222Z/inspect.process.json",
+      "archive": "evidence.worker-imports-sdk-inspect-process.json",
+      "bytes": 1157,
+      "sha256": "6d7596927747022fa69fdc7fb87cc3c544747d7656040f0a69c1436891ca022d",
+      "exitCode": 0,
+      "wallSeconds": 0.255,
+      "allReaped": true,
+      "signalsSent": false
+    }
+  ],
+  "archiveVerification": {
+    "checkedAtUtc": "2026-10-15T01:20:01.392893+00:00",
+    "sourcePolicyPins": 581,
+    "sourceInventories": {
+      "wasmer-sdk": 198,
+      "wasmer-wasix": 376
+    },
+    "queueInputPins": 5,
+    "additionalToolAndCompilerLibraryPins": 6,
+    "preparedInputFiles": 6,
+    "outputArtifacts": 6,
+    "allRecordedHashesMatched": true,
+    "sourceInventoriesMatched": true,
+    "sourceSymlinksFound": false,
+    "applicableCargoConfigsPinned": [
+      "/data/seorii-container-20261014/shell-sdk-worker-imports-20261015/prepared-source-clean/wasmer-sdk/.cargo/config.toml"
+    ],
+    "cargoOutputMatchesRawArtifact": true,
+    "inventoryMatchesOriginalReceipt": true,
+    "typecheckCopyMatchesQueueOriginal": true,
+    "recordedStagePidsAbsentAtVerification": true
+  },
+  "buildContext": {
+    "freshPhysicalSource": true,
+    "uniqueTargetForThisPhysicalCopy": true,
+    "copiedOrSharedCompiledArtifacts": false,
+    "samePhysicalCopyCheckedTargetReusedForRelease": true,
+    "typecheckAndReleaseAreDistinctProfiles": true,
+    "releaseTimingIsNotAnIndependentCleanBuild": true,
+    "releaseProfilePreserved": true,
+    "additionalWasmOpt": false,
+    "automaticRetry": false
+  },
+  "sharedMemory": {
+    "raw": [
+      {
+        "shared": true,
+        "minimumPages": 33,
+        "maximumPages": 16384
+      }
+    ],
+    "bindgen": [
+      {
+        "shared": true,
+        "minimumPages": 34,
+        "maximumPages": 16384
+      }
+    ]
+  },
+  "completedLogs": [
+    {
+      "stage": "typecheck",
+      "path": "/home/seorii/logs/sdk-worker-imports-gate-20261015T002222Z-sdk-check.log",
+      "bytes": 29373,
+      "sha256": "846e1d1e4c2781abad2fb4b666683055f72bcb09db99c45a379c59b9381a5e7a",
+      "inspection": "Last 12 lines after process exit; empty logs remain empty."
+    },
+    {
+      "stage": "sdk-build",
+      "path": "/home/seorii/logs/sdk-worker-imports-binary-20261015T002222Z-sdk-build.log",
+      "bytes": 29273,
+      "sha256": "38d417b8e1e6cde42c09d804a0e9fd7e2e27b92c39986befecca1927a66314bc",
+      "inspection": "Last 12 lines after process exit; empty logs remain empty."
+    },
+    {
+      "stage": "bindgen",
+      "path": "/home/seorii/logs/sdk-worker-imports-binary-20261015T002222Z-bindgen.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "inspection": "Last 12 lines after process exit; empty logs remain empty."
+    },
+    {
+      "stage": "inspect",
+      "path": "/home/seorii/logs/sdk-worker-imports-binary-20261015T002222Z-inspect.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "inspection": "Last 12 lines after process exit; empty logs remain empty."
+    }
+  ],
+  "historicalFailurePreserved": {
+    "pr": 195,
+    "receiptSha256": "db4ee40be5021dfe47301931fc28aae14e529b833cbdf29096832584292a7ff1"
+  },
+  "qualification": {
+    "guestQualified": false,
+    "shellBackendReady": false,
+    "commonContainerFdVfsQualified": false,
+    "scope": "Real Rust SDK/runtime library and external example check; original release profile Wasm, generated web glue and static inventory. No packaging, Worker initialization or guest execution was performed by this gate."
+  },
+  "remainingGates": [
+    "Local index/worker module packaging",
+    "Trusted JS command registry",
+    "Real Bash with private exec shim",
+    "Common live fd/VFS and cancellation",
+    "Browser guest acceptance",
+    "Complete dependency licenses/source notices"
+  ]
+}

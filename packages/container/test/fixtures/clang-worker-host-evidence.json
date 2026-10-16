@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "qualification": "actual Node Worker snapshot C stdio and explicit -fno-exceptions C++20 template workflow; Chromium remains separate",
+  "applicationCommit": "ed7f498eae830ada9aced34ed69d27ede7fc8c46",
+  "workerReceipt": {
+    "bytes": 5322,
+    "sha256": "778657316c319152c994a2c166a8861b2e452e41d3f0db506682d0d62440ce51"
+  },
+  "compiledHosts": {
+    "packages/container/dist/adapters/clang/worker.js": {
+      "bytes": 5200,
+      "sha256": "c272e49dfe06c94b7f834356d170121e31f355aab8098991798be4e4491badd8"
+    },
+    "packages/container/dist/adapters/wasi/host.js": {
+      "bytes": 16824,
+      "sha256": "e711e22f0697dd47da2bc12b1ca099281f4423aed6bbc77887494ad83872ea8f"
+    },
+    "packages/container/dist/adapters/wasi/stdio.js": {
+      "bytes": 1261,
+      "sha256": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467"
+    },
+    "packages/container/dist/fs/memory.js": {
+      "bytes": 39636,
+      "sha256": "922c4ac6c14a5f1b3fdc24a3bc94be8d7bf78f028bcf024072f4fbb29b1884f5"
+    },
+    "packages/llvm-core/dist/clang/src/tool-host.js": {
+      "bytes": 13831,
+      "sha256": "dbbb0387c11e22213cd592362b301db6919a9fd707315dc3d3eac2047465178e"
+    }
+  },
+  "producerReceipt": {
+    "bytes": 68741,
+    "sha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd"
+  },
+  "producerCliReceipt": {
+    "bytes": 8930,
+    "sha256": "f7895ec00fd05cb224b42e085873beb75fd5899cf238acf8f3833aeb2f9bded5"
+  },
+  "sourceInputsUnchangedDuringWorkerRun": true,
+  "compiledSourceNote": "The compiled-host hashes record executed JavaScript; source comments/docs may differ from the earlier build. Chromium separately records directly bundled source identities.",
+  "fullSysrootSha256": "91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402",
+  "nodeWorkerExitCode": 0,
+  "linearMemoryLimitBytesPerInstance": 4294967296,
+  "limitsScope": "Wasm maximum per tool instance; not aggregate JS heap/browser RSS",
+  "packageBoundary": {
+    "container": 183211,
+    "llvmCore": 896259,
+    "binaryAssets": 0
+  },
+  "browserQualified": false
+}

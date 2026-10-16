@@ -1,0 +1,138 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -6,6 +6,7 @@
+ extern crate alloc;
+ 
+ pub mod fs;
++mod host_command;
+ mod instance;
+ mod js_runtime;
+ mod logging;
+--- a/src/runtime.rs
++++ b/src/runtime.rs
+@@ -38,6 +38,10 @@
+     module_cache: Arc<ThreadLocalCache>,
+     tty: TtyOptions,
+     connected_to_tty: Arc<AtomicBool>,
++    /// Trusted exact-path host commands, shared by every clone of this runtime.
++    host_commands: Arc<crate::host_command::HostCommands>,
++    /// The pool whose scheduler thread runs host-command handlers.
++    host_command_pool: Option<Arc<ThreadPool>>,
+ }
+ 
+ impl Runtime {
+@@ -95,6 +99,7 @@
+         //     .with_task_manager(task_manager.clone());
+         runtime.http_client = Arc::new(http_client);
+ 
++        runtime.host_command_pool = Some(task_manager.clone());
+         runtime.task_manager = Some(task_manager);
+         runtime
+     }
+@@ -124,6 +129,8 @@
+             module_cache: Arc::new(module_cache),
+             tty: TtyOptions::default(),
+             connected_to_tty: Arc::new(AtomicBool::new(false)),
++            host_commands: Arc::default(),
++            host_command_pool: None,
+         }
+     }
+ 
+@@ -148,6 +155,10 @@
+ }
+ 
+ impl Runtime {
++    pub(crate) fn host_commands(&self) -> &Arc<crate::host_command::HostCommands> {
++        &self.host_commands
++    }
++
+     pub(crate) fn tty_options(&self) -> &TtyOptions {
+         &self.tty
+     }
+@@ -172,6 +183,14 @@
+         self.task_manager.as_ref().expect("Task manager not found")
+     }
+ 
++    fn host_command(
++        &self,
++        path: &str,
++    ) -> Option<Arc<dyn wasmer_wasix::os::command::VirtualCommand + Send + Sync>> {
++        self.host_commands
++            .lookup(self.host_command_pool.as_ref()?, path)
++    }
++
+     fn source(&self) -> Arc<dyn wasmer_wasix::runtime::resolver::Source + Send + Sync> {
+         match &self.source {
+             Some(wapm) => Arc::clone(wapm) as _,
+--- a/src/tasks/scheduler.rs
++++ b/src/tasks/scheduler.rs
+@@ -209,6 +209,10 @@
+                 );
+                 Ok(())
+             }
++            SchedulerMessage::HostCommand(dispatch) => {
++                crate::host_command::start(*dispatch);
++                Ok(())
++            }
+             SchedulerMessage::WorkerIdle { worker_id } => {
+                 move_worker(worker_id, &mut self.busy, &mut self.idle);
+                 tracing::trace!(
+--- a/src/tasks/scheduler_message.rs
++++ b/src/tasks/scheduler_message.rs
+@@ -51,6 +51,8 @@
+         memory: Option<wasmer::Memory>,
+         spawn_wasm: SpawnWasm,
+     },
++    /// Run a trusted host command's handler on the scheduler thread.
++    HostCommand(Box<crate::host_command::HostCommandDispatch>),
+     #[doc(hidden)]
+     #[allow(dead_code)]
+     Markers {
+@@ -124,6 +126,10 @@
+                     spawn_wasm,
+                 })
+             }
++            consts::TYPE_HOST_COMMAND => {
++                let dispatch = de.boxed(consts::PTR)?;
++                Ok(SchedulerMessage::HostCommand(dispatch))
++            }
+             other => {
+                 tracing::warn!(r#type = other, "Unknown message type");
+                 Err(anyhow::anyhow!("Unknown message type, \"{other}\"").into())
+@@ -174,6 +180,9 @@
+ 
+                 ser.finish()
+             }
++            SchedulerMessage::HostCommand(dispatch) => Serializer::new(consts::TYPE_HOST_COMMAND)
++                .boxed(consts::PTR, dispatch)
++                .finish(),
+             SchedulerMessage::Markers { uninhabited, .. } => match uninhabited {},
+         }
+     }
+@@ -188,6 +197,7 @@
+     pub const TYPE_CACHE_MODULE: &str = "cache-module";
+     pub const TYPE_SPAWN_WITH_MODULE: &str = "spawn-with-module";
+     pub const TYPE_SPAWN_WITH_MODULE_AND_MEMORY: &str = "spawn-with-module-and-memory";
++    pub const TYPE_HOST_COMMAND: &str = "host-command";
+     pub const MEMORY: &str = "memory";
+     pub const MODULE_HASH: &str = "module-hash";
+     pub const MODULE: &str = "module";
+--- a/src/tasks/thread_pool.rs
++++ b/src/tasks/thread_pool.rs
+@@ -49,6 +49,16 @@
+         self.scheduler.send(msg).expect("scheduler is dead");
+     }
+ 
++    /// Move an owned host-command child to the scheduler thread. Unlike
++    /// `send`, a closed scheduler is reported instead of panicking the guest.
++    pub(crate) fn dispatch_host_command(
++        &self,
++        dispatch: crate::host_command::HostCommandDispatch,
++    ) -> Result<(), anyhow::Error> {
++        self.scheduler
++            .send(SchedulerMessage::HostCommand(Box::new(dispatch)))
++    }
++
+     pub fn close(&self) {
+         self.scheduler.close();
+     }

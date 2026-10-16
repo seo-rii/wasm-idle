@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "status": "source-prepared-not-built",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "inputs": [
+    {
+      "name": "wasmer-sdk",
+      "sha256": "ca5df306ffcb260fb3086e89d450aafac106e200ccf7b49bb03c348bc2208712",
+      "bytes": 2888858
+    },
+    {
+      "name": "wasmer-wasix",
+      "sha256": "a9a804fcfbdbbfe5b2d6fb30e741e22a21e88e964dedfea9e609f13a52823bfe",
+      "bytes": 2831166
+    }
+  ],
+  "patches": {
+    "0001-preserve-exec-unwind.patch": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315",
+    "0002-replace-explicit-environment.patch": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934",
+    "0003-add-lossless-exec-frame.patch": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d",
+    "0004-expose-host-command-hook.patch": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442",
+    "0005-owned-command-snapshot.patch": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad",
+    "0006-register-worker-shell-import.patch": "af4c8aeff3ff5329d45f07f6149ebe2a86d77fc00c7774957531a9a9dff40565",
+    "0007-delegate-host-command-descriptors.patch": "af88c54c6d0b7ffbd6ad8e09ed12289de4881b9530f16ad6210085de70523542",
+    "0009-preserve-join-exit-status.patch": "125a375c8cefc688ca5b0275c4310cfc5533477e81959af15ef6b3fbfb9c0f79",
+    "0010-keep-running-child-on-wnohang.patch": "779f93f223b7ef64d8864bde73b96f8537e08205de6f8ffd1a05c7a46b93325a",
+    "0012-revalidate-live-mounts.patch": "865bd75cc2fc5303f94414a69e9b7ca207aba8a18a4c17ed98d8a4934f748194",
+    "0008-dispatch-trusted-host-commands.patch": "3f025c0a3f5a28c6e018c3bdd966ecf7f4263b4589d490544770b98c90f4d01e",
+    "0011-mount-host-filesystems.patch": "c3ce5d776d67d1054c19b692ca2c2a5f998c7817b9938740640f5e106be54e73",
+    "0013-serve-host-commands-off-the-scheduler.patch": "21e2a9516683ea2ef25f4fb9de3bc9436343aae9776066dba1180df182a021d5",
+    "exec_frame.rs": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a",
+    "proc_exec_v1.rs": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63",
+    "host_command_io.rs": "644f08e7da252974ef7046340ac81365df4e71826f6bb07889fc20cc34273acf",
+    "sdk_host_command.rs": "17d6ca2c6821ca7fdd5ca70c8de7e9083060b947fd191f0a02efe4fbe45658b5",
+    "sdk_host_filesystem.rs": "503bbedabb04fad53fea921d3a35a8f7051310063787c3fb47db876b2ed05853",
+    "host_command_compile_probe.rs": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+  },
+  "workerImports": {
+    "status": "source-shape-checked-not-typechecked",
+    "namespace": "wasm_idle_shell_v1",
+    "function": "exec_v1",
+    "parameters": [
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+      "i32"
+    ],
+    "result": "i32",
+    "workerGate": "actual wasix_32v1 function import",
+    "guestQualified": false,
+    "sources": {
+      "src/lib.rs": {
+        "bytes": 52396,
+        "sha256": "104b631cfd73453387c5690756d6d15536c3557a2de99e4c7a29ed3f9e0a8e1a"
+      },
+      "src/state/env.rs": {
+        "bytes": 50513,
+        "sha256": "df64bf6e57b65f0396fa4412efbee95e2d16ca2e65036e2363f6a4f1f4197c29"
+      },
+      "src/syscalls/wasix/proc_exec_v1.rs": {
+        "bytes": 2377,
+        "sha256": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63"
+      }
+    }
+  },
+  "compilerProbe": {
+    "status": "not-run",
+    "sdkExample": "container_command_snapshot_compile",
+    "sourceSha256": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+  },
+  "limitations": [
+    "No SDK rebuild or patched Bash/browser qualification",
+    "Host commands receive descriptors 0-2 only; no common Container fd/VFS ownership"
+  ]
+}

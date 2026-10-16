@@ -1,0 +1,45 @@
+{
+  "argv": [
+    "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+    "/home/seorii/dev/hancomac/tmp/container-20261013/product/packages/container/scripts/test-product-release-browser.mjs",
+    "--directory",
+    "/data/seorii-container-fixes-20261015/immutable-release-20261016-elqrstiz/release",
+    "--expected-sha256",
+    "e7392ffb2ec6af345f848ae675d2eecf890e2536cffa9cf9ce051d40801c201b",
+    "--config",
+    "/data/seorii-container-fixes-20261015/product-release-browser-20261015T152017Z/configuration.json",
+    "--output",
+    "/data/seorii-container-fixes-20261015/product-release-browser-20261015T152017Z/browser"
+  ],
+  "startedAtUnix": 1792078064.5355597,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 3464414,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 3466941,
+        "exitCode": 0
+      },
+      {
+        "pid": 3466948,
+        "exitCode": 0
+      },
+      {
+        "pid": 3466965,
+        "exitCode": 0
+      },
+      {
+        "pid": 3466967,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 124.459
+}

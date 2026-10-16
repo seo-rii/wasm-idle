@@ -1,0 +1,91 @@
+{
+  "name": "@wasm-idle/container",
+  "version": "0.1.0-alpha.0",
+  "description": "Experimental browser command containers with explicit resource and asset contracts",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./adapters/wasi": {
+      "types": "./dist/adapters/wasi/index.d.ts",
+      "import": "./dist/adapters/wasi/index.js"
+    },
+    "./adapters/wasi-live": {
+      "types": "./dist/adapters/wasi-live/index.d.ts",
+      "import": "./dist/adapters/wasi-live/index.js"
+    },
+    "./adapters/clang": {
+      "types": "./dist/adapters/clang/index.d.ts",
+      "import": "./dist/adapters/clang/index.js"
+    },
+    "./adapters/clang-live": {
+      "types": "./dist/adapters/clang-live/index.d.ts",
+      "import": "./dist/adapters/clang-live/index.js"
+    },
+    "./adapters/wasix": {
+      "types": "./dist/adapters/wasix/index.d.ts",
+      "import": "./dist/adapters/wasix/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/fs/persistence/index.d.ts",
+      "import": "./dist/fs/persistence/index.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace/index.d.ts",
+      "import": "./dist/workspace/index.js"
+    },
+    "./terminal": {
+      "types": "./dist/terminal/index.d.ts",
+      "import": "./dist/terminal/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/**/*.map",
+    "FS.md",
+    "DISTRIBUTIONS.md",
+    "CLANG.md",
+    "PERSISTENCE.md",
+    "LIVE.md",
+    "WORKSPACE.md",
+    "TERMINAL.md",
+    "SHELL.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test test/unit/*.test.mjs",
+    "verify:package-boundary": "node scripts/verify-package-boundary.mjs",
+    "prepack": "pnpm run build && pnpm run verify:package-boundary",
+    "test:contract": "pnpm run build && node --test test/contract/*.test.mjs",
+    "test:browser": "pnpm run build && node scripts/test-browser.mjs",
+    "test:live": "pnpm run build && node scripts/test-live-browser.mjs",
+    "test:workspace": "pnpm run build && node scripts/test-workspace-browser.mjs",
+    "test:clang": "pnpm run build && node scripts/test-clang.mjs",
+    "test:clang:live": "node scripts/test-live-clang.mjs",
+    "test:browser:clang": "node scripts/test-clang-browser.mjs",
+    "test:clang:headers": "node scripts/test-clang-headers.mjs",
+    "test:browser:clang:headers": "node scripts/test-clang-browser.mjs --headers",
+    "test:persistence": "pnpm run build && node scripts/test-persistence-browser.mjs",
+    "test:terminal": "pnpm run build && node scripts/test-terminal-browser.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^6.0.3",
+    "playwright-core": "^1.63.0"
+  },
+  "dependencies": {
+    "@wasm-idle/core": "workspace:*",
+    "@wasm-idle/llvm-core": "workspace:*"
+  }
+}

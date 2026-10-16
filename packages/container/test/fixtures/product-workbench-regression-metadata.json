@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "qualification": "Actual WASI-only rendered workbench regression with current relative host paths/shared bundler and untouched UTF8 BOM CRLF preservation; no actual Bash/Clang qualification",
+  "originalRun": "/data/seorii-container-fixes-20261015/product-workbench-regression-20261015T134708Z",
+  "originalEvidence": {
+    "product-workbench-regression-evidence.json": {
+      "bytes": 13847,
+      "sha256": "e2e9c08750d6665e266fe36f4f1bc3fc1d497fc8599c6fa7594af454beabd2a1"
+    },
+    "product-workbench-regression-process-evidence.json": {
+      "bytes": 934,
+      "sha256": "3cce6a4aeeff3806ecef1cc3dd184ac8a7e061250723097eaec1f2476750660d"
+    }
+  },
+  "testedApplicationCommit": "4db8856060eeadab48818fa8be5a78bc2558b648",
+  "sourceScope": "Exact compiled source bytes recorded by esbuild and rechecked after browser run. New actual Bash helpers present in source inventory are not exercised by this WASI-only profile. Historical product-browser-evidence.json remains unchanged.",
+  "processExitCode": 0,
+  "processCleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [
+      {
+        "pid": 2520817,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520822,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520828,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520830,
+        "exitCode": 0
+      },
+      {
+        "pid": 2520704,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "log": "/home/seorii/logs/product-workbench-regression-20261015T134708Z.log"
+}

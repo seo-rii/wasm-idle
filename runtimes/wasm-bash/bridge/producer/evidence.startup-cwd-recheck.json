@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "status": "external-artifacts-inputs-and-source-materials-verified",
+  "testedApplicationCommit": "7d15375967ed557e724488e82bab75cb5c4b41cb",
+  "archiveBaseApplicationCommit": "7d15375967ed557e724488e82bab75cb5c4b41cb",
+  "receipts": {
+    "build": {
+      "file": "evidence.startup-cwd-build.json",
+      "bytes": 26366,
+      "sha256": "777a96e9abe679788a6ba25774cb277c0535f05aed7e238e6dee225fa7ba0baa"
+    },
+    "process": {
+      "file": "evidence.startup-cwd-process.json",
+      "bytes": 909,
+      "sha256": "8265d8bfb9a8b838535778d2bde2376f85e58a1b15ad3193744643776bc10f8e"
+    }
+  },
+  "sourceCommitGuard": {
+    "sourceCommitBeforeBuild": "7d15375967ed557e724488e82bab75cb5c4b41cb",
+    "sourceCommitAtArchive": "7d15375967ed557e724488e82bab75cb5c4b41cb",
+    "policy": {
+      "bytes": 8078,
+      "sha256": "9c3efd81bd24f84a2c16ef5b9dfbe20036f0ae8fd615986ecbe23ce6a88a9a03"
+    },
+    "pinsVerifiedBeforeAndAfterBuild": true,
+    "pinsRecheckedAtArchive": {
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/execve.c": {
+        "bytes": 2533,
+        "sha256": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/exec_frame.rs": {
+        "bytes": 3717,
+        "sha256": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/proc_exec_v1.rs": {
+        "bytes": 2377,
+        "sha256": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/host_command_compile_probe.rs": {
+        "bytes": 1750,
+        "sha256": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/patches/0001-preserve-exec-unwind.patch": {
+        "bytes": 438,
+        "sha256": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/patches/0002-replace-explicit-environment.patch": {
+        "bytes": 1318,
+        "sha256": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/patches/0003-add-lossless-exec-frame.patch": {
+        "bytes": 1839,
+        "sha256": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/patches/0004-expose-host-command-hook.patch": {
+        "bytes": 1878,
+        "sha256": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/patches/0005-owned-command-snapshot.patch": {
+        "bytes": 3880,
+        "sha256": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/startup_cwd.c": {
+        "bytes": 1253,
+        "sha256": "dd86c46ce5e835ff5bdd67b32eb0e9ca330fe5e4b66f2f2706ccd9448d2dd3f0"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/build.mjs": {
+        "bytes": 22688,
+        "sha256": "c99b280d5d7d73f0cfddeb2a44eb6912c2f574c16c3acb1c384e6b796642ef82"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/verify.mjs": {
+        "bytes": 4690,
+        "sha256": "e9a4615dd9282c2f015d6faa8566ef7239924720e994831ecec3b5ea5f1c2016"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/inputs.lock.json": {
+        "bytes": 9025,
+        "sha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/README.md": {
+        "bytes": 11688,
+        "sha256": "15f71d6341e82588d5c7416eff6aecc8ccdda66df166be00d38c1514e30b5910"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/build.test.mjs": {
+        "bytes": 10122,
+        "sha256": "75cb0769788fe79f2039a4f0d7c05718a5bb33cf6089e457501004779bcfc165"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/startup-cwd.lock.json": {
+        "bytes": 751,
+        "sha256": "6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/startup-cwd.test.mjs": {
+        "bytes": 2235,
+        "sha256": "448bd2004707badae72c632953dc238b90b3f5ae1247c0e8fba0cc47e2ad31cb"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/startup-cwd.fixture.c": {
+        "bytes": 2539,
+        "sha256": "f24434071580fcd98004a7fe2b4426469f97f4e8ea420a13c1c469aa5cdd6239"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/scripts/prepare-runtime.mjs": {
+        "bytes": 11370,
+        "sha256": "696a0033d6116d4649bfee1ffdf6c556d0f7cf250b69c7aa50809d9ff1a99e53"
+      },
+      "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/packages/container/test/g0-shell/evidence.chromium.json": {
+        "bytes": 26886,
+        "sha256": "6074ab52ec5cb86b7d475b0e5473261bca8b14dacaab6954dd633b65f7b846f2"
+      },
+      "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node": {
+        "bytes": 126595440,
+        "sha256": "7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c"
+      },
+      "/data/seorii-container-20261014/bash-cwd-gate-20261015T013614Z/producer-plan.json": {
+        "bytes": 5331,
+        "sha256": "57b35836b6a49c8ca924d442937512051371af6cfd6ebdf5b4780672edec1566"
+      },
+      "/data/seorii-container-20261014/bash-shim-inputs/bash-fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz": {
+        "bytes": 10401294,
+        "sha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41"
+      },
+      "/data/seorii-container-20261014/bash-shim-inputs/wasix-sysroot-v2024-07-08.1.tar.gz": {
+        "bytes": 2134068,
+        "sha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9"
+      },
+      "/data/seorii-container-20261014/bash-shim-inputs/wasi-sdk-20.0-linux.tar.gz": {
+        "bytes": 79570956,
+        "sha256": "7030139d495a19fbeccb9449150c2b1531e15d8fb74419872a719a7580aad0f9"
+      },
+      "/data/seorii-container-20261014/bash-shim-inputs/binaryen-version_108-x86_64-linux.tar.gz": {
+        "bytes": 42446797,
+        "sha256": "7bb8a2d97214f40bf34abc31d49b34aa5deab10b25d6d13c5f72cb395cf142fb"
+      },
+      "/data/seorii-container-20261014/bash-shim-inputs/wasmer-7.2.0-linux-amd64.tar.gz": {
+        "bytes": 256943735,
+        "sha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2"
+      },
+      "/data/seorii-container-20261014/bash-cwd-gate-20261015T013614Z/guard.py": {
+        "bytes": 7594,
+        "sha256": "79b2341b0ad1b81820b1d3420c6be1de0498213cbe3fb3ba5d68a3e665c5bb84"
+      },
+      "/data/seorii-container-20261014/bash-cwd-gate-20261015T013614Z/run.py": {
+        "bytes": 2280,
+        "sha256": "93ecf355cc2386c33edc77b7228baaab4ba59a5c6ec5d5a36e78290990bcd60e"
+      }
+    }
+  },
+  "supervisorPolicy": {
+    "automaticRetry": false,
+    "stage": {
+      "name": "bash-build",
+      "argv": [
+        "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+        "--disable-wasm-trap-handler",
+        "--wasm-num-compilation-tasks=1",
+        "/home/seorii/dev/hancomac/tmp/container-20261013/bash-cwd/runtimes/wasm-bash/bridge/producer/build.mjs",
+        "--cache",
+        "/data/seorii-container-20261014/bash-shim-inputs",
+        "--output",
+        "/data/seorii-container-20261014/bash-cwd-gate-20261015T013614Z/bash-cwd-build-20261015T013614Z",
+        "--jobs",
+        "1",
+        "--webc"
+      ],
+      "log": "/home/seorii/logs/bash-cwd-gate-20261015T013614Z-bash-build.log",
+      "wallSeconds": 1800
+    },
+    "environment": {
+      "PATH": "/usr/bin:/bin",
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    },
+    "limits": {
+      "addressSpaceBytes": 8589934592,
+      "cpuSoftSeconds": 1200,
+      "cpuHardSeconds": 1260,
+      "minimumRemainingDiskBytes": 2147483648
+    },
+    "admission": {
+      "minimumAvailableMemoryBytes": 8589934592,
+      "minimumFreeDiskBytes": 6442450944
+    },
+    "scope": "Actual real Bash producer with pinned startup constructor; no download or cache deletion; build/import scope only, guest/browser rerun required"
+  },
+  "process": {
+    "finalStatus": 0,
+    "exitCode": 0,
+    "termination": "exited",
+    "wallSeconds": 129.466,
+    "cleanup": {
+      "allReaped": true,
+      "deadlineSeconds": 10,
+      "remaining": [],
+      "signaled": [],
+      "reaped": [],
+      "errors": []
+    },
+    "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee"
+  },
+  "externalArtifactRoot": "/data/seorii-container-20261014/bash-cwd-gate-20261015T013614Z/bash-cwd-build-20261015T013614Z",
+  "externalInputCache": "/data/seorii-container-20261014/bash-shim-inputs",
+  "artifactPaths": {
+    "shimObject": "work/execve.o",
+    "startupCwdObject": "work/startup_cwd.o",
+    "wasm": "candidate/bash-exec-shim.wasm",
+    "license": "candidate/LICENSE.txt",
+    "webc": "candidate/bash-exec-shim.webc",
+    "sourceMaterials": "source-materials.tar.gz"
+  },
+  "sourceMaterials": {
+    "archive": {
+      "bytes": 10447539,
+      "sha256": "3cf31065138ded89963bdd8a7a7fe8f4789187cb4876ba26a44e3548eae3754c"
+    },
+    "entryCount": 34,
+    "regularFileCount": 25,
+    "entries": {
+      "COPYING": {
+        "bytes": 35147,
+        "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+      },
+      "bash-fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz": {
+        "bytes": 10401294,
+        "sha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41"
+      },
+      "clang-with-exec-shim": {
+        "bytes": 1076,
+        "sha256": "1417344f1b00cc8df28b81009af47dd49ed042d95e6a66dea020afa2a6dc7f40"
+      },
+      "commands.json": {
+        "bytes": 8515,
+        "sha256": "dc9dc4cac4e56df16b0b630398f8157505ca002a4da01fc39e0a1ac09cc795c0"
+      },
+      "generated-configuration/Makefile": {
+        "bytes": 9090,
+        "sha256": "bf63c849a0fc2d826db88ab384719f95022b8e8f18fe3648f3905eb8e25efff0"
+      },
+      "generated-configuration/config.h": {
+        "bytes": 33290,
+        "sha256": "eac3894f1c018da3140c7b681171e7d4b14ce397379314a2717720d63903e0b4"
+      },
+      "repository/runtimes/wasm-bash/bridge/exec_frame.rs": {
+        "bytes": 3717,
+        "sha256": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a"
+      },
+      "repository/runtimes/wasm-bash/bridge/execve.c": {
+        "bytes": 2533,
+        "sha256": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5"
+      },
+      "repository/runtimes/wasm-bash/bridge/host_command_compile_probe.rs": {
+        "bytes": 1750,
+        "sha256": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+      },
+      "repository/runtimes/wasm-bash/bridge/patches/0001-preserve-exec-unwind.patch": {
+        "bytes": 438,
+        "sha256": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315"
+      },
+      "repository/runtimes/wasm-bash/bridge/patches/0002-replace-explicit-environment.patch": {
+        "bytes": 1318,
+        "sha256": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934"
+      },
+      "repository/runtimes/wasm-bash/bridge/patches/0003-add-lossless-exec-frame.patch": {
+        "bytes": 1839,
+        "sha256": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d"
+      },
+      "repository/runtimes/wasm-bash/bridge/patches/0004-expose-host-command-hook.patch": {
+        "bytes": 1878,
+        "sha256": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442"
+      },
+      "repository/runtimes/wasm-bash/bridge/patches/0005-owned-command-snapshot.patch": {
+        "bytes": 3880,
+        "sha256": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad"
+      },
+      "repository/runtimes/wasm-bash/bridge/proc_exec_v1.rs": {
+        "bytes": 2377,
+        "sha256": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/README.md": {
+        "bytes": 11688,
+        "sha256": "15f71d6341e82588d5c7416eff6aecc8ccdda66df166be00d38c1514e30b5910"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/build.mjs": {
+        "bytes": 22688,
+        "sha256": "c99b280d5d7d73f0cfddeb2a44eb6912c2f574c16c3acb1c384e6b796642ef82"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/build.test.mjs": {
+        "bytes": 10122,
+        "sha256": "75cb0769788fe79f2039a4f0d7c05718a5bb33cf6089e457501004779bcfc165"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/inputs.lock.json": {
+        "bytes": 9025,
+        "sha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/startup-cwd.fixture.c": {
+        "bytes": 2539,
+        "sha256": "f24434071580fcd98004a7fe2b4426469f97f4e8ea420a13c1c469aa5cdd6239"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/startup-cwd.lock.json": {
+        "bytes": 751,
+        "sha256": "6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/startup-cwd.test.mjs": {
+        "bytes": 2235,
+        "sha256": "448bd2004707badae72c632953dc238b90b3f5ae1247c0e8fba0cc47e2ad31cb"
+      },
+      "repository/runtimes/wasm-bash/bridge/producer/verify.mjs": {
+        "bytes": 4690,
+        "sha256": "e9a4615dd9282c2f015d6faa8566ef7239924720e994831ecec3b5ea5f1c2016"
+      },
+      "repository/runtimes/wasm-bash/bridge/startup_cwd.c": {
+        "bytes": 1253,
+        "sha256": "dd86c46ce5e835ff5bdd67b32eb0e9ca330fe5e4b66f2f2706ccd9448d2dd3f0"
+      },
+      "repository/runtimes/wasm-bash/scripts/prepare-runtime.mjs": {
+        "bytes": 11370,
+        "sha256": "696a0033d6116d4649bfee1ffdf6c556d0f7cf250b69c7aa50809d9ff1a99e53"
+      }
+    },
+    "producerFilesVerifiedAgainstBuildCommit": true,
+    "commandsRecordedBeforeFinalArchiveCommand": 13,
+    "completeReleaseSourcePack": false
+  },
+  "runtimeQualified": false,
+  "qualification": "Actual Bash build/import inventory and source-materials inspection only; no guest/browser execution. No clean/cold performance comparison or aggregate process-tree RSS guarantee."
+}

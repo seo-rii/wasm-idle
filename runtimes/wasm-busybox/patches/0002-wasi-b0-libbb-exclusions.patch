@@ -1,0 +1,114 @@
+--- a/libbb/appletlib.c
++++ b/libbb/appletlib.c
+@@ -33,7 +33,7 @@
+ #include "busybox.h"
+ 
+ #if !(defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) \
+-    || defined(__APPLE__) \
++    || defined(__APPLE__) || defined(BB_WASI_B0) \
+     )
+ # include <malloc.h> /* for mallopt */
+ #endif
+--- a/libbb/xfuncs_printf.c
++++ b/libbb/xfuncs_printf.c
+@@ -108,6 +108,7 @@
+ 	return memcpy(xmalloc(n), s, n);
+ }
+ 
++#if !defined(BB_WASI_B0)
+ void* FAST_FUNC mmap_read(int fd, size_t size)
+ {
+ 	return mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+@@ -128,6 +129,8 @@
+ 		bb_die_memory_exhausted();
+ 	return p;
+ }
++
++#endif
+ 
+ // Die if we can't open a file and return a FILE* to it.
+ // Notice we haven't got xfread(), This is for use with fscanf() and friends.
+@@ -184,6 +187,7 @@
+ 	return xopen(pathname, O_RDONLY | O_NONBLOCK);
+ }
+ 
++#if !defined(BB_WASI_B0)
+ int FAST_FUNC xopen_as_uid_gid(const char *pathname, int flags, uid_t u, gid_t g)
+ {
+ 	int fd;
+@@ -200,6 +204,8 @@
+ 
+ 	return fd;
+ }
++
++#endif
+ 
+ void FAST_FUNC xunlink(const char *pathname)
+ {
+@@ -221,6 +227,7 @@
+ 	return n;
+ }
+ 
++#if !defined(BB_WASI_B0)
+ void FAST_FUNC xpipe(int *filedes)
+ {
+ 	if (pipe(filedes))
+@@ -242,6 +249,8 @@
+ 	xdup2(from, to);
+ 	close(from);
+ }
++
++#endif
+ 
+ // Die with an error message if we can't write the entire buffer.
+ void FAST_FUNC xwrite(int fd, const void *buf, size_t count)
+@@ -281,6 +290,7 @@
+ 	return off;
+ }
+ 
++#if !defined(BB_WASI_B0)
+ int FAST_FUNC xmkstemp(char *template)
+ {
+ 	int fd = mkstemp(template);
+@@ -288,6 +298,8 @@
+ 		bb_perror_msg_and_die("can't create temp file '%s'", template);
+ 	return fd;
+ }
++
++#endif
+ 
+ // Die with supplied filename if this FILE* has ferror set.
+ void FAST_FUNC die_if_ferror(FILE *fp, const char *fn)
+@@ -394,6 +406,7 @@
+ // Die with an error message if we can't set gid.  (Because resource limits may
+ // limit this user to a given number of processes, and if that fills up the
+ // setgid() will fail and we'll _still_be_root_, which is bad.)
++#if !defined(BB_WASI_B0)
+ void FAST_FUNC xsetgid(gid_t gid)
+ {
+ 	if (setgid(gid)) bb_simple_perror_msg_and_die("setgid");
+@@ -740,3 +753,5 @@
+ 	gettimeofday(tv, NULL);
+ #endif
+ }
++
++#endif /* !BB_WASI_B0: account, process, network, terminal and clock setters */
+--- a/libbb/xfuncs.c
++++ b/libbb/xfuncs.c
+@@ -232,6 +232,7 @@
+ 	return full_write(STDERR_FILENO, str, strlen(str));
+ }
+ 
++#if !defined(BB_WASI_B0)
+ static int wh_helper(int value, int def_val, const char *env_name, int *err)
+ {
+ 	/* Envvars override even if "value" from ioctl is valid (>0).
+@@ -424,6 +425,8 @@
+ 	return 0;
+ }
+ 
++#endif /* !BB_WASI_B0: terminal and child process helpers */
++
+ void FAST_FUNC exit_SUCCESS(void)
+ {
+ 	exit(EXIT_SUCCESS);

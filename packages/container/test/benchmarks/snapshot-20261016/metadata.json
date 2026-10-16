@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "kind": "actual-chromium-snapshot-compiler-baseline",
+  "receipts": {
+    "benchmark.json": {
+      "bytes": 25718,
+      "sha256": "bd88944baaf749220759afeff24f35ba6a47f9fd6153f5b7805a425458d33984"
+    },
+    "process.json": {
+      "bytes": 1608,
+      "sha256": "b46ad6817d276a90d79370429b39f0d8c5bc6bea20f83b1ac989cc1a7fa3f2be"
+    },
+    "sample-1.json": {
+      "bytes": 200997,
+      "sha256": "a059155cea9e5673ffd188decd5c556e13748484a2cc4ffbcd35f4c1d766b4ff"
+    },
+    "sample-2.json": {
+      "bytes": 200626,
+      "sha256": "da19491362198435b39cd1f4a9d9dc75c0a7e9e0aac3ad062daf0dab8f12a445"
+    },
+    "sample-3.json": {
+      "bytes": 201788,
+      "sha256": "5ef543ca03ca2be4cebe3b0e89cc4699e79ec28cf1e39528975efc39c1399ae3"
+    }
+  },
+  "log": "/home/seorii/logs/container-benchmark-20261016-8kyu4ni1.log",
+  "exitCode": 0,
+  "scope": "Three passing 72-check public-session suites; measurements select only cold and warm scripts. Shared development host, not controlled performance qualification.",
+  "concurrencyObservation": {
+    "otherUiFixtureStartedAtUnix": 1792076749.361387,
+    "otherUiFixtureWallSeconds": 10.624,
+    "sample1NextOwnerAfterWarmAtUnix": 1792076742.34,
+    "relation": "The brief aborted UI fixture began after sample 1 warm completion; it overlapped only the unmeasured interrupt scenario. Other shared-host activity is reflected by the recorded load averages."
+  }
+}

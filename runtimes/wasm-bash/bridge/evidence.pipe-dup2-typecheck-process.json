@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "/home/seorii/.cargo/bin/cargo",
+    "+nightly-2025-07-05",
+    "check",
+    "--locked",
+    "--offline",
+    "--target",
+    "wasm32-unknown-unknown",
+    "--lib",
+    "--example",
+    "container_command_snapshot_compile",
+    "-j",
+    "1"
+  ],
+  "startedAtUnix": 1792060842.7438383,
+  "exitCode": 0,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 2139410,
+  "termination": "exited",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [],
+    "reaped": [],
+    "errors": []
+  },
+  "wallSeconds": 287.298
+}

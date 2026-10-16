@@ -78,8 +78,12 @@ jobs:
                   cache-dependency-path: runtimes/wasm-awk/go.sum
             - run: pnpm install --frozen-lockfile
             - run: pnpm --dir packages/core build
+            - run: pnpm --dir packages/llvm-core build
+            - run: pnpm --dir packages/container build
             - run: pnpm exec svelte-kit sync
             - run: node --test scripts/*.test.mjs
+              env:
+                  WASM_IDLE_SDK_ESBUILD_ROOT: ${{ github.workspace }}/node_modules/esbuild
             - run: node --test runtimes/wasm-scala/src/candidate.test.mjs
             - run: pnpm exec vitest run --root packages/node
             - run: pnpm exec vitest run --root packages/svelte

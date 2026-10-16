@@ -1,0 +1,88 @@
+{
+	"schemaVersion": 1,
+	"originalReceipts": {
+		"owner-cancel-browser.json": {
+			"original": "/data/seorii-container-20261014/patched-shell-cancel-20261015T041544Z/browser/receipt.json",
+			"bytes": 36426,
+			"sha256": "d5fdbace414dc5fbca66cc748781c89c1c2495dad6e48bc7120fb36d04664036"
+		},
+		"owner-cancel-browser-process.json": {
+			"original": "/data/seorii-container-20261014/patched-shell-cancel-20261015T041544Z/browser.process.json",
+			"bytes": 1056,
+			"sha256": "ec7502bd18708492db0ed5002b483e2549e158f993f4a8efa4b93e29730ecb58"
+		}
+	},
+	"applicationCommit": "266469ff21821f8e347fcc967bc32d3da8fb8437",
+	"browser": "153.0.8010.12",
+	"host": {
+		"node": "v24.21.0",
+		"platform": "linux",
+		"arch": "x64",
+		"kernelRelease": "6.1.0-53-cloud-amd64"
+	},
+	"packageReceipt": {
+		"bytes": 2604,
+		"sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+	},
+	"complete": true,
+	"passedChecks": 19,
+	"totalChecks": 19,
+	"wallSeconds": 19.216,
+	"stageExitCode": 0,
+	"supervisorExitCode": 0,
+	"allOwnedProcessesReaped": true,
+	"allPrivateInputPinsRechecked": 18,
+	"createdWorkerTargets": 21,
+	"createdNestedWorkerTargets": 15,
+	"scope": "Forced trusted host Worker-group cleanup; recovery uses a new owner and SDK memory in the same page",
+	"guestSignalQualified": false,
+	"survivingShellQualified": false,
+	"commonContainerFdVfsQualified": false,
+	"shellBackendReady": false,
+	"cases": [
+		{
+			"id": "G0-CANCEL-CPU",
+			"workersBeforeRecovery": 0,
+			"workersAfterRecovery": 0,
+			"workersAfterContextClose": 0,
+			"retirementAfterAcknowledgementMs": 2044,
+			"download": null,
+			"ownerAcknowledgementMs": 1.8650000095367432,
+			"requestedSdkWorkerTerminations": 3,
+			"recoveryExitCode": 0
+		},
+		{
+			"id": "G0-CANCEL-READ",
+			"workersBeforeRecovery": 0,
+			"workersAfterRecovery": 0,
+			"workersAfterContextClose": 0,
+			"retirementAfterAcknowledgementMs": 2044,
+			"download": null,
+			"ownerAcknowledgementMs": 6.544999986886978,
+			"requestedSdkWorkerTerminations": 3,
+			"recoveryExitCode": 0
+		},
+		{
+			"id": "G0-CANCEL-DOWNLOAD",
+			"workersBeforeRecovery": 0,
+			"workersAfterRecovery": 0,
+			"workersAfterContextClose": 0,
+			"retirementAfterAcknowledgementMs": 54,
+			"download": {
+				"active": 0,
+				"aborted": 1,
+				"completed": 0,
+				"sentBytes": 16384,
+				"expectedBytes": 1812678
+			},
+			"ownerAcknowledgementMs": 0.8650000095367432,
+			"requestedSdkWorkerTerminations": 0,
+			"recoveryExitCode": 0
+		}
+	],
+	"log": {
+		"path": "/home/seorii/logs/patched-shell-cancel-20261015T041544Z.log",
+		"bytes": 184,
+		"sha256": "578c9e065ed0a793cca6b67eb8ad64eecd733443377e70702f865e683eb8aaac"
+	}
+}

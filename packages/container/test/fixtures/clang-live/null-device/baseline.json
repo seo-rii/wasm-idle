@@ -1,0 +1,22 @@
+{
+  "diagnosticOnly": true,
+  "passed": true,
+  "results": [
+    {
+      "stdin": "EOF",
+      "code": 0,
+      "reason": "exited",
+      "stdout": "clang version 22.1.8 (https://github.com/llvm/llvm-project ca7933e47d3a3451d81e72ac174dcb5aa28b59d1)\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /opt/toolchains/llvm/bin\n",
+      "stderr": "clang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\n"
+    },
+    {
+      "stdin": "closed",
+      "code": 1,
+      "reason": "exited",
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "workers": 0,
+  "clangSha256": "e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3"
+}
