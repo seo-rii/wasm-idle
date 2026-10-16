@@ -25,6 +25,13 @@ export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 
 interface HostOptions { fs: WasiFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: WasiStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : type === 'character-device' ? 2 : 4;
 const RIGHTS = (1n << 30n) - 1n;
+const FD_READ = 2n, FD_SEEK = 4n, FD_TELL = 32n, FD_WRITE = 64n;
+// Keep the requested masks for fdstat, but evaluate implications each time:
+// removing SEEK must also remove its implicit TELL unless TELL is explicit.
+const hasRights = (granted: bigint, requested: bigint) => {
+  const effective = granted & FD_SEEK ? granted | FD_TELL : granted;
+  return (effective & requested) === requested;
+};
 
 /** Synchronous WASI imports. A live binding may block only its dedicated guest Worker. */
 export function createWasiHost(options: HostOptions) {
@@ -52,7 +59,7 @@ export function createWasiHost(options: HostOptions) {
   const handle = (fd: number, right = 0n) => {
     const h = handles.get(fd);
     if (!h) throw new WasiFault(8);
-    if ((h.rights & right) !== right) throw new WasiFault(76);
+    if (!hasRights(h.rights, right)) throw new WasiFault(76);
     return h;
   };
   const relative = (fd: number, ptr: number, len: number, right = 0n) => {
@@ -117,16 +124,16 @@ export function createWasiHost(options: HostOptions) {
   const safeOffset = (value: bigint) => { const n = Number(value); if (!Number.isSafeInteger(n)) throw new WasiFault(28); return n; };
   const fdRead = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count);
-    if (fd !== 0 || !standard.has(0)) handle(fd, 2n);
     const input = fd === 0 && standard.has(fd);
+    const h = input ? undefined : handle(fd, FD_READ | (offset === undefined ? 0n : FD_SEEK));
     if (input && offset !== undefined) throw new WasiFault(70);
     const length = buffers.reduce((total, buffer) => Math.min(1024 * 1024, total + buffer.length), 0);
     if (!length) { put32(result, 0); return 0; }
     // A stream read must return bytes already available without blocking again on
     // the next iovec. Perform one bounded read, then scatter its partial result.
     const bytes = input ? stdio.read(length) : offset === undefined
-      ? options.fs.read(handle(fd, 2n).fd, length)
-      : options.fs.pread(handle(fd, 2n).fd, length, safeOffset(offset));
+      ? options.fs.read(h!.fd, length)
+      : options.fs.pread(h!.fd, length, safeOffset(offset));
     if (bytes.length > length) throw new WasiFault(29);
     let copied = 0;
     for (const buffer of buffers) {
@@ -139,7 +146,7 @@ export function createWasiHost(options: HostOptions) {
   const fdWrite = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count); let total = 0;
     const output = (fd === 1 || fd === 2) && standard.has(fd);
-    if (!output) handle(fd, 64n);
+    const h = output ? undefined : handle(fd, FD_WRITE | (offset === undefined ? 0n : FD_SEEK));
     if (output && offset !== undefined) throw new WasiFault(70);
     for (const buffer of buffers) {
       const bytes = buffer.subarray(0, Math.min(buffer.length, 1024 * 1024 - total));
@@ -148,8 +155,7 @@ export function createWasiHost(options: HostOptions) {
         const n = stdio.write(fd as 1 | 2, bytes);
         total += n; if (n < bytes.length) break;
       } else {
-        const h = handle(fd, 64n);
-        const n = offset === undefined ? options.fs.write(h.fd, bytes) : options.fs.pwrite(h.fd, bytes, safeOffset(offset) + total);
+        const n = offset === undefined ? options.fs.write(h!.fd, bytes) : options.fs.pwrite(h!.fd, bytes, safeOffset(offset) + total);
         total += n; if (n < bytes.length) break;
       }
     }
@@ -164,10 +170,11 @@ export function createWasiHost(options: HostOptions) {
     fd_close: (fd) => { if (standard.delete(fd)) { stdio.close?.(fd); return 0; } options.fs.close(handle(fd).fd); handles.delete(fd); return 0; },
     fd_seek: (fd, offset, whence, ptr) => {
       span(ptr, 8); if (whence < 0 || whence > 2) throw new WasiFault(28);
-      const position = options.fs.seek(handle(fd, 4n).fd, safeOffset(offset), (['set', 'cur', 'end'] as const)[whence]!);
+      const right = whence === 1 && offset === 0n ? FD_TELL : FD_SEEK;
+      const position = options.fs.seek(handle(fd, right).fd, safeOffset(offset), (['set', 'cur', 'end'] as const)[whence]!);
       view(ptr, 8).setBigUint64(0, BigInt(position), true); return 0;
     },
-    fd_tell: (fd, ptr) => { view(ptr, 8).setBigUint64(0, BigInt(options.fs.tell(handle(fd, 32n).fd)), true); return 0; },
+    fd_tell: (fd, ptr) => { view(ptr, 8).setBigUint64(0, BigInt(options.fs.tell(handle(fd, FD_TELL).fd)), true); return 0; },
     fd_fdstat_get: (fd, ptr) => {
       span(ptr, 24); const h = standard.has(fd) ? undefined : handle(fd);
       const v = view(ptr, 24); span(ptr, 24).fill(0);
@@ -175,7 +182,7 @@ export function createWasiHost(options: HostOptions) {
       v.setUint8(0, h ? filetype(options.fs.fstat(h.fd).type) : 0); v.setUint16(2, h?.flags ?? 0, true);
       v.setBigUint64(8, h?.rights ?? (fd === 0 ? 2n : 64n), true); v.setBigUint64(16, h?.inherited ?? 0n, true); return 0;
     },
-    fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if ((base | h.rights) !== h.rights || (inherited | h.inherited) !== h.inherited) return 76; h.rights = base; h.inherited = inherited; return 0; },
+    fd_fdstat_set_rights: (fd, base, inherited) => { const h = handle(fd); if (!hasRights(h.rights, base) || !hasRights(h.inherited, inherited)) return 76; h.rights = base; h.inherited = inherited; return 0; },
     fd_fdstat_set_flags: (fd, flags) => {
       // Standard streams report no flags; only that unchanged value is accepted.
       if (standard.has(fd)) return flags === 0 ? 0 : 58;
@@ -195,7 +202,7 @@ export function createWasiHost(options: HostOptions) {
     path_open: (fd, flags, ptr, len, oflags, rights, inherited, fdflags, result) => {
       span(result, 4); if ((flags & ~1) || (oflags & ~15) || (fdflags & ~5)) return 58;
       const parent = handle(fd, 1n << 13n);
-      if ((rights | parent.inherited) !== parent.inherited || (inherited | parent.inherited) !== parent.inherited) return 76;
+      if (!hasRights(parent.inherited, rights) || !hasRights(parent.inherited, inherited)) return 76;
       if ((oflags & 1) && !(parent.rights & (1n << 10n))) return 76;
       if ((oflags & 8) && (!(parent.rights & (1n << 19n)) || !(rights & 64n))) return 76;
       const p = relative(fd, ptr, len);
