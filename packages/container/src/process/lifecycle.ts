@@ -55,5 +55,10 @@ export function snapshotInvocation(command: string, args: readonly string[], opt
   if (timeoutMs !== undefined && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2147483647)) {
     throw new ContainerError('INVALID_ARGUMENT', 'timeoutMs must be a positive timer-safe integer');
   }
-  return Object.freeze({ command, args: Object.freeze(argv as string[]), cwd, env: Object.freeze(env), timeoutMs, signal: options.signal });
+  const signal = options.signal;
+  if (signal !== undefined && (!signal || typeof signal !== 'object' || typeof signal.aborted !== 'boolean' ||
+      typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function')) {
+    throw new ContainerError('INVALID_ARGUMENT', 'signal must provide the AbortSignal event interface');
+  }
+  return Object.freeze({ command, args: Object.freeze(argv as string[]), cwd, env: Object.freeze(env), timeoutMs, signal });
 }
