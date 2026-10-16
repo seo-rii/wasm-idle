@@ -1,1 +1,0 @@
-import{st as e,ut as t}from"./B00J1OCs.js";function n(e={}){return{persistentCache:t(void 0,e.persistentCache),assetRoot:e.assetRoot??void 0}}function r(t,r,i){if(i!==void 0)return typeof i==`string`?{sha256:i}:i;let a=n(r).assetRoot;return a?e(t,{assetRoot:a}):void 0}export{r as n,n as t};

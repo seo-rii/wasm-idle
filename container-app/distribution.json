@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "id": "shell",
+      "identity": "sha256:0dc8906c5008efcc460ccdf95fb21e20f035023a5c392f7318ad49734e94242f",
+      "dependencies": [],
+      "mount": "/opt/toolchains/bash",
+      "producer": {
+        "repository": "https://github.com/seo-rii/wasm-idle",
+        "revision": "9b3ca1374d68a7a98645131227fe54fcb7ec02be",
+        "receiptSha256": "ee3589f60292b3481e8609c03f4a210120c31b416fbb1ec5d8cac2dd50c22bb0"
+      },
+      "capabilities": [
+        "wasix"
+      ],
+      "assets": [
+        {
+          "id": "sdk",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+          "encoding": "identity",
+          "delivery": {
+            "bytes": 9246938,
+            "sha256": "522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce",
+            "mediaType": "application/wasm"
+          },
+          "logical": {
+            "bytes": 9246938,
+            "sha256": "522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce",
+            "mediaType": "application/wasm"
+          }
+        },
+        {
+          "id": "bash",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+          "encoding": "identity",
+          "delivery": {
+            "bytes": 1812678,
+            "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4",
+            "mediaType": "application/octet-stream"
+          },
+          "logical": {
+            "bytes": 1812678,
+            "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4",
+            "mediaType": "application/octet-stream"
+          }
+        }
+      ],
+      "files": [
+        {
+          "path": "sdk.wasm",
+          "asset": "sdk",
+          "executable": false
+        },
+        {
+          "path": "bash.webc",
+          "asset": "bash",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "busybox",
+      "identity": "sha256:547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+      "dependencies": [],
+      "mount": "/opt/toolchains/busybox",
+      "producer": {
+        "repository": "https://github.com/seo-rii/wasm-idle",
+        "revision": "3097726bc6e04667ba7d92738d5bcf4798062617",
+        "receiptSha256": "95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51"
+      },
+      "capabilities": [
+        "wasi-preview1"
+      ],
+      "assets": [
+        {
+          "id": "busybox",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade/busybox.wasm",
+          "encoding": "identity",
+          "delivery": {
+            "bytes": 447557,
+            "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+            "mediaType": "application/wasm"
+          },
+          "logical": {
+            "bytes": 447557,
+            "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+            "mediaType": "application/wasm"
+          }
+        }
+      ],
+      "files": [
+        {
+          "path": "bin/busybox",
+          "asset": "busybox",
+          "executable": true
+        }
+      ]
+    },
+    {
+      "id": "llvm",
+      "identity": "sha256:1f7f638019dbb70a74fc9d4c5579b5d8697bc243a893bc3f9dbdc65a4b80465b",
+      "dependencies": [],
+      "mount": "/opt/toolchains/llvm",
+      "producer": {
+        "repository": "https://github.com/llvm/llvm-project",
+        "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+        "receiptSha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd"
+      },
+      "capabilities": [
+        "wasi-preview1",
+        "llvm-tool-host-exec-v1"
+      ],
+      "assets": [
+        {
+          "id": "clang",
+          "encoding": "gzip",
+          "delivery": {
+            "bytes": 16270174,
+            "sha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba",
+            "mediaType": "application/octet-stream"
+          },
+          "logical": {
+            "bytes": 51965041,
+            "sha256": "e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3",
+            "mediaType": "application/wasm"
+          },
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin"
+        },
+        {
+          "id": "lld",
+          "encoding": "gzip",
+          "delivery": {
+            "bytes": 8178107,
+            "sha256": "dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d",
+            "mediaType": "application/octet-stream"
+          },
+          "logical": {
+            "bytes": 24938493,
+            "sha256": "3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a",
+            "mediaType": "application/wasm"
+          },
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin"
+        },
+        {
+          "id": "sysroot",
+          "encoding": "identity",
+          "delivery": {
+            "bytes": 35328000,
+            "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+            "mediaType": "application/x-tar"
+          },
+          "logical": {
+            "bytes": 35328000,
+            "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
+            "mediaType": "application/x-tar"
+          },
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar"
+        }
+      ],
+      "files": [
+        {
+          "path": "bin/llvm",
+          "asset": "clang",
+          "executable": true
+        },
+        {
+          "path": "bin/wasm-ld",
+          "asset": "lld",
+          "executable": true
+        },
+        {
+          "path": "sysroot.tar",
+          "asset": "sysroot",
+          "executable": false
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "name": "cat",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "cat",
+      "prefixArgs": []
+    },
+    {
+      "name": "cp",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "cp",
+      "prefixArgs": []
+    },
+    {
+      "name": "grep",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "grep",
+      "prefixArgs": []
+    },
+    {
+      "name": "mkdir",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "mkdir",
+      "prefixArgs": []
+    },
+    {
+      "name": "mv",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "mv",
+      "prefixArgs": []
+    },
+    {
+      "name": "rm",
+      "package": "busybox",
+      "adapter": "wasi-preview1-live",
+      "path": "bin/busybox",
+      "argv0": "rm",
+      "prefixArgs": []
+    },
+    {
+      "name": "clang",
+      "package": "llvm",
+      "adapter": "llvm-clang-tool-host-live-v1",
+      "path": "bin/llvm",
+      "argv0": "/opt/toolchains/llvm/bin/llvm",
+      "prefixArgs": [
+        "clang",
+        "--target=wasm32-wasi",
+        "-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld",
+        "--sysroot=/usr/share/wasm-sysroot",
+        "-resource-dir=/usr/share/wasm-sysroot/lib/clang/22",
+        "-Wl,--max-memory=67108864"
+      ]
+    }
+  ],
+  "distributionId": "website-95d4716372d7d8f5fde5aa682f20871566d728c6647d214a684f6e0de70e8221"
+}

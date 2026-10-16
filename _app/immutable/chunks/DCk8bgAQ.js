@@ -1,1 +1,0 @@
-var e=`246f942354f65dcc08446e73976bf8e901ccd7e2d2f8cd04b96cdc8b28734bfa`,t=Object.freeze({fingerprint:e,moduleReceipt:Object.freeze({bytes:1892,sha256:`17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a`}),manifestReceipt:Object.freeze({bytes:60076,sha256:`bb6ad7850ebed944b3a35fad1b71de82e8ef1256cb4600ebe6c6cfcf0f5497e3`})});export{t as n,e as t};

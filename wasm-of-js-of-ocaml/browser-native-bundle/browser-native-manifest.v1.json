@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-12T04:50:04.362Z",
+  "generatedAt": "2026-10-07T08:56:57.871Z",
   "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1",
   "findlibConf": {
     "url": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
@@ -59,29 +59,29 @@
       "tool": "wasm_of_ocaml.bc.browser.js",
       "bridgeSymbol": "globalThis.__wasm_of_js_system_command",
       "systemFunctionName": "px",
-      "alreadyPatched": false,
-      "sourceSha256": "303aa68b4b6b19c1eeac1c5a96dca6addfb10ce4aca42810db0ce1a28e1af551",
+      "alreadyPatched": true,
+      "sourceSha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76",
       "patchedSha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76"
     },
     "browser_binaryen_tools": [
       {
         "tool": "wasm-opt",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-opt",
-        "outPath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-opt",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
         "sourceSha256": "608c021fa3f2c68cdc26f06a1454341089a0e689abb71cbe5a23ef7300e7f3e3",
         "patchedSha256": "e04ed72e19aab4ab3cbbca152a95ed00d63d2d084be7d8dd07fc133c8d576196"
       },
       {
         "tool": "wasm-merge",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-merge",
-        "outPath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-merge",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
         "sourceSha256": "8b2c6a3c27a6c7a7cd8be9d02b587b1626781377c14d5f4cafd9f9ee2e9eb405",
         "patchedSha256": "28c285a03583af811d5acc6e912e2b5298953cb1fe38cbe79140b7e017cb9155"
       },
       {
         "tool": "wasm-metadce",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-metadce",
-        "outPath": "/home/seorii/dev/hancomac/wasm-idle-redesign/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-metadce",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
         "sourceSha256": "69e3d8af452a10eca9416c1795e0659fc2d2a1e0ca17d10f63700caf116e306e",
         "patchedSha256": "6130fc8ef8715e34625efb82b0f31c4c7ef1e6ea790e01c65a56ab44d294fee0"
       }

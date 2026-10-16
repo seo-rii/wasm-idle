@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "applicationPath": "host/5ab26584ed21efc6d768e17d8e238aaa102d80a9a5e65492b144cbfd3a11b6a3/index.html",
+  "profile": "live",
+  "containerVersion": "0.1.0",
+  "manifestSha256": "1b07ef6f945212eca2739f32998c6b8ceb6feced519caee6c0e63fd2a572c265",
+  "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
+}

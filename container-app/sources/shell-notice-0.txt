@@ -1,0 +1,507 @@
+# Container source materials
+
+Source status: incomplete. This inventory is not a license or release approval.
+
+Original source archives, declared license metadata, and identified notice texts are preserved.
+The Cargo.lock inventory includes packages that may not be linked into the selected binary.
+
+## Components
+
+- addr2line-0.21.0: declared license `Apache-2.0 OR MIT`; notices/addr2line-0.21.0/LICENSE-APACHE, notices/addr2line-0.21.0/LICENSE-MIT
+- addr2line-0.25.0: declared license `Apache-2.0 OR MIT`; notices/addr2line-0.25.0/LICENSE-APACHE, notices/addr2line-0.25.0/LICENSE-MIT
+- adler-1.0.2: declared license `0BSD OR MIT OR Apache-2.0`; notices/adler-1.0.2/LICENSE-0BSD, notices/adler-1.0.2/LICENSE-APACHE, notices/adler-1.0.2/LICENSE-MIT
+- adler2-2.0.0: declared license `0BSD OR MIT OR Apache-2.0`; notices/adler2-2.0.0/LICENSE-0BSD, notices/adler2-2.0.0/LICENSE-APACHE, notices/adler2-2.0.0/LICENSE-MIT
+- adler2-2.0.1: declared license `0BSD OR MIT OR Apache-2.0`; notices/adler2-2.0.1/LICENSE-0BSD, notices/adler2-2.0.1/LICENSE-APACHE, notices/adler2-2.0.1/LICENSE-MIT
+- ahash-0.8.11: declared license `MIT OR Apache-2.0`; notices/ahash-0.8.11/LICENSE-APACHE, notices/ahash-0.8.11/LICENSE-MIT
+- aho-corasick-1.1.2: declared license `Unlicense OR MIT`; notices/aho-corasick-1.1.2/COPYING, notices/aho-corasick-1.1.2/LICENSE-MIT, notices/aho-corasick-1.1.2/UNLICENSE
+- aliasable-0.1.3: declared license `MIT`; notices/aliasable-0.1.3/LICENSE
+- android-tzdata-0.1.1: declared license `MIT OR Apache-2.0`; notices/android-tzdata-0.1.1/LICENSE-APACHE, notices/android-tzdata-0.1.1/LICENSE-MIT
+- android_system_properties-0.1.5: declared license `MIT/Apache-2.0`; notices/android_system_properties-0.1.5/LICENSE-APACHE, notices/android_system_properties-0.1.5/LICENSE-MIT
+- any_ascii-0.1.7: declared license `ISC`; notices/any_ascii-0.1.7/LICENSE
+- anyhow-1.0.97: declared license `MIT OR Apache-2.0`; notices/anyhow-1.0.97/LICENSE-APACHE, notices/anyhow-1.0.97/LICENSE-MIT
+- arrayref-0.3.7: declared license `BSD-2-Clause`; notices/arrayref-0.3.7/LICENSE
+- arrayvec-0.7.4: declared license `MIT OR Apache-2.0`; notices/arrayvec-0.7.4/LICENSE-APACHE, notices/arrayvec-0.7.4/LICENSE-MIT
+- async-trait-0.1.88: declared license `MIT OR Apache-2.0`; notices/async-trait-0.1.88/LICENSE-APACHE, notices/async-trait-0.1.88/LICENSE-MIT
+- atomic-waker-1.1.2: declared license `Apache-2.0 OR MIT`; notices/atomic-waker-1.1.2/LICENSE-APACHE, notices/atomic-waker-1.1.2/LICENSE-MIT, notices/atomic-waker-1.1.2/LICENSE-THIRD-PARTY
+- autocfg-1.1.0: declared license `Apache-2.0 OR MIT`; notices/autocfg-1.1.0/LICENSE-APACHE, notices/autocfg-1.1.0/LICENSE-MIT
+- backtrace-0.3.69: declared license `MIT OR Apache-2.0`; notices/backtrace-0.3.69/LICENSE-APACHE, notices/backtrace-0.3.69/LICENSE-MIT
+- base64-0.22.1: declared license `MIT OR Apache-2.0`; notices/base64-0.22.1/LICENSE-APACHE, notices/base64-0.22.1/LICENSE-MIT
+- bash: declared license `GPL-3.0-or-later`; notices/bash/LICENSE.txt
+- beef-0.5.2: declared license `MIT OR Apache-2.0`; notices/beef-0.5.2/LICENSE-APACHE, notices/beef-0.5.2/LICENSE-MIT
+- bincode-1.3.3: declared license `MIT`; notices/bincode-1.3.3/LICENSE.md
+- bindgen-0.70.1: declared license `BSD-3-Clause`; notices/bindgen-0.70.1/LICENSE
+- bitflags-1.3.2: declared license `MIT/Apache-2.0`; notices/bitflags-1.3.2/LICENSE-APACHE, notices/bitflags-1.3.2/LICENSE-MIT
+- bitflags-2.9.0: declared license `MIT OR Apache-2.0`; notices/bitflags-2.9.0/LICENSE-APACHE, notices/bitflags-2.9.0/LICENSE-MIT
+- blake3-1.5.1: declared license `CC0-1.0 OR Apache-2.0`; notices/blake3-1.5.1/LICENSE
+- block-buffer-0.10.4: declared license `MIT OR Apache-2.0`; notices/block-buffer-0.10.4/LICENSE-APACHE, notices/block-buffer-0.10.4/LICENSE-MIT
+- bstr-1.9.1: declared license `MIT OR Apache-2.0`; notices/bstr-1.9.1/COPYING, notices/bstr-1.9.1/LICENSE-APACHE, notices/bstr-1.9.1/LICENSE-MIT, notices/bstr-1.9.1/src/unicode/data/LICENSE-UNICODE
+- bumpalo-3.14.0: declared license `MIT OR Apache-2.0`; notices/bumpalo-3.14.0/LICENSE-APACHE, notices/bumpalo-3.14.0/LICENSE-MIT
+- bus-2.4.1: declared license `MIT OR Apache-2.0`; notices/bus-2.4.1/LICENSE-APACHE, notices/bus-2.4.1/LICENSE-MIT
+- bytecheck-0.6.11: declared license `MIT`; notices/bytecheck-0.6.11/LICENSE
+- bytecheck-0.8.1: declared license `MIT`; notices/bytecheck-0.8.1/LICENSE
+- bytecheck_derive-0.6.11: declared license `MIT`; notices/bytecheck_derive-0.6.11/LICENSE
+- bytecheck_derive-0.8.1: declared license `MIT`; notices/bytecheck_derive-0.8.1/LICENSE
+- byteorder-1.5.0: declared license `Unlicense OR MIT`; notices/byteorder-1.5.0/COPYING, notices/byteorder-1.5.0/LICENSE-MIT, notices/byteorder-1.5.0/UNLICENSE
+- bytes-1.10.1: declared license `MIT`; notices/bytes-1.10.1/LICENSE
+- bytesize-1.3.0: declared license `Apache-2.0`; notices/bytesize-1.3.0/LICENSE
+- cc-1.2.0: declared license `MIT OR Apache-2.0`; notices/cc-1.2.0/LICENSE-APACHE, notices/cc-1.2.0/LICENSE-MIT
+- cc-1.2.18: declared license `MIT OR Apache-2.0`; notices/cc-1.2.18/LICENSE-APACHE, notices/cc-1.2.18/LICENSE-MIT
+- cexpr-0.6.0: declared license `Apache-2.0/MIT`; notices/cexpr-0.6.0/LICENSE-APACHE, notices/cexpr-0.6.0/LICENSE-MIT
+- cfg-if-1.0.0: declared license `MIT/Apache-2.0`; notices/cfg-if-1.0.0/LICENSE-APACHE, notices/cfg-if-1.0.0/LICENSE-MIT
+- cfg-if-1.0.1: declared license `MIT OR Apache-2.0`; notices/cfg-if-1.0.1/LICENSE-APACHE, notices/cfg-if-1.0.1/LICENSE-MIT
+- chrono-0.4.40: declared license `MIT OR Apache-2.0`; notices/chrono-0.4.40/LICENSE.txt
+- ciborium-0.2.2: declared license `Apache-2.0`; notices/ciborium-0.2.2/LICENSE
+- ciborium-io-0.2.2: declared license `Apache-2.0`; notices/ciborium-io-0.2.2/LICENSE
+- ciborium-ll-0.2.2: declared license `Apache-2.0`; notices/ciborium-ll-0.2.2/LICENSE
+- clang-sys-1.8.1: declared license `Apache-2.0`; notices/clang-sys-1.8.1/LICENSE.txt
+- cmake-0.1.54: declared license `MIT OR Apache-2.0`; notices/cmake-0.1.54/LICENSE-APACHE, notices/cmake-0.1.54/LICENSE-MIT
+- compiler-rt-08d094a0e457360ad8b94b017d2dc277e697ca76.tar.gz: declared license `unspecified`; notices/compiler-rt-08d094a0e457360ad8b94b017d2dc277e697ca76.tar.gz/compiler-rt/LICENSE.TXT, notices/compiler-rt-08d094a0e457360ad8b94b017d2dc277e697ca76.tar.gz/llvm/LICENSE.TXT
+- console-0.15.11: declared license `MIT`; notices/console-0.15.11/LICENSE
+- console_error_panic_hook-0.1.7: declared license `Apache-2.0/MIT`; notices/console_error_panic_hook-0.1.7/LICENSE-APACHE, notices/console_error_panic_hook-0.1.7/LICENSE-MIT
+- constant_time_eq-0.3.0: declared license `CC0-1.0 OR MIT-0 OR Apache-2.0`; notices/constant_time_eq-0.3.0/LICENSE-APACHE, notices/constant_time_eq-0.3.0/LICENSE-CC0, notices/constant_time_eq-0.3.0/LICENSE-MIT0
+- cooked-waker-5.0.0: declared license `MPL-2.0`; notices/cooked-waker-5.0.0/LICENSE
+- core-foundation-0.9.4: declared license `MIT OR Apache-2.0`; notices/core-foundation-0.9.4/LICENSE-APACHE, notices/core-foundation-0.9.4/LICENSE-MIT
+- core-foundation-sys-0.8.7: declared license `MIT OR Apache-2.0`; notices/core-foundation-sys-0.8.7/LICENSE-APACHE, notices/core-foundation-sys-0.8.7/LICENSE-MIT
+- corosensei-0.3.0: declared license `MIT OR Apache-2.0`; notices/corosensei-0.3.0/LICENSE-APACHE, notices/corosensei-0.3.0/LICENSE-MIT
+- cpufeatures-0.2.12: declared license `MIT OR Apache-2.0`; notices/cpufeatures-0.2.12/LICENSE-APACHE, notices/cpufeatures-0.2.12/LICENSE-MIT
+- crc32fast-1.3.2: declared license `MIT OR Apache-2.0`; notices/crc32fast-1.3.2/LICENSE-APACHE, notices/crc32fast-1.3.2/LICENSE-MIT
+- crossbeam-channel-0.5.15: declared license `MIT OR Apache-2.0`; notices/crossbeam-channel-0.5.15/LICENSE-APACHE, notices/crossbeam-channel-0.5.15/LICENSE-MIT, notices/crossbeam-channel-0.5.15/LICENSE-THIRD-PARTY
+- crossbeam-deque-0.8.5: declared license `MIT OR Apache-2.0`; notices/crossbeam-deque-0.8.5/LICENSE-APACHE, notices/crossbeam-deque-0.8.5/LICENSE-MIT
+- crossbeam-epoch-0.9.18: declared license `MIT OR Apache-2.0`; notices/crossbeam-epoch-0.9.18/LICENSE-APACHE, notices/crossbeam-epoch-0.9.18/LICENSE-MIT
+- crossbeam-queue-0.3.11: declared license `MIT OR Apache-2.0`; notices/crossbeam-queue-0.3.11/LICENSE-APACHE, notices/crossbeam-queue-0.3.11/LICENSE-MIT
+- crossbeam-utils-0.8.19: declared license `MIT OR Apache-2.0`; notices/crossbeam-utils-0.8.19/LICENSE-APACHE, notices/crossbeam-utils-0.8.19/LICENSE-MIT
+- crunchy-0.2.2: declared license `MIT`; notice text requires review
+- crypto-common-0.1.6: declared license `MIT OR Apache-2.0`; notices/crypto-common-0.1.6/LICENSE-APACHE, notices/crypto-common-0.1.6/LICENSE-MIT
+- cynic-3.10.0: declared license `MPL-2.0`; supplements/obmarg-cynic-a4747951bc76-LICENSE
+- cynic-codegen-3.10.0: declared license `MPL-2.0`; supplements/obmarg-cynic-a4747951bc76-LICENSE
+- cynic-parser-0.9.1: declared license `MPL-2.0`; supplements/obmarg-cynic-25dd6469532a-LICENSE
+- cynic-proc-macros-3.10.0: declared license `MPL-2.0`; supplements/obmarg-cynic-a4747951bc76-LICENSE
+- darling-0.14.4: declared license `MIT`; notices/darling-0.14.4/LICENSE
+- darling-0.20.3: declared license `MIT`; notices/darling-0.20.3/LICENSE
+- darling_core-0.14.4: declared license `MIT`; notices/darling_core-0.14.4/LICENSE
+- darling_core-0.20.3: declared license `MIT`; notices/darling_core-0.20.3/LICENSE
+- darling_macro-0.14.4: declared license `MIT`; notices/darling_macro-0.14.4/LICENSE
+- darling_macro-0.20.3: declared license `MIT`; notices/darling_macro-0.20.3/LICENSE
+- dashmap-6.1.0: declared license `MIT`; notices/dashmap-6.1.0/LICENSE
+- deranged-0.3.11: declared license `MIT OR Apache-2.0`; notices/deranged-0.3.11/LICENSE-Apache, notices/deranged-0.3.11/LICENSE-MIT
+- derivative-2.2.0: declared license `MIT/Apache-2.0`; notices/derivative-2.2.0/LICENSE-APACHE, notices/derivative-2.2.0/LICENSE-MIT
+- derive_builder-0.12.0: declared license `MIT/Apache-2.0`; notices/derive_builder-0.12.0/LICENSE-APACHE, notices/derive_builder-0.12.0/LICENSE-MIT
+- derive_builder_core-0.12.0: declared license `MIT/Apache-2.0`; notices/derive_builder_core-0.12.0/LICENSE-APACHE, notices/derive_builder_core-0.12.0/LICENSE-MIT
+- derive_builder_macro-0.12.0: declared license `MIT/Apache-2.0`; notices/derive_builder_macro-0.12.0/LICENSE-APACHE, notices/derive_builder_macro-0.12.0/LICENSE-MIT
+- derive_more-0.99.19: declared license `MIT`; notices/derive_more-0.99.19/LICENSE
+- derive_more-2.0.1: declared license `MIT`; notices/derive_more-2.0.1/LICENSE
+- derive_more-impl-2.0.1: declared license `MIT`; notices/derive_more-impl-2.0.1/LICENSE
+- digest-0.10.7: declared license `MIT OR Apache-2.0`; notices/digest-0.10.7/LICENSE-APACHE, notices/digest-0.10.7/LICENSE-MIT
+- displaydoc-0.2.5: declared license `MIT OR Apache-2.0`; notices/displaydoc-0.2.5/LICENSE-APACHE, notices/displaydoc-0.2.5/LICENSE-MIT
+- dlmalloc-0.2.9: declared license `MIT/Apache-2.0`; notices/dlmalloc-0.2.9/LICENSE-APACHE, notices/dlmalloc-0.2.9/LICENSE-MIT
+- document-features-0.2.8: declared license `MIT OR Apache-2.0`; notices/document-features-0.2.8/LICENSE-APACHE, notices/document-features-0.2.8/LICENSE-MIT
+- dunce-1.0.5: declared license `CC0-1.0 OR MIT-0 OR Apache-2.0`; notices/dunce-1.0.5/LICENSE
+- dyn-clone-1.0.17: declared license `MIT OR Apache-2.0`; notices/dyn-clone-1.0.17/LICENSE-APACHE, notices/dyn-clone-1.0.17/LICENSE-MIT
+- educe-0.5.11: declared license `MIT`; notices/educe-0.5.11/LICENSE
+- either-1.13.0: declared license `MIT OR Apache-2.0`; notices/either-1.13.0/LICENSE-APACHE, notices/either-1.13.0/LICENSE-MIT
+- encode_unicode-1.0.0: declared license `Apache-2.0 OR MIT`; notices/encode_unicode-1.0.0/LICENSE-APACHE, notices/encode_unicode-1.0.0/LICENSE-MIT
+- encoding_rs-0.8.34: declared license `(Apache-2.0 OR MIT) AND BSD-3-Clause`; notices/encoding_rs-0.8.34/COPYRIGHT, notices/encoding_rs-0.8.34/LICENSE-APACHE, notices/encoding_rs-0.8.34/LICENSE-MIT, notices/encoding_rs-0.8.34/LICENSE-WHATWG
+- enum-iterator-0.7.0: declared license `0BSD`; supplements/stephaneyfx-enum-iterator-4ad8ca2d69cb-LICENSE
+- enum-iterator-derive-0.7.0: declared license `0BSD`; supplements/stephaneyfx-enum-iterator-4ad8ca2d69cb-LICENSE
+- enum-ordinalize-4.3.2: declared license `MIT`; notices/enum-ordinalize-4.3.2/LICENSE
+- enum-ordinalize-derive-4.3.2: declared license `MIT`; notices/enum-ordinalize-derive-4.3.2/LICENSE
+- enumset-1.1.3: declared license `MIT/Apache-2.0`; notices/enumset-1.1.3/LICENSE-APACHE, notices/enumset-1.1.3/LICENSE-MIT
+- enumset_derive-0.8.1: declared license `MIT/Apache-2.0`; notices/enumset_derive-0.8.1/LICENSE-APACHE, notices/enumset_derive-0.8.1/LICENSE-MIT
+- equivalent-1.0.1: declared license `Apache-2.0 OR MIT`; notices/equivalent-1.0.1/LICENSE-APACHE, notices/equivalent-1.0.1/LICENSE-MIT
+- errno-0.3.8: declared license `MIT OR Apache-2.0`; notices/errno-0.3.8/LICENSE-APACHE, notices/errno-0.3.8/LICENSE-MIT
+- fastrand-2.0.1: declared license `Apache-2.0 OR MIT`; notices/fastrand-2.0.1/LICENSE-APACHE, notices/fastrand-2.0.1/LICENSE-MIT
+- filetime-0.2.23: declared license `MIT/Apache-2.0`; notices/filetime-0.2.23/LICENSE-APACHE, notices/filetime-0.2.23/LICENSE-MIT
+- fixedbitset-0.5.7: declared license `MIT OR Apache-2.0`; notices/fixedbitset-0.5.7/LICENSE-APACHE, notices/fixedbitset-0.5.7/LICENSE-MIT
+- flate2-1.1.1: declared license `MIT OR Apache-2.0`; notices/flate2-1.1.1/LICENSE-APACHE, notices/flate2-1.1.1/LICENSE-MIT
+- fnv-1.0.7: declared license `Apache-2.0 / MIT`; notices/fnv-1.0.7/LICENSE-APACHE, notices/fnv-1.0.7/LICENSE-MIT
+- foreign-types-0.3.2: declared license `MIT/Apache-2.0`; notices/foreign-types-0.3.2/LICENSE-APACHE, notices/foreign-types-0.3.2/LICENSE-MIT
+- foreign-types-shared-0.1.1: declared license `MIT/Apache-2.0`; notices/foreign-types-shared-0.1.1/LICENSE-APACHE, notices/foreign-types-shared-0.1.1/LICENSE-MIT
+- form_urlencoded-1.2.1: declared license `MIT OR Apache-2.0`; notices/form_urlencoded-1.2.1/LICENSE-APACHE, notices/form_urlencoded-1.2.1/LICENSE-MIT
+- fortanix-sgx-abi-0.5.0: declared license `MPL-2.0`; supplements/fortanix-rust-sgx-4bbac9583f36-LICENSE
+- futures-0.3.30: declared license `MIT OR Apache-2.0`; notices/futures-0.3.30/LICENSE-APACHE, notices/futures-0.3.30/LICENSE-MIT
+- futures-channel-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-channel-0.3.31/LICENSE-APACHE, notices/futures-channel-0.3.31/LICENSE-MIT
+- futures-core-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-core-0.3.31/LICENSE-APACHE, notices/futures-core-0.3.31/LICENSE-MIT
+- futures-executor-0.3.30: declared license `MIT OR Apache-2.0`; notices/futures-executor-0.3.30/LICENSE-APACHE, notices/futures-executor-0.3.30/LICENSE-MIT
+- futures-io-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-io-0.3.31/LICENSE-APACHE, notices/futures-io-0.3.31/LICENSE-MIT
+- futures-macro-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-macro-0.3.31/LICENSE-APACHE, notices/futures-macro-0.3.31/LICENSE-MIT
+- futures-sink-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-sink-0.3.31/LICENSE-APACHE, notices/futures-sink-0.3.31/LICENSE-MIT
+- futures-task-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-task-0.3.31/LICENSE-APACHE, notices/futures-task-0.3.31/LICENSE-MIT
+- futures-util-0.3.31: declared license `MIT OR Apache-2.0`; notices/futures-util-0.3.31/LICENSE-APACHE, notices/futures-util-0.3.31/LICENSE-MIT
+- generic-array-0.14.7: declared license `MIT`; notices/generic-array-0.14.7/LICENSE
+- getopts-0.2.23: declared license `MIT OR Apache-2.0`; notices/getopts-0.2.23/LICENSE-APACHE, notices/getopts-0.2.23/LICENSE-MIT
+- getrandom-0.2.15: declared license `MIT OR Apache-2.0`; notices/getrandom-0.2.15/LICENSE-APACHE, notices/getrandom-0.2.15/LICENSE-MIT
+- gimli-0.28.1: declared license `MIT OR Apache-2.0`; notices/gimli-0.28.1/LICENSE-APACHE, notices/gimli-0.28.1/LICENSE-MIT
+- gimli-0.32.0: declared license `MIT OR Apache-2.0`; notices/gimli-0.32.0/LICENSE-APACHE, notices/gimli-0.32.0/LICENSE-MIT
+- glob-0.3.2: declared license `MIT OR Apache-2.0`; notices/glob-0.3.2/LICENSE-APACHE, notices/glob-0.3.2/LICENSE-MIT
+- globset-0.4.14: declared license `Unlicense OR MIT`; notices/globset-0.4.14/COPYING, notices/globset-0.4.14/LICENSE-MIT, notices/globset-0.4.14/UNLICENSE
+- h2-0.4.5: declared license `MIT`; notices/h2-0.4.5/LICENSE
+- half-2.4.1: declared license `MIT OR Apache-2.0`; notices/half-2.4.1/LICENSE, notices/half-2.4.1/LICENSES/Apache-2.0.txt, notices/half-2.4.1/LICENSES/MIT.txt
+- harsh-0.2.2: declared license `MIT/Apache-2.0`; notices/harsh-0.2.2/LICENSE-APACHE, notices/harsh-0.2.2/LICENSE-MIT
+- hash32-0.3.1: declared license `MIT OR Apache-2.0`; notices/hash32-0.3.1/LICENSE-APACHE, notices/hash32-0.3.1/LICENSE-MIT
+- hashbrown-0.14.3: declared license `MIT OR Apache-2.0`; notices/hashbrown-0.14.3/LICENSE-APACHE, notices/hashbrown-0.14.3/LICENSE-MIT
+- hashbrown-0.15.2: declared license `MIT OR Apache-2.0`; notices/hashbrown-0.15.2/LICENSE-APACHE, notices/hashbrown-0.15.2/LICENSE-MIT
+- hashbrown-0.15.4: declared license `MIT OR Apache-2.0`; notices/hashbrown-0.15.4/LICENSE-APACHE, notices/hashbrown-0.15.4/LICENSE-MIT
+- heapless-0.8.0: declared license `MIT OR Apache-2.0`; notices/heapless-0.8.0/LICENSE-APACHE, notices/heapless-0.8.0/LICENSE-MIT
+- heck-0.3.3: declared license `MIT OR Apache-2.0`; notices/heck-0.3.3/LICENSE-APACHE, notices/heck-0.3.3/LICENSE-MIT
+- heck-0.4.1: declared license `MIT OR Apache-2.0`; notices/heck-0.4.1/LICENSE-APACHE, notices/heck-0.4.1/LICENSE-MIT
+- hermit-abi-0.5.2: declared license `MIT OR Apache-2.0`; notices/hermit-abi-0.5.2/LICENSE-APACHE, notices/hermit-abi-0.5.2/LICENSE-MIT
+- hex-0.4.3: declared license `MIT OR Apache-2.0`; notices/hex-0.4.3/LICENSE-APACHE, notices/hex-0.4.3/LICENSE-MIT
+- http-1.3.1: declared license `MIT OR Apache-2.0`; notices/http-1.3.1/LICENSE-APACHE, notices/http-1.3.1/LICENSE-MIT
+- http-body-1.0.0: declared license `MIT`; supplements/hyperium-http-body-2474edda2035-LICENSE
+- http-body-util-0.1.2: declared license `MIT`; notices/http-body-util-0.1.2/LICENSE
+- httparse-1.10.1: declared license `MIT OR Apache-2.0`; notices/httparse-1.10.1/LICENSE-APACHE, notices/httparse-1.10.1/LICENSE-MIT
+- hyper-1.4.0: declared license `MIT`; notices/hyper-1.4.0/LICENSE
+- hyper-rustls-0.27.2: declared license `Apache-2.0 OR ISC OR MIT`; notices/hyper-rustls-0.27.2/LICENSE, notices/hyper-rustls-0.27.2/LICENSE-APACHE, notices/hyper-rustls-0.27.2/LICENSE-ISC, notices/hyper-rustls-0.27.2/LICENSE-MIT
+- hyper-tls-0.6.0: declared license `MIT/Apache-2.0`; notices/hyper-tls-0.6.0/LICENSE-APACHE, notices/hyper-tls-0.6.0/LICENSE-MIT
+- hyper-util-0.1.6: declared license `MIT`; notices/hyper-util-0.1.6/LICENSE
+- iana-time-zone-0.1.59: declared license `MIT OR Apache-2.0`; notices/iana-time-zone-0.1.59/LICENSE-APACHE, notices/iana-time-zone-0.1.59/LICENSE-MIT
+- iana-time-zone-haiku-0.1.2: declared license `MIT OR Apache-2.0`; notices/iana-time-zone-haiku-0.1.2/LICENSE-APACHE, notices/iana-time-zone-haiku-0.1.2/LICENSE-MIT
+- icu_collections-1.5.0: declared license `Unicode-3.0`; notices/icu_collections-1.5.0/LICENSE
+- icu_locid-1.5.0: declared license `Unicode-3.0`; notices/icu_locid-1.5.0/LICENSE
+- icu_locid_transform-1.5.0: declared license `Unicode-3.0`; notices/icu_locid_transform-1.5.0/LICENSE
+- icu_locid_transform_data-1.5.1: declared license `Unicode-3.0`; notices/icu_locid_transform_data-1.5.1/LICENSE
+- icu_normalizer-1.5.0: declared license `Unicode-3.0`; notices/icu_normalizer-1.5.0/LICENSE
+- icu_normalizer_data-1.5.1: declared license `Unicode-3.0`; notices/icu_normalizer_data-1.5.1/LICENSE
+- icu_properties-1.5.1: declared license `Unicode-3.0`; notices/icu_properties-1.5.1/LICENSE
+- icu_properties_data-1.5.1: declared license `Unicode-3.0`; notices/icu_properties_data-1.5.1/LICENSE
+- icu_provider-1.5.0: declared license `Unicode-3.0`; notices/icu_provider-1.5.0/LICENSE
+- icu_provider_macros-1.5.0: declared license `Unicode-3.0`; notices/icu_provider_macros-1.5.0/LICENSE
+- id-arena-2.2.1: declared license `MIT/Apache-2.0`; notices/id-arena-2.2.1/LICENSE-APACHE, notices/id-arena-2.2.1/LICENSE-MIT
+- ident_case-1.0.1: declared license `MIT/Apache-2.0`; notices/ident_case-1.0.1/LICENSE
+- idna-1.0.3: declared license `MIT OR Apache-2.0`; notices/idna-1.0.3/LICENSE-APACHE, notices/idna-1.0.3/LICENSE-MIT
+- idna_adapter-1.2.0: declared license `Apache-2.0 OR MIT`; notices/idna_adapter-1.2.0/LICENSE-APACHE, notices/idna_adapter-1.2.0/LICENSE-MIT
+- ignore-0.4.22: declared license `Unlicense OR MIT`; notices/ignore-0.4.22/COPYING, notices/ignore-0.4.22/LICENSE-MIT, notices/ignore-0.4.22/UNLICENSE
+- indexmap-2.9.0: declared license `Apache-2.0 OR MIT`; notices/indexmap-2.9.0/LICENSE-APACHE, notices/indexmap-2.9.0/LICENSE-MIT
+- insta-1.41.1: declared license `Apache-2.0`; notices/insta-1.41.1/LICENSE
+- instant-0.1.12: declared license `BSD-3-Clause`; notices/instant-0.1.12/LICENSE
+- ipnet-2.11.0: declared license `MIT OR Apache-2.0`; notices/ipnet-2.11.0/LICENSE-APACHE, notices/ipnet-2.11.0/LICENSE-MIT
+- iprange-0.6.7: declared license `MIT`; notices/iprange-0.6.7/LICENSE
+- itertools-0.12.1: declared license `MIT OR Apache-2.0`; notices/itertools-0.12.1/LICENSE-APACHE, notices/itertools-0.12.1/LICENSE-MIT
+- itoa-1.0.10: declared license `MIT OR Apache-2.0`; notices/itoa-1.0.10/LICENSE-APACHE, notices/itoa-1.0.10/LICENSE-MIT
+- js-sys-0.3.78: declared license `MIT OR Apache-2.0`; notices/js-sys-0.3.78/LICENSE-APACHE, notices/js-sys-0.3.78/LICENSE-MIT
+- lalrpop-util-0.22.1: declared license `Apache-2.0 OR MIT`; notices/lalrpop-util-0.22.1/LICENSE-APACHE, notices/lalrpop-util-0.22.1/LICENSE-MIT
+- lazy_static-1.5.0: declared license `MIT OR Apache-2.0`; notices/lazy_static-1.5.0/LICENSE-APACHE, notices/lazy_static-1.5.0/LICENSE-MIT
+- leb128-0.2.5: declared license `Apache-2.0/MIT`; notices/leb128-0.2.5/LICENSE-APACHE, notices/leb128-0.2.5/LICENSE-MIT
+- leb128fmt-0.1.0: declared license `MIT OR Apache-2.0`; notices/leb128fmt-0.1.0/LICENSE-APACHE, notices/leb128fmt-0.1.0/LICENSE-MIT
+- lexical-sort-0.3.1: declared license `MIT OR Apache-2.0`; notices/lexical-sort-0.3.1/LICENSE-APACHE, notices/lexical-sort-0.3.1/LICENSE-MIT
+- libc-0.2.171: declared license `MIT OR Apache-2.0`; notices/libc-0.2.171/LICENSE-APACHE, notices/libc-0.2.171/LICENSE-MIT
+- libc-0.2.174: declared license `MIT OR Apache-2.0`; notices/libc-0.2.174/LICENSE-APACHE, notices/libc-0.2.174/LICENSE-MIT
+- libloading-0.8.6: declared license `ISC`; notices/libloading-0.8.6/LICENSE
+- libunwind-1.3.3: declared license `MIT`; notices/libunwind-1.3.3/LICENSE
+- linked-hash-map-0.5.6: declared license `MIT/Apache-2.0`; notices/linked-hash-map-0.5.6/LICENSE-APACHE, notices/linked-hash-map-0.5.6/LICENSE-MIT
+- linked_hash_set-0.1.4: declared license `Apache-2.0`; notices/linked_hash_set-0.1.4/LICENSE
+- linux-raw-sys-0.4.12: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; notices/linux-raw-sys-0.4.12/COPYRIGHT, notices/linux-raw-sys-0.4.12/LICENSE-APACHE, notices/linux-raw-sys-0.4.12/LICENSE-Apache-2.0_WITH_LLVM-exception, notices/linux-raw-sys-0.4.12/LICENSE-MIT
+- litemap-0.7.5: declared license `Unicode-3.0`; notices/litemap-0.7.5/LICENSE
+- litrs-0.4.1: declared license `MIT/Apache-2.0`; notices/litrs-0.4.1/LICENSE-APACHE, notices/litrs-0.4.1/LICENSE-MIT
+- llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz: declared license `unspecified`; notices/llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz/compiler-rt/LICENSE.TXT, notices/llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz/libcxx/LICENSE.TXT, notices/llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz/libcxxabi/LICENSE.TXT, notices/llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz/libunwind/LICENSE.TXT, notices/llvm-project-4ba6a9c9f65bbc8bd06e3652cb20fd4dfc846137.tar.gz/llvm/LICENSE.TXT
+- lock_api-0.4.11: declared license `MIT OR Apache-2.0`; notices/lock_api-0.4.11/LICENSE-APACHE, notices/lock_api-0.4.11/LICENSE-MIT
+- log-0.4.20: declared license `MIT OR Apache-2.0`; notices/log-0.4.20/LICENSE-APACHE, notices/log-0.4.20/LICENSE-MIT
+- logos-0.14.4: declared license `MIT OR Apache-2.0`; notices/logos-0.14.4/LICENSE-APACHE, notices/logos-0.14.4/LICENSE-MIT
+- logos-codegen-0.14.4: declared license `MIT OR Apache-2.0`; notices/logos-codegen-0.14.4/LICENSE-APACHE, notices/logos-codegen-0.14.4/LICENSE-MIT
+- logos-derive-0.14.4: declared license `MIT OR Apache-2.0`; notices/logos-derive-0.14.4/LICENSE-APACHE, notices/logos-derive-0.14.4/LICENSE-MIT
+- lz4_flex-0.11.1: declared license `MIT`; supplements/pseitz-lz4_flex-244275aaa33f-LICENSE
+- mach2-0.4.2: declared license `BSD-2-Clause OR MIT OR Apache-2.0`; notices/mach2-0.4.2/LICENSE-APACHE, notices/mach2-0.4.2/LICENSE-BSD, notices/mach2-0.4.2/LICENSE-MIT
+- macho-unwind-info-0.5.0: declared license `MIT/Apache-2.0`; notices/macho-unwind-info-0.5.0/LICENSE-APACHE, notices/macho-unwind-info-0.5.0/LICENSE-MIT
+- managed-0.8.0: declared license `0BSD`; notices/managed-0.8.0/LICENSE-0BSD.txt
+- matchers-0.1.0: declared license `MIT`; notices/matchers-0.1.0/LICENSE
+- memchr-2.7.1: declared license `Unlicense OR MIT`; notices/memchr-2.7.1/COPYING, notices/memchr-2.7.1/LICENSE-MIT, notices/memchr-2.7.1/UNLICENSE
+- memchr-2.7.5: declared license `Unlicense OR MIT`; notices/memchr-2.7.5/COPYING, notices/memchr-2.7.5/LICENSE-MIT, notices/memchr-2.7.5/UNLICENSE
+- memmap2-0.6.2: declared license `MIT OR Apache-2.0`; notices/memmap2-0.6.2/LICENSE-APACHE, notices/memmap2-0.6.2/LICENSE-MIT
+- memoffset-0.9.0: declared license `MIT`; notices/memoffset-0.9.0/LICENSE
+- merge-streams-0.1.2: declared license `MIT OR Apache-2.0`; notices/merge-streams-0.1.2/LICENSE-APACHE, notices/merge-streams-0.1.2/LICENSE-MIT
+- mime-0.3.17: declared license `MIT OR Apache-2.0`; notices/mime-0.3.17/LICENSE-APACHE, notices/mime-0.3.17/LICENSE-MIT
+- minicov-0.3.7: declared license `Apache-2.0/MIT`; notices/minicov-0.3.7/LICENSE-APACHE, notices/minicov-0.3.7/LICENSE-MIT
+- minimal-lexical-0.2.1: declared license `MIT/Apache-2.0`; notices/minimal-lexical-0.2.1/LICENSE-APACHE, notices/minimal-lexical-0.2.1/LICENSE-MIT, notices/minimal-lexical-0.2.1/LICENSE.md
+- miniz_oxide-0.7.1: declared license `MIT OR Zlib OR Apache-2.0`; notices/miniz_oxide-0.7.1/LICENSE, notices/miniz_oxide-0.7.1/LICENSE-APACHE.md, notices/miniz_oxide-0.7.1/LICENSE-MIT.md, notices/miniz_oxide-0.7.1/LICENSE-ZLIB.md
+- miniz_oxide-0.8.7: declared license `MIT OR Zlib OR Apache-2.0`; notices/miniz_oxide-0.8.7/LICENSE, notices/miniz_oxide-0.8.7/LICENSE-APACHE.md, notices/miniz_oxide-0.8.7/LICENSE-MIT.md, notices/miniz_oxide-0.8.7/LICENSE-ZLIB.md
+- miniz_oxide-0.8.9: declared license `MIT OR Zlib OR Apache-2.0`; notices/miniz_oxide-0.8.9/LICENSE, notices/miniz_oxide-0.8.9/LICENSE-APACHE.md, notices/miniz_oxide-0.8.9/LICENSE-MIT.md, notices/miniz_oxide-0.8.9/LICENSE-ZLIB.md
+- mio-1.0.3: declared license `MIT`; notices/mio-1.0.3/LICENSE
+- more-asserts-0.2.2: declared license `CC0-1.0`; notices/more-asserts-0.2.2/LICENSE-CC0
+- munge-0.4.3: declared license `MIT`; notices/munge-0.4.3/LICENSE
+- munge_macro-0.4.3: declared license `MIT`; notices/munge_macro-0.4.3/LICENSE
+- native-tls-0.2.12: declared license `MIT OR Apache-2.0`; notices/native-tls-0.2.12/LICENSE-APACHE, notices/native-tls-0.2.12/LICENSE-MIT
+- nom-5.1.3: declared license `MIT`; notices/nom-5.1.3/LICENSE
+- nom-7.1.3: declared license `MIT`; notices/nom-7.1.3/LICENSE
+- nu-ansi-term-0.46.0: declared license `MIT`; notices/nu-ansi-term-0.46.0/LICENCE
+- num-conv-0.1.0: declared license `MIT OR Apache-2.0`; notices/num-conv-0.1.0/LICENSE-Apache, notices/num-conv-0.1.0/LICENSE-MIT
+- num-traits-0.2.17: declared license `MIT OR Apache-2.0`; notices/num-traits-0.2.17/LICENSE-APACHE, notices/num-traits-0.2.17/LICENSE-MIT
+- num_cpus-1.17.0: declared license `MIT OR Apache-2.0`; notices/num_cpus-1.17.0/LICENSE-APACHE, notices/num_cpus-1.17.0/LICENSE-MIT
+- num_enum-0.7.3: declared license `BSD-3-Clause OR MIT OR Apache-2.0`; notices/num_enum-0.7.3/LICENSE-APACHE, notices/num_enum-0.7.3/LICENSE-BSD, notices/num_enum-0.7.3/LICENSE-MIT
+- num_enum_derive-0.7.3: declared license `BSD-3-Clause OR MIT OR Apache-2.0`; notices/num_enum_derive-0.7.3/LICENSE-APACHE, notices/num_enum_derive-0.7.3/LICENSE-BSD, notices/num_enum_derive-0.7.3/LICENSE-MIT
+- object-0.32.2: declared license `Apache-2.0 OR MIT`; notices/object-0.32.2/LICENSE-APACHE, notices/object-0.32.2/LICENSE-MIT
+- object-0.37.1: declared license `Apache-2.0 OR MIT`; notices/object-0.37.1/LICENSE-APACHE, notices/object-0.37.1/LICENSE-MIT
+- once_cell-1.19.0: declared license `MIT OR Apache-2.0`; notices/once_cell-1.19.0/LICENSE-APACHE, notices/once_cell-1.19.0/LICENSE-MIT
+- openssl-0.10.64: declared license `Apache-2.0`; notices/openssl-0.10.64/LICENSE
+- openssl-macros-0.1.1: declared license `MIT/Apache-2.0`; notices/openssl-macros-0.1.1/LICENSE-APACHE, notices/openssl-macros-0.1.1/LICENSE-MIT
+- openssl-probe-0.1.5: declared license `MIT/Apache-2.0`; notices/openssl-probe-0.1.5/LICENSE-APACHE, notices/openssl-probe-0.1.5/LICENSE-MIT
+- openssl-sys-0.9.102: declared license `MIT`; notices/openssl-sys-0.9.102/LICENSE-MIT
+- ouroboros-0.18.5: declared license `MIT OR Apache-2.0`; notices/ouroboros-0.18.5/LICENSE_APACHE, notices/ouroboros-0.18.5/LICENSE_MIT
+- ouroboros_macro-0.18.5: declared license `MIT OR Apache-2.0`; notices/ouroboros_macro-0.18.5/LICENSE_APACHE, notices/ouroboros_macro-0.18.5/LICENSE_MIT
+- overload-0.1.1: declared license `MIT`; notices/overload-0.1.1/LICENSE
+- parking_lot_core-0.9.9: declared license `MIT OR Apache-2.0`; notices/parking_lot_core-0.9.9/LICENSE-APACHE, notices/parking_lot_core-0.9.9/LICENSE-MIT
+- paste-1.0.15: declared license `MIT OR Apache-2.0`; notices/paste-1.0.15/LICENSE-APACHE, notices/paste-1.0.15/LICENSE-MIT
+- path-clean-1.0.1: declared license `MIT OR Apache-2.0`; notices/path-clean-1.0.1/LICENSE-APACHE, notices/path-clean-1.0.1/LICENSE-MIT
+- percent-encoding-2.3.1: declared license `MIT OR Apache-2.0`; notices/percent-encoding-2.3.1/LICENSE-APACHE, notices/percent-encoding-2.3.1/LICENSE-MIT
+- petgraph-0.7.1: declared license `MIT OR Apache-2.0`; notices/petgraph-0.7.1/LICENSE-APACHE, notices/petgraph-0.7.1/LICENSE-MIT, notices/petgraph-0.7.1/assets/LICENSE.md
+- pin-project-1.1.3: declared license `Apache-2.0 OR MIT`; notices/pin-project-1.1.3/LICENSE-APACHE, notices/pin-project-1.1.3/LICENSE-MIT
+- pin-project-internal-1.1.3: declared license `Apache-2.0 OR MIT`; notices/pin-project-internal-1.1.3/LICENSE-APACHE, notices/pin-project-internal-1.1.3/LICENSE-MIT
+- pin-project-lite-0.2.13: declared license `Apache-2.0 OR MIT`; notices/pin-project-lite-0.2.13/LICENSE-APACHE, notices/pin-project-lite-0.2.13/LICENSE-MIT
+- pin-utils-0.1.0: declared license `MIT OR Apache-2.0`; notices/pin-utils-0.1.0/LICENSE-APACHE, notices/pin-utils-0.1.0/LICENSE-MIT
+- pkg-config-0.3.30: declared license `MIT OR Apache-2.0`; notices/pkg-config-0.3.30/LICENSE-APACHE, notices/pkg-config-0.3.30/LICENSE-MIT
+- powerfmt-0.2.0: declared license `MIT OR Apache-2.0`; notices/powerfmt-0.2.0/LICENSE-Apache, notices/powerfmt-0.2.0/LICENSE-MIT
+- ppv-lite86-0.2.17: declared license `MIT/Apache-2.0`; notices/ppv-lite86-0.2.17/LICENSE-APACHE, notices/ppv-lite86-0.2.17/LICENSE-MIT
+- prettyplease-0.2.32: declared license `MIT OR Apache-2.0`; notices/prettyplease-0.2.32/LICENSE-APACHE, notices/prettyplease-0.2.32/LICENSE-MIT
+- proc-macro-crate-1.3.1: declared license `MIT OR Apache-2.0`; notices/proc-macro-crate-1.3.1/LICENSE-APACHE, notices/proc-macro-crate-1.3.1/LICENSE-MIT
+- proc-macro-error-attr2-2.0.0: declared license `MIT OR Apache-2.0`; notices/proc-macro-error-attr2-2.0.0/LICENSE-APACHE, notices/proc-macro-error-attr2-2.0.0/LICENSE-MIT
+- proc-macro-error2-2.0.1: declared license `MIT OR Apache-2.0`; notices/proc-macro-error2-2.0.1/LICENSE-APACHE, notices/proc-macro-error2-2.0.1/LICENSE-MIT
+- proc-macro2-1.0.94: declared license `MIT OR Apache-2.0`; notices/proc-macro2-1.0.94/LICENSE-APACHE, notices/proc-macro2-1.0.94/LICENSE-MIT
+- proc-macro2-diagnostics-0.10.1: declared license `MIT/Apache-2.0`; notices/proc-macro2-diagnostics-0.10.1/LICENSE-APACHE, notices/proc-macro2-diagnostics-0.10.1/LICENSE-MIT
+- ptr_meta-0.1.4: declared license `MIT`; notices/ptr_meta-0.1.4/LICENSE
+- ptr_meta-0.3.0: declared license `MIT`; notices/ptr_meta-0.3.0/LICENSE
+- ptr_meta_derive-0.1.4: declared license `MIT`; notices/ptr_meta_derive-0.1.4/LICENSE
+- ptr_meta_derive-0.3.0: declared license `MIT`; notices/ptr_meta_derive-0.3.0/LICENSE
+- pulldown-cmark-0.8.0: declared license `MIT`; notices/pulldown-cmark-0.8.0/LICENSE
+- quote-1.0.35: declared license `MIT OR Apache-2.0`; notices/quote-1.0.35/LICENSE-APACHE, notices/quote-1.0.35/LICENSE-MIT
+- r-efi-5.3.0: declared license `MIT OR Apache-2.0 OR LGPL-2.1-or-later`; notice text requires review
+- r-efi-alloc-2.1.0: declared license `MIT OR Apache-2.0 OR LGPL-2.1-or-later`; notice text requires review
+- rancor-0.1.0: declared license `MIT`; notices/rancor-0.1.0/LICENSE
+- rand-0.8.5: declared license `MIT OR Apache-2.0`; notices/rand-0.8.5/COPYRIGHT, notices/rand-0.8.5/LICENSE-APACHE, notices/rand-0.8.5/LICENSE-MIT
+- rand-0.9.1: declared license `MIT OR Apache-2.0`; notices/rand-0.9.1/COPYRIGHT, notices/rand-0.9.1/LICENSE-APACHE, notices/rand-0.9.1/LICENSE-MIT
+- rand_chacha-0.3.1: declared license `MIT OR Apache-2.0`; notices/rand_chacha-0.3.1/COPYRIGHT, notices/rand_chacha-0.3.1/LICENSE-APACHE, notices/rand_chacha-0.3.1/LICENSE-MIT
+- rand_core-0.6.4: declared license `MIT OR Apache-2.0`; notices/rand_core-0.6.4/COPYRIGHT, notices/rand_core-0.6.4/LICENSE-APACHE, notices/rand_core-0.6.4/LICENSE-MIT
+- rand_core-0.9.3: declared license `MIT OR Apache-2.0`; notices/rand_core-0.9.3/COPYRIGHT, notices/rand_core-0.9.3/LICENSE-APACHE, notices/rand_core-0.9.3/LICENSE-MIT
+- rand_xorshift-0.4.0: declared license `MIT OR Apache-2.0`; notices/rand_xorshift-0.4.0/COPYRIGHT, notices/rand_xorshift-0.4.0/LICENSE-APACHE, notices/rand_xorshift-0.4.0/LICENSE-MIT
+- redox_syscall-0.4.1: declared license `MIT`; notices/redox_syscall-0.4.1/LICENSE
+- ref-cast-1.0.24: declared license `MIT OR Apache-2.0`; notices/ref-cast-1.0.24/LICENSE-APACHE, notices/ref-cast-1.0.24/LICENSE-MIT
+- ref-cast-impl-1.0.24: declared license `MIT OR Apache-2.0`; notices/ref-cast-impl-1.0.24/LICENSE-APACHE, notices/ref-cast-impl-1.0.24/LICENSE-MIT
+- regex-1.10.2: declared license `MIT OR Apache-2.0`; notices/regex-1.10.2/LICENSE-APACHE, notices/regex-1.10.2/LICENSE-MIT
+- regex-automata-0.1.10: declared license `Unlicense/MIT`; notices/regex-automata-0.1.10/COPYING, notices/regex-automata-0.1.10/LICENSE-MIT, notices/regex-automata-0.1.10/UNLICENSE, notices/regex-automata-0.1.10/data/fowler-tests/LICENSE, notices/regex-automata-0.1.10/data/tests/fowler/LICENSE
+- regex-automata-0.4.3: declared license `MIT OR Apache-2.0`; notices/regex-automata-0.4.3/LICENSE-APACHE, notices/regex-automata-0.4.3/LICENSE-MIT
+- regex-syntax-0.6.29: declared license `MIT OR Apache-2.0`; notices/regex-syntax-0.6.29/LICENSE-APACHE, notices/regex-syntax-0.6.29/LICENSE-MIT, notices/regex-syntax-0.6.29/src/unicode_tables/LICENSE-UNICODE
+- regex-syntax-0.8.2: declared license `MIT OR Apache-2.0`; notices/regex-syntax-0.8.2/LICENSE-APACHE, notices/regex-syntax-0.8.2/LICENSE-MIT, notices/regex-syntax-0.8.2/src/unicode_tables/LICENSE-UNICODE
+- region-3.0.2: declared license `MIT`; notices/region-3.0.2/LICENSE
+- rend-0.5.2: declared license `MIT`; notices/rend-0.5.2/LICENSE
+- replace_with-0.1.7: declared license `MIT OR Apache-2.0`; notices/replace_with-0.1.7/LICENSE-APACHE.txt, notices/replace_with-0.1.7/LICENSE-MIT.txt
+- reqwest-0.12.7: declared license `MIT OR Apache-2.0`; notices/reqwest-0.12.7/LICENSE-APACHE, notices/reqwest-0.12.7/LICENSE-MIT
+- ring-0.17.8: declared license `unspecified`; notices/ring-0.17.8/LICENSE, notices/ring-0.17.8/third_party/fiat/LICENSE
+- rkyv-0.8.10: declared license `MIT`; notices/rkyv-0.8.10/LICENSE
+- rkyv_derive-0.8.10: declared license `MIT`; notices/rkyv_derive-0.8.10/LICENSE, notices/rkyv_derive-0.8.10/src/serde/LICENSE
+- rust-src-nightly-2025-07-05.tar.xz: declared license `unspecified`; notices/rust-src-nightly-2025-07-05.tar.xz/COPYRIGHT, notices/rust-src-nightly-2025-07-05.tar.xz/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/backtrace/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/backtrace/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/compiler-builtins/LICENSE.txt, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/compiler-builtins/libm/LICENSE.txt, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/portable-simd/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/portable-simd/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/portable-simd/crates/core_simd/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/crates/core_arch/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/crates/std_detect/LICENSE-APACHE, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/library/stdarch/crates/std_detect/LICENSE-MIT, notices/rust-src-nightly-2025-07-05.tar.xz/rust-src/lib/rustlib/src/rust/src/llvm-project/libunwind/LICENSE.TXT
+- rustc-demangle-0.1.23: declared license `MIT/Apache-2.0`; notices/rustc-demangle-0.1.23/LICENSE-APACHE, notices/rustc-demangle-0.1.23/LICENSE-MIT
+- rustc-demangle-0.1.25: declared license `MIT/Apache-2.0`; notices/rustc-demangle-0.1.25/LICENSE-APACHE, notices/rustc-demangle-0.1.25/LICENSE-MIT
+- rustc-hash-1.1.0: declared license `Apache-2.0/MIT`; notices/rustc-hash-1.1.0/LICENSE-APACHE, notices/rustc-hash-1.1.0/LICENSE-MIT
+- rustc-literal-escaper-0.0.4: declared license `Apache-2.0 OR MIT`; notices/rustc-literal-escaper-0.0.4/LICENSE-APACHE, notices/rustc-literal-escaper-0.0.4/LICENSE-MIT
+- rustix-0.38.34: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; notices/rustix-0.38.34/COPYRIGHT, notices/rustix-0.38.34/LICENSE-APACHE, notices/rustix-0.38.34/LICENSE-Apache-2.0_WITH_LLVM-exception, notices/rustix-0.38.34/LICENSE-MIT
+- rustls-0.23.25: declared license `Apache-2.0 OR ISC OR MIT`; notices/rustls-0.23.25/LICENSE-APACHE, notices/rustls-0.23.25/LICENSE-ISC, notices/rustls-0.23.25/LICENSE-MIT
+- rustls-pemfile-2.1.2: declared license `Apache-2.0 OR ISC OR MIT`; notices/rustls-pemfile-2.1.2/LICENSE, notices/rustls-pemfile-2.1.2/LICENSE-APACHE, notices/rustls-pemfile-2.1.2/LICENSE-ISC, notices/rustls-pemfile-2.1.2/LICENSE-MIT
+- rustls-pki-types-1.11.0: declared license `MIT OR Apache-2.0`; notices/rustls-pki-types-1.11.0/LICENSE-APACHE, notices/rustls-pki-types-1.11.0/LICENSE-MIT
+- rustls-webpki-0.103.1: declared license `ISC`; notices/rustls-webpki-0.103.1/LICENSE
+- rustversion-1.0.20: declared license `MIT OR Apache-2.0`; notices/rustversion-1.0.20/LICENSE-APACHE, notices/rustversion-1.0.20/LICENSE-MIT
+- ruzstd-0.5.0: declared license `MIT`; notices/ruzstd-0.5.0/LICENSE
+- ryu-1.0.16: declared license `Apache-2.0 OR BSL-1.0`; notices/ryu-1.0.16/LICENSE-APACHE, notices/ryu-1.0.16/LICENSE-BOOST
+- saffron-0.1.0: declared license `unspecified`; notices/saffron-0.1.0/LICENSE
+- same-file-1.0.6: declared license `Unlicense/MIT`; notices/same-file-1.0.6/COPYING, notices/same-file-1.0.6/LICENSE-MIT, notices/same-file-1.0.6/UNLICENSE
+- schannel-0.1.23: declared license `MIT`; notices/schannel-0.1.23/LICENSE.md
+- schemars-0.8.21: declared license `MIT`; notices/schemars-0.8.21/LICENSE
+- schemars_derive-0.8.21: declared license `MIT`; notices/schemars_derive-0.8.21/LICENSE
+- scopeguard-1.2.0: declared license `MIT OR Apache-2.0`; notices/scopeguard-1.2.0/LICENSE-APACHE, notices/scopeguard-1.2.0/LICENSE-MIT
+- security-framework-2.10.0: declared license `MIT OR Apache-2.0`; notices/security-framework-2.10.0/LICENSE-APACHE, notices/security-framework-2.10.0/LICENSE-MIT
+- security-framework-sys-2.14.0: declared license `MIT OR Apache-2.0`; notices/security-framework-sys-2.14.0/LICENSE-APACHE, notices/security-framework-sys-2.14.0/LICENSE-MIT
+- self_cell-1.0.3: declared license `Apache-2.0`; notices/self_cell-1.0.3/LICENSE
+- semver-1.0.26: declared license `MIT OR Apache-2.0`; notices/semver-1.0.26/LICENSE-APACHE, notices/semver-1.0.26/LICENSE-MIT
+- serde-1.0.219: declared license `MIT OR Apache-2.0`; notices/serde-1.0.219/LICENSE-APACHE, notices/serde-1.0.219/LICENSE-MIT
+- serde-wasm-bindgen-0.6.5: declared license `MIT`; notices/serde-wasm-bindgen-0.6.5/LICENSE
+- serde_bytes-0.11.14: declared license `MIT OR Apache-2.0`; notices/serde_bytes-0.11.14/LICENSE-APACHE, notices/serde_bytes-0.11.14/LICENSE-MIT
+- serde_derive-1.0.219: declared license `MIT OR Apache-2.0`; notices/serde_derive-1.0.219/LICENSE-APACHE, notices/serde_derive-1.0.219/LICENSE-MIT
+- serde_derive_internals-0.29.1: declared license `MIT OR Apache-2.0`; notices/serde_derive_internals-0.29.1/LICENSE-APACHE, notices/serde_derive_internals-0.29.1/LICENSE-MIT
+- serde_json-1.0.140: declared license `MIT OR Apache-2.0`; notices/serde_json-1.0.140/LICENSE-APACHE, notices/serde_json-1.0.140/LICENSE-MIT
+- serde_path_to_error-0.1.17: declared license `MIT OR Apache-2.0`; notices/serde_path_to_error-0.1.17/LICENSE-APACHE, notices/serde_path_to_error-0.1.17/LICENSE-MIT
+- serde_spanned-0.6.6: declared license `MIT OR Apache-2.0`; notices/serde_spanned-0.6.6/LICENSE-APACHE, notices/serde_spanned-0.6.6/LICENSE-MIT
+- serde_urlencoded-0.7.1: declared license `MIT/Apache-2.0`; notices/serde_urlencoded-0.7.1/LICENSE-APACHE, notices/serde_urlencoded-0.7.1/LICENSE-MIT
+- serde_yaml-0.9.34+deprecated: declared license `MIT OR Apache-2.0`; notices/serde_yaml-0.9.34+deprecated/LICENSE-APACHE, notices/serde_yaml-0.9.34+deprecated/LICENSE-MIT
+- sha2-0.10.8: declared license `MIT OR Apache-2.0`; notices/sha2-0.10.8/LICENSE-APACHE, notices/sha2-0.10.8/LICENSE-MIT
+- sharded-slab-0.1.7: declared license `MIT`; notices/sharded-slab-0.1.7/LICENSE
+- shared-buffer-0.1.4: declared license `MIT OR Apache-2.0`; notices/shared-buffer-0.1.4/LICENSE_APACHE.md, notices/shared-buffer-0.1.4/LICENSE_MIT.md
+- shlex-1.3.0: declared license `MIT OR Apache-2.0`; notices/shlex-1.3.0/LICENSE-APACHE, notices/shlex-1.3.0/LICENSE-MIT
+- simdutf8-0.1.4: declared license `MIT OR Apache-2.0`; notices/simdutf8-0.1.4/LICENSE-Apache, notices/simdutf8-0.1.4/LICENSE-MIT
+- similar-2.7.0: declared license `Apache-2.0`; notices/similar-2.7.0/LICENSE
+- slab-0.4.9: declared license `MIT`; notices/slab-0.4.9/LICENSE
+- smallvec-1.13.2: declared license `MIT OR Apache-2.0`; notices/smallvec-1.13.2/LICENSE-APACHE, notices/smallvec-1.13.2/LICENSE-MIT
+- smoltcp-0.8.2: declared license `0BSD`; notices/smoltcp-0.8.2/LICENSE-0BSD.txt
+- socket2-0.5.7: declared license `MIT OR Apache-2.0`; notices/socket2-0.5.7/LICENSE-APACHE, notices/socket2-0.5.7/LICENSE-MIT
+- spin-0.9.8: declared license `MIT`; notices/spin-0.9.8/LICENSE
+- stable_deref_trait-1.2.0: declared license `MIT/Apache-2.0`; notices/stable_deref_trait-1.2.0/LICENSE-APACHE, notices/stable_deref_trait-1.2.0/LICENSE-MIT
+- static_assertions-1.1.0: declared license `MIT OR Apache-2.0`; notices/static_assertions-1.1.0/LICENSE-APACHE, notices/static_assertions-1.1.0/LICENSE-MIT
+- strsim-0.10.0: declared license `MIT`; notices/strsim-0.10.0/LICENSE
+- subtle-2.6.1: declared license `BSD-3-Clause`; notices/subtle-2.6.1/LICENSE
+- syn-1.0.109: declared license `MIT OR Apache-2.0`; notices/syn-1.0.109/LICENSE-APACHE, notices/syn-1.0.109/LICENSE-MIT
+- syn-2.0.100: declared license `MIT OR Apache-2.0`; notices/syn-2.0.100/LICENSE-APACHE, notices/syn-2.0.100/LICENSE-MIT
+- sync_wrapper-1.0.1: declared license `Apache-2.0`; notices/sync_wrapper-1.0.1/LICENSE
+- synstructure-0.13.1: declared license `MIT`; notices/synstructure-0.13.1/LICENSE
+- system-configuration-0.6.1: declared license `MIT OR Apache-2.0`; notices/system-configuration-0.6.1/LICENSE-APACHE, notices/system-configuration-0.6.1/LICENSE-MIT
+- system-configuration-sys-0.6.0: declared license `MIT OR Apache-2.0`; notices/system-configuration-sys-0.6.0/LICENSE-APACHE, notices/system-configuration-sys-0.6.0/LICENSE-MIT
+- tar-0.4.44: declared license `MIT OR Apache-2.0`; notices/tar-0.4.44/LICENSE-APACHE, notices/tar-0.4.44/LICENSE-MIT
+- target-lexicon-0.12.16: declared license `Apache-2.0 WITH LLVM-exception`; notices/target-lexicon-0.12.16/LICENSE
+- tempfile-3.12.0: declared license `MIT OR Apache-2.0`; notices/tempfile-3.12.0/LICENSE-APACHE, notices/tempfile-3.12.0/LICENSE-MIT
+- terminal_size-0.3.0: declared license `MIT OR Apache-2.0`; notices/terminal_size-0.3.0/LICENSE-APACHE, notices/terminal_size-0.3.0/LICENSE-MIT
+- termios-0.3.3: declared license `MIT`; notices/termios-0.3.3/LICENSE
+- thiserror-1.0.69: declared license `MIT OR Apache-2.0`; notices/thiserror-1.0.69/LICENSE-APACHE, notices/thiserror-1.0.69/LICENSE-MIT
+- thiserror-2.0.12: declared license `MIT OR Apache-2.0`; notices/thiserror-2.0.12/LICENSE-APACHE, notices/thiserror-2.0.12/LICENSE-MIT
+- thiserror-impl-1.0.69: declared license `MIT OR Apache-2.0`; notices/thiserror-impl-1.0.69/LICENSE-APACHE, notices/thiserror-impl-1.0.69/LICENSE-MIT
+- thiserror-impl-2.0.12: declared license `MIT OR Apache-2.0`; notices/thiserror-impl-2.0.12/LICENSE-APACHE, notices/thiserror-impl-2.0.12/LICENSE-MIT
+- thread_local-1.1.7: declared license `MIT OR Apache-2.0`; notices/thread_local-1.1.7/LICENSE-APACHE, notices/thread_local-1.1.7/LICENSE-MIT
+- time-0.3.36: declared license `MIT OR Apache-2.0`; notices/time-0.3.36/LICENSE-Apache, notices/time-0.3.36/LICENSE-MIT
+- time-core-0.1.2: declared license `MIT OR Apache-2.0`; notices/time-core-0.1.2/LICENSE-Apache, notices/time-core-0.1.2/LICENSE-MIT
+- time-macros-0.2.18: declared license `MIT OR Apache-2.0`; notices/time-macros-0.2.18/LICENSE-Apache, notices/time-macros-0.2.18/LICENSE-MIT
+- tinystr-0.7.6: declared license `Unicode-3.0`; notices/tinystr-0.7.6/LICENSE
+- tinyvec-1.6.0: declared license `Zlib OR Apache-2.0 OR MIT`; notices/tinyvec-1.6.0/LICENSE-APACHE.md, notices/tinyvec-1.6.0/LICENSE-MIT.md, notices/tinyvec-1.6.0/LICENSE-ZLIB.md
+- tinyvec_macros-0.1.1: declared license `MIT OR Apache-2.0 OR Zlib`; notices/tinyvec_macros-0.1.1/LICENSE-APACHE.md, notices/tinyvec_macros-0.1.1/LICENSE-MIT.md, notices/tinyvec_macros-0.1.1/LICENSE-ZLIB.md
+- tokio-1.44.2: declared license `MIT`; notices/tokio-1.44.2/LICENSE
+- tokio-macros-2.5.0: declared license `MIT`; notices/tokio-macros-2.5.0/LICENSE
+- tokio-native-tls-0.3.1: declared license `MIT`; notices/tokio-native-tls-0.3.1/LICENSE
+- tokio-rustls-0.26.0: declared license `MIT/Apache-2.0`; notices/tokio-rustls-0.26.0/LICENSE-APACHE, notices/tokio-rustls-0.26.0/LICENSE-MIT
+- tokio-serde-0.9.0: declared license `MIT OR Apache-2.0`; notices/tokio-serde-0.9.0/LICENSE-APACHE, notices/tokio-serde-0.9.0/LICENSE-MIT
+- tokio-stream-0.1.15: declared license `MIT`; notices/tokio-stream-0.1.15/LICENSE
+- tokio-util-0.7.11: declared license `MIT`; notices/tokio-util-0.7.11/LICENSE
+- toml-0.8.14: declared license `MIT OR Apache-2.0`; notices/toml-0.8.14/LICENSE-APACHE, notices/toml-0.8.14/LICENSE-MIT
+- toml_datetime-0.6.6: declared license `MIT OR Apache-2.0`; notices/toml_datetime-0.6.6/LICENSE-APACHE, notices/toml_datetime-0.6.6/LICENSE-MIT
+- toml_edit-0.19.15: declared license `MIT OR Apache-2.0`; notices/toml_edit-0.19.15/LICENSE-APACHE, notices/toml_edit-0.19.15/LICENSE-MIT
+- toml_edit-0.22.14: declared license `MIT OR Apache-2.0`; notices/toml_edit-0.22.14/LICENSE-APACHE, notices/toml_edit-0.22.14/LICENSE-MIT
+- tower-0.4.13: declared license `MIT`; notices/tower-0.4.13/LICENSE
+- tower-layer-0.3.2: declared license `MIT`; notices/tower-layer-0.3.2/LICENSE
+- tower-service-0.3.2: declared license `MIT`; notices/tower-service-0.3.2/LICENSE
+- tracing-0.1.41: declared license `MIT`; notices/tracing-0.1.41/LICENSE
+- tracing-attributes-0.1.28: declared license `MIT`; notices/tracing-attributes-0.1.28/LICENSE
+- tracing-core-0.1.33: declared license `MIT`; notices/tracing-core-0.1.33/LICENSE, notices/tracing-core-0.1.33/src/spin/LICENSE
+- tracing-log-0.2.0: declared license `MIT`; notices/tracing-log-0.2.0/LICENSE
+- tracing-subscriber-0.3.18: declared license `MIT`; notices/tracing-subscriber-0.3.18/LICENSE
+- try-lock-0.2.5: declared license `MIT`; notices/try-lock-0.2.5/LICENSE
+- twox-hash-1.6.3: declared license `MIT`; notices/twox-hash-1.6.3/LICENSE.txt
+- typenum-1.17.0: declared license `MIT OR Apache-2.0`; notices/typenum-1.17.0/LICENSE, notices/typenum-1.17.0/LICENSE-APACHE, notices/typenum-1.17.0/LICENSE-MIT
+- unicase-2.7.0: declared license `MIT/Apache-2.0`; notices/unicase-2.7.0/LICENSE-APACHE, notices/unicase-2.7.0/LICENSE-MIT
+- unicode-ident-1.0.12: declared license `(MIT OR Apache-2.0) AND Unicode-DFS-2016`; notices/unicode-ident-1.0.12/LICENSE-APACHE, notices/unicode-ident-1.0.12/LICENSE-MIT, notices/unicode-ident-1.0.12/LICENSE-UNICODE
+- unicode-normalization-0.1.22: declared license `MIT/Apache-2.0`; notices/unicode-normalization-0.1.22/COPYRIGHT, notices/unicode-normalization-0.1.22/LICENSE-APACHE, notices/unicode-normalization-0.1.22/LICENSE-MIT
+- unicode-segmentation-1.10.1: declared license `MIT/Apache-2.0`; notices/unicode-segmentation-1.10.1/COPYRIGHT, notices/unicode-segmentation-1.10.1/LICENSE-APACHE, notices/unicode-segmentation-1.10.1/LICENSE-MIT
+- unicode-width-0.2.0: declared license `MIT OR Apache-2.0`; notices/unicode-width-0.2.0/COPYRIGHT, notices/unicode-width-0.2.0/LICENSE-APACHE, notices/unicode-width-0.2.0/LICENSE-MIT
+- unicode-width-0.2.1: declared license `MIT OR Apache-2.0`; notices/unicode-width-0.2.1/COPYRIGHT, notices/unicode-width-0.2.1/LICENSE-APACHE, notices/unicode-width-0.2.1/LICENSE-MIT
+- unicode-xid-0.2.4: declared license `MIT OR Apache-2.0`; notices/unicode-xid-0.2.4/COPYRIGHT, notices/unicode-xid-0.2.4/LICENSE-APACHE, notices/unicode-xid-0.2.4/LICENSE-MIT
+- unsafe-libyaml-0.2.11: declared license `MIT`; notices/unsafe-libyaml-0.2.11/LICENSE-MIT
+- untrusted-0.9.0: declared license `ISC`; notices/untrusted-0.9.0/LICENSE.txt
+- unwinding-0.2.7: declared license `MIT OR Apache-2.0`; notices/unwinding-0.2.7/LICENSE-APACHE, notices/unwinding-0.2.7/LICENSE-MIT
+- url-2.5.4: declared license `MIT OR Apache-2.0`; notices/url-2.5.4/LICENSE-APACHE, notices/url-2.5.4/LICENSE-MIT
+- urlencoding-2.1.3: declared license `MIT`; notices/urlencoding-2.1.3/LICENSE
+- utf16_iter-1.0.5: declared license `Apache-2.0 OR MIT`; notices/utf16_iter-1.0.5/COPYRIGHT, notices/utf16_iter-1.0.5/LICENSE-APACHE, notices/utf16_iter-1.0.5/LICENSE-MIT
+- utf8_iter-1.0.4: declared license `Apache-2.0 OR MIT`; notices/utf8_iter-1.0.4/COPYRIGHT, notices/utf8_iter-1.0.4/LICENSE-APACHE, notices/utf8_iter-1.0.4/LICENSE-MIT
+- uuid-1.9.1: declared license `Apache-2.0 OR MIT`; notices/uuid-1.9.1/LICENSE-APACHE, notices/uuid-1.9.1/LICENSE-MIT
+- valuable-0.1.0: declared license `MIT`; notices/valuable-e89de8805f524aefafdbcc1fcd1b20ecfd0d22b6.tar.gz/LICENSE
+- valuable-e89de8805f524aefafdbcc1fcd1b20ecfd0d22b6.tar.gz: declared license `unspecified`; notices/valuable-e89de8805f524aefafdbcc1fcd1b20ecfd0d22b6.tar.gz/LICENSE
+- vcpkg-0.2.15: declared license `MIT/Apache-2.0`; notices/vcpkg-0.2.15/LICENSE-APACHE, notices/vcpkg-0.2.15/LICENSE-MIT
+- version_check-0.9.5: declared license `MIT/Apache-2.0`; notices/version_check-0.9.5/LICENSE-APACHE, notices/version_check-0.9.5/LICENSE-MIT
+- virtual-fs: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- virtual-mio-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- virtual-net-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wai-bindgen-gen-core-0.2.3: declared license `Apache-2.0`; supplements/wasmerio-wai-4b228e1229c9-LICENSE
+- wai-bindgen-gen-rust-0.2.3: declared license `Apache-2.0`; supplements/wasmerio-wai-4b228e1229c9-LICENSE
+- wai-bindgen-gen-rust-wasm-0.2.3: declared license `Apache-2.0`; supplements/wasmerio-wai-4b228e1229c9-LICENSE
+- wai-bindgen-rust-0.2.3: declared license `Apache-2.0`; supplements/wasmerio-wai-4b228e1229c9-LICENSE
+- wai-bindgen-rust-impl-0.2.3: declared license `Apache-2.0`; supplements/wasmerio-wai-4b228e1229c9-LICENSE
+- wai-parser-0.2.3: declared license `Apache-2.0`; notice text requires review
+- waker-fn-1.1.1: declared license `Apache-2.0 OR MIT`; notices/waker-fn-1.1.1/LICENSE-APACHE, notices/waker-fn-1.1.1/LICENSE-MIT
+- walkdir-2.4.0: declared license `Unlicense/MIT`; notices/walkdir-2.4.0/COPYING, notices/walkdir-2.4.0/LICENSE-MIT, notices/walkdir-2.4.0/UNLICENSE
+- want-0.3.1: declared license `MIT`; notices/want-0.3.1/LICENSE
+- wasi-0.11.0+wasi-snapshot-preview1: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; notices/wasi-0.11.0+wasi-snapshot-preview1/LICENSE-APACHE, notices/wasi-0.11.0+wasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception, notices/wasi-0.11.0+wasi-snapshot-preview1/LICENSE-MIT
+- wasi-0.11.1+wasi-snapshot-preview1: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; notices/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-APACHE, notices/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception, notices/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-MIT
+- wasi-headers-bac366c8aeb69cacfea6c4c04a503191bf1cede1.tar.gz: declared license `unspecified`; notices/wasi-headers-bac366c8aeb69cacfea6c4c04a503191bf1cede1.tar.gz/tools/witx/LICENSE
+- wasi-sdk-935fe1acd2fcd7ea4aed2d5ee4527482862b6344.tar.gz: declared license `unspecified`; notices/wasi-sdk-935fe1acd2fcd7ea4aed2d5ee4527482862b6344.tar.gz/LICENSE
+- wasix-headers-ad9d3c9a2fa6ef13cde11466b7e3f93ba1293c49.tar.gz: declared license `unspecified`; notices/wasix-headers-ad9d3c9a2fa6ef13cde11466b7e3f93ba1293c49.tar.gz/tools/witx/LICENSE
+- wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz: declared license `unspecified`; notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/LICENSE, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/LICENSE-APACHE, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/LICENSE-APACHE-LLVM, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/LICENSE-MIT, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/libc-bottom-half/cloudlibc/LICENSE, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/libc-top-half/musl/COPYRIGHT, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/tools/wasi-headers/LICENSE, notices/wasix-libc-c20a27d4b42228647b084b5e9e88408cbccff931.tar.gz/tools/wasix-headers/LICENSE
+- wasm-bindgen-0.2.101: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-0.2.101/LICENSE-APACHE, notices/wasm-bindgen-0.2.101/LICENSE-MIT
+- wasm-bindgen-backend-0.2.101: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-backend-0.2.101/LICENSE-APACHE, notices/wasm-bindgen-backend-0.2.101/LICENSE-MIT
+- wasm-bindgen-derive-0.2.1: declared license `MIT`; supplements/fjarri-wasm-bindgen-derive-97ba7dab5d1d-LICENSE.md
+- wasm-bindgen-derive-macro-0.2.1: declared license `MIT`; supplements/fjarri-wasm-bindgen-derive-c619c0dcb504-LICENSE.md
+- wasm-bindgen-futures-0.4.51: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-futures-0.4.51/LICENSE-APACHE, notices/wasm-bindgen-futures-0.4.51/LICENSE-MIT
+- wasm-bindgen-macro-0.2.101: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-macro-0.2.101/LICENSE-APACHE, notices/wasm-bindgen-macro-0.2.101/LICENSE-MIT
+- wasm-bindgen-macro-support-0.2.101: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-macro-support-0.2.101/LICENSE-APACHE, notices/wasm-bindgen-macro-support-0.2.101/LICENSE-MIT
+- wasm-bindgen-shared-0.2.101: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-shared-0.2.101/LICENSE-APACHE, notices/wasm-bindgen-shared-0.2.101/LICENSE-MIT
+- wasm-bindgen-test-0.3.51: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-test-0.3.51/LICENSE-APACHE, notices/wasm-bindgen-test-0.3.51/LICENSE-MIT
+- wasm-bindgen-test-macro-0.3.51: declared license `MIT OR Apache-2.0`; notices/wasm-bindgen-test-macro-0.3.51/LICENSE-APACHE, notices/wasm-bindgen-test-macro-0.3.51/LICENSE-MIT
+- wasm-encoder-0.221.3: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-MIT
+- wasm-encoder-0.235.0: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-MIT
+- wasm-streams-0.4.0: declared license `MIT OR Apache-2.0`; notices/wasm-streams-0.4.0/LICENSE-APACHE, notices/wasm-streams-0.4.0/LICENSE-MIT
+- wasmer-6.1.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-backend-api-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-compiler-6.1.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-config-0.601.0: declared license `MIT`; notices/wasmer-config-0.601.0/LICENSE, supplements/wasmer-3189527-LICENSE
+- wasmer-derive-6.1.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-journal-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-package-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-sdk: declared license `MIT`; notices/wasmer-sdk/LICENSE
+- wasmer-types-6.1.0: declared license `MIT OR Apache-2.0 WITH LLVM-exception`; supplements/wasmer-3189527-LICENSE
+- wasmer-vm-6.1.0: declared license `MIT OR Apache-2.0 WITH LLVM-exception`; supplements/wasmer-3189527-LICENSE
+- wasmer-wasix: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmer-wasix-types-0.601.0: declared license `MIT`; supplements/wasmer-3189527-LICENSE
+- wasmparser-0.221.3: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-MIT
+- wasmparser-0.224.1: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-0155f1a43c50-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-0155f1a43c50-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-0155f1a43c50-LICENSE-MIT
+- wasmparser-0.235.0: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-e26d5ebea0b8-LICENSE-MIT
+- wast-221.0.3: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-MIT
+- wat-1.221.3: declared license `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-APACHE, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-Apache-2.0_WITH_LLVM-exception, supplements/bytecodealliance-wasm-tools-1b2c8585415d-LICENSE-MIT
+- web-sys-0.3.78: declared license `MIT OR Apache-2.0`; notices/web-sys-0.3.78/LICENSE-APACHE, notices/web-sys-0.3.78/LICENSE-MIT
+- web-time-1.1.0: declared license `MIT OR Apache-2.0`; notices/web-time-1.1.0/LICENSE-APACHE, notices/web-time-1.1.0/LICENSE-MIT
+- webc-10.0.1: declared license `MIT`; notice text requires review
+- weezl-0.1.7: declared license `MIT OR Apache-2.0`; notices/weezl-0.1.7/LICENSE-APACHE, notices/weezl-0.1.7/LICENSE-MIT
+- winapi-0.3.9: declared license `MIT/Apache-2.0`; notices/winapi-0.3.9/LICENSE-APACHE, notices/winapi-0.3.9/LICENSE-MIT
+- winapi-i686-pc-windows-gnu-0.4.0: declared license `MIT/Apache-2.0`; notice text requires review
+- winapi-util-0.1.6: declared license `Unlicense/MIT`; notices/winapi-util-0.1.6/COPYING, notices/winapi-util-0.1.6/LICENSE-MIT, notices/winapi-util-0.1.6/UNLICENSE
+- winapi-x86_64-pc-windows-gnu-0.4.0: declared license `MIT/Apache-2.0`; notice text requires review
+- windows-core-0.52.0: declared license `MIT OR Apache-2.0`; notices/windows-core-0.52.0/license-apache-2.0, notices/windows-core-0.52.0/license-mit
+- windows-link-0.1.1: declared license `MIT OR Apache-2.0`; notices/windows-link-0.1.1/license-apache-2.0, notices/windows-link-0.1.1/license-mit
+- windows-registry-0.2.0: declared license `MIT OR Apache-2.0`; notices/windows-registry-0.2.0/license-apache-2.0, notices/windows-registry-0.2.0/license-mit
+- windows-result-0.2.0: declared license `MIT OR Apache-2.0`; notices/windows-result-0.2.0/license-apache-2.0, notices/windows-result-0.2.0/license-mit
+- windows-strings-0.1.0: declared license `MIT OR Apache-2.0`; notices/windows-strings-0.1.0/license-apache-2.0, notices/windows-strings-0.1.0/license-mit
+- windows-sys-0.48.0: declared license `MIT OR Apache-2.0`; notices/windows-sys-0.48.0/license-apache-2.0, notices/windows-sys-0.48.0/license-mit
+- windows-sys-0.52.0: declared license `MIT OR Apache-2.0`; notices/windows-sys-0.52.0/license-apache-2.0, notices/windows-sys-0.52.0/license-mit
+- windows-sys-0.59.0: declared license `MIT OR Apache-2.0`; notices/windows-sys-0.59.0/license-apache-2.0, notices/windows-sys-0.59.0/license-mit
+- windows-targets-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows-targets-0.48.5/license-apache-2.0, notices/windows-targets-0.48.5/license-mit
+- windows-targets-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows-targets-0.52.6/license-apache-2.0, notices/windows-targets-0.52.6/license-mit
+- windows_aarch64_gnullvm-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_aarch64_gnullvm-0.48.5/license-apache-2.0, notices/windows_aarch64_gnullvm-0.48.5/license-mit
+- windows_aarch64_gnullvm-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_aarch64_gnullvm-0.52.6/license-apache-2.0, notices/windows_aarch64_gnullvm-0.52.6/license-mit
+- windows_aarch64_msvc-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_aarch64_msvc-0.48.5/license-apache-2.0, notices/windows_aarch64_msvc-0.48.5/license-mit
+- windows_aarch64_msvc-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_aarch64_msvc-0.52.6/license-apache-2.0, notices/windows_aarch64_msvc-0.52.6/license-mit
+- windows_i686_gnu-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_i686_gnu-0.48.5/license-apache-2.0, notices/windows_i686_gnu-0.48.5/license-mit
+- windows_i686_gnu-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_i686_gnu-0.52.6/license-apache-2.0, notices/windows_i686_gnu-0.52.6/license-mit
+- windows_i686_gnullvm-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_i686_gnullvm-0.52.6/license-apache-2.0, notices/windows_i686_gnullvm-0.52.6/license-mit
+- windows_i686_msvc-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_i686_msvc-0.48.5/license-apache-2.0, notices/windows_i686_msvc-0.48.5/license-mit
+- windows_i686_msvc-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_i686_msvc-0.52.6/license-apache-2.0, notices/windows_i686_msvc-0.52.6/license-mit
+- windows_x86_64_gnu-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_gnu-0.48.5/license-apache-2.0, notices/windows_x86_64_gnu-0.48.5/license-mit
+- windows_x86_64_gnu-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_gnu-0.52.6/license-apache-2.0, notices/windows_x86_64_gnu-0.52.6/license-mit
+- windows_x86_64_gnullvm-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_gnullvm-0.48.5/license-apache-2.0, notices/windows_x86_64_gnullvm-0.48.5/license-mit
+- windows_x86_64_gnullvm-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_gnullvm-0.52.6/license-apache-2.0, notices/windows_x86_64_gnullvm-0.52.6/license-mit
+- windows_x86_64_msvc-0.48.5: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_msvc-0.48.5/license-apache-2.0, notices/windows_x86_64_msvc-0.48.5/license-mit
+- windows_x86_64_msvc-0.52.6: declared license `MIT OR Apache-2.0`; notices/windows_x86_64_msvc-0.52.6/license-apache-2.0, notices/windows_x86_64_msvc-0.52.6/license-mit
+- winnow-0.5.33: declared license `MIT`; notices/winnow-0.5.33/LICENSE-MIT
+- winnow-0.6.13: declared license `MIT`; notices/winnow-0.6.13/LICENSE-MIT
+- write16-1.0.0: declared license `Apache-2.0 OR MIT`; notices/write16-1.0.0/COPYRIGHT, notices/write16-1.0.0/LICENSE-APACHE, notices/write16-1.0.0/LICENSE-MIT
+- writeable-0.5.5: declared license `Unicode-3.0`; notices/writeable-0.5.5/LICENSE
+- xattr-1.2.0: declared license `MIT/Apache-2.0`; notices/xattr-1.2.0/LICENSE-APACHE, notices/xattr-1.2.0/LICENSE-MIT
+- xxhash-rust-0.8.11: declared license `BSL-1.0`; notices/xxhash-rust-0.8.11/LICENSE
+- yansi-1.0.1: declared license `MIT OR Apache-2.0`; notices/yansi-1.0.1/LICENSE-APACHE, notices/yansi-1.0.1/LICENSE-MIT
+- yoke-0.7.5: declared license `Unicode-3.0`; notices/yoke-0.7.5/LICENSE
+- yoke-derive-0.7.5: declared license `Unicode-3.0`; notices/yoke-derive-0.7.5/LICENSE
+- zerocopy-0.7.35: declared license `BSD-2-Clause OR Apache-2.0 OR MIT`; notices/zerocopy-0.7.35/LICENSE-APACHE, notices/zerocopy-0.7.35/LICENSE-BSD, notices/zerocopy-0.7.35/LICENSE-MIT, notices/zerocopy-0.7.35/src/third_party/rust/LICENSE-APACHE, notices/zerocopy-0.7.35/src/third_party/rust/LICENSE-MIT
+- zerocopy-0.8.24: declared license `BSD-2-Clause OR Apache-2.0 OR MIT`; notices/zerocopy-0.8.24/LICENSE-APACHE, notices/zerocopy-0.8.24/LICENSE-BSD, notices/zerocopy-0.8.24/LICENSE-MIT
+- zerocopy-derive-0.7.35: declared license `BSD-2-Clause OR Apache-2.0 OR MIT`; notices/zerocopy-derive-0.7.35/LICENSE-APACHE, notices/zerocopy-derive-0.7.35/LICENSE-BSD, notices/zerocopy-derive-0.7.35/LICENSE-MIT
+- zerocopy-derive-0.8.24: declared license `BSD-2-Clause OR Apache-2.0 OR MIT`; notices/zerocopy-derive-0.8.24/LICENSE-APACHE, notices/zerocopy-derive-0.8.24/LICENSE-BSD, notices/zerocopy-derive-0.8.24/LICENSE-MIT
+- zerofrom-0.1.6: declared license `Unicode-3.0`; notices/zerofrom-0.1.6/LICENSE
+- zerofrom-derive-0.1.6: declared license `Unicode-3.0`; notices/zerofrom-derive-0.1.6/LICENSE
+- zeroize-1.8.1: declared license `Apache-2.0 OR MIT`; notices/zeroize-1.8.1/LICENSE-APACHE, notices/zeroize-1.8.1/LICENSE-MIT
+- zerovec-0.10.4: declared license `Unicode-3.0`; notices/zerovec-0.10.4/LICENSE
+- zerovec-derive-0.10.3: declared license `Unicode-3.0`; notices/zerovec-derive-0.10.3/LICENSE
+
+## Remaining release review
+
+- Bash release sysroot source correspondence is tied to its release commit and gitlinks, not a reproduced binary build; the historical release workflow used mutable tool packages.
+- Both sysroot and WASI SDK20 compiler-rt source lineages are included; an actual linker input inventory must identify which builtin archive is linked into the selected Bash.
+- Per-file license applicability and third-party notice completeness require review of the preserved sources; a declared SPDX expression alone does not establish this.
+- Some published crate archives omit notice texts: exact publicly accessible VCS notices were recovered where available; missing texts remain listed individually, including unused target packages in this lockfile superset.
+- Some source archives have no separately identified notice text; inspect their embedded source: crunchy-0.2.2, r-efi-5.3.0, r-efi-alloc-2.1.0, wai-parser-0.2.3, webc-10.0.1, winapi-i686-pc-windows-gnu-0.4.0, winapi-x86_64-pc-windows-gnu-0.4.0
+- Source-to-binary correspondence and notice applicability still require release review; source availability does not establish either
