@@ -15,7 +15,11 @@ so each entry stays addressable and snapshot-representable. Relative host paths 
 `{cwd, root}` selects a real working directory and directory capability. Absolute
 paths must name that capability's canonical subtree. Traversal applies `..` after
 symlinks, rejects capability escape with `EACCES`, and follows at most 40 links.
-`lstat`, `readlink`, rename and unlink do not follow the final symlink.
+A trailing slash in a path or followed symlink target requires a directory, including
+through chained targets; a dangling directory-required target cannot create a regular
+file. `lstat` and `readlink` do not follow an unadorned final symlink. A final slash
+requires that link to resolve to a directory. Rename and unlink do not follow the
+final symlink.
 
 Directory entries reference inodes. Rename in a mount preserves the inode;
 cross-mount rename returns `EXDEV`. Unlink removes a name while existing file

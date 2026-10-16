@@ -75,6 +75,88 @@ test('creation follows a dangling symlink without replacing its dentry', () => {
   assert.throws(() => fs.writeFile('trailing', bytes('x')), error('ENOTDIR'));
 });
 
+test('symlink target trailing slashes require directories without changing regular files', () => {
+  for (const target of ['plain/', '/workspace/plain/', 'alias/', 'slash-link']) {
+    const fs = new MemoryFileSystem();
+    fs.writeFile('plain', bytes('original'));
+    fs.symlink('plain', 'alias');
+    fs.symlink('plain/', 'slash-link');
+    fs.symlink(target, 'link');
+    const original = fs.stat('plain');
+    const generation = fs.generation;
+    for (const operation of [
+      () => fs.stat('link'),
+      () => fs.realpath('link'),
+      () => fs.readFile('link'),
+      () => fs.writeFile('link', bytes('replacement')),
+      () => fs.open('link', { write: true, truncate: true }),
+    ]) {
+      assert.throws(operation, error('ENOTDIR'), target);
+      assert.equal(text(fs.readFile('plain')), 'original', target);
+      assert.deepEqual(fs.stat('plain'), original, target);
+      assert.equal(fs.generation, generation, target);
+    }
+    assert.equal(fs.lstat('link').type, 'symlink', target);
+    assert.equal(fs.readlink('link'), target);
+  }
+});
+
+test('directory symlink targets retain suffix traversal and final nofollow behavior', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('directory/nested', { recursive: true });
+  fs.writeFile('directory/file', bytes('contents'));
+  fs.symlink('file', 'directory/leaf');
+  fs.symlink('directory', 'alias');
+  for (const [index, target] of ['directory/', '/workspace/directory/', 'alias/'].entries()) {
+    const link = `link-${index}`;
+    fs.symlink(target, link);
+    assert.equal(fs.stat(link).type, 'directory', target);
+    assert.equal(fs.realpath(link), '/workspace/directory', target);
+    assert.equal(text(fs.readFile(`${link}/file`)), 'contents', target);
+    assert.equal(text(fs.readFile(`${link}/nested/../file`)), 'contents', target);
+    assert.equal(fs.lstat(`${link}/leaf`).type, 'symlink', target);
+    assert.equal(fs.readlink(`${link}/leaf`), 'file', target);
+    assert.equal(fs.lstat(`${link}/`).type, 'directory', target);
+    assert.throws(() => fs.readlink(`${link}/`), error('EINVAL'), target);
+    fs.writeFile(`${link}/created-${index}`, bytes('new'));
+    assert.equal(text(fs.readFile(`directory/created-${index}`)), 'new', target);
+  }
+});
+
+test('directory-required dangling symlink chains cannot create regular files', () => {
+  for (const [target, innerTarget] of [
+    ['missing/', 'unused'],
+    ['inner/', 'missing'],
+    ['/workspace/inner/', 'missing'],
+    ['inner', 'missing/'],
+  ]) {
+    const fs = new MemoryFileSystem();
+    fs.symlink(innerTarget, 'inner');
+    fs.symlink(target, 'link');
+    const original = fs.exportSnapshot();
+    assert.throws(() => fs.writeFile('link', bytes('replacement')), error('ENOTDIR'), target);
+    assert.throws(() => fs.open('link', { write: true, create: true }), error('ENOTDIR'), target);
+    assert.throws(() => fs.stat('missing'), error('ENOENT'), target);
+    assert.deepEqual(fs.exportSnapshot(), original, target);
+  }
+});
+
+test('symlink target trailing slashes retain directory capability boundaries', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('directory');
+  fs.symlink('directory/', 'inside');
+  fs.symlink('/tmp/', 'absolute-escape');
+  fs.symlink('../tmp/', 'relative-escape');
+  fs.symlink('relative-escape/', 'chained-escape');
+  const options = { root: '/workspace' };
+  assert.equal(fs.realpath('inside', options), '/workspace/directory');
+  for (const link of ['absolute-escape', 'relative-escape', 'chained-escape']) {
+    assert.throws(() => fs.stat(link, options), error('EACCES'), link);
+    assert.throws(() => fs.writeFile(`${link}/new`, bytes('no'), options), error('EACCES'), link);
+  }
+  assert.deepEqual(fs.readdir('/tmp'), []);
+});
+
 test('FS-03: dup shares offsets, pread/pwrite do not, rename retains inode', () => {
   const fs = new MemoryFileSystem();
   fs.writeFile('source', bytes('abcdef'));
