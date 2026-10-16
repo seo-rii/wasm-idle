@@ -1,4 +1,5 @@
 import { MemoryFileSystem } from '../memory.js';
+import { FsError } from '../errors.js';
 import type { FileSystemSnapshot, MemoryFileSystemOptions, SnapshotEntry } from '../types.js';
 
 export type PersistentWorkspaceErrorCode = 'INVALID_ARGUMENT' | 'UNSUPPORTED' | 'BUSY' | 'CORRUPT' | 'STORAGE' | 'DISPOSED' | 'RESOURCE_LIMIT';
@@ -187,7 +188,8 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       };
     };
     const readBlob = async (identity: { sha256: string; bytes: number }): Promise<Uint8Array> => {
-      if (!identity || !digestPattern.test(identity.sha256) || !Number.isSafeInteger(identity.bytes) || identity.bytes < 0 || identity.bytes > fs.maxBytes) corrupt('Invalid workspace blob reference');
+      if (!identity || !digestPattern.test(identity.sha256) || !Number.isSafeInteger(identity.bytes) || identity.bytes < 0) corrupt('Invalid workspace blob reference');
+      if (identity.bytes > fs.maxBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace blob exceeds the current byte budget');
       const handle = await directory.getFileHandle(identity.sha256);
       const file = await handle.getFile();
       if (file.size !== identity.bytes) corrupt('Workspace blob size does not match its root');
@@ -195,14 +197,26 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
       if (await hash(bytes) !== identity.sha256) corrupt('Workspace blob digest does not match its root');
       return bytes;
     };
+    const restoreSnapshot = (snapshot: FileSystemSnapshot): MemoryFileSystem => {
+      try { return MemoryFileSystem.fromSnapshot(snapshot, policy); }
+      catch (cause) {
+        if (cause instanceof FsError && cause.code === 'ENOSPC') {
+          throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace snapshot exceeds the current memory budget', { cause });
+        }
+        throw cause;
+      }
+    };
     const decodeRoot = async (record: RootRecord) => {
-      if (!record || !Number.isSafeInteger(record.sequence) || record.sequence < 1 || typeof record.manifest !== 'string' || record.manifest.length > maxMetadataBytes || !digestPattern.test(record.sha256)) corrupt('Malformed workspace root record');
+      if (!record || !Number.isSafeInteger(record.sequence) || record.sequence < 1 || typeof record.manifest !== 'string' || !digestPattern.test(record.sha256)) corrupt('Malformed workspace root record');
+      if (record.manifest.length > maxMetadataBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace root exceeds the current metadata budget');
       const manifestBytes = encoder.encode(record.manifest);
-      if (manifestBytes.length > maxMetadataBytes || await hash(manifestBytes) !== record.sha256) corrupt('Workspace root digest does not match');
+      if (manifestBytes.length > maxMetadataBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace root exceeds the current metadata budget');
+      if (await hash(manifestBytes) !== record.sha256) corrupt('Workspace root digest does not match');
       let value: RootManifest;
       try { value = JSON.parse(record.manifest) as RootManifest; } catch { return corrupt('Workspace root is not JSON'); }
       if (!value || typeof value !== 'object') corrupt('Workspace root must be an object');
-      if (value.schemaVersion !== 1 || value.id !== id || value.sequence !== record.sequence || !Array.isArray(value.entries) || value.entries.length > fs.maxInodes) corrupt('Workspace root belongs to an unsupported profile');
+      if (value.schemaVersion !== 1 || value.id !== id || value.sequence !== record.sequence || !Array.isArray(value.entries)) corrupt('Workspace root belongs to an unsupported profile');
+      if (value.entries.length > fs.maxInodes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace root exceeds the current inode budget');
       let total = 0;
       const records: SnapshotEntry[] = value.entries.map((entry) => {
         if (!entry || typeof entry.path !== 'string' || !(entry.path === '/workspace' || entry.path.startsWith('/workspace/'))) corrupt('Workspace root references a non-user mount');
@@ -210,7 +224,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
           const blob = entry.blob;
           if (!blob || typeof blob.sha256 !== 'string' || !digestPattern.test(blob.sha256) || !Number.isSafeInteger(blob.bytes) || blob.bytes < 0) return corrupt('Invalid workspace file reference');
           total += blob.bytes;
-          if (total > fs.maxBytes) corrupt('Workspace root exceeds its byte budget');
+          if (total > fs.maxBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace root exceeds the current byte budget');
         } else if (entry.blob !== undefined) corrupt('Non-file entry references blob data');
         return { inode: entry.inode, path: entry.path, type: entry.type, mode: entry.mode, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs,
           ...(entry.type === 'file' ? { data: new Uint8Array() } : {}),
@@ -221,7 +235,8 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
         entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...records]
       };
       // Check namespace, IDs, directory shape and metadata quotas before opening any blob.
-      MemoryFileSystem.fromSnapshot(snapshot, policy);
+      const metadata = restoreSnapshot(snapshot);
+      if (total > fs.maxBytes - metadata.byteLength) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace files and symlinks exceed the current byte budget');
       return { value, records, snapshot };
     };
     const restore = async (record: RootRecord): Promise<MemoryFileSystem> => {
@@ -230,7 +245,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
         const entry = value.entries[i]!;
         if (entry.type === 'file') records[i] = { ...records[i]!, data: await readBlob(entry.blob!) };
       }
-      return MemoryFileSystem.fromSnapshot({ ...snapshot, entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...records] }, policy);
+      return restoreSnapshot({ ...snapshot, entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...records] });
     };
 
     const roots = await readRoots(database);
@@ -242,7 +257,9 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
         if (!lastRoot) { fs = restored; lastRoot = record; committedGeneration = fs.generation; }
       } catch (error) {
         // The next flush retires every root except the loaded one, so only evidence about the
-        // stored data may select an older root. Storage access failures abort and preserve both.
+        // stored data may select an older root. Current admission limits and storage access
+        // failures abort and preserve both roots for a retry with the original policy.
+        if (error instanceof PersistentWorkspaceError && error.code === 'RESOURCE_LIMIT') throw error;
         if (error instanceof RangeError || error instanceof DOMException && error.name !== 'NotFoundError' && error.name !== 'TypeMismatchError') throw error;
         if (!lastRoot) recovered = true;
       }

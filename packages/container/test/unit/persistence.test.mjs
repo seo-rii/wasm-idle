@@ -139,3 +139,46 @@ test('missing or mismatched newest blobs still fall back to the previous verifie
     } finally { await owner.dispose(); }
   }
 });
+
+for (const [id, edit, limits] of [
+  ['file-bytes', (fs) => fs.writeFile('file', encode('NEW DATA THAT MUST NOT BE LOST')), { maxBytes: 10 }],
+  ['aggregate-bytes', (fs) => fs.writeFile('other', encode('more')), { maxBytes: 6 }],
+  ['symlink-bytes', (fs) => fs.symlink('a-long-target', 'link'), { maxBytes: 6 }],
+  ['file-and-symlink-bytes', (fs) => fs.symlink('file', 'link'), { maxBytes: 6 }],
+  ['inodes-with-base', (fs) => fs.mkdir('other'), (fs) => ({ maxInodes: fs.inodeCount - 1 })],
+  ['workspace-inodes', (fs) => { for (let i = 0; i < 20; i++) fs.mkdir(`dir-${i}`); }, { maxInodes: 14 }],
+  ['metadata-characters', (fs) => { for (let i = 0; i < 10; i++) fs.mkdir(`dir-${i}`); }, { maxMetadataBytes: 1024 }],
+  ['metadata-utf8', (fs) => fs.mkdir('한'.repeat(300)), { maxMetadataBytes: 1024 }]
+]) {
+  test(`lower ${id} budget rejects admission and preserves both committed roots`, async () => {
+    let owner = await openPersistentWorkspace({ id });
+    owner.fs.writeFile('file', encode('old')); await owner.flush();
+    edit(owner.fs); await owner.flush();
+    const expected = owner.exportSnapshot();
+    const budget = typeof limits === 'function' ? limits(owner.fs) : limits;
+    await owner.dispose();
+    const records = databases.get(`wasm-idle-workspaces-v1:${id}`).get('roots').records;
+    const blobs = (await opfs.getDirectoryHandle('wasm-idle-workspaces-v1')).directories.get(id).files;
+    const originalRecords = structuredClone(records), originalBlobs = structuredClone(blobs);
+    if (id === 'metadata-utf8') {
+      assert.ok(records.get(2).manifest.length < 1024);
+      assert.ok(encode(records.get(2).manifest).length > 1024);
+    }
+    // Repeated failed admission must release the writer lock and never return an
+    // older writable generation whose flush would retire the valid newest save.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let admitted;
+      try {
+        await assert.rejects(async () => { admitted = await openPersistentWorkspace({ id, ...budget }); }, { code: 'RESOURCE_LIMIT' });
+      } finally { await admitted?.dispose(); }
+      assert.deepEqual(databases.get(`wasm-idle-workspaces-v1:${id}`).get('roots').records, originalRecords);
+      assert.deepEqual(blobs, originalBlobs);
+    }
+    owner = await openPersistentWorkspace({ id });
+    try {
+      assert.deepEqual(owner.exportSnapshot().entries.filter((entry) => entry.path.startsWith('/workspace/')),
+        expected.entries.filter((entry) => entry.path.startsWith('/workspace/')));
+      assert.deepEqual([owner.inspect().state, owner.inspect().recovered, owner.inspect().committedSequence], ['saved', false, 2]);
+    } finally { await owner.dispose(); }
+  });
+}

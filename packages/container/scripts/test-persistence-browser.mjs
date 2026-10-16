@@ -179,6 +179,53 @@ try {
   assert.equal(recovery.inspection.state, 'recovered'); assert.equal(recovery.inspection.committedSequence, 1);
   checks.push('PERSIST-02: a corrupt newest blob falls back to the previous verified committed root');
 
+  const lowerBudgets = await page.evaluate(async () => {
+    const results = [];
+    for (const kind of ['bytes', 'inodes', 'metadata']) {
+      const id = `lower-${kind}`;
+      let workspace = await persistence.openPersistentWorkspace({ id });
+      workspace.fs.writeFile('file', encode('old')); await workspace.flush();
+      if (kind === 'bytes') workspace.fs.writeFile('file', encode('NEW DATA THAT MUST NOT BE LOST'));
+      else if (kind === 'inodes') workspace.fs.mkdir('newest-directory');
+      else for (let i = 0; i < 10; i++) workspace.fs.mkdir(`dir-${i}`);
+      await workspace.flush();
+      const expected = JSON.stringify(workspace.exportSnapshot().entries.filter((entry) => entry.path.startsWith('/workspace/')));
+      const limits = kind === 'bytes' ? { maxBytes: 10 } : kind === 'inodes' ? { maxInodes: workspace.fs.inodeCount - 1 } : { maxMetadataBytes: 1024 };
+      await workspace.dispose();
+      const readJournal = async () => {
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open(`wasm-idle-workspaces-v1:${id}`, 1);
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+        });
+        try {
+          return await new Promise((resolve, reject) => {
+            const transaction = db.transaction('roots', 'readonly'), request = transaction.objectStore('roots').getAll();
+            transaction.oncomplete = () => resolve(JSON.stringify(request.result)); transaction.onabort = transaction.onerror = () => reject(transaction.error);
+          });
+        } finally { db.close(); }
+      };
+      const originalJournal = await readJournal(), rejected = [];
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let admitted;
+        try { admitted = await persistence.openPersistentWorkspace({ id, ...limits }); rejected.push('admitted'); }
+        catch (error) { rejected.push(error.code); }
+        finally { await admitted?.dispose(); }
+      }
+      const preservedJournal = await readJournal() === originalJournal;
+      workspace = await persistence.openPersistentWorkspace({ id });
+      const restored = JSON.stringify(workspace.exportSnapshot().entries.filter((entry) => entry.path.startsWith('/workspace/'))) === expected;
+      results.push({ kind, rejected, preservedJournal, restored, state: workspace.inspect() });
+      await workspace.dispose();
+    }
+    return results;
+  });
+  for (const result of lowerBudgets) {
+    assert.deepEqual(result.rejected, ['RESOURCE_LIMIT', 'RESOURCE_LIMIT']);
+    assert.equal(result.preservedJournal, true); assert.equal(result.restored, true);
+    assert.equal(result.state.committedSequence, 2); assert.equal(result.state.state, 'saved'); assert.equal(result.state.recovered, false);
+  }
+  checks.push('PERSIST-02: lower byte/inode/metadata budgets reject admission, preserve both roots and release the owner lock for a retry');
+
   const afterPublish = await page.evaluate(async () => {
     await owner.dispose();
     owner = await persistence.openPersistentWorkspace({ id: 'recovery', fault(point) { if (point === 'after-root-publish') throw new Error('injected post-commit interruption'); } });
@@ -553,7 +600,7 @@ try {
     sourceSha256: createHash('sha256').update(await readFile(resolve(root, 'src/fs/persistence/index.ts'))).digest('hex'),
     fixtureScriptSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'),
     os: { platform: platform(), release: release(), arch: arch() },
-    garbageCollection,
+    garbageCollection, lowerBudgets,
     results: checks, fixtureCount: checks.length
   };
   if (process.env.CONTAINER_PERSISTENCE_EVIDENCE) {
