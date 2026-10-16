@@ -340,9 +340,21 @@ async function publish({ targetDir, versionModulePath, verified, worker, version
 		if (moved) await rename(backup, targetDir);
 		throw error;
 	} finally {
-		await rm(staging, { recursive: true, force: true });
-		await rm(stagedVersion, { force: true });
-		if (complete && moved) await rm(backup, { recursive: true });
+		const cleanup = [
+			{ path: staging, options: { recursive: true, force: true } },
+			{ path: stagedVersion, options: { force: true } },
+			...(complete && moved ? [{ path: backup, options: { recursive: true } }] : [])
+		];
+		for (const entry of cleanup) {
+			try {
+				await rm(entry.path, entry.options);
+			} catch (error) {
+				if (!complete) throw error;
+				console.warn(
+					`Lean 4 runtime and profile were published, but cleanup failed for ${entry.path}: ${error instanceof Error ? error.message : error}. Remove this leftover path manually.`
+				);
+			}
+		}
 	}
 }
 
