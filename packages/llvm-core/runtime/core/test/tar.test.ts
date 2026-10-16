@@ -76,6 +76,8 @@ describe('untar', () => {
 		['UTF-8 BOM', '\ufeff0000001\0'],
 		['non-breaking space', '\u00a00000001\0'],
 		['tab', '\t0000001\0'],
+		['final newline', '00000000001\n'],
+		['final carriage return', '00000000001\r'],
 		['negative number', '-0000001\0'],
 		['positive sign', '+0000001\0'],
 		['non-octal digit', '0000008\0'],

@@ -15,7 +15,7 @@ export function readStrR(u8: Uint8Array, o: number, len = -1) {
 export function readOct(u8: Uint8Array, o: number, len: number) {
 	let field = '';
 	for (const byte of u8.subarray(o, o + len)) field += String.fromCharCode(byte);
-	if (field.length !== len || !/^ *[0-7]+[\0 ]*$/.test(field)) {
+	if (field.length !== len || /[^0-7\0 ]/.test(field) || !/^ *[0-7]+[\0 ]*$/.test(field)) {
 		throw new Error('TAR has an invalid octal number');
 	}
 	const value = Number.parseInt(field, 8);

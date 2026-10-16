@@ -176,7 +176,8 @@ export function readTarEntries(bytes) {
 			// Numeric fields are ASCII, even when archive paths are UTF-8. Unicode
 			// whitespace must not normalize malformed bytes into an accepted size.
 			const value = Buffer.from(header.subarray(start, start + length)).toString('latin1');
-			if (!/^ *[0-7]+[\0 ]*$/.test(value)) throw new Error('TAR has an invalid octal number');
+			if (/[^0-7\0 ]/.test(value) || !/^ *[0-7]+[\0 ]*$/.test(value))
+				throw new Error('TAR has an invalid octal number');
 			const number = Number.parseInt(value, 8);
 			if (!Number.isSafeInteger(number))
 				throw new Error('TAR number exceeds the safe integer range');
