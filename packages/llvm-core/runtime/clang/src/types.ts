@@ -199,6 +199,8 @@ export interface BrowserClangRuntimeOptions {
 	stdout?: (chunk: string) => void;
 	progress?: (value: number) => void;
 	signal?: AbortSignal;
+	/** Fetch provider for every compiler, linker, MemFS and sysroot asset. */
+	fetchImpl?: typeof fetch;
 	onDebugEvent?: (event: BrowserClangPauseEvent) => void;
 	log?: boolean;
 	showTiming?: boolean;

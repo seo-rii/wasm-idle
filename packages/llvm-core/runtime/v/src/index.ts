@@ -397,10 +397,23 @@ class VCompiler implements BrowserVCompiler {
 			log: options.log,
 			maxAssetBytes,
 			signal: options.signal,
+			fetchImpl,
 			stdout: () => {}
 		});
-		const frontendReady = compile(assets.frontend, undefined, options.signal, maxAssetBytes);
-		const rootfsReady = readBuffer(assets.rootfs, undefined, maxAssetBytes, options.signal);
+		const frontendReady = compile(
+			assets.frontend,
+			undefined,
+			options.signal,
+			maxAssetBytes,
+			fetchImpl
+		);
+		const rootfsReady = readBuffer(
+			assets.rootfs,
+			undefined,
+			maxAssetBytes,
+			options.signal,
+			fetchImpl
+		);
 		const [frontend, rootfs] = await Promise.all([frontendReady, rootfsReady]);
 		await runtime.ready;
 		if (options.signal?.aborted) throw options.signal.reason;

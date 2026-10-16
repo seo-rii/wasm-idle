@@ -360,6 +360,13 @@ describe('public wasm-clang API contract', () => {
 		);
 	});
 
+	it('passes the fetch provider through compiler creation to runtime assets', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		const compiler = await createClangCompiler({ runtimeBaseUrl: 'https://cdn.example.com/clang/', manifest, fetchImpl });
+		await compiler.compile({ code: 'int main() { return 0; }', language: 'C' });
+		expect(runtimeState.instances[0]?.options).toEqual(expect.objectContaining({ fetchImpl }));
+	});
+
 	it('derives the runtime base URL from an explicit manifest URL', async () => {
 		const fetchImpl = vi.fn(
 			async () => new Response(JSON.stringify(manifest), {
@@ -376,7 +383,7 @@ describe('public wasm-clang API contract', () => {
 			{ cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' }
 		);
 		expect(runtimeState.instances[0]?.options).toEqual(
-			expect.objectContaining({ runtimeBaseUrl: 'https://cdn.example.com/clang/v2/' })
+			expect.objectContaining({ runtimeBaseUrl: 'https://cdn.example.com/clang/v2/', fetchImpl })
 		);
 	});
 

@@ -226,6 +226,58 @@ describe('Wasm compilation buffer ownership', () => {
 		assert.deepEqual(copies, []);
 	});
 
+	it('isolates bytes and compiled modules by fetch provider at the same URL', async () => {
+		const { api, requests } = createLoader();
+		const changed = Uint8Array.from(wasm);
+		changed[changed.length - 2] = 43;
+		let requestsA = 0;
+		let requestsB = 0;
+		const providerA: typeof fetch = async () => {
+			requestsA++;
+			return new Response(wasm);
+		};
+		const providerB: typeof fetch = async () => {
+			requestsB++;
+			return new Response(changed);
+		};
+		const moduleA = await api.compile(url, undefined, undefined, undefined, providerA);
+		const moduleB = await api.compile(url, undefined, undefined, undefined, providerB);
+		assert.equal(await answer(moduleA), 42);
+		assert.equal(await answer(moduleB), 43);
+		assert.equal(await api.compile(url, undefined, undefined, undefined, providerA), moduleA);
+		assert.deepEqual(
+			await api.readBuffer(url, undefined, undefined, undefined, providerA),
+			wasm
+		);
+		assert.deepEqual(
+			await api.readBuffer(url, undefined, undefined, undefined, providerB),
+			changed
+		);
+		assert.equal(requestsA, 1);
+		assert.equal(requestsB, 1);
+		assert.equal(requests.length, 0);
+	});
+
+	it('uses the custom provider for cancellable gzip loads and keeps default loading available', async () => {
+		const { api, requests } = createLoader();
+		const controller = new AbortController();
+		let receivedSignal: AbortSignal | null | undefined;
+		const provider: typeof fetch = async (_input, init) => {
+			receivedSignal = init?.signal;
+			return new Response(gzipSync(wasm));
+		};
+		assert.equal(
+			await answer(
+				await api.compile(`${url}.gz`, undefined, controller.signal, undefined, provider)
+			),
+			42
+		);
+		assert.equal(receivedSignal, controller.signal);
+		assert.equal(requests.length, 0);
+		assert.equal(await answer(await api.compile(url)), 42);
+		assert.equal(requests.length, 1);
+	});
+
 	it('does not export the borrowed-buffer helper', () => {
 		const { api } = createLoader();
 		assert.equal('readBufferInternal' in api, false);

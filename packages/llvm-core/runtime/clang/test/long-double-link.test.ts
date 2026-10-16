@@ -49,6 +49,17 @@ afterEach(() => {
 });
 
 describe('WASI long double linker support', () => {
+	it('uses the runtime fetch provider for the optional libc archive', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		readBuffer.mockResolvedValue(archive);
+		const { runtime } = harness();
+		Object.assign(runtime, { fetchImpl });
+		await expect(runtime.prepareLongDoubleLinkArgs()).resolves.toEqual([
+			'-lc-printscan-long-double'
+		]);
+		expect(readBuffer).toHaveBeenCalledWith(assetUrl, undefined, 123_456, undefined, fetchImpl);
+	});
+
 	it('waits for the base sysroot before preparing arguments for a direct linker caller', async () => {
 		const ready = deferred<void>();
 		readBuffer.mockResolvedValue(archive);

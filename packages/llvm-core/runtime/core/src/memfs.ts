@@ -16,6 +16,7 @@ export interface MemFsOptions {
 	moduleUrl: string;
 	progress?: ProgressSink;
 	signal?: AbortSignal;
+	fetchImpl?: typeof fetch;
 	maxAssetBytes?: number;
 	trace?: (message: string) => void;
 }
@@ -57,16 +58,24 @@ export default class MemFS {
 		);
 
 		this.ready = (
-			options.maxAssetBytes !== undefined
+			options.fetchImpl
 				? compile(
 						options.moduleUrl,
 						options.progress,
 						options.signal,
-						options.maxAssetBytes
+						options.maxAssetBytes,
+						options.fetchImpl
 					)
-				: options.signal
-					? compile(options.moduleUrl, options.progress, options.signal)
-					: compile(options.moduleUrl, options.progress)
+				: options.maxAssetBytes !== undefined
+					? compile(
+							options.moduleUrl,
+							options.progress,
+							options.signal,
+							options.maxAssetBytes
+						)
+					: options.signal
+						? compile(options.moduleUrl, options.progress, options.signal)
+						: compile(options.moduleUrl, options.progress)
 		)
 			.then(
 				(module) =>
