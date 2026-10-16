@@ -13,7 +13,14 @@ export function readStrR(u8: Uint8Array, o: number, len = -1) {
 }
 
 export function readOct(u8: Uint8Array, o: number, len: number) {
-	return parseInt(readStr(u8, o, len), 8);
+	let field = '';
+	for (const byte of u8.subarray(o, o + len)) field += String.fromCharCode(byte);
+	if (field.length !== len || !/^ *[0-7]+[\0 ]*$/.test(field)) {
+		throw new Error('TAR has an invalid octal number');
+	}
+	const value = Number.parseInt(field, 8);
+	if (!Number.isSafeInteger(value)) throw new Error('TAR number exceeds the safe integer range');
+	return value;
 }
 
 export function readUint8(u8: Uint8Array, o: number, len: number) {
