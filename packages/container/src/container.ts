@@ -196,7 +196,13 @@ export class Container {
         });
         if (mounts.length) this.fs.mountReadonlyPackages(mounts);
         for (const pkg of missing) this.#mountedPackages.add(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`);
-        this.#mountedCommands.set(prepared.command.name, Object.freeze({ command: prepared.command, executablePath: prepared.executablePath }));
+        // Every package in this verified closure includes all of its dependencies.
+        // Publish readiness for its other commands only after the atomic mount succeeds.
+        const preparedMounts = new Map(prepared.packages.map(pkg => [pkg.id, pkg.mount]));
+        for (const entry of this.packages!.listCommands()) {
+          const mount = preparedMounts.get(entry.package);
+          if (mount) this.#mountedCommands.set(entry.name, Object.freeze({ command: entry, executablePath: `${mount}/${entry.path}` }));
+        }
         definition = { adapter: prepared.command.adapter, argv0: prepared.command.argv0, bytes: prepared.executable };
         executionArgs = Object.freeze([...prepared.command.prefixArgs, ...invocation.args]);
       }
