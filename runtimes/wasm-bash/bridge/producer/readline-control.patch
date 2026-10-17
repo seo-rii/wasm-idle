@@ -1,0 +1,170 @@
+--- a/bashline.c
++++ b/bashline.c
+@@ -213,6 +213,8 @@
+ #endif
+ 
+ static int bash_event_hook PARAMS((void));
++static int wasm_idle_readline_poll PARAMS((void));
++static int bash_execute_readline_command PARAMS((char *, int));
+ 
+ #if defined (PROGRAMMABLE_COMPLETION)
+ static int find_cmd_start PARAMS((int));
+@@ -634,6 +636,12 @@
+   if (posixly_correct)
+     posix_readline_initialize (1);
+ #endif
++
++  /* Only the explicit website control profile installs this idle callback. */
++  if (getenv ("WASM_IDLE_SHELL_CONTROL") &&
++      strcmp (getenv ("WASM_IDLE_SHELL_CONTROL"), "1") == 0 &&
++      rl_event_hook == 0)
++    rl_event_hook = wasm_idle_readline_poll;
+ 
+   bash_readline_initialized = 1;
+ }
+@@ -4419,12 +4427,7 @@
+ )
+ {
+   int type;
+-  register int i, r;
+-  intmax_t mi;
+-  sh_parser_state_t ps;
+-  char *cmd, *value, *ce, old_ch;
+-  SHELL_VAR *v;
+-  char ibuf[INT_STRLEN_BOUND(int) + 1];
++  char *cmd;
+   Keymap cmd_xmap;
+ 
+   /* First, we need to find the right command to execute.  This is tricky,
+@@ -4444,13 +4447,29 @@
+       return 1;
+     }
+ 
+-  ce = rl_get_termcap ("ce");
++  bash_execute_readline_command (cmd, 0);
++  return 0;
++}
++
++/* Share bind -x's parser and editing-buffer preservation with the opt-in
++   idle callback. POLL never clears or redraws an unchanged editing line. */
++static int
++bash_execute_readline_command (char *cmd, int poll)
++{
++  register int i, r;
++  intmax_t mi;
++  sh_parser_state_t ps;
++  char *value, *ce, *prompt;
++  SHELL_VAR *v;
++  char ibuf[INT_STRLEN_BOUND(int) + 1];
++
++  ce = poll ? 0 : rl_get_termcap ("ce");
+   if (ce)	/* clear current line */
+     {
+       rl_clear_visible_line ();
+       fflush (rl_outstream);
+     }
+-  else
++  else if (poll == 0)
+     rl_crlf ();	/* move to a new line */
+ 
+   v = bind_variable ("READLINE_LINE", rl_line_buffer, 0);
+@@ -4471,9 +4490,19 @@
+   array_needs_making = 1;
+ 
+   save_parser_state (&ps);
++  if (poll)
++    expand_aliases = 0;  /* The fixed readonly function cannot be alias-replaced. */
+   rl_clear_signals ();
+-  r = parse_and_execute (savestring (cmd), "bash_execute_unix_command", SEVAL_NOHIST);
++  r = parse_and_execute (savestring (cmd), "bash_execute_unix_command",
++                         SEVAL_NOHIST | (poll ? SEVAL_IGNORE_RETURN : 0));
+   rl_set_signals ();
++  if (poll && r == 124)
++    {
++      prompt = get_string_value ("PS1");
++      prompt = decode_prompt_string (prompt ? prompt : "");
++      rl_set_prompt (prompt);
++      FREE (prompt);
++    }
+   restore_parser_state (&ps);
+ 
+   v = find_variable ("READLINE_LINE");
+@@ -4496,11 +4525,55 @@
+   /* If we clear the last line of the prompt above, redraw only that last
+      line.  If the command returns 124, we redraw unconditionally as in
+      previous versions. */
+-  if (ce && r != 124)
++  if (poll)
++    {
++      if (r == 124)
++        rl_forced_update_display ();
++    }
++  else if (ce && r != 124)
+     rl_redraw_prompt_last_line ();
+   else
+     rl_forced_update_display ();
+ 
++  return r;
++}
++
++/* Called by Readline only when its real input queue has no character ready.
++   Foreground commands, `read -e`, heredocs and continuation prompts do not
++   constitute a host-control boundary. No bytes are injected into stdin. */
++static int
++wasm_idle_readline_poll (void)
++{
++  static int active = 0;
++  SHELL_VAR *function;
++  char *lastarg;
++  int lastsignal;
++
++  if (active || executing || interactive_shell == 0 ||
++      get_current_prompt_level () != 1 || rl_done ||
++      RL_ISSTATE (RL_STATE_READCMD) == 0 ||
++      RL_ISSTATE (RL_STATE_METANEXT | RL_STATE_DISPATCHING | RL_STATE_MOREINPUT |
++                  RL_STATE_ISEARCH | RL_STATE_NSEARCH | RL_STATE_SEARCH |
++                  RL_STATE_NUMERICARG | RL_STATE_MACROINPUT | RL_STATE_MACRODEF |
++                  RL_STATE_COMPLETING | RL_STATE_SIGHANDLER | RL_STATE_UNDOING |
++                  RL_STATE_INPUTPENDING | RL_STATE_VIMOTION | RL_STATE_MULTIKEY |
++                  RL_STATE_CHARSEARCH | RL_STATE_REDISPLAYING | RL_STATE_DONE))
++    return 0;
++
++  function = find_function ("__wasm_idle_poll");
++  if (function == 0 || readonly_p (function) == 0)
++    return 0;
++
++  active = 1;
++  lastsignal = last_command_exit_signal;
++  lastarg = get_string_value ("_");
++  if (lastarg)
++    lastarg = savestring (lastarg);
++  bash_execute_readline_command ("__wasm_idle_poll", 1);
++  last_command_exit_signal = lastsignal;
++  bind_variable ("_", lastarg, 0);
++  FREE (lastarg);
++  active = 0;
+   return 0;
+ }
+ 
+--- a/builtins/common.h
++++ b/builtins/common.h
+@@ -51,6 +51,7 @@
+ #define SEVAL_FUNCDEF	0x080		/* only allow function definitions */
+ #define SEVAL_ONECMD	0x100		/* only allow a single command */
+ #define SEVAL_NOHISTEXP	0x200		/* inhibit history expansion */
++#define SEVAL_IGNORE_RETURN 0x400	/* fixed host-control conditional context */
+ 
+ /* Flags for describe_command, shared between type.def and command.def */
+ #define CDESC_ALL		0x001	/* type -a */
+--- a/builtins/evalstring.c
++++ b/builtins/evalstring.c
+@@ -441,7 +441,8 @@
+ 
+ 	      global_command = (COMMAND *)NULL;
+ 
+-	      if ((subshell_environment & SUBSHELL_COMSUB) && comsub_ignore_return)
++	      if ((flags & SEVAL_IGNORE_RETURN) ||
++		  ((subshell_environment & SUBSHELL_COMSUB) && comsub_ignore_return))
+ 		command->flags |= CMD_IGNORE_RETURN;
+ 
+ #if defined (ONESHOT)

@@ -212,6 +212,52 @@ cleanup rather than running a lengthy producer in the foreground. No Rust build
 is invoked here; the SDK requires its own unique physical Cargo target and
 intermediate directories and must keep its original nightly/lockfile pins.
 
+## Opt-in primary Readline workspace control
+
+`--readline-control` additionally applies `readline-control.patch` to the exact
+pinned `bashline.c`; both the original and patched file identities are verified
+before compilation. Ordinary builds leave Bash sources unchanged. The resulting
+candidate enables the hook only when `WASM_IDLE_SHELL_CONTROL=1` at Readline
+initialization and the running shell defines a readonly `__wasm_idle_poll`
+function. The trusted application rcfile supplies that function and may also
+call it from `PROMPT_COMMAND`.
+
+The callback runs at real primary Readline idle boundaries. It defers while a
+foreground command, `read -e`, heredoc, secondary prompt, search, completion,
+macro, or incomplete key sequence is active. It never writes command text to
+stdin. The shared implementation of Bash's existing `bind -x` execution keeps
+the parser state, previous exit status and `PIPESTATUS`, editing buffer, cursor,
+and mark. The callback also restores the previous signal status and `$_`.
+Alias expansion is disabled only for the fixed readonly function invocation.
+The new internal `SEVAL_IGNORE_RETURN` flag applies Bash's actual
+`CMD_IGNORE_RETURN` conditional context to that invocation, so an intentional
+`124` cannot activate a user's `set -e` or `ERR` trap. Existing eval/bind callers
+retain their original behavior.
+
+The function returns `0` for an unchanged state or `124` after a transition that
+requires a redraw. On `124`, Bash decodes the current `PS1` again and redraws the
+preserved editing line. The function must not read terminal input, replace the
+editing variables, execute an unbounded command, or print terminal output.
+Mailbox handling, allowed cwd targets, and actual `builtin cd` belong to the
+trusted rcfile and application. This cooperative hook is not an isolation
+boundary against arbitrary shell code. A language switch during a foreground
+command or continuation remains queued until a genuine primary prompt boundary.
+
+```sh
+node runtimes/wasm-bash/bridge/producer/build.mjs \
+  --cache /private/inputs --output /private/new-control-build --jobs 1 --webc \
+  --readline-control
+node --test runtimes/wasm-bash/bridge/producer/readline-control.test.mjs
+```
+
+The native unit fixture exercises only the idle-boundary gate. Set
+`WASM_IDLE_BASH_SOURCE_ARCHIVE` to a local pinned Bash archive to also exercise
+exact patch application. Neither fixture qualifies real Readline or browser
+behavior: primary/partial input, foreground input, continuation, cwd changes,
+exit status, and subsequent commands require actual guest/browser fixtures.
+The receipt and source-materials pack include the additional patch, input lock,
+and unit fixture whenever this profile is selected. No SDK or Rust build changes.
+
 ## Outputs and remaining acceptance
 
 `build-receipt.json` records the input lock, local dependency hashes, native tool

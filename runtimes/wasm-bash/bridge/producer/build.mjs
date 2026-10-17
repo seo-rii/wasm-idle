@@ -14,6 +14,8 @@ const HERE = path.dirname(THIS_FILE),
 const REPOSITORY = path.resolve(HERE, '../../../..');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const STARTUP_CWD_LOCK_SHA256 = '6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5';
+const READLINE_CONTROL_LOCK_SHA256 =
+	'4d543f288048db80911c4d37c2f5a09f8dafa3ba1651a991a8b3e75f1a341661';
 const REDIRECT_HOSTS = new Set([
 	'github.com',
 	'codeload.github.com',
@@ -28,13 +30,16 @@ export function parseOptions(args) {
 		const key = args[i];
 		assert(!seen.has(key), `duplicate option: ${key}`);
 		seen.add(key);
-		if (['--plan', '--download', '--fetch-only', '--webc'].includes(key)) {
+		if (
+			['--plan', '--download', '--fetch-only', '--webc', '--readline-control'].includes(key)
+		) {
 			options[
 				{
 					'--plan': 'plan',
 					'--download': 'download',
 					'--fetch-only': 'fetchOnly',
-					'--webc': 'webc'
+					'--webc': 'webc',
+					'--readline-control': 'readlineControl'
 				}[key]
 			] = true;
 		} else if (['--output', '--cache', '--jobs'].includes(key)) {
@@ -128,6 +133,23 @@ export async function verifyArchive(file, expectedSha256) {
 		`archive SHA-256 mismatch: ${path.basename(file)}; existing data was preserved`
 	);
 	return { bytes: info.size, sha256: digest };
+}
+
+export async function verifyReadlineControlSources() {
+	const bytes = await readFile(path.join(HERE, 'readline-control.lock.json'));
+	assert.equal(
+		sha256(bytes),
+		READLINE_CONTROL_LOCK_SHA256,
+		'Readline control input lock identity'
+	);
+	const policy = JSON.parse(bytes);
+	const patch = await readFile(path.join(HERE, policy.patch.path));
+	assert.deepEqual(
+		{ bytes: patch.length, sha256: sha256(patch) },
+		{ bytes: policy.patch.bytes, sha256: policy.patch.sha256 },
+		'Readline control patch identity'
+	);
+	return { ...policy, manifest: { bytes: bytes.length, sha256: READLINE_CONTROL_LOCK_SHA256 } };
 }
 
 async function ensurePrivateDirectory(directory) {
@@ -227,6 +249,7 @@ export async function buildBashShim(options) {
 	const lock = await readProducerLock();
 	const localFiles = await verifyLocalSources(lock);
 	const startupCwd = await verifyStartupCwdSources();
+	const readlineControl = options.readlineControl ? await verifyReadlineControlSources() : null;
 	localFiles[startupCwd.source.path] = {
 		bytes: startupCwd.source.bytes,
 		sha256: startupCwd.source.sha256
@@ -240,7 +263,15 @@ export async function buildBashShim(options) {
 		'build.test.mjs',
 		'startup-cwd.lock.json',
 		'startup-cwd.test.mjs',
-		'startup-cwd.fixture.c'
+		'startup-cwd.fixture.c',
+		...(readlineControl
+			? [
+					'readline-control.lock.json',
+					'readline-control.patch',
+					'readline-control.test.mjs',
+					'readline-control.fixture.c'
+				]
+			: [])
 	]) {
 		const bytes = await readFile(path.join(HERE, name));
 		producerFiles[name] = { bytes: bytes.length, sha256: sha256(bytes) };
@@ -263,6 +294,7 @@ export async function buildBashShim(options) {
 			buildTarget: 'shell',
 			shimTarget: 'wasm32-wasmer-wasi',
 			startupCwd,
+			readlineControl,
 			qualification: 'not-run; SDK/browser execution remains a separate gate'
 		};
 	assert(
@@ -340,7 +372,8 @@ export async function buildBashShim(options) {
 				shimTarget: 'wasm32-wasmer-wasi',
 				wrapper:
 					'link-time execve and startup cwd objects; original configure and Asyncify recipe unchanged',
-				startupCwd
+				startupCwd,
+				readlineControl
 			},
 			commands: [],
 			artifacts: {},
@@ -443,6 +476,36 @@ export async function buildBashShim(options) {
 				'--no-same-owner',
 				...(strip ? ['--strip-components=1'] : [])
 			]);
+		}
+		if (readlineControl) {
+			for (const [name, identities] of Object.entries(readlineControl.files)) {
+				const bytes = await readFile(path.join(source, name));
+				assert.deepEqual(
+					{ bytes: bytes.length, sha256: sha256(bytes) },
+					identities.original,
+					`Readline control original source: ${name}`
+				);
+			}
+			await run(
+				'patch',
+				[
+					'--batch',
+					'--fuzz=0',
+					'--no-backup-if-mismatch',
+					'-p1',
+					'-i',
+					path.join(HERE, readlineControl.patch.path)
+				],
+				source
+			);
+			for (const [name, identities] of Object.entries(readlineControl.files)) {
+				const bytes = await readFile(path.join(source, name));
+				assert.deepEqual(
+					{ bytes: bytes.length, sha256: sha256(bytes) },
+					identities.patched,
+					`Readline control patched source: ${name}`
+				);
+			}
 		}
 		const license = await readFile(path.join(source, 'COPYING'));
 		assert.equal(sha256(license), lock.licenseSha256, 'original GNU Bash license');
@@ -618,6 +681,12 @@ export async function buildBashShim(options) {
 		// Recheck local dependencies and source archives after compilation, before success.
 		await verifyLocalSources(lock);
 		assert.deepEqual(await verifyStartupCwdSources(), startupCwd, 'startup cwd inputs changed');
+		if (readlineControl)
+			assert.deepEqual(
+				await verifyReadlineControlSources(),
+				readlineControl,
+				'Readline control inputs changed'
+			);
 		for (const [name, identity] of Object.entries(producerFiles)) {
 			const bytes = await readFile(path.join(HERE, name));
 			assert.deepEqual(

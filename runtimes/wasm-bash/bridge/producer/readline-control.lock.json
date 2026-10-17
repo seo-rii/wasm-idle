@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "profile": "bash-readline-workspace-control-v1",
+  "environment": {
+    "WASM_IDLE_SHELL_CONTROL": "1"
+  },
+  "function": "__wasm_idle_poll",
+  "readonlyFunctionRequired": true,
+  "redrawExitCode": 124,
+  "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+  "patch": {
+    "path": "readline-control.patch",
+    "bytes": 5302,
+    "sha256": "ca12b998efa3bcfc1c58bfb3a6dd851d7853a6f744a2c297110ece08f4b53140"
+  },
+  "files": {
+    "bashline.c": {
+      "original": {
+        "bytes": 129048,
+        "sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
+      },
+      "patched": {
+        "bytes": 131602,
+        "sha256": "a9821c112b053b92ba91283d06c138a92403c09c38275e5c8657c9396fcf63e8"
+      }
+    },
+    "builtins/common.h": {
+      "original": {
+        "bytes": 9077,
+        "sha256": "b19017c4179334ecf1122ce1b3d25ee7e98d11b278cb27e3d176567b16e90226"
+      },
+      "patched": {
+        "bytes": 9156,
+        "sha256": "2322aa5ad7aad205702ff82b47832c0a9bac27dac26ef9e7a2ba762240871cda"
+      }
+    },
+    "builtins/evalstring.c": {
+      "original": {
+        "bytes": 21554,
+        "sha256": "443c216249f97eb515ba05a7b641a93677c29393baccc2e7019445ea5cfd5604"
+      },
+      "patched": {
+        "bytes": 21593,
+        "sha256": "f72dd2a260526a64b910b467a83a1b44bd51297ae55df01f8757b4c66e8dba72"
+      }
+    }
+  },
+  "qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
+  "ignoreReturnFlag": "SEVAL_IGNORE_RETURN"
+}
