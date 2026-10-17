@@ -1,17 +1,18 @@
 <script lang="ts">
 	import type { RuntimeProgressEvent } from '@wasm-idle/core';
 	import Terminal from '../src/Terminal.svelte';
-	import type { PlaygroundBinding, TerminalControl } from '../src/types.js';
+	import type { PlaygroundBinding, TerminalControl, TerminalShellBinding } from '../src/types.js';
 
 	interface Props {
 		playground: PlaygroundBinding;
+		shell?: TerminalShellBinding;
 		onReady?: (terminal: TerminalControl) => void;
 		onload?: () => void;
 		onterminal?: (terminal: TerminalControl) => void;
 		onprogress?: (event: RuntimeProgressEvent) => void;
 	}
 
-	let { playground, onReady, onload, onterminal, onprogress }: Props = $props();
+	let { playground, shell, onReady, onload, onterminal, onprogress }: Props = $props();
 	let terminal = $state<TerminalControl>();
 	let progressLabel = $state('');
 	let reportedTerminal: TerminalControl | undefined;
@@ -32,7 +33,7 @@
 	}
 </script>
 
-<Terminal {playground} bind:terminal onload={handleLoad} />
+<Terminal {playground} {shell} bind:terminal onload={handleLoad} />
 
 <button
 	onclick={() =>

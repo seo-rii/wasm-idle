@@ -86,6 +86,15 @@ export interface PlaygroundBinding extends Pick<CorePlaygroundBinding, 'runtimeA
 	load: (language: string) => Promise<BoundSandbox>;
 }
 
+/** A host-owned real shell. Input and output are text transport, not shell syntax. */
+export interface TerminalShellBinding {
+	connect(onOutput: (text: string) => void, onError?: (error: unknown) => void): Promise<void>;
+	write(text: string): Promise<void>;
+	eof(): Promise<void>;
+	interrupt(): Promise<void>;
+	dispose(): Promise<void>;
+}
+
 export interface TerminalControl extends Omit<
 	CoreTerminalControl,
 	'prepare' | 'run' | 'debugCommand'

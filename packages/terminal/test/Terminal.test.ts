@@ -17,7 +17,7 @@ describe('Terminal source', () => {
 			/const isCopyShortcut =\s+\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
 		);
 		expect(source).toMatch(
-			/if \(isCopyShortcut && term\.hasSelection\(\)\) \{\s+const selectedText = term\.getSelection\(\);\s+if \(selectedText\) \{\s+ev\.preventDefault\(\);\s+navigator\.clipboard\.writeText\(selectedText\)\.catch\(\(\) => \{\}\);\s+return;\s+\}\s+\}\s+if \(finish\) return;/s
+			/if \(isCopyShortcut && term\.hasSelection\(\)\) \{\s+const selectedText = term\.getSelection\(\);\s+if \(selectedText\) \{\s+ev\.preventDefault\(\);\s+navigator\.clipboard\.writeText\(selectedText\)\.catch\(\(\) => \{\}\);\s+return;\s+\}\s+\}\s+if \(finish && executionInputOwners === 0\) return;/s
 		);
 		expect(source).toMatch(
 			/if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s
@@ -151,7 +151,7 @@ describe('Terminal source', () => {
 		);
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
-		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
+		expect(source).toMatch(/loadedPlayground !== currentPlayground/);
 		expect(source).toMatch(
 			/function writeTerminalOutput\(text: string, executionOutput = false\)/
 		);
@@ -164,7 +164,7 @@ describe('Terminal source', () => {
 
 	it('reuses the same sandbox between prepare and run when language and runtime assets are unchanged', () => {
 		expect(source).toMatch(
-			/const requiresSandboxReset =\s+ll !== language \|\| loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;/
+			/const requiresSandboxReset =[\s\S]*?ll !== language[\s\S]*?loadedRuntimeAssetsKey !== currentRuntimeAssetsKey[\s\S]*?loadedPlayground !== currentPlayground;/
 		);
 		expect(source).toMatch(
 			/if \(sandbox && requiresSandboxReset\) \{\s+discardPendingSandboxInput\(\);\s+await sandbox\.clear\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
@@ -199,7 +199,7 @@ describe('Terminal source', () => {
 			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
 		);
 		expect(source).toMatch(
-			/async write\(input: string\) \{\s+await waitForInput\(\);\s+if \(!input\) return;\s+applyPastedText\(input\);/s
+			/async write\(input: string\) \{\s+const shellTarget = finish && executionInputOwners === 0 \? shell : undefined;\s+await waitForInput\(\);\s+if \(!input\) return;\s+if \(shellTarget\) return await sendShellInput\(shellTarget, input\);\s+applyPastedText\(input\);/s
 		);
 		expect(source).toMatch(
 			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+executionRunWillFinalize = true;\s+const result = await runSandbox\(\s+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)\s+\);/s
@@ -215,9 +215,11 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/progressController\.begin\(\s+`\$\{language\}:\$\{\+\+progressLifecycleCounter\}`,\s+progress,\s+`Loading \$\{language\} runtime`/s
 		);
-		expect(source).toMatch(/finally \{\s+lifecycle\.end\(\);\s+\}/s);
 		expect(source).toMatch(
-			/return async \(\) => \{\s+initialization\.abort\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+discardPendingSandboxInput\(\);\s+term\?\.dispose\(\);/s
+			/finally \{\s+executionInputOwners -= 1;\s+lifecycle\.end\(\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/return \(\) => \{\s+initialization\.abort\(\);\s+void disposeTerminal\(\)\.catch/s
 		);
 		expect(source).toMatch(/sandbox\.load\(code, log, args, options, prepareProgress\)/);
 		expect(source).toMatch(

@@ -24,7 +24,7 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
  * clangFilesystem is snapshot by default, or an explicit live application profile.
  * The injecting host retains the lifetime of an optional persistence workspace.
  */
-export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation }) {
+export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation, adapters = [], commands = {}, workerGroup }) {
   const clangProfile = selectClangProfile(config.clangFilesystem);
   const distribution = await validateDistribution({
     bytes: new TextEncoder().encode(config.manifest), expectedSha256: config.manifestSha256,
@@ -36,10 +36,11 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
   const shellAssets = createVerifiedAssetLoader({ ...assetOptions, maxCachedBytes: 64 * 1024 * 1024 });
   let workers, container;
   try {
-    workers = installWasixWorkerGroup({ maxWorkers: config.maxWorkers ?? 32 });
+    workers = workerGroup ?? installWasixWorkerGroup({ maxWorkers: config.maxWorkers ?? 32 });
     container = createContainer({
-      workspace, packages: manager, maxBytes: workspace?.fs.maxBytes ?? 256 * 1024 * 1024,
+      workspace, packages: manager, commands, maxBytes: workspace?.fs.maxBytes ?? 256 * 1024 * 1024,
       adapters: [
+      ...adapters,
         createLiveWasiAdapter({ maxBlockedIoMs: 120000, workerFactory: () => new Worker(config.liveWorkerUrl, { type: 'module' }) }),
         (clangProfile.filesystem === 'live' ? createLiveClangAdapter : createClangAdapter)({
           clangSha256: config.clangSha256, linkerSha256: config.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
@@ -75,6 +76,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
   return Object.freeze({
     container, manager, shellAssets, workers, cache, clangFilesystem: clangProfile.filesystem,
     inspectSysroot: () => sysroot ?? null,
+    prepareCommand,
     startShell(options = {}, signal) {
       if (starting || stop.signal.aborted) return Promise.reject(new Error('The dedicated Bash owner has already started or retired'));
       starting = createWasixShellSession({

@@ -20,12 +20,15 @@
 		CompilerDiagnostic,
 		PlaygroundBinding,
 		TerminalControl,
-		TerminalExecutionOptions
+		TerminalExecutionOptions,
+		TerminalShellBinding
 	} from './types.js';
 
 	interface Props {
 		dark?: boolean;
 		playground: PlaygroundBinding;
+		/** Share this terminal with a real shell while no Run or Debug operation owns stdin. */
+		shell?: TerminalShellBinding;
 		font?: string;
 		/** Load the optional WebGL renderer after the terminal is ready. */
 		webgl?: boolean;
@@ -42,6 +45,7 @@
 	let {
 		dark = false,
 		playground,
+		shell,
 		font = "'D2 coding', monospace",
 		webgl = false,
 		onload,
@@ -72,6 +76,7 @@
 		plugin = $state(),
 		ll: string | null = null,
 		loadedRuntimeAssetsKey: string | undefined = undefined,
+		loadedPlayground: PlaygroundBinding | undefined = undefined,
 		stopRequested = false,
 		progressLifecycleCounter = 0,
 		activeExecutionProgress: ProgressLike | undefined,
@@ -84,6 +89,14 @@
 			| undefined;
 	let preparedExecutionGeneration = 0;
 	let lastExecutionError: unknown;
+	let executionInputOwners = 0;
+	let terminalDisposed = false;
+	let abortInitialization: (() => void) | undefined;
+	let terminalDisposal: Promise<void> | undefined;
+	let connectedShell: TerminalShellBinding | undefined;
+	let shellConnection: Promise<void> | undefined;
+	let shellInput = Promise.resolve();
+	const shellDisposals = new Map<TerminalShellBinding, Promise<void>>();
 	const progressController = new RuntimeProgressController();
 	const terminalOutputReadinessLanguages = new Set([
 		'C',
@@ -157,10 +170,105 @@
 		term?.write(text);
 	}
 
+	function reportShellError(error: unknown) {
+		if (terminalDisposed) return;
+		const message = error instanceof Error ? error.message : String(error);
+		writeTerminalOutput(`\r\n\x1b[31mShell: ${message}\x1b[0m\r\n`);
+	}
+
+	function disposeShell(binding: TerminalShellBinding) {
+		let disposal = shellDisposals.get(binding);
+		if (!disposal) {
+			disposal = Promise.resolve().then(() => binding.dispose());
+			shellDisposals.set(binding, disposal);
+		}
+		return disposal;
+	}
+
+	function connectShell(binding: TerminalShellBinding) {
+		if (terminalDisposed) return Promise.reject(new Error('Terminal has been disposed'));
+		if (connectedShell === binding && shellConnection) return shellConnection;
+		const previous = connectedShell;
+		connectedShell = binding;
+		let previousCarriageReturn = false;
+		shellConnection = Promise.resolve().then(() => {
+			if (terminalDisposed || connectedShell !== binding) return;
+			return binding.connect(
+				(text) => {
+					if (terminalDisposed || connectedShell !== binding || !text) return;
+					const output = text.replace(/\r\n|\n/g, (newline, offset: number) =>
+						newline === '\r\n' || (offset === 0 && previousCarriageReturn)
+							? newline
+							: '\r\n'
+					);
+					previousCarriageReturn = text.endsWith('\r');
+					writeTerminalOutput(output);
+				},
+				(error) => {
+					if (connectedShell === binding) reportShellError(error);
+				}
+			);
+		});
+		void shellConnection.catch((error) => {
+			if (connectedShell === binding) reportShellError(error);
+		});
+		if (previous) void disposeShell(previous).catch(reportShellError);
+		return shellConnection;
+	}
+
+	function sendShellInput(binding: TerminalShellBinding, text: string) {
+		const connection = connectShell(binding);
+		// Interrupts use the control path even when a prior stdin write is blocked.
+		if (text === '\u0003')
+			return connection.then(async () => {
+				if (!terminalDisposed && connectedShell === binding) await binding.interrupt();
+			});
+		const operation = shellInput
+			.catch(() => {})
+			.then(async () => {
+				await connection;
+				if (terminalDisposed || connectedShell !== binding) return;
+				for (const chunk of text.split(/([\u0003\u0004])/)) {
+					if (chunk === '\u0003') await binding.interrupt();
+					else if (chunk === '\u0004') await binding.eof();
+					else if (chunk) await binding.write(chunk);
+				}
+			});
+		shellInput = operation;
+		return operation;
+	}
+
+	function disposeTerminal() {
+		return (terminalDisposal ??= (async () => {
+			terminalDisposed = true;
+			abortInitialization?.();
+			progressController.invalidate();
+			invalidatePreparedExecution();
+			sandboxAcceptingInput = false;
+			discardPendingSandboxInput();
+			const cleanups = [Promise.resolve().then(() => term?.dispose())];
+			if (sandbox) cleanups.push(Promise.resolve().then(() => sandbox.clear()));
+			if (connectedShell) cleanups.push(disposeShell(connectedShell));
+			cleanups.push(...shellDisposals.values());
+			const results = await Promise.allSettled(cleanups);
+			discardPendingSandboxInput();
+			const errors = results
+				.filter((result) => result.status === 'rejected')
+				.map((result) => result.reason);
+			if (errors.length) throw new AggregateError(errors, 'Terminal cleanup failed');
+		})());
+	}
+
 	function wait() {
+		if (terminalDisposed) return Promise.reject(new Error('Terminal has been disposed'));
 		if (term) return Promise.resolve();
-		return new Promise<void>((r) => {
+		return new Promise<void>((r, reject) => {
 			const i = setInterval(() => {
+				if (terminalDisposed) {
+					clearInterval(i);
+					reject(new Error('Terminal has been disposed'));
+					return;
+				}
 				if (term) {
 					clearInterval(i);
 					r();
@@ -174,7 +282,9 @@
 		const currentRuntimeAssets = currentPlayground.runtimeAssets;
 		const currentRuntimeAssetsKey = createRuntimeAssetsKey(currentRuntimeAssets);
 		const requiresSandboxReset =
-			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
+			ll !== language ||
+			loadedRuntimeAssetsKey !== currentRuntimeAssetsKey ||
+			loadedPlayground !== currentPlayground;
 		let _tc = ++tc;
 		await wait();
 		sandboxAcceptingInput = false;
@@ -192,6 +302,7 @@
 			await sandbox.clear();
 			ll = language;
 			loadedRuntimeAssetsKey = currentRuntimeAssetsKey;
+			loadedPlayground = currentPlayground;
 		}
 		sandbox.image = onimage;
 		sandbox.ondebug = (event) => {
@@ -240,7 +351,10 @@
 		stopRequested = false;
 		onfinish?.();
 		finish = true;
-		if (term) term.options.cursorBlink = false;
+		if (term) {
+			term.options.cursorBlink = Boolean(shell);
+			if (shell) writeTerminalOutput('\r\n\u001B[?25h');
+		}
 	}
 
 	function isTimeoutError(error: unknown) {
@@ -280,6 +394,7 @@
 		progress: ProgressLike | undefined,
 		operation: (progress: ProgressLike | undefined) => Promise<T>
 	) {
+		executionInputOwners += 1;
 		const lifecycle = progressController.begin(
 			`${language}:${++progressLifecycleCounter}`,
 			progress,
@@ -288,6 +403,7 @@
 		try {
 			return await operation(lifecycle.progress);
 		} finally {
+			executionInputOwners -= 1;
 			lifecycle.end();
 		}
 	}
@@ -381,6 +497,7 @@
 
 	async function waitForInput() {
 		await wait();
+		if (finish && executionInputOwners === 0 && shell) await connectShell(shell);
 	}
 
 	const terminalControl: TerminalControl = {
@@ -556,14 +673,7 @@
 			});
 		},
 		async destroy() {
-			await wait();
-			progressController.invalidate();
-			invalidatePreparedExecution();
-			sandboxAcceptingInput = false;
-			discardPendingSandboxInput();
-			term?.dispose();
-			if (sandbox) await sandbox.clear();
-			discardPendingSandboxInput();
+			await disposeTerminal();
 		},
 		async restartRuntime() {
 			await wait();
@@ -654,13 +764,17 @@
 			await waitForInput();
 		},
 		async write(input: string) {
+			const shellTarget = finish && executionInputOwners === 0 ? shell : undefined;
 			await waitForInput();
 			if (!input) return;
+			if (shellTarget) return await sendShellInput(shellTarget, input);
 			applyPastedText(input);
 			if (!input.endsWith('\n') && !input.endsWith('\r')) submitCurrentInput();
 		},
 		async eof() {
+			const shellTarget = finish && executionInputOwners === 0 ? shell : undefined;
 			await waitForInput();
+			if (shellTarget) return await sendShellInput(shellTarget, '\u0004');
 			submitSandboxEof();
 		}
 	};
@@ -681,8 +795,13 @@
 		terminal = terminalControl;
 	});
 
+	$effect(() => {
+		if (term && shell && !terminalDisposed) void connectShell(shell).catch(() => {});
+	});
+
 	onMount(() => {
 		const initialization = new AbortController();
+		abortInitialization = () => initialization.abort();
 		import('@xterm/xterm')
 			.then(async ({ Terminal }) => {
 				if (!ref || initialization.signal.aborted) return;
@@ -695,9 +814,13 @@
 				});
 				term.open(ref);
 				term.onData((data: string) => {
-					if (!term || finish) return;
+					if (!term || terminalDisposed) return;
+					if (finish && executionInputOwners === 0) {
+						if (shell) void sendShellInput(shell, data).catch(reportShellError);
+						return;
+					}
 					let pendingText = '';
-					for (let i = 0; i < data.length; ) {
+					for (let i = 0; i < data.length;) {
 						const escapeSequence = data
 							.slice(i)
 							.match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
@@ -786,7 +909,7 @@
 							return;
 						}
 					}
-					if (finish) return;
+					if (finish && executionInputOwners === 0) return;
 					onkey?.(ev);
 					if (isCopyShortcut) {
 						ev.preventDefault();
@@ -808,6 +931,7 @@
 					}
 				});
 				plugin = await registerBasicPlugins(term, initialization.signal);
+				if (initialization.signal.aborted || terminalDisposed) return;
 
 				onload?.();
 				if (webgl) {
@@ -820,14 +944,11 @@
 					console.error('Failed to initialize terminal', error);
 			});
 
-		return async () => {
+		return () => {
 			initialization.abort();
-			progressController.invalidate();
-			invalidatePreparedExecution();
-			discardPendingSandboxInput();
-			term?.dispose();
-			if (sandbox) await sandbox.clear();
-			discardPendingSandboxInput();
+			void disposeTerminal().catch((error) =>
+				console.error('Failed to dispose terminal', error)
+			);
 		};
 	});
 </script>

@@ -1,6 +1,7 @@
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
+import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
 import { runInNewContext } from 'node:vm';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,101 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 	expect(playgroundLanguages).toContain(language);
 	expect(languageLabels[language]).toBeTruthy();
 };
+
+describe('shared workspace refresh scheduling', () => {
+	const refreshStart = source.indexOf('async function refreshContainerWorkspace(');
+	const refreshSource = source.slice(
+		refreshStart,
+		source.indexOf('\n\tfunction sharedFileProject(', refreshStart)
+	);
+	function fixture() {
+		const baseline = [{ path: 'main.c', content: 'int main(){}' }];
+		const remote = [...baseline, { path: 'during-run.txt', content: 'created by guest\n' }];
+		const binding = {
+			listWorkspaceFiles: vi.fn(async () => [
+				{ path: 'C/during-run.txt', type: 'file', size: 17 }
+			]),
+			publishedWorkspace: () => baseline,
+			readWorkspace: vi.fn(async () => remote),
+			acceptWorkspace: vi.fn()
+		};
+		const context = {
+			browser: true,
+			workspaceInitialized: true,
+			runningMode: 'run' as string | null,
+			containerRefresh: undefined as Promise<void> | undefined,
+			containerRefreshPending: false,
+			containerRefreshForcePending: false,
+			containerEditorRefreshDeferred: false,
+			sharedWorkspaceFiles: [] as Array<{ path: string }>,
+			playground: binding,
+			language: 'C',
+			files: [...baseline],
+			activePath: 'main.c',
+			openTabs: ['main.c'],
+			activeFile: baseline[0],
+			debug: { active: false },
+			containerWorkspaceConflict: '',
+			saveStatus: '',
+			editorFiles: (values: unknown) => values,
+			mergeContainerWorkspace
+		};
+		const refresh = runInNewContext(`${refreshSource}\nrefreshContainerWorkspace`, context) as (
+			force?: boolean
+		) => Promise<void>;
+		return { context, binding, refresh };
+	}
+
+	it('publishes guest-created file metadata during Run and replays editor reconciliation on Stop', async () => {
+		const { context, binding, refresh } = fixture();
+		await refresh();
+		expect(context.sharedWorkspaceFiles).toEqual([
+			{ path: 'C/during-run.txt', type: 'file', size: 17 }
+		]);
+		expect(binding.readWorkspace).not.toHaveBeenCalled();
+		expect(context.files).toHaveLength(1);
+		expect(context.containerEditorRefreshDeferred).toBe(true);
+
+		let replay: () => void = () => {};
+		const effect = source.match(
+			/\$effect\(\(\) => \{\s*if \(!browser \|\| !workspaceInitialized \|\| runningMode \|\| !containerEditorRefreshDeferred\)[\s\S]*?\n\t\}\);/
+		)?.[0];
+		expect(effect).toBeTruthy();
+		Object.assign(context, {
+			untrack: (operation: () => unknown) => operation(),
+			captureEffect: (operation: () => void) => {
+				replay = operation;
+			}
+		});
+		runInNewContext(effect!.replace('$effect(', 'captureEffect('), context);
+		context.runningMode = null;
+		replay();
+		await context.containerRefresh;
+		expect(binding.readWorkspace).toHaveBeenCalledExactlyOnceWith('C');
+		expect(context.files.some((file) => file.path === 'during-run.txt')).toBe(true);
+		expect(context.containerEditorRefreshDeferred).toBe(false);
+	});
+
+	it('defers a file snapshot if Run starts while that snapshot is in flight', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		let resolve!: (files: Array<{ path: string; content: string }>) => void;
+		binding.readWorkspace.mockImplementationOnce(
+			() =>
+				new Promise((value) => {
+					resolve = value;
+				})
+		);
+		const pending = refresh();
+		await vi.waitFor(() => expect(binding.readWorkspace).toHaveBeenCalledOnce());
+		context.runningMode = 'run';
+		resolve([{ path: 'main.c', content: 'do not replace the running editor' }]);
+		await pending;
+		expect(context.files[0].content).toBe('int main(){}');
+		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
+		expect(context.containerEditorRefreshDeferred).toBe(true);
+	});
+});
 
 describe('example route debug actions', () => {
 	it('reloads once the Pages isolation service worker is ready', () => {
@@ -165,9 +261,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/import Terminal, \{ type TerminalControl \} from '@wasm-idle\/terminal';/
 		);
-		expect(source).toMatch(
-			/import \{ createPlaygroundBinding, isSharedArrayBufferAvailable \} from '\$lib';/
-		);
+		expect(source).toMatch(/import \{ isSharedArrayBufferAvailable \} from '\$lib';/);
 		expect(source).toMatch(
 			/import \{\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+goDebugLanguageAdapter,\s+pythonDebugLanguageAdapter,\s+rustDebugLanguageAdapter,\s+type DebugLanguageAdapter\s+\} from '@wasm-idle\/debug';/s
 		);
@@ -455,9 +549,12 @@ describe('example route debug actions', () => {
 		);
 		expect(source).not.toMatch(/import \{ WASM_[A-Z_]+_ASSET_VERSION \}/u);
 		expect(source).toMatch(
-			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets, \{ prewarm: true \}\)\);/
+			/const playground = \$derived\.by\([\s\S]*?createContainerPlaygroundBinding\(runtimeAssets, \{/
 		);
 		expect(source).toMatch(/<Terminal\s+bind:terminal\s+\{playground\}/s);
+		expect(source).toContain('shell={playground.shell}');
+		expect(source).toContain('await publishContainerWorkspace(');
+		expect(source).not.toContain("resolve('/container/')");
 		expect(applicationRuntimeAssets.rootUrl).toBe('/wasm-idle');
 
 		for (const [runtime, config] of Object.entries(applicationRuntimeAssets)) {

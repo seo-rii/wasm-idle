@@ -106,17 +106,20 @@ function shouldPreserveExactResponseUrl(request, url) {
 		: '';
 	const version = url.searchParams.get('v') || '';
 	const exactReceipt = exactResponseUrlAssetReceipts.get(assetPath);
+	const containerObject = /^container-app\/objects\/[a-f0-9]{64}\/(?:sdk\.wasm|bash\.webc(?:\.bin)?|busybox\.wasm|clang\.wasm\.gz\.bin|lld\.wasm\.gz\.bin|sysroot\.tar)$/.test(assetPath);
 	return (
 		request.method === 'GET' &&
 		request.destination === '' &&
 		request.credentials === 'omit' &&
 		!request.headers.has('range') &&
 		url.origin === scopeUrl.origin &&
-		((exactReceipt !== undefined && version === exactReceipt) ||
-			(exactReceipt === undefined &&
-				exactResponseUrlAssetPaths.has(assetPath) &&
-				/^[a-f0-9]{64}$/u.test(version))) &&
-		url.search === `?v=${version}`
+		((containerObject && url.search === '') ||
+			(!containerObject &&
+				((exactReceipt !== undefined && version === exactReceipt) ||
+					(exactReceipt === undefined &&
+						exactResponseUrlAssetPaths.has(assetPath) &&
+						/^[a-f0-9]{64}$/u.test(version))) &&
+				url.search === `?v=${version}`))
 	);
 }
 
