@@ -1,1 +1,0 @@
-import e from"./C4YA_rVZ.js";var t=class extends e{constructor(){super(`golfscript`)}};export{t as default};

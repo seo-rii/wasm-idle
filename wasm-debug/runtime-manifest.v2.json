@@ -58,15 +58,15 @@
       "js": "debug/wamr-debug.js",
       "wasm": "debug/wamr-debug.wasm",
       "worker": "debug/wamr-debug.worker.mjs",
-      "jsSha256": "ee0d1d3cbb1379a7f4389a445c5b3846461ebaa8e0b320fb1e3c1062eb9a838a",
+      "jsSha256": "5071ebb71f077a9ebed15d52897a2ab13b470a44a1e271f44113f3a27d388e0d",
       "wasmSha256": "35e53c222ec5cde0935d48bdd5fd1897de91622619f78e9b939170e67792b95b",
-      "workerSha256": "6cdfdba3fba1d9f0226f2ac748d9be1ee567049a086727072b82a9451f6eb609",
+      "workerSha256": "b02f409a57667da4edf2562fddc1101527bd2ccd6885133c178188e09d2413b8",
       "revision": "25bd7eb63e828e4bd242cc9b38d260b4b31c6605",
       "provenance": {
         "sourcesLockSha256": "18f924fa418c7dccb0c557c1310ae877f5e5ab41ce34256230565879fe1f2727",
-        "producerManifestSha256": "c78fe663f4406e74f63305834565dc8d9cd6f63415993a39d77beebbc5e0dc19",
+        "producerManifestSha256": "f7efb29794c7f64bc9d21088230ff2bfce52f504e80419b50b8bc8fc0c260d8a",
         "patchesSha256": "6c6bcf6037fc33378ea290a6a263fb60eaaf5a82a12bd6687c6b78fb0cf25289",
-        "overlaysSha256": "356dee9776146b0e453b382c98610ce86ce530c5b9ae66a64e14f66f24550f2b"
+        "overlaysSha256": "59a504fb047a67577202b4ff9a79f056d080fa6a39ca3eb6bd27118d497b14d7"
       }
     },
     "capabilities": {

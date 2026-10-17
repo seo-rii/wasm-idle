@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../php-xzL11QD2.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

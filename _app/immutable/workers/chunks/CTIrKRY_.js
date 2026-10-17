@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../typescript-BZEy_MW0.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
