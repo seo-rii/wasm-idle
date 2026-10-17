@@ -7,6 +7,7 @@
 	import { isSharedArrayBufferAvailable } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
+	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
 	import { resolveInitialWorkspace } from './initialWorkspace';
 	import type { ContainerWorkspaceEntry } from '$lib/playground/container/protocol';
 	import {
@@ -1033,7 +1034,6 @@
 	let containerRefreshForcePending = false;
 	let containerEditorRefreshDeferred = $state(false);
 	let sharedWorkspaceFiles = $state<ContainerWorkspaceEntry[]>([]);
-	let sharedWorkspaceLimit = $state(256);
 	let sharedWorkspaceOpening = $state(false);
 	const containerFiles = (values: readonly WorkspaceFile[]) =>
 		values.map((file) => ({ path: file.path, content: workspaceFileBytes(file) }));
@@ -4023,49 +4023,14 @@
 					<p>
 						Shared with Bash. Selecting a project leaves the shell directory unchanged.
 					</p>
-					<div class="shared-workspace__files">
-						{#each sharedWorkspaceFiles.slice(0, sharedWorkspaceLimit) as entry (entry.path)}
-							{@const project = sharedFileProject(entry)}
-							{#if project}
-								<button
-									data-container-path={entry.path}
-									class:active={project.language === language &&
-										project.path === activePath}
-									disabled={!!runningMode || sharedWorkspaceOpening}
-									onclick={() => selectSharedWorkspaceFile(entry)}
-									title={`/workspace/${entry.path} (${entry.size} bytes)`}
-								>
-									<span class="material-symbols-outlined" aria-hidden="true"
-										>draft</span
-									>
-									<span>{entry.path}</span>
-								</button>
-							{:else}
-								<div
-									class="shared-workspace__entry"
-									data-container-path={entry.path}
-									title={`/workspace/${entry.path}${entry.type === 'symlink' ? ' (symbolic link; target is not followed)' : entry.type === 'file' ? ' (available in the terminal)' : '/'}`}
-								>
-									<span class="material-symbols-outlined" aria-hidden="true">
-										{entry.type === 'directory'
-											? 'folder'
-											: entry.type === 'symlink'
-												? 'link'
-												: 'draft'}
-									</span>
-									<span>{entry.path}{entry.type === 'directory' ? '/' : ''}</span>
-								</div>
-							{/if}
-						{/each}
-						{#if sharedWorkspaceFiles.length > sharedWorkspaceLimit}
-							<button
-								class="shared-workspace__more"
-								onclick={() => (sharedWorkspaceLimit += 256)}
-							>
-								Show more ({sharedWorkspaceFiles.length - sharedWorkspaceLimit} remaining)
-							</button>
-						{/if}
-					</div>
+					<ContainerExplorer
+						entries={sharedWorkspaceFiles}
+						selectedPath={`${language}/${activePath}`}
+						initialDirectory={language}
+						busy={!!runningMode || sharedWorkspaceOpening}
+						onOpenFile={selectSharedWorkspaceFile}
+					/>
+
 					<p>
 						Files outside language projects and symbolic links are listed for terminal
 						access.
@@ -5196,55 +5161,6 @@
 		color: var(--text-3);
 		font-size: 10px;
 		line-height: 1.45;
-	}
-
-	.shared-workspace__files {
-		min-height: 36px;
-		overflow: auto;
-	}
-
-	.shared-workspace__files button,
-	.shared-workspace__entry {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		width: 100%;
-		min-height: 30px;
-		padding: 5px 8px;
-		border: 0;
-		border-radius: 6px;
-		background: transparent;
-		color: var(--text-2);
-		font-family: var(--mono);
-		font-size: 11px;
-		text-align: left;
-	}
-
-	.shared-workspace__files button {
-		cursor: pointer;
-	}
-
-	.shared-workspace__files button:hover,
-	.shared-workspace__files button.active {
-		background: var(--primary-soft);
-		color: var(--primary-strong);
-	}
-
-	.shared-workspace__files button:disabled {
-		cursor: not-allowed;
-		opacity: 0.65;
-	}
-
-	.shared-workspace__files span:last-child {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.shared-workspace__files .material-symbols-outlined {
-		flex: 0 0 auto;
-		font-size: 16px;
 	}
 
 	.workspace-files button {
