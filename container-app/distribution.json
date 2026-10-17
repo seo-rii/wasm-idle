@@ -32,7 +32,7 @@
         },
         {
           "id": "bash",
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
           "encoding": "identity",
           "delivery": {
             "bytes": 1812678,
@@ -242,5 +242,5 @@
       ]
     }
   ],
-  "distributionId": "website-95d4716372d7d8f5fde5aa682f20871566d728c6647d214a684f6e0de70e8221"
+  "distributionId": "website-9870f602e98446f6c2dca46f15c659f2fa5536ec978e66782c57093a9f855617"
 }

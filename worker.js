@@ -106,7 +106,7 @@ function shouldPreserveExactResponseUrl(request, url) {
 		: '';
 	const version = url.searchParams.get('v') || '';
 	const exactReceipt = exactResponseUrlAssetReceipts.get(assetPath);
-	const containerObject = /^container-app\/objects\/[a-f0-9]{64}\/(?:sdk\.wasm|bash\.webc|busybox\.wasm|clang\.wasm\.gz\.bin|lld\.wasm\.gz\.bin|sysroot\.tar)$/.test(assetPath);
+	const containerObject = /^container-app\/objects\/[a-f0-9]{64}\/(?:sdk\.wasm|bash\.webc(?:\.bin)?|busybox\.wasm|clang\.wasm\.gz\.bin|lld\.wasm\.gz\.bin|sysroot\.tar)$/.test(assetPath);
 	return (
 		request.method === 'GET' &&
 		request.destination === '' &&

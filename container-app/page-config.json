@@ -3,6 +3,6 @@
   "hostHash": "abab66cc9c48836f76988fad20cd6e3d302bf4e9d0a01831cf63143cab641d3f",
   "profile": "live",
   "containerVersion": "0.1.0",
-  "manifestSha256": "1b07ef6f945212eca2739f32998c6b8ceb6feced519caee6c0e63fd2a572c265",
+  "manifestSha256": "9f0ed5c0b8703effb88b81e1aff35047e9a87509a41442d969fef449d3c70c6f",
   "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
 }
