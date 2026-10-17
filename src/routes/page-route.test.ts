@@ -656,7 +656,7 @@ describe('example route debug actions', () => {
 			/let availableGoTargets = \$state<GoTarget\[]>\(\['wasip1\/wasm'\]\);/
 		);
 		expect(source).toMatch(/localStorage\.setItem\('goTarget', goTarget\);/);
-		expect(source).toMatch(/const storedGoTarget = readStoredValue\('goTarget'\);/);
+		expect(source).toMatch(/goTarget: restoredGoTarget/);
 		expect(source).toMatch(/const manifestUrl = runtimeAssets\.go\?\.manifestUrl;/);
 		expect(applicationRuntimeAssets.go?.manifestUrl).toContain(
 			'/wasm-go/runtime/runtime-manifest.v1.json?'
@@ -667,8 +667,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableGoTargets = \[\.\.\.nextAvailableGoTargets\];/);
 		expect(source).toMatch(/availableGoTargets = \['wasip1\/wasm'\];/);
 		expect(source).toMatch(/GO: \(\) => \(\{ goTarget \}\)/);
-		expect(source).toMatch(/requestedGoTarget === 'js\/wasm'/);
-		expect(source).toMatch(/storedGoTarget === 'js\/wasm'/);
+		expect(source).toMatch(/restoredGoTarget === 'js\/wasm'/);
 		expect(source).toMatch(/<select id="go-target" bind:value=\{goTarget\}>/);
 		expect(source).toMatch(
 			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
@@ -699,12 +698,8 @@ describe('example route debug actions', () => {
 			/if \(!availableGoTargets\.includes\(goTarget\)\) \{\s+goTarget = 'wasip1\/wasm';\s+\}/
 		);
 		// Without a stored workspace snapshot, the legacy key still seeds the Rust target.
-		expect(source).toMatch(
-			/const storedRustTargetTriple = readStoredValue\('rustTargetTriple'\);/
-		);
-		expect(source).toMatch(
-			/rustTargetTriple = requestedRustTargetTriple;\s+\} else if \(\s*storedRustTargetTriple === 'wasm32-wasip1' \|\|\s*storedRustTargetTriple === 'wasm32-wasip2' \|\|\s*storedRustTargetTriple === 'wasm32-wasip3'\s*\) \{\s+rustTargetTriple = storedRustTargetTriple;\s+\}/
-		);
+		expect(source).toMatch(/rustTargetTriple: restoredRustTarget/);
+		expect(source).toMatch(/rustTargetTriple = restoredRustTarget;/);
 	});
 
 	it('locks language, rename, delete, reset, and import while a run or debug session is active', () => {
@@ -1381,25 +1376,15 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/localStorage\.setItem\('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode\);/
 		);
-		expect(source).toMatch(/const storedOcamlBackend = readStoredValue\('ocamlBackend'\);/);
+		expect(source).toMatch(/ocamlBackend: restoredOcamlBackend/);
+		expect(source).toMatch(/ocamlWasmBinaryenMode: restoredBinaryenMode/);
+		expect(source).toMatch(/ocamlBackend = restoredOcamlBackend;/);
+		expect(source).toMatch(/ocamlWasmBinaryenMode = restoredBinaryenMode;/);
 		expect(source).toMatch(
-			/const storedOcamlWasmBinaryenMode = readStoredValue\('ocamlWasmBinaryenMode'\);/
+			/restoredOcamlBackend === 'js' \|\| restoredOcamlBackend === 'wasm'/
 		);
 		expect(source).toMatch(
-			/const requestedOcamlBackend = page\.url\.searchParams\.get\('ocamlBackend'\);/
-		);
-		expect(source).toMatch(
-			/const requestedOcamlWasmBinaryenMode =\s+page\.url\.searchParams\.get\('ocamlWasmBinaryenMode'\);/s
-		);
-		expect(source).toMatch(
-			/requestedOcamlBackend === 'js' \|\| requestedOcamlBackend === 'wasm'/
-		);
-		expect(source).toMatch(/storedOcamlBackend === 'js' \|\| storedOcamlBackend === 'wasm'/);
-		expect(source).toMatch(
-			/requestedOcamlWasmBinaryenMode === 'fast' \|\|\s+requestedOcamlWasmBinaryenMode === 'full'/
-		);
-		expect(source).toMatch(
-			/storedOcamlWasmBinaryenMode === 'fast' \|\|\s+storedOcamlWasmBinaryenMode === 'full'/
+			/restoredBinaryenMode === 'fast' \|\| restoredBinaryenMode === 'full'/
 		);
 		expectEditorLanguage('OCAML', 'ocaml');
 		expect(source).toMatch(/OCAML: \(\) => \(\{ ocamlBackend, ocamlWasmBinaryenMode \}\)/);

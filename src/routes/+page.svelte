@@ -7,6 +7,7 @@
 	import { isSharedArrayBufferAvailable } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
+	import { resolveInitialWorkspace } from './initialWorkspace';
 	import type { ContainerWorkspaceEntry } from '$lib/playground/container/protocol';
 	import {
 		createDebugSessionController,
@@ -63,7 +64,6 @@
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
-	import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 	import { copyWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
 	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
@@ -241,7 +241,6 @@
 		progressStage = $state(''),
 		progressIndeterminate = $state(false),
 		stdinInput = $state(''),
-		init = $state(false),
 		editorLspStatus = $state<EditorLspStatusView | null>(null),
 		splitPane = $state<HTMLDivElement>(),
 		splitPaneWidth = $state(0),
@@ -258,10 +257,20 @@
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
 
-	const initialWorkspace = createDefaultWorkspace('CPP');
+	const initialSelection = browser
+		? resolveInitialWorkspace({
+				url: new URL(location.href),
+				readStorage: (key) => localStorage.getItem(key),
+				normalizeLanguage: normalizeRequestedLanguage,
+				languageForPath,
+				fallbackLanguage: language
+			})
+		: null;
+	if (initialSelection) language = initialSelection.language;
+	const initialWorkspace = createDefaultWorkspace(language);
 	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
 		...createDefaultLanguageWorkspaces(),
-		CPP: cloneWorkspace(initialWorkspace)
+		[language]: cloneWorkspace(initialWorkspace)
 	});
 	let files = $state<WorkspaceFile[]>(cloneFiles(initialWorkspace.files));
 	let activePath = $state(initialWorkspace.activePath);
@@ -317,7 +326,7 @@
 		savedRevision: -1,
 		error: null
 	});
-	let currentWorkspaceStorageKey = $state(WORKSPACE_STORAGE_KEY);
+	let currentWorkspaceStorageKey = $state(initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY);
 	const workspaceStorage = createWorkspaceStorage(
 		(value) => localStorage.setItem(currentWorkspaceStorageKey, value),
 		(state) => {
@@ -1419,20 +1428,6 @@
 		return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 	}
 
-	function readHashSnapshot() {
-		if (!browser || !location.hash.startsWith(`#${SHARE_PREFIX}`)) return null;
-		try {
-			const decoded = decodeBase64Url(location.hash.slice(SHARE_PREFIX.length + 1));
-			if (!decoded) return null;
-			const value: unknown = JSON.parse(decoded);
-			validateWorkspaceSnapshot(value);
-			return value as Partial<WorkspaceSnapshot>;
-		} catch {
-			saveStatus = 'Invalid share URL';
-			return null;
-		}
-	}
-
 	function snapshot(): WorkspaceSnapshot {
 		return {
 			activePath,
@@ -1516,19 +1511,6 @@
 		const saved = workspaceStorage.save(workspaceSaveKey, currentWorkspaceStorageKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
-	}
-
-	function readStoredValue(key: string) {
-		if (
-			currentWorkspaceStorageKey !== WORKSPACE_STORAGE_KEY &&
-			key !== currentWorkspaceStorageKey
-		)
-			return null;
-		try {
-			return localStorage.getItem(key);
-		} catch {
-			return null;
-		}
 	}
 
 	function downloadWorkspaceBackup() {
@@ -1839,19 +1821,6 @@
 	async function sendTerminalEof() {
 		if (!terminal || !runningMode) return;
 		await terminal.eof?.();
-	}
-
-	function decodeBase64Url(value: string | null) {
-		if (value === null) return null;
-		try {
-			const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-			const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-			const binary = atob(padded);
-			const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-			return new TextDecoder().decode(bytes);
-		} catch {
-			return null;
-		}
 	}
 
 	function normalizeRequestedLanguage(value: string | null): PlaygroundLanguage | null {
@@ -2538,127 +2507,11 @@
 		return execution;
 	}
 
+	// Only URL publication waits for the router. Workspace restoration is synchronous
+	// so Monaco, the terminal and prewarming all observe the selected language first.
 	$effect(() => {
-		if (browser && editor && !init) {
-			const currentUrl = new URL(location.href);
-			const requestedWorkspaceUrl = hasWorkspaceQueryInput(currentUrl)
-				? consumeWorkspaceQueryInput(createSharedWorkspaceUrl(currentUrl))
-				: null;
-			currentWorkspaceStorageKey = workspaceStorageKey(requestedWorkspaceUrl ?? currentUrl);
-			const sharedWorkspace = readHashSnapshot();
-			if (sharedWorkspace) {
-				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
-				const consumedUrl = consumeWorkspaceQueryInput(
-					createSharedWorkspaceUrl(currentUrl)
-				);
-				currentWorkspaceStorageKey = workspaceStorageKey(consumedUrl);
-				replaceState(consumedUrl, page.state);
-				workspaceInitialized = true;
-				init = true;
-				return;
-			}
-
-			const storedWorkspace = requestedWorkspaceUrl
-				? null
-				: readStoredValue(currentWorkspaceStorageKey);
-			if (storedWorkspace) {
-				try {
-					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
-					workspaceInitialized = true;
-					init = true;
-					return;
-				} catch {
-					unrestoredWorkspace = storedWorkspace;
-					workspaceRecoveryKey = preserveUnrestoredWorkspace(
-						(key, value) => localStorage.setItem(key, value),
-						currentWorkspaceStorageKey,
-						storedWorkspace
-					);
-					saveStatus = 'Stored workspace could not be restored';
-				}
-			}
-
-			const code = readStoredValue('code');
-			const lang = readStoredValue('language');
-			const storedArgs = readStoredValue('argsInput');
-			const storedRustTargetTriple = readStoredValue('rustTargetTriple');
-			const storedGoTarget = readStoredValue('goTarget');
-			const storedOcamlBackend = readStoredValue('ocamlBackend');
-			const storedOcamlWasmBinaryenMode = readStoredValue('ocamlWasmBinaryenMode');
-			const requestedCode =
-				decodeBase64Url(page.url.searchParams.get('code64')) ??
-				page.url.searchParams.get('code');
-			const requestedLanguage = normalizeRequestedLanguage(page.url.searchParams.get('lang'));
-			const requestedArgs =
-				decodeBase64Url(page.url.searchParams.get('args64')) ??
-				page.url.searchParams.get('args');
-			const storedLanguage = normalizeRequestedLanguage(lang);
-			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
-			const requestedGoTarget = page.url.searchParams.get('goTarget');
-			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
-			const requestedOcamlWasmBinaryenMode =
-				page.url.searchParams.get('ocamlWasmBinaryenMode');
-			if (requestedLanguage ?? storedLanguage) {
-				switchLanguage(
-					requestedLanguage ?? storedLanguage ?? language,
-					'Workspace restored'
-				);
-			}
-			const nextCode = requestedCode ?? code;
-			if (nextCode !== null) activeFile.content = nextCode;
-			if (requestedArgs !== null) argsInput = requestedArgs;
-			else if (storedArgs !== null) argsInput = storedArgs;
-			if (
-				requestedGoTarget === 'wasip1/wasm' ||
-				requestedGoTarget === 'wasip2/wasm' ||
-				requestedGoTarget === 'wasip3/wasm' ||
-				requestedGoTarget === 'js/wasm'
-			) {
-				goTarget = requestedGoTarget;
-			} else if (
-				storedGoTarget === 'wasip1/wasm' ||
-				storedGoTarget === 'wasip2/wasm' ||
-				storedGoTarget === 'wasip3/wasm' ||
-				storedGoTarget === 'js/wasm'
-			) {
-				goTarget = storedGoTarget;
-			}
-			if (requestedOcamlBackend === 'js' || requestedOcamlBackend === 'wasm') {
-				ocamlBackend = requestedOcamlBackend;
-			} else if (storedOcamlBackend === 'js' || storedOcamlBackend === 'wasm') {
-				ocamlBackend = storedOcamlBackend;
-			}
-			if (
-				requestedOcamlWasmBinaryenMode === 'fast' ||
-				requestedOcamlWasmBinaryenMode === 'full'
-			) {
-				ocamlWasmBinaryenMode = requestedOcamlWasmBinaryenMode;
-			} else if (
-				storedOcamlWasmBinaryenMode === 'fast' ||
-				storedOcamlWasmBinaryenMode === 'full'
-			) {
-				ocamlWasmBinaryenMode = storedOcamlWasmBinaryenMode;
-			}
-			if (
-				requestedRustTargetTriple === 'wasm32-wasip1' ||
-				requestedRustTargetTriple === 'wasm32-wasip2' ||
-				requestedRustTargetTriple === 'wasm32-wasip3'
-			) {
-				rustTargetTriple = requestedRustTargetTriple;
-			} else if (
-				storedRustTargetTriple === 'wasm32-wasip1' ||
-				storedRustTargetTriple === 'wasm32-wasip2' ||
-				storedRustTargetTriple === 'wasm32-wasip3'
-			) {
-				rustTargetTriple = storedRustTargetTriple;
-			}
-			if (requestedWorkspaceUrl) {
-				replaceState(requestedWorkspaceUrl, page.state);
-				saveStatus = 'URL workspace loaded';
-			}
-			workspaceInitialized = true;
-			init = true;
-		}
+		if (initialSelection?.replacementUrl)
+			untrack(() => replaceState(initialSelection.replacementUrl!, page.state));
 	});
 
 	$effect(() => {
@@ -2834,7 +2687,7 @@
 	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || !workspaceInitialized) return;
 		const binding = playground;
 		const enabled = prewarmEnabled;
 		const selectedLanguage = language;
@@ -3000,6 +2853,55 @@
 			debug.reset();
 		}
 	});
+	if (initialSelection) {
+		if (initialSelection.snapshot) {
+			applySnapshot(
+				initialSelection.snapshot,
+				initialSelection.source === 'share'
+					? 'Shared workspace loaded'
+					: 'Workspace restored'
+			);
+		} else {
+			const {
+				code,
+				argsInput: restoredArgs,
+				rustTargetTriple: restoredRustTarget,
+				goTarget: restoredGoTarget,
+				ocamlBackend: restoredOcamlBackend,
+				ocamlWasmBinaryenMode: restoredBinaryenMode
+			} = initialSelection.overrides;
+			if (code !== null && activeFile) activeFile.content = code;
+			if (restoredArgs !== null) argsInput = restoredArgs;
+			if (
+				restoredRustTarget === 'wasm32-wasip1' ||
+				restoredRustTarget === 'wasm32-wasip2' ||
+				restoredRustTarget === 'wasm32-wasip3'
+			)
+				rustTargetTriple = restoredRustTarget;
+			if (
+				restoredGoTarget === 'wasip1/wasm' ||
+				restoredGoTarget === 'wasip2/wasm' ||
+				restoredGoTarget === 'wasip3/wasm' ||
+				restoredGoTarget === 'js/wasm'
+			)
+				goTarget = restoredGoTarget;
+			if (restoredOcamlBackend === 'js' || restoredOcamlBackend === 'wasm')
+				ocamlBackend = restoredOcamlBackend;
+			if (restoredBinaryenMode === 'fast' || restoredBinaryenMode === 'full')
+				ocamlWasmBinaryenMode = restoredBinaryenMode;
+			if (initialSelection.source === 'query') saveStatus = 'URL workspace loaded';
+		}
+		if (initialSelection.unrestoredWorkspace !== null) {
+			unrestoredWorkspace = initialSelection.unrestoredWorkspace;
+			workspaceRecoveryKey = preserveUnrestoredWorkspace(
+				(key, value) => localStorage.setItem(key, value),
+				currentWorkspaceStorageKey,
+				unrestoredWorkspace
+			);
+			saveStatus = 'Stored workspace could not be restored';
+		} else if (initialSelection.invalidShare) saveStatus = 'Invalid share URL';
+		workspaceInitialized = true;
+	}
 </script>
 
 <svelte:head>
