@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "scope": "SH-02/SH-03 named Bash syntax through real BusyBox commands; independent of the earlier seven-scenario compiler gate",
+  "receipt": {
+    "file": "syntax-0020.json",
+    "bytes": 65918,
+    "sha256": "71bd345bebbeeabf4dcccba5ec260ab88fd04f734b382c50a2ddc5ddb1ad24ca"
+  },
+  "processReceipt": {
+    "file": "syntax-0020-process.json",
+    "bytes": 985,
+    "sha256": "f676f3b8d71593a45c5afb8bcf509d4303a14941466a6997349f0f6d7ac95ce6"
+  },
+  "configuration": {
+    "bytes": 1990,
+    "sha256": "fb1387ddeff56fbf3cc0508862c09610b2ac72754dc064b2219e7aab7ac23cd0"
+  },
+  "sourcePinsAsExecuted": {
+    "scripts/probe-container-shell-acceptance.mjs": {
+      "sha256": "25dcb7c80510965a273ab88e41185b07c5f0cc80cac56cf7b0712c2e38ff78ab",
+      "bytes": 22677
+    },
+    "scripts/probe-container-shell-acceptance-lib.mjs": {
+      "sha256": "f56c96cad3dc234c31c4fad284f1ec93878142abf5be4d91ba8f06a8c0cd23e7",
+      "bytes": 35774
+    },
+    "scripts/probe-container-shell-acceptance.test.mjs": {
+      "sha256": "3fe2eb8a18bebc4c90725328c7630c89a811e5fd45ba7e22f3fb4c132b0b9061",
+      "bytes": 26238
+    },
+    "packages/container/test/shell-acceptance/worker.mjs": {
+      "sha256": "456dc03d13f3bfb7d024f836dc6931d3cdd8ba7b3ed9f25d538e84bbc502ef4e",
+      "bytes": 9650
+    }
+  },
+  "guard": {
+    "bytes": 7281,
+    "sha256": "0632babd5bd3f425bcd64f15eb9075ecd2e7ebacf16230c7ee2763035fc39d3f"
+  },
+  "runner": {
+    "bytes": 1249,
+    "sha256": "c252851cfe106ec6201152e6c9c35365532a2bbfe7007bf656c40da99612fbd0"
+  },
+  "policy": {
+    "workingDirectory": "/home/seorii/dev/hancomac/tmp/container-20261013/product",
+    "stage": {
+      "name": "browser",
+      "argv": [
+        "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+        "scripts/probe-container-shell-acceptance.mjs",
+        "--run-syntax",
+        "/data/seorii-container-fixes-20261015/shell-syntax-20261015T152102Z/configuration.json"
+      ],
+      "log": "/home/seorii/logs/container-shell-syntax-20261015T152102Z-browser.log",
+      "wallSeconds": 120
+    },
+    "limits": {
+      "cpuSoftSeconds": 120,
+      "cpuHardSeconds": 150,
+      "addressSpaceBytes": 140737488355328,
+      "minimumRemainingDiskBytes": 1073741824
+    },
+    "minimumAvailableMemoryBytes": 2147483648,
+    "tmpdir": "/data/shsyn-0caaif_g",
+    "supervisorLog": "/home/seorii/logs/container-shell-syntax-20261015T152102Z-supervisor.log"
+  },
+  "status": {
+    "exitCode": 0,
+    "finishedAtUnix": 1792077841.406847
+  },
+  "sourceVerification": "The four explicit source pins and bundle input inventory were verified before and after execution. The receipt applicationCommit is the base commit; sourcePinsAsExecuted and receipt.bundleSources identify the uncommitted fixture changes actually run.",
+  "qualificationBoundary": "shellSyntaxPassed is true; shellAcceptancePassed remains false for this standalone scenario. No new compiler, general shebang, PTY or POSIX conformance qualification."
+}

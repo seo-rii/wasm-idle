@@ -6,7 +6,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 describe('Core TeaVM runtime receipts', () => {
-	it('publishes an exact detached and deeply immutable four-asset snapshot', () => {
+	it('publishes an exact detached and deeply immutable five-asset snapshot', () => {
 		const input = Object.fromEntries(
 			TEAVM_RUNTIME_ASSET_NAMES.map((asset) => [
 				asset,
@@ -23,6 +23,13 @@ describe('Core TeaVM runtime receipts', () => {
 		for (const asset of TEAVM_RUNTIME_ASSET_NAMES) {
 			expect(Object.isFrozen(snapshot[asset])).toBe(true);
 		}
+	});
+
+	it('requires the deobfuscator receipt alongside the compiler and class libraries', () => {
+		const input = { ...TEAVM_RUNTIME_ASSET_RECEIPTS } as Record<string, unknown>;
+		delete input['compiler.wasm-deobfuscator.wasm'];
+
+		expect(() => snapshotTeaVmRuntimeAssetReceipts(input)).toThrow('exactly five assets');
 	});
 
 	it('captures every caller-owned receipt and field exactly once', () => {

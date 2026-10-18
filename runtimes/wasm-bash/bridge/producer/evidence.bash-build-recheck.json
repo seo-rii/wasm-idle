@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "status": "external-artifacts-and-inputs-verified",
+  "checkedAt": "2026-10-14T23:26:19.792Z",
+  "testedApplicationCommit": "74abe3922c5a248b57ef0cb2d38d2d9a86fa1fc5",
+  "archiveBaseApplicationCommit": "f5844b5212621a949318638ec7263faba2c1f3dd",
+  "lockSha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1",
+  "originalReceipts": {
+    "build": {
+      "file": "evidence.bash-build.json",
+      "bytes": 22110,
+      "sha256": "fb541666900f6ce1d71def362221b8b34a42b532dbcd7c10097f863e0021870f"
+    },
+    "process": {
+      "file": "evidence.bash-build-process.json",
+      "bytes": 890,
+      "sha256": "42b4a97da13ce11e3fd46a9802d49e36669d0b4874fe5ccef06ac9de12d8f012"
+    }
+  },
+  "originalBuildSourceFiles": {
+    "runtimes/wasm-bash/bridge/producer/build.mjs": {
+      "bytes": 20729,
+      "sha256": "fb6d30a2b66f0e088f64fd888cc67698898fa40188e33e2c078f6b4107629a41"
+    },
+    "runtimes/wasm-bash/bridge/producer/verify.mjs": {
+      "bytes": 4690,
+      "sha256": "e9a4615dd9282c2f015d6faa8566ef7239924720e994831ecec3b5ea5f1c2016"
+    },
+    "runtimes/wasm-bash/bridge/producer/inputs.lock.json": {
+      "bytes": 9025,
+      "sha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1"
+    },
+    "runtimes/wasm-bash/bridge/producer/README.md": {
+      "bytes": 6553,
+      "sha256": "ea18080fa7de70cb52986367ac00f835d5b0205098c8f34053afca5c754b58ba"
+    },
+    "runtimes/wasm-bash/bridge/producer/build.test.mjs": {
+      "bytes": 8733,
+      "sha256": "2b19b68b7bd59d74505dbf8d85cf06ef9488ee9713baf018ff3bd0fa88ea93a9"
+    },
+    "runtimes/wasm-bash/bridge/execve.c": {
+      "bytes": 2533,
+      "sha256": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5"
+    },
+    "runtimes/wasm-bash/bridge/exec_frame.rs": {
+      "bytes": 3717,
+      "sha256": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a"
+    },
+    "runtimes/wasm-bash/bridge/proc_exec_v1.rs": {
+      "bytes": 2377,
+      "sha256": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63"
+    },
+    "runtimes/wasm-bash/bridge/host_command_compile_probe.rs": {
+      "bytes": 1750,
+      "sha256": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+    },
+    "runtimes/wasm-bash/bridge/patches/0001-preserve-exec-unwind.patch": {
+      "bytes": 438,
+      "sha256": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315"
+    },
+    "runtimes/wasm-bash/bridge/patches/0002-replace-explicit-environment.patch": {
+      "bytes": 1318,
+      "sha256": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934"
+    },
+    "runtimes/wasm-bash/bridge/patches/0003-add-lossless-exec-frame.patch": {
+      "bytes": 1839,
+      "sha256": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d"
+    },
+    "runtimes/wasm-bash/bridge/patches/0004-expose-host-command-hook.patch": {
+      "bytes": 1878,
+      "sha256": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442"
+    },
+    "runtimes/wasm-bash/bridge/patches/0005-owned-command-snapshot.patch": {
+      "bytes": 3880,
+      "sha256": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad"
+    },
+    "runtimes/wasm-bash/scripts/prepare-runtime.mjs": {
+      "bytes": 11370,
+      "sha256": "696a0033d6116d4649bfee1ffdf6c556d0f7cf250b69c7aa50809d9ff1a99e53"
+    }
+  },
+  "sourceMaterialsMatchTestedCommit": true,
+  "currentReader": {
+    "file": "runtimes/wasm-bash/bridge/producer/verify-evidence.mjs",
+    "bytes": 5201,
+    "sha256": "31e922a07cae53e056efd221283bb21a4a3127cb7183d0a6382dda00c8d0c799"
+  },
+  "currentWasmVerifier": {
+    "file": "runtimes/wasm-bash/bridge/producer/verify.mjs",
+    "bytes": 4690,
+    "sha256": "e9a4615dd9282c2f015d6faa8566ef7239924720e994831ecec3b5ea5f1c2016"
+  },
+  "environment": {
+    "node": "v24.1.0",
+    "platform": "linux",
+    "architecture": "x64"
+  },
+  "artifactRoot": "/data/seorii-container-20261014/bash-shim-build-20261014",
+  "inputCache": "/data/seorii-container-20261014/bash-shim-inputs",
+  "verifiedInputs": {
+    "source": {
+      "filename": "bash-fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+      "url": "https://github.com/wasix-org/bash/archive/fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+      "sha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41",
+      "bytes": 10401294
+    },
+    "sysroot": {
+      "filename": "wasix-sysroot-v2024-07-08.1.tar.gz",
+      "url": "https://github.com/wasix-org/wasix-libc/releases/download/v2024-07-08.1/sysroot.tar.gz",
+      "sha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9",
+      "bytes": 2134068
+    },
+    "toolchain": {
+      "filename": "wasi-sdk-20.0-linux.tar.gz",
+      "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz",
+      "sha256": "7030139d495a19fbeccb9449150c2b1531e15d8fb74419872a719a7580aad0f9",
+      "bytes": 79570956
+    },
+    "binaryen": {
+      "filename": "binaryen-version_108-x86_64-linux.tar.gz",
+      "url": "https://github.com/WebAssembly/binaryen/releases/download/version_108/binaryen-version_108-x86_64-linux.tar.gz",
+      "sha256": "7bb8a2d97214f40bf34abc31d49b34aa5deab10b25d6d13c5f72cb395cf142fb",
+      "bytes": 42446797
+    },
+    "wasmer": {
+      "filename": "wasmer-7.2.0-linux-amd64.tar.gz",
+      "url": "https://github.com/wasmerio/wasmer/releases/download/v7.2.0/wasmer-linux-amd64.tar.gz",
+      "sha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2",
+      "bytes": 256943735
+    }
+  },
+  "verifiedArtifacts": {
+    "shimObject": {
+      "bytes": 1097,
+      "sha256": "8259636b4cc3f4638176a6ab5d71219d8a090fa033d25a36e6fef40cbb8cb4b9"
+    },
+    "wasm": {
+      "bytes": 1811021,
+      "sha256": "96866a2ea6b4cc19949346822348ca8caba80052dd227e07a3e644329c7ba02d"
+    },
+    "license": {
+      "bytes": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    "webc": {
+      "bytes": 1812328,
+      "sha256": "67bb42fa59430ad0c713885617dcaa84809bd601b534f4a2a201bf9ef58606a9"
+    },
+    "sourceMaterials": {
+      "bytes": 10442324,
+      "sha256": "ccbb4cf3650ae7ee6b35ecfef3d54994f5f26a2f5a7ef2b42d95f33d8c96596b"
+    }
+  },
+  "wasmInspection": {
+    "entireModuleValidated": true,
+    "inventoryMatchesOriginalReceipt": true,
+    "imports": 50,
+    "exports": 15,
+    "execSignature": {
+      "params": [
+        127,
+        127,
+        127,
+        127,
+        127,
+        127,
+        127
+      ],
+      "results": [
+        127
+      ]
+    },
+    "memories": [
+      {
+        "module": "env",
+        "name": "memory",
+        "flags": 3,
+        "initial": 133,
+        "maximum": 65536
+      }
+    ]
+  },
+  "process": {
+    "exitCode": 0,
+    "wallSeconds": 587.243,
+    "cleanupAllReaped": true,
+    "finalStatus": {
+      "path": "/data/seorii-container-20261014/bash-shim-supervisor-20261014/final.status",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "exitCode": 0
+    }
+  },
+  "focusedChecks": [
+    {
+      "command": [
+        "node",
+        "--test",
+        "runtimes/wasm-bash/bridge/producer/build.test.mjs"
+      ],
+      "exitCode": 0,
+      "passedTests": 10
+    },
+    {
+      "command": [
+        "cc",
+        "-fsyntax-only",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "runtimes/wasm-bash/bridge/execve.c"
+      ],
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "node",
+        "--check",
+        "runtimes/wasm-bash/bridge/producer/verify-evidence.mjs"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "qualification": {
+    "realBashBuild": true,
+    "rawWasmImportProfile": true,
+    "webcPackaging": true,
+    "completeReleaseSourcePack": false,
+    "actualModifiedBashExecution": false,
+    "runtimeQualified": false,
+    "commonLiveFdAndFilesystem": false,
+    "shellMvp": false
+  },
+  "limitations": [
+    "The original build used the tested application commit; the later archive base was not rebuilt.",
+    "No guest, patched SDK binary, browser fixture, host registry or common live fd/filesystem was executed in this recheck.",
+    "Binary artifacts and complete input archives remain outside Git; absent external files cannot be reconstructed from the archived receipts."
+  ]
+}

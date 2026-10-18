@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "originalReceipts": {
+    "worker-browser.json": {
+      "original": "/data/seorii-container-20261014/worker-shell-chromium-20261015T011909Z/browser/receipt.json",
+      "bytes": 254011,
+      "sha256": "25f8bb75efda9ce61128809fb922a5e31f539f22c2a86e931dad3671905f7bbd"
+    },
+    "worker-browser-process.json": {
+      "original": "/data/seorii-container-20261014/worker-shell-chromium-20261015T011909Z/browser.process.json",
+      "bytes": 1056,
+      "sha256": "2439f1a7f25fa32c7e2bd7a838fa836f2b21d7e6e6a15398ea1b8f55ae22595c"
+    }
+  },
+  "applicationCommit": "77c8dad608e642f5891d2bb389bbdabb41c2d7b8",
+  "sdkSourceCommit": "7ceef67180e047d4703936482006a69b814662d2",
+  "packageReceiptIdentity": {
+    "bytes": 2604,
+    "sha256": "9d3a6094f057d52d7221c676965a03a366de6a0d709ffeaf11147193c0273525"
+  },
+  "browser": "153.0.8010.12",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "kernelRelease": "6.1.0-53-cloud-amd64",
+    "osVersion": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.187-1 (2026-09-07)"
+  },
+  "completeCollection": true,
+  "backendCompleteCases": 10,
+  "passedSelectedChecks": 17,
+  "totalSelectedChecks": 18,
+  "failedChecks": [
+    "redirect-mount"
+  ],
+  "guestAcceptancePassed": false,
+  "shellBackendReady": false,
+  "commonContainerFdVfsQualified": false,
+  "stageExitCode": 1,
+  "supervisorExitCode": 3,
+  "wallSeconds": 17.671,
+  "createdWorkerTargets": 60,
+  "createdNestedWorkerTargets": 50,
+  "remainingWorkersAfterOwnedCleanup": 0,
+  "remainingWorkersAfterContextClose": 0,
+  "allOwnedProcessesReaped": true,
+  "failure": "G0-FD returns the exact9 binary stdout bytes and exit0, but host Directory.readFile(/binary) reports entry not found. Do not infer common/live mount visibility from pipe output alone.",
+  "qualifiedObservations": [
+    "Actual GNU Bash builtins consume prebuffered stdin",
+    "UTF-8/spaces/empty/LF/CR argv",
+    "Explicit environment replacement and exec -c empty environment",
+    "Raw stderr bytes",
+    "Guest23 status propagation",
+    "Actual child cwd",
+    "Tail external exec completion",
+    "Native binary pipe bytes/EOF",
+    "Parent/guest/host Directory file sharing in the separate G0-FS case",
+    "All observed dedicated Workers retire under owner cleanup"
+  ],
+  "remainingGates": [
+    "Pipeline redirection file visibility",
+    "Trusted JavaScript host command registry",
+    "Common Container live fd/VFS",
+    "Foreground cancellation/recovery",
+    "Actual Clang/BusyBox shell acceptance",
+    "Full release and dependency license profile"
+  ],
+  "log": {
+    "path": "/home/seorii/logs/worker-shell-chromium-20261015T011909Z.log",
+    "bytes": 268,
+    "sha256": "242264984925c1e58a7b8e4b11be24e3c99a4a653a032633c83a235ea10f69dc"
+  }
+}

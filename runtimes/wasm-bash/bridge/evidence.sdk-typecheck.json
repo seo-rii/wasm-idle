@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-pinned-sdk-and-external-snapshot-example-typecheck-passed",
+  "passed": true,
+  "testedApplicationCommit": "de98d061435a308e8bbcd2ca195d29ac07401774",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "runtimeCrate": "wasmer-wasix@0.601.0",
+  "toolchain": {
+    "channel": "nightly-2025-07-05",
+    "rustcCommit": "e3843659e9f65f589d184d1221ac6149d5fa07b5",
+    "cargoCommit": "930b4f62cfcd1f0eabdb30a56d91bf6844b739bf",
+    "target": "wasm32-unknown-unknown"
+  },
+  "sourcePreparation": {
+    "path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/receipt.json",
+    "bytes": 1650,
+    "sha256": "3994f0002ac2cfe3e1405cc03a95343393322c98dc5be1a36189ecf13a50757f"
+  },
+  "patches": {
+    "0001-preserve-exec-unwind.patch": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315",
+    "0002-replace-explicit-environment.patch": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934",
+    "0003-add-lossless-exec-frame.patch": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d",
+    "0004-expose-host-command-hook.patch": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442",
+    "0005-owned-command-snapshot.patch": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad",
+    "exec_frame.rs": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a",
+    "proc_exec_v1.rs": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63",
+    "host_command_compile_probe.rs": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+  },
+  "sdkLock": {
+    "path": "/data/seorii-container-20261014/shell-sdk-typefix-20261014-source/wasmer-sdk/Cargo.lock",
+    "bytes": 114779,
+    "sha256": "234c4afcc75325358fb9fc7807b53b6b1e3db7526cf68c9954f191c7d548cd72"
+  },
+  "stdLock": {
+    "path": "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/Cargo.lock",
+    "bytes": 10886,
+    "sha256": "207129d8edc2cb762f8556dce440012854d28ca2d8774852fb00ee0a32191fc5"
+  },
+  "policy": {
+    "path": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/policy.json",
+    "bytes": 136003,
+    "sha256": "bb84df32cb7a564fac6c0f0b3cc79d5fdcb60edbecfd2d631d5c3e0debca0533"
+  },
+  "verifiedInputFiles": 580,
+  "inputsUnchangedAfterCheck": true,
+  "command": [
+    "/home/seorii/.cargo/bin/cargo",
+    "+nightly-2025-07-05",
+    "check",
+    "--locked",
+    "--offline",
+    "--target",
+    "wasm32-unknown-unknown",
+    "--lib",
+    "--example",
+    "container_command_snapshot_compile",
+    "-j",
+    "1"
+  ],
+  "exitCode": 0,
+  "wallSeconds": 412.428,
+  "processReceipt": "evidence.sdk-typecheck-process.json",
+  "processReceiptSha256": "a906d32e8b063520dd7aba2b002b84ddc067a52482434ec78ebeb7ded4e0d6b8",
+  "log": {
+    "path": "/home/seorii/logs/shell-sdk-typefix-check-20261014.log",
+    "bytes": 28867,
+    "sha256": "4419e76d277d33fe319931468bb911e44b210f6e6c6ad2490ae5ca3180d7ab84"
+  },
+  "cleanupAllReaped": true,
+  "cargoOutputs": {
+    "target": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-target",
+    "intermediate": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-intermediate",
+    "profile": "dev, unoptimized, metadata-only cargo check",
+    "metadata": [
+      {
+        "path": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-target/wasm32-unknown-unknown/debug/examples/libcontainer_command_snapshot_compile-ea2dd88ccc4225fe.rmeta",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/data/seorii-container-20261014/shell-sdk-typefix-check-20261014/sdk-target/wasm32-unknown-unknown/debug/deps/libwasmer_js-2e3f8eab7fd62fd6.rmeta",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "qualification": {
+    "sdkLibraryTypecheck": true,
+    "externalPreparedSnapshotExampleTypecheck": true,
+    "actualSdkWasmBinaryOrJsGlue": false,
+    "actualModifiedBashExecution": false,
+    "jsSupervisorRegistry": false,
+    "commonLiveFdAndFilesystem": false,
+    "shellMvp": false
+  },
+  "scope": "The full pinned runtime and SDK plus a real external VirtualCommand example typecheck with immutable owned prepared-child argv/raw-env/actual-cwd metadata. No guest is executed or successful task handle fabricated.",
+  "priorFailureReceipt": "evidence.sdk-typecheck-errors.json"
+}

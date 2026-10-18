@@ -240,7 +240,7 @@ describe('TeaVM runtime asset boundary', () => {
 					unexpected: receiptFor(Uint8Array.of(1))
 				} as never
 			})
-		).rejects.toThrow('exactly four assets');
+		).rejects.toThrow('exactly five assets');
 		await expect(
 			fetchTeaVmAsset('compiler.wasm', {
 				baseUrl: 'https://assets.example/teavm/',

@@ -1,0 +1,42 @@
+--- a/src/utils/mod.rs
++++ b/src/utils/mod.rs
+@@ -35,6 +35,11 @@
+ }
+ 
+ pub fn map_io_err(err: std::io::Error) -> Errno {
++    // Host filesystem operations use std::io for async traits, but Other alone
++    // cannot distinguish a full workspace from an actual I/O failure.
++    if let Some(error) = err.get_ref().and_then(|error| error.downcast_ref::<virtual_fs::FsError>()) {
++        return crate::fs::fs_error_into_wasi_err(*error);
++    }
+     From::<std::io::Error>::from(err)
+ }
+ 
+@@ -288,3 +293,16 @@
+         assert!(WasiVersion::Wasix64v1 > WasiVersion::Wasix32v1);
+     }
+ }
++
++#[cfg(test)]
++mod container_filesystem_errno_tests {
++    use super::*;
++
++    #[test]
++    fn quota_and_descriptor_errors_retain_their_wasi_errno() {
++        assert_eq!(map_io_err(virtual_fs::FsError::StorageFull.into()), Errno::Nospc);
++        assert_eq!(map_io_err(virtual_fs::FsError::InvalidFd.into()), Errno::Badf);
++        assert_eq!(map_io_err(virtual_fs::FsError::WouldBlock.into()), Errno::Again);
++        assert_eq!(map_io_err(std::io::ErrorKind::Other.into()), Errno::Io);
++    }
++}
+--- a/src/fs/mod.rs
++++ b/src/fs/mod.rs
+@@ -2411,7 +2411,7 @@
+         FsError::WouldBlock => Errno::Again,
+         FsError::WriteZero => Errno::Nospc,
+         FsError::DirectoryNotEmpty => Errno::Notempty,
+-        FsError::StorageFull => Errno::Overflow,
++        FsError::StorageFull => Errno::Nospc,
+         FsError::Lock | FsError::UnknownError => Errno::Io,
+         FsError::Unsupported => Errno::Notsup,
+     }

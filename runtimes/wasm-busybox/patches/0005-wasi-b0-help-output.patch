@@ -1,0 +1,82 @@
+--- a/libbb/appletlib.c
++++ b/libbb/appletlib.c
+@@ -766,6 +766,11 @@
+ #   define busybox_main(argc,argv) busybox_main(argv)
+ static
+ #  endif
++#if defined(BB_WASI_B0)
++# define bb_help_write full_write1_str
++#else
++# define bb_help_write full_write2_str
++#endif
+ int busybox_main(int argc UNUSED_PARAM, char **argv)
+ {
+ 	if (!argv[1]) {
+@@ -774,12 +779,16 @@
+ 		int col;
+ 		unsigned output_width;
+  help:
++#if defined(BB_WASI_B0)
++		/* Batch WASI has byte streams, not a terminal. */
++		output_width = 80;
++#else
+ 		output_width = get_terminal_width(2);
+-
+ 		dup2(1, 2);
+-		full_write2_str(bb_banner); /* reuse const string */
+-		full_write2_str(" multi-call binary.\n"); /* reuse */
+-		full_write2_str(
++#endif
++		bb_help_write(bb_banner); /* reuse const string */
++		bb_help_write(" multi-call binary.\n"); /* reuse */
++		bb_help_write(
+ 			"BusyBox is copyrighted by many authors between 1998-2015.\n"
+ 			"Licensed under GPLv2. See source distribution for detailed\n"
+ 			"copyright notices.\n"
+@@ -817,20 +826,20 @@
+ 		while (*a) {
+ 			int len2 = strlen(a) + 2;
+ 			if (col >= (int)output_width - len2) {
+-				full_write2_str(",\n");
++				bb_help_write(",\n");
+ 				col = 0;
+ 			}
+ 			if (col == 0) {
+ 				col = 6;
+-				full_write2_str("\t");
++				bb_help_write("\t");
+ 			} else {
+-				full_write2_str(", ");
++				bb_help_write(", ");
+ 			}
+-			full_write2_str(a);
++			bb_help_write(a);
+ 			col += len2;
+ 			a += len2 - 1;
+ 		}
+-		full_write2_str("\n");
++		bb_help_write("\n");
+ 		return 0;
+ 	}
+ 
+@@ -850,14 +859,16 @@
+ 	if (is_prefixed_with(argv[1], "--list")) {
+ 		unsigned i = 0;
+ 		const char *a = applet_names;
++#if !defined(BB_WASI_B0)
+ 		dup2(1, 2);
++#endif
+ 		while (*a) {
+ #  if ENABLE_FEATURE_INSTALLER
+ 			if (argv[1][6]) /* --list-full? */
+-				full_write2_str(install_dir[APPLET_INSTALL_LOC(i)] + 1);
+-#  endif
+-			full_write2_str(a);
+-			full_write2_str("\n");
++				bb_help_write(install_dir[APPLET_INSTALL_LOC(i)] + 1);
++#  endif
++			bb_help_write(a);
++			bb_help_write("\n");
+ 			i++;
+ 			while (*a++ != '\0')
+ 				continue;

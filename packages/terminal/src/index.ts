@@ -14,7 +14,8 @@ import type {
 	PlaygroundBinding,
 	SandboxExecutionOptions,
 	TerminalControl,
-	TerminalExecutionOptions
+	TerminalExecutionOptions,
+	TerminalShellBinding
 } from './types.js';
 
 export { Terminal, Theme, registerAllPlugins };
@@ -37,6 +38,7 @@ export type {
 	PlaygroundBinding,
 	SandboxExecutionOptions,
 	TerminalControl,
-	TerminalExecutionOptions
+	TerminalExecutionOptions,
+	TerminalShellBinding
 };
 export default Terminal;

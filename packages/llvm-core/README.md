@@ -14,6 +14,13 @@ const compiler = await createClangCompiler({
 });
 ```
 
+Clang, V and COBOL compiler options accept `fetchImpl` for both manifests and every binary or
+archive asset, including the shared Clang host used by V and COBOL. The provider remains responsible
+for any host-specific pinning and verification. In-memory byte and module caches are scoped to the
+fetch function identity as well as the asset URL and byte limit. Reuse one provider within a fixed
+asset scope; use a different provider for a different storage or verification scope. Assets within
+one scope must retain immutable URLs. Loads with an abort signal remain uncached.
+
 The corresponding compiler patches, source pins, and reproducible asset producers are maintained
 in the `wasm-llvm` repository. This package does not read files from that repository or its npm
 package.
@@ -419,7 +426,7 @@ step, not an application-start preload.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `286940595483460e65dd2569b9c85918c0dc7bd4` for C, C++, and Rust. The V2
+`wasm-llvm` commit `14ea5ecbc514b0c87338aebf8f2b567020be5750` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their

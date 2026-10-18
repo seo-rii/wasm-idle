@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "scope": "Default snapshot complete eight-scenario real Bash gate",
+  "receipt": {
+    "file": "public-session-0020-full8.json",
+    "bytes": 245729,
+    "sha256": "8258c37637b29f45173fce76826e791e370c61dc764e28f55cd2c5f47029e794"
+  },
+  "processReceipt": {
+    "file": "public-session-0020-full8-process.json",
+    "bytes": 970,
+    "sha256": "3c9cfa9c7fe945d7630e943b8c7a830e6fbec7d561a42deb14e5efe5fbc0db32"
+  },
+  "configuration": {
+    "bytes": 1983,
+    "sha256": "052a60e7a99e30cc4cbceca698e4be652efe9e37d977115ca48e60973a0ea111"
+  },
+  "applicationCommit": "a8ff08b7eb1cf34c13fedb8369ae3bd0df64873c",
+  "sourcePinsAsExecuted": {
+    "scripts/probe-container-shell-acceptance.mjs": {
+      "bytes": 24912,
+      "sha256": "fe94cc6fc859cb42833a5721d72deb37b1172d2b2a013b6508e89d32997b5f52"
+    },
+    "scripts/probe-container-shell-acceptance-lib.mjs": {
+      "bytes": 41862,
+      "sha256": "08935cdb3a2cb3112e04e7b528f001649294b5f63c447e5adb1e13fadec72813"
+    },
+    "scripts/probe-container-shell-acceptance.test.mjs": {
+      "bytes": 32027,
+      "sha256": "a7b849333b3a017e0c3f3f114a342cb965586a14b0c606e0671c39a5f334d2d4"
+    },
+    "packages/container/test/shell-acceptance/worker.mjs": {
+      "bytes": 11541,
+      "sha256": "5cca870ad144f210a8da58c3eb6879fa26529710937d374d8b9f2242c3c9418b"
+    },
+    "packages/container/scripts/test-product-shell-browser.mjs": {
+      "bytes": 17637,
+      "sha256": "c859b6cadca5d4fc9817524ae505597db25959aef3f55395dd5f7d36130565bf"
+    },
+    "examples/container/bash-profile.mjs": {
+      "bytes": 6484,
+      "sha256": "017dc8b0dd980a5a0a1dfa8db3f38631e64cf22b54975abc53d22f6f86c87278"
+    },
+    "examples/container/clang-profile.mjs": {
+      "bytes": 733,
+      "sha256": "d84f36dc8bd370ada4984d736bd7d041e876b47f0a00b21fffdc1ba8104e16b7"
+    },
+    "examples/container/serve-bash.mjs": {
+      "bytes": 6569,
+      "sha256": "c714c0a138f01222b35359a124d0d2956b263bc361527875931a61e51999bd7a"
+    },
+    "examples/container/serve.mjs": {
+      "bytes": 9138,
+      "sha256": "04de401a9b5c4d5edb72a02a946808312cd2ef0172516245727fc8da1f83dd71"
+    }
+  },
+  "sourcePinsRecheckedAfterRun": true,
+  "guard": {
+    "bytes": 7281,
+    "sha256": "0632babd5bd3f425bcd64f15eb9075ecd2e7ebacf16230c7ee2763035fc39d3f"
+  },
+  "runner": {
+    "bytes": 2150,
+    "sha256": "6a0975f767825aefc10fd38b78eb131b68ba7199cf0a33df38ff3f0fd3e5de21"
+  },
+  "policy": {
+    "workingDirectory": "/home/seorii/dev/hancomac/tmp/container-20261013/product",
+    "stage": {
+      "name": "snapshot-v2",
+      "argv": [
+        "/home/seorii/.cache/wasm-idle-aux-deps-20261007/node-v24.21.0-linux-x64/bin/node",
+        "scripts/probe-container-shell-acceptance.mjs",
+        "--run",
+        "/data/container-shell-profiles-20261016-t2rbk7_j/snapshot-v2-configuration.json"
+      ],
+      "log": "/home/seorii/logs/container-final-profiles-20261015T162816Z-snapshot-v2.log",
+      "wallSeconds": 900,
+      "configuration": "/data/container-shell-profiles-20261016-t2rbk7_j/snapshot-v2-configuration.json",
+      "temporaryDirectory": "/data/cx-p-xlttug8l",
+      "output": "/data/container-shell-profiles-20261016-t2rbk7_j/snapshot-v2-browser",
+      "extraEnv": {},
+      "supervisorLog": "/home/seorii/logs/container-final-profiles-20261015T162816Z-snapshot-v2-supervisor.log"
+    },
+    "limits": {
+      "cpuSoftSeconds": 720,
+      "cpuHardSeconds": 780,
+      "addressSpaceBytes": 140737488355328,
+      "minimumRemainingDiskBytes": 536870912
+    },
+    "minimumAvailableMemoryBytes": 2147483648
+  },
+  "status": {
+    "exitCode": 0,
+    "finishedAtUnix": 1792082195.562064
+  },
+  "supervisorLog": "/home/seorii/logs/container-final-profiles-20261015T162816Z-snapshot-v2-supervisor.log",
+  "qualificationBoundary": "Loopback Chromium qualification only. No production upload/deployment, PTY/job-control/POSIX conformance, arbitrary adapter or complete source/license closure claim. Historical immutable snapshot release remains unchanged.",
+  "supersededFailedAttempt": {
+    "receipt": "/data/container-shell-profiles-20261016-t2rbk7_j/snapshot-browser/receipt.json",
+    "bytes": 248280,
+    "sha256": "9b95fe19353f1b2b86d5833a2f1c791e8be0c16da1b304f1f6371724d4d10396",
+    "passed": 77,
+    "total": 83,
+    "qualified": false,
+    "failedReceiptPreservedUnchanged": true,
+    "cause": "One interrupt owner target remained before context close; explicit owner self-retirement is tested by this new receipt without weakening CDP0."
+  }
+}

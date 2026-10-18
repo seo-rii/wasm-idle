@@ -1,11 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { cp, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { unzipSync } from 'fflate';
 import { assertClangdStdinBridge } from './llvm-contracts/clangd-artifact-contract.mjs';
+import { readSingleZipEntry } from './llvm-contracts/archive.mjs';
+import {
+	CLANG_BUILD_RECEIPT,
+	parseClangBuildReceipt,
+	validateClangBuildProvenance,
+	verifyClangBuildReceiptInputs,
+	verifyLegacyClangRelease
+} from './llvm-contracts/clang-build-provenance.mjs';
 import {
 	CLANGD_HEADER_ASSET,
 	validateClangdHeaderMetadata,
@@ -223,6 +229,20 @@ async function validateBundle(bundleDir, layout) {
 	) {
 		throw new Error('wasm-clang runtime-build.json is missing the clangd stdin bridge receipt');
 	}
+	const provenance = validateClangBuildProvenance(buildInfo.toolchain);
+	const sidecars = new Map();
+	let buildReceipt;
+	if (provenance) {
+		const root = layout === 'source' ? bundleDir : path.join(bundleDir, 'clang');
+		const receiptPath = path.join(root, CLANG_BUILD_RECEIPT);
+		if ((await stat(receiptPath)).size !== provenance.bytes)
+			throw new Error('Clang build provenance: build receipt size mismatch');
+		const bytes = await readFile(receiptPath);
+		buildReceipt = parseClangBuildReceipt(buildInfo.toolchain, bytes);
+		sidecars.set(CLANG_BUILD_RECEIPT, bytes);
+		if (!isObject(buildInfo.toolchain.memfs) || !buildInfo.toolchain.memfs.files)
+			throw new Error('Clang build provenance: verified builds require MemFS evidence');
+	}
 	const bundleAssets = [...ASSETS];
 	const headerDescriptor = buildInfo.toolchain.clangd.headers;
 	if (headerDescriptor !== undefined || clangd.headers !== undefined) {
@@ -291,23 +311,20 @@ async function validateBundle(bundleDir, layout) {
 		}
 	}
 
+	const assetFiles = new Map();
 	for (const asset of bundleAssets) {
 		const filePath = path.join(bundleDir, asset[layout]);
-		const fileStats = await stat(filePath);
-		const hash = createHash('sha256');
-		for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+		const bytes = await readFile(filePath);
 		const metadata = buildAssets.get(layout === 'source' ? asset.asset : asset.deliveryAsset);
-		if (metadata.size !== fileStats.size || metadata.sha256 !== hash.digest('hex')) {
+		if (metadata.size !== bytes.length || metadata.sha256 !== sha256(bytes)) {
 			throw new Error(
 				`wasm-clang runtime asset ${asset.source} does not match runtime-build.json`
 			);
 		}
+		assetFiles.set(asset.asset, bytes);
 	}
 	if (headerDescriptor !== undefined)
-		verifyClangdHeaderAsset(
-			await readFile(path.join(bundleDir, CLANGD_HEADER_ASSET)),
-			headerDescriptor
-		);
+		verifyClangdHeaderAsset(assetFiles.get(CLANGD_HEADER_ASSET), headerDescriptor);
 	const memfsMetadata = buildInfo.toolchain.memfs;
 	if (isObject(memfsMetadata) && memfsMetadata.files !== undefined) {
 		const files = memfsMetadata.files;
@@ -335,6 +352,7 @@ async function validateBundle(bundleDir, layout) {
 			if (bytes.length !== pin.bytes || sha256(bytes) !== pin.sha256) {
 				throw new Error(`MemFS sidecar does not match its receipt: ${name}`);
 			}
+			sidecars.set(name, bytes);
 			if (
 				name === 'memfs-build-receipt.json' &&
 				JSON.stringify(JSON.parse(bytes.toString('utf8'))) !== JSON.stringify(receipt)
@@ -342,10 +360,11 @@ async function validateBundle(bundleDir, layout) {
 				throw new Error('MemFS build receipt does not match toolchain metadata');
 			}
 		}
-		const delivered = await readFile(
-			path.join(root, 'bin', layout === 'source' ? 'memfs.zip' : 'memfs.wasm.gz')
-		);
-		const wasm = layout === 'source' ? unzipSync(delivered).memfs : gunzipSync(delivered);
+		const delivered = assetFiles.get('memfs.zip');
+		const wasm =
+			layout === 'source'
+				? readSingleZipEntry(delivered, 'memfs', 'wasm-clang memfs ZIP')
+				: gunzipSync(delivered, { maxOutputLength: 512 * 1024 * 1024 });
 		const pin = receipt.outputs?.['memfs.wasm'];
 		if (
 			!wasm ||
@@ -357,9 +376,39 @@ async function validateBundle(bundleDir, layout) {
 		}
 	}
 
-	const clangdJs = await readFile(path.join(bundleDir, 'clangd', 'clangd.js'), 'utf8');
-	const clangdWasm = gunzipSync(await readFile(path.join(bundleDir, 'clangd', 'clangd.wasm.gz')));
+	const clangdJs = assetFiles.get('clangd/clangd.js');
+	const clangdWasm = gunzipSync(assetFiles.get('clangd/clangd.wasm.gz'), {
+		maxOutputLength: buildReceipt?.inputs.clangdWasm.bytes ?? 512 * 1024 * 1024
+	});
 	await assertClangdStdinBridge(clangdJs, clangdWasm);
+	{
+		/** @type {Record<string, Buffer>} */
+		const inputs = {
+			clangdJs,
+			clangdWasm,
+			memfsReceipt: sidecars.get('memfs-build-receipt.json')
+		};
+		for (const asset of ASSETS) {
+			if (!asset.entry) continue;
+			const name = asset.entry === 'sysroot.tar' ? 'sysroot' : asset.entry;
+			const bytes = assetFiles.get(asset.asset);
+			inputs[name] =
+				layout === 'source'
+					? readSingleZipEntry(bytes, asset.entry, `wasm-clang ${asset.asset}`)
+					: gunzipSync(bytes, {
+							maxOutputLength: buildReceipt?.inputs[name].bytes ?? 512 * 1024 * 1024
+						});
+		}
+		if (headerDescriptor !== undefined) {
+			inputs.clangdHeaders = gunzipSync(assetFiles.get(CLANGD_HEADER_ASSET), {
+				maxOutputLength:
+					buildReceipt?.inputs.clangdHeaders.bytes ?? headerDescriptor.uncompressedBytes
+			});
+		}
+		if (buildReceipt) verifyClangBuildReceiptInputs(buildReceipt, inputs);
+		else verifyLegacyClangRelease(buildInfo.toolchain, inputs);
+	}
+	return { sidecars, assetFiles, manifest, buildInfo };
 }
 
 /** @param {Buffer} bytes */
@@ -373,36 +422,31 @@ async function writeJson(filePath, value) {
 	await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
-/** @param {string} sourceDir @param {string} targetRoot */
-async function writeDeliveryBundle(sourceDir, targetRoot) {
-	const sourceManifest = JSON.parse(
-		await readFile(path.join(sourceDir, 'runtime-manifest.v1.json'), 'utf8')
-	);
+/** @param {Awaited<ReturnType<typeof validateBundle>>} snapshot @param {string} targetRoot */
+async function writeDeliveryBundle(snapshot, targetRoot) {
+	const { manifest: sourceManifest, buildInfo: sourceBuildInfo, assetFiles, sidecars } = snapshot;
 	const bundleAssets = [...ASSETS, ...(sourceManifest.clangd.headers ? [HEADER_ASSET] : [])];
 	for (const asset of bundleAssets) {
-		const sourcePath = path.join(sourceDir, asset.source);
 		const targetPath = path.join(targetRoot, asset.target);
 		await mkdir(path.dirname(targetPath), { recursive: true });
 		if (!asset.entry) {
-			await cp(sourcePath, targetPath);
+			await writeFile(targetPath, assetFiles.get(asset.asset));
 			continue;
 		}
 
-		let entries;
+		let payload;
 		try {
-			entries = unzipSync(await readFile(sourcePath));
+			payload = readSingleZipEntry(
+				assetFiles.get(asset.asset),
+				asset.entry,
+				`wasm-clang ${asset.source}`
+			);
 		} catch (error) {
 			throw new Error(
 				`wasm-clang runtime asset ${asset.source} could not be repackaged: ${error instanceof Error ? error.message : error}`
 			);
 		}
-		const files = Object.entries(entries).filter(([entryName]) => !entryName.endsWith('/'));
-		if (files.length !== 1 || files[0][0] !== asset.entry) {
-			throw new Error(
-				`wasm-clang runtime asset ${asset.source} must contain only ${asset.entry}`
-			);
-		}
-		await writeFile(targetPath, gzipSync(files[0][1], { level: 9 }));
+		await writeFile(targetPath, gzipSync(payload, { level: 9 }));
 	}
 
 	const deliveryManifest = JSON.parse(JSON.stringify(sourceManifest));
@@ -411,14 +455,8 @@ async function writeDeliveryBundle(sourceDir, targetRoot) {
 	deliveryManifest.compiler.lld.asset = MANIFEST_ASSETS.target.lld;
 	deliveryManifest.compiler.sysroot.asset = MANIFEST_ASSETS.target.sysroot;
 
-	const sourceBuildInfo = JSON.parse(
-		await readFile(path.join(sourceDir, 'runtime-build.json'), 'utf8')
-	);
-	if (sourceBuildInfo.toolchain.memfs?.files) {
-		for (const name of MEMFS_DOCUMENTS) {
-			await cp(path.join(sourceDir, name), path.join(targetRoot, 'clang', name));
-		}
-	}
+	for (const [name, bytes] of sidecars)
+		await writeFile(path.join(targetRoot, 'clang', name), bytes);
 	const deliveryAssets = [];
 	for (const asset of bundleAssets) {
 		const bytes = await readFile(path.join(targetRoot, asset.target));
@@ -452,7 +490,7 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 	}
 	const resolvedSourceDir = path.resolve(sourceDir);
 	const resolvedStaticDir = path.resolve(staticDir);
-	await validateBundle(resolvedSourceDir, 'source');
+	const snapshot = await validateBundle(resolvedSourceDir, 'source');
 
 	await mkdir(resolvedStaticDir, { recursive: true });
 	const suffix = `${process.pid}-${randomUUID()}`;
@@ -477,7 +515,7 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 	let keepPreviousRoot = false;
 
 	try {
-		await writeDeliveryBundle(resolvedSourceDir, nextRoot);
+		await writeDeliveryBundle(snapshot, nextRoot);
 		await validateBundle(nextRoot, 'target');
 
 		await mkdir(previousRoot, { recursive: true });

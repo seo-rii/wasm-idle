@@ -1,0 +1,889 @@
+{
+  "schemaVersion": 1,
+  "kind": "rendered-real-bash-container-workbench",
+  "complete": true,
+  "qualified": true,
+  "applicationCommit": "a8ff08b7eb1cf34c13fedb8369ae3bd0df64873c",
+  "startedAt": "2026-10-15T16:38:05.210Z",
+  "script": "set -eu\nmkdir -p /workspace/demo\ncd /workspace/demo\nprintf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;}\\n' > main.c\nclang main.c -o hello.wasm\n./hello.wasm | grep hello > result.txt\ncat result.txt\n",
+  "scriptSha256": "5eb5cdaefa0bf3bd4b1e749f8a5bb62c751fa7184d41487b56ead6ecdb7ebbc5",
+  "clangFilesystem": "live",
+  "configurationSha256": "692e89d9466a997e6176249013c88d07c8a816bcfcb43dbce6ef048b62eebb59",
+  "packageReceiptSha256": "ee74bc0dab416b3e1365f5380c0ab31abb45337fcbd45fa6fdb815459226f228",
+  "producerReceiptSha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd",
+  "busyboxReceiptSha256": "95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51",
+  "processSysrootReceiptSha256": "105089044738721b7177c1846454d8132578d79292100d6413c56b09fd27304c",
+  "os": {
+    "platform": "linux",
+    "release": "6.1.0-53-cloud-amd64",
+    "architecture": "x64"
+  },
+  "runs": [
+    {
+      "id": "cold-unchanged-plan-script",
+      "elapsedMs": 4867.874956,
+      "inputSha256": "5eb5cdaefa0bf3bd4b1e749f8a5bb62c751fa7184d41487b56ead6ecdb7ebbc5",
+      "stdout": "hello\n",
+      "stderr": "bash-dist# set -eu\nbash-dist# mkdir -p /workspace/demo\nbash-dist# cd /workspace/demo\nbash-dist# printf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;\r< <stdio.h>\\nint main(void){puts(\"hello\");return 0;}                         \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\\n' > main.c\nbash-dist# clang main.c -o hello.wasm\nclang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nbash-dist# ./hello.wasm | grep hello > result.txt\nbash-dist# cat result.txt\nbash-dist# exit\n",
+      "files": {
+        "source": {
+          "bytes": 59,
+          "sha256": "3f71be5bf678d999a70f70da4d0c3209b403181ad4650576fac497accc426aa4",
+          "inode": 27
+        },
+        "result": {
+          "bytes": 6,
+          "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+          "inode": 2324
+        },
+        "artifact": {
+          "bytes": 191813,
+          "sha256": "b88a9595a2c099c05bf4ad22c5e825931402c7dd51356e9a890bf461eabc8d30",
+          "inode": 2323,
+          "mode": 493
+        }
+      },
+      "downloads": {
+        "start": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 0,
+          "/assets/lld": 0,
+          "/assets/sysroot": 0
+        },
+        "end": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        }
+      },
+      "inspection": {
+        "disposed": false,
+        "profile": "isolated",
+        "persistence": "opfs",
+        "workspace": {
+          "id": "real-bash-ui",
+          "state": "saved",
+          "generation": 258,
+          "committedGeneration": 258,
+          "committedSequence": 1,
+          "dirty": false,
+          "recovered": false,
+          "maintenance": false
+        },
+        "packages": {
+          "distributionId": "shell-acceptance-8664390215c1f6c1c85625615d103cb6f47f119abd60c5ca4fd8801ec551989c",
+          "distributionSha256": "b2f0090d273b7cb445e0dc2db61d40ce178728e35e83da9aa7cfa90480cc988d",
+          "pendingPackages": [],
+          "preparingBytes": 0,
+          "assets": {
+            "pendingRequests": 0,
+            "consumers": 0,
+            "cachedEntries": 4,
+            "cachedBytes": 112679091,
+            "memoryCacheHits": 5
+          }
+        },
+        "limits": {
+          "maxWorkspaceBytes": 268435456,
+          "maxWorkspaceInodes": 16384,
+          "maxMemoryBytes": 4294967296,
+          "maxInputBytes": 8388608,
+          "maxOutputBytes": 8388608
+        },
+        "processes": [],
+        "save": {
+          "workspace": {
+            "id": "real-bash-ui",
+            "state": "saved",
+            "generation": 258,
+            "committedGeneration": 258,
+            "committedSequence": 1,
+            "dirty": false,
+            "recovered": false,
+            "maintenance": false
+          },
+          "autosave": false,
+          "pausedAfterError": false,
+          "disposed": false
+        }
+      }
+    },
+    {
+      "id": "reload-reexecute-persisted-artifact",
+      "script": "set -eu\ncd /workspace/demo\n./hello.wasm | grep hello > restored.txt\ncat restored.txt\n",
+      "stdout": "hello\n",
+      "stderr": "bash-dist# set -eu\nbash-dist# cd /workspace/demo\nbash-dist# ./hello.wasm | grep hello > restored.txt\nbash-dist# cat restored.txt\nbash-dist# exit\n",
+      "files": {
+        "source": {
+          "bytes": 59,
+          "sha256": "3f71be5bf678d999a70f70da4d0c3209b403181ad4650576fac497accc426aa4",
+          "inode": 27
+        },
+        "result": {
+          "bytes": 6,
+          "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+          "inode": 2324
+        },
+        "artifact": {
+          "bytes": 191813,
+          "sha256": "b88a9595a2c099c05bf4ad22c5e825931402c7dd51356e9a890bf461eabc8d30",
+          "inode": 2323,
+          "mode": 493
+        }
+      },
+      "downloads": {
+        "start": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        },
+        "end": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        }
+      },
+      "inspection": {
+        "disposed": false,
+        "profile": "isolated",
+        "persistence": "opfs",
+        "workspace": {
+          "id": "real-bash-ui",
+          "state": "saved",
+          "generation": 265,
+          "committedGeneration": 265,
+          "committedSequence": 2,
+          "dirty": false,
+          "recovered": false,
+          "maintenance": false
+        },
+        "packages": {
+          "distributionId": "shell-acceptance-8664390215c1f6c1c85625615d103cb6f47f119abd60c5ca4fd8801ec551989c",
+          "distributionSha256": "b2f0090d273b7cb445e0dc2db61d40ce178728e35e83da9aa7cfa90480cc988d",
+          "pendingPackages": [],
+          "preparingBytes": 0,
+          "assets": {
+            "pendingRequests": 0,
+            "consumers": 0,
+            "cachedEntries": 1,
+            "cachedBytes": 447557,
+            "memoryCacheHits": 1
+          }
+        },
+        "limits": {
+          "maxWorkspaceBytes": 268435456,
+          "maxWorkspaceInodes": 16384,
+          "maxMemoryBytes": 4294967296,
+          "maxInputBytes": 8388608,
+          "maxOutputBytes": 8388608
+        },
+        "processes": [],
+        "save": {
+          "workspace": {
+            "id": "real-bash-ui",
+            "state": "saved",
+            "generation": 265,
+            "committedGeneration": 265,
+            "committedSequence": 2,
+            "dirty": false,
+            "recovered": false,
+            "maintenance": false
+          },
+          "autosave": false,
+          "pausedAfterError": false,
+          "disposed": false
+        }
+      }
+    },
+    {
+      "id": "warm-unchanged-plan-script",
+      "elapsedMs": 4562.561667,
+      "inputSha256": "5eb5cdaefa0bf3bd4b1e749f8a5bb62c751fa7184d41487b56ead6ecdb7ebbc5",
+      "stdout": "hello\n",
+      "stderr": "bash-dist# set -eu\nbash-dist# mkdir -p /workspace/demo\nbash-dist# cd /workspace/demo\nbash-dist# printf '#include <stdio.h>\\nint main(void){puts(\"hello\");return 0;\r< <stdio.h>\\nint main(void){puts(\"hello\");return 0;}                         \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\\n' > main.c\nbash-dist# clang main.c -o hello.wasm\nclang: warning: argument '--target=wasm32-wasi' is deprecated, use --target=wasm32-wasip1 instead [-Wdeprecated]\nbash-dist# ./hello.wasm | grep hello > result.txt\nbash-dist# cat result.txt\nbash-dist# exit\n",
+      "files": {
+        "source": {
+          "bytes": 59,
+          "sha256": "3f71be5bf678d999a70f70da4d0c3209b403181ad4650576fac497accc426aa4",
+          "inode": 27
+        },
+        "result": {
+          "bytes": 6,
+          "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+          "inode": 2324
+        },
+        "artifact": {
+          "bytes": 191813,
+          "sha256": "b88a9595a2c099c05bf4ad22c5e825931402c7dd51356e9a890bf461eabc8d30",
+          "inode": 2323,
+          "mode": 493
+        }
+      },
+      "downloads": {
+        "start": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        },
+        "end": {
+          "/assets/sdk": 1,
+          "/assets/bash": 1,
+          "/assets/busybox": 1,
+          "/assets/clang": 1,
+          "/assets/lld": 1,
+          "/assets/sysroot": 1
+        }
+      },
+      "inspection": {
+        "disposed": false,
+        "profile": "isolated",
+        "persistence": "opfs",
+        "workspace": {
+          "id": "real-bash-ui",
+          "state": "saved",
+          "generation": 515,
+          "committedGeneration": 515,
+          "committedSequence": 3,
+          "dirty": false,
+          "recovered": false,
+          "maintenance": false
+        },
+        "packages": {
+          "distributionId": "shell-acceptance-8664390215c1f6c1c85625615d103cb6f47f119abd60c5ca4fd8801ec551989c",
+          "distributionSha256": "b2f0090d273b7cb445e0dc2db61d40ce178728e35e83da9aa7cfa90480cc988d",
+          "pendingPackages": [],
+          "preparingBytes": 0,
+          "assets": {
+            "pendingRequests": 0,
+            "consumers": 0,
+            "cachedEntries": 4,
+            "cachedBytes": 112679091,
+            "memoryCacheHits": 5
+          }
+        },
+        "limits": {
+          "maxWorkspaceBytes": 268435456,
+          "maxWorkspaceInodes": 16384,
+          "maxMemoryBytes": 4294967296,
+          "maxInputBytes": 8388608,
+          "maxOutputBytes": 8388608
+        },
+        "processes": [],
+        "save": {
+          "workspace": {
+            "id": "real-bash-ui",
+            "state": "saved",
+            "generation": 515,
+            "committedGeneration": 515,
+            "committedSequence": 3,
+            "dirty": false,
+            "recovered": false,
+            "maintenance": false
+          },
+          "autosave": false,
+          "pausedAfterError": false,
+          "disposed": false
+        }
+      }
+    }
+  ],
+  "checks": [
+    "PRODUCT-SH-01: rendered actual Bash profile opens persistent workspace with no compiler body requests",
+    "PRODUCT-SH-02: actual Bash creates source in common workspace before the first Clang request",
+    "PRODUCT-SH-03: unchanged plan script runs actual Bash→Clang→artifact→BusyBox pipe/redirect; all files and executable metadata are committed",
+    "PRODUCT-SH-04: new owner restores source/result/executable Wasm and directly reruns it through real BusyBox without body downloads",
+    "PRODUCT-SH-05: a fresh owner repeats the unchanged real compiler workflow using verified persistent bytes with zero repeated body downloads",
+    "PRODUCT-SH-06: UI foreground interrupt releases a real BusyBox command blocked on stdin while actual Bash survives and executes the next input"
+  ],
+  "errors": [],
+  "scope": "Actual rendered workbench, public WASIX session, real Bash/BusyBox/Clang, common workspace, OPFS save/reload and independently verified asset cache; loopback deployment only, no PTY or production CDN claim",
+  "distributionSha256": "b2f0090d273b7cb445e0dc2db61d40ce178728e35e83da9aa7cfa90480cc988d",
+  "clangAdapterId": "llvm-clang-tool-host-live-v1",
+  "browser": "153.0.8010.12",
+  "workerTargets": {
+    "initial": [],
+    "afterColdShell": [
+      {
+        "type": "worker",
+        "url": "http://127.0.0.1:36433/owner.mjs"
+      }
+    ],
+    "afterRestoredArtifactShell": [
+      {
+        "type": "worker",
+        "url": "http://127.0.0.1:36433/owner.mjs"
+      }
+    ],
+    "afterWarmShell": [
+      {
+        "type": "worker",
+        "url": "http://127.0.0.1:36433/owner.mjs"
+      }
+    ],
+    "afterOwnerClosed": []
+  },
+  "renderedProfile": "Workspace real-bash-ui · Real GNU Bash · BusyBox · live Clang · persistent workspace",
+  "phase": "complete",
+  "backup": {
+    "file": "real-bash-workspace-backup.json",
+    "bytes": 193122,
+    "sha256": "88ead1852f924eb6b5dce5912886f0e61b4683d70ee4b099bada8005bb0d5fe5"
+  },
+  "sourceHashes": {
+    "examples/container/main.mjs": "96fe177732561f803f725e9ed03bd4ac89d2a1a85528f53dd0101b6e417f84a3",
+    "examples/container/bash-owner.mjs": "f197487b6dcf2ca8ee87990e8ca2c5ea5f70232f72d4e748e6d68079b3ccdfee",
+    "packages/container/src/adapters/wasi-live/worker.ts": "e5e64037e3daf496030ff9a60b5f160fe1cb4d957e6f47c8c314dd6f8e7ea73f",
+    "packages/container/src/adapters/clang-live/worker.ts": "6832bb2265fb4a58ab3b50550c00b1d78f642dbb5aaed6a490ea982eee8e829f",
+    "packages/container/src/transport/rpc.ts": "fb6731cbfc172256a03c8f5a98e92b1a851cb63d7a919d89d6b6174e018e1900",
+    "packages/container/src/adapters/wasi/host.ts": "27602242eb5d61f1c9ad6c389c158c164ee99af4f97cb57e9a02e2cb2b25b347",
+    "packages/container/src/adapters/wasi-live/io.ts": "6a5a1b71606f35dca151d8d609e075bb130969c627994d72827366708447f42e",
+    "examples/container/workbench.mjs": "3a98bd6042e5bb8cd69c43aef41bfc85c9a8ae40dfe3b80aed1f9804df1b8412",
+    "packages/container/src/adapters/wasi/profile.ts": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4",
+    "packages/container/src/adapters/wasix/index.ts": "153a07b48729907b3567d78533938dde66f5e89e5c30c83e7db29baeccdb8241",
+    "packages/container/src/adapters/clang-live/stdio.ts": "27e01ed84a4851c9fb7fdbece814075748e2229e17e7f59b42fd61933206d34d",
+    "packages/llvm-core/runtime/clang/src/tool-host.ts": "d6951c231f6394ffc54cb060609b5af63f5f48d690320a84f97618560e66b324",
+    "packages/core/src/index.ts": "90ca280f189ca60d7f0faf02564f1b24ef5b3ae9789dd03e2e807cd7fccc33b0",
+    "examples/container/bash-profile.mjs": "017dc8b0dd980a5a0a1dfa8db3f38631e64cf22b54975abc53d22f6f86c87278",
+    "packages/container/src/fs/index.ts": "2f6ea6db34574ff767f9ee6b970a4aa107c58f8918331d2d5051dde655858820",
+    "packages/container/src/fs/persistence/index.ts": "4cf9405deaddb91e22e2c16620b7285d895c76a5928099ac14102e6961d0410e",
+    "packages/container/src/workspace/index.ts": "42e80709946d479e19e2ff8404e613eafd332d710c79308fa8e80674ffeb732e",
+    "packages/container/src/errors.ts": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8",
+    "packages/container/src/adapters/wasix/owner.ts": "b5ccc95dad2282e4d71b74eddc29e3fc0f7d3d5ea11225fbefe2c56bb6c8b9dc",
+    "packages/container/src/adapters/wasix/session.ts": "2c6a47d92103504130603fd6f0ed7aac596d00318d906d6a0a406e773f0e2527",
+    "packages/container/src/adapters/wasix/workers.ts": "dde7657fd21cde2662b73e596499a04fb08b387552d3e960d6aec23fa32de911",
+    "packages/container/src/fs/errors.ts": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a",
+    "packages/container/src/fd/pipe.ts": "9447ac23617ef7e90badaca6d43765a828d6657c0fb6ddb5cc662f79d47c6646",
+    "packages/container/src/fs/memory.ts": "3fb932a1c522c3c9af5ff5d8f79b06ddec697ea34fd58ba8d34d988f630da6f1",
+    "packages/container/src/workspace/save.ts": "241a227fe0ef3090617126a1230fe014425a61086c9ef05c7380f78a1f3529cb",
+    "packages/container/src/workspace/backup.ts": "4bd6718afe0fa732cee4d59e4e058117d1236458bee3dcbabceda25bab1c41fa",
+    "packages/container/src/terminal/index.ts": "bf1f3fcfdc97164635ef14c01b15f29a67f06987df81c67e8eed5e65ca81a587",
+    "packages/container/src/index.ts": "70885c9ecfa88127adbe4b86bde1da040a0ab86f015c61cb1fdf6b1584942f46",
+    "packages/container/src/adapters/wasi-live/index.ts": "eb37c42792422a9895bad54d7a1101e3a7435dcc5a5f532bd80009dc7f4fdadf",
+    "examples/container/clang-profile.mjs": "d84f36dc8bd370ada4984d736bd7d041e876b47f0a00b21fffdc1ba8104e16b7",
+    "packages/container/src/adapters/clang-live/index.ts": "4480928a4a2806dce66a73546355577047b5a0302456407edfd767ad47ac70d2",
+    "packages/container/src/adapters/clang/index.ts": "0a96d80d246080861d9de15589975c52c0c65491a3727c26eec49d3f147450c1",
+    "packages/container/src/shell/filesystem.ts": "4104ce201b64ea2d448bf580a15d6a9feedb574f1e6f6c2ad0bc9aaea2ea5793",
+    "packages/container/src/shell/host-command.ts": "bf4da8d6ba5023f761971d6cba78f59d2a05b490e6c8ea9f610d3ccb01168623",
+    "packages/container/src/process/lifecycle.ts": "51f44436f91ba59cf90f60c1953717c60c41fd72fc66b2603adfae6e061e731b",
+    "packages/container/src/adapters/wasi/stdio.ts": "c1df62c017fe8f5543354c66652a4051376541654babae367412bd0f8f984690",
+    "packages/core/src/pinned-asset-fetch.ts": "6c7d1159934396792c56211e622b5ce5ec9136ed11bd666bb92b1eeeac72314f",
+    "packages/core/src/asset-delivery-budget.ts": "cc4f834054234a28eccd5220defd3874e43181c32498ce615fbe7757b39637f1",
+    "packages/core/src/persistent-asset-cache.ts": "d26a6d21d95a49dbe07b22cfa65efc3c81432e0a02a92698994ddf38cd0c0777",
+    "packages/core/src/runtime-asset-lock.ts": "8a6e7f01d32136a52fc17340322ca52d68a4073b18c3c97a76bb83163fd60846",
+    "packages/core/src/capabilities.ts": "9c0d0086c4ade511ce11ba06229f9a24023ad213a9965ee83cfd561f0b0cc83d",
+    "packages/core/src/protocol.ts": "2b3bba1657ef9c6b65fbb37ad2d94233250381c22dc666397a885e6d6c282f00",
+    "packages/core/src/asset-integrity.ts": "bab908b33160ac19846073ecfa0488b73065dfe0d0a2f795d9f981dee18cb928",
+    "packages/core/src/languages.ts": "073e932aa5c1e8c3e4a39c482dde3540627d397a3338a30ea243d37faca3c6e9",
+    "packages/core/src/awk-runtime.ts": "b222301246f57e24eca67d30c5ca0cd9427f9db310bab8cf9476a27e0df78e69",
+    "packages/core/src/progress.ts": "8fb4edba74dcd1b59f7cb5b5eeaff200defe3979b98b78ae75b703b9697b11e9",
+    "packages/core/src/errors.ts": "36affaa3329c850181848c5a58f09438386837b22ee263092157f65ccb98e0f4",
+    "packages/core/src/runtime-assets.ts": "a043ce58da41d619a88e58e4b6274f5c015b60643eaeb10e9765fb3eca111f5e",
+    "packages/core/src/runtime-activation.ts": "f87317deced45fd48929cd970bd85f36ff3c8449d21e340a8b3ce8d3ad37dd07",
+    "packages/core/src/execution.ts": "179aacde14a70e6cef71a6a48e0794c10b25b9460502571e01d8fa2add10ecb0",
+    "packages/core/src/prolog-runtime.ts": "33277db40269ff0b153170bff98838b14b1f0ef3995de63833c9fe27de35ad5a",
+    "packages/core/src/bash-runtime.ts": "d4aa2f8bc8bc23b64aa23d88e17674eccebff5862e445f72d4b3327f0777db6a",
+    "packages/core/src/janet-runtime.ts": "4a93f4eee32ea7b11b7b68fe8fbe15689b207da2ca05d1a4ec593beef6430eba",
+    "packages/core/src/ruby-runtime.ts": "e44b347fd1bdabae5112707566fa9ebd3c79b2eb6ad84638157d75fed1a49944",
+    "packages/core/src/sandbox.ts": "afcd88c161f37004ba8f64416545b2b23abe9f6d990ceaacfe0e158a3b57c79e",
+    "packages/core/src/resource-budget.ts": "9cec36db9aa8690586e666ee8fb3df594e49a3f71f77db51bd9b3221aa070a1d",
+    "packages/core/src/runtime-preflight-activation.ts": "3a7a6e89a71809a7a723be1a3a3888a1ffa5218abc257a6bbcf9bf035fa3548d",
+    "packages/core/src/pascal-runtime.ts": "adc2cdac9ba1404e3b1e4dd82ee11e29f0eecc6ee1588bcde809f27dca076343",
+    "packages/core/src/runtime-preflight.ts": "7bb2b19dacdfe57bbad1cef72694b00ad14623b0106524321e5cea7cfb382041",
+    "packages/core/src/nim-runtime.ts": "fca15f0d89aaefa445038bf5bcd7332f720c7b50bee20662fd6c9f7e31c24c10",
+    "packages/core/src/module-asset-rewrite.ts": "8a8142851271559b6b5f0b3319788faa955e6a5350bf0b91254a4f3897ad0e46",
+    "packages/core/src/runtime-manifest.ts": "ecc5882de5d03f32e366a6e055deb31b441731baa82d3e0eecfb5e22766b916d",
+    "packages/core/src/workspace.ts": "0fae86a0c2fd467801f868ac464dc400fff59c4a6cbad7c080e50f6144f68f1c",
+    "packages/core/src/haskell-runtime.ts": "6cf202244afebccea6d84f9da5c255b794a80cfa406d3acf9c9ae301dfe48bc2",
+    "packages/core/src/perl-runtime.ts": "ba40ee0598f28cf0a3280af5ac73a12ce2d0ecfbe151ebc0e2ac77a6cf60f409",
+    "packages/core/src/lisp-runtime.ts": "5c24735877a926426604eb0c34957830dc1c54c46de7fe229adebcb36ed2c01e",
+    "packages/core/src/runtime-asset-lock.generated.ts": "fd79a006b706a1f38feeee8826692dfe98b3882942cc9e879367a17f0922e94f",
+    "packages/core/src/tcl-runtime.ts": "5fe706b4ee4a518ce7cb381f25ed182e8bdc798a5aaf75e88d8a07be9ad4b9f1",
+    "packages/core/src/worker-lifetime.ts": "59ea60d2fe9ed606e669e98f105c71a23e79ebde61f7c19d6771e08e56b35310",
+    "packages/core/src/teavm-runtime.ts": "a611d0bac9635935b6aece558cdcfc0e1fb63570baaa31a037f5c3a998066354",
+    "packages/core/src/julia-runtime.ts": "6db37d220fe390eb95448c3b614bae86674ee0ef374fa0e1630980e0cfb24fe8",
+    "packages/container/src/fs/watch.ts": "df7d0c1e3bc72b87d1e19fed986afcf36e3f63034e8764bc731269a7479b58cc",
+    "packages/core/src/ruby-split.ts": "0ef1b6eb50af947daa7b1fd1fc6052f12e5511c8cedb5fd5d672fcf42510e8c7",
+    "packages/container/src/packages/index.ts": "1f98a17d5f63fc817848260ab4e375958833ccb2823609aede587ecf478f645f",
+    "packages/container/src/container.ts": "388749c5204be57deb5f43982dff3f8ad79531a3ee7660c402eca105799edc61",
+    "packages/container/src/adapters/live-worker.ts": "a5c397e4bddb33b74fb33acfa51fa6ac056968ae0f2444cdcc3c4d0f8c4bc6d5",
+    "packages/container/src/adapters/clang-live/outputs.ts": "bda0fc71c0bd3993d57569165b1311c79d65caa61520c9f271ce234da63a8f33",
+    "packages/container/src/adapters/worker-adapter.ts": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e",
+    "packages/container/src/adapters/clang/configuration.ts": "c6a51026fb090b29444d6098c19ae16144f7d0c2583753a2cded2837b0d4646c",
+    "packages/core/src/ruby-runtime.generated.ts": "382d80a250688b34cd3ac7473d83ddad49e9b875234d30d425a165643ee22a2b",
+    "packages/core/src/teavm-runtime.generated.ts": "74c901c64fa6f2d576a93fec5d6e3f8e0ff73b41dcbea4439a9effab6a134d79",
+    "packages/core/src/prewarm.ts": "9bddede2dfeff380e891c3bd4b862c5502986e7ff97989aa35c4c99a3fc357c1",
+    "packages/core/src/haskell-runtime.generated.ts": "85237d1eccd8f9fa939c3884701e3f95ff9968e6109b922f1c779520aff6c554",
+    "packages/container/src/packages/manager.ts": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c",
+    "packages/container/src/packages/distribution.ts": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7",
+    "packages/container/src/packages/archive.ts": "eb42bef7796e427271de6e1a58e3827771aa0f9c976260fe21f40604aa0e3fa0",
+    "packages/container/src/packages/assets.ts": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5",
+    "packages/container/src/adapters/clang/artifacts.ts": "a673bccb7d2b545179c1ed0f24d006d407a71ade2caf6452bd5882ccdd374905",
+    "packages/core/src/ruby-split.generated.ts": "4a9ee0e9274d1074318fdc6ab38fbd9ad1d781e636307b476a579e3674b591ac",
+    "examples/container/index.html": "e9a549a906ccb1bb004910502216a1e445612d7ca09e8dec0ff3cd16429ed4fa",
+    "examples/container/style.css": "16ce83acf6627203807d1c52a5fc465e6e962837c44c2ef924acd52d4796dd22",
+    "../../../../../../../data/seorii-container-fixes-20261015/sdk-streaming-errors-20261015/sdk-startup-final-20261015T141040Z-package/local-package/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs": "28868fae1a80b2ea984f4643ec485d6a1ee757430fd40422c1413131c0bc066d",
+    "examples/container/serve-bash.mjs": "c714c0a138f01222b35359a124d0d2956b263bc361527875931a61e51999bd7a",
+    "examples/container/serve.mjs": "04de401a9b5c4d5edb72a02a946808312cd2ef0172516245727fc8da1f83dd71",
+    "scripts/probe-container-shell-acceptance.mjs": "fe94cc6fc859cb42833a5721d72deb37b1172d2b2a013b6508e89d32997b5f52",
+    "scripts/probe-container-shell-acceptance-lib.mjs": "08935cdb3a2cb3112e04e7b528f001649294b5f63c447e5adb1e13fadec72813",
+    "scripts/probe-patched-container-shell-lib.mjs": "8c2703139e7091f1ab8d8ce5a93e9da229fa11f3d4b2017919caf21e29dabf24",
+    "packages/container/scripts/clang-browser-inputs.mjs": "1241b2d7d7fb688efb8db8b5cd979b32e548b12e7a05b128485026e188657eb2",
+    "packages/container/scripts/test-product-shell-browser.mjs": "c859b6cadca5d4fc9817524ae505597db25959aef3f55395dd5f7d36130565bf"
+  },
+  "sourcesRecheckedAfterRun": true,
+  "requests": [
+    {
+      "path": "/",
+      "accepted": true,
+      "atMs": 1792082285806
+    },
+    {
+      "path": "/style.css",
+      "accepted": true,
+      "atMs": 1792082285853
+    },
+    {
+      "path": "/main.mjs",
+      "accepted": true,
+      "atMs": 1792082285858
+    },
+    {
+      "path": "/owner.mjs",
+      "accepted": true,
+      "atMs": 1792082285896
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082285954
+    },
+    {
+      "path": "/assets/sdk",
+      "accepted": true,
+      "atMs": 1792082286167
+    },
+    {
+      "path": "/assets/bash",
+      "accepted": true,
+      "atMs": 1792082286357
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082286476
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082286488
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082286516
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082286531
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082286665
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082286677
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082286709
+    },
+    {
+      "path": "/assets/busybox",
+      "accepted": true,
+      "atMs": 1792082286709
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082286728
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082286738
+    },
+    {
+      "path": "/assets/clang",
+      "accepted": true,
+      "atMs": 1792082286986
+    },
+    {
+      "path": "/assets/lld",
+      "accepted": true,
+      "atMs": 1792082287475
+    },
+    {
+      "path": "/assets/sysroot",
+      "accepted": true,
+      "atMs": 1792082287773
+    },
+    {
+      "path": "/clang-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082289037
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082290210
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082290219
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082290266
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082290298
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082290302
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082290311
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082290357
+    },
+    {
+      "path": "/",
+      "accepted": true,
+      "atMs": 1792082291820
+    },
+    {
+      "path": "/style.css",
+      "accepted": true,
+      "atMs": 1792082291845
+    },
+    {
+      "path": "/main.mjs",
+      "accepted": true,
+      "atMs": 1792082291847
+    },
+    {
+      "path": "/owner.mjs",
+      "accepted": true,
+      "atMs": 1792082291877
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082291916
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293208
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293218
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293240
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293251
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293415
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293417
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293429
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293432
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293455
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293459
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293466
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293474
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293485
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293489
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293500
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082293512
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082293549
+    },
+    {
+      "path": "/",
+      "accepted": true,
+      "atMs": 1792082294649
+    },
+    {
+      "path": "/style.css",
+      "accepted": true,
+      "atMs": 1792082294665
+    },
+    {
+      "path": "/main.mjs",
+      "accepted": true,
+      "atMs": 1792082294665
+    },
+    {
+      "path": "/owner.mjs",
+      "accepted": true,
+      "atMs": 1792082294682
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082294713
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082294996
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082295006
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082295030
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082295041
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082295174
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082295183
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082295202
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082295213
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082295221
+    },
+    {
+      "path": "/clang-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082296677
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082297803
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082297827
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082297890
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082297892
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082297893
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082297910
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082297959
+    },
+    {
+      "path": "/",
+      "accepted": true,
+      "atMs": 1792082299378
+    },
+    {
+      "path": "/style.css",
+      "accepted": true,
+      "atMs": 1792082299396
+    },
+    {
+      "path": "/main.mjs",
+      "accepted": true,
+      "atMs": 1792082299398
+    },
+    {
+      "path": "/owner.mjs",
+      "accepted": true,
+      "atMs": 1792082299420
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082299482
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082299776
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082299785
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082299811
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082299823
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082299948
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082299963
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/worker.mjs",
+      "accepted": true,
+      "atMs": 1792082299989
+    },
+    {
+      "path": "/sdk/sha256-60f76db4e7525d32fef1c47546ec7b77a0e5056b4b96474ce585cc97e5aec107/index.mjs",
+      "accepted": true,
+      "atMs": 1792082300003
+    },
+    {
+      "path": "/live-worker.mjs",
+      "accepted": true,
+      "atMs": 1792082300011
+    }
+  ],
+  "downloads": {
+    "/assets/sdk": 1,
+    "/assets/bash": 1,
+    "/assets/busybox": 1,
+    "/assets/clang": 1,
+    "/assets/lld": 1,
+    "/assets/sysroot": 1
+  },
+  "finishedAt": "2026-10-15T16:38:20.441Z"
+}

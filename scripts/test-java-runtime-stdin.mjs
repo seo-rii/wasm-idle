@@ -28,6 +28,7 @@ function load(relative, dependencies = {}) {
 }
 const snapshot = load('../src/lib/playground/javaStdin.ts');
 const helpers = load('../src/lib/playground/javaRuntimeStdin.ts', { './javaStdin': snapshot });
+const exceptionHelpers = load('../src/lib/playground/javaRuntimeErrors.ts');
 const { prepareJavaRuntimeStdinInjection: prepare, createJavaStdinBridge: bridge } = helpers;
 const source =
 	'public class Main { public static void main(String[] args) throws Exception { System.out.println(System.in.read()); } }';
@@ -63,7 +64,15 @@ test('programs without stdin remain unchanged and standalone snapshot callers st
 test('explicit UTF-8 input is delivered once in bounded byte chunks followed by stable EOF', () => {
 	let calls = 0;
 	const text = '한글🙂\0abc\r\n'.repeat(1000);
-	const input = bridge(text, true, () => { calls++; return null; }, 7);
+	const input = bridge(
+		text,
+		true,
+		() => {
+			calls++;
+			return null;
+		},
+		7
+	);
 	const chunks = drain(input);
 	assert.equal(decode(chunks), text);
 	assert.ok(chunks.every((c) => c.length <= 7));
@@ -72,14 +81,24 @@ test('explicit UTF-8 input is delivered once in bounded byte chunks followed by 
 	assert.equal(calls, 0);
 });
 test('explicit empty input never requests interactive input', () => {
-	const input = bridge('', true, () => { throw new Error('must not wait'); });
+	const input = bridge('', true, () => {
+		throw new Error('must not wait');
+	});
 	assert.equal(input.readChunk(), null);
 	assert.equal(input.readByte(), -1);
 });
 test('interactive prefix is not duplicated and empty chunks are not mistaken for EOF', () => {
 	const queue = ['', 'second\n', null];
 	let calls = 0;
-	const input = bridge('first\n', false, () => { calls++; return queue.shift(); }, 3);
+	const input = bridge(
+		'first\n',
+		false,
+		() => {
+			calls++;
+			return queue.shift();
+		},
+		3
+	);
 	assert.equal(decode(drain(input)), 'first\nsecond\n');
 	assert.equal(input.readByte(), -1);
 	assert.equal(calls, 3);
@@ -92,8 +111,11 @@ test('byte and chunk reads share one cursor and preserve unsigned byte values', 
 	assert.equal(input.readChunk(), null);
 });
 test('dispose ends both read APIs and chunk limits are validated', () => {
-	const input = bridge('data', false, () => { throw new Error('must not wait'); });
-	input.dispose(); input.dispose();
+	const input = bridge('data', false, () => {
+		throw new Error('must not wait');
+	});
+	input.dispose();
+	input.dispose();
 	assert.equal(input.readByte(), -1);
 	assert.equal(input.readChunk(), null);
 	for (const size of [0, -1, NaN, 1.5]) assert.throws(() => bridge('', true, () => null, size));
@@ -110,46 +132,113 @@ test('generated helper uses classlib JSO overlays and retains a byte-reader fall
 
 const workerCode = transpile(
 	readFileSync(new URL('../src/lib/playground/worker/java.ts', import.meta.url), 'utf8') +
-		'\nexport function __inject(c: any, r: any) { compiler = c; runtimeLoad = r; }'
+		'\nexport function __inject(c: any, r: any) { compiler = c; runtimeLoad = r; exceptionDeobfuscator = {} as WebAssembly.Module; }'
 );
 function worker() {
 	const counts = { compile: 0, generate: 0, run: 0 };
-	const inputs = [], addedSources = [], messages = [], queue = [];
+	const inputs = [],
+		addedSources = [],
+		messages = [],
+		queue = [];
 	const failures = { compile: false, run: false };
+	let compilingBridge = false;
 	let handler;
-	const originalWindow = {}, originalBridge = {};
+	const originalWindow = {},
+		originalBridge = {};
 	const context = {
-		exports: {}, TextDecoder, TextEncoder, Blob, URL, Uint8Array, Int8Array, Int32Array, Error,
-		window: originalWindow, wasmIdleJavaStdin: originalBridge,
+		exports: {},
+		TextDecoder,
+		TextEncoder,
+		Blob,
+		URL,
+		Uint8Array,
+		Int8Array,
+		Int32Array,
+		Error,
+		window: originalWindow,
+		wasmIdleJavaStdin: originalBridge,
 		self: {
-			addEventListener(_, listener) { handler = listener; },
-			postMessage(message) { messages.push(message); }
+			addEventListener(_, listener) {
+				handler = listener;
+			},
+			postMessage(message) {
+				messages.push(message);
+			}
 		},
 		require(id) {
 			if (id === '$lib/playground/javaRuntimeStdin') return helpers;
-			if (id === '$lib/playground/javaSource') return { resolveJavaSourceIdentity: () => ({ mainClass: 'Main', sourcePath: 'Main.java' }) };
-			if (id === '$lib/playground/stdinBuffer') return { waitForBufferedStdin: (_, notify) => { notify(); return queue.shift() ?? null; } };
+			if (id === '$lib/playground/javaRuntimeErrors') return exceptionHelpers;
+			if (id === '$lib/playground/javaSource')
+				return {
+					resolveJavaSourceIdentity: () => ({
+						mainClass: 'Main',
+						sourcePath: 'Main.java'
+					})
+				};
+			if (id === '$lib/playground/stdinBuffer')
+				return {
+					waitForBufferedStdin: (_, notify) => {
+						notify();
+						return queue.shift() ?? null;
+					}
+				};
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			if (id === './javaStreaming') return {};
 			throw new Error(id);
 		}
 	};
 	vm.runInNewContext(workerCode, context);
-	context.exports.__inject({
-		onDiagnostic: () => () => {}, clearSourceFiles() {}, clearInputClassFiles() {}, clearOutputFiles() {},
-		addSourceFile(name, content) { addedSources.push({ name, content }); },
-		compile() { counts.compile++; return !failures.compile; },
-		detectMainClasses: () => ['Main'],
-		generateWebAssembly() { counts.generate++; return true; },
-		getWebAssemblyOutputFile: () => new Uint8Array([1])
-	}, async () => ({ exports: { main() {
-		counts.run++;
-		inputs.push(decode(drain(context.wasmIdleJavaStdin)));
-		if (failures.run) throw new Error('user failed');
-	} } }));
-	return { counts, inputs, messages, addedSources, queue, failures,
-		send: (data = {}) => handler({ data: { code: source, hasExplicitStdin: true, buffer: new ArrayBuffer(64), ...data } }),
-		assertRestored() { assert.equal(context.window, originalWindow); assert.equal(context.wasmIdleJavaStdin, originalBridge); }
+	context.exports.__inject(
+		{
+			onDiagnostic: () => () => {},
+			clearSourceFiles() {
+				compilingBridge = false;
+			},
+			clearInputClassFiles() {},
+			clearOutputFiles() {},
+			addSourceFile(name, content) {
+				addedSources.push({ name, content });
+				compilingBridge = name.startsWith('WasmIdleJava');
+			},
+			listOutputFiles: () => ['Main.class'],
+			getOutputFile: () => new Int8Array([1]),
+			addClassFile() {},
+			compile() {
+				if (!compilingBridge) counts.compile++;
+				return !failures.compile;
+			},
+			detectMainClasses: () => ['Main'],
+			generateWebAssembly() {
+				counts.generate++;
+				return true;
+			},
+			getWebAssemblyOutputFile: () => new Uint8Array([1])
+		},
+		async () => ({
+			exports: {
+				main() {
+					counts.run++;
+					inputs.push(decode(drain(context.wasmIdleJavaStdin)));
+					if (failures.run) throw new Error('user failed');
+				}
+			}
+		})
+	);
+	return {
+		counts,
+		inputs,
+		messages,
+		addedSources,
+		queue,
+		failures,
+		send: (data = {}) =>
+			handler({
+				data: { code: source, hasExplicitStdin: true, buffer: new ArrayBuffer(64), ...data }
+			}),
+		assertRestored() {
+			assert.equal(context.window, originalWindow);
+			assert.equal(context.wasmIdleJavaStdin, originalBridge);
+		}
 	};
 }
 test('prepare and different input-only runs compile once, with fresh input each time', async () => {
@@ -160,7 +249,11 @@ test('prepare and different input-only runs compile once, with fresh input each 
 	await w.send({ stdin: '' });
 	assert.deepEqual(w.counts, { compile: 1, generate: 1, run: 3 });
 	assert.deepEqual(w.inputs, ['second', '한글'.repeat(10000), '']);
-	assert.ok(w.addedSources.every((file) => !file.content.includes('second') && !file.content.includes('한글')));
+	assert.ok(
+		w.addedSources.every(
+			(file) => !file.content.includes('second') && !file.content.includes('한글')
+		)
+	);
 	w.assertRestored();
 });
 test('switching explicit and interactive input reuses the compiled program', async () => {

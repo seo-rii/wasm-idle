@@ -2,8 +2,26 @@ export interface ProgressSink {
 	set?: (value: number) => void;
 }
 
-const store = new Map<string, Promise<WebAssembly.Module>>();
-const bufferStore = new Map<string, Promise<Uint8Array>>();
+// Providers can apply different credentials, pins or storage at the same URL.
+// Keep both caches within that provider identity and allow unused providers to be collected.
+const providerCaches = new WeakMap<
+	typeof fetch,
+	{
+		modules: Map<string, Promise<WebAssembly.Module>>;
+		buffers: Map<string, Promise<Uint8Array>>;
+	}
+>();
+
+function resolveAssetProvider(fetchImpl?: typeof fetch) {
+	const provider = fetchImpl ?? globalThis.fetch;
+	if (!provider) throw new Error('Fetch is unavailable while loading runtime assets');
+	let cache = providerCaches.get(provider);
+	if (!cache) {
+		cache = { modules: new Map(), buffers: new Map() };
+		providerCaches.set(provider, cache);
+	}
+	return { provider, cache };
+}
 const moduleFingerprints = new WeakMap<WebAssembly.Module, Promise<string | undefined>>();
 
 /** The digest belongs to the exact bytes compiled, including cancellable uncached loads. */
@@ -698,12 +716,15 @@ const readBufferInternal = async (
 	name: string,
 	progress?: ProgressSink,
 	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	fetchImpl?: typeof fetch
 ) => {
 	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
 		throw new Error('Runtime asset byte limit must be a non-negative safe integer');
 	}
 	throwIfRuntimeAssetAborted(signal);
+	const { provider, cache } = resolveAssetProvider(fetchImpl);
+	const bufferStore = cache.buffers;
 	const cacheKey = `${name}\0${maxOutputBytes}`;
 	let pending = signal ? undefined : bufferStore.get(cacheKey);
 	if (!pending) {
@@ -717,7 +738,7 @@ const readBufferInternal = async (
 			if (signal) requestInit.signal = signal;
 			let response: Response;
 			try {
-				const pendingResponse = Promise.resolve(fetch(resolvedUrl, requestInit));
+				const pendingResponse = Promise.resolve(provider(resolvedUrl, requestInit));
 				response = await waitForRuntimeAssetOperation(
 					pendingResponse,
 					signal,
@@ -787,13 +808,15 @@ const readBufferInternal = async (
 	return data;
 };
 
+/** Binary caches are scoped to the fetch function identity; cancellable loads remain uncached. */
 export const readBuffer = async (
 	name: string,
 	progress?: ProgressSink,
 	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	fetchImpl?: typeof fetch
 ) => {
-	const data = await readBufferInternal(name, progress, maxOutputBytes, signal);
+	const data = await readBufferInternal(name, progress, maxOutputBytes, signal, fetchImpl);
 	throwIfRuntimeAssetAborted(signal);
 	return Uint8Array.from(data);
 };
@@ -802,16 +825,25 @@ export async function compile(
 	filename: string,
 	progress?: ProgressSink,
 	signal?: AbortSignal,
-	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	fetchImpl?: typeof fetch
 ) {
 	// TODO: make compileStreaming work. It needs the server to use the
 	// application/wasm mimetype.
 	throwIfRuntimeAssetAborted(signal);
+	const { provider, cache } = resolveAssetProvider(fetchImpl);
+	const store = cache.modules;
 	const cacheKey = `${filename}\0${maxOutputBytes}`;
 	const cached = signal ? undefined : store.get(cacheKey);
 	if (cached) return cached;
 	let pending = (async () => {
-		const bytes = await readBufferInternal(filename, progress, maxOutputBytes, signal);
+		const bytes = await readBufferInternal(
+			filename,
+			progress,
+			maxOutputBytes,
+			signal,
+			provider
+		);
 		throwIfRuntimeAssetAborted(signal);
 		const buffer = bytes.buffer;
 		if (!(buffer instanceof ArrayBuffer)) {

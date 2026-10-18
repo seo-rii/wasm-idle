@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "profile": "wasi-preview1-process",
+  "purpose": "Initial fd metadata, zero-length I/O and close semantics for all eight stdin/stdout/stderr open masks",
+  "compiler": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)",
+  "command": [
+    "clang",
+    "--target=wasm32-unknown-unknown",
+    "-Oz",
+    "-nostdlib",
+    "closed-stdio.c",
+    "-Wl,--no-entry",
+    "-Wl,--export-memory",
+    "-Wl,--max-memory=16777216",
+    "-o",
+    "closed-stdio.wasm"
+  ],
+  "files": {
+    "closed-stdio.c": {
+      "bytes": 1824,
+      "sha256": "a33c749704f098a5b80c7933f9b13a80d1a3f237e7699dc631eaec686b29c140"
+    },
+    "closed-stdio.wasm": {
+      "bytes": 1036,
+      "sha256": "cbe63120c53e009b051a05caab1239a40a18a30454b484c17e13a63800a9e5d6"
+    }
+  }
+}

@@ -2170,6 +2170,7 @@ multi-module guests, and Rust WASI Preview 2/3 debugging remain outside the supp
 
 \`\`\`sh
 cd ../wasm-llvm
+WASM_LLVM_CLANG_ARTIFACT_DIR=/path/to/verified-clang-artifacts \\
 WASM_LLVM_LLDB_ARTIFACT_DIR=/path/to/lldb-artifacts \\
 WASM_LLVM_WAMR_ARTIFACT_DIR=/path/to/wamr-artifacts \\
 pnpm prepare:clang-release
@@ -2179,8 +2180,15 @@ WASM_RUST_PRODUCER_OUTPUT_ROOT=/path/to/rust-producer-output \\
 pnpm --dir runtimes/wasm-rust build:producer
 pnpm sync:wasm-rust
 pnpm sync:wasm-debug ../wasm-llvm/out/clang-browser
-WASM_IDLE_BROWSER_SERVER_MODE=dev pnpm test:browser:debug:lldb
+pnpm test:browser:debug:lldb
 \`\`\`
+
+The Clang artifact directory must contain the verified build receipt and its matching raw-input
+identities. The producer rejects historical artifacts without that evidence when assembling a new
+release. For the already reviewed bundled debugger, use \`pnpm prepare:wasm-debug-release\` in
+\`wasm-idle\` to install the immutable release selected by the tracked profile.
+The browser command uses the qualified preview path; development-server LLDB qualification is
+tracked separately.
 
 The synchronized manifest rejects missing hashes, incompatible Clang/LLDB revisions, and stale
 worker sidecars. The strict browser test covers real C, C++, and Rust breakpoint, step, output, and

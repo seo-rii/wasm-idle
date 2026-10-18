@@ -223,6 +223,7 @@ class Clang {
 	progress: CombinedProgressSlots;
 	private readonly maxAssetBytes: number;
 	private readonly signal?: AbortSignal;
+	private readonly fetchImpl?: typeof fetch;
 	private cppSysrootReady?: Promise<void>;
 	private printscanLongDoubleReady?: Promise<void>;
 	private readonly persistentCache?: RuntimeAssetCacheOptions;
@@ -240,6 +241,7 @@ class Clang {
 		}
 		this.maxAssetBytes = maxAssetBytes;
 		this.signal = options.signal;
+		this.fetchImpl = options.fetchImpl;
 		this.persistentCache = options.persistentCache;
 		this.moduleCache = {};
 		this.moduleLoads = {};
@@ -258,6 +260,7 @@ class Clang {
 			moduleUrl: this.assetUrls.memfs,
 			progress: this.progress.memfs,
 			signal: options.signal,
+			fetchImpl: options.fetchImpl,
 			maxAssetBytes,
 			trace: (message) => this.trace(message)
 		});
@@ -270,9 +273,17 @@ class Clang {
 		// Download the sysroot while MemFS is still initializing. Observe both promises
 		// immediately so either failure rejects startup even if the other asset stalls.
 		const initialSysrootUrl = this.assetUrls.cSysroot || this.assetUrls.sysroot;
-		const sysrootReady = options.signal
-			? readBuffer(initialSysrootUrl, undefined, maxAssetBytes, options.signal)
-			: readBuffer(initialSysrootUrl, undefined, maxAssetBytes);
+		const sysrootReady = this.fetchImpl
+			? readBuffer(
+					initialSysrootUrl,
+					undefined,
+					maxAssetBytes,
+					options.signal,
+					this.fetchImpl
+				)
+			: options.signal
+				? readBuffer(initialSysrootUrl, undefined, maxAssetBytes, options.signal)
+				: readBuffer(initialSysrootUrl, undefined, maxAssetBytes);
 		const fileSystemInputsReady = Promise.all([this.memfs.ready, sysrootReady]);
 		const fileSystemReady = fileSystemInputsReady.then(async ([, buffer]) => {
 			this.sysrootFingerprints.push(fingerprintPrecompiledHeaderBytes(buffer));
@@ -307,9 +318,11 @@ class Clang {
 		if (this.cppSysrootReady) return this.cppSysrootReady;
 
 		// Start the download immediately, but mount only after the C base and MemFS are ready.
-		const download = this.signal
-			? readBuffer(addonUrl, undefined, this.maxAssetBytes, this.signal)
-			: readBuffer(addonUrl, undefined, this.maxAssetBytes);
+		const download = this.fetchImpl
+			? readBuffer(addonUrl, undefined, this.maxAssetBytes, this.signal, this.fetchImpl)
+			: this.signal
+				? readBuffer(addonUrl, undefined, this.maxAssetBytes, this.signal)
+				: readBuffer(addonUrl, undefined, this.maxAssetBytes);
 		const pending = Promise.all([this.ready, download]).then(async ([, buffer]) => {
 			this.sysrootFingerprints.push(fingerprintPrecompiledHeaderBytes(buffer));
 			await this.hostLogAsync(
@@ -388,9 +401,17 @@ class Clang {
 		if (assetUrl && !this.memfs.hasFile(printscanLongDoublePath)) {
 			if (!this.printscanLongDoubleReady) {
 				const pending = (
-					this.signal
-						? readBuffer(assetUrl, undefined, this.maxAssetBytes, this.signal)
-						: readBuffer(assetUrl, undefined, this.maxAssetBytes)
+					this.fetchImpl
+						? readBuffer(
+								assetUrl,
+								undefined,
+								this.maxAssetBytes,
+								this.signal,
+								this.fetchImpl
+							)
+						: this.signal
+							? readBuffer(assetUrl, undefined, this.maxAssetBytes, this.signal)
+							: readBuffer(assetUrl, undefined, this.maxAssetBytes)
 				).then((buffer) => {
 					this.signal?.throwIfAborted();
 					this.memfs.addFile(printscanLongDoublePath, buffer);
@@ -445,7 +466,9 @@ class Clang {
 
 		const pending = this.hostLogAsync(
 			`Fetching and compiling ${name}`,
-			compile(name, progress, signal, this.maxAssetBytes)
+			this.fetchImpl
+				? compile(name, progress, signal, this.maxAssetBytes, this.fetchImpl)
+				: compile(name, progress, signal, this.maxAssetBytes)
 		).then(
 			(module) => {
 				this.moduleCache[name] = module;

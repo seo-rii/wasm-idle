@@ -1,0 +1,76 @@
+name: Container contracts
+
+on:
+  pull_request:
+    paths:
+      - 'packages/container/**'
+      - 'packages/core/**'
+      - 'packages/llvm-core/**'
+      - 'pnpm-lock.yaml'
+      - 'docs/container-*.md'
+      - 'examples/container/**'
+      - 'scripts/*container*'
+      - '.github/workflows/container.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  command-and-persistence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir packages/core build
+      - run: pnpm --dir packages/llvm-core build
+      - run: pnpm --dir packages/container build
+      - run: node --test packages/container/test/unit/*.test.mjs packages/container/test/contract/*.test.mjs
+      - run: node --test scripts/container-distribution.test.mjs scripts/container-release-server.test.mjs scripts/probe-container-shell-acceptance.test.mjs
+      - run: pnpm --dir packages/llvm-core exec vitest run runtime/clang/test --maxWorkers=2
+      - run: pnpm --dir packages/container verify:package-boundary
+      - run: pnpm --dir packages/container exec playwright-core install --with-deps chromium
+      - run: node packages/container/scripts/test-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-batch.json
+      - run: node packages/container/scripts/test-browser.mjs
+        env:
+          CONTAINER_ISOLATED: '1'
+          CONTAINER_EVIDENCE: .codex/container-isolated-headers.json
+      - run: node packages/container/scripts/test-persistence-browser.mjs
+        env:
+          CONTAINER_PERSISTENCE_EVIDENCE: .codex/container-persistence.json
+      - run: node packages/container/scripts/test-live-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-live.json
+      - run: node packages/container/scripts/test-workspace-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-workspace.json
+      - run: node packages/container/scripts/test-terminal-browser.mjs
+        env:
+          CONTAINER_EVIDENCE: .codex/container-terminal.json
+      - run: node packages/container/scripts/test-product-browser.mjs
+        env:
+          CONTAINER_PRODUCT_TEST_OUTPUT: .codex/container-product
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-browser-evidence
+          path: |
+            .codex/container-*.json
+            .codex/container-product/*.json
+          # The receipts live in a dot directory, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: error

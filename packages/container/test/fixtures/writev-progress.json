@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "profile": "wasi-preview1-process",
+  "purpose": "WASI vectored write and positioned write partial progress, retry offsets, zero-progress errno and prevalidation under snapshot/live filesystem quotas",
+  "compiler": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)",
+  "command": [
+    "clang",
+    "--target=wasm32",
+    "-nostdlib",
+    "-O0",
+    "-Wl,--no-entry",
+    "-Wl,--export-memory",
+    "-Wl,--initial-memory=131072",
+    "-Wl,--max-memory=8388608",
+    "writev-progress.c",
+    "-o",
+    "writev-progress.wasm"
+  ],
+  "files": {
+    "writev-progress.c": {
+      "bytes": 3403,
+      "sha256": "3eb82f580799fb93497620bbd9925fb15bbd0cd2a34c8c98fcb3438aa868c150"
+    },
+    "writev-progress.wasm": {
+      "bytes": 2772,
+      "sha256": "34ba72b8bcb1c48610c74de673d44ac898c8820723c904da526dc1261c84f90f"
+    }
+  }
+}

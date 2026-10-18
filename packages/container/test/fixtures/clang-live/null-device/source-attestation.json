@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "testedSourceCommit": "29435e8a9655e8b5140e796f305f3d50c2cb8089",
+  "receiptApplicationCommit": "b31093ce (the base at launch; exact consumed source bytes below match the committed fix)",
+  "validation": {
+    "node": {
+      "receiptSha256": "9de6bcffa7c9a2a8004cdd69c05d26cd7f0a2fd77239bc8a749664fd32611f46",
+      "consumedSources": 79,
+      "allConsumedSourcesMatchCommit": true
+    },
+    "chromium": {
+      "receiptSha256": "ee633a4689dc8a6f3942f9aea67f01f8458f0b1684d51ae05610ef417e1da396",
+      "consumedSources": 79,
+      "allConsumedSourcesMatchCommit": true
+    }
+  },
+  "contracts": {
+    "passed": 235,
+    "failed": 0,
+    "skipped": 0
+  },
+  "nativeComparison": [
+    {
+      "stdin": "EOF",
+      "code": 0,
+      "stdout": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/seorii/.local/share/swiftly/toolchains/6.3.3/usr/bin\n",
+      "stderr": ""
+    },
+    {
+      "stdin": "closed",
+      "code": 0,
+      "stdout": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /home/seorii/.local/share/swiftly/toolchains/6.3.3/usr/bin\n",
+      "stderr": ""
+    }
+  ],
+  "compilerSource": {
+    "llvmCommit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+    "preparedSourceSha256": {
+      "clang/tools/driver/driver.cpp": "3363bf2ecfd09487855a53551d87589daad81b43a749cb18859610f72f47cedf",
+      "llvm/lib/Support/Unix/Process.inc": "295d6f82d0aab66e29ba900b80b7509fd4c15625f27be27050b47db5f461afa8"
+    },
+    "callPath": "clang_main -> Process::FixupStandardFileDescriptors -> fstat -> open(/dev/null,O_RDWR)",
+    "scope": "Pinned WASI LLVM fixes one absent standard descriptor through the lowest-free fd; its upstream fixup has no dup2 for multiple absent descriptors."
+  }
+}

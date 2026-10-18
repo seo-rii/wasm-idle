@@ -1,0 +1,86 @@
+--- a/src/os/task/process.rs
++++ b/src/os/task/process.rs
+@@ -809,8 +809,10 @@
+             inner.children.clone()
+         };
+         if children.is_empty() {
++            tracing::debug!(target: "host_diag", pid = %self.pid(), "join_any_child: no children");
+             return Err(Errno::Child);
+         }
++        tracing::debug!(target: "host_diag", pid = %self.pid(), children = ?children.iter().map(|c| c.pid.raw()).collect::<Vec<_>>(), "join_any_child: waiting");
+ 
+         let mut waits = Vec::new();
+         for child in children {
+@@ -830,6 +832,7 @@
+ 
+         let code =
+             res.unwrap_or_else(|e| e.as_exit_code().unwrap_or_else(|| Errno::Canceled.into()));
++        tracing::debug!(target: "host_diag", pid = %self.pid(), child = child.pid.raw(), code = code.raw(), "join_any_child: joined");
+ 
+         Ok(Some((child.pid, code)))
+     }
+@@ -839,6 +842,7 @@
+         // FIXME: this is wrong, threads might still be running!
+         // Need special logic for the main thread.
+         let guard = self.inner.0.lock().unwrap();
++        tracing::debug!(target: "host_diag", pid = guard.pid.raw(), code = exit_code.raw(), threads = guard.threads.len(), already = ?self.finished.status().into_finished().map(|r| r.map(|c| c.raw()).ok()), "process terminate");
+         for thread in guard.threads.values() {
+             thread.set_status_finished(Ok(exit_code))
+         }
+--- a/src/os/task/thread.rs
++++ b/src/os/task/thread.rs
+@@ -601,6 +601,7 @@
+         if let Some(inner) = Weak::upgrade(&self.inner) {
+             let mut inner = inner.0.lock().unwrap();
+             if let Some(ctrl) = inner.threads.remove(&id) {
++                tracing::debug!(target: "host_diag", pid = inner.pid.raw(), tid = id.raw(), already = ?ctrl.try_join().map(|r| r.map(|c| c.raw()).ok()), "thread handle dropped: finishing with 0");
+                 ctrl.set_status_finished(Ok(Errno::Success.into()));
+             }
+             inner.thread_count -= 1;
+--- a/src/syscalls/wasix/proc_fork.rs
++++ b/src/syscalls/wasix/proc_fork.rs
+@@ -69,6 +69,7 @@
+     {
+         let mut inner = ctx.data().process.lock();
+         inner.children.push(child_env.process.clone());
++        tracing::debug!(target: "host_diag", parent = inner.pid.raw(), child = child_env.process.pid().raw(), copy_memory = ?copy_memory, "fork: child registered");
+     }
+     let env = ctx.data();
+     let memory = unsafe { env.memory_view(&ctx) };
+--- a/src/syscalls/wasix/proc_exec3.rs
++++ b/src/syscalls/wasix/proc_exec3.rs
+@@ -179,7 +179,10 @@
+             let mut config = Some(wasi_env);
+ 
+             match bin_factory.try_built_in(name.clone(), Some(&ctx), &mut config) {
+-                Ok(a) => Ok(()),
++                Ok(a) => {
++                    tracing::debug!(target: "host_diag", child = %child_pid, name = %name, "vfork exec: builtin/host command started");
++                    Ok(())
++                }
+                 Err(err) => {
+                     if !err.is_not_found() {
+                         error!("builtin failed - {}", err);
+--- a/src/syscalls/wasix/proc_join.rs
++++ b/src/syscalls/wasix/proc_join.rs
+@@ -105,6 +105,7 @@
+         OptionTag::Some => Some(option_pid.pid),
+     };
+     tracing::trace!("filter_pid = {:?}", option_pid);
++    tracing::debug!(target: "host_diag", pid = %ctx.data().pid(), filter = ?option_pid, nonblocking = flags.contains(JoinFlags::NON_BLOCKING), "proc_join enter");
+ 
+     // Clear the existing values (in case something goes wrong)
+     wasi_try_mem_ok!(pid_ptr.write(
+@@ -138,10 +139,12 @@
+                         JoinStatusResult::ExitNormal(pid, exit_code)
+                     }
+                     Ok(None) => {
++                        tracing::debug!(target: "host_diag", "proc_join any: no child");
+                         tracing::trace!("triggered child join (no child)");
+                         JoinStatusResult::Err(Errno::Child)
+                     }
+                     Err(err) => {
++                        tracing::debug!(target: "host_diag", %err, "proc_join any: error");
+                         tracing::trace!(%err, "error triggered on child join");
+                         JoinStatusResult::Err(err)
+                     }

@@ -1,0 +1,98 @@
+--- a/src/streams.rs
++++ b/src/streams.rs
+@@ -15,7 +15,15 @@
+ /// Set up a pipe where data written from JavaScript can be read by the WASIX
+ /// process.
+ pub(crate) fn input_pipe() -> (Pipe, WritableStream) {
+-    let (left, right) = Pipe::channel();
++    input_pipe_from(Pipe::channel())
++}
++
++/// Live raw stdin with backpressure, without TTY echo or line discipline.
++pub(crate) fn raw_input_pipe() -> (Pipe, WritableStream) {
++    input_pipe_from(Pipe::bounded_channel(64 * 1024))
++}
++
++fn input_pipe_from((left, right): (Pipe, Pipe)) -> (Pipe, WritableStream) {
+
+     let sink = JsValue::from(WritableStreamSink { pipe: right });
+
+@@ -49,6 +57,9 @@
+     /// called only after all queued-up writes have succeeded.
+     pub fn close(&mut self) -> Promise {
+         let mut pipe = self.pipe.clone();
++        // Transfer ownership to the flushing task. Retaining the original
++        // writer here prevents readers from observing EOF after close().
++        self.pipe.close();
+
+         wasm_bindgen_futures::future_to_promise(
+             async move {
+@@ -111,7 +122,16 @@
+ /// Set up a pipe where the WASIX pipe writes data that will be read from
+ /// JavaScript.
+ pub(crate) fn output_pipe() -> (Pipe, ReadableStream) {
+-    let (left, right) = Pipe::channel();
++    output_pipe_from(Pipe::bounded_channel(64 * 1024))
++}
++
++// Legacy TTY echo still uses synchronous owner-thread writes. It is outside
++// the raw streaming profile until that path supports async backpressure.
++pub(crate) fn legacy_tty_output_pipe() -> (Pipe, ReadableStream) {
++    output_pipe_from(Pipe::channel())
++}
++
++fn output_pipe_from((left, right): (Pipe, Pipe)) -> (Pipe, ReadableStream) {
+
+     let source = JsValue::from(ReadableStreamSource { pipe: right });
+
+--- a/src/options.rs
++++ b/src/options.rs
+@@ -66,6 +66,8 @@
+  * {@link Command.run}.
+  */
+ export type SpawnOptions = CommonOptions & {
++    /** Live bounded stdin without TTY echo/termios. Cannot be combined with stdin. */
++    rawStdin?: boolean;
+     /**
+      * Packages that should also be loaded into the WASIX environment.
+      */
+@@ -272,6 +274,9 @@
+     #[wasm_bindgen(method, getter)]
+     pub(crate) fn command(this: &SpawnOptions) -> JsValue;
+
++    #[wasm_bindgen(method, getter, js_name = "rawStdin")]
++    pub(crate) fn raw_stdin(this: &SpawnOptions) -> Option<bool>;
++
+     #[wasm_bindgen(method, getter)]
+     pub(crate) fn uses(this: &SpawnOptions) -> Option<js_sys::Array>;
+
+--- a/src/wasmer.rs
++++ b/src/wasmer.rs
+@@ -347,6 +347,18 @@
+     let (stderr_pipe, stderr_stream) = crate::streams::output_pipe();
+     runner.with_stderr(Box::new(stderr_pipe));
+
++    if options.raw_stdin().unwrap_or(false) {
++        if options.read_stdin().is_some() {
++            return Err(Error::Rust(anyhow::anyhow!("rawStdin cannot be combined with prebuffered stdin")));
++        }
++        let (stdin_pipe, stdin_stream) = crate::streams::raw_input_pipe();
++        let (stdout_pipe, stdout_stream) = crate::streams::output_pipe();
++        runner.with_stdin(Box::new(stdin_pipe));
++        runner.with_stdout(Box::new(stdout_pipe));
++        runtime.set_connected_to_tty(false);
++        return Ok((Some(stdin_stream), stdout_stream, stderr_stream));
++    }
++
+     let tty_options = runtime.tty_options().clone();
+     match setup_tty(options, tty_options) {
+         TerminalMode::Interactive {
+@@ -387,7 +399,7 @@
+         };
+     }
+
+-    let (stdout_pipe, stdout_stream) = crate::streams::output_pipe();
++    let (stdout_pipe, stdout_stream) = crate::streams::legacy_tty_output_pipe();
+
+     // Note: Because this is an interactive session, we want to intercept
+     // stdin and let the TTY modify it.

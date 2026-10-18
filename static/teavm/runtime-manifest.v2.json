@@ -1,7 +1,7 @@
 {
 	"format": "wasm-teavm-runtime-manifest-v2",
 	"runtime": "teavm-javac",
-	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v3",
+	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v3-java-errors",
 	"provenanceLevel": "source-build-and-compatibility-overlay-reproduced",
 	"licenseExpression": "Apache-2.0 AND GPL-2.0-only WITH Classpath-exception-2.0 AND BSD-3-Clause AND Unicode-3.0",
 	"source": {
@@ -71,6 +71,12 @@
 					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1-sources.jar",
 					"bytes": 1819937,
 					"sha256": "c816953b045aa1e6aaf4dd38006951884abbc8cd069b7bae32767d4fe12d68d3"
+				},
+				{
+					"name": "teavm-wasm-gc-deobfuscator-0.13.1.jar",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-wasm-gc-deobfuscator/0.13.1/teavm-wasm-gc-deobfuscator-0.13.1.jar",
+					"bytes": 18444,
+					"sha256": "0e89d9a53d8c891cb781b533b259f183bb3e0df1559b26e93b69df3429cab86a"
 				}
 			]
 		},
@@ -184,6 +190,11 @@
 				"path": "compiler.wasm",
 				"bytes": 4334204,
 				"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4"
+			},
+			{
+				"path": "compiler.wasm-deobfuscator.wasm",
+				"bytes": 36608,
+				"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
@@ -526,8 +537,8 @@
 		"files": [
 			{
 				"path": "scripts/sync-wasm-teavm.mjs",
-				"bytes": 39219,
-				"sha256": "46a1c37d363ffb11b7a1cc8020c2091f7acf89b2720b1c96bc693567389efb3c"
+				"bytes": 40474,
+				"sha256": "7b43af0fe8e1e1ca7b2b30f3006dc30bbcc46769938c08259839d01e974287ec"
 			},
 			{
 				"path": "scripts/sync-wasm-teavm.d.mts",
@@ -570,6 +581,18 @@
 			}
 		},
 		{
+			"path": "compiler.wasm-deobfuscator.wasm",
+			"mediaType": "application/wasm",
+			"bytes": 36608,
+			"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c",
+			"storage": {
+				"path": "compiler.wasm-deobfuscator.wasm",
+				"encoding": "identity",
+				"bytes": 36608,
+				"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c"
+			}
+		},
+		{
 			"path": "compile-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
 			"bytes": 200641,
@@ -594,5 +617,5 @@
 			}
 		}
 	],
-	"fingerprint": "1b4be838d3202e3406ae1fd56e5b94cf9fdb878be3cb60e7cba091b375685bec"
+	"fingerprint": "b913ae6e9294153a261ba9e612a2032241e99293eddcef154c8868f2f5977cd0"
 }

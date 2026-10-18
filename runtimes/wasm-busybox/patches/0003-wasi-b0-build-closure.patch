@@ -1,0 +1,35 @@
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -208,3 +208,8 @@
+ 
+ # Add the experimental logging functionality, only used by zcip
+ lib-$(CONFIG_ZCIP) += logenv.o
++
++# Explicit B0-only WASI library closure. Unsupported helpers are not built.
++ifeq ($(ARCH),wasm32)
++lib-y := compare_string_array.o ptr_to_globals.o single_argv.o wfopen_input.o appletlib.o bb_cat.o bb_strtonum.o copyfd.o default_error_retval.o fflush_stdout_and_exit.o full_write.o get_last_path_component.o getopt32.o last_char_is.o llist.o messages.o perror_msg.o perror_nomsg.o perror_nomsg_and_die.o process_escape_sequence.o read.o safe_strncpy.o safe_write.o skip_whitespace.o verror_msg.o xatonum.o xfunc_die.o xfuncs.o xfuncs_printf.o xgetcwd.o
++endif
+--- a/Makefile.flags
++++ b/Makefile.flags
+@@ -221,3 +221,8 @@
+ # (we stole scripts/checkstack.pl from the kernel... thanks guys!)
+ # Reduced from 20k to 16k in 1.9.0.
+ FLTFLAGS += -s 16000
++
++ifeq ($(ARCH),wasm32)
++CFLAGS += -DBB_WASI_B0
++CFLAGS_busybox += -Wl,--max-memory=67108864 -Wl,--undefined=__main_argc_argv
++endif
+--- a/Makefile
++++ b/Makefile
+@@ -493,6 +493,10 @@
+ 		util-linux/ \
+ 		util-linux/volume_id/ \
+ 
++ifeq ($(ARCH),wasm32)
++libs-y := coreutils/ libbb/
++endif
++
+ endif # KBUILD_EXTMOD
+ 
+ ifeq ($(dot-config),1)

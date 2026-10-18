@@ -296,6 +296,42 @@ describe('compressed runtime service worker', () => {
 		expect(harness.cachesOpen).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		'sdk.wasm',
+		'bash.webc',
+		'bash.webc.bin',
+		'busybox.wasm',
+		'clang.wasm.gz.bin',
+		'lld.wasm.gz.bin',
+		'sysroot.tar'
+	])('preserves exact container object URLs for %s', async (name) => {
+		const assetPath = `container-app/objects/${'a'.repeat(64)}/${name}`;
+		const harness = await createServiceWorkerHarness({}, undefined, {
+			[assetPath]: new TextEncoder().encode(name)
+		});
+		const response = await harness.request(assetPath);
+		expect(response.url).toBe(`${scope}${assetPath}`);
+		expect(await response.text()).toBe(name);
+		expect(harness.fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		['container-app/objects/not-a-digest/sdk.wasm', {}],
+		[`container-app/objects/${'a'.repeat(64)}/arbitrary.js`, {}],
+		[`container-app/objects/${'a'.repeat(64)}/sdk.wasm`, { credentials: 'same-origin' }],
+		[`container-app/objects/${'a'.repeat(64)}/sdk.wasm`, { headers: { range: 'bytes=0-3' } }]
+	] as const)(
+		'keeps ordinary isolation handling for unqualified container request %s',
+		async (assetPath, init) => {
+			const harness = await createServiceWorkerHarness({}, undefined, {
+				[assetPath]: new TextEncoder().encode('network')
+			});
+			const response = await harness.request(assetPath, init);
+			expect(response.url).toBe('');
+			expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
+		}
+	);
+
 	it('preserves exact final URLs for pinned AWK v2 network responses', async () => {
 		const receipt = 'a'.repeat(64);
 		for (const assetName of [

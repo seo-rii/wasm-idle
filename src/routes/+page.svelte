@@ -4,7 +4,10 @@
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
-	import { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
+	import { isSharedArrayBufferAvailable } from '$lib';
+	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
+	import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
+	import type { ContainerWorkspaceEntry } from '$lib/playground/container/protocol';
 	import {
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
@@ -93,6 +96,7 @@
 		isBinaryWorkspaceFile,
 		workspaceFileBlob,
 		workspaceFileFromBytes,
+		workspaceFileBytes,
 		type WorkspaceFile
 	} from './workspaceCodec';
 	type LanguageWorkspace = {
@@ -206,7 +210,15 @@
 			publicEnvironment
 		)
 	);
-	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets, { prewarm: true }));
+	const playground = $derived.by(() =>
+		createContainerPlaygroundBinding(runtimeAssets, {
+			applicationRootURL: browser
+				? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+				: '/',
+			workspaceId: currentWorkspaceStorageKey,
+			getLanguage: () => untrack(() => language)
+		})
+	);
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
@@ -1004,6 +1016,160 @@
 		}
 		workspaces[language] = currentWorkspace();
 		return workspaces;
+	}
+
+	let containerWorkspaceConflict = '';
+	let containerRefresh: Promise<void> | undefined;
+	let containerRefreshPending = false;
+	let containerRefreshForcePending = false;
+	let containerEditorRefreshDeferred = $state(false);
+	let sharedWorkspaceFiles = $state<ContainerWorkspaceEntry[]>([]);
+	let sharedWorkspaceLimit = $state(256);
+	let sharedWorkspaceOpening = $state(false);
+	const containerFiles = (values: readonly WorkspaceFile[]) =>
+		values.map((file) => ({ path: file.path, content: workspaceFileBytes(file) }));
+	const editorFiles = (values: readonly { path: string; content: string | Uint8Array }[]) =>
+		values.map((file) =>
+			workspaceFileFromBytes(
+				file.path,
+				typeof file.content === 'string'
+					? new TextEncoder().encode(file.content)
+					: file.content
+			)
+		);
+	async function publishContainerWorkspace(
+		selectedLanguage: string,
+		values: readonly WorkspaceFile[]
+	) {
+		if (containerWorkspaceConflict === selectedLanguage)
+			throw new Error(
+				'An editor buffer conflicts with terminal edits. Refresh files to resolve it.'
+			);
+		await playground.syncWorkspace(selectedLanguage, containerFiles(values));
+	}
+	async function refreshContainerWorkspace(force = false) {
+		if (!browser || !workspaceInitialized) return;
+		if (containerRefresh) {
+			containerRefreshPending = true;
+			containerRefreshForcePending ||= force;
+			return containerRefresh;
+		}
+		const binding = playground,
+			selectedLanguage = language;
+		containerRefresh = (async () => {
+			const metadata = await binding.listWorkspaceFiles();
+			if (playground !== binding) return;
+			sharedWorkspaceFiles = metadata.sort((a, b) => a.path.localeCompare(b.path));
+			if (runningMode) {
+				containerEditorRefreshDeferred = true;
+				return;
+			}
+			const before = editorFiles(binding.publishedWorkspace(selectedLanguage));
+			const remote = await binding.readWorkspace(selectedLanguage);
+			if (playground !== binding) return;
+			if (runningMode || language !== selectedLanguage) {
+				containerEditorRefreshDeferred = true;
+				return;
+			}
+			containerEditorRefreshDeferred = false;
+			const remoteFiles = editorFiles(remote);
+			const result = mergeContainerWorkspace(files, before, remoteFiles);
+			if (
+				result.conflicts.length &&
+				(!force ||
+					!confirm(
+						`Replace editor buffers changed in both the editor and terminal? ${result.conflicts.join(', ')}`
+					))
+			) {
+				containerWorkspaceConflict = selectedLanguage;
+				saveStatus = `Editor buffer preserved: terminal also changed ${result.conflicts.join(', ')}. Refresh files to resolve.`;
+				return;
+			}
+			containerWorkspaceConflict = '';
+			const nextFiles = result.conflicts.length
+				? mergeContainerWorkspace(files, before, remoteFiles, {
+						acceptRemoteConflicts: true
+					}).files
+				: result.files;
+			binding.acceptWorkspace(selectedLanguage, remote);
+			if (JSON.stringify(files) === JSON.stringify(nextFiles)) return;
+			const activeBefore = activeFile?.content;
+			files = nextFiles;
+			openTabs = openTabs.filter((path) => files.some((file) => file.path === path));
+			if (!files.some((file) => file.path === activePath)) activePath = files[0]?.path ?? '';
+			if (activePath && !openTabs.includes(activePath)) openTabs = [...openTabs, activePath];
+			if (debug.active && activeBefore !== activeFile?.content)
+				debug.markSourceRevisionStale(`/workspace/${activePath}`);
+			saveStatus = 'Workspace updated from terminal';
+		})();
+		try {
+			await containerRefresh;
+		} finally {
+			containerRefresh = undefined;
+			if (containerRefreshPending) {
+				const queuedForce = containerRefreshForcePending;
+				containerRefreshPending = false;
+				containerRefreshForcePending = false;
+				void refreshContainerWorkspace(queuedForce).catch((error) => {
+					saveStatus = `Workspace refresh failed: ${error instanceof Error ? error.message : String(error)}`;
+				});
+			}
+		}
+	}
+	function sharedFileProject(entry: ContainerWorkspaceEntry) {
+		if (entry.type !== 'file') return null;
+		const [project, ...parts] = entry.path.split('/');
+		if (!parts.length || !playgroundLanguages.includes(project as PlaygroundLanguage))
+			return null;
+		return { language: project as PlaygroundLanguage, path: parts.join('/') };
+	}
+	async function selectSharedWorkspaceFile(entry: ContainerWorkspaceEntry) {
+		const target = sharedFileProject(entry);
+		if (!target || runningMode || sharedWorkspaceOpening) return;
+		const binding = playground,
+			previousLanguage = language;
+		sharedWorkspaceOpening = true;
+		try {
+			// Read before switching: the language-change publisher must not overwrite a
+			// terminal-created file with the target project's older editor snapshot.
+			const remote = await binding.readWorkspace(target.language);
+			if (playground !== binding || language !== previousLanguage || runningMode) return;
+			const remoteFiles = editorFiles(remote);
+			if (!remoteFiles.some((file) => file.path === target.path)) {
+				saveStatus = `/workspace/${entry.path} is no longer available`;
+				await refreshContainerWorkspace();
+				return;
+			}
+			const previousWorkspace =
+				target.language === language
+					? currentWorkspace()
+					: (languageWorkspaces[target.language] ??
+						createDefaultWorkspace(target.language));
+			const baseline = editorFiles(binding.publishedWorkspace(target.language));
+			const merged = mergeContainerWorkspace(previousWorkspace.files, baseline, remoteFiles);
+			if (
+				merged.conflicts.length &&
+				!confirm(
+					`Replace editor buffers changed in both the editor and terminal? ${merged.conflicts.join(', ')}`
+				)
+			)
+				return;
+			const nextFiles = merged.conflicts.length
+				? mergeContainerWorkspace(previousWorkspace.files, baseline, remoteFiles, {
+						acceptRemoteConflicts: true
+					}).files
+				: merged.files;
+			binding.acceptWorkspace(target.language, remote);
+			if (language !== target.language) switchLanguage(target.language);
+			activateWorkspace({ ...previousWorkspace, files: nextFiles, activePath: target.path });
+			selectFile(target.path);
+			containerWorkspaceConflict = '';
+			saveStatus = `Opened /workspace/${entry.path}`;
+		} catch (error) {
+			saveStatus = `Could not open shared file: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			sharedWorkspaceOpening = false;
+		}
 	}
 
 	function activateWorkspace(workspace: LanguageWorkspace) {
@@ -2258,6 +2424,10 @@
 				}
 			}
 			try {
+				await publishContainerWorkspace(
+					language,
+					files.map((file) => ({ ...file }))
+				);
 				if (executionDebugMode === 'lldb') {
 					try {
 						progressSession.report?.({
@@ -2359,6 +2529,9 @@
 				if (activeProgressSession === progressSession) activeProgressSession = undefined;
 				executionPreflight.finish(preflight);
 				completeExecutionGeneration(generation);
+				void refreshContainerWorkspace().catch((error) => {
+					saveStatus = `Unable to refresh files: ${error instanceof Error ? error.message : String(error)}`;
+				});
 			}
 		})();
 		activeExecution = execution;
@@ -2582,6 +2755,74 @@
 		})();
 		return () => {
 			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceInitialized) return;
+		const binding = playground,
+			selectedLanguage = language;
+		const values = files.map((file) => ({ ...file }));
+		const executing = runningMode;
+		const timer = setTimeout(
+			() => {
+				void publishContainerWorkspace(selectedLanguage, values).catch((error) => {
+					saveStatus = `Workspace sync failed: ${error instanceof Error ? error.message : String(error)}`;
+				});
+			},
+			executing ? 0 : 80
+		);
+		return () => clearTimeout(timer);
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceInitialized) return;
+		const binding = playground;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const remove = binding.onWorkspaceChange(() => {
+			clearTimeout(timer);
+			timer = setTimeout(() => {
+				void refreshContainerWorkspace().catch((error) => {
+					saveStatus = `Workspace refresh failed: ${error instanceof Error ? error.message : String(error)}`;
+				});
+			}, 120);
+		});
+		void untrack(() => refreshContainerWorkspace()).catch((error) => {
+			saveStatus = `Workspace refresh failed: ${error instanceof Error ? error.message : String(error)}`;
+		});
+		return () => {
+			clearTimeout(timer);
+			remove();
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceInitialized || runningMode || !containerEditorRefreshDeferred)
+			return;
+		// Metadata keeps following guest writes during a Run; editor buffers are
+		// reconciled once that execution releases them, even without another event.
+		void untrack(() => refreshContainerWorkspace()).catch((error) => {
+			saveStatus = `Workspace refresh failed: ${error instanceof Error ? error.message : String(error)}`;
+		});
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		const binding = playground;
+		const target = window as Window & typeof globalThis & { __wasmIdleContainer?: unknown };
+		const api = {
+			inspect: () => binding.inspect(),
+			readWorkspace: (selectedLanguage: string) => binding.readWorkspace(selectedLanguage),
+			syncWorkspace: (selectedLanguage: string, values: WorkspaceFile[]) =>
+				binding.syncWorkspace(selectedLanguage, containerFiles(values)),
+			refreshWorkspace: () => refreshContainerWorkspace(),
+			shellWrite: (text: string) => binding.shell.write(text),
+			shellEof: () => binding.shell.eof(),
+			shellInterrupt: () => binding.shell.interrupt()
+		};
+		target.__wasmIdleContainer = api;
+		return () => {
+			if (target.__wasmIdleContainer === api) delete target.__wasmIdleContainer;
 		};
 	});
 
@@ -3457,6 +3698,7 @@
 			<Terminal
 				bind:terminal
 				{playground}
+				shell={playground.shell}
 				font={terminalFont}
 				dark={darkMode}
 				ondebug={onDebugEvent}
@@ -3789,8 +4031,8 @@
 	{#if unrestoredWorkspace !== null}
 		<div class="workspace-save-error" role="alert" data-workspace-recovery>
 			<span>
-				Stored workspace could not be restored. The original snapshot is kept;
-				automatic saving is paused.
+				Stored workspace could not be restored. The original snapshot is kept; automatic
+				saving is paused.
 			</span>
 			<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
 			<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
@@ -3808,7 +4050,9 @@
 					onclick={(event) => event.currentTarget.select()}
 				/>
 			</label>
-			<button class="tool-button" onclick={() => (manualShareUrl = '')}>Close share URL</button>
+			<button class="tool-button" onclick={() => (manualShareUrl = '')}
+				>Close share URL</button
+			>
 		</div>
 	{/if}
 	<div class="workbench">
@@ -3825,6 +4069,14 @@
 						<span class="count-badge">{sortedFiles.length}</span>
 					</div>
 					<div class="workspace-sidebar__tools">
+						<button
+							aria-label="Refresh workspace files"
+							title="Refresh files changed in the terminal"
+							onclick={() => refreshContainerWorkspace(true)}
+						>
+							<span class="material-symbols-outlined" aria-hidden="true">refresh</span
+							>
+						</button>
 						<button aria-label="New file" title="New file" onclick={newFile}>
 							<span class="material-symbols-outlined" aria-hidden="true">add</span>
 						</button>
@@ -3845,6 +4097,9 @@
 						</button>
 					</div>
 				</header>
+				<p class="workspace-path" title={`Current editor project: /workspace/${language}`}>
+					/workspace/{language}
+				</p>
 				<div class="workspace-files">
 					{#each sortedFiles as file (file.path)}
 						<button
@@ -3858,6 +4113,62 @@
 						</button>
 					{/each}
 				</div>
+				<section class="shared-workspace" aria-label="Shared workspace files">
+					<header>
+						<strong>/workspace</strong>
+						<span class="count-badge">{sharedWorkspaceFiles.length}</span>
+					</header>
+					<p>
+						Shared with Bash. Selecting a project leaves the shell directory unchanged.
+					</p>
+					<div class="shared-workspace__files">
+						{#each sharedWorkspaceFiles.slice(0, sharedWorkspaceLimit) as entry (entry.path)}
+							{@const project = sharedFileProject(entry)}
+							{#if project}
+								<button
+									data-container-path={entry.path}
+									class:active={project.language === language &&
+										project.path === activePath}
+									disabled={!!runningMode || sharedWorkspaceOpening}
+									onclick={() => selectSharedWorkspaceFile(entry)}
+									title={`/workspace/${entry.path} (${entry.size} bytes)`}
+								>
+									<span class="material-symbols-outlined" aria-hidden="true"
+										>draft</span
+									>
+									<span>{entry.path}</span>
+								</button>
+							{:else}
+								<div
+									class="shared-workspace__entry"
+									data-container-path={entry.path}
+									title={`/workspace/${entry.path}${entry.type === 'symlink' ? ' (symbolic link; target is not followed)' : entry.type === 'file' ? ' (available in the terminal)' : '/'}`}
+								>
+									<span class="material-symbols-outlined" aria-hidden="true">
+										{entry.type === 'directory'
+											? 'folder'
+											: entry.type === 'symlink'
+												? 'link'
+												: 'draft'}
+									</span>
+									<span>{entry.path}{entry.type === 'directory' ? '/' : ''}</span>
+								</div>
+							{/if}
+						{/each}
+						{#if sharedWorkspaceFiles.length > sharedWorkspaceLimit}
+							<button
+								class="shared-workspace__more"
+								onclick={() => (sharedWorkspaceLimit += 256)}
+							>
+								Show more ({sharedWorkspaceFiles.length - sharedWorkspaceLimit} remaining)
+							</button>
+						{/if}
+					</div>
+					<p>
+						Files outside language projects and symbolic links are listed for terminal
+						access.
+					</p>
+				</section>
 				<div class="workspace-sidebar__section">
 					<p class="section-label">Active file</p>
 					<div class="workspace-sidebar__actions">
@@ -4947,6 +5258,91 @@
 		min-height: 0;
 		overflow: auto;
 		padding: 0 8px 8px;
+	}
+
+	.workspace-path {
+		margin: 0 16px 8px;
+		color: var(--text-3);
+		font-family: var(--mono);
+		font-size: 11px;
+		overflow-wrap: anywhere;
+	}
+
+	.shared-workspace {
+		display: flex;
+		flex: 0 1 280px;
+		flex-direction: column;
+		min-height: 140px;
+		border-top: 1px solid var(--line-soft);
+		padding: 10px 8px;
+	}
+
+	.shared-workspace header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 8px;
+	}
+
+	.shared-workspace header strong {
+		font-family: var(--mono);
+		font-size: 12px;
+	}
+
+	.shared-workspace p {
+		margin: 6px 8px;
+		color: var(--text-3);
+		font-size: 10px;
+		line-height: 1.45;
+	}
+
+	.shared-workspace__files {
+		min-height: 36px;
+		overflow: auto;
+	}
+
+	.shared-workspace__files button,
+	.shared-workspace__entry {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		min-height: 30px;
+		padding: 5px 8px;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-2);
+		font-family: var(--mono);
+		font-size: 11px;
+		text-align: left;
+	}
+
+	.shared-workspace__files button {
+		cursor: pointer;
+	}
+
+	.shared-workspace__files button:hover,
+	.shared-workspace__files button.active {
+		background: var(--primary-soft);
+		color: var(--primary-strong);
+	}
+
+	.shared-workspace__files button:disabled {
+		cursor: not-allowed;
+		opacity: 0.65;
+	}
+
+	.shared-workspace__files span:last-child {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.shared-workspace__files .material-symbols-outlined {
+		flex: 0 0 auto;
+		font-size: 16px;
 	}
 
 	.workspace-files button {

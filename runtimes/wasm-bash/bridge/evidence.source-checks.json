@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "status": "patches-apply-cleanly-not-built",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "inputs": [
+    {
+      "name": "wasmer-sdk",
+      "sha256": "ca5df306ffcb260fb3086e89d450aafac106e200ccf7b49bb03c348bc2208712",
+      "bytes": 2888858
+    },
+    {
+      "name": "wasmer-wasix",
+      "sha256": "a9a804fcfbdbbfe5b2d6fb30e741e22a21e88e964dedfea9e609f13a52823bfe",
+      "bytes": 2831166
+    }
+  ],
+  "patches": {
+    "0001-preserve-exec-unwind.patch": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315",
+    "0002-replace-explicit-environment.patch": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934",
+    "0003-add-lossless-exec-frame.patch": "5f3bcb6ae351ff63ece12534fa4a1c3d07e03c9a2d6ed8f76424bbcb867801cc",
+    "0004-expose-host-command-hook.patch": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442",
+    "exec_frame.rs": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a",
+    "proc_exec_v1.rs": "41efac8d4d1e8cd700a64542c2a26d7e08761d0b33d3eb8c7d382554eea689e6",
+    "execve.c": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5"
+  },
+  "limitations": [
+    "No Wasmer typecheck, SDK rebuild or patched Bash/browser qualification",
+    "No JS Supervisor fd/VFS implementation or public package API"
+  ]
+}

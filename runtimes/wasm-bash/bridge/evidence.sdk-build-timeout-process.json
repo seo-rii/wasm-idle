@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "/data/seorii-container-20261014/shell-sdk-prerequisites-20261014/rustup/toolchains/nightly-2025-07-05-x86_64-unknown-linux-gnu/bin/cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "--target",
+    "wasm32-unknown-unknown",
+    "--lib",
+    "-j",
+    "1",
+    "--release"
+  ],
+  "startedAtUnix": 1791987448.5711653,
+  "exitCode": -9,
+  "limitScope": "CPU and address-space limits apply per process; disk admission is sampled; no aggregate RSS guarantee",
+  "pid": 3564687,
+  "termination": "outer-wall-timeout",
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "signaled": [
+      {
+        "pid": 3564687,
+        "startTicks": 18064113
+      }
+    ],
+    "reaped": [
+      {
+        "pid": 3564687,
+        "exitCode": -9
+      },
+      {
+        "pid": 4042242,
+        "exitCode": 0
+      }
+    ],
+    "errors": []
+  },
+  "wallSeconds": 3600.395
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "profile": "wasi-preview1-process",
+  "purpose": "FD_FILESTAT_SET_SIZE without FD_WRITE, unchanged byte-I/O restrictions, rights reduction and readonly mounts, directory opens with broad rights",
+  "compiler": "clang version 21.0.0 (https://github.com/swiftlang/llvm-project.git 82cdc19fa54d566969527b56f587ea8ea30bef51)",
+  "command": [
+    "clang",
+    "--target=wasm32-unknown-unknown",
+    "-Oz",
+    "-nostdlib",
+    "resize-rights.c",
+    "-Wl,--no-entry",
+    "-Wl,--export-memory",
+    "-Wl,--max-memory=8388608",
+    "-o",
+    "resize-rights.wasm"
+  ],
+  "files": {
+    "resize-rights.c": {
+      "bytes": 3121,
+      "sha256": "157a99af21a4262bb73485bafec1b2d3cbda26b623eccf14d06d607bffb50e37"
+    },
+    "resize-rights.wasm": {
+      "bytes": 1603,
+      "sha256": "b96c02e99724ae2488a4b0d4b945b0b3bef79b9f770956c3ca3cb33e2e393a5b"
+    }
+  }
+}

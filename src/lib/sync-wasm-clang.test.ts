@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,8 @@ import { zipSync } from 'fflate';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { syncWasmClangDist } from '../../scripts/sync-wasm-clang.mjs';
+import { verifyLegacyClangRelease } from '../../scripts/llvm-contracts/clang-build-provenance.mjs';
+import { LEGACY_CLANG_RELEASE } from '../../scripts/llvm-contracts/clang-legacy-release.mjs';
 
 const tempDirs: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -79,7 +82,7 @@ async function writeJson(filePath: string, value: unknown) {
 	await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-async function writeFixture(sourceDir: string, minified = false) {
+async function writeUnprovenFixture(sourceDir: string, minified = false) {
 	const payloads = new Map<string, Buffer>();
 	const contents = new Map<string, Buffer>();
 	for (const asset of assets) {
@@ -174,7 +177,7 @@ async function writeFixture(sourceDir: string, minified = false) {
 
 async function replaceFixtureAsset(
 	sourceDir: string,
-	buildInfo: Awaited<ReturnType<typeof writeFixture>>['buildInfo'],
+	buildInfo: Awaited<ReturnType<typeof writeUnprovenFixture>>['buildInfo'],
 	asset: string,
 	source: string,
 	bytes: Buffer
@@ -194,15 +197,15 @@ async function replaceFixtureAsset(
 	await writeJson(path.join(sourceDir, 'runtime-build.json'), nextBuildInfo);
 }
 
-async function writeHeaderFixture(sourceDir: string) {
-	const fixture = await writeFixture(sourceDir);
+async function writeRawHeaderFixture(sourceDir: string) {
+	const fixture = await writeUnprovenFixture(sourceDir);
 	const tree = {
 		schemaVersion: 1,
 		version: `${fixture.manifest.version}:fixture-commit`,
 		targetTriple: 'wasm32-wasi',
 		resourceDir: '/lib/clang/22',
 		files: {
-			'/usr/include/wasm32-wasi/stdio.h': 'selected C header',
+			'/usr/include/wasm32-wasi/stdio.h': '\uFEFFselected C header',
 			'/usr/include/wasm32-wasi/noeh/c++/v1/__config_site': 'selected C++ configuration',
 			'/usr/include/c++/v1/vector': 'shared C++ header',
 			'/lib/clang/22/include/stddef.h': 'matching resource header'
@@ -242,7 +245,7 @@ async function writeHeaderFixture(sourceDir: string) {
 
 async function writeMemfsSidecars(
 	sourceDir: string,
-	fixture: Awaited<ReturnType<typeof writeFixture>>,
+	fixture: Awaited<ReturnType<typeof writeUnprovenFixture>>,
 	wasm = fixture.payloads.get('bin/memfs.zip')!
 ) {
 	const compressed = gzipSync(wasm, { level: 9 });
@@ -274,6 +277,151 @@ async function writeMemfsSidecars(
 	return { contents, buildInfo };
 }
 
+async function writeFixture(sourceDir: string, minified = false) {
+	return attachBuildReceipt(sourceDir, await writeUnprovenFixture(sourceDir, minified));
+}
+
+async function writeHeaderFixture(sourceDir: string) {
+	const fixture = await writeRawHeaderFixture(sourceDir);
+	return attachBuildReceipt(sourceDir, fixture, fixture.compressed);
+}
+
+async function writeVerifiedBuildFixture(sourceDir: string, separateHeaders = false) {
+	return separateHeaders ? writeHeaderFixture(sourceDir) : writeFixture(sourceDir);
+}
+
+async function attachBuildReceipt<T extends Awaited<ReturnType<typeof writeUnprovenFixture>>>(
+	sourceDir: string,
+	fixture: T,
+	headersCompressed?: Buffer
+) {
+	const separateHeaders = !!headersCompressed;
+	const memfs = await writeMemfsSidecars(sourceDir, fixture);
+	const llvmCommit = '1'.repeat(40);
+	const emsdkCommit = '2'.repeat(40);
+	const manifestSha256 = '3'.repeat(64);
+	const treeIdentity = { bytes: 12, sha256: '4'.repeat(64), entries: 2 };
+	const recipeFiles = [
+		'build-toolchain.mjs',
+		'build-provenance.mjs',
+		'build-memfs.mjs',
+		'prepare-clangd-headers.mjs',
+		'sysroot-pruning.mjs',
+		'gcc-compat.mjs',
+		'hot-path-launcher.sh'
+	].map((file) => ({ path: `scripts/${file}`, ...treeIdentity }));
+	const inputs = {
+		clang: fixture.payloads.get('bin/clang.zip')!,
+		lld: fixture.payloads.get('bin/lld.zip')!,
+		memfs: fixture.payloads.get('bin/memfs.zip')!,
+		memfsReceipt: memfs.contents.get('memfs-build-receipt.json')!,
+		sysroot: fixture.payloads.get('bin/sysroot.tar.zip')!,
+		clangdJs: fixture.contents.get('clangd/clangd.js')!,
+		clangdWasm: gunzipSync(fixture.contents.get('clangd/clangd.wasm.gz')!),
+		...(headersCompressed ? { clangdHeaders: gunzipSync(headersCompressed) } : {})
+	};
+	const receipt = {
+		schemaVersion: 1,
+		producerId: 'wasm-llvm/clang-browser',
+		kind: 'clang-build-receipt',
+		buildMode: 'fresh-output-directory',
+		manifestSha256,
+		buildOptions: {
+			llvmVersion: '22.1.8',
+			llvmCommit,
+			emsdkCommit,
+			wasiSdkVersion: '33',
+			emsdkVersion: '6.0.0',
+			yowaspWasiPatchRepo: 'https://github.com/YoWASP/llvm-project',
+			yowaspWasiPatchCommit: '5'.repeat(40),
+			clangdSeparateHeaders: separateHeaders ? 'ON' : 'OFF'
+		},
+		sources: {
+			llvm: {
+				repository: 'https://github.com/llvm/llvm-project',
+				commit: llvmCommit,
+				tree: '6'.repeat(40),
+				diffSha256: '7'.repeat(64),
+				patches: [
+					{
+						repository: 'https://github.com/YoWASP/llvm-project',
+						commit: '5'.repeat(40),
+						sha256: '8'.repeat(64)
+					},
+					{ path: 'patches/llvm-wasi-close.patch', sha256: '9'.repeat(64) },
+					{ path: 'patches/lld-wasm-only.patch', sha256: 'b'.repeat(64) },
+					{
+						path: fixture.buildInfo.toolchain.clangd.patch,
+						sha256: fixture.buildInfo.toolchain.clangd.patchSha256
+					}
+				]
+			},
+			emsdk: {
+				repository: 'https://github.com/emscripten-core/emsdk',
+				commit: emsdkCommit,
+				tree: 'a'.repeat(40),
+				diffSha256: 'b'.repeat(64)
+			}
+		},
+		installedToolchains: { wasiSdk: treeIdentity, emsdkUpstream: treeIdentity },
+		tools: Object.fromEntries(
+			[
+				'cmake',
+				'ninja',
+				'tar',
+				'wasiClang',
+				'wasiClangxx',
+				'wasiAr',
+				'wasiRanlib',
+				'wasiLld',
+				'nativeC',
+				'nativeCxx',
+				'llvmTablegen',
+				'clangTablegen',
+				'emsdkClang',
+				'wasmOpt',
+				'emccDriver'
+			].map((name) => [name, treeIdentity])
+		),
+		recipe: { files: recipeFiles, sha256: sha256(Buffer.from(JSON.stringify(recipeFiles))) },
+		inputs: Object.fromEntries(
+			Object.entries(inputs).map(([name, bytes]) => [
+				name,
+				{ bytes: bytes.length, sha256: sha256(bytes) }
+			])
+		)
+	};
+	const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+	const buildInfo = {
+		...memfs.buildInfo,
+		toolchain: {
+			...memfs.buildInfo.toolchain,
+			producer: { ...memfs.buildInfo.toolchain.producer, manifestSha256 },
+			llvmCommit,
+			buildProvenance: {
+				status: 'verified',
+				receipt: 'clang-build-receipt.json',
+				bytes: receiptBytes.length,
+				sha256: sha256(receiptBytes)
+			}
+		}
+	};
+	await writeFile(path.join(sourceDir, 'clang-build-receipt.json'), receiptBytes);
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+	return { ...fixture, buildInfo, receipt, receiptBytes };
+}
+
+async function updateBuildReceipt(
+	sourceDir: string,
+	fixture: Awaited<ReturnType<typeof writeVerifiedBuildFixture>>
+) {
+	const bytes = Buffer.from(`${JSON.stringify(fixture.receipt, null, 2)}\n`);
+	fixture.buildInfo.toolchain.buildProvenance.bytes = bytes.length;
+	fixture.buildInfo.toolchain.buildProvenance.sha256 = sha256(bytes);
+	await writeFile(path.join(sourceDir, 'clang-build-receipt.json'), bytes);
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), fixture.buildInfo);
+}
+
 async function writeExistingTargets(staticDir: string) {
 	await mkdir(path.join(staticDir, 'clang', 'bin'), { recursive: true });
 	await mkdir(path.join(staticDir, 'clangd'), { recursive: true });
@@ -303,6 +451,63 @@ describe('syncWasmClangDist', () => {
 		);
 	});
 
+	it('requires the independently pinned historical metadata and all six raw asset identities', async () => {
+		const historical = JSON.parse(
+			await readFile(path.resolve('static/clang/runtime-build.json'), 'utf8')
+		);
+		expect(historical.toolchain.buildProvenance).toBeUndefined();
+		expect(() => verifyLegacyClangRelease(historical.toolchain, {})).toThrow(
+			'clang input identity mismatch'
+		);
+		historical.toolchain.llvmCommit = 'e'.repeat(40);
+		expect(() => verifyLegacyClangRelease(historical.toolchain, {})).toThrow(
+			'missing build receipt outside the pinned historical release'
+		);
+	});
+
+	it.skipIf(!assets.every(({ target }) => existsSync(path.resolve('static', target))))(
+		'retains the exact installed historical Clang bytes without inventing a build receipt',
+		async () => {
+			const historical = JSON.parse(
+				await readFile(path.resolve('static/clang/runtime-build.json'), 'utf8')
+			);
+			expect(historical.toolchain.buildProvenance).toBeUndefined();
+			// Independently committed pins bind the six raw assets; no incoming bundle
+			// chooses the identity used by the exception.
+			const inputs: Record<string, Buffer> = {};
+			for (const name of Object.keys(LEGACY_CLANG_RELEASE.inputs)) {
+				const file =
+					name === 'clangdJs'
+						? 'clangd/clangd.js'
+						: name === 'clangdWasm'
+							? 'clangd/clangd.wasm.gz'
+							: `clang/bin/${name === 'sysroot' ? 'sysroot.tar' : `${name}.wasm`}.gz`;
+				const bytes = await readFile(path.resolve('static', file));
+				inputs[name] = name === 'clangdJs' ? bytes : gunzipSync(bytes);
+			}
+			expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).not.toThrow();
+			inputs.clang = Buffer.from(inputs.clang);
+			inputs.clang[0] ^= 1;
+			expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).toThrow(
+				'clang input identity mismatch'
+			);
+		}
+	);
+
+	it('rejects stripping build provenance from a different release and preserves existing targets', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeFixture(sourceDir);
+		Reflect.deleteProperty(fixture.buildInfo.toolchain, 'buildProvenance');
+		await rm(path.join(sourceDir, 'clang-build-receipt.json'));
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), fixture.buildInfo);
+		await writeExistingTargets(staticDir);
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'missing build receipt outside the pinned historical release'
+		);
+		await expectExistingTargets(staticDir);
+	});
+
 	it('validates, stages, and transactionally installs the complete producer bundle', async () => {
 		const sourceDir = await makeTempDir();
 		const staticDir = path.join(await makeTempDir(), 'static');
@@ -329,6 +534,12 @@ describe('syncWasmClangDist', () => {
 			format: 'wasm-idle-clang-native-gzip-v1',
 			sourceAssets: fixture.buildInfo.assets
 		});
+		expect(deliveredBuildInfo.toolchain.buildProvenance).toEqual(
+			fixture.buildInfo.toolchain.buildProvenance
+		);
+		expect(await readFile(path.join(staticDir, 'clang/clang-build-receipt.json'))).toEqual(
+			fixture.receiptBytes
+		);
 		expect(deliveredBuildInfo.assets.map(({ asset }: { asset: string }) => asset)).toEqual(
 			assets.map(({ deliveryAsset }) => deliveryAsset)
 		);
@@ -380,6 +591,120 @@ describe('syncWasmClangDist', () => {
 		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
 	});
 
+	it.each([false, true])(
+		'preserves the exact verified build receipt through native-gzip delivery (headers=%s)',
+		async (headers) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir, headers);
+			await syncWasmClangDist({ sourceDir, staticDir });
+			expect(await readFile(path.join(staticDir, 'clang/clang-build-receipt.json'))).toEqual(
+				fixture.receiptBytes
+			);
+			const delivered = JSON.parse(
+				await readFile(path.join(staticDir, 'clang/runtime-build.json'), 'utf8')
+			);
+			expect(delivered.toolchain.buildProvenance).toEqual(
+				fixture.buildInfo.toolchain.buildProvenance
+			);
+			for (const { entry, source, target } of assets) {
+				if (entry)
+					expect(gunzipSync(await readFile(path.join(staticDir, target)))).toEqual(
+						fixture.payloads.get(source)
+					);
+			}
+		}
+	);
+
+	it.each(['missing', 'corrupt'])(
+		'rejects a %s declared build receipt before replacing existing targets',
+		async (failure) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir);
+			await writeExistingTargets(staticDir);
+			if (failure === 'missing') await rm(path.join(sourceDir, 'clang-build-receipt.json'));
+			else
+				await writeFile(
+					path.join(sourceDir, 'clang-build-receipt.json'),
+					Buffer.alloc(fixture.receiptBytes.length, 0x20)
+				);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow();
+			await expectExistingTargets(staticDir);
+		}
+	);
+
+	it.each([
+		'clang',
+		'lld',
+		'memfs',
+		'memfsReceipt',
+		'sysroot',
+		'clangdJs',
+		'clangdWasm',
+		'clangdHeaders'
+	])(
+		'rejects mixed %s inputs even when the changed build receipt has a matching file hash',
+		async (name) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir, true);
+			fixture.receipt.inputs[name].sha256 = 'f'.repeat(64);
+			await updateBuildReceipt(sourceDir, fixture);
+			await writeExistingTargets(staticDir);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				`${name} input identity mismatch`
+			);
+			await expectExistingTargets(staticDir);
+		}
+	);
+
+	it.each(['unverified', 'unknown'])(
+		'rejects explicitly %s new release metadata',
+		async (status) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir);
+			fixture.buildInfo.toolchain.buildProvenance.status = status;
+			await writeJson(path.join(sourceDir, 'runtime-build.json'), fixture.buildInfo);
+			await writeExistingTargets(staticDir);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				'requires verified declared build provenance'
+			);
+			await expectExistingTargets(staticDir);
+		}
+	);
+
+	it.each([
+		'manifest',
+		'llvm-commit',
+		'reused-build',
+		'missing-tool',
+		'oversized-input',
+		'missing-memfs'
+	])(
+		'rejects contradictory %s build evidence before replacing existing targets',
+		async (failure) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir);
+			if (failure === 'manifest') fixture.receipt.manifestSha256 = 'e'.repeat(64);
+			if (failure === 'llvm-commit') fixture.receipt.buildOptions.llvmCommit = 'e'.repeat(40);
+			if (failure === 'reused-build') fixture.receipt.buildMode = 'reused';
+			if (failure === 'missing-tool') delete fixture.receipt.tools.wasiClang;
+			if (failure === 'oversized-input')
+				fixture.receipt.inputs.clang.bytes = Number.MAX_SAFE_INTEGER;
+			if (failure === 'missing-memfs')
+				Reflect.deleteProperty(fixture.buildInfo.toolchain, 'memfs');
+			await updateBuildReceipt(sourceDir, fixture);
+			await writeExistingTargets(staticDir);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				/Clang build provenance/u
+			);
+			await expectExistingTargets(staticDir);
+		}
+	);
+
 	it('preserves separately versioned clangd headers and pins through native-gzip delivery', async () => {
 		const sourceDir = await makeTempDir();
 		const staticDir = path.join(await makeTempDir(), 'static');
@@ -399,6 +724,12 @@ describe('syncWasmClangDist', () => {
 		expect(receipt.assets).toHaveLength(7);
 		expect(receipt.toolchain.assets[fixture.headers.asset]).toBe(fixture.headers.sha256);
 		expect(JSON.parse(gunzipSync(fixture.compressed).toString('utf8'))).toEqual(fixture.tree);
+		const deliveredTree = JSON.parse(
+			gunzipSync(await readFile(path.join(staticDir, fixture.headers.asset))).toString('utf8')
+		);
+		expect(Buffer.from(deliveredTree.files['/usr/include/wasm32-wasi/stdio.h'])).toEqual(
+			Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('selected C header')])
+		);
 	});
 
 	it.each(['missing', 'corrupt', 'stale-raw-receipt', 'manifest-mismatch'])(

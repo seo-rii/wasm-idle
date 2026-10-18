@@ -130,6 +130,7 @@ export async function preloadBrowserClangRuntime(
 		stdout: () => {},
 		progress: () => {},
 		signal: options.signal,
+		fetchImpl: options.fetchImpl,
 		log: false,
 		maxAssetBytes,
 		runtimeBaseUrl,
@@ -186,6 +187,7 @@ export async function compileClang(
 		log: enabledLogs,
 		maxAssetBytes,
 		signal: options.signal,
+		fetchImpl: options.fetchImpl,
 		showTiming: request.showTiming ?? options.showTiming ?? false,
 		runtimeBaseUrl,
 		manifest

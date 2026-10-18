@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "status": "actual-sdk-rust-typing-failed",
+  "sdkSourceRevision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+  "preparedApplicationCommit": "bd25e68cc542e51b2ee51e4895429513efbab5c9",
+  "sourcePreparationReceipt": {
+    "path": "/data/seorii-container-20261014/shell-sdk-snapshot-check-20261014-source/receipt.json",
+    "bytes": 1650,
+    "sha256": "4cca6994099825c89ed707cd557b35f00c420bd165947f1f92bc8df770df7357"
+  },
+  "policy": {
+    "path": "/data/seorii-container-20261014/shell-sdk-snapshot-typecheck-20261014/policy.json",
+    "bytes": 139779,
+    "sha256": "598f8aac046dd0601244ef402b3cd48372f0db39f7d298fa007e36a0b0ed0e5f"
+  },
+  "processReceipt": {
+    "path": "/data/seorii-container-20261014/shell-sdk-snapshot-typecheck-20261014/sdk-check.process.json",
+    "bytes": 1034,
+    "sha256": "544bb9e063577473465f9bfb3a1f61007f20dd3ab7048f38f04aaf24e64de0b3"
+  },
+  "log": {
+    "path": "/home/seorii/logs/shell-sdk-snapshot-typecheck-20261014.log",
+    "bytes": 17583,
+    "sha256": "ee9ec38131eeaa153059ca34c76afed133de2142a4de3e2996ffc8ba9719e2da"
+  },
+  "lockedDependencyPrefetch": {
+    "status": "passed-including-offline-validation",
+    "stageReceipt": {
+      "path": "/data/seorii-container-20261014/shell-sdk-unfiltered-prefetch-20261014/stages.json",
+      "bytes": 99,
+      "sha256": "e2723960c44c8b61cd6638affce5b22e6fce89b5bba591358a1164c8b3429299"
+    }
+  },
+  "toolchain": {
+    "channel": "nightly-2025-07-05",
+    "rustcCommit": "e3843659e9f65f589d184d1221ac6149d5fa07b5",
+    "cargoCommit": "930b4f62cfcd1f0eabdb30a56d91bf6844b739bf"
+  },
+  "command": [
+    "/home/seorii/.cargo/bin/cargo",
+    "+nightly-2025-07-05",
+    "check",
+    "--locked",
+    "--offline",
+    "--target",
+    "wasm32-unknown-unknown",
+    "--lib",
+    "--example",
+    "container_command_snapshot_compile",
+    "-j",
+    "1"
+  ],
+  "exitCode": 101,
+  "wallSeconds": 342.205,
+  "cleanup": {
+    "allReaped": true,
+    "deadlineSeconds": 10,
+    "remaining": [],
+    "remainingMayBeTruncated": false,
+    "signaled": [],
+    "reaped": [],
+    "errors": []
+  },
+  "rustTypingReached": true,
+  "errors": [
+    {
+      "code": "E0433",
+      "file": "wasmer-wasix/src/lib.rs",
+      "line": 390,
+      "diagnostic": "use of undeclared type Function"
+    },
+    {
+      "code": "E0599",
+      "file": "wasmer-wasix/src/syscalls/wasix/proc_exec_v1.rs",
+      "line": 37,
+      "diagnostic": "WasmSliceAccess has no to_vec method"
+    },
+    {
+      "code": "E0599",
+      "file": "wasmer-wasix/src/syscalls/wasix/proc_exec_v1.rs",
+      "line": 46,
+      "diagnostic": "WasmSliceAccess has no to_vec method"
+    }
+  ],
+  "sourceCorrection": {
+    "applicationCommit": "de98d061435a308e8bbcd2ca195d29ac07401774",
+    "changes": [
+      "Qualify wasmer::Function in the optional import registration.",
+      "Copy validated bounded argv/env frames with the pinned fallible WasmSlice::read_to_vec API."
+    ],
+    "framedAbiAndDecoderUnchanged": true,
+    "sourceCheckReceipt": "evidence.sdk-typefix-source-checks.json",
+    "genuineCorrectedSdkAndExampleCheck": "pending"
+  },
+  "qualification": {
+    "sdkTypecheckPassed": false,
+    "externalSnapshotExampleQualified": false,
+    "actualShellExecution": false,
+    "commonLiveFdAndFilesystem": false
+  }
+}

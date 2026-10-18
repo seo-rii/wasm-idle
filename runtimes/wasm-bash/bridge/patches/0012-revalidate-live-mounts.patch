@@ -1,0 +1,187 @@
+--- a/src/fs/mod.rs
++++ b/src/fs/mod.rs
+@@ -49,6 +49,28 @@
+     InodeValFileReadGuard, InodeValFileWriteGuard, WasiStateFileGuard, POLL_GUARD_MAX_RET,
+ };
+ pub use self::notification::NotificationInner;
++
++/// Mount prefixes whose backing filesystem other processes change concurrently.
++/// Cached inodes below them are revalidated on every lookup.
++static LIVE_MOUNTS: std::sync::RwLock<Vec<std::path::PathBuf>> = std::sync::RwLock::new(Vec::new());
++
++/// Register a live mount prefix. Revalidating a mount that is not live costs
++/// extra metadata calls but never changes results.
++pub fn register_live_mount(path: impl AsRef<std::path::Path>) {
++    let path = path.as_ref().to_path_buf();
++    if let Ok(mut mounts) = LIVE_MOUNTS.write() {
++        if !mounts.contains(&path) {
++            mounts.push(path);
++        }
++    }
++}
++
++pub(crate) fn is_live_path(path: &std::path::Path) -> bool {
++    LIVE_MOUNTS
++        .read()
++        .map(|mounts| mounts.iter().any(|mount| path.starts_with(mount)))
++        .unwrap_or(false)
++}
+ use crate::syscalls::map_io_err;
+ use crate::{bin_factory::BinaryPackage, state::PreopenedDir, ALL_RIGHTS};
+ 
+@@ -1062,10 +1084,19 @@
+                         }
+                         // used for full resolution of symlinks
+                         let mut loop_for_symlink = false;
+-                        if let Some(entry) =
+-                            entries.get(component.as_os_str().to_string_lossy().as_ref())
+-                        {
+-                            cur_inode = entry.clone();
++                        let name = component.as_os_str().to_string_lossy();
++                        let mut cached = entries.get(name.as_ref()).cloned();
++                        if let Some(entry) = &cached {
++                            let mut file = path.clone();
++                            file.push(component);
++                            // Another process may have removed or replaced a live entry.
++                            if is_live_path(&file) && !self.revalidate_live_entry(entry, &file)? {
++                                entries.remove(name.as_ref());
++                                cached = None;
++                            }
++                        }
++                        if let Some(entry) = cached {
++                            cur_inode = entry;
+                         } else {
+                             let file = {
+                                 let mut cd = path.clone();
+@@ -1462,8 +1493,52 @@
+             .map(|a| a.inode.clone())
+     }
+ 
++    /// Check a cached child of a live mount against the backing filesystem and
++    /// refresh its stat. Returns false when the cached entry must be discarded.
++    fn revalidate_live_entry(&self, entry: &InodeGuard, path: &Path) -> Result<bool, Errno> {
++        let metadata = match self.root_fs.symlink_metadata(path) {
++            Ok(metadata) => metadata,
++            Err(FsError::EntryNotFound) | Err(FsError::BaseNotDirectory) => return Ok(false),
++            Err(_) => return Err(Errno::Io),
++        };
++        let file_type = metadata.file_type();
++        let (matches, is_file) = match entry.read().deref() {
++            Kind::Dir { .. } => (file_type.is_dir(), false),
++            Kind::File { fd: None, .. } => (file_type.is_file(), true),
++            _ => (true, false),
++        };
++        if matches {
++            let mut stat = entry.stat.write().unwrap();
++            if is_file {
++                stat.st_size = metadata.len();
++            }
++            stat.st_mtim = metadata.modified();
++            stat.st_atim = metadata.accessed();
++            stat.st_ctim = metadata.created();
++        }
++        Ok(matches)
++    }
++
+     pub fn filestat_fd(&self, fd: WasiFd) -> Result<Filestat, Errno> {
+         let inode = self.get_fd_inode(fd)?;
++        // A live file's size and times can change outside this process.
++        let live = match inode.read().deref() {
++            Kind::File {
++                handle: Some(handle),
++                path,
++                ..
++            } if is_live_path(path) => Some(handle.clone()),
++            _ => None,
++        };
++        if let Some(handle) = live {
++            if let Ok(handle) = handle.read() {
++                let mut stat = inode.stat.write().unwrap();
++                stat.st_size = handle.size();
++                stat.st_mtim = handle.last_modified();
++                stat.st_atim = handle.last_accessed();
++                stat.st_ctim = handle.created_time();
++            }
++        }
+         let guard = inode.stat.read().unwrap();
+         Ok(*guard.deref())
+     }
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -75,6 +75,8 @@
+ pub use wasmer;
+ pub use wasmer_wasix_types;
+ 
++pub use crate::fs::register_live_mount;
++
+ use wasmer::{
+     imports, namespace, AsStoreMut, Exports, FunctionEnv, Imports, Memory32, MemoryAccessError,
+     MemorySize, RuntimeError,
+--- a/src/syscalls/wasi/fd_write.rs
++++ b/src/syscalls/wasi/fd_write.rs
+@@ -147,9 +147,10 @@
+             let (mut memory, _) = unsafe { env.get_memory_and_wasi_state(&ctx, 0) };
+             let mut guard = fd_entry.inode.write();
+             match guard.deref_mut() {
+-                Kind::File { handle, .. } => {
++                Kind::File { handle, path, .. } => {
+                     if let Some(handle) = handle {
+                         let handle = handle.clone();
++                        let live = crate::fs::is_live_path(path);
+                         drop(guard);
+ 
+                         let res = __asyncify_light(
+@@ -164,7 +165,15 @@
+                                 if !is_stdio {
+                                     if fd_entry.inner.flags.contains(Fdflags::APPEND) {
+                                         // `fdflags::append` means we need to seek to the end before writing.
+-                                        offset = fd_entry.inode.stat.read().unwrap().st_size;
++                                        // A live file may have grown outside this process.
++                                        offset = if live {
++                                            handle
++                                                .seek(std::io::SeekFrom::End(0))
++                                                .await
++                                                .map_err(map_io_err)?
++                                        } else {
++                                            fd_entry.inode.stat.read().unwrap().st_size
++                                        };
+                                         fd_entry.inner.offset.store(offset, Ordering::Release);
+                                     }
+ 
+--- a/src/syscalls/wasix/path_open2.rs
++++ b/src/syscalls/wasix/path_open2.rs
+@@ -255,6 +255,16 @@
+                     open_options.open(&path).map_err(fs_error_into_wasi_err)
+                 ))));
+ 
++                // A live file's size may have changed since lookup, or by O_TRUNC.
++                if crate::fs::is_live_path(path) {
++                    if let Some(handle) = handle {
++                        let handle = handle.read().unwrap();
++                        let mut stat = inode.stat.write().unwrap();
++                        stat.st_size = handle.size();
++                        stat.st_mtim = handle.last_modified();
++                    }
++                }
++
+                 if let Some(handle) = handle {
+                     let handle = handle.read().unwrap();
+                     if let Some(fd) = handle.get_special_fd() {
+@@ -362,6 +372,17 @@
+ 
+                 match open_options.open(&new_file_host_path) {
+                     Ok(handle) => Some(handle),
++                    // Another process created this live file after the lookup.
++                    Err(FsError::AlreadyExists)
++                        if crate::fs::is_live_path(&new_file_host_path)
++                            && !o_flags.contains(Oflags::EXCL) =>
++                    {
++                        Some(wasi_try_ok_ok!(open_options
++                            .create_new(false)
++                            .create(true)
++                            .open(&new_file_host_path)
++                            .map_err(fs_error_into_wasi_err)))
++                    }
+                     Err(err) => {
+                         // Even though the file does not exist, it still failed to create with
+                         // `AlreadyExists` error.  This can happen if the path resolves to a
