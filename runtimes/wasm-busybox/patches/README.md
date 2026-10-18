@@ -22,6 +22,7 @@ original helpers and paths.
 | `0012-b2-command-profile.patch` | Add the real directory/path/text helper closure, UTF-8 display, checked dot entries for WASI `ls -a`, and direct FILE handles for sort/uniq instead of POSIX dup2. Explicitly reject tail follow, tee signal, and pre-extension long/block metadata modes. |
 | `0013-b3-development-commands.patch` | Real sed/find/diff/hash/binary helpers; content-only recursive copy and symbolic links; direct FILE/fmemopen paths avoid POSIX dup/fork/mkstemp. Explicitly reject unsupported mutation/process modes. |
 | `0014-virtual-metadata-profile.patch` | Enable touch/stat/long ls with real WASI timestamps and versioned mode imports. Enrich libc stat with stored permission bits, retain file types, and report unavailable account/block/device fields explicitly. |
+| `0015-archive-content-profile.patch` | Link real archive codecs, CRC32 and content extraction; use owned descriptors instead of dup2/fork, real metadata times, exclusive output creation and explicit unsupported-mode failures. |
 
 No shell parser, fake process success, network implementation or filesystem stub
 is introduced. Unsupported applets remain disabled. Extending this closure needs

@@ -23,10 +23,9 @@ under `/usr/local/bin`, backed by the common container filesystem and stdio.
 | `echo`, `printf`, `pwd`, `true`, `false` | Existing BusyBox applets; also available as Bash builtins |
 
 These commands operate on raw byte streams. `tail -f` is outside the profile:
-file watching requires a separate live-wait contract. Long directory metadata
-(`ls -l`), timestamp changes and recursive copy are introduced in later stages.
-The existing copy profile rejects metadata-preserving and recursive options
-before changing the destination. Ownership, host identity and Unix permission
+file watching requires a separate live-wait contract. Stage 1 rejects long
+directory metadata, timestamp changes and recursive copy; later stages enable
+the supported forms below. Ownership, host identity and Unix permission
 mutation are not modeled by these commands.
 
 For example, these commands can inspect a workspace and process a text stream:
@@ -40,8 +39,8 @@ wc -l /workspace/names.txt
 
 ## Staged additions
 
-The registry and binary expand cumulatively with each stage. Stages 1 through 3
-are implemented here; archive commands follow in stage 4.
+The registry and binary expand cumulatively with each stage. All four stages
+below are implemented in the current 40-applet profile.
 
 | Stage | Commands and changes |
 | --- | --- |
@@ -97,3 +96,55 @@ Producer, container and actual Bash qualification receipts for this stage are
 retained under `runtimes/wasm-busybox/evidence/commands-stage3-*.json`.
 
 Stage 3 qualification: the 598,169-byte Wasm SHA-256 is `fc34cb5005690d5fc00f3df973014d3978d97c7ecfcbebdcaa6f7b81b9a793e9`. All 196 cumulative native/WASI command invocations and 784 Node/Chromium batch/live invocations pass, with the retained B0 and 104-invocation B1 gates. Focused host metadata, RPC, persistence and backup tests also pass.
+
+## Stage 4 archives and compression
+
+`tar` creates, lists and extracts regular files, directories and symbolic links.
+`gzip`/`gunzip` use the upstream gzip codec for file or stream compression,
+decompression and integrity checks. `unzip` reads stored/deflated ZIP data and
+supported stored Unix symlinks. The codecs run inside the Wasm applet, with real
+byte streams and filesystem operations.
+
+Tar compression options `-z/-a` require a separate transformer profile and fail
+explicitly. Compressed archives work through actual Bash pipelines:
+
+```sh
+tar -cf - source | gzip -c > bundle.tar.gz
+mkdir unpacked
+gunzip -c bundle.tar.gz | tar -xf - -C unpacked
+gunzip -c bundle.tar.gz | tar -tf -
+unzip -q bundle.zip -d zip-output
+```
+
+Creation modes remain host-owned. Tar restores supported timestamps and accepts
+`-m` to omit that step. Permission/ownership restoration, hardlinks and special
+file extraction are unsupported. Archive files and extracted files require
+exclusive creation: conflicts return an error and retain existing file bytes.
+Gzip/gunzip file overwrite `-f` and unzip `-n/-o/-K/-t` are explicit errors.
+For gzip integrity checking, `gunzip -t` still decodes and checks the real stream
+without producing output. Corrupt input, readonly mounts and quota errors return
+nonzero statuses.
+
+Extraction rejects parent path components and existing symlink parents. It is
+not transactional: an error may leave newly created partial entries. Normal VFS
+capability checks and quotas continue to apply.
+
+The cumulative command corpus covers both invocation forms and all four real
+container profiles. Additional reproducible archive checks run against explicit
+final artifacts:
+
+```sh
+node scripts/container-archive-qualification/test-archive-extra.mjs \
+  --artifact /path/to/busybox.wasm --native /path/to/native/busybox \
+  --work /new/archive-extra --output /new/archive-extra.json
+node scripts/container-archive-qualification/test-archive-host.mjs \
+  --artifact /path/to/busybox.wasm --source-root "$PWD" \
+  --work /new/archive-host --output /new/archive-host.json
+```
+
+These downstream checks validate archive byte trees, unsupported options,
+existing-file preservation, readonly and quota failures, and real timestamp
+restoration. Full producer, container, archive and Bash receipts are retained
+under `runtimes/wasm-busybox/evidence/commands-stage4-*.json`.
+
+Stage 4 qualification: the 634,131-byte Wasm SHA-256 is `3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9`. All 218 cumulative native/WASI invocations and 872 Node/Chromium batch/live invocations pass, plus 22 boundary/pipeline/lifecycle checks and the retained B0/B1 gates. Additional archive native/WASI and actual-host checks cover content, modes, timestamp restoration, readonly/quota failures and preservation of existing files.

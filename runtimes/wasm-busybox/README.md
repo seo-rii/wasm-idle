@@ -1,9 +1,9 @@
 # BusyBox WASI producer probe
 
 Status: **staged producer; browser/container qualification is separate**. This
-directory pins upstream BusyBox and the cumulative 36-applet configuration in
+directory pins upstream BusyBox and the cumulative 40-applet configuration in
 `commands.mjs`. The original G0/B1 receipts remain historical evidence; current
-stage receipts are named `evidence/commands-stage3-*.json`. Registration as a
+stage receipts are named `evidence/commands-stage4-*.json`. Registration as a
 supported container package additionally requires browser byte tests.
 
 The source is BusyBox 1.37.0, pinned to the checksum published next to its official
@@ -146,3 +146,26 @@ The source archive's `LICENSE` identifies GPL version 2 only. Keep corresponding
 source materials with any binary distribution. The [official license page](https://busybox.net/license.html)
 and [upstream build/porting FAQ](https://busybox.net/FAQ.html) are the primary
 references; `CONFIG_NOMMU` alone does not create a browser process backend.
+
+
+Stage 4 links real upstream tar, gzip, gunzip and unzip code. Tar creates/lists/
+extracts regular files, directories and symlinks; gzip/gunzip encode/decode and
+validate gzip streams; unzip reads stored/deflated ZIP data and supported stored
+Unix symlinks. Compression inside tar would require child transformers and is
+not enabled: use `tar -cf - tree | gzip -c` or
+`gunzip -c tree.tar.gz | tar -xf -` through the real Bash pipeline.
+
+This is a content profile with host-owned creation modes. Tar restores supported
+timestamps through actual WASI operations and offers `-m` to omit restoration.
+Owner/permission restoration, hardlinks and special-file extraction fail
+explicitly. Output archive files and extracted files use exclusive creation;
+conflicting files fail without replacing their bytes. Gzip/gunzip file `-f` and
+unzip `-n/-o/-K/-t` are explicit errors. Integrity-test decoding discards output
+inside the real transformer while retaining checksum/error handling.
+
+Extraction rejects existing symlink parents and parent path components; the
+normal VFS capability boundary still applies. Extraction is not transactional: a
+nonzero exit may leave newly created partial entries. Native differential builds
+retain full upstream behavior; profile-specific restrictions have explicit WASI
+expectations. Final command, browser and shell receipts use the cumulative
+40-applet artifact.
