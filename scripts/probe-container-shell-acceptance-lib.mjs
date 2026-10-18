@@ -5,6 +5,7 @@ import path from 'node:path';
 import { BASH_WASM_SHA256, BASH_WEBC, digest, identity } from './probe-patched-container-shell-lib.mjs';
 import { FULL_SYSROOT_SHA256, loadClangBrowserInputs } from '../packages/container/scripts/clang-browser-inputs.mjs';
 import { selectClangProfile } from '../examples/container/clang-profile.mjs';
+import { BUSYBOX_APPLETS, BUSYBOX_SHELL_COMMANDS } from '../runtimes/wasm-busybox/commands.mjs';
 
 export { BASH_WASM_SHA256, digest, identity };
 // SDK with bridge patches 0001-0020: registry/filesystem/pipe fixes, exit-only wait,
@@ -19,15 +20,15 @@ export const SDK_WASM = {
 	sha256: '11063fe5d9d5d16880cb1027e50a07841271e78709788de5b65cc6b9100ea34a'
 };
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
-// BusyBox B1, qualified live in runtimes/wasm-busybox/LIVE.md.
+// Stage 1 genuine BusyBox applets; producer and real Node/Chromium receipts are pinned below.
 export const BUSYBOX = {
-	bytes: 447557,
-	sha256: '547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade'
+  "bytes": 486866,
+  "sha256": "939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d"
 };
-export const BUSYBOX_APPLETS = ['cat', 'cp', 'echo', 'false', 'grep', 'mkdir', 'mv', 'printf', 'pwd', 'rm', 'true'];
-// The producer receipt and revision recorded by runtimes/wasm-busybox/evidence/container-live-b1.json.
-export const BUSYBOX_RECEIPT_SHA256 = '95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51';
-export const BUSYBOX_PRODUCER_REVISION = '3097726bc6e04667ba7d92738d5bcf4798062617';
+export { BUSYBOX_APPLETS };
+// Exact producer receipt retained in runtimes/wasm-busybox/evidence/commands-stage1-producer.json.
+export const BUSYBOX_RECEIPT_SHA256 = 'd8c374435cd3c3b94a82ed73ebdb60527a90d820706b228f16733b90949450af';
+export const BUSYBOX_PRODUCER_REVISION = '119ba3430e49d3094dad029ccce20679b9a69417';
 // wasm-llvm process-sysroot.py: the full selected-target sysroot with initial_cwd linked into crt1.o.
 export const PROCESS_SYSROOT = {
 	bytes: 35328000,
@@ -279,8 +280,13 @@ const decode = (bytes) => Buffer.from(Array.isArray(bytes) || bytes instanceof U
 const same = (actual, expected) => Array.isArray(actual) &&
 	actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
 
+// Existing evidence predates the shared command registry. Preserve its original
+// six-route contract while new receipts require the complete current inventory.
+const LEGACY_SHELL_COMMANDS = Object.freeze(['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm']);
+const shellCommandsFor = receipt => receipt.busybox?.shellCommands === undefined ? LEGACY_SHELL_COMMANDS : BUSYBOX_SHELL_COMMANDS;
+
 /** One run's acceptance. `downloads` are the server's body counts at the run's start and end. */
-function judgeRun(run, result, downloads, assetPaths, checks, clangAdapterId = 'llvm-clang-tool-host-v1') {
+function judgeRun(run, result, downloads, assetPaths, checks, clangAdapterId = 'llvm-clang-tool-host-v1', shellCommands = LEGACY_SHELL_COMMANDS, registryMatches = true) {
 	const check = (id, passed, observed) => checks.push({ id: `${run}:${id}`, passed: Boolean(passed), observed });
 	const completed = result?.type === 'result' && result.backendCompleted === true;
 	const output = result?.result;
@@ -307,8 +313,8 @@ function judgeRun(run, result, downloads, assetPaths, checks, clangAdapterId = '
 		records.map(({ path }) => path));
 	check('processes-retired', completed && Array.isArray(result.containerProcesses) && !result.containerProcesses.length,
 		result?.containerProcesses?.length);
-	check('metadata-only-lookup', result?.assetsBeforeShell?.cachedEntries === 0 &&
-		result?.lookups?.clang === 'llvm' && ['cat', 'grep', 'mkdir'].every((name) => result.lookups[name] === 'busybox'), result?.lookups);
+	check('metadata-only-lookup', registryMatches && result?.assetsBeforeShell?.cachedEntries === 0 &&
+		result?.lookups?.clang === 'llvm' && shellCommands.every((name) => result.lookups[name] === 'busybox'), result?.lookups);
 	const clang = result?.clangCommand;
 	check('clang-multicall-profile', clang?.path === 'bin/llvm' && clang.argv0 === LLVM_EXECUTABLE &&
 		clang.package === 'llvm' && clang.adapter === clangAdapterId && same(clang.prefixArgs, ['clang', ...CLANG_PROFILE]), clang);
@@ -333,7 +339,8 @@ function judgeRun(run, result, downloads, assetPaths, checks, clangAdapterId = '
 	check('sysroot-closure', result?.sysroot?.entries === 2285 && result.sysroot.files === 2168, result?.sysroot);
 	check('public-api', result?.publicApi?.runtime?.includes('registerHostCommandDirectory') &&
 		result.publicApi.directory?.includes('fromHostFileSystem') && result.publicApi.session === 'createWasixShellSession', result?.publicApi);
-	check('virtual-command-metadata', Object.values(result?.virtualCommands ?? {}).length === 7 && Object.values(result.virtualCommands).every(stat => stat.command === true && stat.mode === 0o555 && stat.size === 0), result?.virtualCommands);
+	check('virtual-command-metadata', registryMatches && same(Object.keys(result?.virtualCommands ?? {}).sort(), [...shellCommands, 'clang'].sort()) &&
+		Object.values(result.virtualCommands).every(stat => stat.command === true && stat.mode === 0o555 && stat.size === 0), result?.virtualCommands);
 	check('executable-artifact', (result?.artifact?.mode & 0o111) !== 0, result?.artifact?.mode);
 	check('sdk-group-retired', result?.workerGroup?.disposed === true && result.workerGroup.active === 0 && result.workerGroup.created === result.workerGroup.terminated, result?.workerGroup);
 	check('browser-errors', !result?.events?.some((event) => event.type === 'threadError') &&
@@ -485,7 +492,8 @@ export function judgeLiveShellAcceptance(receipt) {
 		{ scenario: receipt.scenario, clangFilesystem: receipt.clangFilesystem });
 	for (const name of ['cold', 'warm']) {
 		const entry = receipt.runs?.find(run => run.run === name);
-		judgeRun(name, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assets, checks, profile.adapterId);
+		judgeRun(name, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assets, checks, profile.adapterId,
+			shellCommandsFor(receipt), receipt.busybox?.shellCommands === undefined || same(receipt.busybox.shellCommands, BUSYBOX_SHELL_COMMANDS));
 	}
 	const entry = receipt.runs?.find(run => run.run === 'live-io'), result = entry?.result, io = result?.liveIo;
 	const output = result?.result, processed = result?.files?.[LIVE_CLANG_FILES[1]];
@@ -548,7 +556,8 @@ export function judgeShellAcceptance(receipt) {
 				result.workerGroup.created > 0 && result.workerGroup.created === result.workerGroup.terminated && result.remainingWorkerTargets === 0 &&
 				!result.ownedCleanup?.cleanupError && !result.consoleErrors?.length && !result.blockedRequests?.length, observed: result?.workerGroup });
 		}
-		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks);
+		else judgeRun(run, entry?.result, entry?.downloads ?? { start: {}, end: {} }, assetPaths, checks, undefined,
+			shellCommandsFor(receipt), receipt.busybox?.shellCommands === undefined || same(receipt.busybox.shellCommands, BUSYBOX_SHELL_COMMANDS));
 	}
 	checks.push({ id: 'context-cleanup', passed: receipt.initialWorkerTargets === 0 && receipt.workersAfterContextClose === 0,
 		observed: [receipt.initialWorkerTargets, receipt.workersAfterContextClose] });

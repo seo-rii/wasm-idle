@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import { selectClangProfile } from '../examples/container/clang-profile.mjs';
+import { BUSYBOX_COMMANDS, BUSYBOX_SHELL_COMMANDS } from '../runtimes/wasm-busybox/commands.mjs';
 import {
 	BASH_WASM_SHA256, BIN, BUSYBOX_PRODUCER_REVISION, CLANG_PROFILE, COMMAND_TIMEOUT_MS, INTERRUPTS, LLVM_EXECUTABLE, PROCESS_SYSROOT_RECEIPT_SHA256, MEMORY,
 	PACKAGE_RECEIPT, READ_FILES, REDIRECTION_FILES, RUNS, RUN_SCRIPTS, RUN_TIMEOUT_MS, SCRIPT, SYNTAX_FILES, SYNTAX_SCRIPT, LIVE_CLANG_SCRIPT, LIVE_CLANG_FILES,
@@ -126,7 +127,7 @@ export function manifest(origin, inputs, busyboxAsset = 'busybox', clangFilesyst
 			}
 		],
 		commands: [
-			...['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm'].map((name) => ({
+			...BUSYBOX_COMMANDS.map((name) => ({
 				name, package: 'busybox', adapter: 'wasi-preview1-live', path: 'bin/busybox', argv0: name, prefixArgs: []
 			})),
 			// This producer emits an LLVM multicall executable. Its canonical basename must
@@ -164,7 +165,7 @@ export async function runProbe(configuration, { syntaxOnly = false, liveOnly = f
 		diagnosticOptions: { sdkDiagnostics: configuration.sdkDiagnostics === true, omittedTmpMount: configuration.sdkDiagnostics === true && configuration.sdkDiagnosticsOmitTmp === true },
 		bundles: Object.fromEntries([...prepared.bundles.modules].map(([name, bytes]) => [name, identity(bytes)])),
 		bundleSources: prepared.bundles.sources,
-		busybox: { receiptSha256: prepared.inputs.busyboxReceiptSha256, artifact: identity(prepared.inputs.busybox) },
+		busybox: { receiptSha256: prepared.inputs.busyboxReceiptSha256, artifact: identity(prepared.inputs.busybox), shellCommands: BUSYBOX_SHELL_COMMANDS },
 		processSysroot: prepared.inputs.processSysroot,
 		clang: {
 			producerReceiptSha256: prepared.inputs.clang.producerSha256, producerSmokeSha256: prepared.inputs.clang.producerSmokeSha256,

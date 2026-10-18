@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { manifest, runProbe } from './probe-container-shell-acceptance.mjs';
 import { selectClangProfile } from '../examples/container/clang-profile.mjs';
+import { BUSYBOX_APPLETS, BUSYBOX_COMMANDS, BUSYBOX_SHELL_BUILTINS, BUSYBOX_SHELL_COMMANDS } from '../runtimes/wasm-busybox/commands.mjs';
 import {
 	BIN, CLANG_PROFILE, CLANG_TRIPLE_WARNING, CLANG_PREPROCESS_WARNINGS, DISPATCHES, FAILURE_DISPATCHES, INTERRUPTS, INTERRUPT_DISPATCHES, LLVM_EXECUTABLE, PIPELINE_DISPATCHES, SCRIPT, SOURCE,
 	SYNTAX_COMMANDS, SYNTAX_CONTENTS, SYNTAX_DIRECTORY, SYNTAX_ENVIRONMENT,
@@ -159,6 +160,9 @@ test('distribution identity covers URL policy and declares the LLVM multicall la
 	const first = JSON.parse(manifest('https://one.invalid', inputs)), second = JSON.parse(manifest('https://two.invalid', inputs));
 	assert.notEqual(first.distributionId, second.distributionId);
 	assert.notEqual(first.distributionId, JSON.parse(manifest('https://one.invalid', inputs, 'busybox-corrupt')).distributionId);
+	assert.deepEqual(first.commands.filter(command => command.package === 'busybox'), BUSYBOX_COMMANDS.map(name => ({
+		name, package: 'busybox', adapter: 'wasi-preview1-live', path: 'bin/busybox', argv0: name, prefixArgs: []
+	})));
 	assert.deepEqual(first.packages.find(pkg => pkg.id === 'llvm').files, [
 		{ path: 'bin/llvm', asset: 'clang', executable: true }, { path: 'bin/wasm-ld', asset: 'lld', executable: true },
 		{ path: 'sysroot.tar', asset: 'sysroot', executable: false }
@@ -172,6 +176,39 @@ test('distribution identity covers URL policy and declares the LLVM multicall la
 	const live = JSON.parse(manifest('https://one.invalid', inputs, 'busybox', 'live'));
 	assert.notEqual(live.distributionId, first.distributionId);
 	assert.equal(live.commands.find(command => command.name === 'clang').adapter, 'llvm-clang-tool-host-live-v1');
+});
+
+test('the BusyBox command inventory preserves Bash builtins and exposes multicall discovery', () => {
+	assert(Object.isFrozen(BUSYBOX_APPLETS));
+	assert(Object.isFrozen(BUSYBOX_COMMANDS));
+	assert(Object.isFrozen(BUSYBOX_SHELL_COMMANDS));
+	assert.equal(new Set(BUSYBOX_COMMANDS).size, BUSYBOX_COMMANDS.length);
+	assert.deepEqual(BUSYBOX_APPLETS, [...BUSYBOX_APPLETS].sort());
+	assert(BUSYBOX_SHELL_COMMANDS.includes('busybox'));
+	assert.deepEqual(BUSYBOX_SHELL_BUILTINS, ['echo', 'false', 'printf', 'pwd', 'true']);
+	for (const builtin of BUSYBOX_SHELL_BUILTINS) {
+		assert(BUSYBOX_COMMANDS.includes(builtin));
+		assert(!BUSYBOX_SHELL_COMMANDS.includes(builtin));
+	}
+	for (const name of ['ls', 'rmdir', 'head', 'tail', 'wc', 'tee', 'sort', 'uniq', 'cut', 'tr', 'basename', 'dirname', 'readlink', 'realpath'])
+		assert(BUSYBOX_SHELL_COMMANDS.includes(name), `${name} must be discoverable through PATH`);
+});
+
+test('new shell receipts require every registered route without changing archived six-route evidence', () => {
+	const value = receipt();
+	value.busybox = { shellCommands: [...BUSYBOX_SHELL_COMMANDS] };
+	for (const run of value.runs.filter(run => ['cold', 'warm'].includes(run.run))) {
+		run.result.lookups = { ...Object.fromEntries(BUSYBOX_SHELL_COMMANDS.map(name => [name, 'busybox'])), clang: 'llvm' };
+		run.result.virtualCommands = Object.fromEntries([...BUSYBOX_SHELL_COMMANDS, 'clang'].map(name => [name, { command: true, mode: 0o555, size: 0 }]));
+	}
+	assert.deepEqual(failed(value), []);
+	assert.equal(judgeLiveShellAcceptance({ ...value, scenario: 'live-only', clangFilesystem: 'live' }).checks
+		.find(check => check.id === 'cold:virtual-command-metadata').passed, true);
+	delete value.runs[0].result.lookups.ls;
+	delete value.runs[0].result.virtualCommands.ls;
+	assert.deepEqual(failed(value), ['cold:metadata-only-lookup', 'cold:virtual-command-metadata']);
+	value.busybox.shellCommands = ['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm'];
+	assert.deepEqual(failed(value), ['cold:metadata-only-lookup', 'cold:virtual-command-metadata', 'warm:metadata-only-lookup', 'warm:virtual-command-metadata']);
 });
 
 test('trusted Clang profile selects only a fixed adapter, worker and descriptor mode', async () => {

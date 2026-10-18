@@ -63,13 +63,13 @@ const release = {
       },
       {
         "id": "busybox",
-        "identity": "sha256:547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+        "identity": "sha256:939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d",
         "dependencies": [],
         "mount": "/opt/toolchains/busybox",
         "producer": {
           "repository": "https://github.com/seo-rii/wasm-idle",
-          "revision": "3097726bc6e04667ba7d92738d5bcf4798062617",
-          "receiptSha256": "95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51"
+          "revision": "119ba3430e49d3094dad029ccce20679b9a69417",
+          "receiptSha256": "d8c374435cd3c3b94a82ed73ebdb60527a90d820706b228f16733b90949450af"
         },
         "capabilities": [
           "wasi-preview1"
@@ -77,16 +77,16 @@ const release = {
         "assets": [
           {
             "id": "busybox",
-            "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade/busybox.wasm",
+            "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d/busybox.wasm",
             "encoding": "identity",
             "delivery": {
-              "bytes": 447557,
-              "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+              "bytes": 486866,
+              "sha256": "939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d",
               "mediaType": "application/wasm"
             },
             "logical": {
-              "bytes": 447557,
-              "sha256": "547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade",
+              "bytes": 486866,
+              "sha256": "939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d",
               "mediaType": "application/wasm"
             }
           }
@@ -181,6 +181,22 @@ const release = {
     ],
     "commands": [
       {
+        "name": "busybox",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "busybox",
+        "prefixArgs": []
+      },
+      {
+        "name": "basename",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "basename",
+        "prefixArgs": []
+      },
+      {
         "name": "cat",
         "package": "busybox",
         "adapter": "wasi-preview1-live",
@@ -197,11 +213,59 @@ const release = {
         "prefixArgs": []
       },
       {
+        "name": "cut",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "cut",
+        "prefixArgs": []
+      },
+      {
+        "name": "dirname",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "dirname",
+        "prefixArgs": []
+      },
+      {
+        "name": "echo",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "echo",
+        "prefixArgs": []
+      },
+      {
+        "name": "false",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "false",
+        "prefixArgs": []
+      },
+      {
         "name": "grep",
         "package": "busybox",
         "adapter": "wasi-preview1-live",
         "path": "bin/busybox",
         "argv0": "grep",
+        "prefixArgs": []
+      },
+      {
+        "name": "head",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "head",
+        "prefixArgs": []
+      },
+      {
+        "name": "ls",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "ls",
         "prefixArgs": []
       },
       {
@@ -221,11 +285,107 @@ const release = {
         "prefixArgs": []
       },
       {
+        "name": "printf",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "printf",
+        "prefixArgs": []
+      },
+      {
+        "name": "pwd",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "pwd",
+        "prefixArgs": []
+      },
+      {
+        "name": "readlink",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "readlink",
+        "prefixArgs": []
+      },
+      {
+        "name": "realpath",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "realpath",
+        "prefixArgs": []
+      },
+      {
         "name": "rm",
         "package": "busybox",
         "adapter": "wasi-preview1-live",
         "path": "bin/busybox",
         "argv0": "rm",
+        "prefixArgs": []
+      },
+      {
+        "name": "rmdir",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "rmdir",
+        "prefixArgs": []
+      },
+      {
+        "name": "sort",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "sort",
+        "prefixArgs": []
+      },
+      {
+        "name": "tail",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "tail",
+        "prefixArgs": []
+      },
+      {
+        "name": "tee",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "tee",
+        "prefixArgs": []
+      },
+      {
+        "name": "tr",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "tr",
+        "prefixArgs": []
+      },
+      {
+        "name": "true",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "true",
+        "prefixArgs": []
+      },
+      {
+        "name": "uniq",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "uniq",
+        "prefixArgs": []
+      },
+      {
+        "name": "wc",
+        "package": "busybox",
+        "adapter": "wasi-preview1-live",
+        "path": "bin/busybox",
+        "argv0": "wc",
         "prefixArgs": []
       },
       {
@@ -244,15 +404,15 @@ const release = {
         ]
       }
     ],
-    "distributionId": "website-9870f602e98446f6c2dca46f15c659f2fa5536ec978e66782c57093a9f855617"
+    "distributionId": "website-c88602b7574ecf1a4e614d2a701130d910dd9d2d93a0320820a855f6194d9320"
   },
   "config": {
-    "manifest": "{\n  \"schemaVersion\": 1,\n  \"packages\": [\n    {\n      \"id\": \"shell\",\n      \"identity\": \"sha256:0dc8906c5008efcc460ccdf95fb21e20f035023a5c392f7318ad49734e94242f\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/bash\",\n      \"producer\": {\n        \"repository\": \"https://github.com/seo-rii/wasm-idle\",\n        \"revision\": \"9b3ca1374d68a7a98645131227fe54fcb7ec02be\",\n        \"receiptSha256\": \"ee3589f60292b3481e8609c03f4a210120c31b416fbb1ec5d8cac2dd50c22bb0\"\n      },\n      \"capabilities\": [\n        \"wasix\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"sdk\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 9246938,\n            \"sha256\": \"522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"logical\": {\n            \"bytes\": 9246938,\n            \"sha256\": \"522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce\",\n            \"mediaType\": \"application/wasm\"\n          }\n        },\n        {\n          \"id\": \"bash\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 1812678,\n            \"sha256\": \"045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 1812678,\n            \"sha256\": \"045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4\",\n            \"mediaType\": \"application/octet-stream\"\n          }\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"sdk.wasm\",\n          \"asset\": \"sdk\",\n          \"executable\": false\n        },\n        {\n          \"path\": \"bash.webc\",\n          \"asset\": \"bash\",\n          \"executable\": false\n        }\n      ]\n    },\n    {\n      \"id\": \"busybox\",\n      \"identity\": \"sha256:547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/busybox\",\n      \"producer\": {\n        \"repository\": \"https://github.com/seo-rii/wasm-idle\",\n        \"revision\": \"3097726bc6e04667ba7d92738d5bcf4798062617\",\n        \"receiptSha256\": \"95788aa1a140e73efbcc77ed714933db7a18777ab0bc18479663928e6faf2a51\"\n      },\n      \"capabilities\": [\n        \"wasi-preview1\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"busybox\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade/busybox.wasm\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 447557,\n            \"sha256\": \"547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"logical\": {\n            \"bytes\": 447557,\n            \"sha256\": \"547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade\",\n            \"mediaType\": \"application/wasm\"\n          }\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"bin/busybox\",\n          \"asset\": \"busybox\",\n          \"executable\": true\n        }\n      ]\n    },\n    {\n      \"id\": \"llvm\",\n      \"identity\": \"sha256:1f7f638019dbb70a74fc9d4c5579b5d8697bc243a893bc3f9dbdc65a4b80465b\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/llvm\",\n      \"producer\": {\n        \"repository\": \"https://github.com/llvm/llvm-project\",\n        \"revision\": \"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\n        \"receiptSha256\": \"7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd\"\n      },\n      \"capabilities\": [\n        \"wasi-preview1\",\n        \"llvm-tool-host-exec-v1\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"clang\",\n          \"encoding\": \"gzip\",\n          \"delivery\": {\n            \"bytes\": 16270174,\n            \"sha256\": \"eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 51965041,\n            \"sha256\": \"e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin\"\n        },\n        {\n          \"id\": \"lld\",\n          \"encoding\": \"gzip\",\n          \"delivery\": {\n            \"bytes\": 8178107,\n            \"sha256\": \"dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 24938493,\n            \"sha256\": \"3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin\"\n        },\n        {\n          \"id\": \"sysroot\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 35328000,\n            \"sha256\": \"b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f\",\n            \"mediaType\": \"application/x-tar\"\n          },\n          \"logical\": {\n            \"bytes\": 35328000,\n            \"sha256\": \"b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f\",\n            \"mediaType\": \"application/x-tar\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar\"\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"bin/llvm\",\n          \"asset\": \"clang\",\n          \"executable\": true\n        },\n        {\n          \"path\": \"bin/wasm-ld\",\n          \"asset\": \"lld\",\n          \"executable\": true\n        },\n        {\n          \"path\": \"sysroot.tar\",\n          \"asset\": \"sysroot\",\n          \"executable\": false\n        }\n      ]\n    }\n  ],\n  \"commands\": [\n    {\n      \"name\": \"cat\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"cat\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"cp\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"cp\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"grep\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"grep\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"mkdir\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"mkdir\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"mv\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"mv\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"rm\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"rm\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"clang\",\n      \"package\": \"llvm\",\n      \"adapter\": \"llvm-clang-tool-host-live-v1\",\n      \"path\": \"bin/llvm\",\n      \"argv0\": \"/opt/toolchains/llvm/bin/llvm\",\n      \"prefixArgs\": [\n        \"clang\",\n        \"--target=wasm32-wasi\",\n        \"-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld\",\n        \"--sysroot=/usr/share/wasm-sysroot\",\n        \"-resource-dir=/usr/share/wasm-sysroot/lib/clang/22\",\n        \"-Wl,--max-memory=67108864\"\n      ]\n    }\n  ],\n  \"distributionId\": \"website-9870f602e98446f6c2dca46f15c659f2fa5536ec978e66782c57093a9f855617\"\n}\n",
-    "manifestSha256": "9f0ed5c0b8703effb88b81e1aff35047e9a87509a41442d969fef449d3c70c6f",
+    "manifest": "{\n  \"schemaVersion\": 1,\n  \"packages\": [\n    {\n      \"id\": \"shell\",\n      \"identity\": \"sha256:0dc8906c5008efcc460ccdf95fb21e20f035023a5c392f7318ad49734e94242f\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/bash\",\n      \"producer\": {\n        \"repository\": \"https://github.com/seo-rii/wasm-idle\",\n        \"revision\": \"9b3ca1374d68a7a98645131227fe54fcb7ec02be\",\n        \"receiptSha256\": \"ee3589f60292b3481e8609c03f4a210120c31b416fbb1ec5d8cac2dd50c22bb0\"\n      },\n      \"capabilities\": [\n        \"wasix\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"sdk\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 9246938,\n            \"sha256\": \"522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"logical\": {\n            \"bytes\": 9246938,\n            \"sha256\": \"522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce\",\n            \"mediaType\": \"application/wasm\"\n          }\n        },\n        {\n          \"id\": \"bash\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 1812678,\n            \"sha256\": \"045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 1812678,\n            \"sha256\": \"045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4\",\n            \"mediaType\": \"application/octet-stream\"\n          }\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"sdk.wasm\",\n          \"asset\": \"sdk\",\n          \"executable\": false\n        },\n        {\n          \"path\": \"bash.webc\",\n          \"asset\": \"bash\",\n          \"executable\": false\n        }\n      ]\n    },\n    {\n      \"id\": \"busybox\",\n      \"identity\": \"sha256:939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/busybox\",\n      \"producer\": {\n        \"repository\": \"https://github.com/seo-rii/wasm-idle\",\n        \"revision\": \"119ba3430e49d3094dad029ccce20679b9a69417\",\n        \"receiptSha256\": \"d8c374435cd3c3b94a82ed73ebdb60527a90d820706b228f16733b90949450af\"\n      },\n      \"capabilities\": [\n        \"wasi-preview1\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"busybox\",\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d/busybox.wasm\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 486866,\n            \"sha256\": \"939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"logical\": {\n            \"bytes\": 486866,\n            \"sha256\": \"939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d\",\n            \"mediaType\": \"application/wasm\"\n          }\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"bin/busybox\",\n          \"asset\": \"busybox\",\n          \"executable\": true\n        }\n      ]\n    },\n    {\n      \"id\": \"llvm\",\n      \"identity\": \"sha256:1f7f638019dbb70a74fc9d4c5579b5d8697bc243a893bc3f9dbdc65a4b80465b\",\n      \"dependencies\": [],\n      \"mount\": \"/opt/toolchains/llvm\",\n      \"producer\": {\n        \"repository\": \"https://github.com/llvm/llvm-project\",\n        \"revision\": \"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\n        \"receiptSha256\": \"7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd\"\n      },\n      \"capabilities\": [\n        \"wasi-preview1\",\n        \"llvm-tool-host-exec-v1\"\n      ],\n      \"assets\": [\n        {\n          \"id\": \"clang\",\n          \"encoding\": \"gzip\",\n          \"delivery\": {\n            \"bytes\": 16270174,\n            \"sha256\": \"eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 51965041,\n            \"sha256\": \"e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin\"\n        },\n        {\n          \"id\": \"lld\",\n          \"encoding\": \"gzip\",\n          \"delivery\": {\n            \"bytes\": 8178107,\n            \"sha256\": \"dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d\",\n            \"mediaType\": \"application/octet-stream\"\n          },\n          \"logical\": {\n            \"bytes\": 24938493,\n            \"sha256\": \"3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a\",\n            \"mediaType\": \"application/wasm\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin\"\n        },\n        {\n          \"id\": \"sysroot\",\n          \"encoding\": \"identity\",\n          \"delivery\": {\n            \"bytes\": 35328000,\n            \"sha256\": \"b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f\",\n            \"mediaType\": \"application/x-tar\"\n          },\n          \"logical\": {\n            \"bytes\": 35328000,\n            \"sha256\": \"b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f\",\n            \"mediaType\": \"application/x-tar\"\n          },\n          \"url\": \"https://seo-rii.github.io/wasm-idle/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar\"\n        }\n      ],\n      \"files\": [\n        {\n          \"path\": \"bin/llvm\",\n          \"asset\": \"clang\",\n          \"executable\": true\n        },\n        {\n          \"path\": \"bin/wasm-ld\",\n          \"asset\": \"lld\",\n          \"executable\": true\n        },\n        {\n          \"path\": \"sysroot.tar\",\n          \"asset\": \"sysroot\",\n          \"executable\": false\n        }\n      ]\n    }\n  ],\n  \"commands\": [\n    {\n      \"name\": \"busybox\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"busybox\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"basename\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"basename\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"cat\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"cat\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"cp\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"cp\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"cut\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"cut\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"dirname\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"dirname\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"echo\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"echo\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"false\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"false\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"grep\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"grep\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"head\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"head\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"ls\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"ls\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"mkdir\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"mkdir\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"mv\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"mv\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"printf\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"printf\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"pwd\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"pwd\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"readlink\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"readlink\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"realpath\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"realpath\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"rm\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"rm\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"rmdir\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"rmdir\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"sort\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"sort\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"tail\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"tail\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"tee\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"tee\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"tr\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"tr\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"true\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"true\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"uniq\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"uniq\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"wc\",\n      \"package\": \"busybox\",\n      \"adapter\": \"wasi-preview1-live\",\n      \"path\": \"bin/busybox\",\n      \"argv0\": \"wc\",\n      \"prefixArgs\": []\n    },\n    {\n      \"name\": \"clang\",\n      \"package\": \"llvm\",\n      \"adapter\": \"llvm-clang-tool-host-live-v1\",\n      \"path\": \"bin/llvm\",\n      \"argv0\": \"/opt/toolchains/llvm/bin/llvm\",\n      \"prefixArgs\": [\n        \"clang\",\n        \"--target=wasm32-wasi\",\n        \"-fuse-ld=/opt/toolchains/llvm/bin/wasm-ld\",\n        \"--sysroot=/usr/share/wasm-sysroot\",\n        \"-resource-dir=/usr/share/wasm-sysroot/lib/clang/22\",\n        \"-Wl,--max-memory=67108864\"\n      ]\n    }\n  ],\n  \"distributionId\": \"website-c88602b7574ecf1a4e614d2a701130d910dd9d2d93a0320820a855f6194d9320\"\n}\n",
+    "manifestSha256": "8910f2896c0c69f1bf669a14dc4e8fa87b391e73371cb8a16a2c52fd91f660be",
     "assetURLs": [
       "https://seo-rii.github.io/wasm-idle/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
       "https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
-      "https://seo-rii.github.io/wasm-idle/container-app/objects/547827daf25957a4e2f77ba9ba76b4734f363f867a8a5cb39302dce1b1c36ade/busybox.wasm",
+      "https://seo-rii.github.io/wasm-idle/container-app/objects/939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d/busybox.wasm",
       "https://seo-rii.github.io/wasm-idle/container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin",
       "https://seo-rii.github.io/wasm-idle/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin",
       "https://seo-rii.github.io/wasm-idle/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar"
@@ -281,7 +441,7 @@ const release = {
     "commandTimeoutMs": 240000,
     "clangFilesystem": "live"
   },
-  "hostHash": "abab66cc9c48836f76988fad20cd6e3d302bf4e9d0a01831cf63143cab641d3f",
+  "hostHash": "5759003863a111bee09fbc1d609c0c0982e97a419be8fd62978d40a36c5c727b",
   "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
 };
 
