@@ -63,6 +63,10 @@ async function withPage(run: (page: Page, compilerLogs: string[]) => Promise<voi
 					await navigator.serviceWorker.ready;
 				});
 			}
+			// Load gzip-only owner Workers from a document already controlled by the service worker.
+			errors.length = 0;
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.waitForTimeout(1500);
 			await page.waitForFunction(
 				() =>
 					crossOriginIsolated &&
