@@ -58,3 +58,9 @@ provide an applet.
 ## Stage 1 qualification
 
 The exact 486,866-byte upstream BusyBox Wasm (SHA-256 `939faca10df3f30f96092eb0539c804702112aaa43e6dd0ca3b9ef958d23842d`) passes 106 new native/WASI invocation checks plus the retained B0/B1 gates. All 424 real container invocations pass across Node and Chromium, batch and live, with 22 additional readonly, quota, lifecycle and pipeline checks. Chromium was 153.0.8010.12. Full producer, verification and container receipts are in `runtimes/wasm-busybox/evidence/commands-stage1-*.json`.
+
+## Stage 2 development tools
+
+Adds `sed`, query-only `find`, `diff`, `cmp`, `ln -s`, `sha256sum`, `base64`, `od` and `hexdump`, plus content-tree `cp -r/-R`. Existing B1 recursive-copy rejection cases are replaced by positive recursive-copy tests. `sed -i`, hardlinks, find process/deletion actions and copy metadata preservation remain explicit errors. Base64 retains upstream garbage-skipping semantics and rejects truncated quartets. Binary dumps and stdin comparisons use real file streams rather than POSIX descriptor replacement or temporary-file emulation.
+
+Stage 2 qualification: the 551,862-byte Wasm SHA-256 is `45e067aa95cb76b1c8dba19dcde9eb85736ba45486f19fe77c38030eaf1bccb8`. Native/WASI executes all 166 cumulative command cases successfully; Node/Chromium batch/live executes 664 cumulative command cases successfully. The original B0 and the updated 104-invocation B1 gates also pass. Complete receipts are retained under `runtimes/wasm-busybox/evidence/commands-stage2-*.json`.

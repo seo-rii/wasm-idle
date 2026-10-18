@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-b2-command-candidate",
+  "status": "producer-b3-development-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -45,7 +45,7 @@
   },
   "config": {
     "path": "config/b1.config",
-    "sha256": "85fab1a1496f7e5d3e5a10e80cf5671ecf7872bd73b0a74059dea7f691ce9b97",
+    "sha256": "b0db1b037cd4d91a9ccaa0bcc0844618f47c1d9dc4cd8a4316cedfa1ef9e36a8",
     "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
   },
   "patches": [
@@ -108,27 +108,41 @@
       "path": "patches/0012-b2-command-profile.patch",
       "sha256": "4e9b5da8e2cff7278e1ebc61611340011eb97e21c21f7cdfe54fb041b34c3aa6",
       "classification": "noninteractive-directory-and-text-profile"
+    },
+    {
+      "path": "patches/0013-b3-development-commands.patch",
+      "sha256": "0d0e9dd8214fc2ae57b68ce3098b7301de8b0c4ec94a11a24915222b0e9d96da",
+      "classification": "development-text-tree-and-binary-profile"
     }
   ],
   "requestedApplets": [
+    "base64",
     "basename",
     "cat",
+    "cmp",
     "cp",
     "cut",
+    "diff",
     "dirname",
     "echo",
     "false",
+    "find",
     "grep",
     "head",
+    "hexdump",
+    "ln",
     "ls",
     "mkdir",
     "mv",
+    "od",
     "printf",
     "pwd",
     "readlink",
     "realpath",
     "rm",
     "rmdir",
+    "sed",
+    "sha256sum",
     "sort",
     "tail",
     "tee",
@@ -156,12 +170,13 @@
   },
   "limitations": [
     "Host owns creation modes; mkdir -m is rejected",
-    "cp regular files and symlinks only; -p/-a/-r/-R/-l/-s are rejected before destination mutation",
+    "cp recursive directory/regular/symlink content uses host creation modes; -p/-a/-l/-s are rejected before destination mutation",
     "mv uses same-mount rename only; cross-mount fallback is rejected without copy or unlink",
     "No ownership, timestamps, permission mutation, hardlink preservation or device/FIFO/socket copying",
     "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated",
     "Noninteractive applets; tail -f/-F and tee -i are explicitly rejected",
-    "ls -l/-n/-s await the virtual metadata profile; no terminal width or automatic color"
+    "ls -l/-n/-s await the virtual metadata profile; no terminal width or automatic color",
+    "sed -i and find -exec/-ok/-delete are unsupported; ln requires symbolic -s mode"
   ],
-  "commandStage": 1
+  "commandStage": 2
 }

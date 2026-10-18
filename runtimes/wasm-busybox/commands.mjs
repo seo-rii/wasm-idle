@@ -1,9 +1,41 @@
 // Canonical applet inventory for the container BusyBox producer. Keep the
 // effective producer configuration, applet-list smoke and distribution in sync.
+export const BUSYBOX_COMMAND_STAGE = 2;
 export const BUSYBOX_APPLETS = Object.freeze([
-	'basename', 'cat', 'cp', 'cut', 'dirname', 'echo', 'false', 'grep', 'head',
-	'ls', 'mkdir', 'mv', 'printf', 'pwd', 'readlink', 'realpath', 'rm', 'rmdir',
-	'sort', 'tail', 'tee', 'tr', 'true', 'uniq', 'wc'
+  "base64",
+  "basename",
+  "cat",
+  "cmp",
+  "cp",
+  "cut",
+  "diff",
+  "dirname",
+  "echo",
+  "false",
+  "find",
+  "grep",
+  "head",
+  "hexdump",
+  "ln",
+  "ls",
+  "mkdir",
+  "mv",
+  "od",
+  "printf",
+  "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
+  "sed",
+  "sha256sum",
+  "sort",
+  "tail",
+  "tee",
+  "tr",
+  "true",
+  "uniq",
+  "wc"
 ]);
 
 // Direct container callers may use every compiled applet or the multicall entry.
