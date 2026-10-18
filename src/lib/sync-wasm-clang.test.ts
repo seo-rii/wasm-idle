@@ -42,6 +42,10 @@ import { LEGACY_CLANG_RELEASE } from '../../scripts/llvm-contracts/clang-legacy-
 const tempDirs: string[] = [];
 const execFileAsync = promisify(execFile);
 const syncScript = path.resolve('scripts/sync-wasm-clang.mjs');
+// Preserve the exact pre-receipt release independently of the currently installed
+// compiler. Captured from b92c73343e35e1563af5cdd6d46be16112f33c9a; the production
+// LEGACY_CLANG_RELEASE metadata and raw-byte pins authenticate this fixture.
+const historicalBuildInfo = path.resolve('src/lib/test-fixtures/clang-legacy-runtime-build.json');
 const assets = [
 	{
 		asset: 'clang.zip',
@@ -611,9 +615,7 @@ describe('syncWasmClangDist', () => {
 	});
 
 	it('requires the independently pinned historical metadata and all six raw asset identities', async () => {
-		const historical = JSON.parse(
-			await readFile(path.resolve('static/clang/runtime-build.json'), 'utf8')
-		);
+		const historical = JSON.parse(await readFile(historicalBuildInfo, 'utf8'));
 		expect(historical.toolchain.buildProvenance).toBeUndefined();
 		expect(() => verifyLegacyClangRelease(historical.toolchain, {})).toThrow(
 			'clang input identity mismatch'
@@ -625,11 +627,9 @@ describe('syncWasmClangDist', () => {
 	});
 
 	it.skipIf(!assets.every(({ target }) => existsSync(path.resolve('static', target))))(
-		'retains the exact installed historical Clang bytes without inventing a build receipt',
+		'binds the historical exception to all six independently pinned installed raw assets',
 		async () => {
-			const historical = JSON.parse(
-				await readFile(path.resolve('static/clang/runtime-build.json'), 'utf8')
-			);
+			const historical = JSON.parse(await readFile(historicalBuildInfo, 'utf8'));
 			expect(historical.toolchain.buildProvenance).toBeUndefined();
 			// Independently committed pins bind the six raw assets; no incoming bundle
 			// chooses the identity used by the exception.
@@ -644,12 +644,26 @@ describe('syncWasmClangDist', () => {
 				const bytes = await readFile(path.resolve('static', file));
 				inputs[name] = name === 'clangdJs' ? bytes : gunzipSync(bytes);
 			}
-			expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).not.toThrow();
-			inputs.clang = Buffer.from(inputs.clang);
-			inputs.clang[0] ^= 1;
-			expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).toThrow(
-				'clang input identity mismatch'
+			const changedInput = Object.entries(LEGACY_CLANG_RELEASE.inputs).find(
+				([name, expected]) =>
+					inputs[name].byteLength !== expected.bytes || sha256(inputs[name]) !== expected.sha256
 			);
+			if (changedInput) {
+				// An updated installed compiler cannot inherit the historical exception,
+				// even when paired with the authentic old release metadata.
+				expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).toThrow(
+					`${changedInput[0]} input identity mismatch`
+				);
+				return;
+			}
+			expect(() => verifyLegacyClangRelease(historical.toolchain, inputs)).not.toThrow();
+			for (const name of Object.keys(LEGACY_CLANG_RELEASE.inputs)) {
+				const changed = Buffer.from(inputs[name]);
+				changed[0] ^= 1;
+				expect(() =>
+					verifyLegacyClangRelease(historical.toolchain, { ...inputs, [name]: changed })
+				).toThrow(`${name} input identity mismatch`);
+			}
 		}
 	);
 
