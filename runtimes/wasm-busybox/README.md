@@ -3,7 +3,7 @@
 Status: **staged producer; browser/container qualification is separate**. This
 directory pins upstream BusyBox and the cumulative 40-applet configuration in
 `commands.mjs`. The original G0/B1 receipts remain historical evidence; current
-stage receipts are named `evidence/commands-stage4-*.json`. Registration as a
+review-correction receipts are named `evidence/commands-review-fixes-*.json`. Registration as a
 supported container package additionally requires browser byte tests.
 
 The source is BusyBox 1.37.0, pinned to the checksum published next to its official
@@ -169,3 +169,20 @@ nonzero exit may leave newly created partial entries. Native differential builds
 retain full upstream behavior; profile-specific restrictions have explicit WASI
 expectations. Final command, browser and shell receipts use the cumulative
 40-applet artifact.
+
+
+Review corrections retain the 40-applet profile and real upstream algorithms.
+Sort/uniq retain a prior stdio error when the final close succeeds, including
+redirected stdout. Tar propagates failed directory creation or a conflicting
+non-directory before restoring metadata; directory timestamps are restored
+after child and deferred-link extraction, with the last directory header taking
+precedence. Stored ZIP payloads use the real upstream CRC32 helper and report
+checksum errors through nonzero exit status. Partial new output after a failed
+extraction remains possible; an existing conflicting file is not replaced.
+
+The common Node/Chromium batch/live harness covers quota failures across stdio
+buffering boundaries, directory conflicts and readonly errors, nested and
+repeated directory timestamps, and corrupt stored ZIP input. Its immutable
+standard-library-generated archive fixtures are included in the source pack
+and command-script hash inventory. The separate native/WASI and actual-host
+archive qualifiers retain upstream differences as explicit negative controls.

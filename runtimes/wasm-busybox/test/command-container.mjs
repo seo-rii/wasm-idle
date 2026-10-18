@@ -1,5 +1,13 @@
 // Runs unchanged in Node and Chromium using production container workers.
 import { checkCommandResult, compareTree, fromHex, toHex } from './command-cases.mjs';
+import {
+	DIRECTORY_ARCHIVE_MTIME_MS,
+	DIRECTORY_LAST_ARCHIVE_MTIME_MS,
+	directoryTarHex,
+	directoryTreeTarHex,
+	duplicateDirectoryTarHex,
+	storedBadCrcZipHex
+} from './archive-regression-fixtures.mjs';
 
 export async function exerciseCommands(config) {
 	const { createContainer, validateDistribution, createContainerPackageManager } = await import(
@@ -222,6 +230,320 @@ export async function exerciseCommands(config) {
 				{ exits, stdoutHex: toHex(output), stderrHex: stderr.map(toHex) }
 			);
 		}
+		for (const applet of ['sort', 'uniq'])
+			for (const invocation of ['argv0', 'multicall']) {
+				const args = applet === 'sort' ? ['-o', 'file-output'] : ['-', 'file-output'];
+				for (const length of [1025, 8193]) {
+					prepare({ source: { type: 'file', hex: '0001ff' } });
+					const payload = new TextEncoder().encode(`${'x'.repeat(length - 1)}\n`);
+					const result = await container.run(
+						invocation === 'argv0' ? applet : 'busybox',
+						invocation === 'argv0' ? args : [applet, ...args],
+						{ ...options, stdin: payload }
+					);
+					const output = fs.readFile(`${cwd}/file-output`);
+					check(
+						`${applet}-file-output-${length}-${invocation}`,
+						result.reason === 'exited' &&
+							result.code === 0 &&
+							result.stderr.length === 0 &&
+							result.stdout.length === 0 &&
+							toHex(output) === toHex(payload),
+						{
+							code: result.code,
+							reason: result.reason,
+							stderrHex: toHex(result.stderr),
+							inputBytes: payload.length,
+							writtenBytes: output.length
+						}
+					);
+				}
+				// The WASI stdio buffer holds 1024 bytes. The smaller case fails on
+				// fclose; the larger cases fail during fprintf before the final close.
+				for (const length of [1024, 1025, 8193]) {
+					prepare({ source: { type: 'file', hex: '0001ff' } });
+					fs.writeFile(
+						`${cwd}/quota-filler`,
+						new Uint8Array(fs.maxBytes - fs.byteLength)
+					);
+					try {
+						const payload = new TextEncoder().encode(`${'x'.repeat(length - 1)}\n`);
+						const result = await container.run(
+							invocation === 'argv0' ? applet : 'busybox',
+							invocation === 'argv0' ? args : [applet, ...args],
+							{ ...options, stdin: payload }
+						);
+						const writtenBytes = fs.stat(`${cwd}/file-output`).size;
+						check(
+							`${applet}-file-output-quota-${length}-${invocation}`,
+							result.reason === 'exited' &&
+								Number.isInteger(result.code) &&
+								result.code > 0 &&
+								result.stderr.length > 0 &&
+								result.stdout.length === 0 &&
+								writtenBytes === 0 &&
+								toHex(fs.readFile(`${cwd}/source`)) === '0001ff',
+							{
+								code: result.code,
+								reason: result.reason,
+								stderrHex: toHex(result.stderr),
+								inputBytes: payload.length,
+								writtenBytes
+							}
+						);
+					} finally {
+						fs.unlink(`${cwd}/quota-filler`);
+					}
+				}
+			}
+		if (live)
+			for (const applet of ['sort', 'uniq'])
+				for (const length of [1025, 8193]) {
+					prepare({ source: { type: 'file', hex: '0001ff' } });
+					const outputPath = `${cwd}/redirected-output`;
+					const fd = fs.open(outputPath, { write: true, create: true, truncate: true });
+					let closed = false,
+						filled = false,
+						process;
+					const pending = [];
+					const closeOutput = () => {
+						if (!closed) {
+							closed = true;
+							fs.close(fd);
+						}
+					};
+					try {
+						fs.writeFile(
+							`${cwd}/quota-filler`,
+							new Uint8Array(fs.maxBytes - fs.byteLength)
+						);
+						filled = true;
+						process = await container.spawn(applet, [], {
+							...options,
+							stdio: {
+								stdout: {
+									async write(bytes) {
+										return fs.write(fd, bytes);
+									},
+									close: closeOutput
+								}
+							}
+						});
+						const payload = new TextEncoder().encode(`${'x'.repeat(length - 1)}\n`);
+						const send = async () => {
+							const writer = process.stdin.getWriter();
+							try {
+								await writer.write(payload);
+								await writer.close();
+							} finally {
+								writer.releaseLock();
+							}
+						};
+						pending.push(
+							drain(process.stdout),
+							drain(process.stderr),
+							process.exited,
+							send()
+						);
+						const [stdout, stderr, result] = await Promise.all(pending);
+						const writtenBytes = fs.stat(outputPath).size;
+						check(
+							`${applet}-redirected-stdout-quota-${length}`,
+							result.reason === 'exited' &&
+								Number.isInteger(result.code) &&
+								result.code > 0 &&
+								stderr.length > 0 &&
+								stdout.length === 0 &&
+								writtenBytes === 0 &&
+								toHex(fs.readFile(`${cwd}/source`)) === '0001ff',
+							{
+								...result,
+								stderrHex: toHex(stderr),
+								inputBytes: payload.length,
+								writtenBytes
+							}
+						);
+					} finally {
+						if (process) await process.terminate();
+						await Promise.allSettled(pending);
+						// Delegated descriptors belong to this caller, including on exit.
+						closeOutput();
+						if (filled) fs.unlink(`${cwd}/quota-filler`);
+					}
+				}
+		if (config.matrix.stage >= 4)
+			for (const invocation of ['argv0', 'multicall']) {
+				const seedAtime = 1262304000123,
+					seedMtime = 1262304000456;
+				prepare({
+					'archive.tar': { type: 'file', hex: directoryTarHex },
+					data: {
+						type: 'file',
+						hex: toHex('preserved bytes'),
+						atimeMs: seedAtime,
+						mtimeMs: seedMtime
+					}
+				});
+				const before = fs.stat(`${cwd}/data`);
+				const conflict = await container.run(
+					invocation === 'argv0' ? 'tar' : 'busybox',
+					invocation === 'argv0' ? ['-xf', 'archive.tar'] : ['tar', '-xf', 'archive.tar'],
+					options
+				);
+				const after = fs.stat(`${cwd}/data`);
+				check(
+					`tar-directory-file-conflict-${invocation}`,
+					conflict.reason === 'exited' &&
+						Number.isInteger(conflict.code) &&
+						conflict.code > 0 &&
+						conflict.stderr.length > 0 &&
+						after.type === 'file' &&
+						after.inode === before.inode &&
+						after.atimeMs === before.atimeMs &&
+						after.mtimeMs === before.mtimeMs &&
+						toHex(fs.readFile(`${cwd}/data`)) === toHex('preserved bytes'),
+					{
+						code: conflict.code,
+						reason: conflict.reason,
+						stderrHex: toHex(conflict.stderr),
+						before,
+						after
+					}
+				);
+				prepare({ 'archive.tar': { type: 'file', hex: directoryTarHex } });
+				const missingRoot = `/opt/toolchains/archive-missing-${invocation}`;
+				fs.mountReadonly(missingRoot, []);
+				const missingBefore = fs.stat(missingRoot);
+				const missingArgs = ['-xmf', `${cwd}/archive.tar`, '-C', missingRoot];
+				const missingDirectory = await container.run(
+					invocation === 'argv0' ? 'tar' : 'busybox',
+					invocation === 'argv0' ? missingArgs : ['tar', ...missingArgs],
+					options
+				);
+				const missingAfter = fs.stat(missingRoot);
+				check(
+					`tar-readonly-missing-directory-no-mtime-${invocation}`,
+					missingDirectory.reason === 'exited' &&
+						Number.isInteger(missingDirectory.code) &&
+						missingDirectory.code > 0 &&
+						new TextDecoder()
+							.decode(missingDirectory.stderr)
+							.includes('Read-only file system') &&
+						missingAfter.inode === missingBefore.inode &&
+						missingAfter.atimeMs === missingBefore.atimeMs &&
+						missingAfter.mtimeMs === missingBefore.mtimeMs &&
+						fs.readdir(missingRoot).length === 0,
+					{
+						code: missingDirectory.code,
+						reason: missingDirectory.reason,
+						stderrHex: toHex(missingDirectory.stderr),
+						before: missingBefore,
+						after: missingAfter
+					}
+				);
+				// An existing directory with -m requires no write: EEXIST is valid,
+				// and the readonly inode and its metadata must remain unchanged.
+				const readonlyRoot = `/opt/toolchains/archive-regression-${invocation}`;
+				fs.mountReadonly(readonlyRoot, [
+					{
+						path: 'data',
+						type: 'directory',
+						mode: 0o755,
+						atimeMs: seedAtime,
+						mtimeMs: seedMtime
+					}
+				]);
+				const readonlyBefore = fs.stat(`${readonlyRoot}/data`);
+				const readonlyArgs = ['-xmf', `${cwd}/archive.tar`, '-C', readonlyRoot];
+				const readonlyDirectory = await container.run(
+					invocation === 'argv0' ? 'tar' : 'busybox',
+					invocation === 'argv0' ? readonlyArgs : ['tar', ...readonlyArgs],
+					options
+				);
+				const readonlyInfo = fs.stat(`${readonlyRoot}/data`);
+				check(
+					`tar-readonly-existing-directory-no-mtime-${invocation}`,
+					readonlyDirectory.reason === 'exited' &&
+						readonlyDirectory.code === 0 &&
+						readonlyDirectory.stderr.length === 0 &&
+						readonlyInfo.type === 'directory' &&
+						readonlyInfo.inode === readonlyBefore.inode &&
+						readonlyInfo.mode === readonlyBefore.mode &&
+						readonlyInfo.ctimeMs === readonlyBefore.ctimeMs &&
+						readonlyInfo.atimeMs === seedAtime &&
+						readonlyInfo.mtimeMs === seedMtime &&
+						fs.readdir(`${readonlyRoot}/data`).length === 0,
+					{
+						code: readonlyDirectory.code,
+						reason: readonlyDirectory.reason,
+						stderrHex: toHex(readonlyDirectory.stderr),
+						before: readonlyBefore,
+						after: readonlyInfo
+					}
+				);
+				for (const [id, archiveHex, directoryMtime] of [
+					['directory-child', directoryTreeTarHex, DIRECTORY_ARCHIVE_MTIME_MS],
+					[
+						'duplicate-directory',
+						duplicateDirectoryTarHex,
+						DIRECTORY_LAST_ARCHIVE_MTIME_MS
+					]
+				]) {
+					prepare({ 'archive.tar': { type: 'file', hex: archiveHex } });
+					const args = ['-xf', 'archive.tar'];
+					const result = await container.run(
+						invocation === 'argv0' ? 'tar' : 'busybox',
+						invocation === 'argv0' ? args : ['tar', ...args],
+						options
+					);
+					const directory = fs.stat(`${cwd}/data`),
+						file = fs.stat(`${cwd}/data/file.txt`);
+					check(
+						`tar-${id}-mtime-${invocation}`,
+						result.reason === 'exited' &&
+							result.code === 0 &&
+							result.stderr.length === 0 &&
+							directory.type === 'directory' &&
+							file.type === 'file' &&
+							directory.mtimeMs === directoryMtime &&
+							file.mtimeMs === DIRECTORY_ARCHIVE_MTIME_MS &&
+							toHex(fs.readFile(`${cwd}/data/file.txt`)) === toHex('child'),
+						{
+							code: result.code,
+							reason: result.reason,
+							stderrHex: toHex(result.stderr),
+							directory,
+							file
+						}
+					);
+				}
+				for (const extract of [false, true]) {
+					prepare({
+						'bad-crc.zip': { type: 'file', hex: storedBadCrcZipHex },
+						guard: { type: 'file', hex: toHex('preserved bytes') }
+					});
+					const args = [extract ? '-q' : '-p', 'bad-crc.zip'];
+					const result = await container.run(
+						invocation === 'argv0' ? 'unzip' : 'busybox',
+						invocation === 'argv0' ? args : ['unzip', ...args],
+						options
+					);
+					check(
+						`unzip-stored-crc-${extract ? 'extract' : 'stdout'}-${invocation}`,
+						result.reason === 'exited' &&
+							Number.isInteger(result.code) &&
+							result.code > 0 &&
+							result.stderr.length > 0 &&
+							toHex(fs.readFile(`${cwd}/guard`)) === toHex('preserved bytes'),
+						{
+							code: result.code,
+							reason: result.reason,
+							stderrHex: toHex(result.stderr),
+							stdoutHex: toHex(result.stdout)
+						}
+					);
+				}
+			}
 		// Leave only 32 bytes after a warm package mount. No large host allocation
 		// or fake filesystem error is needed to exercise a real guest ENOSPC.
 		prepare({ source: { type: 'file', hex: '0001ff' } });

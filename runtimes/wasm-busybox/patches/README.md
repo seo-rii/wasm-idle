@@ -23,6 +23,10 @@ original helpers and paths.
 | `0013-b3-development-commands.patch` | Real sed/find/diff/hash/binary helpers; content-only recursive copy and symbolic links; direct FILE/fmemopen paths avoid POSIX dup/fork/mkstemp. Explicitly reject unsupported mutation/process modes. |
 | `0014-virtual-metadata-profile.patch` | Enable touch/stat/long ls with real WASI timestamps and versioned mode imports. Enrich libc stat with stored permission bits, retain file types, and report unavailable account/block/device fields explicitly. |
 | `0015-archive-content-profile.patch` | Link real archive codecs, CRC32 and content extraction; use owned descriptors instead of dup2/fork, real metadata times, exclusive output creation and explicit unsupported-mode failures. |
+| `0016-buffered-output-errors.patch` | Preserve prior stdio write errors in sort/uniq file and stdout output even when a later close/flush succeeds. |
+| `0017-tar-directory-errors.patch` | Propagate directory creation errors and reject non-directory conflicts before metadata restoration. |
+| `0018-tar-directory-times.patch` | Restore directory times after child/deferred-link extraction with last-header precedence and explicit errors. |
+| `0019-zip-stored-crc.patch` | Validate stored ZIP payloads with the actual upstream CRC32 helper and report checksum failures. |
 
 No shell parser, fake process success, network implementation or filesystem stub
 is introduced. Unsupported applets remain disabled. Extending this closure needs

@@ -1,0 +1,51 @@
+--- a/coreutils/sort.c
++++ b/coreutils/sort.c
+@@ -682,7 +682,20 @@
+ 			fprintf(output_file, "%s%c", lines[i], ch);
+ 	}
+ 
+-	if (output_file != stdout && fclose(output_file) != 0)
+-		bb_simple_perror_msg_and_die("write error");
++	if (output_file != stdout) {
++		int write_error = ferror(output_file);
++		int saved_errno = errno;
++		/* A buffered write may already have failed before fclose flushes. */
++		if (fclose(output_file) != 0) {
++			write_error = 1;
++			saved_errno = errno;
++		}
++		if (write_error) {
++			errno = saved_errno ? saved_errno : EIO;
++			bb_simple_perror_msg_and_die("write error");
++		}
++	}
++	/* stdout can carry the same earlier error after a redirected write. */
++	die_if_ferror_stdout();
+ 	fflush_stdout_and_exit_SUCCESS();
+ }
+--- a/coreutils/uniq.c
++++ b/coreutils/uniq.c
+@@ -138,8 +138,21 @@
+ 	} while (cur_line);
+ 
+ 	die_if_ferror(input_file, input_filename);
+-	if (output_file != stdout && fclose(output_file) != 0)
+-		bb_simple_perror_msg_and_die("write error");
++	if (output_file != stdout) {
++		int write_error = ferror(output_file);
++		int saved_errno = errno;
++		/* A buffered write may already have failed before fclose flushes. */
++		if (fclose(output_file) != 0) {
++			write_error = 1;
++			saved_errno = errno;
++		}
++		if (write_error) {
++			errno = saved_errno ? saved_errno : EIO;
++			bb_simple_perror_msg_and_die("write error");
++		}
++	}
++	/* stdout can carry the same earlier error after a redirected write. */
++	die_if_ferror_stdout();
+ 
+ 	fflush_stdout_and_exit_SUCCESS();
+ }

@@ -117,13 +117,19 @@ unzip -q bundle.zip -d zip-output
 ```
 
 Creation modes remain host-owned. Tar restores supported timestamps and accepts
-`-m` to omit that step. Permission/ownership restoration, hardlinks and special
-file extraction are unsupported. Archive files and extracted files require
-exclusive creation: conflicts return an error and retain existing file bytes.
+`-m` to omit that step. Directory timestamps are restored after child entries and
+deferred symlinks; the last header wins for repeated directory names. Directory
+creation errors return nonzero, including missing directories on readonly mounts
+with `-m` and directory headers conflicting with existing regular files. Those conflicts preserve the
+existing file bytes and timestamps. Permission/ownership restoration, hardlinks
+and special file extraction are unsupported. Archive files and extracted files
+require exclusive creation: conflicts return an error and retain existing file bytes.
 Gzip/gunzip file overwrite `-f` and unzip `-n/-o/-K/-t` are explicit errors.
 For gzip integrity checking, `gunzip -t` still decodes and checks the real stream
-without producing output. Corrupt input, readonly mounts and quota errors return
-nonzero statuses.
+without producing output. Unzip checks CRC32 for both stored and deflated data,
+including stored symlink targets. Corrupt input, readonly mounts and quota errors
+return nonzero statuses. Extraction may have written partial bytes before a CRC
+error is discovered.
 
 Upstream tar/unzip strip unsafe absolute and parent prefixes from member names,
 warning when names change. Extraction then rejects any remaining `..` components
@@ -149,3 +155,36 @@ restoration. Full producer, container, archive and Bash receipts are retained
 under `runtimes/wasm-busybox/evidence/commands-stage4-*.json`.
 
 Stage 4 qualification: the 634,131-byte Wasm SHA-256 is `3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9`. All 218 cumulative native/WASI invocations and 872 Node/Chromium batch/live invocations pass, plus 22 boundary/pipeline/lifecycle checks and the retained B0/B1 gates. Additional archive native/WASI and actual-host checks cover content, modes, timestamp restoration, readonly/quota failures and preservation of existing files.
+
+## Review corrections
+
+The reviewed profile retains the same 40 applets. `sort -o FILE` and
+`uniq INPUT OUTPUT`, and their delegated stdout streams, now report buffered
+write failures even when a later close succeeds. Actual full-quota regressions
+exercise the 1,024-byte boundary and 1,025/8,193-byte payloads, with matching
+successful-output controls.
+
+Additional archive regressions cover directory creation failures, preservation
+of existing file bytes and times, directory timestamps after children and
+deferred symlinks, repeated directory headers, and stored ZIP CRC failures for
+streams, files and symlinks. Native upstream differences are asserted and
+recorded explicitly alongside the corrected WASI expectations.
+
+The initial Stage 4 qualification above is historical. Review qualification
+receipts are retained separately under
+`runtimes/wasm-busybox/evidence/commands-review-fixes-*.json`.
+
+The reviewed Wasm is 634,885 bytes, SHA-256
+`30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40`.
+Its pinned producer and source-pack verification pass the retained B0 gates
+(20 native and 24 WASI checks), 104 B1 invocations and 218 cumulative command
+invocations. Independent archive qualification passes 120 native/WASI
+invocations across 35 scenarios and 26 actual-host checks.
+
+Node and Chromium batch/live qualification passes all 872 cumulative command
+invocations and 166 boundary, archive, pipeline and lifecycle checks. Existing
+readonly directories with `tar -m` remain successful no-ops with unchanged
+metadata; missing-directory creation on the same kind of mount fails with EROFS.
+The actual GNU Bash browser gate passes all 10 checks and 61 routed invocations.
+All 70 owned workers terminate, and the final browser worker and process lists
+are empty. These gates use the same receipt-pinned reviewed Wasm.

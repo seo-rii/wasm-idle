@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { WASI } from 'node:wasi';
 import { parseArgs } from 'node:util';
 import { createNodeWasiMetadata } from '../../runtimes/wasm-busybox/test/node-wasi-fixture.mjs';
+import { directoryTarHex, directoryTreeTarHex, duplicateDirectoryTarHex, storedBadCrcZipHex, DIRECTORY_ARCHIVE_MTIME_MS, DIRECTORY_LAST_ARCHIVE_MTIME_MS } from '../../runtimes/wasm-busybox/test/archive-regression-fixtures.mjs';
 import { readFileSync, writeFileSync, mkdirSync, cpSync, openSync, closeSync, symlinkSync, readlinkSync, existsSync, readdirSync, lstatSync, utimesSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +21,9 @@ const fixtures = spawnSync('python3', [join(directory, 'fixtures.py'), join(root
 assert.equal(fixtures.status, 0, fixtures.stderr);
 const runRoot = join(root, 'cases');
 const nativeIdentity = { path: native, bytes: readFileSync(native).length, sha256: createHash('sha256').update(readFileSync(native)).digest('hex') };
-const sourceIdentities = Object.fromEntries([fileURLToPath(import.meta.url), fileURLToPath(new URL('../../runtimes/wasm-busybox/test/node-wasi-fixture.mjs', import.meta.url)), join(directory, 'fixtures.py')].map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')]));
+const sourceIdentities = Object.fromEntries([fileURLToPath(import.meta.url), fileURLToPath(new URL('../../runtimes/wasm-busybox/test/node-wasi-fixture.mjs', import.meta.url)), fileURLToPath(new URL('../../runtimes/wasm-busybox/test/archive-regression-fixtures.mjs', import.meta.url)), join(directory, 'fixtures.py')].map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')]));
+for (const [name, hex] of [['directory-only.tar', directoryTarHex], ['directory-tree.tar', directoryTreeTarHex], ['directory-duplicate.tar', duplicateDirectoryTarHex], ['stored-bad-crc.zip', storedBadCrcZipHex]])
+  assert.equal(readFileSync(join(root, 'fixtures', name)).toString('hex'), hex, 'Node/browser regression fixtures must be identical');
 const artifact = readFileSync(wasmPath), module = await WebAssembly.compile(artifact);
 const evidence = { schemaVersion: 1, profile: 'busybox-archive-extra-final-artifact', native: nativeIdentity, sourceIdentities, artifact: {
   path: wasmPath,
@@ -43,7 +46,7 @@ const tree = directory => {
   return result;
 };
 
-async function run(id, command, args, check, { input = Buffer.alloc(0), setup, nativeCheck = true } = {}) {
+async function run(id, command, args, check, { input = Buffer.alloc(0), setup, nativeCheck = true, nativeDivergence } = {}) {
   const runs = [];
   for (const engine of nativeCheck ? ['native', 'wasi'] : ['wasi']) {
     for (const alias of [false, true]) {
@@ -84,21 +87,27 @@ async function run(id, command, args, check, { input = Buffer.alloc(0), setup, n
         stdout = readFileSync(join(directory, 'stdout')); stderr = readFileSync(join(directory, 'stderr'));
       }
       const value = { engine, alias, code, stdout, stderr, workspace };
-      check(value);
+      const details = check(value);
       const treeSha256 = createHash('sha256').update(JSON.stringify(tree(workspace).filter(([path]) => path !== 'output.tar'))).digest('hex');
-      const observed = { engine, alias, code, stdoutHex: stdout.toString('hex'), stderr: utf8(stderr), treeSha256 };
+      const observed = { engine, alias, code, stdoutHex: stdout.toString('hex'), stderr: utf8(stderr), treeSha256, ...(details ? { details } : {}) };
       const reference = runs.find(run => run.engine === 'native' && run.alias === alias);
       if (engine === 'wasi' && reference) {
-        assert.equal(observed.code, reference.code, id);
-        assert.equal(observed.stdoutHex, reference.stdoutHex, id);
-        assert.equal(observed.stderr, reference.stderr, id);
-        assert.equal(observed.treeSha256, reference.treeSha256, id);
-        observed.nativeDifferentialPassed = true;
+        if (nativeDivergence) {
+          assert.notDeepEqual([observed.code, observed.stdoutHex, observed.stderr, observed.treeSha256, observed.details], [reference.code, reference.stdoutHex, reference.stderr, reference.treeSha256, reference.details], id);
+          observed.nativeDifferentialPassed = false;
+          observed.expectedNativeDivergence = nativeDivergence;
+        } else {
+          assert.equal(observed.code, reference.code, id);
+          assert.equal(observed.stdoutHex, reference.stdoutHex, id);
+          assert.equal(observed.stderr, reference.stderr, id);
+          assert.equal(observed.treeSha256, reference.treeSha256, id);
+          observed.nativeDifferentialPassed = true;
+        }
       }
       runs.push(observed);
     }
   }
-  evidence.cases.push({ id, command, args, runs, passed: true });
+  evidence.cases.push({ id, command, args, runs, passed: true, ...(nativeDivergence ? { expectedNativeDivergence: nativeDivergence } : {}) });
 }
 const success = value => { assert.equal(value.code, 0, utf8(value.stderr)); assert.equal(value.stderr.length, 0); };
 const fail = value => { assert.notEqual(value.code, 0); assert(value.stderr.length > 0); };
@@ -160,8 +169,72 @@ await run('unzip-list', 'unzip', ['-l', 'input.zip'], value => { success(value);
 await run('unzip-existing-preserved', 'unzip', ['-q', 'input.zip'], value => { fail(value); assert.equal(readFileSync(join(value.workspace, 'tree/text.txt'), 'utf8'), original); }, { setup: existingTree, nativeCheck: false });
 await run('unzip-overwrite-refused', 'unzip', ['-oq', 'input.zip'], value => { fail(value); assert.equal(readFileSync(join(value.workspace, 'tree/text.txt'), 'utf8'), original); }, { setup: existingTree, nativeCheck: false });
 
-assert.equal(evidence.cases.length, 25);
-assert.equal(evidence.cases.reduce((n, value) => n + value.runs.length, 0), 80);
+for (const omitTime of [false, true]) await run(`tar-directory-file-conflict${omitTime ? '-m' : ''}`, 'tar', [omitTime ? '-xmf' : '-xf', 'directory-only.tar'], value => {
+  const stat = lstatSync(join(value.workspace, 'data'));
+  assert(stat.isFile());
+  if (value.engine === 'native') {
+    success(value);
+    assert.equal(stat.mtimeMs, omitTime ? 1300000000000 : DIRECTORY_ARCHIVE_MTIME_MS);
+  } else {
+    fail(value);
+    assert.match(utf8(value.stderr), /not a directory/);
+    assert.equal(stat.atimeMs, 1200000000000);
+    assert.equal(stat.mtimeMs, 1300000000000);
+  }
+  assert.equal(readFileSync(join(value.workspace, 'data'), 'utf8'), original);
+  return { atimeMs: stat.atimeMs, mtimeMs: stat.mtimeMs };
+}, { setup(workspace) { writeFileSync(join(workspace, 'data'), original); utimesSync(join(workspace, 'data'), 1200000000, 1300000000); }, nativeDivergence: 'Upstream tar accepts EEXIST for a directory entry even when the existing object is a regular file; WASI must fail before changing existing metadata.' });
+await run('tar-directory-times', 'tar', ['-xf', 'directory-tree.tar'], value => {
+  success(value);
+  const directory = lstatSync(join(value.workspace, 'data'));
+  assert.equal(lstatSync(join(value.workspace, 'data/file.txt')).mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  assert.equal(readFileSync(join(value.workspace, 'data/file.txt'), 'utf8'), 'child');
+  if (value.engine === 'native') assert.notEqual(directory.mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  else { assert.equal(directory.atimeMs, DIRECTORY_ARCHIVE_MTIME_MS); assert.equal(directory.mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS); }
+  return { directoryMtimeMs: directory.mtimeMs };
+}, { nativeDivergence: 'Upstream tar restores a directory timestamp before its child is created; the WASI profile restores after all children.' });
+await run('tar-directory-omit-times', 'tar', ['-xmf', 'directory-tree.tar'], value => {
+  success(value);
+  assert.notEqual(lstatSync(join(value.workspace, 'data')).mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  assert.notEqual(lstatSync(join(value.workspace, 'data/file.txt')).mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+});
+await run('tar-directory-duplicate-last-time', 'tar', ['-xf', 'directory-duplicate.tar'], value => {
+  success(value);
+  assert.equal(lstatSync(join(value.workspace, 'data')).mtimeMs, DIRECTORY_LAST_ARCHIVE_MTIME_MS);
+  assert.equal(lstatSync(join(value.workspace, 'data/file.txt')).mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+});
+await run('tar-directory-times-after-deferred-link', 'tar', ['-xf', 'directory-deferred-link.tar'], value => {
+  success(value);
+  assert.equal(readlinkSync(join(value.workspace, 'data/link')), '../sibling');
+  const stat = lstatSync(join(value.workspace, 'data'));
+  if (value.engine === 'native') assert.notEqual(stat.mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  else assert.equal(stat.mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  return { directoryMtimeMs: stat.mtimeMs };
+}, { nativeDivergence: 'Upstream tar creates deferred symlinks after restoring directory timestamps; WASI restores after deferred links.' });
+const storedCrcDivergence = 'Upstream BusyBox does not validate stored ZIP CRC; native success is recorded, while the WASI profile must report the actual CRC mismatch.';
+await run('unzip-stored-bad-crc-stdout', 'unzip', ['-p', 'stored-bad-crc.zip'], value => {
+  assert.equal(utf8(value.stdout), 'dxpected bytes\n');
+  if (value.engine === 'native') success(value);
+  else { fail(value); assert.match(utf8(value.stderr), /crc error/); }
+}, { nativeDivergence: storedCrcDivergence });
+await run('unzip-stored-bad-crc-file', 'unzip', ['-q', 'stored-bad-crc.zip'], value => {
+  assert.equal(readFileSync(join(value.workspace, 'data.txt'), 'utf8'), 'dxpected bytes\n');
+  assert.equal(readFileSync(join(value.workspace, 'existing.txt'), 'utf8'), original);
+  if (value.engine === 'native') success(value);
+  else { fail(value); assert.match(utf8(value.stderr), /crc error/); }
+}, { setup(workspace) { writeFileSync(join(workspace, 'existing.txt'), original); }, nativeDivergence: storedCrcDivergence });
+await run('unzip-stored-bad-crc-symlink', 'unzip', ['-q', 'stored-symlink-bad-crc.zip'], value => {
+  if (value.engine === 'native') { success(value); assert.equal(readlinkSync(join(value.workspace, 'link')), 'uarget'); }
+  else { fail(value); assert.match(utf8(value.stderr), /crc error/); assert(!lstatSync(join(value.workspace, 'link'), { throwIfNoEntry: false })); }
+}, { nativeDivergence: storedCrcDivergence });
+await run('unzip-stored-binary-and-empty', 'unzip', ['-q', 'stored-boundary.zip'], value => {
+  success(value);
+  assert.deepEqual(readFileSync(join(value.workspace, 'stored.bin')), readFileSync(join(root, 'fixtures/stored-boundary.bin')));
+  assert.equal(readFileSync(join(value.workspace, 'empty.txt')).length, 0);
+});
+
+assert.equal(evidence.cases.length, 35);
+assert.equal(evidence.cases.reduce((n, value) => n + value.runs.length, 0), 120);
 assert.equal(createHash('sha256').update(readFileSync(wasmPath)).digest('hex'), evidence.artifact.sha256, 'WASI artifact changed during validation');
 assert.equal(createHash('sha256').update(readFileSync(native)).digest('hex'), nativeIdentity.sha256, 'Native artifact changed during validation');
 for (const [path, sha] of Object.entries(sourceIdentities)) assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'), sha, 'Runner source changed');

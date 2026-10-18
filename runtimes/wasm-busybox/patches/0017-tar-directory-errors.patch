@@ -1,0 +1,27 @@
+--- a/archival/libarchive/data_extract_all.c
++++ b/archival/libarchive/data_extract_all.c
+@@ -170,12 +170,24 @@
+ // (if tar xf isn't run as root).
+ // GNU tar works around this by chmod-ing directories *after* all files are extracted.
+ 		res = mkdir(dst_name, file_header->mode);
++#if defined(BB_WASI_B1)
++		if (res != 0) {
++			struct stat st;
++			if (errno != EEXIST && errno != EISDIR)
++				bb_perror_msg_and_die("can't make dir %s", dst_name);
++			if (lstat(dst_name, &st) != 0)
++				bb_perror_msg_and_die("can't stat directory %s", dst_name);
++			if (!S_ISDIR(st.st_mode))
++				bb_error_msg_and_die("%s exists but is not a directory", dst_name);
++		}
++#else
+ 		if ((res != 0)
+ 		 && (errno != EISDIR) /* btw, Linux doesn't return this */
+ 		 && (errno != EEXIST)
+ 		) {
+ 			bb_perror_msg("can't make dir %s", dst_name);
+ 		}
++#endif
+ 		break;
+ 	case S_IFLNK:
+ 		/* Symlink */

@@ -130,7 +130,7 @@ for (const file of bundled.outputFiles) {
 const sources = {};
 for (const input of Object.keys(bundled.metafile.inputs).sort())
 	sources[input] = sha(await readFile(resolve(repository, input)));
-for (const name of ['command-cases', 'command-container']) {
+for (const name of ['command-cases', 'command-container', 'archive-regression-fixtures']) {
 	const bytes = await readFile(new URL(`../test/${name}.mjs`, import.meta.url));
 	files.set(`/test/${name}.mjs`, { type: 'text/javascript', body: bytes });
 	sources[`test/${name}.mjs`] = sha(bytes);
