@@ -33,11 +33,13 @@ def main():
     assert receipt['patches'] == manifest['patches']
     assert receipt['processAbi'] == manifest['processAbi']
     assert receipt['metadataAbi'] == manifest.get('metadataAbi')
+    assert receipt['reviewFixes'] == manifest.get('reviewFixes', [])
     assert receipt['b1Scripts'] == {path: probe.digest(probe.ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')}
     stage = manifest['commandStage']
     assert isinstance(stage, int) and 1 <= stage <= 4 and receipt['commandStage'] == stage
     command_sources = ('commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs',
-                       'test/command-smoke.mjs', 'test/command-container.mjs', 'scripts/test-commands.mjs')
+                       'test/command-smoke.mjs', 'test/command-container.mjs',
+                       'test/archive-regression-fixtures.mjs', 'scripts/test-commands.mjs')
     assert receipt['commandScripts'] == {path: probe.digest(probe.ROOT / path) for path in command_sources}
     wasi_smoke = json.loads((work / 'wasi-smoke.json').read_text())
     assert wasi_smoke == receipt['wasi']['smoke'] and receipt['wasiNodeSmokePassed']

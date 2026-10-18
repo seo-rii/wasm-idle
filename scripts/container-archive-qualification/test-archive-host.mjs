@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { directoryTarHex, directoryTreeTarHex, duplicateDirectoryTarHex, storedBadCrcZipHex, DIRECTORY_ARCHIVE_MTIME_MS, DIRECTORY_LAST_ARCHIVE_MTIME_MS } from '../../runtimes/wasm-busybox/test/archive-regression-fixtures.mjs';
 
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -20,7 +21,7 @@ const { build } = dependencyRequire('esbuild');
 const fixtureResult = spawnSync('python3', [join(directory, 'fixtures.py'), join(root, 'fixtures')], { encoding: 'utf8', timeout: 10000 });
 assert.equal(fixtureResult.status, 0, fixtureResult.stderr);
 const sources = new Map();
-for (const path of [fileURLToPath(import.meta.url), join(directory, 'fixtures.py')]) sources.set(path, createHash('sha256').update(await readFile(path)).digest('hex'));
+for (const path of [fileURLToPath(import.meta.url), join(directory, 'fixtures.py'), fileURLToPath(new URL('../../runtimes/wasm-busybox/test/archive-regression-fixtures.mjs', import.meta.url))]) sources.set(path, createHash('sha256').update(await readFile(path)).digest('hex'));
 
 const bundled = await build({ stdin: { contents: `export { MemoryFileSystem } from ${JSON.stringify(join(repository, 'packages/container/src/fs/index.ts'))};\nexport { createWasiHost } from ${JSON.stringify(join(repository, 'packages/container/src/adapters/wasi/host.ts'))};`,
   resolveDir: repository, sourcefile: 'archive-host-probe.ts', loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', target: 'es2022', write: false, logLevel: 'silent', metafile: true, plugins: [{ name: 'record-host-sources', setup(builder) { builder.onLoad({ filter: /\.[cm]?[jt]s$/ }, async ({ path }) => { const bytes = await readFile(path); sources.set(path, createHash('sha256').update(bytes).digest('hex')); return { contents: bytes, loader: path.endsWith('.ts') ? 'ts' : 'js' }; }); } }] });
@@ -30,6 +31,9 @@ await writeFile(hostModule, bundled.outputFiles[0].contents, { flag: 'wx', mode:
 const { MemoryFileSystem, createWasiHost } = await import(pathToFileURL(hostModule).href);
 const bytes = await readFile(artifactPath), module = await WebAssembly.compile(bytes);
 const fixtures = Object.fromEntries(await Promise.all(['input.tar', 'input.zip', 'payload.bin', 'payload.bin.gz'].map(async name => [name, await readFile(join(root, 'fixtures', name))])));
+const regression = Object.fromEntries(await Promise.all(['directory-only.tar', 'directory-tree.tar', 'directory-duplicate.tar', 'directory-deferred-link.tar', 'stored-bad-crc.zip', 'stored-symlink-bad-crc.zip', 'stored-boundary.zip', 'stored-boundary.bin'].map(async name => [name, await readFile(join(root, 'fixtures', name))])));
+for (const [name, hex] of [['directory-only.tar', directoryTarHex], ['directory-tree.tar', directoryTreeTarHex], ['directory-duplicate.tar', duplicateDirectoryTarHex], ['stored-bad-crc.zip', storedBadCrcZipHex]])
+  assert.equal(regression[name].toString('hex'), hex, 'Actual-host and browser regression fixtures must match');
 const results = [];
 const decoded = bytes => new TextDecoder().decode(bytes);
 
@@ -124,7 +128,88 @@ const failed = (id, value) => { assert.notEqual(value.code, 0); assert(value.std
   assert.deepEqual(fs.readFile('/workspace/unpacked'), source);
   assert(fs.byteLength <= fs.maxBytes);
 }
-assert.equal(results.length, 14);
+for (const omitTime of [false, true]) {
+  const fs = setup();
+  fs.writeFile('/workspace/directory.tar', regression['directory-only.tar']);
+  const old = new TextEncoder().encode('existing user content');
+  fs.writeFile('/workspace/data', old);
+  fs.setTimes('/workspace/data', { atimeMs: 1200000000000, mtimeMs: 1300000000000 });
+  const before = fs.stat('/workspace/data');
+  const result = await run(fs, 'tar', [omitTime ? '-xmf' : '-xf', 'directory.tar']);
+  failed(`tar-directory-file-conflict${omitTime ? '-m' : ''}`, result);
+  assert.match(decoded(result.stderr), /not a directory/);
+  assert.deepEqual(fs.readFile('/workspace/data'), old);
+  assert.equal(fs.stat('/workspace/data').type, 'file');
+  assert.equal(fs.stat('/workspace/data').atimeMs, before.atimeMs);
+  assert.equal(fs.stat('/workspace/data').mtimeMs, before.mtimeMs);
+}
+for (const omitTime of [false, true]) {
+  const fs = setup();
+  fs.writeFile('/workspace/directory.tar', regression['directory-only.tar']);
+  fs.mountReadonly('/opt/directory-readonly', [{ path: 'existing.txt', type: 'file', mode: 0o444, data: new TextEncoder().encode('existing') }]);
+  const result = await run(fs, 'tar', [omitTime ? '-xmf' : '-xf', 'directory.tar', '-C', '/opt/directory-readonly']);
+  failed(`tar-directory-readonly${omitTime ? '-m' : ''}`, result);
+  assert.match(decoded(result.stderr), /Read-only file system/);
+  assert.deepEqual(fs.readdir('/opt/directory-readonly'), ['existing.txt']);
+}
+for (const omitTime of [false, true]) {
+  const fs = setup();
+  fs.writeFile('/workspace/directory.tar', regression['directory-tree.tar']);
+  passed(`tar-directory-times${omitTime ? '-m' : ''}`, await run(fs, 'tar', [omitTime ? '-xmf' : '-xf', 'directory.tar']));
+  assert.equal(decoded(fs.readFile('/workspace/data/file.txt')), 'child');
+  if (omitTime) {
+    assert.notEqual(fs.stat('/workspace/data').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+    assert.notEqual(fs.stat('/workspace/data/file.txt').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  } else {
+    assert.equal(fs.stat('/workspace/data').atimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+    assert.equal(fs.stat('/workspace/data').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+    assert.equal(fs.stat('/workspace/data/file.txt').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  }
+}
+{
+  const fs = setup();
+  fs.writeFile('/workspace/directory.tar', regression['directory-duplicate.tar']);
+  passed('tar-directory-duplicate-last-time', await run(fs, 'tar', ['-xf', 'directory.tar']));
+  assert.equal(fs.stat('/workspace/data').atimeMs, DIRECTORY_LAST_ARCHIVE_MTIME_MS);
+  assert.equal(fs.stat('/workspace/data').mtimeMs, DIRECTORY_LAST_ARCHIVE_MTIME_MS);
+  assert.equal(fs.stat('/workspace/data/file.txt').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+}
+{
+  const fs = setup();
+  fs.writeFile('/workspace/directory.tar', regression['directory-deferred-link.tar']);
+  passed('tar-directory-times-after-deferred-link', await run(fs, 'tar', ['-xf', 'directory.tar']));
+  assert.equal(fs.readlink('/workspace/data/link'), '../sibling');
+  assert.equal(fs.stat('/workspace/data').atimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+  assert.equal(fs.stat('/workspace/data').mtimeMs, DIRECTORY_ARCHIVE_MTIME_MS);
+}
+for (const stdout of [true, false]) {
+  const fs = setup();
+  fs.writeFile('/workspace/corrupt.zip', regression['stored-bad-crc.zip']);
+  const original = new TextEncoder().encode('existing user content');
+  fs.writeFile('/workspace/existing.txt', original);
+  const result = await run(fs, 'unzip', [stdout ? '-p' : '-q', 'corrupt.zip']);
+  failed(`unzip-stored-bad-crc-${stdout ? 'stdout' : 'file'}`, result);
+  assert.match(decoded(result.stderr), /crc error/);
+  if (stdout) assert.equal(decoded(result.stdout), 'dxpected bytes\n');
+  else assert.equal(decoded(fs.readFile('/workspace/data.txt')), 'dxpected bytes\n');
+  assert.deepEqual(fs.readFile('/workspace/existing.txt'), original);
+}
+{
+  const fs = setup();
+  fs.writeFile('/workspace/corrupt.zip', regression['stored-symlink-bad-crc.zip']);
+  const result = await run(fs, 'unzip', ['-q', 'corrupt.zip']);
+  failed('unzip-stored-bad-crc-symlink', result);
+  assert.match(decoded(result.stderr), /crc error/);
+  assert.throws(() => fs.lstat('/workspace/link'), error => error.code === 'ENOENT');
+}
+{
+  const fs = setup();
+  fs.writeFile('/workspace/stored.zip', regression['stored-boundary.zip']);
+  passed('unzip-stored-binary-and-empty', await run(fs, 'unzip', ['-q', 'stored.zip']));
+  assert.deepEqual(fs.readFile('/workspace/stored.bin'), new Uint8Array(regression['stored-boundary.bin']));
+  assert.equal(fs.readFile('/workspace/empty.txt').length, 0);
+}
+assert.equal(results.length, 26);
 const artifactSha256 = createHash('sha256').update(bytes).digest('hex');
 assert.equal(createHash('sha256').update(await readFile(artifactPath)).digest('hex'), artifactSha256, 'Artifact changed during validation');
 for (const [path, sha] of sources) assert.equal(createHash('sha256').update(await readFile(path)).digest('hex'), sha, 'Host source changed');

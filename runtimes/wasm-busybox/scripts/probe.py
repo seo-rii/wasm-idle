@@ -149,7 +149,8 @@ def source_pack(work, archive, source_dir):
                      'scripts/probe.py', 'scripts/verify.py', 'test/smoke.mjs',
                      'test/b1-smoke.mjs', 'test/b1-cases.mjs', 'patches/README.md',
                      'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
-                     'test/command-container.mjs', 'scripts/test-commands.mjs']:
+                     'test/command-container.mjs', 'test/archive-regression-fixtures.mjs',
+                     'scripts/test-commands.mjs']:
         members['producer/' + relative] = ROOT / relative
     for patch in sorted((ROOT / 'patches').glob('*.patch')):
         members['producer/patches/' + patch.name] = patch
@@ -229,9 +230,11 @@ def main():
                'b1Scripts': {path: digest(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')},
                'commandStage': manifest['commandStage'],
                'metadataAbi': manifest.get('metadataAbi'),
+               'reviewFixes': manifest.get('reviewFixes', []),
                'commandScripts': {path: digest(ROOT / path) for path in (
                    'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
-                   'test/command-container.mjs', 'scripts/test-commands.mjs')},
+                   'test/command-container.mjs', 'test/archive-regression-fixtures.mjs',
+                   'scripts/test-commands.mjs')},
                'jobs': args.jobs,
                'host': {'system': platform.platform(), 'ccSha256': digest(Path(host_cc)),
                         'ccVersion': subprocess.check_output([host_cc, '--version'], text=True).splitlines()[0]},
