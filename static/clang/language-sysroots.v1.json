@@ -3,8 +3,8 @@
   "source": {
     "llvmVersion": "22.1.8",
     "llvmCommit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
-    "toolchainReceiptSha256": "237a4d29d5a0a7edbec9e78f5a61c303b5e3d90eeb2ff7d4b4bb7b8fe77e5ae8",
-    "inventorySha256": "df83915a6624313df3c4ddde58c1d7a5bf31231938a84be66ec886f527fdaf71"
+    "toolchainReceiptSha256": "d1cc26297bb9c52c49543240bf25ca9e9ec85506748799d285024af6d5259dd8",
+    "inventorySha256": "3e9bbc66d6ab5f4d329e782c06388e7245b6f8a19a260b5537dd7760408e7bfa"
   },
   "profiles": {
     "c": [
@@ -17,10 +17,10 @@
   },
   "assets": {
     "c-sysroot.tar.gz": {
-      "bytes": 1964664,
-      "sha256": "4a22b52adb6d4c02bfb666d89262de49475ba983b04294a4b7b91bed2d33824f",
-      "uncompressedBytes": 11944960,
-      "uncompressedSha256": "83a1cf62bde6757ac9174ac1d3b9d0132e1c63b9d7ac96e3b45d2ea5ffac14cd",
+      "bytes": 2006388,
+      "sha256": "da7a29250b2fe2d928fa8818069ff67e1dcb26c529bbf01f40bbeb251535ecaa",
+      "uncompressedBytes": 12213760,
+      "uncompressedSha256": "517b32208f4e556b22eb5ac775411c39fb75239dfaf81f206e6052e168425b62",
       "files": [
         {
           "path": "include/bits/extc++.h",
@@ -531,6 +531,41 @@
           "path": "include/wasm32-wasi/dlfcn.h",
           "bytes": 1175,
           "sha256": "cb1279e1d1924f9818192c26f7798db65545caac23b24e2fcd6188b075fb179b"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/__libunwind_config.h",
+          "bytes": 8296,
+          "sha256": "9c4d2213e9b6dd77da80d066e7a320ddbf3b62a8e511026e4c7a2e10ec9059f8"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/libunwind.h",
+          "bytes": 38238,
+          "sha256": "34d08a481ab71fc699971638cb58693cc9fcc6dafe4680963cb937359cfa6edb"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/libunwind.modulemap",
+          "bytes": 246,
+          "sha256": "48f339450fa40a3fddec84d4fc75a7197fce4b36f75925d3f3a22a54aa3ffe90"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/mach-o/compact_unwind_encoding.h",
+          "bytes": 19025,
+          "sha256": "06f58e9d0058583b6da91ca2328fa663f80d089496a4979754ee7608fe9bd877"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/unwind.h",
+          "bytes": 7523,
+          "sha256": "e4a58637fc8ca1d29cd600c3c4416aafed50085edf276fa076214c8d81c263f0"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/unwind_arm_ehabi.h",
+          "bytes": 5741,
+          "sha256": "04cf22a069866ae35bf075c36f8d9112700bb9772653d80d9c6c4c856f4e7dbb"
+        },
+        {
+          "path": "include/wasm32-wasi/eh/unwind_itanium.h",
+          "bytes": 2824,
+          "sha256": "c8cc61d806e13a2e75e93f1c15afd432f93a99283d27d15f5a28a3ebee989cba"
         },
         {
           "path": "include/wasm32-wasi/endian.h",
@@ -1109,8 +1144,8 @@
         },
         {
           "path": "lib/clang/22/include/__clang_cuda_runtime_wrapper.h",
-          "bytes": 18297,
-          "sha256": "0ae1a139888ec2a62e3d007ba27efee9731edf0fc2a2bc887e540ce99d53cee3"
+          "bytes": 18624,
+          "sha256": "877d48f0f311943eacdef11807c1935108c7d9b083da6974b764a97c478648bc"
         },
         {
           "path": "lib/clang/22/include/__clang_cuda_texture_intrinsics.h",
@@ -1744,8 +1779,48 @@
         },
         {
           "path": "lib/clang/22/include/hexagon_types.h",
-          "bytes": 133505,
-          "sha256": "2ba756d62277f009ec853486a3f11fa63733a256a7bb1c6600aa9775d5970f31"
+          "bytes": 134014,
+          "sha256": "4713ad5a97e7b577e42bbd4a7f5bd4528bd6a73b04c9de9d40960b5bf4191879"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_alias_intrinsics.h",
+          "bytes": 117207,
+          "sha256": "9ce2cad43f2b71363378e4cc1dd833e1351a61faba1a54d5155d459f69f850e4"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_basic_types.h",
+          "bytes": 13498,
+          "sha256": "daaacf1b5e5b2dac42ac3b61ebc3bba5094d982f0b55d955c6c109414c961df3"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_compat_overloads.h",
+          "bytes": 28013,
+          "sha256": "cf2d35c8aa36dc8c5d29219c5bdbaef4fb6c618f41cbf4bd4d556e9331cb997d"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_detail.h",
+          "bytes": 1457,
+          "sha256": "fb4e171db8a808c2e5de1daa7cd36365febd576b7ecbcd09945e2f12e29e4277"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_intrinsic_helpers.h",
+          "bytes": 5761,
+          "sha256": "650af972ee3d80a6bd1bb3ea9e7e46dc5b80fc5194d406aeacdf995e3d3cad4d"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_intrinsics.h",
+          "bytes": 28983,
+          "sha256": "3971ce65b91bee05a09e551afa62461661ae432c5197fa9dc881866d969e3a80"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl/hlsl_spirv.h",
+          "bytes": 923,
+          "sha256": "4665c20e57168b82eb80f79025e17408f91128bce708204b8250778606d46fc2"
+        },
+        {
+          "path": "lib/clang/22/include/hlsl.h",
+          "bytes": 1149,
+          "sha256": "1c217d5640f89870643dde7c07a8027ebe1f4e4c1dcb88ff2e3ffe4959f67ced"
         },
         {
           "path": "lib/clang/22/include/hresetintrin.h",
@@ -1764,8 +1839,8 @@
         },
         {
           "path": "lib/clang/22/include/hvx_hexagon_protos.h",
-          "bytes": 301185,
-          "sha256": "8c430ebde7c141866a81f16b59bf1c195f5a99e03159d092f334c4b072990d1e"
+          "bytes": 277476,
+          "sha256": "efd60a7050ef96948cc80f0d99426743f68cbe63e6b0420c36d068960b545bac"
         },
         {
           "path": "lib/clang/22/include/ia32intrin.h",

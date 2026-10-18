@@ -6,15 +6,15 @@
 			"group": "clang",
 			"source": "clang/bin/clang.wasm.gz",
 			"target": "clang/bin/clang.wasm.gz",
-			"size": 13121917,
-			"sha256": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75"
+			"size": 13124999,
+			"sha256": "cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982"
 		},
 		{
 			"group": "clang",
 			"source": "clang/bin/lld.wasm.gz",
 			"target": "clang/bin/lld.wasm.gz",
-			"size": 6417339,
-			"sha256": "495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11"
+			"size": 6421841,
+			"sha256": "798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20"
 		},
 		{
 			"group": "clang",
@@ -27,8 +27,8 @@
 			"group": "clang",
 			"source": "clangd/clangd.wasm.gz",
 			"target": "clangd/clangd.wasm.gz",
-			"size": 16723115,
-			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
+			"size": 16722963,
+			"sha256": "17a447dff61020664c23dd8c8516e2cd6bdb93cf244a4e6ee19078b0948fe566"
 		},
 		{
 			"group": "clangd",
@@ -41,8 +41,8 @@
 			"group": "clangd",
 			"source": "clangd/clangd.wasm.gz",
 			"target": "clangd/clangd.wasm.gz",
-			"size": 16723115,
-			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
+			"size": 16722963,
+			"sha256": "17a447dff61020664c23dd8c8516e2cd6bdb93cf244a4e6ee19078b0948fe566"
 		},
 		{
 			"group": "ocaml",
@@ -269,7 +269,12 @@
 	],
 	"groupBaseUrls": {
 		"c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
-		"lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/"
+		"lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
+		"clang": "https://seo-rii.github.io/wasm-idle/",
+		"clangd": "https://seo-rii.github.io/wasm-idle/"
 	},
-	"generatedWorkers": ["c3", "lfortran"]
+	"generatedWorkers": [
+		"c3",
+		"lfortran"
+	]
 }

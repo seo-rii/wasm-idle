@@ -28,28 +28,28 @@ export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 		'5b741e03dd3502bcfd80e4e5055232b5d633604e1461752efed0189f93407dc3'
 	),
 	'bin/clang.wasm.gz': integrityEntry(
-		13_121_917,
-		'8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75',
-		35_658_969,
-		'd92ef06cdd3fea88acf384db15a6f2a344790c05bcba8e9f13f5b75b36ad4a99'
+		13_124_999,
+		'cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982',
+		35_597_829,
+		'fe7c40c2369d4a1b91d87cd2a38b1a5be11cd7f381373b7888be0b5f209e2d5b'
 	),
 	'bin/lld.wasm.gz': integrityEntry(
-		6_417_339,
-		'495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11',
-		16_171_013,
-		'34d39bc410c098e7e09933b61cc8e28699447af9a28abf4544d71b6e9cad1f9d'
+		6_421_841,
+		'798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20',
+		16_136_490,
+		'77949fed32d5481979b8ebe6081009e3ec69c7219cb355e3f388a316746ea9b7'
 	),
 	'bin/sysroot.tar.gz': integrityEntry(
-		6_741_773,
-		'8f31e0be44b45bef4b22e41b3e8381ccbd5410d4b328bad76b12cc8765d6cbb5',
-		35_328_000,
-		'91899da37610664152a2a1cbae3632f35ff8803e32f006225c1c4fb50f341402'
+		6_780_412,
+		'6188b500fa7af2dceadcbd6dcf2619b6935fa94c224c1c2078426666ebea1d50',
+		35_594_240,
+		'fb6d8a8786ec395009d44f62ff24a5bf09ff8672340b7dae9f48e28cf1569cba'
 	),
 	'bin/c-sysroot.tar.gz': integrityEntry(
-		1_964_664,
-		'4a22b52adb6d4c02bfb666d89262de49475ba983b04294a4b7b91bed2d33824f',
-		11_944_960,
-		'83a1cf62bde6757ac9174ac1d3b9d0132e1c63b9d7ac96e3b45d2ea5ffac14cd'
+		2_006_388,
+		'da7a29250b2fe2d928fa8818069ff67e1dcb26c529bbf01f40bbeb251535ecaa',
+		12_213_760,
+		'517b32208f4e556b22eb5ac775411c39fb75239dfaf81f206e6052e168425b62'
 	),
 	'bin/cpp-addon.tar.gz': integrityEntry(
 		4_776_509,
@@ -58,7 +58,7 @@ export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 		'feaf2aa538623ec8c543ccb49e9a833d2a1aa6dee7a9ad502c277deba24ef642'
 	),
 	'language-sysroots.v1.json': integrityEntry(
-		423_904,
-		'e6b2b196dc73ba9f5738eee8ffd628bf3767cd4959bbbb50167c10c5574dcd32'
+		426_858,
+		'08f6c2c87b4bebc9599193334e1d0ed322ebb38cbdd2bbb83d2b8c3a4cb61263'
 	)
 });
