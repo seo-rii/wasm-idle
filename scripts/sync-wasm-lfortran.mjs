@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format } from 'prettier';
+import { withRuntimeWasmModuleClient } from './runtime-wasm-module-client.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 /** @param {Uint8Array} bytes */
@@ -17,7 +18,9 @@ export async function renderLfortranRunnerWorker(lock) {
 	const placeholder = '__WASM_IDLE_LFORTRAN_ASSET_LOCK__';
 	if (workerSource.split(placeholder).length !== 2)
 		throw new Error('LFortran worker must contain exactly one asset-lock placeholder.');
-	return Buffer.from(workerSource.replace(placeholder, JSON.stringify(lock)));
+	return Buffer.from(
+		await withRuntimeWasmModuleClient(workerSource.replace(placeholder, JSON.stringify(lock)))
+	);
 }
 
 // The reviewed lock pins the complete producer receipt, including validation inputs

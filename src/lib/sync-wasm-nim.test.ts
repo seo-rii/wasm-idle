@@ -7,12 +7,7 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-	computeNimRuntimeFingerprint,
-	patchClangJs,
-	patchNimLicense,
-	syncWasmNimAssets
-} from '../../scripts/sync-wasm-nim.mjs';
+import { computeNimRuntimeFingerprint, syncWasmNimAssets } from '../../scripts/sync-wasm-nim.mjs';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '..', '..');
 const workerSourcePath = path.join(
@@ -22,7 +17,7 @@ const workerSourcePath = path.join(
 	'wasm-nim-runner-worker.js'
 );
 const productionLockPath = path.join(repositoryRoot, 'scripts', 'wasm-nim-assets.lock.json');
-const noticeSourcePath = path.join(repositoryRoot, 'scripts', 'wasm-nim-third-party-notices.md');
+const noticeSourcePath = path.join(repositoryRoot, 'static', 'wasm-nim', 'THIRD_PARTY_NOTICES.md');
 const temporaryRoots: string[] = [];
 const originalSourceDir = process.env.WASM_NIM_SOURCE_DIR;
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -51,17 +46,7 @@ type MutableNimInputLock = {
 };
 
 function makeClangJsFixture() {
-	const embeddedWorker =
-		'let h={path:"fixture"},a;a=h.path,{' +
-		'readBuffer:async t=>(await fetch(`${a}/${t}`)).arrayBuffer(),async compileStreaming(t){const e=await fetch(`${a}/${t}`,{cache:"no-store"});return WebAssembly.compile(await e.arrayBuffer())}' +
-		'};' +
-		'let s,i;let r=null;const n=async t=>{' +
-		'case"compile-each-link":{const files=h.files;' +
-		'const o=s.memfs.getFileContents(h.out);const inst=await s.hostLogAsync(`Compiling ${h.out}`,WebAssembly.compile(o));const finalResult=await s.run(inst,h.out);i.postMessage({id:"compile-each-link-done",data:finalResult?{ok:true}:{ok:false}});' +
-		'break;}' +
-		'};';
-	const encoded = Buffer.from(embeddedWorker, 'utf8').toString('base64');
-	return `var a="${encoded}";var y,m=!1;class o{constructor(l){this.worker={postMessage(){}};const c={};this.worker.postMessage({id:"constructor",payload:{port:c,path:l}},[c]);this.onReady=Promise.resolve()}}async function p({path:l}){m||(y=new o(l||location.origin),await y.onReady,m=!0)}const marker="compile-each-link-done";export{p as init,marker};`;
+	return 'export async function p({assets:l,modules:c}){};const constructorContract="payload:{port:c,assets:l.assets,modules:l.modules}";const completion="compile-each-link-done";';
 }
 
 const wasmFixture = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
@@ -77,7 +62,7 @@ const sourceFiles: Record<string, Buffer> = {
 	'clang/memfs.wasm': wasmFixture,
 	'clang/sysroot.tar': sysrootFixture,
 	LICENSE: Buffer.from(
-		'MIT License\n\nPermission is hereby granted\n\nThis project bundles third-party wasm binaries:\n\n- clang.wasm, lld.wasm, memfs.wasm, sysroot.tar: Copyright (c) Andy Wingo,\n  distributed under the terms of the binji/clang.js project\n  (https://github.com/binji/clang.js).\n'
+		'MIT License\n\nPermission is hereby granted\n\nThis project bundles third-party wasm binaries:\n\n- clang.wasm, lld.wasm, memfs.wasm, sysroot.tar: Copyright (c) Andy Wingo,\n  distributed under the terms of the binji/wasm-clang project\n  (https://github.com/binji/wasm-clang).\nSee THIRD_PARTY_NOTICES.md.\n'
 	),
 	'README.md': Buffer.from('Compile and run **Nim 2.2.4** entirely in the browser\n')
 };
@@ -94,17 +79,14 @@ async function createFixture() {
 	const lock = JSON.parse(await readFile(productionLockPath, 'utf8')) as MutableNimInputLock;
 	for (const receipt of lock.assets) {
 		const sourceBytes = sourceFiles[receipt.path];
-		const runtimeBytes =
-			receipt.path === 'clang/clang.js'
-				? Buffer.from(patchClangJs(sourceBytes.toString('utf8')))
-				: sourceBytes;
+		const runtimeBytes = sourceBytes;
 		receipt.sourceBytes = sourceBytes.byteLength;
 		receipt.sourceSha256 = sha256(sourceBytes);
 		receipt.bytes = runtimeBytes.byteLength;
 		receipt.sha256 = sha256(runtimeBytes);
 	}
 	const sourceLicense = sourceFiles.LICENSE;
-	const derivedLicense = Buffer.from(patchNimLicense(sourceLicense.toString('utf8')));
+	const derivedLicense = sourceLicense;
 	lock.license.sourceBytes = sourceLicense.byteLength;
 	lock.license.sourceSha256 = sha256(sourceLicense);
 	lock.license.bytes = derivedLicense.byteLength;
@@ -117,12 +99,31 @@ async function createFixture() {
 	lock.notices.sha256 = sha256(notices);
 	const lockFilePath = path.join(root, 'wasm-nim-assets.lock.json');
 	await writeFile(lockFilePath, `${JSON.stringify(lock, null, '\t')}\n`);
+	await writeFile(path.join(sourceDir, 'THIRD_PARTY_NOTICES.md'), notices);
+	const producerLock = {
+		producerId: 'wasm-llvm/nim-browser',
+		format: 'wasm-llvm-nim-browser-artifacts-v1',
+		manifestSha256: 'a'.repeat(64),
+		sourceLockSha256: sha256(await readFile(lockFilePath))
+	};
+	const producerLockFilePath = path.join(root, 'producer.lock.json');
+	const artifacts = [...lock.assets, lock.license, lock.notices, lock.documentation].map(
+		({ path, bytes, sha256 }) => ({ path, bytes, sha256 })
+	);
+	const producerReceiptBytes = JSON.stringify({ schemaVersion: 1, ...producerLock, artifacts });
+	await writeFile(path.join(sourceDir, 'producer-receipt.json'), producerReceiptBytes);
+	await writeFile(
+		producerLockFilePath,
+		JSON.stringify({ ...producerLock, receiptSha256: sha256(producerReceiptBytes) })
+	);
+
 	return {
 		root,
 		sourceDir,
 		targetDir: path.join(root, 'published'),
 		versionModulePath: path.join(root, 'wasmNimVersion.ts'),
-		lockFilePath
+		lockFilePath,
+		producerLockFilePath
 	};
 }
 
@@ -148,7 +149,7 @@ async function publishFixture(fixture: Awaited<ReturnType<typeof createFixture>>
 		versionModulePath: fixture.versionModulePath,
 		workerSourcePath,
 		lockFilePath: fixture.lockFilePath,
-		noticeSourcePath
+		producerLockFilePath: fixture.producerLockFilePath
 	});
 }
 
@@ -159,7 +160,7 @@ afterEach(async () => {
 });
 
 describe('syncWasmNimAssets', () => {
-	it('loads the Nim LLVM contract from wasm-idle', async () => {
+	it('retains the consumer compatibility profile for the producer LLVM version', async () => {
 		const source = await readFile(path.resolve('scripts', 'sync-wasm-nim.mjs'), 'utf8');
 
 		expect(source).toContain("from './llvm-contracts/nim.mjs'");
@@ -311,7 +312,8 @@ describe('syncWasmNimAssets', () => {
 			targetDir: fixture.targetDir,
 			versionModulePath: fixture.versionModulePath,
 			workerSourcePath,
-			lockFilePath: fixture.lockFilePath
+			lockFilePath: fixture.lockFilePath,
+			producerLockFilePath: fixture.producerLockFilePath
 		});
 
 		expect(second.fingerprint).toBe(first.fingerprint);
@@ -323,7 +325,8 @@ describe('syncWasmNimAssets', () => {
 				targetDir: fixture.targetDir,
 				versionModulePath: fixture.versionModulePath,
 				workerSourcePath,
-				lockFilePath: fixture.lockFilePath
+				lockFilePath: fixture.lockFilePath,
+				producerLockFilePath: fixture.producerLockFilePath
 			})
 		).rejects.toThrow(/installed nim\/nim\.wasm/u);
 	});
@@ -344,9 +347,27 @@ describe('syncWasmNimAssets', () => {
 		expect(await readFile(fixture.versionModulePath, 'utf8')).toBe('previous pin');
 	});
 
+	it('rejects a modified producer receipt before publishing any runtime files', async () => {
+		const fixture = await createFixture();
+		const receiptPath = path.join(fixture.sourceDir, 'producer-receipt.json');
+		const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+		receipt.producerId = 'unreviewed/nim-browser';
+		await writeFile(receiptPath, JSON.stringify(receipt));
+		await expect(publishFixture(fixture)).rejects.toThrow('producer receipt failed SHA-256');
+		await expect(readFile(fixture.versionModulePath)).rejects.toMatchObject({ code: 'ENOENT' });
+	});
+
+	it('binds producer artifacts to the exact reviewed source lock', async () => {
+		const fixture = await createFixture();
+		const lock = JSON.parse(await readFile(fixture.producerLockFilePath, 'utf8'));
+		lock.sourceLockSha256 = '0'.repeat(64);
+		await writeFile(fixture.producerLockFilePath, JSON.stringify(lock));
+		await expect(publishFixture(fixture)).rejects.toThrow('producer lock is invalid');
+	});
+
 	it('rejects a third-party notice receipt mismatch', async () => {
 		const fixture = await createFixture();
-		const corruptNoticePath = path.join(fixture.root, 'THIRD_PARTY_NOTICES.md');
+		const corruptNoticePath = path.join(fixture.sourceDir, 'THIRD_PARTY_NOTICES.md');
 		const notices = await readFile(noticeSourcePath);
 		notices[notices.byteLength - 1] ^= 1;
 		await writeFile(corruptNoticePath, notices);
@@ -358,9 +379,9 @@ describe('syncWasmNimAssets', () => {
 				versionModulePath: fixture.versionModulePath,
 				workerSourcePath,
 				lockFilePath: fixture.lockFilePath,
-				noticeSourcePath: corruptNoticePath
+				producerLockFilePath: fixture.producerLockFilePath
 			})
-		).rejects.toThrow('third-party notice source does not match its receipt');
+		).rejects.toThrow('third-party notices does not match its receipt');
 	});
 
 	it.each<[string, (lock: MutableNimInputLock) => void]>([
@@ -401,9 +422,10 @@ describe('syncWasmNimAssets', () => {
 				targetDir: fixture.targetDir,
 				versionModulePath: fixture.versionModulePath,
 				workerSourcePath,
-				lockFilePath: fixture.lockFilePath
+				lockFilePath: fixture.lockFilePath,
+				producerLockFilePath: fixture.producerLockFilePath
 			})
-		).rejects.toThrow('source assets were not found');
+		).rejects.toThrow('source must be a directory');
 	});
 
 	it('publishes from an immutable source snapshot when inputs change during rename', async () => {
@@ -416,6 +438,7 @@ describe('syncWasmNimAssets', () => {
 			versionModulePath: fixture.versionModulePath,
 			workerSourcePath,
 			lockFilePath: fixture.lockFilePath,
+			producerLockFilePath: fixture.producerLockFilePath,
 			renamePath: async (source, target) => {
 				if (!mutated) {
 					mutated = true;
@@ -446,6 +469,7 @@ describe('syncWasmNimAssets', () => {
 				versionModulePath: fixture.versionModulePath,
 				workerSourcePath,
 				lockFilePath: fixture.lockFilePath,
+				producerLockFilePath: fixture.producerLockFilePath,
 				renamePath: async (source, target) => {
 					if (target === fixture.versionModulePath && source.includes('.staging-')) {
 						throw new Error('fixture final publication failure');
@@ -466,7 +490,8 @@ describe('syncWasmNimAssets', () => {
 				targetDir: fixture.sourceDir,
 				versionModulePath: fixture.versionModulePath,
 				workerSourcePath,
-				lockFilePath: fixture.lockFilePath
+				lockFilePath: fixture.lockFilePath,
+				producerLockFilePath: fixture.producerLockFilePath
 			})
 		).rejects.toThrow('publication targets must not overlap their inputs');
 	});

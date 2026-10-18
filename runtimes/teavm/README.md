@@ -7,6 +7,7 @@ Java execution uses TeaVM's browser compiler/runtime assets from `static/teavm/`
 
 - `compiler.wasm`
 - `compiler.wasm-runtime.js`
+- `compiler.wasm-deobfuscator.wasm`
 - `compile-classlib-teavm.bin`
 - `runtime-classlib-teavm.bin`
 
@@ -15,11 +16,16 @@ The checked-in generation is reproduced from `konsoletyper/teavm-javac` revision
 25.0.3+9 Linux x64 JDK archive. Java-specific integration code lives in
 `src/lib/playground/worker/java.ts` and `src/lib/playground/javaStdin.ts`.
 
-The wrapper and browser application pin all four logical assets to the same exact byte counts and
+The wrapper and browser application pin all five logical assets to the same exact byte counts and
 SHA-256 receipts. `static/teavm/runtime-manifest.v2.json` binds those receipts to source, JDK,
 Gradle, dependency-verification, local-overlay, storage, and license metadata. A custom base URL or
 loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
 replacement receipt set.
+
+The stack deobfuscator is the unmodified `org/teavm/backend/wasm/deobfuscator.wasm` resource from
+the pinned `teavm-wasm-gc-deobfuscator` 0.13.1 JAR. It resolves the debug metadata already embedded
+in compiled programs to Java class, method, file, and line information, including calls to
+`Throwable.printStackTrace()`.
 
 The compiler is built from that revision with one source patch,
 `scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch` (TeaVM issue #1322). TeaVM skips

@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { syncWasmDDist } from '../../scripts/sync-wasm-d.mjs';
+import { writeProducerReceipt } from '../../runtimes/wasm-d/test/producer-fixture';
 
 const tempDirs: string[] = [];
 
@@ -49,6 +50,7 @@ async function writeCompleteRuntimeFixture(
 		'runtime/runtime-manifest.v1.json',
 		`${JSON.stringify({
 			manifestVersion: 1,
+			version: 'test',
 			profileId: 'd-browser-test',
 			compiler: {
 				ldc2: { asset: 'bin/ldc2.wasm.gz', compression: 'gzip' },
@@ -61,6 +63,7 @@ async function writeCompleteRuntimeFixture(
 			}
 		})}\n`
 	);
+	return await writeProducerReceipt(path.join(sourceDir, 'runtime'));
 }
 
 describe('syncWasmDDist', () => {
@@ -89,7 +92,7 @@ describe('syncWasmDDist', () => {
 			await makeTempDir(),
 			'bundledDRuntimeIntegrity.ts'
 		);
-		await writeCompleteRuntimeFixture(sourceDir, {
+		const producerLock = await writeCompleteRuntimeFixture(sourceDir, {
 			js: 'shared-js   \n',
 			wasm: 'shared-wasm',
 			data: 'shared-data'
@@ -99,6 +102,7 @@ describe('syncWasmDDist', () => {
 		await writeFixtureFile(sharedLldDir, 'lld.data.gz', gzipSync('shared-data'));
 
 		await syncWasmDDist({
+			producerLock,
 			sourceDir,
 			targetDir,
 			versionModulePath,
@@ -149,6 +153,13 @@ describe('syncWasmDDist', () => {
 		expect(await readFile(lspIntegrityModulePath, 'utf8')).toContain(
 			'export const BUNDLED_D_OUTER_ASSET_RECEIPTS'
 		);
+		const compilerProfile = await readFile(versionModulePath, 'utf8');
+		expect(compilerProfile).toContain('WASM_D_COMPILER_PROFILE');
+		expect(compilerProfile).toContain(
+			createHash('sha256').update('fixture-ldc2').digest('hex')
+		);
+		expect(compilerProfile).toContain(createHash('sha256').update('shared-wasm').digest('hex'));
+		expect(compilerProfile).toContain(createHash('sha256').update(manifest).digest('hex'));
 		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.js'))).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.wasm.gz'))).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.data.gz'))).rejects.toThrow();
@@ -166,7 +177,7 @@ describe('syncWasmDDist', () => {
 			await makeTempDir(),
 			'bundledDRuntimeIntegrity.ts'
 		);
-		await writeCompleteRuntimeFixture(sourceDir, {
+		const producerLock = await writeCompleteRuntimeFixture(sourceDir, {
 			js: 'shared-js',
 			wasm: 'different',
 			data: 'shared-data'
@@ -177,6 +188,7 @@ describe('syncWasmDDist', () => {
 
 		await expect(
 			syncWasmDDist({
+				producerLock,
 				sourceDir,
 				targetDir,
 				versionModulePath,

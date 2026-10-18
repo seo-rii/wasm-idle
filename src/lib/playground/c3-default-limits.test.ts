@@ -5,6 +5,38 @@ import C3 from './c3';
 afterEach(() => vi.restoreAllMocks());
 
 describe('C3 memory profile at the Core binding boundary', () => {
+	it('compiles a receipt-bound module under distinct host memory caps', async () => {
+		const sandbox = new C3();
+		const config = (
+			sandbox as unknown as {
+				config: import('./staticWorkerRuntime').StaticWorkerRuntimeConfig;
+			}
+		).config;
+		const memoryModule = Uint8Array.from([
+			0, 97, 115, 109, 1, 0, 0, 0, 5, 4, 1, 1, 1, 8, 7, 10, 1, 6, 109, 101, 109, 111, 114,
+			121, 2, 0
+		]);
+		const { resolveExecutionLimits } = await import('@wasm-idle/core');
+		const first = config.compilerModules!(
+			{ baseUrl: '', workerUrl: '' },
+			resolveExecutionLimits({
+				maxWasmMemoryBytes: 65_536
+			})
+		).compiler;
+		const second = config.compilerModules!(
+			{ baseUrl: '', workerUrl: '' },
+			resolveExecutionLimits({
+				maxWasmMemoryBytes: 131_072
+			})
+		).compiler;
+		expect(first.receipt.sha256).toMatch(/^[a-f0-9]{64}$/u);
+		expect(second.compileKey).not.toBe(first.compileKey);
+		const module = await first.compile!(memoryModule);
+		const instance = await WebAssembly.instantiate(module);
+		const memory = instance.exports.memory as WebAssembly.Memory;
+		expect(() => memory.grow(1)).toThrow(RangeError);
+	});
+
 	it('applies the C3 1 GiB default to both bound load and run', async () => {
 		const sandbox = new C3();
 		const load = vi.spyOn(sandbox, 'load').mockResolvedValue();

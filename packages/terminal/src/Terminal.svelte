@@ -377,11 +377,9 @@
 			.catch((msg) => {
 				lastExecutionError = msg;
 				if (stopRequested) return false;
-				if (isTimeoutError(msg)) {
-					writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
-					throw msg;
-				}
-				writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
+				const message = String(msg).replace(/\r\n|\n/g, '\r\n');
+				writeTerminalOutput(`\r\n\x1B[1;3;31m${message}\u001B[?25l`);
+				if (isTimeoutError(msg)) throw msg;
 				return false;
 			})
 			.finally(() => {

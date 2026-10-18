@@ -44,9 +44,11 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 			offset += len;
 			return readOct(u8, offset - len, len);
 		},
-		align = () => (offset = (offset + 511) & ~511);
+		align = () => (offset = Math.ceil(offset / 512) * 512);
 
 	while (offset + 512 <= u8.length) {
+		const headerOffset = offset;
+		if (u8.subarray(offset, offset + 512).every((byte) => byte === 0)) return;
 		const entryInit: EntryInit = {
 			filename: str(100),
 			mode: oct(8),
@@ -72,13 +74,20 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 		};
 
 		align();
+		const nextOffset = offset + Math.ceil(entry.size / 512) * 512;
+		if (
+			!Number.isSafeInteger(nextOffset) ||
+			nextOffset <= headerOffset ||
+			nextOffset > u8.length
+		) {
+			throw new Error('TAR has a truncated or out-of-range payload');
+		}
 
 		if (entry.size > 0 || entry.type === '0' || entry.type === '' || entry.type === 'L') {
 			const contents = u8.subarray(offset, offset + entry.size);
 			entry.contents = contents;
-			offset += entry.size;
-			align();
 		}
+		offset = nextOffset;
 
 		if (entry.type === 'L') {
 			if (entry.contents) nextFilename = readStr(entry.contents, 0, entry.size);
