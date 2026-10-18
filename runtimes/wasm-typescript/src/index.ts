@@ -557,8 +557,10 @@ function createRequire(options: BrowserTypeScriptExecutionOptions) {
 		platform: 'browser',
 		browser: true
 	};
+	const bufferModule = { Buffer };
 	const modules: Record<string, unknown> = {
-		buffer: { Buffer },
+		buffer: bufferModule,
+		'node:buffer': bufferModule,
 		fs: fsModule,
 		'node:fs': fsModule,
 		path: pathModule,
@@ -608,7 +610,9 @@ export async function executeBrowserTypeScriptArtifact(
 			'Buffer',
 			'__filename',
 			'__dirname',
-			`${artifact.javascript}\n//# sourceURL=${artifact.fileName}`
+			// The guest owns its lexical declarations; builtin imports may shadow the
+			// injected bindings. A function body also preserves directive prologues.
+			`return (async function () {\n${artifact.javascript}\n}).apply(undefined, arguments);\n//# sourceURL=${artifact.fileName}`
 		);
 		options.onReady?.();
 		await execute(
