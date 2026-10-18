@@ -33,7 +33,10 @@ test('sysroot archives retain pinned bytes when using a portable delivery MIME',
 		delivery: receipt,
 		logical: receipt
 	};
-	const prepared = prepareWebsiteAssetDelivery(asset, 'https://example.com/wasm-idle/container-app/');
+	const prepared = prepareWebsiteAssetDelivery(
+		asset,
+		'https://example.com/wasm-idle/container-app/'
+	);
 	assert.equal(
 		prepared.url,
 		`https://example.com/wasm-idle/container-app/objects/${receipt.sha256}/sysroot.tar.bin`
