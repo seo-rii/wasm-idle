@@ -4,6 +4,10 @@ import { chromium, type Page } from 'playwright-core';
 import { runC3BrowserProbe } from '../../../scripts/c3-browser-probe.mjs';
 import { startBrowserPreviewServer } from '../../../scripts/browser-preview-server.mjs';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import {
+	prepareContainerRuntimePage,
+	observeContainerRuntimeWorkers
+} from '../../../scripts/container-runtime-browser-observer.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 
@@ -36,76 +40,29 @@ describe.skipIf(!enabled)('real C3 browser consumer', () => {
 				executablePath: await resolveChromiumExecutable()
 			});
 			let page: Page | undefined;
+			let runtimeObservation:
+				| Awaited<ReturnType<typeof observeContainerRuntimeWorkers>>
+				| undefined;
 			const consoleMessages: string[] = [];
 			const requestFailures: string[] = [];
 			const pageErrors: string[] = [];
 			try {
 				const context = await browser.newContext();
 				await addBrowserTestCookies(context, server.browserUrl);
-				await context.addInitScript(() => {
-					const target = window as any;
-					target.__c3ConsumerRuns = [];
-					target.__c3ConsumerEvidence = [];
-					const BrowserWorker = Worker;
-					target.Worker = class extends BrowserWorker {
-						constructor(url: string | URL, options?: WorkerOptions) {
-							super(url, options);
-							this.addEventListener('message', ({ data }) => {
-								if (data.evidence?.kind === 'c3-memory-limits')
-									target.__c3ConsumerEvidence.push(data.evidence);
-							});
-						}
-						postMessage(message: any, transfer: any = []) {
-							if (message.run && message.baseUrl?.includes('/wasm-c3/'))
-								target.__c3ConsumerRuns.push({
-									limits: message.limits,
-									code: message.code
-								});
-							super.postMessage(message, transfer);
-						}
-					};
-				});
 				page = await context.newPage();
 				page.setDefaultTimeout(60_000);
 				page.setDefaultNavigationTimeout(180_000);
 				page.on('console', (message) => consoleMessages.push(message.text()));
-				page.on('pageerror', (error) => pageErrors.push(error.message));
 				page.on('requestfailed', (request) =>
 					requestFailures.push(`${request.failure()?.errorText}: ${request.url()}`)
 				);
-				await page.goto(server.browserUrl, { waitUntil: 'domcontentloaded' });
-				let activeState = await page.evaluate(() => ({
+				await prepareContainerRuntimePage(page, server.browserUrl);
+				page.on('pageerror', (error) => pageErrors.push(error.message));
+				const activeState = await page.evaluate(() => ({
 					crossOriginIsolated,
 					serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
 					sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
 				}));
-				for (let attempt = 0; attempt < 4; attempt += 1) {
-					if (
-						activeState.crossOriginIsolated &&
-						activeState.serviceWorkerControlled &&
-						activeState.sharedArrayBuffer
-					) {
-						break;
-					}
-					await page
-						.evaluate(async () => {
-							if (!navigator.serviceWorker) return;
-							await Promise.race([
-								navigator.serviceWorker.ready,
-								new Promise((resolve) => setTimeout(resolve, 1_500))
-							]);
-						})
-						.catch(() => {});
-					await page
-						.goto(server.browserUrl, { waitUntil: 'domcontentloaded' })
-						.catch(() => null);
-					await page.waitForTimeout(2_000 + attempt * 500);
-					activeState = await page.evaluate(() => ({
-						crossOriginIsolated,
-						serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
-						sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
-					}));
-				}
 				expect(activeState).toEqual({
 					crossOriginIsolated: true,
 					serviceWorkerControlled: true,
@@ -123,10 +80,18 @@ describe.skipIf(!enabled)('real C3 browser consumer', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 				).toBe(editorDefaults.c3);
+				runtimeObservation = await observeContainerRuntimeWorkers(page, {
+					runtimePath: '/wasm-c3/',
+					evidenceKind: 'c3-memory-limits'
+				});
 				await page.locator('button.action-button--run').first().click();
-				await page.waitForFunction(() =>
-					(window as any).__c3ConsumerEvidence.some((event: any) => event.guest)
-				);
+				await expect
+					.poll(
+						async () =>
+							(await runtimeObservation!.read()).evidence.some((event: any) => event.guest),
+						{ timeout: 60_000 }
+					)
+					.toBe(true);
 				await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 150)));
 				await page.evaluate(async () => {
 					await (window as any).__wasmIdleDebug.writeTerminalInput('UI 입력 🦀\n', false);
@@ -145,12 +110,14 @@ describe.skipIf(!enabled)('real C3 browser consumer', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
 				).toMatchObject({ status: 'completed', exitCode: 0 });
-				const evidence = await page.evaluate(() => ({
-					runs: (window as any).__c3ConsumerRuns,
-					memory: (window as any).__c3ConsumerEvidence.at(-1),
-					transcript: document.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent
-				}));
+				const observed = await runtimeObservation.read();
+				const evidence = {
+					runs: observed.runs,
+					memory: observed.evidence.at(-1),
+					transcript: await page
+						.locator('[data-testid="terminal-debug-output"]')
+						.textContent()
+				};
 				expect(evidence.runs).toHaveLength(1);
 				expect(evidence.runs[0].limits.maxWasmMemoryBytes).toBe(1024 ** 3);
 				expect(
@@ -166,6 +133,7 @@ describe.skipIf(!enabled)('real C3 browser consumer', () => {
 						console: consoleMessages.slice(-20),
 						pageErrors,
 						requestFailures: requestFailures.slice(-20),
+						ownerObservation: await runtimeObservation?.read().catch(() => null),
 						state: await page?.evaluate(() => ({
 							crossOriginIsolated,
 							serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
@@ -174,8 +142,6 @@ describe.skipIf(!enabled)('real C3 browser consumer', () => {
 							transcript: document.querySelector(
 								'[data-testid="terminal-debug-output"]'
 							)?.textContent,
-							runs: (window as any).__c3ConsumerRuns,
-							memory: (window as any).__c3ConsumerEvidence,
 							url: location.href
 						}))
 					})

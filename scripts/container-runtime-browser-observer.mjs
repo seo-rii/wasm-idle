@@ -34,12 +34,12 @@ export async function prepareContainerRuntimePage(page, browserUrl) {
  * Runtime workers belong to the container owner rather than the window. Observe
  * their actual requests and evidence without changing their transport behavior.
  * @param {import('playwright-core').Page} page
- * @param {{ runtimePath: string; evidenceProtocol?: string }} options
+ * @param {{ runtimePath: string; evidenceProtocol?: string; evidenceKind?: string }} options
  */
 export async function observeContainerRuntimeWorkers(page, options) {
 	const owner = page.workers().find((worker) => /\/owner\.worker[-.]/u.test(worker.url()));
 	if (!owner) throw new Error('The initialized container owner Worker is missing');
-	await owner.evaluate(({ runtimePath, evidenceProtocol }) => {
+	await owner.evaluate(({ runtimePath, evidenceProtocol, evidenceKind }) => {
 		const target = /** @type {any} */ (globalThis);
 		const result = (target.__containerRuntimeBrowserObservation = {
 			runs: /** @type {any[]} */ ([]),
@@ -55,7 +55,10 @@ export async function observeContainerRuntimeWorkers(page, options) {
 			if (!observed.has(this)) {
 				observed.add(this);
 				this.addEventListener('message', ({ data }) => {
-					if (evidenceProtocol && data?.evidence?.protocol === evidenceProtocol)
+					if (
+						(evidenceProtocol && data?.evidence?.protocol === evidenceProtocol) ||
+						(evidenceKind && data?.evidence?.kind === evidenceKind)
+					)
 						result.evidence.push(data.evidence);
 				});
 			}
