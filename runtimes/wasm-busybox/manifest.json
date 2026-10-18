@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-b1-subset-candidate",
+  "status": "producer-b2-command-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -45,7 +45,7 @@
   },
   "config": {
     "path": "config/b1.config",
-    "sha256": "8b842510f2d758ee4cf416449db59963e990a37a5bb8d9a6fd9d4fdae9581c36",
+    "sha256": "85fab1a1496f7e5d3e5a10e80cf5671ecf7872bd73b0a74059dea7f691ce9b97",
     "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
   },
   "patches": [
@@ -103,20 +103,39 @@
       "path": "patches/0011-b1-text-grep-profile.patch",
       "sha256": "6d1561c7c34a3996f201de3e522745fecc62773b0883246b360330dcbfe09313",
       "classification": "unsupported-binary-grep-explicit-rejection"
+    },
+    {
+      "path": "patches/0012-b2-command-profile.patch",
+      "sha256": "4e9b5da8e2cff7278e1ebc61611340011eb97e21c21f7cdfe54fb041b34c3aa6",
+      "classification": "noninteractive-directory-and-text-profile"
     }
   ],
   "requestedApplets": [
+    "basename",
     "cat",
     "cp",
+    "cut",
+    "dirname",
     "echo",
     "false",
     "grep",
+    "head",
+    "ls",
     "mkdir",
     "mv",
     "printf",
     "pwd",
+    "readlink",
+    "realpath",
     "rm",
-    "true"
+    "rmdir",
+    "sort",
+    "tail",
+    "tee",
+    "tr",
+    "true",
+    "uniq",
+    "wc"
   ],
   "qualifiedWasiApplets": [],
   "license": {
@@ -136,11 +155,13 @@
     "action": "validate result then call actual libc chdir before upstream main"
   },
   "limitations": [
-    "Batch byte streams; no PTY, shell or live-pipe qualification",
     "Host owns creation modes; mkdir -m is rejected",
     "cp regular files and symlinks only; -p/-a/-r/-R/-l/-s are rejected before destination mutation",
     "mv uses same-mount rename only; cross-mount fallback is rejected without copy or unlink",
     "No ownership, timestamps, permission mutation, hardlink preservation or device/FIFO/socket copying",
-    "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated"
-  ]
+    "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated",
+    "Noninteractive applets; tail -f/-F and tee -i are explicitly rejected",
+    "ls -l/-n/-s await the virtual metadata profile; no terminal width or automatic color"
+  ],
+  "commandStage": 1
 }

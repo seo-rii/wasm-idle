@@ -32,6 +32,11 @@ def verify(work):
     assert receipt['probeScriptSha256'] == sha(ROOT / 'scripts/probe.py')
     assert receipt['smokeScriptSha256'] == sha(ROOT / 'test/smoke.mjs')
     assert receipt['b1Scripts'] == {path: sha(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')}
+    command_sources = ('commands.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+                       'test/command-container.mjs', 'scripts/test-commands.mjs')
+    assert receipt['commandScripts'] == {path: sha(ROOT / path) for path in command_sources}
+    assert receipt['commandStage'] == manifest['commandStage']
+    assert receipt['commandSmokePassed'] and receipt['commandRun']['exitCode'] == 0
     assert receipt['toolchain']['files'] == manifest['toolchain']['files']
     assert receipt['toolchain']['trees'] == manifest['toolchain']['trees']
     assert receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed'] and receipt['b1SmokePassed']
@@ -75,6 +80,20 @@ def verify(work):
     assert len(b1['cases']) == len(expected_cases) and all(case['passed'] for case in b1['cases'])
     assert {case['applet'] for case in matrix['cases']} == {'grep', 'mkdir', 'cp', 'mv', 'rm'}
     assert b1['imports'] == smoke['imports']
+    commands = json.loads((work / 'command-smoke.json').read_text())
+    assert commands == receipt['commands'] and commands['passed']
+    assert commands['stage'] == manifest['commandStage']
+    assert commands['artifact'] == {'sha256': artifact['sha256'], 'bytes': artifact['size']}
+    assert commands['nativeSha256'] == receipt['native']['artifact']['sha256']
+    command_matrix = work / commands['matrix']['path']
+    assert command_matrix.resolve().is_relative_to(work.resolve()), 'Command matrix escapes producer work'
+    assert sha(command_matrix) == commands['matrix']['sha256']
+    matrix = json.loads(command_matrix.read_text())
+    assert sorted(matrix['applets']) == sorted(manifest['requestedApplets'])
+    assert len(matrix['cases']) == commands['matrix']['cases']
+    expected_commands = {(case['id'], invocation) for case in matrix['cases'] for invocation in ('argv0', 'multicall')}
+    assert {(case['id'], case['invocation']) for case in commands['cases']} == expected_commands
+    assert len(commands['cases']) == len(expected_commands) and all(case['passed'] for case in commands['cases'])
     for target in ('wasi', 'native'):
         assert sha(work / (target + '.config')) == receipt[target]['generatedConfigSha256']
     pack = receipt['sourcePack']
@@ -99,11 +118,14 @@ def verify(work):
             assert hashlib.sha256(archive.extractfile('producer/scripts/resume-native.py').read()).hexdigest() == receipt['nativeContinuation']['scriptSha256']
         for patch in manifest['patches']:
             assert hashlib.sha256(archive.extractfile('producer/' + patch['path']).read()).hexdigest() == patch['sha256']
+        for relative in command_sources:
+            assert hashlib.sha256(archive.extractfile('producer/' + relative).read()).hexdigest() == sha(ROOT / relative)
         for target in ('wasi', 'native'):
             name = 'producer/config/generated-' + target + '.config'
             assert hashlib.sha256(archive.extractfile(name).read()).hexdigest() == receipt[target]['generatedConfigSha256']
     return {'producer': 'passed', 'browser': 'not-qualified', 'artifact': artifact,
-            'nativeB0Cases': 20, 'wasiB0Cases': 24, 'b1Cases': len(b1['cases']), 'sourcePack': pack}
+            'nativeB0Cases': 20, 'wasiB0Cases': 24, 'b1Cases': len(b1['cases']),
+            'commandCases': len(commands['cases']), 'sourcePack': pack}
 
 
 if __name__ == '__main__':

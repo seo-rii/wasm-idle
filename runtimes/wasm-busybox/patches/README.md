@@ -20,6 +20,8 @@ original helpers and paths.
 | `0010-b1-file-mutation-profile.patch` | Reject recursive/preserving/link copy modes before mutation, reject special files, and retain actual regular/symlink copy code. Use actual rename for mv; reject its cross-mount fallback before copy/unlink because metadata preservation is unavailable. Native code retains the upstream fallback. |
 | `0011-b1-text-grep-profile.patch` | The small upstream grep accepts but ignores -a/-I and truncates NUL chunks. Reject these modes/input explicitly. WASI libc lacks the GNU regex API required by EXTRA_COMPAT; no replacement regex engine is introduced. Native reference behavior remains upstream. |
 
+| `0012-b2-command-profile.patch` | Add the real directory/path/text helper closure, UTF-8 display, checked dot entries for WASI `ls -a`, and direct FILE handles for sort/uniq instead of POSIX dup2. Explicitly reject tail follow, tee signal, and pre-extension long/block metadata modes. |
+
 No shell parser, fake process success, network implementation or filesystem stub
 is introduced. Unsupported applets remain disabled. Extending this closure needs
 real syscall support or explicit feature exclusion, then native/WASI/browser tests.
