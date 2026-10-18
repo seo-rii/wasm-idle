@@ -1,11 +1,11 @@
-export const BUNDLED_D_INTEGRITY_VERSION = '6cd397798bc292ec';
+export const BUNDLED_D_INTEGRITY_VERSION = 'aebaa5b7c1ddf0cc';
 
 export const BUNDLED_D_OUTER_ASSET_RECEIPTS = Object.freeze({
 	'index.js': Object.freeze({
-		bytes: 50012,
-		sha256: 'bdf2ef4a3f5697f07ac2c32d68d452373b8a7162300b9cec0e8a87ccd35bf27a',
-		uncompressedBytes: 50012,
-		uncompressedSha256: 'bdf2ef4a3f5697f07ac2c32d68d452373b8a7162300b9cec0e8a87ccd35bf27a'
+		bytes: 50382,
+		sha256: '0671a0b3c7759a5a1bfd481c0a2a23ae22971bd80d8bb537581708f58937f218',
+		uncompressedBytes: 50382,
+		uncompressedSha256: '0671a0b3c7759a5a1bfd481c0a2a23ae22971bd80d8bb537581708f58937f218'
 	}),
 	'runtime/runtime-manifest.v1.json': Object.freeze({
 		bytes: 2303,

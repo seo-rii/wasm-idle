@@ -53,6 +53,26 @@ test('adds a maximum to an unbounded defined memory and retains a stricter origi
 	);
 });
 
+test('derives evidence and capped bytes without recompiling the original module on cache hits', async () => {
+	const originalCompile = WebAssembly.compile;
+	let calls = 0;
+	WebAssembly.compile = (...args) => {
+		calls++;
+		return originalCompile(...args);
+	};
+	let bounded;
+	try {
+		bounded = await limitC3WasmMemory(memoryModule(), PAGE * 2, { verifyModules: false });
+		assert.equal(calls, 0);
+	} finally {
+		WebAssembly.compile = originalCompile;
+	}
+	const { instance } = await WebAssembly.instantiate(bounded.bytes);
+	assert.equal(instance.exports.memory.grow(1), 1);
+	assert.throws(() => instance.exports.memory.grow(1), RangeError);
+	assert.equal(bounded.evidence.maximumBytes, PAGE * 2);
+});
+
 test('rejects initial memory larger than the budget without changing its minimum', async () => {
 	await assert.rejects(limitC3WasmMemory(memoryModule(3, 4), PAGE * 2), {
 		code: 'resource-limit',

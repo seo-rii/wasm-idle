@@ -3,6 +3,13 @@
   "runtime": "benagastov-nim-wasm-compiler",
   "profileId": "nim-2.2.4-benagastov-ca3471ae",
   "provenanceLevel": "content-locked-opaque-prebuilt",
+  "producer": {
+    "producerId": "wasm-llvm/nim-browser",
+    "format": "wasm-llvm-nim-browser-artifacts-v1",
+    "manifestSha256": "f472c71416f1c57227274ecfe1743621bade4637786cacc413cbb99390f43dc1",
+    "sourceLockSha256": "4a0372bd7830ee54305211838c62dcb2539585451a44cff5c72005621d2e27d8",
+    "receiptSha256": "97dc1bd62623c4b0e17723297b28f0409368e6684d78e065df6feccc126b1913"
+  },
   "licenseExpression": "MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party",
   "artifact": {
     "kind": "content-locked-git-archive-prebuilt",
@@ -62,7 +69,7 @@
   },
   "transformations": [
     {
-      "id": "wasm-idle-clang-js-asset-map-and-compile-each-link-v2",
+      "id": "wasm-llvm-clang-js-verified-module-map-v3",
       "path": "clang/clang.js",
       "modificationNotice": "THIRD_PARTY_NOTICES.md"
     },

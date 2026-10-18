@@ -94,7 +94,27 @@ self.onmessage = async ({ data }) => {
 		const totalCap = Math.min(limits.maxWasmMemoryBytes, 2 * 1024 ** 3);
 		const guestCap = Math.min(64 * 1024 ** 2, Math.floor(totalCap / 8 / 65536) * 65536);
 		const compilerCap = totalCap - guestCap;
-		const boundedCompiler = await limitC3WasmMemory(assets.compilerWasmBytes, compilerCap);
+		const modulePorts = data.runtimeWasmModulePorts;
+		const boundedCompiler = await limitC3WasmMemory(assets.compilerWasmBytes, compilerCap, {
+			verifyModules: modulePorts === undefined
+		});
+		let compilerModule;
+		if (modulePorts !== undefined) {
+			if (
+				!modulePorts ||
+				!(modulePorts.compiler instanceof MessagePort) ||
+				typeof __wasmIdleRequestRuntimeWasmModule !== 'function'
+			)
+				throw new Error('C3 compiler module service is invalid');
+			compilerModule = await __wasmIdleRequestRuntimeWasmModule(
+				assets.compilerWasmBytes,
+				modulePorts.compiler,
+				{ timeoutMs: Math.min(limits.compileTimeoutMs, 2_147_483_647) }
+			);
+			if (WebAssembly.Module.imports(compilerModule).some((item) => item.kind === 'memory')) {
+				throw new Error('Imported C3 Wasm memories are unsupported');
+			}
+		}
 		self.postMessage({
 			evidence: {
 				kind: 'c3-memory-limits',
@@ -146,7 +166,16 @@ self.onmessage = async ({ data }) => {
 			wasmBinary: boundedCompiler.bytes,
 			locateFile: () => loaderUrl,
 			print: log,
-			printErr: log
+			printErr: log,
+			...(compilerModule
+				? {
+						instantiateWasm(imports, receive) {
+							const instance = new WebAssembly.Instance(compilerModule, imports);
+							receive(instance, compilerModule);
+							return instance.exports;
+						}
+					}
+				: {})
 		});
 		compiler.FS.mkdir('/work');
 		compiler.FS.chdir('/work');
