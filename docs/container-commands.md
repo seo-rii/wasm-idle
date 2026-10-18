@@ -119,8 +119,8 @@ unzip -q bundle.zip -d zip-output
 Creation modes remain host-owned. Tar restores supported timestamps and accepts
 `-m` to omit that step. Directory timestamps are restored after child entries and
 deferred symlinks; the last header wins for repeated directory names. Directory
-creation errors return nonzero, including readonly mounts with `-m` and directory
-headers conflicting with existing regular files. Those conflicts preserve the
+creation errors return nonzero, including missing directories on readonly mounts
+with `-m` and directory headers conflicting with existing regular files. Those conflicts preserve the
 existing file bytes and timestamps. Permission/ownership restoration, hardlinks
 and special file extraction are unsupported. Archive files and extracted files
 require exclusive creation: conflicts return an error and retain existing file bytes.
@@ -180,3 +180,11 @@ Its pinned producer and source-pack verification pass the retained B0 gates
 (20 native and 24 WASI checks), 104 B1 invocations and 218 cumulative command
 invocations. Independent archive qualification passes 120 native/WASI
 invocations across 35 scenarios and 26 actual-host checks.
+
+Node and Chromium batch/live qualification passes all 872 cumulative command
+invocations and 166 boundary, archive, pipeline and lifecycle checks. Existing
+readonly directories with `tar -m` remain successful no-ops with unchanged
+metadata; missing-directory creation on the same kind of mount fails with EROFS.
+The actual GNU Bash browser gate passes all 10 checks and 61 routed invocations.
+All 70 owned workers terminate, and the final browser worker and process lists
+are empty. These gates use the same receipt-pinned reviewed Wasm.
