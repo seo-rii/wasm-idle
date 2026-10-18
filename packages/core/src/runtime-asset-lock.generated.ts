@@ -27,7 +27,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"clangd/clangd.js": {"sha256":"92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27","bytes":97002,"mediaType":"text/javascript"},
 		"clangd/clangd.wasm": {"sha256":"f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3","bytes":78993623,"mediaType":"application/wasm","deliveryPath":"clangd/clangd.wasm.gz"},
 		"clangd/clangd.wasm.gz": {"sha256":"284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f","bytes":16723115,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3","uncompressedBytes":78993623},
-		"compressed-runtime-assets.v1.json": {"sha256":"848ceab011f7e23721245473fce2a13214bd2aa259c8687d7a682eacbe3b6e3d","bytes":23530,"mediaType":"application/json"},
+		"compressed-runtime-assets.v1.json": {"sha256":"c69a1f26b118a988dcac5359cf172496312e28aae99b9f2792655a0a77b87b09","bytes":23530,"mediaType":"application/json"},
 		"jungol-robot/jungol_robot.zip": {"sha256":"af1ff295840219a4b7c4b2640df40d5b91a48c326774e1660fefa9e6cb0371fa","bytes":16230,"mediaType":"application/zip"},
 		"layered-runtime-assets.v1.json": {"sha256":"0ef13d0c1e8772411b113c19d199ce9c09fe2945d146241c0c877223d5e7f714","bytes":75642,"mediaType":"application/json"},
 		"lsp/typescript-libs.json.gz": {"sha256":"8d4acc17ee1c3c09610b207da58b98cd63c1042f3b6a1751e38521f861c5b655","bytes":555649,"encoding":"gzip","mediaType":"application/json","uncompressedSha256":"4b026ba0cfa40aa481545d27fe0ee6594706020c783ef70aa015dbfd661c6d6d","uncompressedBytes":3869629},
