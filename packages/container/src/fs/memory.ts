@@ -712,14 +712,21 @@ export class MemoryFileSystem {
     this.resize(description.node, length);
   }
 
-  exportSnapshot(): FileSystemSnapshot {
+  /**
+   * Copy all entries by default. Selection happens before file bytes are copied;
+   * partial snapshots retain global metadata and need a complete namespace
+   * assembled by the caller before they can be passed to fromSnapshot.
+   */
+  exportSnapshot(options: { includePath?: (path: string) => boolean } = {}): FileSystemSnapshot {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
-      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
-        ...(node.command ? { command: true as const } : {}),
-        ...(node.type === 'file' ? { data: node.data.slice() } : {}),
-        ...(node.type === 'symlink' ? { target: node.target } : {}),
-      });
+      if (!options.includePath || options.includePath(path)) {
+        entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+          ...(node.command ? { command: true as const } : {}),
+          ...(node.type === 'file' ? { data: node.data.slice() } : {}),
+          ...(node.type === 'symlink' ? { target: node.target } : {}),
+        });
+      }
       for (const [name, child] of [...node.children].sort(([a], [b]) => a.localeCompare(b))) {
         visit(child, `${path === '/' ? '' : path}/${name}`);
       }
