@@ -158,12 +158,7 @@ type UnknownRecord = Record<string, unknown>;
 type LogicalAssetPath = keyof typeof LOGICAL_ASSETS;
 type StorageAssetPath = keyof typeof STORAGE_ASSETS;
 type CompressedAssetLabel =
-	| 'nimJavaScript'
-	| 'nimWasm'
-	| 'clangWasm'
-	| 'lldWasm'
-	| 'memfsWasm'
-	| 'sysroot';
+	'nimJavaScript' | 'nimWasm' | 'clangWasm' | 'lldWasm' | 'memfsWasm' | 'sysroot';
 
 export interface NimRuntimePreflightProfile {
 	readonly profileId: string;
@@ -1059,7 +1054,11 @@ function validatePayloadSemantics(payload: NimRuntimePreflightPayload) {
 	validateTextMarker(
 		payload.clangJavaScriptBytes,
 		'clang JavaScript',
-		['payload:{port:c,assets:l}', 'async function p({assets:l})', 'compile-each-link-done'],
+		[
+			'payload:{port:c,assets:l.assets,modules:l.modules}',
+			'async function p({assets:l,modules:c})',
+			'compile-each-link-done'
+		],
 		payload.profileId
 	);
 	for (const [label, bytes] of [

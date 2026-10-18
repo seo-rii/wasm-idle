@@ -2,6 +2,7 @@ export interface EmscriptenLldAssets {
 	jsUrl: string | URL;
 	jsBytes: Uint8Array;
 	wasmBytes: Uint8Array;
+	wasmModule?: WebAssembly.Module;
 	dataBytes: Uint8Array;
 }
 
@@ -123,6 +124,22 @@ export async function runEmscriptenLld(
 	try {
 		const lld = await factory({
 			wasmBinary,
+			...(assets.wasmModule
+				? {
+						instantiateWasm(
+							imports: WebAssembly.Imports,
+							receive: (
+								instance: WebAssembly.Instance,
+								module: WebAssembly.Module
+							) => void
+						) {
+							const module = assets.wasmModule!;
+							const instance = new WebAssembly.Instance(module, imports);
+							receive(instance, module);
+							return instance.exports;
+						}
+					}
+				: {}),
 			getPreloadedPackage() {
 				return dataBytes.slice(0);
 			},

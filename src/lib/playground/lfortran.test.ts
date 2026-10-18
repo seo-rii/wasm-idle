@@ -9,8 +9,27 @@ import {
 } from './lfortranAssets';
 import { WASM_LFORTRAN_PROFILE as profile } from './wasmLfortranVersion';
 import { StaticStdinRingHost } from './staticStdinRing';
+import LFortran from './lfortran';
 
 describe('LFortran reviewed consumer profile', () => {
+	it('binds the native compiler module to the reviewed logical receipt', () => {
+		const sandbox = new LFortran();
+		const config = (
+			sandbox as unknown as {
+				config: import('./staticWorkerRuntime').StaticWorkerRuntimeConfig;
+			}
+		).config;
+		const modules = config.compilerModules!(
+			{ baseUrl: 'https://example.com/runtime/', workerUrl: 'https://example.com/runner.js' },
+			resolveExecutionLimits()
+		);
+		expect(modules.compiler).toEqual({
+			receipt: profile.assets['lfortran.wasm'],
+			compileKey: 'lfortran-native-imported-memory-v1'
+		});
+		expect(modules.compiler.compile).toBeUndefined();
+	});
+
 	it('relocates a fixed receipt bundle without changing the f2c Fortran profile', () => {
 		const resolved = resolveLfortranRuntimeAssetConfig(
 			{ lfortran: { baseUrl: '/mirror/lfortran' } },

@@ -26,6 +26,12 @@ export interface CreateDCompilerOptions {
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
 	verifyRuntimeAssetIntegrity?: RuntimeAssetIntegrityVerifier;
+	/** The host may share verified immutable modules; instances and files stay per compilation. */
+	compileModule?: (
+		kind: 'ldc2' | 'lld',
+		bytes: Uint8Array,
+		signal?: AbortSignal
+	) => Promise<WebAssembly.Module>;
 	log?: boolean;
 }
 
@@ -197,20 +203,31 @@ async function loadRuntimeAssets(
 			)
 		]);
 	emitProgress(request, 'assets', 25, 'D compiler assets loaded');
+	const compileModule = (kind: 'ldc2' | 'lld', bytes: Uint8Array) =>
+		options.compileModule
+			? options.compileModule(kind, bytes, request.signal)
+			: WebAssembly.compile(Uint8Array.from(bytes).buffer);
+	request.signal?.throwIfAborted();
+	const [ldc2Module, linkerModule] = await Promise.all([
+		compileModule('ldc2', ldc2Bytes),
+		compileModule('lld', linkerWasmBytes)
+	]);
+	request.signal?.throwIfAborted();
 	return {
-		ldc2Bytes,
+		ldc2Module,
 		toolchainEntries: parseTar(toolchainTarBytes),
 		linkerAssets: {
 			jsUrl: resolveVersionedAssetUrl(runtimeBaseUrl, linker.js.asset),
 			jsBytes: linkerJsBytes,
 			wasmBytes: linkerWasmBytes,
+			wasmModule: linkerModule,
 			dataBytes: linkerDataBytes
 		} satisfies EmscriptenLldAssets
 	};
 }
 
 async function compileDObject(
-	ldc2Bytes: Uint8Array,
+	ldc2Module: WebAssembly.Module,
 	root: Directory,
 	request: BrowserDCompileRequest,
 	fileName: string,
@@ -219,7 +236,7 @@ async function compileDObject(
 ) {
 	const stdout: string[] = [];
 	const stderr: string[] = [];
-	const compileResult = await runWasiModule(ldc2Bytes, {
+	const compileResult = await runWasiModule(ldc2Module, {
 		root,
 		programName: 'ldc2',
 		args: [
@@ -327,7 +344,7 @@ export async function compileD(
 	const wasmFileName = `${stem}.wasm`;
 	try {
 		const manifest = await resolveManifest(options, request);
-		const { ldc2Bytes, toolchainEntries, linkerAssets } = await loadRuntimeAssets(
+		const { ldc2Module, toolchainEntries, linkerAssets } = await loadRuntimeAssets(
 			manifest,
 			options,
 			request
@@ -341,7 +358,7 @@ export async function compileD(
 		writeGuestFile(root, `/work/${fileName}`, request.code);
 		emitProgress(request, 'compile', 30, 'compiling D source');
 		const compileResult = await compileDObject(
-			ldc2Bytes,
+			ldc2Module,
 			root,
 			request,
 			fileName,

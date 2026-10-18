@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { format, resolveConfig } from 'prettier';
+import { verifyDProducerArtifacts } from '../runtimes/wasm-d/scripts/prepare-runtime.mjs';
 import {
 	EMSCRIPTEN_LLD_PROFILE,
 	rewriteSharedEmscriptenLldAssets,
@@ -45,16 +47,17 @@ function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
 }
 
-/** @param {string} sourceDir @param {string} targetDir */
-async function copyDirectory(sourceDir, targetDir) {
+/** @param {string} sourceDir @param {string} targetDir @param {Set<string>} [excludedPaths] */
+async function copyDirectory(sourceDir, targetDir, excludedPaths = new Set()) {
 	const entries = await readdir(sourceDir, { withFileTypes: true });
 	for (const entry of entries) {
 		const sourcePath = path.join(sourceDir, entry.name);
+		if (excludedPaths.has(sourcePath)) continue;
 		if (shouldSkipCopy(sourcePath)) continue;
 		const targetPath = path.join(targetDir, entry.name);
 		if (entry.isDirectory()) {
 			await mkdir(targetPath, { recursive: true });
-			await copyDirectory(sourcePath, targetPath);
+			await copyDirectory(sourcePath, targetPath, excludedPaths);
 			continue;
 		}
 		await cp(sourcePath, targetPath);
@@ -96,10 +99,32 @@ async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	return hash.digest('hex').slice(0, 16);
 }
 
-/** @param {string} versionModulePath @param {string} fingerprint */
-async function writeVersionModule(versionModulePath, fingerprint) {
+/** @param {string} versionModulePath @param {string} fingerprint @param {Buffer} manifestBytes */
+async function writeVersionModule(versionModulePath, fingerprint, manifestBytes) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_D_ASSET_VERSION = '${fingerprint}';\n`;
+	const manifest = JSON.parse(manifestBytes.toString('utf8'));
+	const compiler = manifest.compiler;
+	const logical = (/** @type {DAssetReceipt} */ receipt) => ({
+		bytes: receipt.uncompressedBytes,
+		sha256: receipt.uncompressedSha256
+	});
+	const profile = {
+		version: manifest.version,
+		manifestSha256: sha256Bytes(manifestBytes),
+		lldProfile: `${EMSCRIPTEN_LLD_PROFILE.id}-v${EMSCRIPTEN_LLD_PROFILE.version}-llvm-${EMSCRIPTEN_LLD_PROFILE.llvmVersion}`,
+		lldLoaderSha256: compiler.linker.js.integrity.uncompressedSha256,
+		lldDataSha256: compiler.linker.data.integrity.uncompressedSha256,
+		ldc2: logical(compiler.ldc2.integrity),
+		lld: logical(compiler.linker.wasm.integrity)
+	};
+	const profileSource = JSON.stringify(profile, null, '\t').replace(
+		/"(ldc2|lld)": (\{[^}]+\})/g,
+		'"$1": Object.freeze($2)'
+	);
+	const moduleSource = await format(
+		`export const WASM_D_ASSET_VERSION = '${fingerprint}';\n\nexport const WASM_D_COMPILER_PROFILE = Object.freeze(${profileSource});\n`,
+		{ ...(await resolveConfig(DEFAULT_VERSION_MODULE_PATH)), parser: 'typescript' }
+	);
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
@@ -274,6 +299,7 @@ ${receiptSource}
  * @property {string} [lspIntegrityModulePath]
  * @property {string} [sharedLldDir]
  * @property {string} [canonicalLldDir]
+ * @property {import('../runtimes/wasm-d/scripts/prepare-runtime.mjs').DProducerLock} [producerLock]
  */
 
 /** @param {SyncWasmDDistOptions} [options] */
@@ -284,7 +310,8 @@ export async function syncWasmDDist({
 	integrityModulePath = DEFAULT_INTEGRITY_MODULE_PATH,
 	lspIntegrityModulePath = DEFAULT_LSP_INTEGRITY_MODULE_PATH,
 	sharedLldDir = DEFAULT_SHARED_LLD_DIR,
-	canonicalLldDir = sharedLldDir
+	canonicalLldDir = sharedLldDir,
+	producerLock
 } = {}) {
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -308,6 +335,11 @@ export async function syncWasmDDist({
 		if (!fileStats?.isFile())
 			throw new Error(`wasm-d dist file was not found at ${absolutePath}.`);
 	}
+	// Validate the pinned producer output again before mutating installed assets.
+	const { files: producerFiles } = await verifyDProducerArtifacts(
+		path.join(sourceDir, 'runtime'),
+		producerLock
+	);
 	await validateSharedEmscriptenLldAssets({
 		sourceAssetDir: path.join(sourceDir, 'runtime', 'bin'),
 		sharedAssetDir: canonicalLldDir
@@ -321,7 +353,13 @@ export async function syncWasmDDist({
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
-	await copyDirectory(sourceDir, targetDir);
+	await copyDirectory(sourceDir, targetDir, new Set([path.join(sourceDir, 'runtime')]));
+	// Publish the verified snapshot, not a second read of mutable producer inputs.
+	for (const [relativePath, bytes] of producerFiles) {
+		const destination = path.join(targetDir, 'runtime', relativePath);
+		await mkdir(path.dirname(destination), { recursive: true });
+		await writeFile(destination, bytes);
+	}
 	await rewriteSharedEmscriptenLldAssets({
 		targetAssetDir: path.join(targetDir, 'runtime', 'bin'),
 		manifestPath: path.join(targetDir, 'runtime', 'runtime-manifest.v1.json'),
@@ -345,7 +383,7 @@ export async function syncWasmDDist({
 		path.join(sharedLldDir, 'lld.wasm.gz'),
 		path.join(sharedLldDir, 'lld.data.gz')
 	]);
-	await writeVersionModule(versionModulePath, fingerprint);
+	await writeVersionModule(versionModulePath, fingerprint, await readFile(manifestPath));
 	return {
 		sourceDir,
 		targetDir,

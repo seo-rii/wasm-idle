@@ -179,7 +179,24 @@ self.onmessage = async ({ data }) => {
 		await verifyPayload(data.runtimePreflight);
 		const payload = data.runtimePreflight;
 		const wasmMemory = createBoundedMemory(data.limits?.maxWasmMemoryBytes);
-		const mainModule = await WebAssembly.compile(payload['lfortran.wasm']);
+		const modulePorts = data.runtimeWasmModulePorts;
+		let mainModule;
+		if (modulePorts === undefined) {
+			mainModule = await WebAssembly.compile(payload['lfortran.wasm']);
+		} else {
+			if (
+				!modulePorts ||
+				!(modulePorts.compiler instanceof MessagePort) ||
+				typeof __wasmIdleRequestRuntimeWasmModule !== 'function'
+			)
+				throw new Error('LFortran compiler module service is invalid');
+			// Preserve the original verified bytes used by Emscripten and subsequent evidence.
+			mainModule = await __wasmIdleRequestRuntimeWasmModule(
+				Uint8Array.from(payload['lfortran.wasm']),
+				modulePorts.compiler,
+				{ timeoutMs: Math.min(data.limits.compileTimeoutMs, 2_147_483_647) }
+			);
+		}
 		const memoryImports = WebAssembly.Module.imports(mainModule).filter(
 			(entry) => entry.kind === 'memory'
 		);

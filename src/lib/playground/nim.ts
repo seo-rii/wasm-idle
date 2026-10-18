@@ -20,6 +20,30 @@ class Nim extends StaticWorkerRuntimeSandbox {
 				sourceHintPattern: /\b(?:stdin|readLine|readAll|lines)\b/i
 			},
 			inlineVerifiedWorker: true,
+			includeExecutionLimits: true,
+			compilerModules(urls) {
+				const profile = snapshotNimRuntimePreflightProfile(urls.preflightProfile);
+				return Object.fromEntries(
+					[
+						['nim', profile.nimWasmReceipt],
+						['clang', profile.clangWasmReceipt],
+						['lld', profile.lldWasmReceipt],
+						['memfs', profile.memfsWasmReceipt]
+					].map(([key, receipt]) => {
+						const integrity = receipt as typeof profile.nimWasmReceipt;
+						return [
+							key,
+							{
+								receipt: {
+									bytes: integrity.uncompressedBytes!,
+									sha256: integrity.uncompressedSha256!
+								},
+								compileKey: 'nim-llvm8-native-v1'
+							}
+						];
+					})
+				);
+			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				const resolved = resolveNimRuntimeAssetConfig(runtimeAssets, currentUrl);
 				const profile = snapshotNimRuntimePreflightProfile(resolved.preflightProfile);

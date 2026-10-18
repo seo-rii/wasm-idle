@@ -173,7 +173,7 @@ export function readGuestFile(root: Directory, guestPath: string) {
 }
 
 export async function runWasiModule(
-	moduleBytes: Uint8Array | ArrayBuffer,
+	moduleBytes: Uint8Array | ArrayBuffer | WebAssembly.Module,
 	options: {
 		root?: Directory;
 		args?: string[];
@@ -200,12 +200,10 @@ export async function runWasiModule(
 		],
 		{ debug: false }
 	);
-	const bytes = moduleBytes instanceof Uint8Array ? moduleBytes : new Uint8Array(moduleBytes);
-	const moduleBuffer = bytes.buffer.slice(
-		bytes.byteOffset,
-		bytes.byteOffset + bytes.byteLength
-	) as ArrayBuffer;
-	const module = await WebAssembly.compile(moduleBuffer);
+	const module =
+		moduleBytes instanceof WebAssembly.Module
+			? moduleBytes
+			: await WebAssembly.compile(Uint8Array.from(new Uint8Array(moduleBytes)).buffer);
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport,
 		wasi_unstable: wasiInstance.wasiImport
