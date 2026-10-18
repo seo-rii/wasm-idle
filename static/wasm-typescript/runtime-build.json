@@ -1,17 +1,17 @@
 {
   "format": "wasm-typescript-runtime-build-v2",
-  "fingerprint": "09f5c8038bc6895b",
+  "fingerprint": "fb67bbc13309e8e3",
   "producer": {
     "format": "wasm-typescript-producer-build-v1",
     "additionalArtifacts": {
       "javascript.js": {
-        "bytes": 157165,
-        "sha256": "4a2cfb68c4e9ff39161dc118c42ed7d1705261f6d6aef26d644e272dbb5e48cb"
+        "bytes": 157861,
+        "sha256": "9186a8a5fb32760df0de1cf8da2b5c581ebf80fe9efa0c82eb6a8432acd17f8d"
       }
     },
     "source": {
       "format": "wasm-typescript-source-inputs-v1",
-      "sha256": "5f3b887ac2cc497f808cd6f26d95ce863d00c74e04481b47e199717954b88f28",
+      "sha256": "28b72d60cfa9d755f8f72bdf26c8c50d96e2ac188da490c58b90257b45b31fc0",
       "files": [
         {
           "path": "package.json",
@@ -29,9 +29,14 @@
           "sha256": "00da656d4864c4f13ee950fc59fb5665b9ffb2aae28f6bdd329cf54f42b2569e"
         },
         {
+          "path": "src/guest-syntax.ts",
+          "bytes": 1720,
+          "sha256": "fe5e1460ffcf5c87b8aaf2e47449f49762760c3920b2c54ea2a82ee7203e21c0"
+        },
+        {
           "path": "src/index.ts",
-          "bytes": 17399,
-          "sha256": "a777d36e6dbee01769a8d9eb4bfea6edaf0ff9a44f444274ef0359440cb56eaf"
+          "bytes": 17471,
+          "sha256": "1e9fbd7d40f013993107b158df94ea0506e22aec93bd00e88c4d8a3ee63ba981"
         },
         {
           "path": "tsconfig.json",
@@ -49,18 +54,18 @@
     },
     "artifact": {
       "path": "index.js",
-      "bytes": 3880420,
-      "sha256": "f174e6affda833f05242dae0b718874b9016c4b1d141a5ddfe499e6c98b20c68"
+      "bytes": 3881116,
+      "sha256": "b018d4076cf5be4babdf79ab6c36e4afcb6e36fa8d4cd25d8eb07b2d5812bed6"
     }
   },
   "assets": {
     "index.js": {
-      "bytes": 3880420,
-      "sha256": "f174e6affda833f05242dae0b718874b9016c4b1d141a5ddfe499e6c98b20c68"
+      "bytes": 3881116,
+      "sha256": "b018d4076cf5be4babdf79ab6c36e4afcb6e36fa8d4cd25d8eb07b2d5812bed6"
     },
     "javascript.js": {
-      "bytes": 157165,
-      "sha256": "4a2cfb68c4e9ff39161dc118c42ed7d1705261f6d6aef26d644e272dbb5e48cb"
+      "bytes": 157861,
+      "sha256": "9186a8a5fb32760df0de1cf8da2b5c581ebf80fe9efa0c82eb6a8432acd17f8d"
     }
   }
 }

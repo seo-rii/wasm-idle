@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { compileTypeScript, executeBrowserTypeScriptArtifact } from '../src/index.js';
 
 describe('builtin import syntax', () => {
+	it('accepts new.target in the native async function body and its arrow functions', async () => {
+		const compiled = await compileTypeScript({
+			language: 'javascript',
+			code: 'const target = () => new.target; console.log(new.target === undefined, target() === undefined);'
+		});
+		expect(compiled.success).toBe(true);
+		expect(await executeBrowserTypeScriptArtifact(compiled.artifact!)).toMatchObject({
+			exitCode: 0,
+			stdout: 'true true\n',
+			stderr: ''
+		});
+	});
+
+	it('rejects source that escapes the synthetic function body', async () => {
+		const compiled = await compileTypeScript({
+			language: 'javascript',
+			code: '}\nasync function escaped() {'
+		});
+		expect(compiled.success).toBe(false);
+		expect(compiled.diagnostics[0]).toMatchObject({ lineNumber: 1, columnNumber: 1 });
+	});
+
+	it('reports parser errors in original source coordinates', async () => {
+		const compiled = await compileTypeScript({
+			language: 'javascript',
+			code: '// header\nconst = 1;'
+		});
+		expect(compiled.success).toBe(false);
+		expect(compiled.diagnostics[0]).toMatchObject({ lineNumber: 2, columnNumber: 7 });
+		expect(compiled.stderr).toContain('(2:6)');
+	});
+
 	it.each([
 		"console.log(`한글🙂\nimport fs from 'fs';\n\\0끝`);",
 		"console.log(`\nimport fs from 'fs';\nexport default 7;\n`);",

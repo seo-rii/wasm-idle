@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
-import { parse } from 'acorn';
 import { transformSync, type Options as SwcTypeScriptOptions } from '@swc/wasm-typescript';
+import { GuestSyntaxError, parseGuestBody } from './guest-syntax.js';
 
 export type BrowserTypeScriptLanguage = 'javascript' | 'typescript';
 export type BrowserTypeScriptDiagnosticSeverity = 'error' | 'warning' | 'other';
@@ -108,19 +108,14 @@ function createDiagnostic(
 }
 
 function rewriteNodeBuiltinImports(code: string, fileName: string) {
-	// Parse the native script body while accepting the builtin imports that this
+	// Parse the native async body while accepting the builtin imports that this
 	// runner lowers. Source ranges leave comments, strings and templates untouched.
-	const program = parse(code, {
-		ecmaVersion: 'latest',
-		sourceType: 'script',
-		allowImportExportEverywhere: true,
-		allowAwaitOutsideFunction: true,
-		allowReturnOutsideFunction: true,
-		locations: true
-	});
+	const parsed = parseGuestBody(code);
 	let javascript = '';
 	let offset = 0;
-	for (const node of program.body) {
+	for (const node of parsed.statements) {
+		const start = node.start - parsed.offset;
+		const end = node.end - parsed.offset;
 		if (node.type === 'ImportDeclaration') {
 			const specifier = String(node.source.value);
 			if (NODE_BUILTIN_SPECIFIERS.has(specifier)) {
@@ -135,13 +130,11 @@ function rewriteNodeBuiltinImports(code: string, fileName: string) {
 							: binding.imported.value;
 					return `const { ${JSON.stringify(imported)}: ${binding.local.name} } = ${requireCall};`;
 				});
-				javascript += code.slice(offset, node.start);
+				javascript += code.slice(offset, start);
 				javascript += statements.length ? statements.join(' ') : `${requireCall};`;
 				// Keep the following source's line numbers stable after multiline imports.
-				javascript += '\n'.repeat(
-					(code.slice(node.start, node.end).match(/\n/g) || []).length
-				);
-				offset = node.end;
+				javascript += '\n'.repeat((code.slice(start, end).match(/\n/g) || []).length);
+				offset = end;
 				continue;
 			}
 		}
@@ -151,7 +144,7 @@ function rewriteNodeBuiltinImports(code: string, fileName: string) {
 				diagnostic: createDiagnostic(
 					'Only Node builtin imports are supported in this browser runner. Use require(...) or import from fs/path/process/buffer.',
 					fileName,
-					node.loc!.start.line,
+					node.loc!.start.line - parsed.lineOffset,
 					node.loc!.start.column + 1
 				)
 			};
@@ -162,6 +155,9 @@ function rewriteNodeBuiltinImports(code: string, fileName: string) {
 
 function normalizeSwcError(error: unknown, fileName: string) {
 	const message = error instanceof Error ? error.message : String(error);
+	if (error instanceof GuestSyntaxError) {
+		return createDiagnostic(message, fileName, error.loc.line, error.loc.column + 1);
+	}
 	return createDiagnostic(message, fileName);
 }
 
