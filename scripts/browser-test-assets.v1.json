@@ -277,9 +277,9 @@
   "groupBaseUrls": {
     "c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
     "lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
-    "clang": "https://seo-rii.github.io/wasm-idle/",
-    "clangd": "https://seo-rii.github.io/wasm-idle/",
-    "ocaml": "https://seo-rii.github.io/wasm-idle/"
+    "clang": "https://seorii.page/wasm-idle/",
+    "clangd": "https://seorii.page/wasm-idle/",
+    "ocaml": "https://seorii.page/wasm-idle/"
   },
   "generatedWorkers": [
     "c3",
