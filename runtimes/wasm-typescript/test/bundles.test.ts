@@ -57,7 +57,8 @@ describe('standalone browser bundles', () => {
 	it('does not accidentally reintroduce the compiler into the JavaScript payload', () => {
 		const javascriptBytes = statSync(new URL(javascriptUrl)).size;
 		const typescriptBytes = statSync(new URL(typescriptUrl)).size;
-		expect(javascriptBytes).toBeLessThan(100_000);
+		// Acorn adds a real syntax parser while the multi-megabyte SWC/Wasm stays out.
+		expect(javascriptBytes).toBeLessThan(180_000);
 		expect(javascriptBytes).toBeLessThan(typescriptBytes / 20);
 	});
 });
