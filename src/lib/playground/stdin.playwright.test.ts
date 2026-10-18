@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import {
 	runBrowserPreparationScripts,
@@ -526,6 +527,29 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 	});
 }
 
+async function expectPinnedContainerClangAssets(browserUrl: string, requests: string[]) {
+	const base = new URL('container-app/', browserUrl);
+	const [manifestResponse, configResponse] = await Promise.all([
+		fetch(new URL('distribution.json', base)),
+		fetch(new URL('page-config.json', base))
+	]);
+	expect(manifestResponse.ok).toBe(true);
+	expect(configResponse.ok).toBe(true);
+	const bytes = new Uint8Array(await manifestResponse.arrayBuffer());
+	const config = await configResponse.json();
+	expect(createHash('sha256').update(bytes).digest('hex')).toBe(config.manifestSha256);
+	const distribution = JSON.parse(new TextDecoder().decode(bytes));
+	const llvm = distribution.packages.find((pkg: { id: string }) => pkg.id === 'llvm');
+	for (const id of ['clang', 'lld', 'sysroot']) {
+		const asset = llvm.assets.find((entry: { id: string }) => entry.id === id);
+		const path = new URL(asset.url).pathname;
+		expect(path).toContain(`/objects/${asset.delivery.sha256}/`);
+		expect(asset.delivery.bytes).toBeGreaterThan(0);
+		const objectPath = path.slice(path.lastIndexOf('/objects/'));
+		expect(requests.some((url) => new URL(url).pathname.endsWith(objectPath))).toBe(true);
+	}
+}
+
 describe('wasm-idle browser stdin connection', () => {
 	for (const {
 		defaultRunTimeoutMs,
@@ -671,24 +695,7 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText
 				});
 				expect(summary.transcript).toContain(expectedOutput);
-				const requestedPaths = summary.runtimeRequests.map(
-					(request) => new URL(request).pathname
-				);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/c-sysroot.tar.gz')
-					)
-				).toBe(true);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
-					)
-				).toBe(language === 'CPP');
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/sysroot.tar.gz')
-					)
-				).toBe(false);
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
 			});
 		}
 	);
@@ -788,19 +795,7 @@ int main() {
 					workspaceFiles: [{ path: 'flags.rsp', content: '-x c++ -std=c++20' }]
 				});
 				expect(summary.transcript).toContain('main=73');
-				const requestedPaths = summary.runtimeRequests.map(
-					(request) => new URL(request).pathname
-				);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
-					)
-				).toBe(true);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/sysroot.tar.gz')
-					)
-				).toBe(false);
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
 			});
 		}
 	);
@@ -1128,11 +1123,15 @@ int main() {
 						expectedOutput: 'invalid expression: unexpected token',
 						language: 'V',
 						requireSharedArrayBuffer: false,
-						runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+						runTimeoutMs: Number(
+							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'
+						),
 						source: vInvalidSource,
 						stdinText: ''
 					})
-				).rejects.toThrow(/"status": "failed"[\s\S]*main\.v:3:1:[\s\S]*invalid expression: unexpected token/);
+				).rejects.toThrow(
+					/"status": "failed"[\s\S]*main\.v:3:1:[\s\S]*invalid expression: unexpected token/
+				);
 			});
 		}
 	);

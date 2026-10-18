@@ -331,13 +331,19 @@ export async function runStdinBrowserProbe(options) {
 	/** @type {string[]} */
 	const selectedRuntimeRequests = [];
 	let languageSelected = false;
-	page.on('request', (request) => {
+	// Container guests run in nested Workers; their requests belong to the context.
+	context.on('request', (request) => {
 		const pathname = new URL(request.url()).pathname;
+		const containerCompiler =
+			/\/container-app\/objects\/[a-f0-9]{64}\/(?:(?:clang|lld)\.wasm\.gz\.bin|sysroot\.tar(?:\.bin)?)$/u.test(
+				pathname
+			);
 		if (
 			!pathname.includes('/@fs/') &&
-			/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
-				pathname
-			)
+			(containerCompiler ||
+				/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
+					pathname
+				))
 		) {
 			(languageSelected ? selectedRuntimeRequests : preselectionRuntimeRequests).push(
 				request.url()
