@@ -1,14 +1,16 @@
 # BusyBox WASI producer probe
 
-Status: **G0 producer probe; browser/container qualification is separate**. This
-directory pins an upstream BusyBox source and a restricted eleven-applet configuration.
-The committed receipt records the actual native and Node WASI results. Registration
-as a supported container package additionally requires browser byte tests.
+Status: **staged producer; browser/container qualification is separate**. This
+directory pins upstream BusyBox and the cumulative 36-applet configuration in
+`commands.mjs`. The original G0/B1 receipts remain historical evidence; current
+stage receipts are named `evidence/commands-stage3-*.json`. Registration as a
+supported container package additionally requires browser byte tests.
 
 The source is BusyBox 1.37.0, pinned to the checksum published next to its official
 archive. `config/b1.config` requests the B0 `cat`, `echo`, `false`, `printf`, `pwd`,
-`true` applets plus B1 `grep`, `mkdir`, `cp`, `mv`, `rm`, and the real upstream
-multicall entry. `config/b0.config` is retained as the historical baseline. The script overlays that fragment onto
+`true` applets plus B1 `grep`, `mkdir`, `cp`, `mv`, `rm`, the staged directory,
+text, development and metadata applets, and the real upstream multicall entry.
+`config/b0.config` is retained as the historical baseline. The script overlays that fragment onto
 `allnoconfig`, resolves `oldconfig`, and checks the effective selected-applet/no-shell flags.
 BusyBox 1.37.0's `allnoconfig` resets boolean values even when `KCONFIG_ALLCONFIG`
 names a fragment; that mechanism alone is insufficient. No shell interpreter,
@@ -61,8 +63,8 @@ receipt, and resumes only the native make with one job. The final receipt record
 that continuation and includes its script in the source pack. A source mismatch
 or an unrelated failure is not accepted as a resumable attempt.
 
-The producer returns nonzero until the B0 regression and B1 native/Node WASI
-differential fixtures pass. Builds allow only one or two compiler jobs. Browser/container qualification remains a separate gate. Native execution
+The producer returns nonzero until the B0 regression, B1 and cumulative command
+native/Node WASI differential fixtures pass. Builds allow only one or two compiler jobs. Browser/container qualification remains a separate gate. Native execution
 is a differential baseline, not evidence of WASI support. Both multicall
 `busybox <applet>` and alias `argv[0]` invocation are tested using actual upstream
 code. Binary stdout/stderr are compared directly, including NUL and non-UTF-8
@@ -74,7 +76,8 @@ and a source pack containing the upstream archive, license and port inputs. Node
 WASI runs trusted local fixtures only; it is not the container's browser sandbox.
 
 
-The B1 profile qualifies operations individually:
+The historical B1 profile qualifies operations individually (stage 2 enables
+content-only recursive copy and replaces its earlier rejection cases):
 
 | Applet | Selected behavior | Explicit limits |
 | --- | --- | --- |
@@ -98,7 +101,7 @@ Both multicall and argv0 forms run in a real cwd with spaces. The matrix include
 `b1-smoke.json` records per-invocation native/WASI evidence. Modes, ownership and
 timestamps are deliberately outside the compared tree schema.
 
-The artifact requires the trusted host import
+All stages require the trusted host import
 `wasm_idle_process_v1.initial_cwd(ptr: i32, capacity: i32) -> i32` in addition to
 WASI Preview 1. The host writes UTF-8 cwd plus NUL and returns the byte count
 including NUL, or returns -1 for insufficient capacity/invalid memory range.
@@ -107,6 +110,29 @@ A priority-101 constructor uses a 4096-byte buffer and performs actual libc
 exits 125. This is an explicit producer ABI, not an injected `PWD` environment
 entry. Native builds retain normal OS cwd behavior. The smoke includes four
 startup failure cases and bounds-checks the host's normal import implementation.
+
+Stage 3 additionally requires the workspace Container `virtual-metadata-v1`
+profile. Real WASI `path_filestat_set_times`/`fd_filestat_set_times` update
+independent access and modification timestamps, stored at integer millisecond
+resolution. Reads use a noatime policy. Touch NOW/OMIT/reference operations retain
+their upstream semantics; unsupported pre-epoch/overflow dates fail in pinned
+libc before changing metadata.
+
+The versioned `wasm_idle_fs_v1.path_mode(dirfd, ptr, length, lookupFlags)` and
+`fd_mode(fd)` imports return the stored lower nine permission bits or negative
+WASI errno. Lookup flags are 0 for nofollow and 1 for follow. The port enriches a
+successful real libc stat/lstat/fstat and retains its file type. Host rights,
+capability lookup and memory checks apply to both observations. Path stat and
+mode are separate operations; concurrent renames can change the observed inode
+between them in the live profile.
+
+The virtual filesystem models numeric uid/gid 0 and link count 1 without an
+account database. `stat` reports unavailable account names, allocated blocks and
+physical device fields as `UNKNOWN`; `ls -s` fails explicitly. `ls -l/-n` show
+stored mode/type/size/timestamps. There is no chmod, chown, hardlink, or host
+permission enforcement. The shared Node fixture observes real OS descriptors
+to supply these two imports during producer tests; actual browser qualification
+uses the Container host, not that fixture.
 
 `evidence/g0-busybox.json` preserves the earlier B0 evidence.
 `evidence/b1-busybox.json`, `evidence/b1-verification.json`,

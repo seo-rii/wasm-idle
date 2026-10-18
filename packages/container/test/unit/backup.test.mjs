@@ -38,6 +38,19 @@ test('backup captures one owned revision before async hashing and restore snapsh
   const target = new MemoryFileSystem(), restoring = restoreWorkspaceBackup(target, archive, { replace: true }); archive.fill(0); await restoring;
   assert.equal(text(target.readFile('a')), 'old');
 });
+
+test('backup preserves explicit access/modification times and accepts archives written before access time existed', async () => {
+  const source = new MemoryFileSystem(); source.writeFile('file', bytes('data'));
+  source.setTimes('file', { atimeMs: 123, mtimeMs: 456 });
+  const archive = await createWorkspaceBackup(source), current = new MemoryFileSystem();
+  await restoreWorkspaceBackup(current, archive, { replace: true });
+  assert.equal(current.stat('file').atimeMs, 123); assert.equal(current.stat('file').mtimeMs, 456);
+  const legacy = await changeArchive(archive, value => { for (const entry of value.entries) delete entry.atimeMs; });
+  const restored = new MemoryFileSystem(); await restoreWorkspaceBackup(restored, legacy, { replace: true });
+  assert.equal(restored.stat('file').atimeMs, 456);
+  const invalid = await changeArchive(archive, value => { value.entries[1].atimeMs = -1; });
+  await assert.rejects(restoreWorkspaceBackup(restored, invalid, { replace: true }), { code: 'INVALID_ARCHIVE' });
+});
 test('restore owns Node Buffer input even when the caller mutates its slice-backed memory', async () => {
   const source = new MemoryFileSystem(); source.writeFile('a', bytes('old'));
   const archive = Buffer.from(await createWorkspaceBackup(source)), target = new MemoryFileSystem();

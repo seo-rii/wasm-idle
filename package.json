@@ -221,7 +221,7 @@
 		"@types/sql.js": "^1.4.11",
 		"@typescript-eslint/eslint-plugin": "^8.71.1",
 		"@typescript-eslint/parser": "^8.71.1",
-		"@wasm-idle/container": "0.1.0",
+		"@wasm-idle/container": "workspace:*",
 		"@wasm-idle/debug": "workspace:*",
 		"@wasm-idle/lsp": "workspace:*",
 		"@wasm-idle/terminal": "workspace:*",

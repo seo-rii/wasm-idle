@@ -67,6 +67,42 @@ filesystem operations complete immediately. The flag is reported by
 has that right. Changing `APPEND` after open, sync flags, and nonblocking standard
 streams remain unsupported and return `ENOTSUP`.
 
+Both WASI adapters support `path_filestat_set_times` and `fd_filestat_set_times`.
+Preview1 ATIM/MTIM and their NOW flags update independent access/modification
+times; an unset field is omitted, and conflicting or unknown flags return
+`EINVAL`. Nanoseconds are truncated to the filesystem's millisecond resolution.
+Path lookup preserves the directory capability and honors SYMLINK_FOLLOW;
+mutation requires PATH_FILESTAT_SET_TIMES or FD_FILESTAT_SET_TIMES, respectively.
+An all-omitted update still checks the target and syscall rights but leaves its
+generation/timestamps unchanged. Live updates execute atomically on the owner;
+completed metadata changes survive cancellation, and a stopped process cannot
+issue another update. Snapshot metadata-only changes are published on ordinary
+exit. See [FS.md](FS.md) for stored timestamps, noatime reads and compatibility.
+
+The optional `wasm_idle_fs_v1` namespace exposes true virtual permission metadata
+that Preview1 filestat cannot carry:
+
+| Import | Signature | Result |
+| --- | --- | --- |
+| `path_mode` | `(dirfd:i32, path:i32, length:i32, lookupFlags:i32) -> i32` | Stored lower nine mode bits, or negative Preview1 errno |
+| `fd_mode` | `(fd:i32) -> i32` | Stored lower nine mode bits, or negative Preview1 errno |
+
+The path form uses the same bounded UTF-8 memory, relative-path, directory-root
+and SYMLINK_FOLLOW rules as `path_filestat_get`. The imports require
+PATH_FILESTAT_GET and FD_FILESTAT_GET, respectively; invalid or unavailable
+descriptors fail, including standard byte streams without a VFS inode. The Worker
+allowlist accepts only these two names. This ABI reports metadata and grants no
+permission, ownership or execution rights. This VFS has no user/group ownership
+model: the current guest libc's synthetic numeric uid/gid `0` do not identify host
+users or grant root privileges. User/group lookup, chmod, chown and hardlinks
+remain unsupported. Preview1 reports one link per inode
+and does not represent allocated disk blocks or terminal width/color capability.
+
+Each metadata import observes one completed owner operation. A libc adapter that
+enriches a successful Preview1 stat with a separate `path_mode` call makes two
+observations; concurrent namespace changes can occur between them. The pair does
+not promise an atomic combined stat snapshot.
+
 The default per-call wait deadline is 120,000 ms, including idle stdin. Set
 `maxBlockedIoMs` explicitly (1..3,600,000) when a workflow needs a different bound.
 Deadline expiry is a runtime failure. `SpawnOptions.timeoutMs` remains the separate

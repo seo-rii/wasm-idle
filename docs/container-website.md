@@ -43,7 +43,9 @@ Runtime commands and debugging continue through the owner after shell EOF.
 Browsers without isolation can use supported batch commands but cannot start
 the interactive Bash profile.
 
-The application uses published `@wasm-idle/container@0.1.0`. Preparation pins the
+The application depends on the workspace `@wasm-idle/container` package. Build
+the workspace packages before preparing the website; the local package's actual
+version is retained, and no npm publication is required. Preparation pins the
 actual Bash/BusyBox/LLVM assets and emits a fixed application asset table in
 `src/lib/playground/container/release.ts`. It bundles only the qualified runtime
 worker entries, not a second UI. The SDK remains a native module at its fixed
@@ -51,6 +53,8 @@ hash path, preserving its `import.meta.url`. Runtime manifests cannot supply
 arbitrary host JavaScript paths.
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm --filter @wasm-idle/container... run build
 WASM_IDLE_PAGE_CONTAINER_CONFIG=/absolute/path/to/pinned-shell-config.json \
   pnpm run prepare:page-container
 ```
@@ -61,6 +65,25 @@ such as `https://seo-rii.github.io/wasm-idle/container-app/`. Generated runtime
 files live in ignored `static/container-app/`. The compiled application rebases
 only its fixed object and host paths onto the application's same-origin base,
 so local and deployed website paths use the same verified byte identities.
+
+After a workspace install, preparation detects the locally resolved Container
+package. Set `"containerSource": "workspace"` in the build configuration to
+select `packages/container` explicitly, including isolated validation that
+reuses an older dependency installation. Only the fixed built exports and
+worker entries are accepted; configuration cannot supply host JavaScript paths.
+The selected source, package version, profile and compiled entry hashes are
+recorded in `provenance.json` and included in the immutable host identity.
+`page-config.json` records the selected source and profile as well.
+
+Legacy asset preparation can explicitly set `"containerSource": "published"`
+when the installed Container package is the qualified `0.1.0` release. This
+option does not fetch or publish a package. BusyBox builds importing
+`wasm_idle_fs_v1` for virtual modes require the workspace SDK; published `0.1.0`
+cannot run that metadata profile. An old installed SDK is never selected
+implicitly. The browser application's dependency remains the workspace package.
+
+Run `node --test scripts/prepare-page-container.test.mjs` for the preparation
+source-selection and legacy compatibility checks.
 
 Normal `npm run page` keeps its existing asset preparation, verification and
 browser audit. For an explicitly requested deployment with prepared runtime

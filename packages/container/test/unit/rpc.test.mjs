@@ -120,3 +120,52 @@ test('live regular-file transfers repeat bounded RPC chunks until complete, like
   assert.throws(() => failing([undefined, new Error('RPC stopped or corrupt response')]).write(9, new Uint8Array(RPC_BYTES + 1)), /RPC stopped/);
   assert.throws(() => failing([new FsError('ENOSPC', 'full')]).write(9, new Uint8Array(1)), { code: 'ENOSPC' });
 });
+
+test('live timestamp operations retain owner capabilities, descriptor ownership and cancellation boundaries', async () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('/workspace/file', new Uint8Array([42])); fs.symlink('file', '/workspace/link');
+  const a = createLiveIo(fs, limits, 4, assert.fail), b = createLiveIo(fs, limits, 4, assert.fail), empty = new Uint8Array();
+  try {
+    const directory = (await a.dispatch(Operation.Open, ['.', { directory: true, root: '/workspace' }], empty)).value;
+    const ref = { directory, path: 'link', root: '/workspace' };
+    await a.dispatch(Operation.PathSetTimes, [ref, { atimeMs: 10, mtimeMs: 20 }, false], empty);
+    assert.equal(fs.lstat('/workspace/link').mtimeMs, 20);
+    assert.notEqual(fs.stat('/workspace/file').mtimeMs, 20);
+    await a.dispatch(Operation.PathSetTimes, [ref, { atimeMs: 30, mtimeMs: 40 }, true], empty);
+    assert.equal(fs.stat('/workspace/file').mtimeMs, 40);
+    const descriptor = (await a.dispatch(Operation.PathOpen, [{ ...ref, path: 'file' }, { read: true }, true], empty)).value;
+    await a.dispatch(Operation.FsetTimes, [descriptor, { mtimeMs: 50 }], empty);
+    assert.equal(fs.stat('/workspace/file').mtimeMs, 50);
+    const before = fs.exportSnapshot();
+    await assert.rejects(b.dispatch(Operation.FsetTimes, [descriptor, { mtimeMs: 60 }], empty), { code: 'EBADF' });
+    for (const [reference, code] of [[{ ...ref, root: '/' }, 'EACCES'], [{ ...ref, path: '../tmp/file' }, 'EACCES'], [{ ...ref, extra: true }, 'EINVAL']]) {
+      await assert.rejects(a.dispatch(Operation.PathSetTimes, [reference, { mtimeMs: 60 }, true], empty), { code });
+    }
+    for (const times of [{ ctimeMs: 1 }, { atimeMs: -1 }, { mtimeMs: 0.5 }, null]) {
+      await assert.rejects(a.dispatch(Operation.PathSetTimes, [ref, times, true], empty), { code: 'EINVAL' });
+    }
+    assert.deepEqual(fs.exportSnapshot(), before);
+    const buffer = createRpcBuffer(1), server = createRpcServer(buffer, 1, a.dispatch);
+    await server.accept(request(buffer, 1, 1, Operation.PathSetTimes, [ref, { mtimeMs: 70 }, true]));
+    assert.equal(fs.stat('/workspace/file').mtimeMs, 70);
+    const generation = fs.generation; server.stop();
+    await server.accept(request(buffer, 1, 2, Operation.PathSetTimes, [ref, { mtimeMs: 80 }, true]));
+    assert.equal(fs.generation, generation, 'a stopped channel cannot dispatch a later metadata write');
+    a.dispose();
+    await assert.rejects(a.dispatch(Operation.FsetTimes, [descriptor, { mtimeMs: 90 }], empty), { code: 'EBADF' });
+    assert.equal(fs.stat('/workspace/file').mtimeMs, 70, 'completed live metadata survives cancellation');
+  } finally { a.dispose(); b.dispose(); }
+  fs.acquireSnapshot().discard();
+});
+
+test('remote timestamp bindings retain NOW and explicit nofollow semantics across JSON RPC', () => {
+  const seen = [], remote = createRemoteFileSystem((operation, args) => { seen.push([operation, JSON.parse(JSON.stringify(args))]); return {}; });
+  remote.setTimes('file', { atimeMs: 'now' });
+  remote.fsetTimes(7, { mtimeMs: 0 });
+  const ref = { directory: 3, path: 'link', root: '/workspace' };
+  remote.paths.setTimes(ref, { atimeMs: 1 }, false);
+  assert.deepEqual(seen, [
+    [Operation.SetTimes, ['file', { atimeMs: 'now' }, {}, true]],
+    [Operation.FsetTimes, [7, { mtimeMs: 0 }]],
+    [Operation.PathSetTimes, [ref, { atimeMs: 1 }, false]]
+  ]);
+});

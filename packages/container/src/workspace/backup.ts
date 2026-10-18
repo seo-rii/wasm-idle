@@ -15,6 +15,7 @@ interface RecordEntry {
   path: string;
   type: 'directory' | 'file' | 'symlink';
   mode: number;
+  atimeMs?: number;
   mtimeMs: number;
   ctimeMs: number;
   target?: string;
@@ -41,7 +42,7 @@ export async function createWorkspaceBackup(fs: MemoryFileSystem, options: Works
   const visit = (path: string) => {
     const stat = fs.lstat(path, { root: '/workspace' });
     if (stat.type === 'character-device') throw new WorkspaceBackupError('UNSUPPORTED', 'Devices are outside the workspace backup profile');
-    const entry: RecordEntry = { path, type: stat.type, mode: stat.mode, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
+    const entry: RecordEntry = { path, type: stat.type, mode: stat.mode, atimeMs: stat.atimeMs, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
     if (entry.type === 'file') {
       if (offset + stat.size + 44 > budget.archive) throw new WorkspaceBackupError('LIMIT', 'Workspace content exceeds backup limit');
       entry.offset = offset; entry.bytes = stat.size; offset += stat.size;
@@ -84,7 +85,8 @@ export async function restoreWorkspaceBackup(fs: MemoryFileSystem, input: Uint8A
     if (!entry || typeof entry.path !== 'string' || !inside(entry.path) || entry.path.split('/').slice(1).some(part => !part || part === '.' || part === '..') || names.has(entry.path)) invalid('Archive path is invalid, duplicate or outside /workspace');
     names.add(entry.path);
     if (!['directory', 'file', 'symlink'].includes(entry.type) || !Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o777 || !Number.isFinite(entry.mtimeMs) || entry.mtimeMs < 0 || !Number.isFinite(entry.ctimeMs) || entry.ctimeMs < 0) invalid('Invalid workspace entry metadata');
-    const result: Omit<SnapshotEntry, 'inode'> = { path: entry.path, type: entry.type, mode: entry.mode, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs };
+    if (entry.atimeMs !== undefined && (!Number.isSafeInteger(entry.atimeMs) || entry.atimeMs < 0)) invalid('Invalid access timestamp');
+    const result: Omit<SnapshotEntry, 'inode'> = { path: entry.path, type: entry.type, mode: entry.mode, atimeMs: entry.atimeMs, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs };
     if (entry.type === 'file') {
       if (entry.target !== undefined || entry.offset !== offset || !Number.isSafeInteger(entry.bytes) || entry.bytes! < 0 || entry.bytes! > end - 12 - metadataLength - offset) invalid('File body overlaps or exceeds archive bounds');
       const start = 12 + metadataLength + offset; offset += entry.bytes!;

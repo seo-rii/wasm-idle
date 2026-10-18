@@ -48,7 +48,20 @@ directories. Mount readonly policy, open access and directory capabilities are
 enforced. Unix user/group ownership, chmod, hardlinks, permission-based access
 checks, arbitrary devices, sockets and arbitrary byte-string paths are unsupported. Execute
 mode metadata alone does not dispatch a command or implement shell access checks.
-Timestamps reflect in-memory modifications and are not persisted timestamps.
+Timestamps are nonnegative integer milliseconds. `atimeMs`, `mtimeMs` and `ctimeMs`
+survive snapshots and workspace persistence. Backups restore entry timestamps
+while retaining the target `/workspace` mount root's metadata, as described in
+[WORKSPACE.md](WORKSPACE.md). Older saved records without `atimeMs` initialize it
+from `mtimeMs`. Reads use a noatime policy: they do not dirty the workspace or
+change timestamps. Explicit `setTimes`/`fsetTimes` updates
+atime and/or mtime without changing contents, inode identities, descriptor offsets
+or byte/inode quota usage. An omitted field stays unchanged; `now` samples one
+owner clock value for both fields. Any requested update sets ctime to that value,
+advances the filesystem generation and invalidates file-version tokens, including
+when the requested timestamp already equals its stored value. An all-omitted
+update validates the target but changes no metadata. Writable mount policy and
+snapshot writer leases apply to timestamp mutations, including directory/symlink
+metadata; path updates follow the final symlink unless explicitly disabled.
 Filesystem string errors are translated separately by each guest ABI adapter.
 
 The built-in `/dev/null` is a character device with mode 0666 and reserved inode 0.

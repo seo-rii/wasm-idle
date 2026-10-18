@@ -10,7 +10,7 @@ export enum Operation {
   Open = 1, Close, Stat, Lstat, Fstat, DirectoryPath, Read, Pread, Write, Pwrite,
   Seek, Tell, Truncate, Realpath, Readdir, Mkdir, Unlink, Rmdir, Readlink, Symlink, Rename,
   Stdin, Stdout, StdioClose, PathOpen, PathStat, PathMkdir, PathUnlink, PathRmdir,
-  PathReadlink, PathSymlink, PathRename, DirectoryEntries
+  PathReadlink, PathSymlink, PathRename, DirectoryEntries, SetTimes, FsetTimes, PathSetTimes
 }
 export interface RpcNotice { type: 'io'; version: number; generation: number; id: number; }
 export interface RpcReply { value?: unknown; bytes?: Uint8Array; }
@@ -88,7 +88,7 @@ export function createRpcServer(buffer: SharedArrayBuffer, generation: number, d
       c.identity();
       if (busy || !notice || notice.type !== 'io' || notice.version !== RPC_VERSION || notice.generation !== generation || notice.id !== sequence + 1 || notice.id > 0x7fffffff || Atomics.load(c.header, Field.State) !== State.Request || c.header[Field.Request] !== notice.id) throw new Error('Invalid RPC request sequence');
       const operation = c.header[Field.Operation]!;
-      if (operation < Operation.Open || operation > Operation.DirectoryEntries) throw new Error('Invalid RPC operation');
+      if (operation < Operation.Open || operation > Operation.PathSetTimes) throw new Error('Invalid RPC operation');
       const [a, b] = c.lengths();
       const args: unknown = JSON.parse(decoder.decode(c.metadata.slice(0, a)));
       if (!Array.isArray(args) || args.length > 4 || c.header[Field.Error] !== 0) throw new Error('Invalid RPC arguments');

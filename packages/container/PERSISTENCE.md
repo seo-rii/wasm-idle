@@ -23,8 +23,10 @@ The caller supplies `openPersistentWorkspace` from the optional persistence
 entrypoint; this module has no dependency on the runtime asset cache or compiler
 adapters. Only `/workspace` is saved. Temporary files, home configuration and
 readonly toolchains are excluded. Paths, file bytes, directory entries, symlinks,
-permission bits, inode identities, modification/change timestamps and the inode
-allocation high-water mark are preserved.
+permission bits, inode identities, access/modification/change timestamps and the
+inode allocation high-water mark are preserved. Timestamps use integer
+milliseconds; older records without access time initialize it from modification
+time. Reads use a noatime policy and do not mark the workspace dirty.
 
 ## Commit and recovery
 

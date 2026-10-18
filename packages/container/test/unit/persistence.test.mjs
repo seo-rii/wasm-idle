@@ -114,6 +114,20 @@ async function twoGenerations(id) {
   return (await opfs.getDirectoryHandle('wasm-idle-workspaces-v1')).directories.get(id);
 }
 
+test('metadata-only saves retain explicit atime/mtime after reopen without replacing file contents', async () => {
+  let owner = await openPersistentWorkspace({ id: 'explicit-timestamps' });
+  owner.fs.writeFile('file', encode('preserved')); await owner.flush();
+  owner.fs.setTimes('file', { atimeMs: 123, mtimeMs: 456 });
+  const info = owner.fs.stat('file'); assert.equal(owner.inspect().dirty, true);
+  await owner.flush(); await owner.dispose();
+  owner = await openPersistentWorkspace({ id: 'explicit-timestamps' });
+  try {
+    assert.equal(owner.fs.stat('file').atimeMs, 123); assert.equal(owner.fs.stat('file').mtimeMs, 456);
+    assert.equal(owner.fs.stat('file').ctimeMs, info.ctimeMs); assert.equal(decode(owner.fs.readFile('file')), 'preserved');
+    assert.equal(owner.inspect().dirty, false);
+  } finally { await owner.dispose(); }
+});
+
 test('a transient blob read failure fails opening without selecting or retiring an older root', async () => {
   await twoGenerations('transient');
   readFault = (name) => name === digest('version-two') ? new DOMException('Busy storage', 'NotReadableError') : undefined;

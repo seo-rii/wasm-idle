@@ -7,6 +7,8 @@ export interface FileStat {
   readonly size: number;
   /** Type bits are not included. Only the lower nine POSIX mode bits are stored. */
   readonly mode: number;
+  /** Explicit access time; reads use a noatime policy. */
+  readonly atimeMs: number;
   readonly mtimeMs: number;
   readonly ctimeMs: number;
   /** Readonly virtual command entry: executable by a registered backend, no file body. */
@@ -24,6 +26,12 @@ export interface PathOptions {
   cwd?: string;
   /** Absolute directory capability. Absolute paths must remain under this root. */
   root?: string;
+}
+
+/** Omitted fields are unchanged; `now` is sampled once by the filesystem owner. */
+export interface FileTimes {
+  readonly atimeMs?: number | 'now';
+  readonly mtimeMs?: number | 'now';
 }
 
 export interface OpenOptions extends PathOptions {
@@ -60,6 +68,7 @@ export interface SnapshotEntry {
   readonly type: FileType;
   readonly mode: number;
   /** Omitted only for host-created package entries or older snapshot inputs. */
+  readonly atimeMs?: number;
   readonly mtimeMs?: number;
   readonly ctimeMs?: number;
   readonly data?: Uint8Array;

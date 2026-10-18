@@ -14,7 +14,7 @@ const packed = JSON.parse(execFileSync('npm', ['pack', '--ignore-scripts', '--js
 assert.equal(packed.length, 1);
 assert.equal(packed[0].name, pkg.name);
 for (const { path } of packed[0].files) {
-  assert.ok(/^(?:dist\/.*\.(?:js|d\.ts)|package\.json|[A-Z_-]+(?:\.md)?)$/u.test(path), `Unexpected tarball file: ${path}`);
+  assert.ok(/^(?:dist\/.*\.(?:js|d\.ts)|package\.json|LICENSE\.txt|[A-Z_-]+(?:\.md)?)$/u.test(path), `Unexpected tarball file: ${path}`);
 }
 for (const entry of Object.values(pkg.exports)) {
   for (const path of Object.values(entry)) assert.ok(packed[0].files.some((file) => file.path === path.replace(/^\.\//u, '')), `Missing export: ${path}`);
