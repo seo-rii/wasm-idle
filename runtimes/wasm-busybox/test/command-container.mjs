@@ -411,6 +411,38 @@ export async function exerciseCommands(config) {
 					}
 				);
 				prepare({ 'archive.tar': { type: 'file', hex: directoryTarHex } });
+				const missingRoot = `/opt/toolchains/archive-missing-${invocation}`;
+				fs.mountReadonly(missingRoot, []);
+				const missingBefore = fs.stat(missingRoot);
+				const missingArgs = ['-xmf', `${cwd}/archive.tar`, '-C', missingRoot];
+				const missingDirectory = await container.run(
+					invocation === 'argv0' ? 'tar' : 'busybox',
+					invocation === 'argv0' ? missingArgs : ['tar', ...missingArgs],
+					options
+				);
+				const missingAfter = fs.stat(missingRoot);
+				check(
+					`tar-readonly-missing-directory-no-mtime-${invocation}`,
+					missingDirectory.reason === 'exited' &&
+						Number.isInteger(missingDirectory.code) &&
+						missingDirectory.code > 0 &&
+						new TextDecoder()
+							.decode(missingDirectory.stderr)
+							.includes('Read-only file system') &&
+						missingAfter.inode === missingBefore.inode &&
+						missingAfter.atimeMs === missingBefore.atimeMs &&
+						missingAfter.mtimeMs === missingBefore.mtimeMs &&
+						fs.readdir(missingRoot).length === 0,
+					{
+						code: missingDirectory.code,
+						reason: missingDirectory.reason,
+						stderrHex: toHex(missingDirectory.stderr),
+						before: missingBefore,
+						after: missingAfter
+					}
+				);
+				// An existing directory with -m requires no write: EEXIST is valid,
+				// and the readonly inode and its metadata must remain unchanged.
 				const readonlyRoot = `/opt/toolchains/archive-regression-${invocation}`;
 				fs.mountReadonly(readonlyRoot, [
 					{
@@ -421,6 +453,7 @@ export async function exerciseCommands(config) {
 						mtimeMs: seedMtime
 					}
 				]);
+				const readonlyBefore = fs.stat(`${readonlyRoot}/data`);
 				const readonlyArgs = ['-xmf', `${cwd}/archive.tar`, '-C', readonlyRoot];
 				const readonlyDirectory = await container.run(
 					invocation === 'argv0' ? 'tar' : 'busybox',
@@ -429,11 +462,14 @@ export async function exerciseCommands(config) {
 				);
 				const readonlyInfo = fs.stat(`${readonlyRoot}/data`);
 				check(
-					`tar-readonly-directory-no-mtime-${invocation}`,
+					`tar-readonly-existing-directory-no-mtime-${invocation}`,
 					readonlyDirectory.reason === 'exited' &&
-						Number.isInteger(readonlyDirectory.code) &&
-						readonlyDirectory.code > 0 &&
-						readonlyDirectory.stderr.length > 0 &&
+						readonlyDirectory.code === 0 &&
+						readonlyDirectory.stderr.length === 0 &&
+						readonlyInfo.type === 'directory' &&
+						readonlyInfo.inode === readonlyBefore.inode &&
+						readonlyInfo.mode === readonlyBefore.mode &&
+						readonlyInfo.ctimeMs === readonlyBefore.ctimeMs &&
 						readonlyInfo.atimeMs === seedAtime &&
 						readonlyInfo.mtimeMs === seedMtime &&
 						fs.readdir(`${readonlyRoot}/data`).length === 0,
@@ -441,7 +477,8 @@ export async function exerciseCommands(config) {
 						code: readonlyDirectory.code,
 						reason: readonlyDirectory.reason,
 						stderrHex: toHex(readonlyDirectory.stderr),
-						actual: readonlyInfo
+						before: readonlyBefore,
+						after: readonlyInfo
 					}
 				);
 				for (const [id, archiveHex, directoryMtime] of [
