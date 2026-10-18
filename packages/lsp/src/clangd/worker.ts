@@ -221,7 +221,8 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 			? mountClangdHeaders(clangdRuntime.FS, event.data.assets.clangdHeaders)
 			: [
 						'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
-						'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3'
+						'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3',
+						'f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c'
 				  ].includes(wasmDigest)
 				? CLANG_RESOURCE_HEADER_DIRECTORY
 				: undefined;
