@@ -11,7 +11,7 @@
   "commandCases": 218,
   "sourcePack": {
     "path": "busybox-source-pack.tar.gz",
-    "sha256": "ef2bb68455f07b060c43f8650b06daf970cc0a0529162211aadf732c062f1427",
-    "size": 2619733
+    "sha256": "a00a72146535893e80fd12ddb56c6274daa738f169f75defd031fb0e36ffe8fc",
+    "size": 2619992
   }
 }

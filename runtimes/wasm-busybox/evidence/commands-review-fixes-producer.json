@@ -171,7 +171,7 @@
     "test/node-wasi-fixture.mjs": "8f66b7a4314f923c5a304fb5a74f1527c1268ade165f2c249f95643d2b0afa77",
     "test/command-cases.mjs": "6bb61e86574f018a3a52c84ce0c3650fce1064bed8f41442ef89330450b27b32",
     "test/command-smoke.mjs": "30a26a97d2576658e587195e0cf1ebaf36587990a963ed4d16176692bd1bc2a3",
-    "test/command-container.mjs": "52b6ea695fa17ff9daacd723440a8656cb9dd2d964f8de0e43b4dad9a9f3d8fa",
+    "test/command-container.mjs": "861bcbd41cc91fe648190ae7f0ab8f471699f52551db41551e346506568a0ad8",
     "test/archive-regression-fixtures.mjs": "08d06033021d1b6f1b3df73c55647d7272cd21f714d182265f125115931a17de",
     "scripts/test-commands.mjs": "c9e0c9ce30bbda597e76526bb24639af60bdc57567c7996bda3c22c27a5078a8"
   },
@@ -181,7 +181,7 @@
     "ccSha256": "75e997ec62297a6484f491bae28ab0ccb489daba23e398fd10fe68e9e6f0def8",
     "ccVersion": "cc (Debian 12.2.0-14+deb12u1) 12.2.0"
   },
-  "startedAt": "2026-10-18T04:04:08Z",
+  "startedAt": "2026-10-18T04:11:08Z",
   "qualifiedWasiApplets": [],
   "browserSmoke": "not-run",
   "wasi": {
@@ -190,14 +190,14 @@
       "timeout": false,
       "diagnostics": [],
       "log": "wasi-configure.log",
-      "logSha256": "072838c2f8eabfb81f1440f0f7666f2226fb997b880ff24cac6bf51e7f28e69b"
+      "logSha256": "52e662fb0673139b3a1a9cf21cd0684dfb0cd89ef944acaa4abb916691411d57"
     },
     "resolveConfig": {
       "exitCode": 0,
       "timeout": false,
       "diagnostics": [],
       "log": "wasi-resolve-config.log",
-      "logSha256": "9beb2bcd4e2cdf9e1e28d909782389fb1cc321f5390335c9cbcb1a90c8822727"
+      "logSha256": "f81b5c329bc7724bd3fc26121c19c3308697ae41d27a92b4e602b332adb576f1"
     },
     "selectedConfigFlags": [
       "BASE64",
@@ -295,7 +295,7 @@
       "timeout": false,
       "diagnostics": [],
       "log": "wasi-build.log",
-      "logSha256": "1b7a9b083871b7bf6175ccea87bfd7bf1ece4425dd408fdf79332e30d5f564e2"
+      "logSha256": "0d73a24f1459efa234ef3bb7aa72630655e96b191b6d862fe948517bfb9d3d54"
     },
     "artifact": {
       "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
@@ -306,7 +306,7 @@
       "timeout": false,
       "diagnostics": [],
       "log": "wasi-smoke.log",
-      "logSha256": "73c4d2a6f80da17ef09b97574605cdd25c12f4b3cf1a92c5057a8e4b905e2a67"
+      "logSha256": "2f8c1c01db55ea93686df3726e7f752f1a0199277a8183c073ffecad9d807c92"
     },
     "smoke": {
       "schemaVersion": 1,
@@ -667,14 +667,14 @@
       "timeout": false,
       "diagnostics": [],
       "log": "native-configure.log",
-      "logSha256": "a387c2a40c7eebd61752dbf5fb91d1e70275bfbc73d89e082009d2dce2ecf976"
+      "logSha256": "e3e0aa125a0d141b05a4f163d428fc5b8d9339b35925381aef11f489594b5725"
     },
     "resolveConfig": {
       "exitCode": 0,
       "timeout": false,
       "diagnostics": [],
       "log": "native-resolve-config.log",
-      "logSha256": "a9a8ccb3e7aaf9ce5a83c54817c81fe841202296bb8cf73abb6f6f49a8111647"
+      "logSha256": "439f0610f191b10cd713b53c85ff614602e2ff3a7469dec145ea8a9946c67697"
     },
     "selectedConfigFlags": [
       "BASE64",
@@ -772,7 +772,7 @@
       "timeout": false,
       "diagnostics": [],
       "log": "native-build.log",
-      "logSha256": "b2647ce29fabb89ca9459a12d918fc945021eebccc2b9bf55e6d416e70948f4f"
+      "logSha256": "32ecf13afff46b3028cee7faea66326b0579f0f6ba92d16005c3d4c344a49e1d"
     },
     "artifact": {
       "sha256": "beffdd2c24aae8152f13d33df8f9ac56430b5f7edd8bef62b5f2688831a953ab",
@@ -928,7 +928,7 @@
         "invocation": "multicall",
         "passed": true,
         "exitCode": 0,
-        "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+        "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722d66696e616c30322f6e61746976652d666978747572652f776f726b73706163652f6120620a",
         "stderrHex": ""
       },
       {
@@ -936,7 +936,7 @@
         "invocation": "argv0",
         "passed": true,
         "exitCode": 0,
-        "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+        "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722d66696e616c30322f6e61746976652d666978747572652f776f726b73706163652f6120620a",
         "stderrHex": ""
       }
     ]
@@ -949,7 +949,7 @@
     "timeout": false,
     "diagnostics": [],
     "log": "b1-smoke.log",
-    "logSha256": "251e753bdc0e65938d3626cd32f111bd62a5bbae662b4da7c56afa7746615729"
+    "logSha256": "bde31859b70647f43746473bf50e54347e55e48c83a621bdf0fffb6d17d7f3b7"
   },
   "b1": {
     "schemaVersion": 1,
@@ -3226,13 +3226,13 @@
     "timeout": false,
     "diagnostics": [],
     "log": "command-smoke.log",
-    "logSha256": "051a57b5953f8fa62cde0ef97525addd9a72dee1ede0e1f3ce9352e48d62bc39"
+    "logSha256": "d4da55671c5b1037d20ed998f02d78e5e739ead5523ee7873dd05ae1313e93bc"
   },
   "commands": {
     "schemaVersion": 1,
     "profile": "busybox-command-stage-4",
     "stage": 4,
-    "generatedAt": "2026-10-18T04:05:00.215Z",
+    "generatedAt": "2026-10-18T04:11:57.226Z",
     "node": "v24.1.0",
     "artifact": {
       "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
@@ -10964,7 +10964,7 @@
   ],
   "sourcePack": {
     "path": "busybox-source-pack.tar.gz",
-    "sha256": "ef2bb68455f07b060c43f8650b06daf970cc0a0529162211aadf732c062f1427",
-    "size": 2619733
+    "sha256": "a00a72146535893e80fd12ddb56c6274daa738f169f75defd031fb0e36ffe8fc",
+    "size": 2619992
   }
 }
