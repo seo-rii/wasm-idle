@@ -125,9 +125,10 @@ For gzip integrity checking, `gunzip -t` still decodes and checks the real strea
 without producing output. Corrupt input, readonly mounts and quota errors return
 nonzero statuses.
 
-Extraction rejects parent path components and existing symlink parents. It is
-not transactional: an error may leave newly created partial entries. Normal VFS
-capability checks and quotas continue to apply.
+Upstream tar/unzip strip unsafe absolute and parent prefixes from member names,
+warning when names change. Extraction then rejects any remaining `..` components
+and existing symlink parents. It is not transactional: an error may leave newly
+created partial entries. Normal VFS capability checks and quotas continue to apply.
 
 The cumulative command corpus covers both invocation forms and all four real
 container profiles. Additional reproducible archive checks run against explicit
