@@ -4,14 +4,14 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
 	chmodSync,
-	closeSync,
 	lstatSync,
+	lutimesSync,
+	utimesSync,
 	mkdirSync,
 	openSync,
 	readFileSync,
 	readdirSync,
 	readlinkSync,
-	statSync,
 	symlinkSync,
 	writeFileSync
 } from 'node:fs';
@@ -20,6 +20,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { WASI } from 'node:wasi';
 import { checkCommandResult, compareTree, createCommandMatrix, fromHex } from './command-cases.mjs';
+import {
+	assertBusyboxImports,
+	closeOwnedDescriptors,
+	createNodeWasiMetadata
+} from './node-wasi-fixture.mjs';
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const stable = (tree) =>
@@ -35,13 +40,20 @@ function prepare(root, tree) {
 		);
 		const full = join(root, path);
 		if (entry.type === 'directory') {
-			mkdirSync(full, { mode: 0o755 });
-			chmodSync(full, 0o755);
+			mkdirSync(full, { mode: entry.mode ?? 0o755 });
+			chmodSync(full, entry.mode ?? 0o755);
 		} else if (entry.type === 'symlink') symlinkSync(entry.target, full);
 		else {
-			writeFileSync(full, fromHex(entry.hex), { mode: 0o644 });
-			chmodSync(full, 0o644);
+			writeFileSync(full, fromHex(entry.hex), { mode: entry.mode ?? 0o644 });
+			chmodSync(full, entry.mode ?? 0o644);
 		}
+	}
+	for (const [path, entry] of Object.entries(tree)) {
+		if (entry.atimeMs === undefined && entry.mtimeMs === undefined) continue;
+		const full = join(root, path),
+			info = lstatSync(full);
+		const set = entry.type === 'symlink' ? lutimesSync : utimesSync;
+		set(full, (entry.atimeMs ?? info.atimeMs) / 1000, (entry.mtimeMs ?? info.mtimeMs) / 1000);
 	}
 }
 function snapshot(root, prefix = '') {
@@ -77,70 +89,6 @@ const contentTree = (tree) =>
 		])
 	);
 
-// Node does not expose its WASI fd table. Observe successful opens solely to
-// implement the producer's metadata ABI using the same trusted fixture paths.
-function metadataImports(wasiImports, guestRoot, getInstance) {
-	const paths = new Map([[3, guestRoot]]);
-	const view = () => new DataView(getInstance().exports.memory.buffer);
-	const target = (fd, ptr, length) => {
-		const base = paths.get(fd >>> 0);
-		if (!base) throw Object.assign(new Error('Unknown WASI descriptor'), { code: 'EBADF' });
-		const memory = new Uint8Array(getInstance().exports.memory.buffer);
-		ptr >>>= 0;
-		length >>>= 0;
-		if (ptr > memory.length || length > memory.length - ptr)
-			throw Object.assign(new Error('Out of bounds'), { code: 'EFAULT' });
-		const name = new TextDecoder('utf-8', { fatal: true }).decode(
-			memory.subarray(ptr, ptr + length)
-		);
-		const full = name.startsWith('/') ? resolve(guestRoot, `.${name}`) : resolve(base, name);
-		const local = relative(guestRoot, full);
-		if (local === '..' || local.startsWith('../'))
-			throw Object.assign(new Error('Outside fixture'), { code: 'EACCES' });
-		return full;
-	};
-	const oldOpen = wasiImports.path_open.bind(wasiImports);
-	wasiImports.path_open = (...args) => {
-		const result = oldOpen(...args);
-		if (result === 0)
-			paths.set(view().getUint32(args[8] >>> 0, true), target(args[0], args[2], args[3]));
-		return result;
-	};
-	const oldClose = wasiImports.fd_close.bind(wasiImports);
-	wasiImports.fd_close = (fd) => {
-		const result = oldClose(fd);
-		if (result === 0) paths.delete(fd >>> 0);
-		return result;
-	};
-	const errno = (error) =>
-		-(
-			{ EBADF: 8, EACCES: 2, EFAULT: 21, EINVAL: 28, ELOOP: 32, ENOENT: 44, ENOTDIR: 54 }[
-				error.code
-			] ?? 29
-		);
-	return {
-		path_mode(fd, ptr, length, flags) {
-			try {
-				if (flags & ~1) return -28;
-				const path = target(fd, ptr, length);
-				return (flags & 1 ? statSync(path) : lstatSync(path)).mode & 0o777;
-			} catch (error) {
-				return errno(error);
-			}
-		},
-		fd_mode(fd) {
-			try {
-				if (fd < 3) return -8;
-				const path = paths.get(fd >>> 0);
-				if (!path) return -8;
-				return statSync(path).mode & 0o777;
-			} catch (error) {
-				return errno(error);
-			}
-		}
-	};
-}
-
 export async function runCommandSmoke(options) {
 	const matrix = createCommandMatrix(Number(options.stage ?? 1));
 	const work = resolve(options.work),
@@ -149,6 +97,7 @@ export async function runCommandSmoke(options) {
 	mkdirSync(work, { mode: 0o700 });
 	const module = await WebAssembly.compile(artifact),
 		cases = [];
+	assertBusyboxImports(WebAssembly.Module.imports(module), matrix.stage);
 	const matrixBytes = Buffer.from(JSON.stringify(matrix, null, 2) + '\n');
 	writeFileSync(join(work, 'command-cases.json'), matrixBytes, { flag: 'wx', mode: 0o600 });
 	for (const test of matrix.cases)
@@ -201,7 +150,7 @@ export async function runCommandSmoke(options) {
 						openSync(outputPath, 'wx', 0o600),
 						openSync(errorPath, 'wx', 0o600)
 					];
-					let code;
+					let code, metadata;
 					try {
 						const wasi = new WASI({
 							version: 'preview1',
@@ -217,11 +166,11 @@ export async function runCommandSmoke(options) {
 						});
 						let instance;
 						const imports = wasi.getImportObject();
-						imports.wasm_idle_fs_v1 = metadataImports(
-							imports.wasi_snapshot_preview1,
-							guestRoot,
-							() => instance
-						);
+						metadata = createNodeWasiMetadata(imports.wasi_snapshot_preview1, {
+							preopens: { '/': guestRoot },
+							getInstance: () => instance
+						});
+						imports.wasm_idle_fs_v1 = metadata.imports;
 						imports.wasm_idle_process_v1 = {
 							initial_cwd(pointer, capacity) {
 								const value = Buffer.from('/workspace/a b\0'),
@@ -241,15 +190,8 @@ export async function runCommandSmoke(options) {
 						instance = await WebAssembly.instantiate(module, imports);
 						code = wasi.start(instance);
 					} finally {
-						for (const fd of fds) {
-							// Node WASI fd_close closes the supplied host descriptor too.
-							// Upstream applets such as od legitimately close stdin.
-							try {
-								closeSync(fd);
-							} catch (error) {
-								if (error.code !== 'EBADF') throw error;
-							}
-						}
+						metadata?.dispose();
+						closeOwnedDescriptors(fds);
 					}
 					stepResults.wasm.push(
 						checkCommandResult(

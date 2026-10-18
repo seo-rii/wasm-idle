@@ -32,10 +32,11 @@ def verify(work):
     assert receipt['probeScriptSha256'] == sha(ROOT / 'scripts/probe.py')
     assert receipt['smokeScriptSha256'] == sha(ROOT / 'test/smoke.mjs')
     assert receipt['b1Scripts'] == {path: sha(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')}
-    command_sources = ('commands.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+    command_sources = ('commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
                        'test/command-container.mjs', 'scripts/test-commands.mjs')
     assert receipt['commandScripts'] == {path: sha(ROOT / path) for path in command_sources}
     assert receipt['commandStage'] == manifest['commandStage']
+    assert receipt['metadataAbi'] == manifest.get('metadataAbi')
     assert receipt['commandSmokePassed'] and receipt['commandRun']['exitCode'] == 0
     assert receipt['toolchain']['files'] == manifest['toolchain']['files']
     assert receipt['toolchain']['trees'] == manifest['toolchain']['trees']
@@ -58,8 +59,14 @@ def verify(work):
     assert smoke == receipt['wasi']['smoke'] and smoke['passed']
     assert smoke['artifact'] == artifact
     assert smoke['memory']['maximumPages'] <= 1024
+    metadata_abi = manifest['commandStage'] >= 3
     assert all(entry['kind'] == 'function' and (entry['module'] == 'wasi_snapshot_preview1'
-               or (entry['module'] == 'wasm_idle_process_v1' and entry['name'] == 'initial_cwd')) for entry in smoke['imports'])
+               or (entry['module'] == 'wasm_idle_process_v1' and entry['name'] == 'initial_cwd')
+               or (metadata_abi and entry['module'] == 'wasm_idle_fs_v1' and entry['name'] in ('path_mode', 'fd_mode')))
+               for entry in smoke['imports'])
+    assert sorted(entry['name'] for entry in smoke['imports'] if entry['module'] == 'wasm_idle_fs_v1') == (
+        ['fd_mode', 'path_mode'] if metadata_abi else [])
+    assert sum(entry['module'] == 'wasm_idle_process_v1' for entry in smoke['imports']) == 1
     assert smoke['processAbi'] == 'wasm_idle_process_v1' and smoke['cwd'] == '/workspace/a b' and smoke['env'] == {}
     assert len(smoke['cases']) == 20 and all(case['passed'] for case in smoke['cases'])
     assert len(smoke['startupCases']) == 4 and all(case['passed'] for case in smoke['startupCases'])

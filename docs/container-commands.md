@@ -38,10 +38,10 @@ head -n 1 /workspace/names.txt
 wc -l /workspace/names.txt
 ```
 
-## Pending stages
+## Staged additions
 
-The following stages are planned additions and are not advertised by the stage 1
-registry or binary.
+The registry and binary expand cumulatively with each stage. Stages 1 through 3
+are implemented here; archive commands follow in stage 4.
 
 | Stage | Commands and changes |
 | --- | --- |
@@ -64,3 +64,36 @@ The exact 486,866-byte upstream BusyBox Wasm (SHA-256 `939faca10df3f30f96092eb05
 Adds `sed`, query-only `find`, `diff`, `cmp`, `ln -s`, `sha256sum`, `base64`, `od` and `hexdump`, plus content-tree `cp -r/-R`. Existing B1 recursive-copy rejection cases are replaced by positive recursive-copy tests. `sed -i`, hardlinks, find process/deletion actions and copy metadata preservation remain explicit errors. Base64 retains upstream garbage-skipping semantics and rejects truncated quartets. Binary dumps and stdin comparisons use real file streams rather than POSIX descriptor replacement or temporary-file emulation.
 
 Stage 2 qualification: the 551,862-byte Wasm SHA-256 is `45e067aa95cb76b1c8dba19dcde9eb85736ba45486f19fe77c38030eaf1bccb8`. Native/WASI executes all 166 cumulative command cases successfully; Node/Chromium batch/live executes 664 cumulative command cases successfully. The original B0 and the updated 104-invocation B1 gates also pass. Complete receipts are retained under `runtimes/wasm-busybox/evidence/commands-stage2-*.json`.
+
+## Stage 3 filesystem metadata
+
+`touch`, `stat` and `ls -l/-n` use the virtual filesystem's stored mode, size,
+type and independent access/modification timestamps. Touch supports creation,
+`-c`, `-a`, `-m`, explicit dates and reference files through real WASI timestamp
+operations. Timestamps have millisecond resolution, reads use noatime, and
+snapshot commits, live workers, persistence and backups preserve these fields.
+Old snapshots without access time default it to modification time.
+
+This stage requires the workspace Container `virtual-metadata-v1` host. Website
+preparation verifies that selection before generating assets, fingerprints its
+entry points and profile, and bundles its actual workers. A legacy published
+0.1.0 host cannot satisfy the new BusyBox metadata imports.
+
+Numeric uid/gid 0 and link count 1 describe the virtual filesystem. Account names,
+allocated blocks and physical device fields are unavailable and `stat` reports
+them as `UNKNOWN`; `ls -s` fails explicitly. Creation modes remain host-owned,
+with no chmod, chown or hardlink commands. `touch` dates rejected by pinned libc,
+including pre-epoch/overflow values, fail before mutation. In live execution,
+libc stat and the stored-mode lookup are separate observations, so a concurrent
+rename can change the namespace between those operations.
+
+```sh
+touch -t 202001020304.05 /workspace/example.txt
+stat -c '%s %a %X %Y' /workspace/example.txt
+ls -ln /workspace/example.txt
+```
+
+Producer, container and actual Bash qualification receipts for this stage are
+retained under `runtimes/wasm-busybox/evidence/commands-stage3-*.json`.
+
+Stage 3 qualification: the 598,169-byte Wasm SHA-256 is `fc34cb5005690d5fc00f3df973014d3978d97c7ecfcbebdcaa6f7b81b9a793e9`. All 196 cumulative native/WASI command invocations and 784 Node/Chromium batch/live invocations pass, with the retained B0 and 104-invocation B1 gates. Focused host metadata, RPC, persistence and backup tests also pass.

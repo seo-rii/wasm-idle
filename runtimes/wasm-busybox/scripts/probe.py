@@ -148,7 +148,7 @@ def source_pack(work, archive, source_dir):
     for relative in ['manifest.json', 'README.md', 'NOTICE', 'config/b0.config', 'config/b1.config',
                      'scripts/probe.py', 'scripts/verify.py', 'test/smoke.mjs',
                      'test/b1-smoke.mjs', 'test/b1-cases.mjs', 'patches/README.md',
-                     'commands.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+                     'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
                      'test/command-container.mjs', 'scripts/test-commands.mjs']:
         members['producer/' + relative] = ROOT / relative
     for patch in sorted((ROOT / 'patches').glob('*.patch')):
@@ -228,8 +228,9 @@ def main():
                'smokeScriptSha256': digest(ROOT / 'test/smoke.mjs'),
                'b1Scripts': {path: digest(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')},
                'commandStage': manifest['commandStage'],
+               'metadataAbi': manifest.get('metadataAbi'),
                'commandScripts': {path: digest(ROOT / path) for path in (
-                   'commands.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+                   'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
                    'test/command-container.mjs', 'scripts/test-commands.mjs')},
                'jobs': args.jobs,
                'host': {'system': platform.platform(), 'ccSha256': digest(Path(host_cc)),
@@ -286,7 +287,7 @@ def main():
                     shutil.copyfile(binary, wasm)
                     result['nodeSmoke'] = run_logged([
                         'node', str(ROOT / 'test/smoke.mjs'), str(wasm), str(work / 'node-smoke'),
-                        str(work / 'wasi-smoke.json')], work / 'wasi-smoke.log', environment)
+                        str(work / 'wasi-smoke.json'), str(manifest['commandStage'])], work / 'wasi-smoke.log', environment)
                     if (work / 'wasi-smoke.json').is_file():
                         result['smoke'] = json.loads((work / 'wasi-smoke.json').read_text())
                     result['requiresQualification'] = ['browser-byte-smoke', 'common-container-vfs']
@@ -299,7 +300,7 @@ def main():
     if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed']:
         receipt['b1Run'] = run_logged([
             'node', str(ROOT / 'test/b1-smoke.mjs'), str(work / 'busybox.wasm'),
-            str(work / 'native-build/busybox'), str(work / 'b1-smoke'), str(work / 'b1-smoke.json')],
+            str(work / 'native-build/busybox'), str(work / 'b1-smoke'), str(work / 'b1-smoke.json'), str(manifest['commandStage'])],
             work / 'b1-smoke.log', environment)
         if (work / 'b1-smoke.json').is_file():
             receipt['b1'] = json.loads((work / 'b1-smoke.json').read_text())

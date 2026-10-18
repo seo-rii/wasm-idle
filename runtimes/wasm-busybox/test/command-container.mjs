@@ -80,9 +80,21 @@ export async function exerciseCommands(config) {
 			a < b ? -1 : a > b ? 1 : 0
 		)) {
 			const full = `${cwd}/${path}`;
-			if (entry.type === 'directory') fs.mkdir(full);
+			if (entry.type === 'directory') fs.mkdir(full, { mode: entry.mode ?? 0o755 });
 			else if (entry.type === 'symlink') fs.symlink(entry.target, full);
-			else fs.writeFile(full, fromHex(entry.hex));
+			else fs.writeFile(full, fromHex(entry.hex), { mode: entry.mode ?? 0o644 });
+		}
+		for (const [path, entry] of Object.entries(tree)) {
+			if (entry.atimeMs === undefined && entry.mtimeMs === undefined) continue;
+			fs.setTimes(
+				`${cwd}/${path}`,
+				{
+					...(entry.atimeMs === undefined ? {} : { atimeMs: entry.atimeMs }),
+					...(entry.mtimeMs === undefined ? {} : { mtimeMs: entry.mtimeMs })
+				},
+				{},
+				entry.type !== 'symlink'
+			);
 		}
 	}
 	function snapshot(prefix = '') {

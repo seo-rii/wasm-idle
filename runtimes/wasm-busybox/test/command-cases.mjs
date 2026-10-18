@@ -316,7 +316,16 @@ add(2, 'hexdump-format', 'hexdump', ['-v', '-e', '1/1 "%02x"'], {
 const stamp = 1577934245000;
 add(3, 'touch-create', 'touch', ['new file'], { after: { 'new file': file('') } });
 add(3, 'touch-preserve-existing-bytes', 'touch', ['existing'], {
-	before: { existing: file(binary) }
+	before: { existing: { ...file(binary), atimeMs: stamp, mtimeMs: stamp } },
+	after: { existing: { ...file(binary), atimeAfterMs: stamp, mtimeAfterMs: stamp } }
+});
+add(3, 'touch-access-only', 'touch', ['-a', 'meta.txt'], {
+	before: { 'meta.txt': { ...file('abc'), atimeMs: stamp, mtimeMs: stamp } },
+	after: { 'meta.txt': { ...file('abc'), atimeAfterMs: stamp, mtimeMs: stamp } }
+});
+add(3, 'touch-modification-only', 'touch', ['-m', 'meta.txt'], {
+	before: { 'meta.txt': { ...file('abc'), atimeMs: stamp, mtimeMs: stamp } },
+	after: { 'meta.txt': { ...file('abc'), atimeMs: stamp, mtimeAfterMs: stamp } }
 });
 add(3, 'touch-no-create', 'touch', ['-c', 'missing']);
 add(3, 'touch-explicit-time', 'touch', ['-t', '202001020304.05', 'meta.txt'], {
@@ -338,6 +347,10 @@ add(3, 'touch-missing-parent', 'touch', ['missing/file'], missing);
 add(3, 'stat-file', 'stat', ['-c', '%s|%F|%a', 'meta.txt'], {
 	before: { 'meta.txt': file('abc') },
 	output: '3|regular file|644\n'
+});
+add(3, 'stat-custom-mode', 'stat', ['-c', '%s|%F|%a', 'meta.txt'], {
+	before: { 'meta.txt': { ...file('abc'), mode: 0o751 } },
+	output: '3|regular file|751\n'
 });
 add(3, 'stat-empty', 'stat', ['-c', '%s|%F', 'empty'], {
 	before: { empty: file('') },
@@ -496,6 +509,13 @@ export function compareTree(actual, expected) {
 		for (const key of ['type', 'hex', 'target', 'mode', 'mtimeMs', 'atimeMs']) {
 			if (wanted[key] !== undefined && wanted[key] !== found[key])
 				failures.push(`${path}:${key}`);
+		}
+		for (const [minimum, field] of [
+			['atimeAfterMs', 'atimeMs'],
+			['mtimeAfterMs', 'mtimeMs']
+		]) {
+			if (wanted[minimum] !== undefined && !(found[field] > wanted[minimum]))
+				failures.push(`${path}:${minimum}`);
 		}
 		if (
 			wanted.minBytes !== undefined &&

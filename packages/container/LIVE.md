@@ -98,6 +98,11 @@ users or grant root privileges. User/group lookup, chmod, chown and hardlinks
 remain unsupported. Preview1 reports one link per inode
 and does not represent allocated disk blocks or terminal width/color capability.
 
+Each metadata import observes one completed owner operation. A libc adapter that
+enriches a successful Preview1 stat with a separate `path_mode` call makes two
+observations; concurrent namespace changes can occur between them. The pair does
+not promise an atomic combined stat snapshot.
+
 The default per-call wait deadline is 120,000 ms, including idle stdin. Set
 `maxBlockedIoMs` explicitly (1..3,600,000) when a workflow needs a different bound.
 Deadline expiry is a runtime failure. `SpawnOptions.timeoutMs` remains the separate
