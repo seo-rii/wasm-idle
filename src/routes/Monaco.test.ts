@@ -81,7 +81,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/occurrencesHighlight: 'off'/);
 		expect(source).toMatch(
-			/const modelUriString = \$derived\(`file:\/\/\/workspace\/\$\{normalizedFilePath\}`\);/
+			/const uri = monacoApi\.Uri\.file\(`\/workspace\/\$\{normalizedFilePath\}`\);/
 		);
 		expect(source).toMatch(
 			/globalThis as typeof globalThis & \{ MonacoEnvironment\?: unknown \}/

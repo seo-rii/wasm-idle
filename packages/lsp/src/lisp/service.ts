@@ -1,5 +1,6 @@
 import {
 	positionAt,
+	uriToPath,
 	type LspDiagnostic,
 	type LspDocument,
 	type LspDocumentContext,
@@ -197,7 +198,7 @@ export function createLispWorkerService(
 		},
 		async diagnostics(document: LspDocument, context: LspDocumentContext) {
 			if (!compiler || !document.text.trim()) return [];
-			const fileName = normalizePath(new URL(document.uri).pathname);
+			const fileName = normalizePath(uriToPath(document.uri));
 			const key = `${fileName}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress('lisp-diagnostics');

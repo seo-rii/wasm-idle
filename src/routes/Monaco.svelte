@@ -2609,7 +2609,6 @@
 		(filePath || `main.${language || 'txt'}`).replace(/\\/g, '/').replace(/^\/+/, '') ||
 			'main.txt'
 	);
-	const modelUriString = $derived(`file:///workspace/${normalizedFilePath}`);
 	const editorSetting = $derived<IMonacoSetting>({
 		automaticLayout: true,
 		fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
@@ -3545,7 +3544,7 @@
 	$effect(() => {
 		const monacoApi = Monaco;
 		if (!monacoApi) return;
-		const uri = monacoApi.Uri.parse(modelUriString);
+		const uri = monacoApi.Uri.file(`/workspace/${normalizedFilePath}`);
 		const initialValue = untrack(() => value ?? defaultValue);
 		let nextModel = monacoApi.editor.getModel(uri) as monaco.editor.ITextModel | null;
 		if (!nextModel) {
