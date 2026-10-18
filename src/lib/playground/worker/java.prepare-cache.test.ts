@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { test } from 'vitest';
+import { prepareJavaExceptionBridge } from '../javaRuntimeErrors';
 
 const source = readFileSync(new URL('./java.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
@@ -13,17 +14,25 @@ const compiled = ts.transpileModule(source, {
 
 function worker() {
 	const messages: any[] = [];
-	const counts = { compile: 0, generate: 0, run: 0, initialize: 0 };
-	const failure = { compile: false, generate: false, output: false };
+	const counts = { compile: 0, bridgeCompile: 0, generate: 0, run: 0, initialize: 0 };
+	const failure = { compile: false, bridge: false, generate: false, output: false };
+	let compilingBridge = false;
 	let onDiagnostic: ((diagnostic: any) => void) | undefined;
 	let handler!: (event: { data: any }) => Promise<void>;
 	const compiler = {
 		setSdk() {},
 		setTeaVMClasslib() {},
-		clearSourceFiles() {},
+		clearSourceFiles() {
+			compilingBridge = false;
+		},
 		clearInputClassFiles() {},
 		clearOutputFiles() {},
-		addSourceFile() {},
+		addSourceFile(name: string) {
+			compilingBridge = name.startsWith('WasmIdleJava');
+		},
+		listOutputFiles: () => ['Main.class'],
+		getOutputFile: () => new Int8Array([1]),
+		addClassFile() {},
 		onDiagnostic(callback: typeof onDiagnostic) {
 			onDiagnostic = callback;
 			return () => {
@@ -31,6 +40,11 @@ function worker() {
 			};
 		},
 		compile() {
+			if (compilingBridge) {
+				counts.bridgeCompile++;
+				onDiagnostic?.({ severity: 'other', message: 'internal generated-source note' });
+				return !failure.bridge;
+			}
 			counts.compile++;
 			onDiagnostic?.({
 				fileName: 'Main.java',
@@ -79,6 +93,7 @@ function worker() {
 		Int8Array,
 		Int32Array,
 		Error,
+		WebAssembly: { compile: async () => ({}) },
 		URL: { createObjectURL: () => 'blob:loader', revokeObjectURL() {} },
 		self: {
 			addEventListener: (_: string, listener: typeof handler) => {
@@ -87,6 +102,7 @@ function worker() {
 			postMessage: (message: any) => messages.push(message)
 		},
 		require: (id: string) => {
+			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
 			if (id === './javaStreaming')
 				return {
 					acceptCompiledTeaVmModule: (source: string) => source,
@@ -105,7 +121,11 @@ function worker() {
 						usesStdin: false,
 						stdinCacheKey: 'host-chunks-v1'
 					}),
-					createJavaStdinBridge: () => ({ readByte: () => -1, readChunk: () => null, dispose() {} })
+					createJavaStdinBridge: () => ({
+						readByte: () => -1,
+						readChunk: () => null,
+						dispose() {}
+					})
 				};
 			if (id === '$lib/playground/javaSource')
 				return {
@@ -144,7 +164,13 @@ test('unchanged prepare requests compile only once and never execute the program
 	await w.load();
 	await w.run();
 	await w.run();
-	assert.deepEqual(w.counts, { compile: 1, generate: 1, run: 0, initialize: 1 });
+	assert.deepEqual(w.counts, {
+		compile: 1,
+		bridgeCompile: 1,
+		generate: 1,
+		run: 0,
+		initialize: 1
+	});
 	assert.equal(w.messages.at(-1)?.results, true);
 });
 
@@ -183,7 +209,7 @@ test('changes to workspace contents invalidate a same-length file list', async (
 	assert.equal(w.counts.compile, 2);
 });
 
-for (const stage of ['compile', 'generate', 'output'] as const) {
+for (const stage of ['compile', 'bridge', 'generate', 'output'] as const) {
 	test(`a failed ${stage} cannot leave the previous artifact eligible for reuse`, async () => {
 		const w = worker();
 		await w.load();

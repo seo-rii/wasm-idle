@@ -1,0 +1,262 @@
+diff --git a/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java b/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java
+new file mode 100644
+index 0000000..d3712c9
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java
+@@ -0,0 +1,244 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.util.ArrayDeque;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import org.teavm.dependency.AbstractDependencyListener;
++import org.teavm.dependency.DependencyAgent;
++import org.teavm.dependency.MethodDependency;
++import org.teavm.model.FieldReference;
++import org.teavm.model.MethodDescriptor;
++import org.teavm.model.MethodHandle;
++import org.teavm.model.MethodReader;
++import org.teavm.model.MethodReference;
++import org.teavm.model.ProgramReader;
++import org.teavm.model.RuntimeConstant;
++import org.teavm.model.ValueType;
++import org.teavm.model.VariableReader;
++import org.teavm.model.instructions.AbstractInstructionReader;
++import org.teavm.model.instructions.ArrayElementType;
++import org.teavm.model.instructions.InvocationType;
++
++/**
++ * Makes {@code Object.clone()} aware of primitive arrays that are cloned by a method.
++ * <p>
++ * WebAssembly GC backend puts clone function into class of a primitive array only when the array type
++ * reaches {@code this} of {@code Object.clone()}. Dependency analyzer does this for array clone instruction
++ * by connecting variable that holds the array to {@code this}. However, it creates nodes only for variables
++ * that escape method (i.e. passed to a method, stored to a field, returned and so on), and array clone does not
++ * count as escape. So, for code like {@code int[] b = a.clone(); b[0] = 1;}, where neither {@code a} nor
++ * {@code b} escape, {@code int[]} class does not get clone function and clone fails at runtime with
++ * "dereferencing a null pointer". This listener infers static type of cloned arrays and propagates
++ * primitive array types to {@code Object.clone()} explicitly. Static type of primitive array is exact,
++ * since such arrays don't have subtypes. Reference arrays are not affected by the problem, since their classes
++ * always get clone function.
++ */
++class ArrayCloneDependencySupport extends AbstractDependencyListener {
++    private static final MethodReference CLONE_METHOD = new MethodReference(Object.class, "clone", Object.class);
++
++    @Override
++    public void methodReached(DependencyAgent agent, MethodDependency method) {
++        var methodReader = method.getMethod();
++        var program = methodReader != null ? methodReader.getProgram() : null;
++        if (program == null || !hasArrayClone(program)) {
++            return;
++        }
++        var analyzer = new Analyzer(methodReader);
++        for (var i = 0; i < program.basicBlockCount(); ++i) {
++            var block = program.basicBlockAt(i);
++            for (var phi : block.readPhis()) {
++                for (var incoming : phi.readIncomings()) {
++                    analyzer.addSource(phi.getReceiver(), incoming.getValue(), 0);
++                }
++            }
++            block.readAllInstructions(analyzer);
++        }
++        var cloneThis = agent.linkMethod(CLONE_METHOD).getVariable(0);
++        for (var type : analyzer.collectTypes(analyzer.clonedArrays)) {
++            if (type instanceof ValueType.Array
++                    && ((ValueType.Array) type).getItemType() instanceof ValueType.Primitive) {
++                cloneThis.propagate(agent.getType(type));
++            }
++        }
++    }
++
++    private static boolean hasArrayClone(ProgramReader program) {
++        var found = new boolean[1];
++        var reader = new AbstractInstructionReader() {
++            @Override
++            public void cloneArray(VariableReader receiver, VariableReader array) {
++                found[0] = true;
++            }
++        };
++        for (var i = 0; i < program.basicBlockCount() && !found[0]; ++i) {
++            program.basicBlockAt(i).readAllInstructions(reader);
++        }
++        return found[0];
++    }
++
++    private static class Source {
++        final ValueType type;
++        final int variable;
++        final int depth;
++
++        Source(ValueType type, int variable, int depth) {
++            this.type = type;
++            this.variable = variable;
++            this.depth = depth;
++        }
++    }
++
++    private static class Analyzer extends AbstractInstructionReader {
++        private static final int MAX_DEPTH = 255;
++        final Map<Integer, List<Source>> sources = new HashMap<>();
++        final List<Integer> clonedArrays = new ArrayList<>();
++
++        Analyzer(MethodReader method) {
++            for (var i = 0; i < method.parameterCount(); ++i) {
++                addType(i + 1, method.parameterType(i));
++            }
++        }
++
++        void addType(int variable, ValueType type) {
++            sources.computeIfAbsent(variable, k -> new ArrayList<>()).add(new Source(type, -1, 0));
++        }
++
++        void addSource(VariableReader receiver, VariableReader source, int depth) {
++            sources.computeIfAbsent(receiver.getIndex(), k -> new ArrayList<>())
++                    .add(new Source(null, source.getIndex(), depth));
++        }
++
++        // Collects static types of values of given variables. Each work item is a variable and a depth,
++        // where non-zero depth means types of array items of the given nesting level.
++        Set<ValueType> collectTypes(List<Integer> variables) {
++            var result = new LinkedHashSet<ValueType>();
++            var visited = new HashSet<Long>();
++            var stack = new ArrayDeque<Long>();
++            for (var variable : variables) {
++                stack.push((long) variable << 8);
++            }
++            while (!stack.isEmpty()) {
++                var item = stack.pop();
++                if (!visited.add(item)) {
++                    continue;
++                }
++                var depth = (int) (item & 255);
++                var variableSources = sources.get((int) (item >>> 8));
++                if (variableSources == null) {
++                    continue;
++                }
++                for (var source : variableSources) {
++                    if (source.type == null) {
++                        if (depth + source.depth <= MAX_DEPTH) {
++                            stack.push(((long) source.variable << 8) | (depth + source.depth));
++                        }
++                        continue;
++                    }
++                    var type = source.type;
++                    var level = 0;
++                    while (level < depth && type instanceof ValueType.Array) {
++                        type = ((ValueType.Array) type).getItemType();
++                        ++level;
++                    }
++                    if (level == depth) {
++                        result.add(type);
++                    }
++                }
++            }
++            return result;
++        }
++
++        @Override
++        public void createArray(VariableReader receiver, ValueType itemType, VariableReader size) {
++            addType(receiver.getIndex(), ValueType.arrayOf(itemType));
++        }
++
++        @Override
++        public void createArray(VariableReader receiver, ValueType itemType,
++                List<? extends VariableReader> dimensions) {
++            addType(receiver.getIndex(), itemType);
++        }
++
++        @Override
++        public void cloneArray(VariableReader receiver, VariableReader array) {
++            clonedArrays.add(array.getIndex());
++            addSource(receiver, array, 0);
++        }
++
++        @Override
++        public void assign(VariableReader receiver, VariableReader assignee) {
++            addSource(receiver, assignee, 0);
++        }
++
++        @Override
++        public void nullCheck(VariableReader receiver, VariableReader value) {
++            addSource(receiver, value, 0);
++        }
++
++        @Override
++        public void unwrapArray(VariableReader receiver, VariableReader array, ArrayElementType elementType) {
++            addSource(receiver, array, 0);
++        }
++
++        @Override
++        public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
++            if (targetType instanceof ValueType.Array) {
++                addType(receiver.getIndex(), targetType);
++            } else {
++                addSource(receiver, value, 0);
++            }
++        }
++
++        @Override
++        public void getElement(VariableReader receiver, VariableReader array, VariableReader index,
++                ArrayElementType type) {
++            if (type == ArrayElementType.OBJECT) {
++                addSource(receiver, array, 1);
++            }
++        }
++
++        @Override
++        public void getField(VariableReader receiver, VariableReader instance, FieldReference field,
++                ValueType fieldType) {
++            addType(receiver.getIndex(), fieldType);
++        }
++
++        @Override
++        public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
++                List<? extends VariableReader> arguments, InvocationType type) {
++            if (receiver != null) {
++                addType(receiver.getIndex(), method.getReturnType());
++            }
++        }
++
++        @Override
++        public void invokeDynamic(VariableReader receiver, VariableReader instance, MethodDescriptor method,
++                List<? extends VariableReader> arguments, MethodHandle bootstrapMethod,
++                List<RuntimeConstant> bootstrapArguments) {
++            if (receiver != null) {
++                addType(receiver.getIndex(), method.getResultType());
++            }
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/Compiler.java b/compiler/src/main/java/org/teavm/javac/Compiler.java
+index 3460c85..4b3d01c 100644
+--- a/compiler/src/main/java/org/teavm/javac/Compiler.java
++++ b/compiler/src/main/java/org/teavm/javac/Compiler.java
+@@ -277,6 +277,7 @@ public final class Compiler {
+         new JCLPlugin().install(teavm);
+         teavm.add(new PluggableDependencySupport());
+         teavm.add(new EnumConstantsDependencySupport());
++        teavm.add(new ArrayCloneDependencySupport());
+         teavm.setEntryPoint(mainClass);
+         target.setObfuscated(false);
+         target.setDebugInfoLocation(WasmDebugInfoLocation.EMBEDDED);

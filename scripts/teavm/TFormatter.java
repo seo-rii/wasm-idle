@@ -255,6 +255,12 @@ public final class TFormatter implements Closeable, Flushable {
                 case 'f':
                     formatFloat(specifier, false);
                     break;
+                case 'e':
+                    formatScientific(specifier, false);
+                    break;
+                case 'E':
+                    formatScientific(specifier, true);
+                    break;
 
                 default:
                     throw new UnknownFormatConversionException(String.valueOf(specifier));
@@ -335,6 +341,100 @@ public final class TFormatter implements Closeable, Flushable {
             precision = -1; // prevent formatGivenString from trimming
 
             formatGivenString(upperCase, str);
+        }
+
+        private void formatScientific(char specifier, boolean upperCase) throws IOException {
+            verifyFlags(specifier, MASK_FOR_GENERAL_FORMAT | TFormattableFlags.SIGNED
+                    | TFormattableFlags.LEADING_SPACE | TFormattableFlags.ZERO_PADDED
+                    | TFormattableFlags.PARENTHESIZED_NEGATIVE);
+            verifyFloatFlags();
+
+            if (precision == -1) {
+                precision = 6;
+            }
+
+            Object arg = args[argumentIndex];
+            BigDecimal value = null;
+            boolean negative;
+            boolean nan = false;
+            if (arg instanceof Double || arg instanceof Float) {
+                double d = ((Number) arg).doubleValue();
+                negative = Double.compare(d, 0.0) < 0;
+                nan = Double.isNaN(d);
+                if (!nan && !Double.isInfinite(d)) {
+                    // Like the JDK, round the shortest decimal representation of the double value
+                    value = new BigDecimal(Double.toString(Math.abs(d)));
+                }
+            } else if (arg instanceof BigDecimal) {
+                negative = ((BigDecimal) arg).signum() < 0;
+                value = ((BigDecimal) arg).abs();
+            } else if (arg == null) {
+                precision = -1;
+                formatGivenString(upperCase, "null");
+                return;
+            } else {
+                throw new IllegalFormatConversionException(specifier, arg.getClass());
+            }
+
+            StringBuilder sb = new StringBuilder();
+            if (value == null) {
+                sb.append(nan ? "NaN" : "Infinity");
+            } else {
+                int exponent = 0;
+                if (value.signum() != 0) {
+                    sb.append(value.unscaledValue().toString());
+                    exponent = sb.length() - value.scale() - 1;
+                }
+                if (sb.length() > precision + 1) {
+                    // Round half up by hand: BigDecimal.round does not round when it drops a single digit
+                    boolean roundUp = sb.charAt(precision + 1) >= '5';
+                    sb.setLength(precision + 1);
+                    int i = precision;
+                    while (roundUp && i >= 0) {
+                        roundUp = sb.charAt(i) == '9';
+                        sb.setCharAt(i, roundUp ? '0' : (char) (sb.charAt(i) + 1));
+                        --i;
+                    }
+                    if (roundUp) {
+                        sb.insert(0, '1').setLength(precision + 1);
+                        ++exponent;
+                    }
+                }
+                while (sb.length() < precision + 1) {
+                    sb.append('0');
+                }
+                if (precision > 0 || (flags & TFormattableFlags.ALTERNATE) != 0) {
+                    sb.insert(1, '.');
+                }
+                sb.append(exponent < 0 ? "e-" : "e+");
+                if (Math.abs(exponent) < 10) {
+                    sb.append('0');
+                }
+                sb.append(Math.abs(exponent));
+            }
+
+            String prefix = "";
+            String suffix = "";
+            if (negative) {
+                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
+                    prefix = "(";
+                    suffix = ")";
+                } else {
+                    prefix = "-";
+                }
+            } else if (!nan && (flags & TFormattableFlags.SIGNED) != 0) {
+                prefix = "+";
+            } else if (!nan && (flags & TFormattableFlags.LEADING_SPACE) != 0) {
+                prefix = " ";
+            }
+            if (value != null && (flags & TFormattableFlags.ZERO_PADDED) != 0) {
+                while (prefix.length() + sb.length() + suffix.length() < width) {
+                    sb.insert(0, '0');
+                }
+            }
+
+            precision = -1; // prevent formatGivenString from trimming
+            formatGivenString(upperCase, prefix + sb + suffix);
         }
 
         private int predictDecimalSize(boolean negative, TDecimalFormat format) {

@@ -7,6 +7,7 @@ import {
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
+import { limitC3WasmMemory } from './c3Memory.js';
 
 export const C3_DEFAULT_WASM_MEMORY_BYTES = 1024 ** 3;
 
@@ -125,6 +126,31 @@ class C3 extends StaticWorkerRuntimeSandbox {
 					manifestFingerprint: profile.producerReceipt.sha256,
 					preflightKey: profile.producerReceipt.sha256,
 					workerReceipt: bundledC3WorkerReceipt
+				};
+			},
+			compilerModules(_urls, limits) {
+				const totalCap = Math.min(limits.maxWasmMemoryBytes, 2 * 1024 ** 3);
+				const guestCap = Math.min(64 * 1024 ** 2, Math.floor(totalCap / 8 / 65536) * 65536);
+				const compilerCap = totalCap - guestCap;
+				return {
+					compiler: {
+						receipt: profile.compilerWasmReceipt,
+						compileKey: `c3-defined-memory-cap-v1:${compilerCap}`,
+						async compile(bytes) {
+							const limited = await limitC3WasmMemory(bytes, compilerCap, {
+								verifyModules: false
+							});
+							const module = await WebAssembly.compile(limited.bytes);
+							if (
+								WebAssembly.Module.imports(module).some(
+									(item) => item.kind === 'memory'
+								)
+							) {
+								throw new Error('Imported C3 Wasm memories are unsupported');
+							}
+							return module;
+						}
+					}
 				};
 			},
 			async preflightRuntimeAssets(urls, context) {

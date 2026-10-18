@@ -75,6 +75,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(files).toEqual([
 			'THIRD_PARTY_NOTICES.md',
 			'compile-classlib-teavm.bin',
+			'compiler.wasm-deobfuscator.wasm',
 			'compiler.wasm-runtime.js',
 			'compiler.wasm.gz',
 			'runtime-classlib-teavm.bin.gz',
@@ -101,7 +102,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3',
+			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3-java-errors',
 			provenanceLevel: 'source-build-and-compatibility-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',
@@ -118,8 +119,22 @@ describe('checked-in TeaVM runtime trust root', () => {
 				jdk: { version: '25.0.3+9' },
 				gradle: { version: '9.1.0' },
 				// Apply @PluggableDependency plugins in the browser compiler (TeaVM #1322).
+				// Then apply @Rename when converting the javac SDK (upstream teavm-javac 199bed0).
 				sourcePatches: [
-					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' },
+					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' },
+					// Link enum values() for Class.getEnumConstants (EnumDependencySupport).
+					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' },
+					// Annotation must not extend itself and SuppressWarnings needs value().
+					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' },
+					// Propagate cloned primitive array types to Object.clone().
+					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' },
+					// Deterministic class order and tags so compiler.wasm is byte-reproducible.
+					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' },
+					// ServiceLoader and runtime annotations skipped by JCLPlugin in the bootstrap.
+					{ path: 'scripts/teavm/patches/teavm-javac-bootstrap-services.patch' },
+					// Methods the TeaVM 0.13.1 class library lacks, merged into the SDK and the runtime.
+					{ path: 'scripts/teavm/patches/teavm-javac-classlib-supplements.patch' }
 				],
 				overlay: {
 					archiveEntryCount: 2141,
@@ -178,7 +193,8 @@ describe('checked-in TeaVM runtime trust root', () => {
 					}
 				]
 			})),
-			// Console byte writes must invoke the pending flush and advance the source offset.
+			// Console byte writes must invoke the pending flush, advance the source offset, and keep an
+			// incomplete UTF-8 sequence pending across a flush instead of ending the decoder's input.
 			{
 				upstreamSourceEntry: `${consoleStream}.java`,
 				transforms: [
@@ -190,6 +206,11 @@ describe('checked-in TeaVM runtime trust root', () => {
 					{
 						from: '                buffer.put(b, off, count);\n                len -= count;',
 						to: '                buffer.put(b, off, count);\n                off += count;\n                len -= count;',
+						expectedOccurrences: 1
+					},
+					{
+						from: '            if (buffer.position() > 0) {\n                output(true);\n            }',
+						to: '            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }',
 						expectedOccurrences: 1
 					}
 				]

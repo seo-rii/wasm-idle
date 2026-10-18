@@ -271,9 +271,7 @@ describe('Terminal source', () => {
 	it('preserves timeout errors so the page can report a timed-out outcome', () => {
 		expect(source).toContain('error instanceof TimeoutError');
 		expect(source).toContain("error instanceof Error && error.name === 'TimeoutError'");
-		expect(source).toMatch(
-			/if \(isTimeoutError\(msg\)\) \{[\s\S]+writeTerminalOutput\([\s\S]+throw msg;/s
-		);
+		expect(source).toMatch(/if \(isTimeoutError\(msg\)\) throw msg;/);
 		expect(source).toMatch(
 			/if \(isTimeoutError\(error\)\) \{[\s\S]+outcome: 'timed-out'[\s\S]+throw error;/s
 		);

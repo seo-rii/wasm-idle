@@ -9,6 +9,7 @@ import { test } from 'vitest';
 const assetNames = [
 	'compiler.wasm-runtime.js',
 	'compiler.wasm',
+	'compiler.wasm-deobfuscator.wasm',
 	'compile-classlib-teavm.bin',
 	'runtime-classlib-teavm.bin'
 ];
@@ -34,6 +35,7 @@ function worker(
 		importError?: () => Error | undefined;
 		setSdk?: () => void;
 		setClasslib?: () => void;
+		compileDeobfuscator?: () => Promise<unknown>;
 	} = {}
 ) {
 	const requests: string[] = [];
@@ -80,6 +82,7 @@ function worker(
 		Int8Array,
 		Int32Array,
 		Error,
+		WebAssembly: { compile: async () => options.compileDeobfuscator?.() ?? {} },
 		URL: {
 			createObjectURL: () => `blob:runtime-${imports.length}`,
 			revokeObjectURL: (url: string) => revoked.push(url)
@@ -108,6 +111,7 @@ function worker(
 					'$lib/playground/javaStdin',
 					'$lib/playground/javaRuntimeStdin',
 					'$lib/playground/javaSource',
+					'$lib/playground/javaRuntimeErrors',
 					'$lib/playground/stdinBuffer'
 				].includes(id)
 			)
@@ -211,7 +215,7 @@ for (const failedAsset of assetNames) {
 		fail = false;
 		await w.load();
 		assert.equal(w.messages.at(-1)?.load, true);
-		assert.equal(w.requests.length, 8);
+		assert.equal(w.requests.length, assetNames.length * 2);
 	});
 }
 
@@ -224,6 +228,26 @@ test('revokes the Blob URL even when importing the loader fails', async () => {
 	fail = false;
 	await w.load();
 	assert.equal(w.messages.at(-1)?.load, true);
+});
+
+test('does not publish a compiler when compiling the verified deobfuscator fails', async () => {
+	let fail = true;
+	const w = worker({
+		compileDeobfuscator: async () => {
+			if (fail) throw new Error('deobfuscator rejected');
+			return {};
+		}
+	});
+	await w.load();
+	assert.equal(w.messages.at(-1)?.error, 'deobfuscator rejected');
+	assert.equal(
+		w.messages.some((message) => message.load),
+		false
+	);
+	fail = false;
+	await w.load();
+	assert.equal(w.messages.at(-1)?.load, true);
+	assert.equal(w.requests.length, assetNames.length * 2);
 });
 
 for (const stage of ['setSdk', 'setClasslib'] as const) {
@@ -248,10 +272,10 @@ test('reuses a successfully initialized compiler and reloads a different base UR
 	await w.load();
 	await w.load();
 	assert.equal(w.initializationCount, 1);
-	assert.equal(w.requests.length, 4);
+	assert.equal(w.requests.length, assetNames.length);
 	await w.load('/other-teavm/');
 	assert.equal(w.initializationCount, 2);
-	assert.equal(w.requests.length, 8);
+	assert.equal(w.requests.length, assetNames.length * 2);
 });
 
 test('observes a class-library rejection even while Wasm initialization is blocked', async () => {

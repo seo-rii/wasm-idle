@@ -1,0 +1,86 @@
+diff --git a/compiler/src/main/java/org/teavm/javac/AnnotationStringDependencySupport.java b/compiler/src/main/java/org/teavm/javac/AnnotationStringDependencySupport.java
+new file mode 100644
+index 0000000..c7ae366
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/AnnotationStringDependencySupport.java
+@@ -0,0 +1,49 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import org.teavm.classlib.java.lang.reflect.BaseAnnotationDependencyListener;
++import org.teavm.dependency.AbstractDependencyListener;
++import org.teavm.dependency.DependencyAgent;
++import org.teavm.dependency.FieldDependency;
++import org.teavm.model.ValueType;
++
++/**
++ * Tells dependency analysis that {@code String} elements of runtime annotations hold strings.
++ * <p>
++ * {@code WasmGCAnnotationDependencyListener} links the field of the generated annotation implementation that
++ * stores each element value, but propagates no type for {@code String} values. The element accessor then
++ * returns a value without types, and using it, e.g. in a string concatenation, dereferences a null pointer.
++ */
++class AnnotationStringDependencySupport extends AbstractDependencyListener {
++    private static final ValueType STRING = ValueType.object("java.lang.String");
++
++    @Override
++    public void fieldReached(DependencyAgent agent, FieldDependency field) {
++        var ref = field.getReference();
++        if (field.getField() == null || !ref.getFieldName().startsWith("$")
++                || !ref.getClassName().endsWith(BaseAnnotationDependencyListener.ANNOTATION_IMPLEMENTOR_SUFFIX)) {
++            return;
++        }
++        var type = field.getField().getType();
++        if (type.equals(STRING)) {
++            field.getValue().propagate(agent.getType(STRING));
++        } else if (type.equals(ValueType.arrayOf(STRING))) {
++            field.getValue().getArrayItem().propagate(agent.getType(STRING));
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/Compiler.java b/compiler/src/main/java/org/teavm/javac/Compiler.java
+index 4b3d01c..0e635df 100644
+--- a/compiler/src/main/java/org/teavm/javac/Compiler.java
++++ b/compiler/src/main/java/org/teavm/javac/Compiler.java
+@@ -37,6 +37,10 @@ import org.objectweb.asm.ClassReader;
+ import org.teavm.backend.wasm.WasmDebugInfoLocation;
+ import org.teavm.backend.wasm.WasmGCTarget;
+ import org.teavm.classlib.impl.JCLPlugin;
++import org.teavm.classlib.impl.ServiceLoaderInformation;
++import org.teavm.classlib.impl.ServiceLoaderSupport;
++import org.teavm.classlib.impl.ServiceLoaderWasmGCSupport;
++import org.teavm.classlib.java.lang.reflect.WasmGCAnnotationDependencyListener;
+ import org.teavm.jso.JSClass;
+ import org.teavm.jso.JSExport;
+ import org.teavm.jso.core.JSObjects;
+@@ -278,6 +282,15 @@ public final class Compiler {
+         teavm.add(new PluggableDependencySupport());
+         teavm.add(new EnumConstantsDependencySupport());
+         teavm.add(new ArrayCloneDependencySupport());
++        // JCLPlugin installs ServiceLoader and runtime-annotation support only when TeaVM is not
++        // compiled by TeaVM, which is the case here. Without them, ServiceLoader.load fails to compile
++        // and Class.getAnnotation of a RUNTIME annotation crashes code generation.
++        var serviceLoaderSupport = new ServiceLoaderSupport(teavm.getClassLoader(), teavm.getResourceProvider());
++        teavm.add(serviceLoaderSupport);
++        teavm.registerService(ServiceLoaderInformation.class, serviceLoaderSupport);
++        target.addGeneratorFactory(new ServiceLoaderWasmGCSupport());
++        teavm.add(new WasmGCAnnotationDependencyListener());
++        teavm.add(new AnnotationStringDependencySupport());
+         teavm.setEntryPoint(mainClass);
+         target.setObfuscated(false);
+         target.setDebugInfoLocation(WasmDebugInfoLocation.EMBEDDED);
