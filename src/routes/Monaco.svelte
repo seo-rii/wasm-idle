@@ -36,6 +36,7 @@
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
+	import { createWorkspaceModelUri } from './workspace-model-uri';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
@@ -3544,7 +3545,7 @@
 	$effect(() => {
 		const monacoApi = Monaco;
 		if (!monacoApi) return;
-		const uri = monacoApi.Uri.file(`/workspace/${normalizedFilePath}`);
+		const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
 		const initialValue = untrack(() => value ?? defaultValue);
 		let nextModel = monacoApi.editor.getModel(uri) as monaco.editor.ITextModel | null;
 		if (!nextModel) {
