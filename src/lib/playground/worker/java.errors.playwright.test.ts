@@ -63,7 +63,7 @@ describe('TeaVM Java errors in Chromium', () => {
 					bundle: true,
 					format: 'esm' as const,
 					platform: 'browser' as const,
-					write: false,
+					write: false as const,
 					alias: {
 						$lib: resolve(repoRoot, 'src/lib'),
 						'@wasm-idle/core': resolve(repoRoot, 'packages/core/src/index.ts')
