@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-virtual-metadata-candidate",
+  "status": "producer-archive-content-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -45,7 +45,7 @@
   },
   "config": {
     "path": "config/b1.config",
-    "sha256": "a6d36ee3a7cbcece5b9f3f6fe6450e952936fb44561ae5808217786bca294fa0",
+    "sha256": "a92ab9c2363f33d8e28b011d22a13468312e9d5797c5e804ae8a9431f2b3d7cc",
     "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
   },
   "patches": [
@@ -118,6 +118,11 @@
       "path": "patches/0014-virtual-metadata-profile.patch",
       "sha256": "c3380e890d90d501035ace7d35272b0f3c1e514c2b25f98cdd3b0923b65d2292",
       "classification": "real-virtual-mode-and-timestamp-metadata"
+    },
+    {
+      "path": "patches/0015-archive-content-profile.patch",
+      "sha256": "1aa4c7abf966c9ec27ac596898e4c1beba2685aaefa7e6498d3df2dc9c8c3932",
+      "classification": "real-linked-archive-codecs-and-content-profile"
     }
   ],
   "requestedApplets": [
@@ -133,6 +138,8 @@
     "false",
     "find",
     "grep",
+    "gunzip",
+    "gzip",
     "head",
     "hexdump",
     "ln",
@@ -151,11 +158,13 @@
     "sort",
     "stat",
     "tail",
+    "tar",
     "tee",
     "touch",
     "tr",
     "true",
     "uniq",
+    "unzip",
     "wc"
   ],
   "qualifiedWasiApplets": [],
@@ -186,9 +195,14 @@
     "touch and stat require the workspace Container virtual-metadata-v1 host; timestamps use integer milliseconds with noatime reads",
     "Numeric uid/gid 0 and nlink 1 describe the virtual filesystem; account names, allocated blocks and physical-device fields report UNKNOWN",
     "ls -l/-n show stored mode, type, size and timestamps; ls -s remains explicitly unsupported",
-    "Pinned libc rejects pre-epoch or overflow touch dates before mutation"
+    "Pinned libc rejects pre-epoch or overflow touch dates before mutation",
+    "tar supports regular files, directories and symbolic links; hard/special extraction and permission/owner restoration are unsupported",
+    "tar -z/-a and child-process transformations are unsupported; use real tar/gzip/gunzip shell pipelines",
+    "Archive output and extracted files use exclusive creation; conflicts fail nonzero while retaining existing bytes",
+    "gzip/gunzip file overwrite -f and unzip -n/-o/-K/-t fail explicitly; gzip/gunzip stream -c/-t integrity operations use the real codec",
+    "Archive extraction is not transactional; partial new entries can remain after an error; existing symlink parents and parent extraction paths are rejected"
   ],
-  "commandStage": 3,
+  "commandStage": 4,
   "metadataAbi": {
     "namespace": "wasm_idle_fs_v1",
     "functions": {

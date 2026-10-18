@@ -1,0 +1,1109 @@
+{
+  "schemaVersion": 1,
+  "profile": "busybox-archive-extra-final-artifact",
+  "native": {
+    "path": "/mnt/work/seorii-wasm-idle-commands-20261018/stage4-build-01/native-build/busybox",
+    "bytes": 147512,
+    "sha256": "c71a9c0d5c1bbe752b2f560be4560cfd91661fbbf03fe67294a3dbc01bd2a137"
+  },
+  "sourceIdentities": {
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/scripts/container-archive-qualification/test-archive-extra.mjs": "10534aac0ce0d59badb3d6e1a6dec76588bb15203790d062901df5e577924ebb",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/runtimes/wasm-busybox/test/node-wasi-fixture.mjs": "8f66b7a4314f923c5a304fb5a74f1527c1268ade165f2c249f95643d2b0afa77",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/scripts/container-archive-qualification/fixtures.py": "1fee19ebff070146304490b025ec395460ad41f243c5cc9fdc01886d480b3d42"
+  },
+  "artifact": {
+    "path": "/mnt/work/seorii-wasm-idle-commands-20261018/stage4-build-01/busybox.wasm",
+    "bytes": 634131,
+    "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9"
+  },
+  "imports": [
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "args_sizes_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "clock_time_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_close",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_fdstat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_fdstat_set_flags",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_filestat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_filestat_set_times",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_prestat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_prestat_dir_name",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_read",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_readdir",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_seek",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "fd_write",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_create_directory",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_filestat_get",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_filestat_set_times",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_open",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_readlink",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_remove_directory",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_rename",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_symlink",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "path_unlink_file",
+      "kind": "function"
+    },
+    {
+      "module": "wasi_snapshot_preview1",
+      "name": "proc_exit",
+      "kind": "function"
+    },
+    {
+      "module": "wasm_idle_process_v1",
+      "name": "initial_cwd",
+      "kind": "function"
+    },
+    {
+      "module": "wasm_idle_fs_v1",
+      "name": "path_mode",
+      "kind": "function"
+    },
+    {
+      "module": "wasm_idle_fs_v1",
+      "name": "fd_mode",
+      "kind": "function"
+    }
+  ],
+  "cases": [
+    {
+      "id": "gzip-stream",
+      "command": "gzip",
+      "args": [
+        "-c"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gzip-file-stdout",
+      "command": "gzip",
+      "args": [
+        "-ck",
+        "payload.bin"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "1f8b08000000000000036360646266616563e7e0e4e2e6e1e5e3171014121611151397909492969195935750545256515553d7d0d4d2d6d1d5d33730343236313533b7b0b4b2b6b1b5b37770747276717573f7f0f4f2f6f1f5f30f080c0a0e090d0b8f888c8a8e898d8b4f484c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8acaaaea9adab6f686c6a6e696d6befe8eceaeee9edeb9f3071d2e42953a74d9f3173d6ec3973e7cd5fb070d1e2254b972d5fb172d5ea356bd7addfb071d3e62d5bb76ddfb173d7ee3d7bf7ed3f70f0d0e123478f1d3f71f2d4e93367cf9dbf70f1d2e52b57af5dbf71f3d6ed3b77efdd7ff0f0d1e3274f9f3d7ff1f2d5eb376fdfbdfff0f1d3e72f5fbf7dfff1f3d7ef3f7ffffd4f2c4acec82c4b552848acccc94f4ce11ae58ff247f9083e00214b292b20040000",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gzip-new-file",
+      "command": "gzip",
+      "args": [
+        "-k",
+        "other.bin"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "36a820c10cd3b3c357c0ac80616d023816f9855e0d07d692b17c62524608d1dc"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "36a820c10cd3b3c357c0ac80616d023816f9855e0d07d692b17c62524608d1dc"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "36a820c10cd3b3c357c0ac80616d023816f9855e0d07d692b17c62524608d1dc",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "36a820c10cd3b3c357c0ac80616d023816f9855e0d07d692b17c62524608d1dc",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gzip-existing-refused",
+      "command": "gzip",
+      "args": [
+        "-k",
+        "payload.bin"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gzip: can't open 'payload.bin.gz': File exists\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gzip: can't open 'payload.bin.gz': File exists\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gunzip-file-stdout",
+      "command": "gunzip",
+      "args": [
+        "-c",
+        "payload.bin.gz"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a61726368697665207061796c6f61640a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gunzip-file",
+      "command": "gunzip",
+      "args": [
+        "-k",
+        "other.gz"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "a48c18042f98f08bf2e907a9188daeb04213e0d17c5f0610b8eb1ca33f737a06"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "a48c18042f98f08bf2e907a9188daeb04213e0d17c5f0610b8eb1ca33f737a06"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "a48c18042f98f08bf2e907a9188daeb04213e0d17c5f0610b8eb1ca33f737a06",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "a48c18042f98f08bf2e907a9188daeb04213e0d17c5f0610b8eb1ca33f737a06",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gunzip-test",
+      "command": "gunzip",
+      "args": [
+        "-t",
+        "payload.bin.gz"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "gunzip-corrupt",
+      "command": "gunzip",
+      "args": [
+        "-t",
+        "broken.gz"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gunzip: corrupted data\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gunzip: corrupted data\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gunzip: corrupted data\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "gunzip: corrupted data\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-list",
+      "command": "tar",
+      "args": [
+        "-tf",
+        "input.tar"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "747265652f0a747265652f746578742e7478740a747265652f7061796c6f61642e62696e0a747265652f6c696e6b0a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "747265652f0a747265652f746578742e7478740a747265652f7061796c6f61642e62696e0a747265652f6c696e6b0a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "747265652f0a747265652f746578742e7478740a747265652f7061796c6f61642e62696e0a747265652f6c696e6b0a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "747265652f0a747265652f746578742e7478740a747265652f7061796c6f61642e62696e0a747265652f6c696e6b0a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-extract",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "input.tar"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-extract-stdout",
+      "command": "tar",
+      "args": [
+        "-xOf",
+        "input.tar",
+        "tree/text.txt"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-create",
+      "command": "tar",
+      "args": [
+        "-cf",
+        "output.tar",
+        "newtree"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "2fcf3218086159eeba3309fe5c849bb75121c50f5b2fe7f3fd12bf612e118ba8"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "2fcf3218086159eeba3309fe5c849bb75121c50f5b2fe7f3fd12bf612e118ba8"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "2fcf3218086159eeba3309fe5c849bb75121c50f5b2fe7f3fd12bf612e118ba8",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "2fcf3218086159eeba3309fe5c849bb75121c50f5b2fe7f3fd12bf612e118ba8",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-output-existing-preserved",
+      "command": "tar",
+      "args": [
+        "-cf",
+        "output.tar",
+        "payload.bin"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: can't open 'output.tar': File exists\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: can't open 'output.tar': File exists\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-existing-preserved",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "input.tar"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: can't open 'tree/text.txt': File exists\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: can't open 'tree/text.txt': File exists\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-permissions-refused",
+      "command": "tar",
+      "args": [
+        "-xpf",
+        "input.tar"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support permission restoration, overwrite or auto-compression\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support permission restoration, overwrite or auto-compression\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-special-refused",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "special.tar"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support hard links or special files\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support hard links or special files\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-hardlink-refused",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "hardlink.tar"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support hard links or special files\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: WASI archive content profile does not support hard links or special files\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-short-read",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "short.tar"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: short read\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: short read\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: short read\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: short read\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-compression-refused",
+      "command": "tar",
+      "args": [
+        "-czf",
+        "output.tar.gz",
+        "payload.bin"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: unrecognized option: z\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: unrecognized option: z\n",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "tar-parent-symlink-refused",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "parent-link.tar"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: archive extraction through a symlink is unsupported\n",
+          "treeSha256": "5ed415e2decaccd89ebfb267cac1c0dd7e34affc24c8333e36f30eeed86645d3"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "tar: archive extraction through a symlink is unsupported\n",
+          "treeSha256": "5ed415e2decaccd89ebfb267cac1c0dd7e34affc24c8333e36f30eeed86645d3"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "unzip-extract",
+      "command": "unzip",
+      "args": [
+        "-q",
+        "input.zip"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "",
+          "stderr": "",
+          "treeSha256": "d59cfc409d81acfc916b301c6c225831a920e7bff10be1711539487047da1fdd",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "unzip-stdout",
+      "command": "unzip",
+      "args": [
+        "-p",
+        "input.zip",
+        "tree/text.txt"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "616c7068610a626574610a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "unzip-list",
+      "command": "unzip",
+      "args": [
+        "-l",
+        "input.zip"
+      ],
+      "runs": [
+        {
+          "engine": "native",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "417263686976653a2020696e7075742e7a69700a20204c656e677468202020202020446174652020202054696d65202020204e616d650a2d2d2d2d2d2d2d2d2d20202d2d2d2d2d2d2d2d2d2d202d2d2d2d2d2020202d2d2d2d0a202020202020202030202030312d30322d323032302030333a3034202020747265652f0a202020202020203131202030312d30322d323032302030333a3034202020747265652f746578742e7478740a202020202031303536202030312d30322d323032302030333a3034202020747265652f7061796c6f61642e62696e0a202020202020202038202030312d30322d323032302030333a3034202020747265652f6c696e6b0a202d2d2d2d2d2d2d2d2020202020202020202020202020202020202020202d2d2d2d2d2d2d0a202020202031303735202020202020202020202020202020202020202020342066696c65730a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "native",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "417263686976653a2020696e7075742e7a69700a20204c656e677468202020202020446174652020202054696d65202020204e616d650a2d2d2d2d2d2d2d2d2d20202d2d2d2d2d2d2d2d2d2d202d2d2d2d2d2020202d2d2d2d0a202020202020202030202030312d30322d323032302030333a3034202020747265652f0a202020202020203131202030312d30322d323032302030333a3034202020747265652f746578742e7478740a202020202031303536202030312d30322d323032302030333a3034202020747265652f7061796c6f61642e62696e0a202020202020202038202030312d30322d323032302030333a3034202020747265652f6c696e6b0a202d2d2d2d2d2d2d2d2020202020202020202020202020202020202020202d2d2d2d2d2d2d0a202020202031303735202020202020202020202020202020202020202020342066696c65730a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea"
+        },
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 0,
+          "stdoutHex": "417263686976653a2020696e7075742e7a69700a20204c656e677468202020202020446174652020202054696d65202020204e616d650a2d2d2d2d2d2d2d2d2d20202d2d2d2d2d2d2d2d2d2d202d2d2d2d2d2020202d2d2d2d0a202020202020202030202030312d30322d323032302030333a3034202020747265652f0a202020202020203131202030312d30322d323032302030333a3034202020747265652f746578742e7478740a202020202031303536202030312d30322d323032302030333a3034202020747265652f7061796c6f61642e62696e0a202020202020202038202030312d30322d323032302030333a3034202020747265652f6c696e6b0a202d2d2d2d2d2d2d2d2020202020202020202020202020202020202020202d2d2d2d2d2d2d0a202020202031303735202020202020202020202020202020202020202020342066696c65730a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 0,
+          "stdoutHex": "417263686976653a2020696e7075742e7a69700a20204c656e677468202020202020446174652020202054696d65202020204e616d650a2d2d2d2d2d2d2d2d2d20202d2d2d2d2d2d2d2d2d2d202d2d2d2d2d2020202d2d2d2d0a202020202020202030202030312d30322d323032302030333a3034202020747265652f0a202020202020203131202030312d30322d323032302030333a3034202020747265652f746578742e7478740a202020202031303536202030312d30322d323032302030333a3034202020747265652f7061796c6f61642e62696e0a202020202020202038202030312d30322d323032302030333a3034202020747265652f6c696e6b0a202d2d2d2d2d2d2d2d2020202020202020202020202020202020202020202d2d2d2d2d2d2d0a202020202031303735202020202020202020202020202020202020202020342066696c65730a",
+          "stderr": "",
+          "treeSha256": "62714fe759ca8dc323726dc6d682fe7cc2b06c9bebe82801e676ab441e847dea",
+          "nativeDifferentialPassed": true
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "unzip-existing-preserved",
+      "command": "unzip",
+      "args": [
+        "-q",
+        "input.zip"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "unzip: tree/text.txt exists; WASI unzip requires a fresh destination\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "unzip: tree/text.txt exists; WASI unzip requires a fresh destination\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "unzip-overwrite-refused",
+      "command": "unzip",
+      "args": [
+        "-oq",
+        "input.zip"
+      ],
+      "runs": [
+        {
+          "engine": "wasi",
+          "alias": false,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "unzip: WASI unzip does not overwrite existing files (-o)\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        },
+        {
+          "engine": "wasi",
+          "alias": true,
+          "code": 1,
+          "stdoutHex": "",
+          "stderr": "unzip: WASI unzip does not overwrite existing files (-o)\n",
+          "treeSha256": "43d73ea7eb2347c39598265cab078418f6cbeaeb807a4ae671c5714bb7ee8dad"
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "complete": true,
+  "passed": true
+}

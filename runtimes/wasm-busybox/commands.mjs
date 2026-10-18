@@ -1,6 +1,6 @@
 // Canonical applet inventory for the container BusyBox producer. Keep the
 // effective producer configuration, applet-list smoke and distribution in sync.
-export const BUSYBOX_COMMAND_STAGE = 3;
+export const BUSYBOX_COMMAND_STAGE = 4;
 export const BUSYBOX_APPLETS = Object.freeze([
   "base64",
   "basename",
@@ -14,6 +14,8 @@ export const BUSYBOX_APPLETS = Object.freeze([
   "false",
   "find",
   "grep",
+  "gunzip",
+  "gzip",
   "head",
   "hexdump",
   "ln",
@@ -32,11 +34,13 @@ export const BUSYBOX_APPLETS = Object.freeze([
   "sort",
   "stat",
   "tail",
+  "tar",
   "tee",
   "touch",
   "tr",
   "true",
   "uniq",
+  "unzip",
   "wc"
 ]);
 
