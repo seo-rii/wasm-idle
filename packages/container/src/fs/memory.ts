@@ -2,7 +2,7 @@ import { FsError } from './errors.js';
 import { createFileSystemWatch } from './watch.js';
 import type {
   FileStat, FileSystemLease, FileSystemSnapshot, FileType, MemoryFileSystemOptions,
-  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions, FileVersion,
+  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions, FileVersion, FileTimes,
 } from './types.js';
 
 interface Inode {
@@ -15,6 +15,7 @@ interface Inode {
   children: Map<string, Inode>;
   references: number;
   linked: boolean;
+  atimeMs: number;
   mtimeMs: number;
   ctimeMs: number;
   command?: true;
@@ -63,7 +64,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 }
 function sameEntry(a: SnapshotEntry, b: SnapshotEntry, compareTimes: boolean): boolean {
   return a.inode === b.inode && a.type === b.type && a.mode === b.mode && a.target === b.target && a.command === b.command &&
-    (!compareTimes || a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs) &&
+    (!compareTimes || a.atimeMs === b.atimeMs && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs) &&
     (a.type !== 'file' || sameBytes(a.data!, b.data!));
 }
 
@@ -164,7 +165,7 @@ export class MemoryFileSystem {
     const inode = type === 'character-device' ? 0 : this.nextInode++;
     const node: Inode = {
       inode, type, mode, mount, data: new Uint8Array(), target: '',
-      children: new Map(), references: 0, linked: true, mtimeMs: now, ctimeMs: now,
+      children: new Map(), references: 0, linked: true, atimeMs: now, mtimeMs: now, ctimeMs: now,
       version: Object.freeze({ inode, revision: ++this.versionSequence }),
     };
     this.versions.set(node.version, node);
@@ -331,7 +332,7 @@ export class MemoryFileSystem {
     return {
       inode: node.inode, type: node.type, mode: node.mode,
       size: node.type === 'file' ? node.data.length : node.type === 'symlink' ? encoder.encode(node.target).length : 0,
-      mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+      atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
       ...(node.command ? { command: true as const } : {}),
     };
   }
@@ -360,6 +361,32 @@ export class MemoryFileSystem {
   stat(path: string, options: PathOptions = {}): FileStat { return this.info(this.resolve(path, options).node); }
   lstat(path: string, options: PathOptions = {}): FileStat { return this.info(this.resolve(path, options, false).node); }
   realpath(path: string, options: PathOptions = {}): string { return this.resolve(path, options).path; }
+
+  /** Metadata updates preserve file contents, descriptor positions and quota usage. */
+  setTimes(path: string, times: FileTimes, options: PathOptions = {}, followSymlinks = true): void {
+    this.updateTimes(this.resolve(path, options, followSymlinks).node, times);
+  }
+
+  fsetTimes(fd: number, times: FileTimes): void { this.updateTimes(this.descriptor(fd).node, times); }
+
+  private updateTimes(node: Inode, times: FileTimes): void {
+    if (!times || typeof times !== 'object' || Array.isArray(times)) throw new FsError('EINVAL', 'Invalid timestamp update');
+    const values: { atimeMs?: number | 'now'; mtimeMs?: number | 'now' } = Object.create(null);
+    for (const [key, value] of Object.entries(times)) {
+      if (key !== 'atimeMs' && key !== 'mtimeMs') throw new FsError('EINVAL', 'Unsupported timestamp field');
+      if (value !== undefined && value !== 'now') integer(value, key);
+      values[key] = value;
+    }
+    if (values.atimeMs === undefined && values.mtimeMs === undefined) return;
+    this.writable(node);
+    const now = Date.now();
+    if (values.atimeMs !== undefined) node.atimeMs = values.atimeMs === 'now' ? now : values.atimeMs;
+    if (values.mtimeMs !== undefined) node.mtimeMs = values.mtimeMs === 'now' ? now : values.mtimeMs;
+    node.ctimeMs = now;
+    this.revision++;
+    this.invalidateVersion(node);
+    this.notifyFile(node);
+  }
 
   readdir(path: string, options: PathOptions = {}): string[] {
     const { node } = this.resolve(path, options);
@@ -688,7 +715,7 @@ export class MemoryFileSystem {
   exportSnapshot(): FileSystemSnapshot {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
-      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
         ...(node.command ? { command: true as const } : {}),
         ...(node.type === 'file' ? { data: node.data.slice() } : {}),
         ...(node.type === 'symlink' ? { target: node.target } : {}),
@@ -718,18 +745,6 @@ export class MemoryFileSystem {
     const rebound = descriptions.map(description => ({ description, node: nextNodes.get(description.node.inode) ?? description.node }));
     for (const next of candidate.nodes) next.references = previous.get(next.inode)?.references ?? 0;
     const nodes = new Set([...candidate.nodes, ...retained]);
-    const adopt = (next: Inode): void => {
-      const old = previous.get(next.inode);
-      if (old?.type === next.type) {
-        if (old.mode === next.mode && old.target === next.target && sameBytes(old.data, next.data) &&
-          old.children.size === next.children.size && [...old.children].every(([name, child]) => next.children.get(name)?.inode === child.inode)) {
-          next.mtimeMs = old.mtimeMs;
-          next.ctimeMs = old.ctimeMs;
-        }
-      }
-      for (const child of next.children.values()) adopt(child);
-    };
-    adopt(candidate.root);
     // Every check and allocation above precedes publication. Rebinding retains
     // shared offsets/flags for dup(), and existing unlinked handles stay private.
     for (const node of candidate.nodes) this.invalidateVersion(node);
@@ -767,6 +782,7 @@ export class MemoryFileSystem {
       }
       if (records.has(entry.path)) throw new FsError('EINVAL', 'Duplicate snapshot path');
       checkMode(entry.mode);
+      if (entry.atimeMs !== undefined) integer(entry.atimeMs, 'atimeMs');
       if (entry.mtimeMs !== undefined) integer(entry.mtimeMs, 'mtimeMs');
       if (entry.ctimeMs !== undefined) integer(entry.ctimeMs, 'ctimeMs');
       if (!['file', 'directory', 'symlink', 'character-device'].includes(entry.type)) throw new FsError('EINVAL', 'Invalid snapshot entry type');
@@ -816,6 +832,7 @@ export class MemoryFileSystem {
       fs.invalidateVersion(node);
       if (entry.mtimeMs !== undefined) node.mtimeMs = entry.mtimeMs;
       if (entry.ctimeMs !== undefined) node.ctimeMs = entry.ctimeMs;
+      node.atimeMs = entry.atimeMs ?? node.mtimeMs;
       node.data = entry.data ? Uint8Array.from(entry.data) : new Uint8Array();
       node.target = entry.target ?? '';
       built.set(path, node);
@@ -859,12 +876,16 @@ export class MemoryFileSystem {
         const candidate = MemoryFileSystem.fromSnapshot(result, { maxBytes: this.maxBytes, maxInodes: this.maxInodes });
         if (candidate.nextInode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot cannot rewind inode allocation');
         const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+        const supplied = new Map(result.entries.map(entry => [entry.inode, entry]));
         for (const next of candidate.nodes) {
           const old = previous.get(next.inode);
           if ((!old || !old.linked) && next.inode < this.nextInode) throw new FsError('ECONFLICT', 'Snapshot reused a retired inode identity');
           if (old && (old.type !== next.type || old.mount !== next.mount)) {
             throw new FsError('ECONFLICT', 'Snapshot cannot change an inode type or mount identity');
           }
+          // Older adapters did not serialize access time. Their omission must
+          // not reset an existing explicit atime during an otherwise valid commit.
+          if (old && supplied.get(next.inode)!.atimeMs === undefined) next.atimeMs = old.atimeMs;
         }
         if (candidate.mounts.size !== this.mounts.size || [...this.mounts].some(([path, readonly]) => candidate.mounts.get(path) !== readonly)) {
           throw new FsError('EROFS', 'Snapshot cannot change the mount table');

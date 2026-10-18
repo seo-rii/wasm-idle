@@ -23,7 +23,7 @@ scope.onmessage = async ({ data }) => {
       try {
         const imports = WebAssembly.Module.imports(module);
         for (const entry of imports) {
-          if (entry.kind !== 'function' || !(entry.module === 'wasi_snapshot_preview1' && Object.hasOwn(host.imports, entry.name) || entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd')) throw new Error(`Unsupported import: ${entry.module}.${entry.name}`);
+          if (entry.kind !== 'function' || !(entry.module === 'wasi_snapshot_preview1' && Object.hasOwn(host.imports, entry.name) || entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd' || entry.module === 'wasm_idle_fs_v1' && Object.hasOwn(host.filesystemImports, entry.name))) throw new Error(`Unsupported import: ${entry.module}.${entry.name}`);
         }
         if (request.invocation.cwd !== '/' && !imports.some((entry) => entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd')) throw new Error('A non-root cwd requires the initial_cwd guest initialization profile');
         const exports = WebAssembly.Module.exports(module);
@@ -35,7 +35,7 @@ scope.onmessage = async ({ data }) => {
       ran = true;
       const { module, host } = prepared;
       try {
-        const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: host.imports, wasm_idle_process_v1: host.processImports });
+        const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: host.imports, wasm_idle_process_v1: host.processImports, wasm_idle_fs_v1: host.filesystemImports });
         const { code } = host.run(instance);
         host.dispose();
         scope.postMessage({ type: 'complete', version: 1, generation, code });

@@ -1,4 +1,4 @@
-import { type MemoryFileSystem, type OpenOptions, type FileStat, FsError } from '../../fs/index.js';
+import { type MemoryFileSystem, type OpenOptions, type FileStat, type FileTimes, FsError } from '../../fs/index.js';
 import { createBatchStdio, type WasiStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
@@ -13,6 +13,7 @@ export interface WasiDirectoryEntry { readonly name: string; readonly stat: File
 export interface WasiPathBinding {
   open(reference: WasiPathReference, options: OpenOptions, follow: boolean): number;
   stat(reference: WasiPathReference, follow: boolean): FileStat;
+  setTimes(reference: WasiPathReference, times: FileTimes, follow: boolean): void;
   mkdir(reference: WasiPathReference): void;
   unlink(reference: WasiPathReference): void;
   rmdir(reference: WasiPathReference): void;
@@ -21,7 +22,7 @@ export interface WasiPathBinding {
   rename(from: WasiPathReference, to: WasiPathReference): void;
   entries(directory: number): readonly WasiDirectoryEntry[];
 }
-export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'> & { readonly paths?: WasiPathBinding };
+export type WasiFileSystem = Pick<MemoryFileSystem, 'open' | 'close' | 'stat' | 'lstat' | 'fstat' | 'setTimes' | 'fsetTimes' | 'getDirectoryPath' | 'read' | 'pread' | 'write' | 'pwrite' | 'seek' | 'tell' | 'ftruncate' | 'realpath' | 'readdir' | 'mkdir' | 'unlink' | 'rmdir' | 'readlink' | 'symlink' | 'rename'> & { readonly paths?: WasiPathBinding };
 interface HostOptions { fs: WasiFileSystem; args: readonly string[]; env: Readonly<Record<string, string>>; cwd: string; stdin: Uint8Array; maxOutputBytes: number; stdio?: WasiStdio; }
 const filetype = (type: string) => type === 'directory' ? 3 : type === 'symlink' ? 7 : type === 'character-device' ? 2 : 4;
 const RIGHTS = (1n << 30n) - 1n;
@@ -80,6 +81,7 @@ export function createWasiHost(options: HostOptions) {
       return options.fs.open(reference.path, { ...flags, ...context });
     },
     stat: (reference, follow) => follow ? options.fs.stat(reference.path, pathOptions(reference)) : options.fs.lstat(reference.path, pathOptions(reference)),
+    setTimes: (reference, times, follow) => options.fs.setTimes(reference.path, times, pathOptions(reference), follow),
     mkdir: reference => options.fs.mkdir(reference.path, pathOptions(reference)),
     unlink: reference => options.fs.unlink(reference.path, pathOptions(reference)),
     rmdir: reference => options.fs.rmdir(reference.path, pathOptions(reference)),
@@ -116,12 +118,25 @@ export function createWasiHost(options: HostOptions) {
     const dest = span(ptr, 64); dest.fill(0); const v = view(ptr, 64);
     v.setBigUint64(8, BigInt(info.inode), true); v.setUint8(16, filetype(info.type)); v.setBigUint64(24, 1n, true);
     v.setBigUint64(32, BigInt(info.size), true);
-    v.setBigUint64(40, BigInt(Math.trunc(info.mtimeMs)) * 1000000n, true);
+    v.setBigUint64(40, BigInt(Math.trunc(info.atimeMs)) * 1000000n, true);
     v.setBigUint64(48, BigInt(Math.trunc(info.mtimeMs)) * 1000000n, true);
     v.setBigUint64(56, BigInt(Math.trunc(info.ctimeMs)) * 1000000n, true);
     return 0;
   };
   const safeOffset = (value: bigint) => { const n = Number(value); if (!Number.isSafeInteger(n)) throw new WasiFault(28); return n; };
+  const times = (atime: bigint, mtime: bigint, flags: number): FileTimes => {
+    if (flags & ~15 || (flags & 3) === 3 || (flags & 12) === 12) throw new WasiFault(28);
+    const milliseconds = (value: bigint) => {
+      if (typeof value !== 'bigint' || value < -0x8000000000000000n || value > 0xffffffffffffffffn) throw new WasiFault(28);
+      // WebAssembly exposes i64 parameters as signed BigInts; Preview1 timestamp
+      // interprets those same bits as an unsigned nanosecond count.
+      return Number(BigInt.asUintN(64, value) / 1000000n);
+    };
+    return {
+      ...(flags & 1 ? { atimeMs: milliseconds(atime) } : flags & 2 ? { atimeMs: 'now' as const } : {}),
+      ...(flags & 4 ? { mtimeMs: milliseconds(mtime) } : flags & 8 ? { mtimeMs: 'now' as const } : {})
+    };
+  };
   const fdRead = (fd: number, ptr: number, count: number, result: number, offset?: bigint) => {
     span(result, 4); const buffers = iovecs(ptr, count);
     const input = fd === 0 && standard.has(fd);
@@ -204,6 +219,10 @@ export function createWasiHost(options: HostOptions) {
       span(ptr, 64).fill(0); return 0;
     },
     fd_filestat_set_size: (fd, length) => { const h = handle(fd, 1n << 22n); options.fs.ftruncate(h.fd, safeOffset(length)); return 0; },
+    fd_filestat_set_times: (fd, atime, mtime, flags) => {
+      const values = times(atime, mtime, flags), h = handle(fd, 1n << 23n);
+      options.fs.fsetTimes(h.fd, values); return 0;
+    },
     fd_prestat_get: (fd, ptr) => { const h = handle(fd); if (h.label === undefined) return 8; span(ptr, 8).fill(0); put32(ptr + 4, encoder.encode(h.label).length); return 0; },
     fd_prestat_dir_name: (fd, ptr, length) => { const h = handle(fd); if (h.label === undefined) return 8; const bytes = encoder.encode(h.label); if ((length >>> 0) < bytes.length) return 37; span(ptr, bytes.length).set(bytes); return 0; },
     path_open: (fd, flags, ptr, len, oflags, rights, inherited, fdflags, result) => {
@@ -220,6 +239,11 @@ export function createWasiHost(options: HostOptions) {
       handles.set(newFd, { fd: opened, root: parent.root, flags: fdflags, rights, inherited }); put32(result, newFd); return 0;
     },
     path_filestat_get: (fd, flags, ptr, len, result) => { span(result, 64); if (flags & ~1) return 28; const p = relative(fd, ptr, len, 1n << 18n); return stat(result, paths.stat(p, Boolean(flags & 1))); },
+    path_filestat_set_times: (fd, lookup, ptr, len, atime, mtime, flags) => {
+      if (lookup & ~1) return 28;
+      const values = times(atime, mtime, flags), p = relative(fd, ptr, len, 1n << 20n);
+      paths.setTimes(p, values, Boolean(lookup & 1)); return 0;
+    },
     path_create_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 9n); paths.mkdir(p); return 0; },
     path_unlink_file: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 26n); paths.unlink(p); return 0; },
     path_remove_directory: (fd, ptr, len) => { const p = relative(fd, ptr, len, 1n << 25n); paths.rmdir(p); return 0; },
@@ -253,7 +277,7 @@ export function createWasiHost(options: HostOptions) {
     sched_yield: () => 0,
     // Unsupported sync, metadata mutation, process and polling are explicit errno failures.
     poll_oneoff: () => 52, fd_sync: () => 58, fd_datasync: () => 58,
-    fd_filestat_set_times: () => 58, path_filestat_set_times: () => 58, path_link: () => 58,
+    path_link: () => 58,
     proc_raise: () => 58
   };
   const imports = Object.fromEntries(Object.entries(funcs).map(([name, fn]) => [name, (...args: any[]) => {
@@ -262,6 +286,17 @@ export function createWasiHost(options: HostOptions) {
   }]));
   return {
     imports,
+    /** Optional versioned metadata ABI: true stored mode bits, no host identity model. */
+    filesystemImports: Object.fromEntries(Object.entries({
+      path_mode(fd: number, ptr: number, length: number, lookup: number) {
+        if (lookup & ~1) throw new WasiFault(28);
+        return paths.stat(relative(fd, ptr, length, 1n << 18n), Boolean(lookup & 1)).mode;
+      },
+      fd_mode(fd: number) { return options.fs.fstat(handle(fd, 1n << 21n).fd).mode; }
+    }).map(([name, fn]) => [name, (...args: number[]) => {
+      try { return (fn as (...values: number[]) => number)(...args); }
+      catch (error) { if (error instanceof WasiFault) return -error.errno; if (error instanceof FsError) return -(errno[error.code] ?? 29); throw error; }
+    }])),
     processImports: {
       initial_cwd(ptr: number, capacity: number) {
         const bytes = encoder.encode(options.cwd + '\0');
