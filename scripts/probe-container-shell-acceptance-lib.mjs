@@ -22,13 +22,13 @@ export const SDK_WASM = {
 export const MEMORY = { initial: 35, maximum: 16384, shared: true };
 // Stage 4 genuine BusyBox applets; producer and real Node/Chromium receipts are pinned below.
 export const BUSYBOX = {
-  "bytes": 634131,
-  "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9"
+  "bytes": 634885,
+  "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40"
 };
 export { BUSYBOX_APPLETS };
-// Exact producer receipt retained in runtimes/wasm-busybox/evidence/commands-stage4-producer.json.
-export const BUSYBOX_RECEIPT_SHA256 = '5a77ca0e31fcde279b4a90195377d666d227ce6974070c90f6e146a557b13f84';
-export const BUSYBOX_PRODUCER_REVISION = '4f0d79cb544a0890754d8ae2e34cd174d9716e4e';
+// Exact producer receipt retained in runtimes/wasm-busybox/evidence/commands-review-fixes-producer.json.
+export const BUSYBOX_RECEIPT_SHA256 = 'a726fa35c9959dbe85c9dfec17ddad9004ef43c403658d71c2080180afa084ad';
+export const BUSYBOX_PRODUCER_REVISION = '8ead09726cfed3c758c9a6b827bf1fa020549dd4';
 // wasm-llvm process-sysroot.py: the full selected-target sysroot with initial_cwd linked into crt1.o.
 export const PROCESS_SYSROOT = {
 	bytes: 35328000,
