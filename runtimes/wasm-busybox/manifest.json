@@ -128,6 +128,11 @@
       "path": "patches/0016-buffered-output-errors.patch",
       "sha256": "eebaf370861b5409f2bf863efccbb59542095bc026842e08c5ba2a01cc50f7c5",
       "classification": "real-stdio-error-propagation"
+    },
+    {
+      "path": "patches/0017-tar-directory-errors.patch",
+      "sha256": "82b2aec9cc9ef2e0dd8f85368d0df1815deab920fcabea9cc6b0e09557222b03",
+      "classification": "archive-directory-error-propagation"
     }
   ],
   "requestedApplets": [
@@ -219,6 +224,7 @@
     "timestamps": "WASI path/fd_filestat_set_times; integer milliseconds; noatime reads"
   },
   "reviewFixes": [
-    "stream-error-status"
+    "stream-error-status",
+    "tar-directory-errors"
   ]
 }
