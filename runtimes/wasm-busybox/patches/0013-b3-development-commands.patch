@@ -1,0 +1,362 @@
+--- a/Makefile
++++ b/Makefile
+@@ -494,7 +494,7 @@
+ 		util-linux/volume_id/ \
+ 
+ ifeq ($(ARCH),wasm32)
+-libs-y := coreutils/ coreutils/libcoreutils/ findutils/ libbb/
++libs-y := coreutils/ coreutils/libcoreutils/ editors/ findutils/ util-linux/ libbb/
+ endif
+ 
+ endif # KBUILD_EXTMOD
+--- a/Makefile.flags
++++ b/Makefile.flags
+@@ -223,6 +223,6 @@
+ FLTFLAGS += -s 16000
+ 
+ ifeq ($(ARCH),wasm32)
+-CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1 -DBB_WASI_B2
++CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1 -DBB_WASI_B2 -DBB_WASI_B3
+ CFLAGS_busybox += -Wl,--max-memory=67108864 -Wl,--undefined=__main_argc_argv
+ endif
+--- a/coreutils/ln.c
++++ b/coreutils/ln.c
+@@ -62,6 +62,10 @@
+ 	int (*link_func)(const char *, const char *);
+ 
+ 	opts = getopt32(argv, "^" "sfnbS:vT" "\0" "-1", &suffix);
++#if defined(BB_WASI_B3)
++	if (!(opts & LN_SYMLINK))
++		bb_simple_error_msg_and_die("hard links are unsupported by the WASI profile");
++#endif
+ /*
+ 	-s, --symbolic		make symbolic links instead of hard links
+ 	-f, --force		remove existing destination files
+@@ -144,7 +148,11 @@
+ 			unlink(src);
+ 		}
+ 
++#if defined(BB_WASI_B3)
++		link_func = symlink;
++#else
+ 		link_func = link;
++#endif
+ 		if (opts & LN_SYMLINK) {
+ 			link_func = symlink;
+ 		}
+--- a/coreutils/od.c
++++ b/coreutils/od.c
+@@ -16,11 +16,18 @@
+ //config:	help
+ //config:	od is used to dump binary files in octal and other formats.
+ 
++//config:config FEATURE_OD_LARGE
++//config:	bool "Full od format and address options"
++//config:	default n
++//config:	depends on OD
++//config:	help
++//config:	Select the upstream full od implementation without DESKTOP.
++
+ //applet:IF_OD(APPLET(od, BB_DIR_USR_BIN, BB_SUID_DROP))
+ 
+ //kbuild:lib-$(CONFIG_OD) += od.o
+ 
+-//usage:#if !ENABLE_DESKTOP
++//usage:#if !(ENABLE_DESKTOP || ENABLE_FEATURE_OD_LARGE)
+ //usage:#define od_trivial_usage
+ //usage:       "[-abcdeFfhiloxsv] [FILE]"
+ // We also support -BDOHXIL, but they are not documented in coreutils 9.1
+@@ -30,7 +37,7 @@
+ //usage:#endif
+ 
+ #include "libbb.h"
+-#if ENABLE_DESKTOP
++#if ENABLE_DESKTOP || ENABLE_FEATURE_OD_LARGE
+ /* This one provides -t (busybox's own build script needs it) */
+ #include "od_bloaty.c"
+ #else
+--- a/coreutils/od_bloaty.c
++++ b/coreutils/od_bloaty.c
+@@ -24,7 +24,7 @@
+ #define assert(a) ((void)0)
+ 
+ 
+-//usage:#if ENABLE_DESKTOP
++//usage:#if ENABLE_DESKTOP || ENABLE_FEATURE_OD_LARGE
+ //usage:#define od_trivial_usage
+ //usage:       "[-abcdfhilovxs] [-t TYPE] [-A RADIX] [-N SIZE] [-j SKIP] [-S MINSTR] [-w WIDTH] [FILE]..."
+ // We also support -BDOHXIL, but they are not documented in coreutils 9.1
+--- a/editors/diff.c
++++ b/editors/diff.c
+@@ -707,6 +707,9 @@
+ static int diffreg(char *file[2])
+ {
+ 	FILE *fp[2];
++#if defined(BB_WASI_B3)
++	char *memory_input[2] = { NULL, NULL };
++#endif
+ 	bool binary = false, differ = false;
+ 	int status = STATUS_SAME, i;
+ 
+@@ -729,6 +732,22 @@
+ 		/* Our diff implementation is using seek.
+ 		 * When we meet non-seekable file, we must make a temp copy.
+ 		 */
++#if defined(BB_WASI_B3)
++		/* Preview1 has no mkstemp. Preserve the real diff algorithm's seeking
++		 * contract using the actual libc's memory-backed FILE implementation. */
++		if (fd == STDIN_FILENO || (lseek(fd, 0, SEEK_SET) == -1 && errno == ESPIPE)) {
++			size_t size = INT_MAX - 4095;
++			memory_input[i] = xmalloc_read(fd, &size);
++			if (!memory_input[i])
++				bb_simple_perror_msg_and_die(file[i]);
++			if (fd != STDIN_FILENO)
++				close(fd);
++			fp[i] = fmemopen(memory_input[i], size, "r");
++			if (!fp[i])
++				bb_simple_perror_msg_and_die("fmemopen");
++			continue;
++		}
++#else
+ 		if (lseek(fd, 0, SEEK_SET) == -1 && errno == ESPIPE) {
+ 			char name[] = "/tmp/difXXXXXX";
+ 			int fd_tmp = xmkstemp(name);
+@@ -741,6 +760,7 @@
+ 			fd = fd_tmp;
+ 			xlseek(fd, 0, SEEK_SET);
+ 		}
++#endif
+ 		fp[i] = fdopen(fd, "r");
+ 	}
+ 
+@@ -776,6 +796,10 @@
+ out:
+ 	fclose_if_not_stdin(fp[0]);
+ 	fclose_if_not_stdin(fp[1]);
++#if defined(BB_WASI_B3)
++	free(memory_input[0]);
++	free(memory_input[1]);
++#endif
+ 
+ 	return status;
+ }
+--- a/editors/sed.c
++++ b/editors/sed.c
+@@ -1571,6 +1571,11 @@
+ 			&G.be_quiet); /* counter for -n */
+ 	//argc -= optind;
+ 	argv += optind;
++#if defined(BB_WASI_B3)
++	/* In-place editing promises ownership/permission preservation unavailable here. */
++	if (opt & OPT_in_place)
++		bb_simple_error_msg_and_die("in-place editing is unsupported by the WASI profile");
++#endif
+ 	if (opt & OPT_in_place) { // -i
+ 		die_func = cleanup_outname;
+ 	}
+@@ -1644,8 +1649,10 @@
+ 			/* Set permissions/owner of output file */
+ 			/* chmod'ing AFTER chown would preserve suid/sgid bits,
+ 			 * but GNU sed 4.2.1 does not preserve them either */
++#if !defined(BB_WASI_B3)
+ 			fchmod(nonstdoutfd, statbuf.st_mode);
+ 			fchown(nonstdoutfd, statbuf.st_uid, statbuf.st_gid);
++#endif
+ 
+ 			process_files();
+ 			fflush(G.nonstdout);
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -223,3 +223,8 @@
+ ifeq ($(ARCH),wasm32)
+ lib-y += mode_string.o printable_string.o printable.o human_readable.o read_printf.o fgets_str.o simplify_path.o safe_poll.o auto_string.o unicode.o
+ endif
++
++# B3 editor, query, digest and byte-dump helper closure.
++ifeq ($(ARCH),wasm32)
++lib-y += hash_md5_sha.o dump.o uuencode.o inode_hash.o bb_qsort.o isqrt.o isdirectory.o bb_bswap_64.o
++endif
+--- a/libbb/copy_file.c
++++ b/libbb/copy_file.c
+@@ -89,10 +89,14 @@
+ 
+ #if defined(BB_WASI_B1)
+ 	/* Refuse unimplemented semantics before touching the destination. */
+-	if (flags & (FILEUTILS_RECUR | FILEUTILS_PRESERVE_STATUS
++	if (flags & (
++#if !defined(BB_WASI_B3)
++	 FILEUTILS_RECUR |
++#endif
++	 FILEUTILS_PRESERVE_STATUS
+ 	 | FILEUTILS_MAKE_HARDLINK | FILEUTILS_MAKE_SOFTLINK)) {
+ 		errno = ENOTSUP;
+-		bb_simple_perror_msg("recursive, preserving, and link copy modes");
++		bb_simple_perror_msg("preserving and link copy modes");
+ 		return -1;
+ 	}
+ #endif
+@@ -154,7 +158,7 @@
+ #endif
+ 
+ 	if (S_ISDIR(source_stat.st_mode)) {
+-#if defined(BB_WASI_B1)
++#if defined(BB_WASI_B1) && !defined(BB_WASI_B3)
+ 		bb_error_msg("omitting directory '%s'", source);
+ 		return -1;
+ #else
+@@ -187,7 +191,9 @@
+ 		} else {
+ 			/* Create DEST */
+ 			mode_t mode;
++#if !defined(BB_WASI_B3)
+ 			saved_umask = umask(0);
++#endif
+ 
+ 			mode = source_stat.st_mode;
+ 			if (!(flags & FILEUTILS_PRESERVE_STATUS))
+@@ -195,11 +201,15 @@
+ 			/* Allow owner to access new dir (at least for now) */
+ 			mode |= S_IRWXU;
+ 			if (mkdir(dest, mode) < 0) {
++#if !defined(BB_WASI_B3)
+ 				umask(saved_umask);
++#endif
+ 				bb_perror_msg("can't create directory '%s'", dest);
+ 				return -1;
+ 			}
++#if !defined(BB_WASI_B3)
+ 			umask(saved_umask);
++#endif
+ 			/* need stat info for add_to_ino_dev_hashtable */
+ 			if (lstat(dest, &dest_stat) < 0) {
+ 				bb_perror_msg("can't stat '%s'", dest);
+@@ -231,12 +241,14 @@
+ 		}
+ 		closedir(dp);
+ 
++#if !defined(BB_WASI_B3)
+ 		if (!dest_exists
+ 		 && chmod(dest, source_stat.st_mode & ~saved_umask) < 0
+ 		) {
+ 			bb_perror_msg("can't preserve %s of '%s'", "permissions", dest);
+ 			/* retval = -1; - WRONG! copy *WAS* made */
+ 		}
++#endif
+ 		goto preserve_mode_ugid_time;
+ #endif
+ 	}
+--- a/libbb/dump.c
++++ b/libbb/dump.c
+@@ -31,6 +31,9 @@
+ 	dumper_t pub;
+ 
+ 	char **argv;
++#if defined(BB_WASI_B3)
++	FILE *input; /* Own file streams without dup2/renumbering stdin. */
++#endif
+ 	FU *endfu;
+ 	off_t savaddress;        /* saved address/offset in stream */
+ 	off_t eaddress;          /* end address */
+@@ -333,7 +336,11 @@
+ {
+ 	struct stat sbuf;
+ 
++	#if defined(BB_WASI_B3)
++	xfstat(fileno(dumper->input), &sbuf, fname);
++#else
+ 	xfstat(STDIN_FILENO, &sbuf, fname);
++#endif
+ 	if (S_ISREG(sbuf.st_mode)
+ 	 && dumper->pub.dump_skip >= sbuf.st_size
+ 	) {
+@@ -342,7 +349,13 @@
+ 		dumper->pub.address += sbuf.st_size;
+ 		return;
+ 	}
+-	if (fseeko(stdin, dumper->pub.dump_skip, SEEK_SET)) {
++	if (fseeko(
++#if defined(BB_WASI_B3)
++			dumper->input,
++#else
++			stdin,
++#endif
++			dumper->pub.dump_skip, SEEK_SET)) {
+ 		bb_simple_perror_msg_and_die(fname);
+ 	}
+ 	dumper->pub.address += dumper->pub.dump_skip;
+@@ -354,11 +367,21 @@
+ {
+ 	for (;;) {
+ 		const char *fname = *dumper->argv;
++#if defined(BB_WASI_B3)
++		if (dumper->input && dumper->input != stdin)
++			fclose(dumper->input);
++		dumper->input = stdin;
++#endif
+ 
+ 		if (fname) {
+ 			dumper->argv++;
+ 			if (NOT_LONE_DASH(fname)) {
++#if defined(BB_WASI_B3)
++				dumper->input = fopen(fname, "r");
++				if (!dumper->input) {
++#else
+ 				if (!freopen(fname, "r", stdin)) {
++#endif
+ 					bb_simple_perror_msg(fname);
+ 					dumper->exitval = 1;
+ 					dumper->next__done = 1;
+@@ -420,9 +443,20 @@
+ 			return dumper->get__curp;
+ 		}
+ 		n = fread(dumper->get__curp + nread, sizeof(unsigned char),
+-				dumper->pub.dump_length == -1 ? need : MIN(dumper->pub.dump_length, need), stdin);
++				dumper->pub.dump_length == -1 ? need : MIN(dumper->pub.dump_length, need),
++#if defined(BB_WASI_B3)
++				dumper->input);
++#else
++				stdin);
++#endif
+ 		if (n == 0) {
+-			if (ferror(stdin)) {
++			if (ferror(
++#if defined(BB_WASI_B3)
++					dumper->input
++#else
++					stdin
++#endif
++				)) {
+ 				bb_simple_perror_msg(dumper->argv[-1]);
+ 			}
+ 			dumper->get__ateof = 1;
+@@ -744,6 +778,11 @@
+ 
+ 	dumper->argv = argv;
+ 	display(dumper);
++#if defined(BB_WASI_B3)
++	if (dumper->input && dumper->input != stdin)
++		fclose(dumper->input);
++	dumper->input = NULL;
++#endif
+ 
+ 	return dumper->exitval;
+ }
+--- a/libbb/xfuncs_printf.c
++++ b/libbb/xfuncs_printf.c
+@@ -531,6 +531,8 @@
+ 	return ret;
+ }
+ 
++#endif /* network helpers */
++
+ // xstat() - a stat() which dies on failure with meaningful error message
+ void FAST_FUNC xstat(const char *name, struct stat *stat_buf)
+ {
+@@ -548,6 +550,7 @@
+ 		bb_simple_perror_msg_and_die(errmsg);
+ }
+ 
++#if !defined(BB_WASI_B0)
+ #if ENABLE_SELINUX
+ // selinux_or_die() - die if SELinux is disabled.
+ void FAST_FUNC selinux_or_die(void)

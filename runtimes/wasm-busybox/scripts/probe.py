@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned upstream BusyBox B0/B1 producer; failed runtime fixtures stay failed."""
+"""Pinned upstream BusyBox producer; failed runtime fixtures stay failed."""
 import argparse
 import hashlib
 import gzip
@@ -147,7 +147,9 @@ def source_pack(work, archive, source_dir):
         members['producer/config/generated-' + target + '.config'] = work / (target + '.config')
     for relative in ['manifest.json', 'README.md', 'NOTICE', 'config/b0.config', 'config/b1.config',
                      'scripts/probe.py', 'scripts/verify.py', 'test/smoke.mjs',
-                     'test/b1-smoke.mjs', 'test/b1-cases.mjs', 'patches/README.md']:
+                     'test/b1-smoke.mjs', 'test/b1-cases.mjs', 'patches/README.md',
+                     'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+                     'test/command-container.mjs', 'scripts/test-commands.mjs']:
         members['producer/' + relative] = ROOT / relative
     for patch in sorted((ROOT / 'patches').glob('*.patch')):
         members['producer/patches/' + patch.name] = patch
@@ -225,6 +227,11 @@ def main():
                'probeScriptSha256': digest(Path(__file__)),
                'smokeScriptSha256': digest(ROOT / 'test/smoke.mjs'),
                'b1Scripts': {path: digest(ROOT / path) for path in ('test/b1-smoke.mjs', 'test/b1-cases.mjs')},
+               'commandStage': manifest['commandStage'],
+               'metadataAbi': manifest.get('metadataAbi'),
+               'commandScripts': {path: digest(ROOT / path) for path in (
+                   'commands.mjs', 'test/node-wasi-fixture.mjs', 'test/command-cases.mjs', 'test/command-smoke.mjs',
+                   'test/command-container.mjs', 'scripts/test-commands.mjs')},
                'jobs': args.jobs,
                'host': {'system': platform.platform(), 'ccSha256': digest(Path(host_cc)),
                         'ccVersion': subprocess.check_output([host_cc, '--version'], text=True).splitlines()[0]},
@@ -280,7 +287,7 @@ def main():
                     shutil.copyfile(binary, wasm)
                     result['nodeSmoke'] = run_logged([
                         'node', str(ROOT / 'test/smoke.mjs'), str(wasm), str(work / 'node-smoke'),
-                        str(work / 'wasi-smoke.json')], work / 'wasi-smoke.log', environment)
+                        str(work / 'wasi-smoke.json'), str(manifest['commandStage'])], work / 'wasi-smoke.log', environment)
                     if (work / 'wasi-smoke.json').is_file():
                         result['smoke'] = json.loads((work / 'wasi-smoke.json').read_text())
                     result['requiresQualification'] = ['browser-byte-smoke', 'common-container-vfs']
@@ -293,12 +300,21 @@ def main():
     if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed']:
         receipt['b1Run'] = run_logged([
             'node', str(ROOT / 'test/b1-smoke.mjs'), str(work / 'busybox.wasm'),
-            str(work / 'native-build/busybox'), str(work / 'b1-smoke'), str(work / 'b1-smoke.json')],
+            str(work / 'native-build/busybox'), str(work / 'b1-smoke'), str(work / 'b1-smoke.json'), str(manifest['commandStage'])],
             work / 'b1-smoke.log', environment)
         if (work / 'b1-smoke.json').is_file():
             receipt['b1'] = json.loads((work / 'b1-smoke.json').read_text())
     receipt['b1SmokePassed'] = receipt.get('b1Run', {}).get('exitCode') == 0 and receipt.get('b1', {}).get('passed', False)
     if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed'] and receipt['b1SmokePassed']:
+        receipt['commandRun'] = run_logged([
+            'node', str(ROOT / 'test/command-smoke.mjs'), '--artifact', str(work / 'busybox.wasm'),
+            '--native', str(work / 'native-build/busybox'), '--stage', str(manifest['commandStage']),
+            '--work', str(work / 'command-smoke'), '--output', str(work / 'command-smoke.json')],
+            work / 'command-smoke.log', environment, timeout=240)
+        if (work / 'command-smoke.json').is_file():
+            receipt['commands'] = json.loads((work / 'command-smoke.json').read_text())
+    receipt['commandSmokePassed'] = receipt.get('commandRun', {}).get('exitCode') == 0 and receipt.get('commands', {}).get('passed', False)
+    if receipt['nativeSmokePassed'] and receipt['wasiNodeSmokePassed'] and receipt['b1SmokePassed'] and receipt['commandSmokePassed']:
         receipt['status'] = 'producer-smoke-passed'
         receipt['nodeWasiApplets'] = manifest['requestedApplets']
         receipt['sourcePack'] = source_pack(work, archive, source_dir)

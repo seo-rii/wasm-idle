@@ -1,0 +1,17 @@
+{
+  "producer": "passed",
+  "browser": "not-qualified",
+  "artifact": {
+    "sha256": "45e067aa95cb76b1c8dba19dcde9eb85736ba45486f19fe77c38030eaf1bccb8",
+    "size": 551862
+  },
+  "nativeB0Cases": 20,
+  "wasiB0Cases": 24,
+  "b1Cases": 104,
+  "commandCases": 166,
+  "sourcePack": {
+    "path": "busybox-source-pack.tar.gz",
+    "sha256": "871ed2536d7dac8971b41c08e8399382c90985485576a83bc7ead9f44b1bec3a",
+    "size": 2602740
+  }
+}

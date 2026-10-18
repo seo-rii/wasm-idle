@@ -21,7 +21,7 @@ scope.onmessage = async ({ data }) => {
       const host = createWasiHost({ ...request.invocation, args: [request.command.argv0 ?? request.invocation.command, ...request.invocation.args], fs, stdin: new Uint8Array(), maxOutputBytes: request.limits.maxOutputBytes });
       try {
         for (const entry of WebAssembly.Module.imports(module)) {
-          if (entry.kind !== 'function' || !(entry.module === 'wasi_snapshot_preview1' && Object.hasOwn(host.imports, entry.name) || entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd')) throw new Error(`Unsupported import: ${entry.module}.${entry.name}`);
+          if (entry.kind !== 'function' || !(entry.module === 'wasi_snapshot_preview1' && Object.hasOwn(host.imports, entry.name) || entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd' || entry.module === 'wasm_idle_fs_v1' && Object.hasOwn(host.filesystemImports, entry.name))) throw new Error(`Unsupported import: ${entry.module}.${entry.name}`);
         }
         if (request.invocation.cwd !== '/' && !WebAssembly.Module.imports(module).some((entry) => entry.module === 'wasm_idle_process_v1' && entry.name === 'initial_cwd')) throw new Error('A non-root cwd requires the initial_cwd guest initialization profile');
         const exports = WebAssembly.Module.exports(module);
@@ -35,7 +35,7 @@ scope.onmessage = async ({ data }) => {
       if (!(data.stdin instanceof Uint8Array) || data.stdin.length > request.limits.maxInputBytes) throw new Error('Invalid batch stdin');
       const host = createWasiHost({ ...request.invocation, args: [request.command.argv0 ?? request.invocation.command, ...request.invocation.args], fs, stdin: data.stdin, maxOutputBytes: request.limits.maxOutputBytes });
       try {
-        const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: host.imports, wasm_idle_process_v1: host.processImports });
+        const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: host.imports, wasm_idle_process_v1: host.processImports, wasm_idle_fs_v1: host.filesystemImports });
         const result = host.run(instance);
         host.dispose();
         scope.postMessage({ type: 'complete', version: 1, generation, ...result, snapshot: fs.exportSnapshot() });

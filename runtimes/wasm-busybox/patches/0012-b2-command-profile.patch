@@ -1,0 +1,208 @@
+--- a/Makefile.flags
++++ b/Makefile.flags
+@@ -223,6 +223,6 @@
+ FLTFLAGS += -s 16000
+ 
+ ifeq ($(ARCH),wasm32)
+-CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1
++CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1 -DBB_WASI_B2
+ CFLAGS_busybox += -Wl,--max-memory=67108864 -Wl,--undefined=__main_argc_argv
+ endif
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -218,3 +218,8 @@
+ ifeq ($(ARCH),wasm32)
+ lib-y += common_bufsiz.o fclose_nonstdin.o wfopen.o ask_confirmation.o concat_path_file.o concat_subpath_file.o copy_file.o get_line_from_file.o make_directory.o recursive_action.o remove_file.o xreadlink.o xregcomp.o xrealloc_vector.o
+ endif
++
++# B2 selected stream, directory and path helper closure.
++ifeq ($(ARCH),wasm32)
++lib-y += mode_string.o printable_string.o printable.o human_readable.o read_printf.o fgets_str.o simplify_path.o safe_poll.o auto_string.o unicode.o
++endif
+--- a/libbb/xfuncs_printf.c
++++ b/libbb/xfuncs_printf.c
+@@ -455,6 +455,8 @@
+ 	xchdir("/");
+ }
+ 
++#endif /* !BB_WASI_B0 */
++
+ // Print a warning message if opendir() fails, but don't die.
+ DIR* FAST_FUNC warn_opendir(const char *path)
+ {
+@@ -477,6 +479,7 @@
+ 	return dp;
+ }
+ 
++#if !defined(BB_WASI_B0)
+ // Die with an error message if we can't open a new socket.
+ int FAST_FUNC xsocket(int domain, int type, int protocol)
+ {
+--- a/coreutils/tail.c
++++ b/coreutils/tail.c
+@@ -146,6 +146,10 @@
+ 			IF_FEATURE_FANCY_TAIL("\0" "Ff"),
+ 			&str_c, &str_n IF_FEATURE_FANCY_TAIL(,&sleep_period)
+ 	);
++#if defined(BB_WASI_B2)
++	if (opt & (1 | (ENABLE_FEATURE_FANCY_TAIL ? 0x40 : 0)))
++		bb_simple_error_msg_and_die("follow mode is unsupported by the batch stream profile");
++#endif
+ #define FOLLOW (opt & 0x1)
+ #define COUNT_BYTES (opt & 0x2)
+ 	//if (opt & 0x1) // -f
+--- a/coreutils/ls.c
++++ b/coreutils/ls.c
+@@ -753,8 +753,10 @@
+ 	cur->dn_nlink  = statbuf.st_nlink ;
+ 	cur->dn_uid    = statbuf.st_uid   ;
+ 	cur->dn_gid    = statbuf.st_gid   ;
++#if !defined(BB_WASI_B2)
+ 	cur->dn_rdev_maj = major(statbuf.st_rdev);
+ 	cur->dn_rdev_min = minor(statbuf.st_rdev);
++#endif
+ 
+ 	return cur;
+ }
+@@ -961,6 +963,29 @@
+ 		nfiles++;
+ 	}
+ 	closedir(dir);
++#if defined(BB_WASI_B2)
++	/* WASI directory streams omit dot entries. ls -a still lists the real
++	 * current and parent directories using the same checked stat path. */
++	if (option_mask32 & OPT_a) {
++		unsigned dot;
++		for (dot = 0; dot < 2; dot++) {
++			const char *name = dot ? ".." : ".";
++			struct dnode *seen;
++			char *fullname;
++			for (seen = dn; seen && strcmp(seen->name, name); seen = seen->dn_next)
++				continue;
++			if (seen)
++				continue;
++			fullname = concat_path_file(path, name);
++			cur = my_stat(fullname, bb_basename(fullname), 0);
++			if (!cur) { free(fullname); continue; }
++			cur->fname_allocated = 1;
++			cur->dn_next = dn;
++			dn = cur;
++			nfiles++;
++		}
++	}
++#endif
+ 
+ 	if (dn == NULL)
+ 		return NULL;
+@@ -1204,6 +1229,10 @@
+ 		option_mask32 |= OPT_dirs_first;
+ 	}
+ 
++#if defined(BB_WASI_B2) && !defined(BB_WASI_METADATA)
++	if (opt & (OPT_l | OPT_n | OPT_s))
++		bb_simple_error_msg_and_die("long and block metadata require the extended filesystem profile");
++#endif
+ 	argv += optind;
+ 	if (!argv[0])
+ 		*--argv = (char*)".";
+--- a/coreutils/tee.c
++++ b/coreutils/tee.c
+@@ -79,7 +79,11 @@
+ 	mode += (retval & 2);	/* Since 'a' is the 2nd option... */
+ 
+ 	if (retval & 1) {
++#if defined(BB_WASI_B2)
++		bb_simple_error_msg_and_die("signal handling is unsupported by the stream profile");
++#else
+ 		signal(SIGINT, SIG_IGN);
++#endif
+ 	}
+ 	retval = EXIT_SUCCESS;
+ 	/* if (opt_p || opt_output_error)
+--- a/coreutils/uniq.c
++++ b/coreutils/uniq.c
+@@ -44,6 +44,7 @@
+ int uniq_main(int argc UNUSED_PARAM, char **argv)
+ {
+ 	const char *input_filename;
++	FILE *input_file = stdin, *output_file = stdout;
+ 	unsigned skip_fields, skip_chars, max_chars;
+ 	unsigned opt;
+ 	char eol;
+@@ -72,8 +73,7 @@
+ 		const char *output;
+ 
+ 		if (input_filename[0] != '-' || input_filename[1]) {
+-			close(STDIN_FILENO); /* == 0 */
+-			xopen(input_filename, O_RDONLY); /* fd will be 0 */
++			input_file = xfopen_for_read(input_filename);
+ 		}
+ 		output = argv[1];
+ 		if (output) {
+@@ -83,7 +83,7 @@
+ 				// Won't work with "uniq - FILE" and closed stdin:
+ 				//close(STDOUT_FILENO);
+ 				//xopen(output, O_WRONLY | O_CREAT | O_TRUNC);
+-				xmove_fd(xopen(output, O_WRONLY | O_CREAT | O_TRUNC), STDOUT_FILENO);
++				output_file = xfopen_for_write(output);
+ 			}
+ 		}
+ 	}
+@@ -102,7 +102,7 @@
+ 		dups = 0;
+ 
+ 		/* gnu uniq ignores newlines */
+-		while ((cur_line = xmalloc_fgetline(stdin)) != NULL) {
++		while ((cur_line = xmalloc_fgetline(input_file)) != NULL) {
+ 			cur_compare = cur_line;
+ 			for (i = skip_fields; i; i--) {
+ 				cur_compare = skip_whitespace(cur_compare);
+@@ -129,15 +129,17 @@
+ 			if (!(opt & (OPT_d << !!dups))) { /* (if dups, opt & OPT_u) */
+ 				if (opt & OPT_c) {
+ 					/* %7lu matches GNU coreutils 6.9 */
+-					printf("%7lu ", dups + 1);
++					fprintf(output_file, "%7lu ", dups + 1);
+ 				}
+-				printf("%s%c", old_line, eol);
++				fprintf(output_file, "%s%c", old_line, eol);
+ 			}
+ 			free(old_line);
+ 		}
+ 	} while (cur_line);
+ 
+-	die_if_ferror(stdin, input_filename);
++	die_if_ferror(input_file, input_filename);
++	if (output_file != stdout && fclose(output_file) != 0)
++		bb_simple_perror_msg_and_die("write error");
+ 
+ 	fflush_stdout_and_exit_SUCCESS();
+ }
+--- a/coreutils/sort.c
++++ b/coreutils/sort.c
+@@ -668,17 +668,21 @@
+ 			linecount = j+1;
+ 	}
+ 
++	/* Keep the real FILE handle; WASI has no POSIX dup2. */
++	FILE *output_file = stdout;
+ 	/* Print it */
+ #if ENABLE_FEATURE_SORT_BIG
+ 	/* Open output file _after_ we read all input ones */
+ 	if (option_mask32 & FLAG_o)
+-		xmove_fd(xopen(str_o, O_WRONLY|O_CREAT|O_TRUNC), STDOUT_FILENO);
++		output_file = xfopen_for_write(str_o);
+ #endif
+ 	{
+ 		int ch = (option_mask32 & FLAG_z) ? '\0' : '\n';
+ 		for (i = 0; i < linecount; i++)
+-			printf("%s%c", lines[i], ch);
+-	}
+-
++			fprintf(output_file, "%s%c", lines[i], ch);
++	}
++
++	if (output_file != stdout && fclose(output_file) != 0)
++		bb_simple_perror_msg_and_die("write error");
+ 	fflush_stdout_and_exit_SUCCESS();
+ }
