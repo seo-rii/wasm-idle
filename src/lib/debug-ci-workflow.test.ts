@@ -114,15 +114,24 @@ describe('LLDB browser integration workflow', () => {
 			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[0-9a-f]{40}\/$/u
 		);
 		expect(workflow).not.toContain('sync:wasm-clang');
-		for (const [asset, sha256] of [
-			['clang.wasm.gz', '8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75'],
-			['lld.wasm.gz', '495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11']
-		]) {
+		const buildReceipt = JSON.parse(
+			await readFile('static/clang/runtime-build.json', 'utf8')
+		) as { assets: Array<{ asset: string; size: number; sha256: string }> };
+		for (const asset of ['clang.wasm.gz', 'lld.wasm.gz'] as const) {
+			const receipt = buildReceipt.assets.find((entry) => entry.asset === asset);
+			expect(receipt, `${asset} must have a committed build receipt`).toBeDefined();
+			expect(receipt?.sha256).toMatch(/^[0-9a-f]{64}$/u);
+			expect(receipt?.size).toBeGreaterThan(0);
+			expect(BUNDLED_CLANG_ASSET_INTEGRITY[`bin/${asset}`]).toMatchObject({
+				bytes: receipt?.size,
+				sha256: receipt?.sha256
+			});
 			expect(assetManifest.assets).toContainEqual(
 				expect.objectContaining({
 					group: 'clang',
 					target: `clang/bin/${asset}`,
-					sha256
+					sha256: receipt?.sha256,
+					size: receipt?.size
 				})
 			);
 		}
