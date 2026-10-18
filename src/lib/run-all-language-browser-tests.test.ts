@@ -63,26 +63,36 @@ describe('all-language browser test runner', () => {
 		}
 	);
 	it.each([
-		['go', 'WASM_IDLE_RUN_REAL_BROWSER_GO', 'src/lib/playground/go.playwright.test.ts'],
+		[
+			'go',
+			{ WASM_IDLE_RUN_REAL_BROWSER_GO: '1' },
+			['src/lib/playground/go.playwright.test.ts']
+		],
 		[
 			'python',
-			'WASM_IDLE_RUN_REAL_BROWSER_PYTHON',
-			'src/lib/playground/python.playwright.test.ts'
+			{
+				WASM_IDLE_RUN_REAL_BROWSER_PYTHON: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG: '1'
+			},
+			[
+				'src/lib/playground/python.playwright.test.ts',
+				'src/lib/playground/python-debug.playwright.test.ts'
+			]
 		]
 	] as const)(
 		'enables required real %s coverage for changes to its runtime family',
-		(family, env, file) => {
+		(family, env, files) => {
 			const options = parseAllLanguageBrowserTestArgs([`--family=${family}`]);
 			const plan = createAllLanguageBrowserTestPlan(options);
-			expect(plan.env).toEqual({ [env]: '1' });
-			expect(plan.testFiles).toEqual([file]);
+			expect(plan.env).toEqual(env);
+			expect(plan.testFiles).toEqual(files);
 			const invocation = createVitestChildInvocation(
 				plan,
 				'http://127.0.0.1:4573/wasm-idle/'
 			);
-			expect(invocation.env[env]).toBe('1');
+			for (const [key, value] of Object.entries(env)) expect(invocation.env[key]).toBe(value);
 			expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
-			expect(invocation.args).toContain(file);
+			expect(invocation.args.slice(5)).toEqual(files);
 		}
 	);
 	it('derives asset preparation from the enabled suites and keeps Objective-C++ in LLVM', () => {
@@ -157,6 +167,7 @@ describe('all-language browser test runner', () => {
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH',
 				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY',
 				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON',
+				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG',
 				'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE',
 				'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS'
 			].sort()
@@ -172,6 +183,8 @@ describe('all-language browser test runner', () => {
 		expect(plan.testFiles).toContain('src/lib/playground/long-double.playwright.test.ts');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE).toBe('1');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE).toBe('1');
+		expect(plan.testFiles).toContain('src/lib/playground/python-debug.playwright.test.ts');
+		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG).toBe('1');
 	});
 
 	it('runs the declared Brainfuck suite as required PR-family browser coverage', () => {
@@ -277,7 +290,9 @@ describe('all-language browser test runner', () => {
 			}
 			if (shard === 'specialized') {
 				expectedFiles.add('src/lib/playground/python.playwright.test.ts');
+				expectedFiles.add('src/lib/playground/python-debug.playwright.test.ts');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG');
 			}
 			if (shard === 'workspace') {
 				for (const file of workspaceFiles) expectedFiles.add(file);
@@ -329,6 +344,8 @@ describe('all-language browser test runner', () => {
 		expect(invocation.args.slice(5)).toEqual(plan.testFiles);
 		expect(invocation.env).toMatchObject({
 			PATH: '/test/bin',
+			WASM_IDLE_REQUIRE_BROWSER_TESTS: '1',
+			WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG: '1',
 			WASM_IDLE_BROWSER_SERVER_MODE: 'preview',
 			WASM_IDLE_BROWSER_URL: 'http://127.0.0.1:4573/wasm-idle/',
 			WASM_IDLE_REUSE_LOCAL_PREVIEW: '1'

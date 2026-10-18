@@ -29,8 +29,13 @@ describe('Python debug tracer source', () => {
 		expect(source).toMatch(
 			/const debugFilename = normalizeWorkspacePath\(debugPath \|\| ''\) \|\| executionFilename;/
 		);
-		expect(source).toContain('current.f_code.co_filename == ${debugFilenameLiteral}');
-		expect(source).toContain('frame.f_code.co_filename != ${debugFilenameLiteral}');
+		expect(source).toContain('__wasm_idle_debug_os.path.abspath(${debugFilenameLiteral})');
+		expect(source).toContain(
+			'current.f_code.co_filename in __wasm_idle_debug_source_filenames'
+		);
+		expect(source).toContain(
+			'frame.f_code.co_filename not in __wasm_idle_debug_source_filenames'
+		);
 		expect(source).toMatch(
 			/compile\(\s*\$\{JSON\.stringify\(code\)\},\s*\$\{executionFilenameLiteral\},\s*"exec",\s*flags = ast\.PyCF_ALLOW_TOP_LEVEL_AWAIT,?\s*\)/
 		);
