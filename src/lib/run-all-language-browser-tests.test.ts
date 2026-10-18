@@ -53,7 +53,7 @@ describe('all-language browser test runner', () => {
 				WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1'
 			});
-			expect(browserTestAssetGroups(plan)).toEqual(['clang']);
+			expect(browserTestAssetGroups(plan)).toEqual(['container', 'clang']);
 			const child = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
 			expect(child.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
 			expect(child.args).toContain('--no-file-parallelism');
@@ -98,6 +98,7 @@ describe('all-language browser test runner', () => {
 	it('derives asset preparation from the enabled suites and keeps Objective-C++ in LLVM', () => {
 		const specialized = createAllLanguageBrowserTestPlan({ shard: 'specialized' });
 		expect(browserTestAssetGroups(specialized)).toEqual([
+			'container',
 			'ocaml',
 			'c3',
 			'lfortran',
@@ -113,21 +114,21 @@ describe('all-language browser test runner', () => {
 		const llvm = createAllLanguageBrowserTestPlan({ shard: 'llvm' });
 		expect(llvm.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX).toBe('1');
 		expect(llvm.testFiles).toContain(objectiveCxx.browserTest!.file);
-		expect(browserTestAssetGroups(llvm)).toEqual(['clang']);
+		expect(browserTestAssetGroups(llvm)).toEqual(['container', 'clang']);
 		expect(
 			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'workers' }))
-		).toEqual([]);
+		).toEqual(['container']);
 		expect(
 			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'stdin' }))
-		).toEqual([]);
+		).toEqual(['container']);
 		expect(
 			browserTestAssetGroups(createAllLanguageBrowserTestPlan({ shard: 'compressed-assets' }))
 		).toEqual(['all']);
 	});
 	it.each([
-		['stdin', []],
-		['workers', []],
-		['specialized', ['ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp']]
+		['stdin', ['container']],
+		['workers', ['container']],
+		['specialized', ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp']]
 	] as const)(
 		'prepares assets and requires execution for the added %s family',
 		(family, groups) => {
@@ -449,7 +450,7 @@ describe('all-language browser test runner', () => {
 		expect(prepareAssets).not.toHaveBeenCalled();
 		expect(startPreview).not.toHaveBeenCalled();
 		expect(verifyAssets).toHaveBeenCalledWith({
-			groups: ['ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp'],
+			groups: ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp'],
 			staticDir: path.join(repositoryRoot, 'build')
 		});
 	});

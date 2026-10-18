@@ -41,7 +41,7 @@ jobs:
             - name: Calibrate retained and released memory measurements
               run: node scripts/probe-chromium-heap.mjs "$WASM_IDLE_CHROMIUM_EXECUTABLE"
             - name: Download pinned Clang browser assets
-              run: pnpm run prepare:test-assets -- clang
+              run: pnpm run prepare:test-assets -- clang container
             - name: Prepare pinned LLDB and WAMR browser release
               run: pnpm run prepare:wasm-debug-release
             - name: Build debugger consumer dependencies

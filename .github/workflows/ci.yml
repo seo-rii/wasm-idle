@@ -162,7 +162,7 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm --dir packages/core build
             - run: pnpm exec playwright-core install --with-deps chromium
-            - run: pnpm run prepare:test-assets -- clangd
+            - run: pnpm run prepare:test-assets -- clangd container
             - run: pnpm --dir packages/lsp exec vitest run test/bundledClangdAssetIntegrity.test.ts
             - run: pnpm run test:lsp:browser:smoke
             - run: pnpm run test:lsp:browser:gleam:csp
@@ -185,7 +185,7 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm --dir packages/core build
             - run: pnpm exec playwright-core install --with-deps chromium
-            - run: pnpm run prepare:test-assets -- clangd ocaml
+            - run: pnpm run prepare:test-assets -- clangd ocaml container
             - run: pnpm run test:lsp:browser:full
             - run: pnpm run test:lsp:browser:gleam:csp
 
