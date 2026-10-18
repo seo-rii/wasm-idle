@@ -40,6 +40,7 @@ export default class MemFS {
 	private readonly filePaths = new Set<string>();
 	private readonly fileOverlays = new Map<string, Uint8Array>();
 	private readonly directoryPaths = new Set<string>();
+	private readonly outputDecoders = new Map<number, TextDecoder>();
 
 	constructor(options: MemFsOptions) {
 		this.stdin = options.stdin;
@@ -92,6 +93,8 @@ export default class MemFS {
 	}
 
 	set hostMem(mem: Memory) {
+		// A newly instantiated guest must never inherit a previous guest's partial character.
+		this.outputDecoders.clear();
 		this.hostMem_ = mem;
 	}
 
@@ -156,20 +159,37 @@ export default class MemFS {
 		assert(fd <= 2);
 		let size = 0;
 		let str = '';
+		let decoder = this.outputDecoders.get(fd);
+		if (!decoder) {
+			decoder = new TextDecoder('utf-8', { ignoreBOM: true });
+			this.outputDecoders.set(fd, decoder);
+		}
 		for (let i = 0; i < iovs_len; ++i) {
 			const buf = this.hostMem_.read32(iovs);
 			iovs += 4;
 			const len = this.hostMem_.read32(iovs);
 			iovs += 4;
-			str += this.hostMem_.readStrR(buf, len);
+			str += decoder.decode(this.hostMem_.u8.subarray(buf, buf + len), { stream: true });
 			size += len;
 		}
 		this.hostMem_.write32(nwritten_out, size);
 		if (this.trace !== noopTrace) {
 			this.trace(`host_write(fd=${fd}, bytes=${size}, data=${previewText(str)})`);
 		}
-		if (this.out) this.stdout(str);
+		if (this.out && str) this.stdout(str);
 		return ESUCCESS;
+	}
+
+	/** Finish an fd on close, or all guest streams when execution settles. */
+	flushOutput(fd?: number) {
+		const streams = fd === undefined ? [...this.outputDecoders.keys()] : [fd];
+		for (const stream of streams) {
+			const decoder = this.outputDecoders.get(stream);
+			if (!decoder) continue;
+			this.outputDecoders.delete(stream);
+			const tail = decoder.decode();
+			if (this.out && tail) this.stdout(tail);
+		}
 	}
 
 	host_read(fd: number, iovs: number, iovs_len: number, nread: number) {

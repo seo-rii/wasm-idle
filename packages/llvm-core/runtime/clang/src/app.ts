@@ -208,11 +208,14 @@ export default class App {
 					this.trace('allow_rAF_after_exit');
 					return true;
 				}
+				this.memfs.flushOutput?.();
 				// Don't allow rAF unless you return the right code.
 				this.trace(`disallow_rAF_after_exit(code=${exn.code})`);
 				if (exn.code == 0) return false;
 				writeStack = false;
 			}
+			// Flush partial guest output before appending the host's error diagnostic.
+			this.memfs.flushOutput?.();
 			if (exn instanceof NotImplemented) this.trace(`not_implemented(${exn.message})`);
 
 			// Write error message.
@@ -224,6 +227,7 @@ export default class App {
 			// Propagate error.
 			throw exn;
 		}
+		this.memfs.flushOutput?.();
 		this.trace('start() returned without proc_exit');
 	}
 
@@ -667,7 +671,9 @@ export default class App {
 			return ESUCCESS;
 		}
 		if (synthetic) return ESUCCESS;
-		return this.memfs.exports.fd_close(fd);
+		const result = this.memfs.exports.fd_close(fd);
+		if (result === ESUCCESS && (fd === 1 || fd === 2)) this.memfs.flushOutput?.(fd);
+		return result;
 	}
 
 	debugEvaluate(expression: string) {
