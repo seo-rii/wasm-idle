@@ -75,6 +75,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(files).toEqual([
 			'THIRD_PARTY_NOTICES.md',
 			'compile-classlib-teavm.bin',
+			'compiler.wasm-deobfuscator.wasm',
 			'compiler.wasm-runtime.js',
 			'compiler.wasm.gz',
 			'runtime-classlib-teavm.bin.gz',
@@ -101,7 +102,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3',
+			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3-java-errors',
 			provenanceLevel: 'source-build-and-compatibility-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',

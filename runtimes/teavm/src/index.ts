@@ -5,6 +5,7 @@ export { TEAVM_ASSET_RECEIPTS, TEAVM_ASSET_VERSION } from './runtime.generated.j
 export const TEAVM_LOAD_ASSETS = [
 	'compiler.wasm-runtime.js',
 	'compiler.wasm',
+	'compiler.wasm-deobfuscator.wasm',
 	'compile-classlib-teavm.bin',
 	'runtime-classlib-teavm.bin'
 ] as const;
@@ -65,7 +66,7 @@ export function snapshotTeaVmAssetReceipts(
 	value: unknown = TEAVM_ASSET_RECEIPTS
 ): TeaVmAssetReceipts {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new TypeError('TeaVM runtime integrity must describe exactly four assets');
+		throw new TypeError('TeaVM runtime integrity must describe exactly five assets');
 	}
 	const receivedNames = Object.keys(value).sort();
 	const expectedNames = [...TEAVM_LOAD_ASSETS].sort();
@@ -73,7 +74,7 @@ export function snapshotTeaVmAssetReceipts(
 		receivedNames.length !== expectedNames.length ||
 		receivedNames.some((name, index) => name !== expectedNames[index])
 	) {
-		throw new TypeError('TeaVM runtime integrity must describe exactly four assets');
+		throw new TypeError('TeaVM runtime integrity must describe exactly five assets');
 	}
 	const receipts = value as Record<TeaVmLoadAsset, unknown>;
 	return Object.freeze(
