@@ -48,13 +48,28 @@ vector version wchar.h wctype.h
 	.split(/\s+/u);
 
 describe('bundled clang asset integrity', () => {
-	it('keeps the unchanged MemFS source receipt self-contained after a sysroot refresh', async () => {
+	it('pins the rebuilt MemFS source receipt and its shipped sidecars', async () => {
 		const root = resolve(process.cwd(), 'static/clang');
 		const build = JSON.parse(await readFile(resolve(root, 'runtime-build.json'), 'utf8'));
-		const receipt = build.toolchain.memfs;
+		const metadata = build.toolchain.memfs;
+		const receipt = metadata.buildReceipt;
 		expect(receipt.format).toBe('wasm-llvm-memfs-build-v1');
 		expect(receipt).not.toHaveProperty('buildReceipt');
 		expect(receipt).not.toHaveProperty('files');
+		expect(Object.keys(metadata.files).sort()).toEqual([
+			'LICENSE.memfs-llvm.txt',
+			'LICENSE.memfs-stb_sprintf.txt',
+			'memfs-build-receipt.json'
+		]);
+		for (const [name, pin] of Object.entries(metadata.files)) {
+			const bytes = await readFile(resolve(root, name));
+			expect(pin).toEqual({
+				bytes: bytes.byteLength,
+				sha256: createHash('sha256').update(bytes).digest('hex')
+			});
+			if (name === 'memfs-build-receipt.json')
+				expect(JSON.parse(bytes.toString('utf8'))).toEqual(receipt);
+		}
 		const module = gunzipSync(await readFile(resolve(root, 'bin/memfs.wasm.gz')));
 		expect(receipt.outputs['memfs.wasm']).toMatchObject({
 			bytes: module.byteLength,
