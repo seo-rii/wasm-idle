@@ -696,7 +696,6 @@ export class WorkerAssetBridge {
 		const generation = this.generation;
 		const controller = new AbortController();
 		const progress = this.progress;
-		const context = this.captureLoadContext();
 		const receiveProgress = (event: AssetPreparationProgress) => {
 			if (controller.signal.aborted || generation !== this.generation) return;
 			if (event.kind === 'download') {
@@ -720,17 +719,20 @@ export class WorkerAssetBridge {
 				// The worker may already be terminated.
 			}
 		};
-		const loadContext = (report: (event: AssetPreparationProgress, key?: string) => void) => ({
-			...context,
-			progress: {
-				update: (asset: string, loaded: number, total?: number) =>
-					report({ kind: 'download', asset, loaded, total }, `download:${asset}`),
-				activity: (phase: 'decompressing' | 'verifying', asset: string) =>
-					report({ kind: 'activity', asset, phase }, `activity:${asset}`)
-			}
-		});
 		this.activeLoads.add(controller);
 		try {
+			const context = this.captureLoadContext();
+			const loadContext = (
+				report: (event: AssetPreparationProgress, key?: string) => void
+			) => ({
+				...context,
+				progress: {
+					update: (asset: string, loaded: number, total?: number) =>
+						report({ kind: 'download', asset, loaded, total }, `download:${asset}`),
+					activity: (phase: 'decompressing' | 'verifying', asset: string) =>
+						report({ kind: 'activity', asset, phase }, `activity:${asset}`)
+				}
+			});
 			this.validateAssetRequest(loadContext(receiveProgress), request.asset);
 			const identity = [
 				this.runtime,
@@ -886,8 +888,22 @@ export class WorkerAssetBridge {
 	}
 
 	private captureLoadContext(): AssetLoadContext {
+		const config = { ...this.config };
+		// Cache identity and verification must observe the same receipt, even if a caller
+		// updates its configuration while an asynchronous asset load is in progress.
+		if (config.integrity) {
+			config.integrity = Object.freeze(
+				Object.fromEntries(
+					Object.entries(config.integrity).map(([asset, receipt]) => [
+						asset,
+						typeof receipt === 'string' ? receipt : Object.freeze({ ...receipt })
+					])
+				)
+			);
+		}
+		if (config.allowedBaseUrls) config.allowedBaseUrls = [...config.allowedBaseUrls];
 		return {
-			config: { ...this.config },
+			config,
 			maxAssetBytes: this.maxAssetBytes,
 			expectedAssets: new Set(this.expectedAssets),
 			pythonPackageAssets: new Set(this.pythonPackageAssets),
