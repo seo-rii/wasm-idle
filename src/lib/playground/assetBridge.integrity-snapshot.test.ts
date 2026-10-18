@@ -140,7 +140,9 @@ describe('worker bridge integrity snapshots', () => {
 					const response = message.assetResponse;
 					expect(response.ok).toBe(true);
 					if (module) {
-						const instance = await WebAssembly.instantiate(response.module);
+						const instance = await WebAssembly.instantiate(
+							response.module as WebAssembly.Module
+						);
 						expect((instance.exports.f as () => number)()).toBe(1);
 					} else {
 						expect(new Uint8Array(response.bytes)).toEqual(expected);
