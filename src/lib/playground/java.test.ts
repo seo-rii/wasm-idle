@@ -1514,6 +1514,59 @@ public class Main {
 		await expect(sandbox.run('public class Retry {}', false)).resolves.toBe(true);
 	});
 
+	it.each([false, true])(
+		'settles an empty Java error promptly and clears its timeout (prepare: %s)',
+		async (prepare) => {
+			const sandbox = new Java();
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			vi.useFakeTimers();
+			onPostMessage = () => undefined;
+
+			const running = sandbox.run('public class Main {}', prepare, true, undefined, [], {
+				limits: { compileTimeoutMs: 5, runTimeoutMs: 5 }
+			});
+			const outcome = expect(running).rejects.toBe('Java execution failed');
+			const staleHandler = worker.onmessage;
+			expect(vi.getTimerCount()).toBe(1);
+			staleHandler?.({ data: { error: '' } } as MessageEvent<any>);
+
+			await outcome;
+			expect(sandbox.exit).toBe(true);
+			expect(vi.getTimerCount()).toBe(0);
+			expect(worker.terminate).not.toHaveBeenCalled();
+
+			const retry = sandbox.run('public class Retry {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 100, runTimeoutMs: 100 }
+			});
+			staleHandler?.({ data: { error: 'stale error' } } as MessageEvent<any>);
+			await vi.advanceTimersByTimeAsync(20);
+			expect(sandbox.exit).toBe(false);
+			expect(worker.terminate).not.toHaveBeenCalled();
+			worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+
+			await expect(retry).resolves.toBe(true);
+			expect(vi.getTimerCount()).toBe(0);
+			await sandbox.dispose();
+		}
+	);
+
+	it.each([
+		'java.lang.IllegalArgumentException: invalid input',
+		'java.lang.RuntimeException: first line\nsecond line\n\tat Main.main(Main.java:3)'
+	])('preserves Java error text exactly: %s', async (error) => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = (worker) => {
+			worker.onmessage?.({ data: { error } } as MessageEvent<any>);
+		};
+
+		await expect(sandbox.run('public class Main {}', false)).rejects.toBe(error);
+		expect(sandbox.exit).toBe(true);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		await sandbox.dispose();
+	});
+
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new Java();
 		const worker = new MockWorker();

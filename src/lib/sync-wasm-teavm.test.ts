@@ -15,6 +15,7 @@ const tempDirs: string[] = [];
 const assetNames = [
 	'compiler.wasm-runtime.js',
 	'compiler.wasm',
+	'compiler.wasm-deobfuscator.wasm',
 	'compile-classlib-teavm.bin',
 	'runtime-classlib-teavm.bin'
 ] as const;
@@ -48,6 +49,7 @@ async function createFixture() {
 	const assets = new Map<string, Uint8Array>([
 		['compiler.wasm-runtime.js', Buffer.from('export const load = () => true;\n')],
 		['compiler.wasm', Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)],
+		['compiler.wasm-deobfuscator.wasm', Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)],
 		['compile-classlib-teavm.bin', gzipSync(Buffer.from('compile classlib fixture'))],
 		['runtime-classlib-teavm.bin', gzipSync(Buffer.from('runtime classlib fixture'))]
 	]);
@@ -67,7 +69,7 @@ async function createFixture() {
 			mediaType:
 				asset === 'compiler.wasm-runtime.js'
 					? 'text/javascript'
-					: asset === 'compiler.wasm'
+					: asset.endsWith('.wasm')
 						? 'application/wasm'
 						: 'application/octet-stream',
 			bytes: bytes.byteLength,
@@ -196,6 +198,7 @@ describe('syncWasmTeaVmAssets', () => {
 		expect(files).toEqual([
 			'THIRD_PARTY_NOTICES.md',
 			'compile-classlib-teavm.bin',
+			'compiler.wasm-deobfuscator.wasm',
 			'compiler.wasm-runtime.js',
 			'compiler.wasm.gz',
 			'runtime-classlib-teavm.bin.gz',
@@ -242,6 +245,24 @@ describe('syncWasmTeaVmAssets', () => {
 		);
 		await expect(readFile(path.join(fixture.targetDir, 'sentinel.txt'), 'utf8')).resolves.toBe(
 			'keep me'
+		);
+	});
+
+	it('rejects a non-Wasm deobfuscator even when its byte receipt matches', async () => {
+		const fixture = await createFixture();
+		const invalid = Buffer.from('not wasm');
+		const output = fixture.lock.outputs.find(
+			({ path }) => path === 'compiler.wasm-deobfuscator.wasm'
+		)!;
+		output.bytes = invalid.byteLength;
+		output.sha256 = sha256(invalid);
+		output.storage.bytes = invalid.byteLength;
+		output.storage.sha256 = sha256(invalid);
+		await writeFile(path.join(fixture.distDir, output.path), invalid);
+		await writeFile(fixture.lockFilePath, JSON.stringify(fixture.lock));
+
+		await expect(syncWasmTeaVmAssets(fixture)).rejects.toThrow(
+			'TeaVM compiler.wasm-deobfuscator.wasm has an invalid WebAssembly header'
 		);
 	});
 });

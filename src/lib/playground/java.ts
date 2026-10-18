@@ -743,7 +743,9 @@ class Java implements Sandbox {
 						resolve(results as string);
 						return;
 					}
-					if (error) failRun(error);
+					if (Object.hasOwn(event.data, 'error')) {
+						failRun(error === '' ? 'Java execution failed' : error);
+					}
 				} catch (error) {
 					failRun(error, true);
 				}

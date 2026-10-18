@@ -33,6 +33,7 @@ const FINGERPRINT_DOMAIN = 'wasm-idle:teavm-runtime-manifest:v2';
 const LOGICAL_ASSETS = Object.freeze([
 	'compiler.wasm-runtime.js',
 	'compiler.wasm',
+	'compiler.wasm-deobfuscator.wasm',
 	'compile-classlib-teavm.bin',
 	'runtime-classlib-teavm.bin'
 ]);
@@ -212,7 +213,7 @@ export async function readTeaVmInputLock(lockFilePath = DEFAULT_LOCK_FILE_PATH) 
 		new Set(outputs.map(({ path: assetPath }) => assetPath)).size !== LOGICAL_ASSETS.length ||
 		LOGICAL_ASSETS.some((asset) => !outputs.some(({ path: candidate }) => candidate === asset))
 	) {
-		throw new Error('TeaVM input lock must describe exactly four outputs');
+		throw new Error('TeaVM input lock must describe exactly five outputs');
 	}
 	const legalFiles = value.legalFiles.map(validateLegalFile);
 	if (
@@ -264,7 +265,7 @@ async function readDistribution(distDir, outputs) {
 		entries.length !== LOGICAL_ASSETS.length ||
 		entries.some((entry) => !entry.isFile() || !LOGICAL_ASSETS.includes(entry.name))
 	) {
-		throw new Error('TeaVM distribution must contain exactly four logical assets');
+		throw new Error('TeaVM distribution must contain exactly five logical assets');
 	}
 	const logicalBytes = new Map();
 	for (const output of outputs) {
@@ -273,10 +274,10 @@ async function readDistribution(distDir, outputs) {
 			throw new Error(`TeaVM ${output.path} does not match the output lock`);
 		}
 		if (
-			output.path === 'compiler.wasm' &&
+			output.path.endsWith('.wasm') &&
 			!Buffer.from(bytes.subarray(0, 8)).equals(Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]))
 		) {
-			throw new Error('TeaVM compiler.wasm has an invalid WebAssembly header');
+			throw new Error(`TeaVM ${output.path} has an invalid WebAssembly header`);
 		}
 		if (
 			output.path.endsWith('-classlib-teavm.bin') &&
@@ -932,6 +933,43 @@ export async function produceWasmTeaVmAssets(options) {
 			cwd: temporaryRoot,
 			env: buildEnvironment
 		});
+		const deobfuscatorArtifact = teavm.artifacts.find(
+			(artifact) =>
+				isObject(artifact) && artifact.name === 'teavm-wasm-gc-deobfuscator-0.13.1.jar'
+		);
+		if (!isObject(deobfuscatorArtifact) || typeof deobfuscatorArtifact.name !== 'string') {
+			throw new Error('TeaVM producer lock is missing the stack deobfuscator JAR');
+		}
+		const deobfuscatorJar = await findFileByName(
+			path.join(
+				gradleUserHome,
+				'caches',
+				'modules-2',
+				'files-2.1',
+				'org.teavm',
+				'teavm-wasm-gc-deobfuscator'
+			),
+			deobfuscatorArtifact.name
+		);
+		if (!deobfuscatorJar)
+			throw new Error('TeaVM stack deobfuscator dependency was not resolved');
+		await verifyFileReceipt(
+			deobfuscatorJar,
+			validateReceipt(deobfuscatorArtifact, 'TeaVM stack deobfuscator JAR'),
+			'TeaVM stack deobfuscator JAR'
+		);
+		const { stdout: deobfuscatorBytes } = await execFile(
+			'unzip',
+			['-p', deobfuscatorJar, 'org/teavm/backend/wasm/deobfuscator.wasm'],
+			{ encoding: 'buffer', maxBuffer: 1024 * 1024 }
+		);
+		if (
+			!deobfuscatorBytes.equals(
+				await readFile(path.join(distDir, 'compiler.wasm-deobfuscator.wasm'))
+			)
+		) {
+			throw new Error('TeaVM stack deobfuscator differs from its pinned JAR resource');
+		}
 		if (!Array.isArray(build.upstreamOutputs)) {
 			throw new Error('TeaVM producer lock is missing upstream output receipts');
 		}

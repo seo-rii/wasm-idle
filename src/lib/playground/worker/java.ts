@@ -1,6 +1,10 @@
 import { acceptCompiledTeaVmModule, loadStreamingJavaCompiler } from './javaStreaming';
-import { createJavaStdinBridge, prepareJavaRuntimeStdinInjection } from '$lib/playground/javaRuntimeStdin';
+import {
+	createJavaStdinBridge,
+	prepareJavaRuntimeStdinInjection
+} from '$lib/playground/javaRuntimeStdin';
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
+import { prepareJavaExceptionBridge } from '$lib/playground/javaRuntimeErrors';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import {
 	configureWorkerRuntimeAssets,
@@ -19,13 +23,17 @@ declare const self: {
 
 let compilerLib: any = null;
 let compiler: any = null;
-let runtimeLoad: ((code: string | ArrayBufferView | WebAssembly.Module, options?: object) => Promise<any>) | null = null;
+let runtimeLoad:
+	| ((code: string | ArrayBufferView | WebAssembly.Module, options?: object) => Promise<any>)
+	| null = null;
+let exceptionDeobfuscator: WebAssembly.Module | null = null;
 let loadedBaseUrl = '';
 let stdoutBuffer = '';
 let stderrBuffer = '';
 let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
+let compiledExceptionFormatter = '';
 let compiledWasm: Uint8Array | null = null;
 let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
@@ -74,23 +82,27 @@ self.addEventListener('message', async (event) => {
 	} = event.data;
 	try {
 		if (load) {
-			const runtimeAssets = assets as (WorkerRuntimeAssetConfig & { streamCompiler?: boolean }) | undefined;
+			const runtimeAssets = assets as
+				(WorkerRuntimeAssetConfig & { streamCompiler?: boolean }) | undefined;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			const baseUrl = runtimeAssets?.baseUrl || '';
 			const streamCompiler = runtimeAssets?.streamCompiler === true;
 			if (!compiler || loadedBaseUrl !== baseUrl) {
 				// Observe every branch immediately: failed assets must not leave an
 				// unhandled rejection while another branch is still initializing Wasm.
-				const [nextRuntime, sdk, runtimeClasslib] = await Promise.all([
+				const [nextRuntime, sdk, runtimeClasslib, deobfuscator] = await Promise.all([
 					(async () => {
 						const [runtimeModule, compilerAsset] = await Promise.all([
 							(async () => {
 								let runtimeSource = decoder.decode(
 									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
 								);
-								if (streamCompiler) runtimeSource = acceptCompiledTeaVmModule(runtimeSource);
+								if (streamCompiler)
+									runtimeSource = acceptCompiledTeaVmModule(runtimeSource);
 								const runtimeUrl = URL.createObjectURL(
-									new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
+									new Blob([runtimeSource], {
+										type: 'text/javascript;charset=utf-8'
+									})
 								);
 								try {
 									return await import(/* @vite-ignore */ runtimeUrl);
@@ -99,21 +111,40 @@ self.addEventListener('message', async (event) => {
 								}
 							})(),
 							(async () => {
-								const module = streamCompiler ? await loadStreamingJavaCompiler(baseUrl, runtimeAssets?.maxAssetBytes ?? 128 * 1024 * 1024) : undefined;
-								return module ? { bytes: module } : loadWorkerRuntimeAsset('compiler.wasm');
+								const module = streamCompiler
+									? await loadStreamingJavaCompiler(
+											baseUrl,
+											runtimeAssets?.maxAssetBytes ?? 128 * 1024 * 1024
+										)
+									: undefined;
+								return module
+									? { bytes: module }
+									: loadWorkerRuntimeAsset('compiler.wasm');
 							})()
 						]);
 						const load = runtimeModule.load as NonNullable<typeof runtimeLoad>;
 						const module = await load(compilerAsset.bytes, {
 							stackDeobfuscator: { enabled: false }
 						});
-						return { load, lib: module.exports, compiler: module.exports.createCompiler() };
+						return {
+							load,
+							lib: module.exports,
+							compiler: module.exports.createCompiler()
+						};
 					})(),
 					loadWorkerRuntimeAsset('compile-classlib-teavm.bin').then(({ bytes }) =>
 						toInt8Array(bytes)
 					),
 					loadWorkerRuntimeAsset('runtime-classlib-teavm.bin').then(({ bytes }) =>
 						toInt8Array(bytes)
+					),
+					loadWorkerRuntimeAsset('compiler.wasm-deobfuscator.wasm').then(({ bytes }) =>
+						(
+							WebAssembly.compile as (
+								bytes: BufferSource,
+								options: { builtins: string[] }
+							) => Promise<WebAssembly.Module>
+						)(bytes as BufferSource, { builtins: ['js-string'] })
 					)
 				]);
 				// Publish only a fully initialized compiler; a failed first attempt
@@ -123,10 +154,12 @@ self.addEventListener('message', async (event) => {
 				compilerLib = nextRuntime.lib;
 				compiler = nextRuntime.compiler;
 				runtimeLoad = nextRuntime.load;
+				exceptionDeobfuscator = deobfuscator;
 				loadedBaseUrl = baseUrl;
 				compiledCode = '';
 				compiledStdin = '';
 				compiledMainClass = '';
+				compiledExceptionFormatter = '';
 				compiledWasm = null;
 				compiledDiagnostics = [];
 				compiledActivePath = '';
@@ -137,7 +170,8 @@ self.addEventListener('message', async (event) => {
 			return;
 		}
 
-		if (!compiler || !runtimeLoad) throw new Error('TeaVM compiler not loaded');
+		if (!compiler || !runtimeLoad || !exceptionDeobfuscator)
+			throw new Error('TeaVM compiler not loaded');
 		stdoutBuffer = '';
 		stderrBuffer = '';
 		const explicitStdin = hasExplicitStdin === true;
@@ -192,6 +226,7 @@ self.addEventListener('message', async (event) => {
 			);
 			const diagnosticLines: string[] = [];
 			const diagnosticMessages: object[] = [];
+			let compilingExceptionBridge = false;
 			const diagnosticRegistration = compiler.onDiagnostic((diagnostic: any) => {
 				const severity = diagnostic.severity
 					? String(diagnostic.severity).toLowerCase()
@@ -200,6 +235,7 @@ self.addEventListener('message', async (event) => {
 					? `${diagnostic.fileName}:${diagnostic.lineNumber || 0}${diagnostic.columnNumber ? `:${diagnostic.columnNumber}` : ''}`
 					: 'TeaVM';
 				diagnosticLines.push(`${location}: ${severity}: ${diagnostic.message}`);
+				if (compilingExceptionBridge) return;
 				const fileName = diagnostic.fileName ? String(diagnostic.fileName) : null;
 				if (fileName && !currentSourcePaths.has(fileName)) {
 					return;
@@ -266,9 +302,44 @@ self.addEventListener('message', async (event) => {
 						: 'Multiple main methods found'
 				);
 			}
+			// Compile the launcher against the original class files so user diagnostics and
+			// main-method validation stay independent, and original source lines are unchanged.
+			const classFiles = Array.from(compiler.listOutputFiles() as string[]);
+			const exceptionBridge = prepareJavaExceptionBridge(
+				mainClass,
+				[
+					code,
+					...sourceFiles.map((file) => file.content),
+					stdinInjection.helperSource || ''
+				],
+				classFiles
+			);
+			for (const path of classFiles) {
+				if (path.endsWith('.class'))
+					compiler.addClassFile(path, compiler.getOutputFile(path));
+			}
+			compiler.clearSourceFiles();
+			compiler.addSourceFile(exceptionBridge.sourceFileName, exceptionBridge.source);
+			compiler.addSourceFile(
+				exceptionBridge.formatterSourceFileName,
+				exceptionBridge.formatterSource
+			);
+			let bridgeOk: boolean;
+			try {
+				compilingExceptionBridge = true;
+				bridgeOk = compiler.compile();
+			} finally {
+				compilingExceptionBridge = false;
+			}
+			if (!bridgeOk) {
+				disposeDiagnosticRegistration();
+				throw new Error(
+					diagnosticLines.join('\n') || 'Java exception bridge compilation failed'
+				);
+			}
 			const generateOk = compiler.generateWebAssembly({
 				outputName: 'app',
-				mainClass
+				mainClass: exceptionBridge.mainClass
 			});
 			disposeDiagnosticRegistration();
 			if (!generateOk) {
@@ -279,6 +350,7 @@ self.addEventListener('message', async (event) => {
 			compiledCode = code;
 			compiledStdin = stdinInjection.stdinCacheKey;
 			compiledMainClass = mainClass;
+			compiledExceptionFormatter = exceptionBridge.formatExport;
 			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
@@ -305,7 +377,10 @@ self.addEventListener('message', async (event) => {
 			wasmIdleJavaStdin?: unknown;
 		};
 		const previousWindow = workerGlobal.window;
-		const hadStdinBridge = Object.prototype.hasOwnProperty.call(workerGlobal, 'wasmIdleJavaStdin');
+		const hadStdinBridge = Object.prototype.hasOwnProperty.call(
+			workerGlobal,
+			'wasmIdleJavaStdin'
+		);
 		const previousStdinBridge = workerGlobal.wasmIdleJavaStdin;
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
 		workerGlobal.wasmIdleJavaStdin = stdinBridge;
@@ -316,7 +391,9 @@ self.addEventListener('message', async (event) => {
 					imports.teavmConsole.putcharStderr = pushStderr;
 				},
 				stackDeobfuscator: {
-					enabled: false
+					enabled: true,
+					path: exceptionDeobfuscator,
+					infoLocation: 'embedded'
 				}
 			});
 			self.postMessage({
@@ -327,7 +404,20 @@ self.addEventListener('message', async (event) => {
 					label: 'Java program started'
 				}
 			});
-			module.exports.main(args);
+			try {
+				module.exports.main(args);
+			} catch (error) {
+				// JSExceptions retrieves the real Java Throwable; its class, causes, and
+				// source stack survive even when getMessage() is null or empty.
+				let javaError: unknown;
+				try {
+					javaError = module.exports[compiledExceptionFormatter](error);
+				} catch {
+					// A formatting failure must not replace the original runtime failure.
+				}
+				if (typeof javaError === 'string' && javaError) throw new Error(javaError);
+				throw error;
+			}
 			flushStdout();
 			flushStderr();
 			self.postMessage({ results: true, mainClass: compiledMainClass });
