@@ -1,3 +1,5 @@
+(()=>{var g=e=>e.reason??new DOMException("Runtime Wasm module request aborted","AbortError");var l=e=>{try{e.onmessage=null}catch{}try{e.onmessageerror=null}catch{}try{e.close()}catch{}};function c(e,s,u={}){let o=u.timeoutMs??12e4;if(!Number.isSafeInteger(o)||o<=0||o>2147483647)return l(s),Promise.reject(new TypeError("Runtime Wasm module timeout must be a positive integer"));let i=u.signal;return new Promise((d,f)=>{let m=!1,n=(t,r,b=!1)=>{if(!m){if(m=!0,clearTimeout(y),i?.removeEventListener("abort",a),b)try{s.postMessage({type:"cancel"})}catch{}l(s),t!==void 0?f(t):d(r)}},a=()=>n(g(i),void 0,!0),y=setTimeout(()=>n(new Error("Runtime Wasm module service timed out"),void 0,!0),o);if(s.onmessageerror=()=>n(new Error("Runtime Wasm module response could not be cloned"),void 0,!0),s.onmessage=t=>{let r=t.data;r?.type==="module"&&r.module instanceof WebAssembly.Module?n(void 0,r.module):n(new Error(r?.type==="error"&&typeof r.message=="string"?r.message:"Invalid runtime Wasm module response"),void 0,!0)},i?.addEventListener("abort",a,{once:!0}),i?.aborted){a();return}try{let t=e.buffer instanceof ArrayBuffer&&e.byteOffset===0&&e.byteLength===e.buffer.byteLength?e.buffer:Uint8Array.from(e).buffer;s.postMessage({type:"compile",bytes:t},[t]),s.start()}catch(t){n(t instanceof Error?t:new Error(String(t)),void 0,!0)}})}globalThis.__wasmIdleRequestRuntimeWasmModule=c;})();
+
 // Synced with the reviewed compiler receipts; this source is never fetched at run time.
 const LFORTRAN_LOCK = {"schemaVersion":1,"profileId":"lfortran-llvm-emscripten-ab867a2-v2","source":"ab867a23029b0c1b1c3131b5a0e2363709be37f0","version":"0.65.0-97-gab867a23","assets":{"producer-receipt.json":{"bytes":6932,"sha256":"11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"},"lfortran.js":{"bytes":968283,"sha256":"348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3"},"lfortran.wasm":{"bytes":80662569,"sha256":"b7c8ef4e942e9965a511b8700955c47c1f48d4ef18c61953a4847a6dcd680181"},"lfortran.data":{"bytes":179758,"sha256":"6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f"}}};
 const PAGE_BYTES = 65536;
@@ -7,10 +9,11 @@ function createSharedStdinReader(channel, flush = () => {}) {
 	if (
 		!channel ||
 		channel.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel.protocolVersion !== 1 ||
+		channel.protocolVersion !== 2 ||
 		channel.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel.capacity) ||
 		channel.capacity < 1 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== 16 + channel.capacity ||
@@ -19,20 +22,22 @@ function createSharedStdinReader(channel, flush = () => {}) {
 		throw new Error('LFortran READ requires the shared streaming stdin channel.');
 	}
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const bytes = new Uint8Array(channel.buffer, 16, channel.capacity);
 	const readByte = (blocking = true) => {
 		flush();
 		while (true) {
 			if (Atomics.load(control, 3) === 1)
 				throw new Error('LFortran streaming stdin was cancelled.');
-			const write = Atomics.load(control, 0),
-				read = Atomics.load(control, 1);
-			const available = write - read;
-			if (available < 0 || available > channel.capacity)
+			const write = Atomics.load(control, 0) >>> 0,
+				read = Atomics.load(control, 1) >>> 0;
+			const available = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || available > channel.capacity)
 				throw new Error('LFortran stdin ring is corrupt.');
 			if (available > 0) {
 				const value = bytes[read % channel.capacity];
-				Atomics.store(control, 1, read + 1);
+				Atomics.store(control, 1, (read + 1) % counterRange);
 				return value;
 			}
 			if (Atomics.load(control, 2) === 1) return null;
@@ -176,7 +181,24 @@ self.onmessage = async ({ data }) => {
 		await verifyPayload(data.runtimePreflight);
 		const payload = data.runtimePreflight;
 		const wasmMemory = createBoundedMemory(data.limits?.maxWasmMemoryBytes);
-		const mainModule = await WebAssembly.compile(payload['lfortran.wasm']);
+		const modulePorts = data.runtimeWasmModulePorts;
+		let mainModule;
+		if (modulePorts === undefined) {
+			mainModule = await WebAssembly.compile(payload['lfortran.wasm']);
+		} else {
+			if (
+				!modulePorts ||
+				!(modulePorts.compiler instanceof MessagePort) ||
+				typeof __wasmIdleRequestRuntimeWasmModule !== 'function'
+			)
+				throw new Error('LFortran compiler module service is invalid');
+			// Preserve the original verified bytes used by Emscripten and subsequent evidence.
+			mainModule = await __wasmIdleRequestRuntimeWasmModule(
+				Uint8Array.from(payload['lfortran.wasm']),
+				modulePorts.compiler,
+				{ timeoutMs: Math.min(data.limits.compileTimeoutMs, 2_147_483_647) }
+			);
+		}
 		const memoryImports = WebAssembly.Module.imports(mainModule).filter(
 			(entry) => entry.kind === 'memory'
 		);

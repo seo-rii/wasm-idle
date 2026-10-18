@@ -1,5 +1,8 @@
+(()=>{var g=e=>e.reason??new DOMException("Runtime Wasm module request aborted","AbortError");var l=e=>{try{e.onmessage=null}catch{}try{e.onmessageerror=null}catch{}try{e.close()}catch{}};function c(e,s,u={}){let o=u.timeoutMs??12e4;if(!Number.isSafeInteger(o)||o<=0||o>2147483647)return l(s),Promise.reject(new TypeError("Runtime Wasm module timeout must be a positive integer"));let i=u.signal;return new Promise((d,f)=>{let m=!1,n=(t,r,b=!1)=>{if(!m){if(m=!0,clearTimeout(y),i?.removeEventListener("abort",a),b)try{s.postMessage({type:"cancel"})}catch{}l(s),t!==void 0?f(t):d(r)}},a=()=>n(g(i),void 0,!0),y=setTimeout(()=>n(new Error("Runtime Wasm module service timed out"),void 0,!0),o);if(s.onmessageerror=()=>n(new Error("Runtime Wasm module response could not be cloned"),void 0,!0),s.onmessage=t=>{let r=t.data;r?.type==="module"&&r.module instanceof WebAssembly.Module?n(void 0,r.module):n(new Error(r?.type==="error"&&typeof r.message=="string"?r.message:"Invalid runtime Wasm module response"),void 0,!0)},i?.addEventListener("abort",a,{once:!0}),i?.aborted){a();return}try{let t=e.buffer instanceof ArrayBuffer&&e.byteOffset===0&&e.byteLength===e.buffer.byteLength?e.buffer:Uint8Array.from(e).buffer;s.postMessage({type:"compile",bytes:t},[t]),s.start()}catch(t){n(t instanceof Error?t:new Error(String(t)),void 0,!0)}})}globalThis.__wasmIdleRequestRuntimeWasmModule=c;})();
+
 const C3_WASM_PAGE_BYTES = 65536;
 
+/** @param {Uint8Array<ArrayBuffer>} bytes */
 async function c3Digest(bytes) {
 	return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (value) =>
 		value.toString(16).padStart(2, '0')
@@ -7,7 +10,12 @@ async function c3Digest(bytes) {
 }
 
 // Only lower the limit of one defined, unshared wasm32 memory. Instructions and data stay intact.
-async function limitC3WasmMemory(bytes, maximumBytes) {
+/**
+ * @param {Uint8Array<ArrayBuffer>} bytes
+ * @param {number} maximumBytes
+ * @param {{verifyModules?: boolean}} [options]
+ */
+async function limitC3WasmMemory(bytes, maximumBytes, { verifyModules = true } = {}) {
 	if (
 		!(bytes instanceof Uint8Array) ||
 		bytes.length < 8 ||
@@ -31,6 +39,7 @@ async function limitC3WasmMemory(bytes, maximumBytes) {
 		}
 		throw new Error('Invalid Wasm integer');
 	};
+	/** @param {number} value */
 	const encode = (value) => {
 		const result = [];
 		do {
@@ -83,9 +92,11 @@ async function limitC3WasmMemory(bytes, maximumBytes) {
 		offset = end;
 	}
 	if (!memory) throw new Error('C3 requires one defined Wasm memory');
-	const module = await WebAssembly.compile(bytes);
-	if (WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')) {
-		throw new Error('Imported C3 Wasm memories are unsupported');
+	if (verifyModules) {
+		const module = await WebAssembly.compile(bytes);
+		if (WebAssembly.Module.imports(module).some((item) => item.kind === 'memory')) {
+			throw new Error('Imported C3 Wasm memories are unsupported');
+		}
 	}
 	const payload = [1, 1, ...encode(memory.minimum), ...encode(memory.maximum)];
 	const section = Uint8Array.from([5, ...encode(payload.length), ...payload]);
@@ -93,7 +104,7 @@ async function limitC3WasmMemory(bytes, maximumBytes) {
 	limited.set(bytes.subarray(0, memory.start));
 	limited.set(section, memory.start);
 	limited.set(bytes.subarray(memory.end), memory.start + section.length);
-	await WebAssembly.compile(limited);
+	if (verifyModules) await WebAssembly.compile(limited);
 	return {
 		bytes: limited,
 		evidence: {
@@ -117,27 +128,31 @@ function c3Stdin(source, channel) {
 	if (!channel) return () => (offset < input.length ? input[offset++] : -1);
 	if (
 		channel.protocol !== 'wasm-idle-static-stdin-ring' ||
-		channel.protocolVersion !== 1 ||
+		channel.protocolVersion !== 2 ||
 		channel.controlBytes !== 16 ||
 		!Number.isSafeInteger(channel.capacity) ||
 		channel.capacity <= 0 ||
+		channel.capacity > 2 ** 31 ||
 		typeof SharedArrayBuffer !== 'function' ||
 		!(channel.buffer instanceof SharedArrayBuffer) ||
 		channel.buffer.byteLength !== 16 + channel.capacity
 	)
 		throw new Error('Invalid C3 stdin ring');
 	const control = new Int32Array(channel.buffer, 0, 4);
+	// Keep rollover aligned with byte offsets, including non-power-of-two capacities.
+	const counterRange = Math.floor(2 ** 32 / channel.capacity) * channel.capacity;
 	const bytes = new Uint8Array(channel.buffer, 16, channel.capacity);
 	return () => {
 		while (true) {
 			if (Atomics.load(control, 3)) throw new Error('C3 stdin cancelled');
-			const write = Atomics.load(control, 0);
-			const read = Atomics.load(control, 1);
-			const count = write - read;
-			if (count < 0 || count > bytes.length) throw new Error('Invalid C3 stdin counters');
+			const write = Atomics.load(control, 0) >>> 0;
+			const read = Atomics.load(control, 1) >>> 0;
+			const count = (write - read + counterRange) % counterRange;
+			if (write >= counterRange || read >= counterRange || count > bytes.length)
+				throw new Error('Invalid C3 stdin counters');
 			if (count) {
 				const value = bytes[read % bytes.length];
-				Atomics.store(control, 1, read + 1);
+				Atomics.store(control, 1, (read + 1) % counterRange);
 				// Wake the producer once per batch, rather than posting one message per byte.
 				if (count === 1 || (read + 1) % 4096 === 0)
 					self.postMessage({ type: 'stdin-request' });
@@ -199,7 +214,27 @@ self.onmessage = async ({ data }) => {
 		const totalCap = Math.min(limits.maxWasmMemoryBytes, 2 * 1024 ** 3);
 		const guestCap = Math.min(64 * 1024 ** 2, Math.floor(totalCap / 8 / 65536) * 65536);
 		const compilerCap = totalCap - guestCap;
-		const boundedCompiler = await limitC3WasmMemory(assets.compilerWasmBytes, compilerCap);
+		const modulePorts = data.runtimeWasmModulePorts;
+		const boundedCompiler = await limitC3WasmMemory(assets.compilerWasmBytes, compilerCap, {
+			verifyModules: modulePorts === undefined
+		});
+		let compilerModule;
+		if (modulePorts !== undefined) {
+			if (
+				!modulePorts ||
+				!(modulePorts.compiler instanceof MessagePort) ||
+				typeof __wasmIdleRequestRuntimeWasmModule !== 'function'
+			)
+				throw new Error('C3 compiler module service is invalid');
+			compilerModule = await __wasmIdleRequestRuntimeWasmModule(
+				assets.compilerWasmBytes,
+				modulePorts.compiler,
+				{ timeoutMs: Math.min(limits.compileTimeoutMs, 2_147_483_647) }
+			);
+			if (WebAssembly.Module.imports(compilerModule).some((item) => item.kind === 'memory')) {
+				throw new Error('Imported C3 Wasm memories are unsupported');
+			}
+		}
 		self.postMessage({
 			evidence: {
 				kind: 'c3-memory-limits',
@@ -251,7 +286,16 @@ self.onmessage = async ({ data }) => {
 			wasmBinary: boundedCompiler.bytes,
 			locateFile: () => loaderUrl,
 			print: log,
-			printErr: log
+			printErr: log,
+			...(compilerModule
+				? {
+						instantiateWasm(imports, receive) {
+							const instance = new WebAssembly.Instance(compilerModule, imports);
+							receive(instance, compilerModule);
+							return instance.exports;
+						}
+					}
+				: {})
 		});
 		compiler.FS.mkdir('/work');
 		compiler.FS.chdir('/work');

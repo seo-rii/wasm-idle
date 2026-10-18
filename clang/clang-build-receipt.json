@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "producerId": "wasm-llvm/clang-browser",
+  "kind": "clang-build-receipt",
+  "manifestSha256": "5ed1a2ae1087529e947973e0f6095cd61e2994ef48b273963cc8c64f5e491ae9",
+  "buildMode": "fresh-output-directory",
+  "installedToolchains": {
+    "wasiSdk": {
+      "bytes": 629403422,
+      "entries": 19800,
+      "sha256": "9494da3476624ee1fe64a33acc8a6c9fdb694edb74d6457e3adaf71f65e94d05"
+    },
+    "emsdkUpstream": {
+      "bytes": 815365268,
+      "entries": 12439,
+      "sha256": "b3c9122dc30c8ac3a7f4e3504c286390980f980bb5e8dc08d207160a03fd28fc"
+    }
+  },
+  "sources": {
+    "llvm": {
+      "repository": "https://github.com/llvm/llvm-project",
+      "commit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+      "tree": "d56bad48870a78d9d3c22ae7abd8e614987a9fe9",
+      "diffSha256": "40d9f6b357fa3e91a5e44d8d17b22ae432fe59b2191b9dc048aa823c0952d97e",
+      "patches": [
+        {
+          "repository": "https://github.com/YoWASP/llvm-project",
+          "commit": "97196c8eeb1d495fa43bb8af2fb26af5ef5b89fb",
+          "sha256": "d07d3e20e2e2d62f04753015a9b2b303dc3ed3d1f84724381e6e9d36213f7714"
+        },
+        {
+          "path": "patches/llvm-wasi-close.patch",
+          "sha256": "5a4260bc1a7715174626cc4ca64cc0a583f449ea98b7921f8867843358d9a1b0"
+        },
+        {
+          "path": "patches/lld-wasm-only.patch",
+          "sha256": "0b5005499d812c55699b6dd50f93800d5c425001315abab10a54248e7f97f178"
+        },
+        {
+          "path": "patches/clangd-emscripten-stdin.patch",
+          "sha256": "e60c4c1299d7e028451e9f46270318c5eb80f8d77ce3af773e2f1ad802b3a022"
+        }
+      ]
+    },
+    "emsdk": {
+      "repository": "https://github.com/emscripten-core/emsdk",
+      "commit": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de",
+      "tree": "0fae1e0c48435c4fa629c1499724399b08abcc44",
+      "diffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "recipe": {
+    "sha256": "3e7debfff0ad18e9b16a60c967584dfdf58f259087fbf96492869282d54161a0",
+    "files": [
+      {
+        "path": "scripts/build-toolchain.mjs",
+        "bytes": 45599,
+        "sha256": "1257d0297ccfffdc12b79e018cefe65621b25d2f27b8b960ca5a0c208d6fb73b"
+      },
+      {
+        "path": "scripts/build-provenance.mjs",
+        "bytes": 13745,
+        "sha256": "1c987648ef5c8407842cc131ace2a5c38943ec572bf297ca261df4df552bec92"
+      },
+      {
+        "path": "scripts/build-memfs.mjs",
+        "bytes": 12456,
+        "sha256": "a7e2bc27013c054698a78e222c5bd623c03d688475491a6784771cca86a5022b"
+      },
+      {
+        "path": "scripts/prepare-clangd-headers.mjs",
+        "bytes": 5794,
+        "sha256": "a2f0c891f0c58fc1d91f8e2d985fa6560c930dcded83c2e3ef56895b622977e2"
+      },
+      {
+        "path": "scripts/sysroot-pruning.mjs",
+        "bytes": 3796,
+        "sha256": "f1880337ed5adc100a5ad9108b1326140895b747168f06e1de16ce5768a80ee4"
+      },
+      {
+        "path": "scripts/gcc-compat.mjs",
+        "bytes": 24894,
+        "sha256": "69828023d89d6e2ebf6707942a6f4ef9f28f98abdeb00bd5901fd3f4dd0a8830"
+      },
+      {
+        "path": "scripts/hot-path-launcher.sh",
+        "bytes": 749,
+        "sha256": "7fe0e578c7f5fb543c00061bd41b83af4e567da19831e5ce52546de945b6fb0a"
+      }
+    ]
+  },
+  "buildOptions": {
+    "llvmVersion": "22.1.8",
+    "llvmCommit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+    "wasiSdkVersion": "33",
+    "emsdkVersion": "6.0.0",
+    "emsdkCommit": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de",
+    "targetTriple": "wasm32-wasi",
+    "hostTriple": "wasm32-wasip1",
+    "yowaspWasiPatchRepo": "https://github.com/YoWASP/llvm-project",
+    "yowaspWasiPatchCommit": "97196c8eeb1d495fa43bb8af2fb26af5ef5b89fb",
+    "llvmBuildType": "MinSizeRel",
+    "llvmMinSizeOpt": "Oz",
+    "llvmHotPathOpt": "none",
+    "llvmHotPathDirs": [
+      "clang/lib/Lex",
+      "clang/lib/Basic",
+      "llvm/lib/Support"
+    ],
+    "clangWasmOpt": "default",
+    "clangToolHost": "OFF",
+    "clangdLto": "ON",
+    "clangdAssertions": "OFF",
+    "clangdTidyChecks": "OFF",
+    "clangdDecisionForest": "OFF",
+    "clangdSeparateHeaders": "OFF",
+    "ninjaJobs": "4",
+    "environment": {
+      "CC": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++",
+      "CFLAGS": "",
+      "CXXFLAGS": "",
+      "CPPFLAGS": "",
+      "LDFLAGS": "",
+      "AR": "",
+      "RANLIB": ""
+    }
+  },
+  "tools": {
+    "cmake": {
+      "bytes": 12327608,
+      "sha256": "51258a914cab9788382758a8c7e3997db232ad7bfe15cb2c40cd4f0b0addddcd",
+      "version": "cmake version 4.0.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake)."
+    },
+    "ninja": {
+      "bytes": 310664,
+      "sha256": "cb1f22b33e58fc69c47728e751b6ff6f5a1d78d60f46d734c02076dc90a78b19",
+      "version": "1.11.1"
+    },
+    "tar": {
+      "bytes": 531984,
+      "sha256": "4e11647a9c86fb8857768bd622c43ed0662d7019f60f5bdd12fb15ac5f087070",
+      "version": "tar (GNU tar) 1.34\nCopyright (C) 2021 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by John Gilmore and Jay Fenlason."
+    },
+    "wasiClang": {
+      "bytes": 118656,
+      "sha256": "6985ec66b1065976616156773f95ed318b1793f7761fe9e9f38f8e771571021c",
+      "version": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)\nTarget: wasm32-unknown-wasip1\nThread model: posix\nInstalledDir: /mnt/work/wasm-clang-release-20261018-9zv7u2c1/producer-work/tools/wasi-sdk-0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce/wasi-sdk-33.0-x86_64-linux/bin\nConfiguration file: /mnt/work/wasm-clang-release-20261018-9zv7u2c1/producer-work/tools/wasi-sdk-0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce/wasi-sdk-33.0-x86_64-linux/bin/clang.cfg"
+    },
+    "wasiClangxx": {
+      "bytes": 118656,
+      "sha256": "6985ec66b1065976616156773f95ed318b1793f7761fe9e9f38f8e771571021c",
+      "version": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)\nTarget: wasm32-unknown-wasip1\nThread model: posix\nInstalledDir: /mnt/work/wasm-clang-release-20261018-9zv7u2c1/producer-work/tools/wasi-sdk-0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce/wasi-sdk-33.0-x86_64-linux/bin\nConfiguration file: /mnt/work/wasm-clang-release-20261018-9zv7u2c1/producer-work/tools/wasi-sdk-0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce/wasi-sdk-33.0-x86_64-linux/bin/clang++.cfg"
+    },
+    "wasiAr": {
+      "bytes": 69576,
+      "sha256": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.0-wasi-sdk\n  Optimized build."
+    },
+    "wasiRanlib": {
+      "bytes": 69576,
+      "sha256": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.0-wasi-sdk\n  Optimized build."
+    },
+    "wasiLld": {
+      "bytes": 4165088,
+      "sha256": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26",
+      "version": "LLD 22.1.0 (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "nativeC": {
+      "bytes": 1301496,
+      "sha256": "75e997ec62297a6484f491bae28ab0ccb489daba23e398fd10fe68e9e6f0def8",
+      "version": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "nativeCxx": {
+      "bytes": 1305592,
+      "sha256": "dd91977c184e327710578363ad93ebb175c3a457b6236b874fd3911b7c055c65",
+      "version": "g++ (Debian 12.2.0-14+deb12u1) 12.2.0\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "llvmTablegen": {
+      "bytes": 5530088,
+      "sha256": "7b8f448965142df53e144e2f2a3b7944a7058c2cd8edfc6aa9008c1f5ad14e9f",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.8\n  Optimized build."
+    },
+    "clangTablegen": {
+      "bytes": 2734232,
+      "sha256": "53aac83decaa55dfdae96887e56a3bfc4c57cbab31e899c5880416fa16745687",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.8\n  Optimized build."
+    },
+    "emsdkClang": {
+      "bytes": 145890584,
+      "sha256": "4d83b9cd7f2c76a4e5ce9c42eca6ff8994c7ee6de5570d2e31afefb0be5c8b09",
+      "version": "clang version 23.0.0git (https:/github.com/llvm/llvm-project c6c2ad52586c28e74a724570985a48dc0022d250)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /mnt/work/wasm-clang-release-20261018-9zv7u2c1/producer-work/emsdk/upstream/bin"
+    },
+    "wasmOpt": {
+      "bytes": 16807776,
+      "sha256": "edaca574b1d17eee1a03c902d0b827bd3fb30e131c249b0c7f5612b16bf55275",
+      "version": "wasm-opt version 130 (version_130-4-gb9c72894f)"
+    },
+    "emccDriver": {
+      "bytes": 22951,
+      "sha256": "6f4271099808746971324cc24bdde5043836d344a4a563b55d9e54fcf600106e"
+    }
+  },
+  "inputs": {
+    "clang": {
+      "bytes": 35597829,
+      "sha256": "fe7c40c2369d4a1b91d87cd2a38b1a5be11cd7f381373b7888be0b5f209e2d5b"
+    },
+    "lld": {
+      "bytes": 16136490,
+      "sha256": "77949fed32d5481979b8ebe6081009e3ec69c7219cb355e3f388a316746ea9b7"
+    },
+    "memfs": {
+      "bytes": 38071,
+      "sha256": "5b741e03dd3502bcfd80e4e5055232b5d633604e1461752efed0189f93407dc3"
+    },
+    "memfsReceipt": {
+      "bytes": 8344,
+      "sha256": "c4ef4aa971195d15b4dec7abe617bce0292d2b889bfcc99ad67c2da1518c620b"
+    },
+    "sysroot": {
+      "bytes": 35594240,
+      "sha256": "fb6d8a8786ec395009d44f62ff24a5bf09ff8672340b7dae9f48e28cf1569cba"
+    },
+    "clangdJs": {
+      "bytes": 97002,
+      "sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
+    },
+    "clangdWasm": {
+      "bytes": 78993689,
+      "sha256": "f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c"
+    }
+  },
+  "reproducibility": {
+    "independentlyRebuilt": false
+  }
+}

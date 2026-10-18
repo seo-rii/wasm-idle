@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../v-C_dhyT80.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

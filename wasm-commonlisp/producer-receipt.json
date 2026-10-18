@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "producerId": "wasm-llvm/ecl-browser",
+  "manifestSha256": "a7a55be5f9bc6c4b2d835f36849cb12e1489142f59658fa87475bfc310fe50bf",
+  "runtimeHost": "wasm32-emscripten",
+  "sources": {
+    "ecl": {
+      "repository": "https://gitlab.com/embeddable-common-lisp/ecl.git",
+      "version": "26.5.5",
+      "tag": "26.5.5",
+      "commit": "74780fa2cd2874889793a657d55b557488d3e346",
+      "license": "LGPL-2.1-or-later"
+    },
+    "emsdk": {
+      "repository": "https://github.com/emscripten-core/emsdk.git",
+      "version": "6.0.0",
+      "commit": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de"
+    }
+  },
+  "overlays": [
+    {
+      "path": "src/ecl-browser-main.c",
+      "sha256": "cf64df9aee7f49c5f6e3009a9dd358ee854b3308087565f803a380ce425a4cfc"
+    }
+  ],
+  "link": {
+    "objects": [
+      "libecl-help.a",
+      "libecl-cdb.a",
+      "libecl.a",
+      "-leclgc",
+      "-leclgmp",
+      "-lm"
+    ],
+    "flags": [
+      "-O2",
+      "-fwasm-exceptions",
+      "-sSUPPORT_LONGJMP=wasm",
+      "-sSTACK_SIZE=16777216",
+      "-sBINARYEN_EXTRA_PASSES=--spill-pointers",
+      "--profiling-funcs",
+      "-sMODULARIZE=1",
+      "-sEXPORT_ES6=1",
+      "-sENVIRONMENT=web,worker,node",
+      "-sEXPORTED_RUNTIME_METHODS=FS,callMain",
+      "-sINVOKE_RUN=0",
+      "-sEXIT_RUNTIME=1",
+      "-sIMPORTED_MEMORY=1",
+      "-sALLOW_MEMORY_GROWTH=1",
+      "-sINITIAL_MEMORY=67108864",
+      "-sMAXIMUM_MEMORY=2147483648"
+    ]
+  },
+  "invocation": {
+    "factory": "default export of ecl.mjs (MODULARIZE, EXPORT_ES6)",
+    "moduleOptions": [
+      "noInitialRun: true",
+      "wasmBinary",
+      "wasmMemory (initial 64 MiB, maximum <= 2 GiB)",
+      "stdin",
+      "stdout",
+      "stderr"
+    ],
+    "args": [
+      "--norc",
+      "--eval",
+      "<LOAD form from scripts/harness.mjs loadForm()>"
+    ]
+  },
+  "build": {
+    "manifestSha256": "a7a55be5f9bc6c4b2d835f36849cb12e1489142f59658fa87475bfc310fe50bf",
+    "builderSha256": "889d043152946f40bae795e2ad3dd8e3b52f7adb06309e5fe244ad3a6484ce31",
+    "prepared": {
+      "manifestSha256": "a7a55be5f9bc6c4b2d835f36849cb12e1489142f59658fa87475bfc310fe50bf",
+      "sourceTreeSha256": "db291d02115476ba94c5ca8866934439602995d4d56e3e2e298b92dc641efafc",
+      "emscripten": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.0 (afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3)"
+    },
+    "emscripten": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.0 (afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3)",
+    "assets": {
+      "ecl.mjs": {
+        "bytes": 77142,
+        "sha256": "c9a2df8f418f637a2f5dc4a52842463a5a9df1a2dc5d24038ad01adb93969fa7"
+      },
+      "ecl.wasm": {
+        "bytes": 4560196,
+        "sha256": "9aa43374a0fd991d841628eb209fbfd78e938636732692662f719383e52184c4"
+      }
+    }
+  },
+  "smoke": {
+    "engine": "Node v24.1.0",
+    "inputs": {
+      "fixtures/stdin.lisp": "6806cfb4ff1924154ded1c847ea0aca8e85b84bd497822a5932ee175b193d374",
+      "fixtures/error.lisp": "296ebce38db4f2f6b08ee1c3c74f87542cd01b5568279f614c6da208f49ae782",
+      "fixtures/gc.lisp": "3adb72ecdac3cc9858dc77666c35cad685d550e2eabeb98e4093501f63ec3d34",
+      "fixtures/recursion.lisp": "0ceabc61101fabbc773f33f6ea72e9655707b1374735e68455cbbb615a4cc573",
+      "scripts/harness.mjs": "12130210c5d57ce23cc06fdf2d9d55bd5d1565c2e8a638487246a32b67033fb1",
+      "scripts/browser-worker.mjs": "bb50c017b944635445b264ef70ecd05f0f4f94582c2a3eea011d9eb1cce9d83a",
+      "scripts/producer.mjs": "889d043152946f40bae795e2ad3dd8e3b52f7adb06309e5fe244ad3a6484ce31"
+    },
+    "checks": {
+      "stdinStdout": true,
+      "unhandledCondition": true,
+      "garbageCollection": true,
+      "recursionTrap": true,
+      "recursionTrapMessage": "RangeError: Maximum call stack size exceeded",
+      "elapsedMs": {
+        "stdin": 417,
+        "error": 297,
+        "gc": 4461,
+        "recursion": 277
+      }
+    },
+    "assets": {
+      "ecl.mjs": {
+        "bytes": 77142,
+        "sha256": "c9a2df8f418f637a2f5dc4a52842463a5a9df1a2dc5d24038ad01adb93969fa7"
+      },
+      "ecl.wasm": {
+        "bytes": 4560196,
+        "sha256": "9aa43374a0fd991d841628eb209fbfd78e938636732692662f719383e52184c4"
+      }
+    }
+  },
+  "browserSmoke": {
+    "engine": "Chromium 149.0.7827.55; ECL runs in module Workers",
+    "inputs": {
+      "fixtures/stdin.lisp": "6806cfb4ff1924154ded1c847ea0aca8e85b84bd497822a5932ee175b193d374",
+      "fixtures/error.lisp": "296ebce38db4f2f6b08ee1c3c74f87542cd01b5568279f614c6da208f49ae782",
+      "fixtures/gc.lisp": "3adb72ecdac3cc9858dc77666c35cad685d550e2eabeb98e4093501f63ec3d34",
+      "fixtures/recursion.lisp": "0ceabc61101fabbc773f33f6ea72e9655707b1374735e68455cbbb615a4cc573",
+      "scripts/harness.mjs": "12130210c5d57ce23cc06fdf2d9d55bd5d1565c2e8a638487246a32b67033fb1",
+      "scripts/browser-worker.mjs": "bb50c017b944635445b264ef70ecd05f0f4f94582c2a3eea011d9eb1cce9d83a",
+      "scripts/producer.mjs": "889d043152946f40bae795e2ad3dd8e3b52f7adb06309e5fe244ad3a6484ce31"
+    },
+    "checks": {
+      "stdinStdout": true,
+      "unhandledCondition": true,
+      "garbageCollection": true,
+      "recursionTrap": true,
+      "recursionTrapMessage": "RangeError: Maximum call stack size exceeded",
+      "elapsedMs": {
+        "stdin": 464,
+        "error": 406,
+        "gc": 4338,
+        "recursion": 440
+      }
+    },
+    "assets": {
+      "ecl.mjs": {
+        "bytes": 77142,
+        "sha256": "c9a2df8f418f637a2f5dc4a52842463a5a9df1a2dc5d24038ad01adb93969fa7"
+      },
+      "ecl.wasm": {
+        "bytes": 4560196,
+        "sha256": "9aa43374a0fd991d841628eb209fbfd78e938636732692662f719383e52184c4"
+      }
+    }
+  },
+  "assets": {
+    "ecl.mjs": {
+      "bytes": 77142,
+      "sha256": "c9a2df8f418f637a2f5dc4a52842463a5a9df1a2dc5d24038ad01adb93969fa7"
+    },
+    "ecl.wasm": {
+      "bytes": 4560196,
+      "sha256": "9aa43374a0fd991d841628eb209fbfd78e938636732692662f719383e52184c4"
+    }
+  },
+  "delivery": {
+    "ecl.wasm.gz": {
+      "bytes": 1535867,
+      "sha256": "2d8d273a602db2e9677dd185351cf3019f3c31be0e0d6b4c14f7356f8f353a16",
+      "encoding": "gzip",
+      "logicalPath": "ecl.wasm"
+    }
+  }
+}

@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../clang-6B8yrr3G.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

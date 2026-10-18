@@ -1,6 +1,6 @@
 # Container workspace sources and licenses
 
-Host SDK: [MIT license](sources/LICENSE.container.txt).
+Host SDK: @wasm-idle/container@0.1.0-alpha.0 (workspace, virtual-metadata-v1); [MIT license](sources/LICENSE.container.txt).
 
 GNU Bash: GPL-3.0-or-later. BusyBox: GPL-2.0-only. SDK, LLVM and linked-runtime notices are retained below.
 
@@ -13,6 +13,6 @@ GNU Bash: GPL-3.0-or-later. BusyBox: GPL-2.0-only. SDK, LLVM and linked-runtime 
 - [shell: shell-notice-1.txt](sources/shell-notice-1.txt)
 - [shell: shell-notice-2.txt](sources/shell-notice-2.txt)
 
-Build instructions, configurations and reviewed patches: [wasm-idle sources](https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d/runtimes).
-SDK bridge patches and build instructions: [Bash bridge](https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d/runtimes/wasm-bash/bridge).
+Build instructions, configurations and reviewed patches: [wasm-idle sources](https://github.com/seo-rii/wasm-idle/tree/8ead09726cfed3c758c9a6b827bf1fa020549dd4/runtimes).
+SDK bridge patches and build instructions: [Bash bridge](https://github.com/seo-rii/wasm-idle/tree/8ead09726cfed3c758c9a6b827bf1fa020549dd4/runtimes/wasm-bash/bridge).
 Compiler producer sources and pinned build: [wasm-llvm](https://github.com/seo-rii/wasm-llvm/tree/ca7933e47d3a3451d81e72ac174dcb5aa28b59d1/producer/clang-browser).

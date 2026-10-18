@@ -64,7 +64,25 @@ export function createCompileHandler(options = {}) {
             fs.writeText(`/workspace/${filePath}`, source);
         }
         const compilePlan = [];
-        const sourceArgs = normalizedEntries.map(([filePath]) => `/workspace/${filePath}`);
+        // ocamlc compiles and links its inputs in argv order: pass only OCaml sources, each
+        // interface before its implementation, and the entry module last. Helper modules keep a
+        // path order because the bundled toolchain has no dependency sorter.
+        const entryModule = entry.replace(/\.mli?$/, '');
+        const sourceArgs = normalizedEntries
+            .map(([filePath]) => filePath)
+            .filter((filePath) => filePath === entry || /\.mli?$/.test(filePath))
+            .sort((left, right) => {
+            const leftModule = left.replace(/\.mli?$/, '');
+            const rightModule = right.replace(/\.mli?$/, '');
+            if ((leftModule === entryModule) !== (rightModule === entryModule)) {
+                return leftModule === entryModule ? 1 : -1;
+            }
+            if (leftModule !== rightModule) {
+                return leftModule.localeCompare(rightModule);
+            }
+            return Number(left.endsWith('.ml')) - Number(right.endsWith('.ml'));
+        })
+            .map((filePath) => `/workspace/${filePath}`);
         const bytecodeOutput = `/workspace/_build/${entryStem}.byte`;
         if (packages.length > 0) {
             compilePlan.push({
