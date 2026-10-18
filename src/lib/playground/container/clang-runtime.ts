@@ -136,12 +136,18 @@ export class WebsiteClangRuntime {
 				language === 'CPP'
 					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
 					: options.cVersion?.toLowerCase();
+			// A response file or -x override can select C++ for a C editor. Keep its
+			// default source mode C while enabling the C++ driver's link libraries.
+			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
 			const argv = [
-				...(language === 'CPP' ? ['--driver-mode=g++'] : []),
+				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
+				...(language === 'C' && override ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
 				'-fno-color-diagnostics',
-				input.options.activePath!,
+				'-fno-exceptions',
 				...compileArgs,
+				input.options.activePath!,
+				'-lc-printscan-long-double',
 				'-o',
 				artifact
 			];
