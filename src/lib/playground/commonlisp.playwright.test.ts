@@ -6,6 +6,10 @@ import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
+import {
+	prepareContainerRuntimePage,
+	observeContainerRuntimeWorkers
+} from '../../../scripts/container-runtime-browser-observer.mjs';
 
 const delayedReadSource = `(format t "name?~%")
 (finish-output)
@@ -228,43 +232,18 @@ describe.skipIf(!enabled)('real Common Lisp (ECL) consumer in Chromium', () => {
 			const browserUrl = process.env.WASM_IDLE_BROWSER_URL || server.browserUrl;
 			const context = await browser.newContext();
 			await addBrowserTestCookies(context, browserUrl);
-			await context.addInitScript(() => {
-				const target = window as any;
-				target.__commonLispRuns = [];
-				target.__commonLispEvidence = [];
-				const BrowserWorker = Worker;
-				target.Worker = class extends BrowserWorker {
-					constructor(url: string | URL, options?: WorkerOptions) {
-						super(url, options);
-						this.addEventListener('message', ({ data }) => {
-							if (data?.evidence?.protocol === 'wasm-idle-commonlisp-evidence-v1')
-								target.__commonLispEvidence.push(data.evidence);
-						});
-					}
-					postMessage(message: any, transfer: any = []) {
-						if (message?.run && message.baseUrl?.includes('/wasm-commonlisp/'))
-							target.__commonLispRuns.push({
-								limits: message.limits,
-								code: message.code,
-								activePath: message.activePath
-							});
-						super.postMessage(message, transfer);
-					}
-				};
-			});
 			const page = await context.newPage();
 			const pageErrors: string[] = [];
 			const consoleMessages: string[] = [];
 			page.on('console', (message) => consoleMessages.push(message.text()));
 			page.setDefaultTimeout(60_000);
-			page.on('pageerror', (error) => pageErrors.push(error.message));
 			try {
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() =>
-						crossOriginIsolated &&
-						Boolean((window as any).__wasmIdleDebug?.getEditorValue)
-				);
+				await prepareContainerRuntimePage(page, browserUrl);
+				page.on('pageerror', (error) => pageErrors.push(error.message));
+				const observer = await observeContainerRuntimeWorkers(page, {
+					runtimePath: '/wasm-commonlisp/',
+					evidenceProtocol: 'wasm-idle-commonlisp-evidence-v1'
+				});
 				await page.locator('#language-select').selectOption('COMMONLISP');
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug.getEditorValue().includes('What is your name?')
@@ -297,12 +276,14 @@ describe.skipIf(!enabled)('real Common Lisp (ECL) consumer in Chromium', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
 				).toMatchObject({ status: 'completed', exitCode: 0 });
-				const evidence = await page.evaluate(() => ({
-					runs: (window as any).__commonLispRuns,
-					runtime: (window as any).__commonLispEvidence.at(-1),
-					transcript: document.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent
-				}));
+				const observed = await observer.read();
+				const evidence = {
+					runs: observed.runs,
+					runtime: observed.evidence.at(-1),
+					transcript: await page
+						.locator('[data-testid="terminal-debug-output"]')
+						.textContent()
+				};
 				process.stdout.write(`Common Lisp UI acceptance: ${JSON.stringify(evidence)}\n`);
 				expect(evidence.runs).toHaveLength(1);
 				expect(evidence.runs[0].code).toBe(editorDefaults.commonlisp);
@@ -322,7 +303,7 @@ describe.skipIf(!enabled)('real Common Lisp (ECL) consumer in Chromium', () => {
 								transcript: document.querySelector(
 									'[data-testid="terminal-debug-output"]'
 								)?.textContent,
-								runs: (window as any).__commonLispRuns
+								execution: (window as any).__wasmIdleDebug?.getExecutionState?.()
 							}))
 						}) +
 						'\n'
