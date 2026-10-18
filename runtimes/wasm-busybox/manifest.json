@@ -138,6 +138,11 @@
       "path": "patches/0018-tar-directory-times.patch",
       "sha256": "ddd7359396e6232c3bcce81d380209ad21b18b1ab26b2e2196d78fc95e72f3db",
       "classification": "real-deferred-directory-timestamps"
+    },
+    {
+      "path": "patches/0019-zip-stored-crc.patch",
+      "sha256": "fba2691ae4085976d73f9bd375cb03d87f08e843e8bc46ccca05668bf69bacdc",
+      "classification": "real-stored-zip-crc-validation"
     }
   ],
   "requestedApplets": [
@@ -231,6 +236,7 @@
   "reviewFixes": [
     "stream-error-status",
     "tar-directory-errors",
-    "tar-directory-time-order"
+    "tar-directory-time-order",
+    "stored-zip-crc"
   ]
 }
