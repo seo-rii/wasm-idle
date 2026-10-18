@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { assertClangdStdinBridge } from './llvm-contracts/clangd-artifact-contract.mjs';
 import { readSingleZipEntry } from './llvm-contracts/archive.mjs';
+import { acquireClangPublicationLock } from './llvm-contracts/clang-publication-lock.mjs';
 import {
 	CLANG_BUILD_RECEIPT,
 	parseClangBuildReceipt,
@@ -493,19 +494,21 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 	const snapshot = await validateBundle(resolvedSourceDir, 'source');
 
 	await mkdir(resolvedStaticDir, { recursive: true });
+	const publicationDir = await realpath(resolvedStaticDir);
+	const releaseLock = await acquireClangPublicationLock(publicationDir);
 	const suffix = `${process.pid}-${randomUUID()}`;
-	const nextRoot = path.join(resolvedStaticDir, `.wasm-clang.next-${suffix}`);
-	const previousRoot = path.join(resolvedStaticDir, `.wasm-clang.previous-${suffix}`);
+	const nextRoot = path.join(publicationDir, `.wasm-clang.next-${suffix}`);
+	const previousRoot = path.join(publicationDir, `.wasm-clang.previous-${suffix}`);
 	const installations = [
 		{
-			current: path.join(resolvedStaticDir, 'clang'),
+			current: path.join(publicationDir, 'clang'),
 			next: path.join(nextRoot, 'clang'),
 			previous: path.join(previousRoot, 'clang'),
 			hadPrevious: false,
 			installed: false
 		},
 		{
-			current: path.join(resolvedStaticDir, 'clangd'),
+			current: path.join(publicationDir, 'clangd'),
 			next: path.join(nextRoot, 'clangd'),
 			previous: path.join(previousRoot, 'clangd'),
 			hadPrevious: false,
@@ -513,6 +516,8 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 		}
 	];
 	let keepPreviousRoot = false;
+	let publicationFailed = false;
+	let publicationError;
 
 	try {
 		await writeDeliveryBundle(snapshot, nextRoot);
@@ -531,6 +536,8 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 			installation.installed = true;
 		}
 	} catch (error) {
+		publicationFailed = true;
+		publicationError = error;
 		const rollbackErrors = [];
 		for (const installation of [...installations].reverse()) {
 			if (!installation.installed) continue;
@@ -553,18 +560,28 @@ export async function syncWasmClangDist({ sourceDir, staticDir = DEFAULT_STATIC_
 
 		if (rollbackErrors.length > 0) {
 			keepPreviousRoot = true;
-			throw new AggregateError(
+			publicationError = new AggregateError(
 				[error, ...rollbackErrors],
 				'wasm-clang sync failed and could not restore all existing targets'
 			);
 		}
-		throw error;
 	} finally {
 		await rm(nextRoot, { recursive: true, force: true }).catch(() => {});
 		if (!keepPreviousRoot) {
 			await rm(previousRoot, { recursive: true, force: true }).catch(() => {});
 		}
 	}
+	try {
+		await releaseLock();
+	} catch (error) {
+		if (publicationFailed)
+			throw new AggregateError(
+				[publicationError, error],
+				'wasm-clang publication and lock release both failed'
+			);
+		throw error;
+	}
+	if (publicationFailed) throw publicationError;
 
 	return { sourceDir: resolvedSourceDir, staticDir: resolvedStaticDir };
 }

@@ -1,13 +1,39 @@
+// @vitest-environment node
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import {
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	rename,
+	rm,
+	stat,
+	symlink,
+	writeFile
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { zipSync } from 'fflate';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const publicationHooks = vi.hoisted(() => ({
+	rename: undefined as
+		((original: typeof rename, source: string, target: string) => Promise<void>) | undefined
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+	const original = await importOriginal<typeof import('node:fs/promises')>();
+	return {
+		...original,
+		rename: (source: string, target: string) =>
+			publicationHooks.rename
+				? publicationHooks.rename(original.rename, source, target)
+				: original.rename(source, target)
+	};
+});
 
 import { syncWasmClangDist } from '../../scripts/sync-wasm-clang.mjs';
 import { verifyLegacyClangRelease } from '../../scripts/llvm-contracts/clang-build-provenance.mjs';
@@ -440,9 +466,142 @@ async function expectExistingTargets(staticDir: string) {
 
 describe('syncWasmClangDist', () => {
 	afterEach(async () => {
+		publicationHooks.rename = undefined;
 		await Promise.all(
 			tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
 		);
+	});
+
+	it('rejects competing same-process and child-process syncs through an output alias', async () => {
+		const parent = await makeTempDir();
+		const sourceDir = path.join(parent, 'source');
+		const staticDir = path.join(parent, 'static');
+		const alias = path.join(parent, 'static-alias');
+		await mkdir(sourceDir);
+		const fixture = await writeFixture(sourceDir);
+		await writeExistingTargets(staticDir);
+		await symlink(staticDir, alias, 'dir');
+		let signalPaused!: () => void;
+		let resume!: () => void;
+		const paused = new Promise<void>((resolve) => (signalPaused = resolve));
+		const resumed = new Promise<void>((resolve) => (resume = resolve));
+		let didPause = false;
+		publicationHooks.rename = async (original, source, target) => {
+			await original(source, target);
+			if (
+				!didPause &&
+				source.includes('.wasm-clang.next-') &&
+				target === path.join(staticDir, 'clang')
+			) {
+				didPause = true;
+				signalPaused();
+				await resumed;
+			}
+		};
+		const first = syncWasmClangDist({ sourceDir, staticDir });
+		try {
+			await paused;
+			await expect(syncWasmClangDist({ sourceDir, staticDir: alias })).rejects.toThrow(
+				'publication lock already exists'
+			);
+			await expect(
+				execFileAsync(process.execPath, [syncScript, sourceDir, alias])
+			).rejects.toThrow('publication lock already exists');
+		} finally {
+			resume();
+			await first;
+		}
+		expect(await readFile(path.join(staticDir, 'clangd/clangd.js'))).toEqual(
+			fixture.contents.get('clangd/clangd.js')
+		);
+		expect(await readFile(path.join(staticDir, 'clang/clang-build-receipt.json'))).toEqual(
+			fixture.receiptBytes
+		);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('holds the lock during rollback and allows a complete retry after failure', async () => {
+		const parent = await makeTempDir();
+		const sourceDir = path.join(parent, 'source');
+		const staticDir = path.join(parent, 'static');
+		await mkdir(sourceDir);
+		await writeFixture(sourceDir);
+		await writeExistingTargets(staticDir);
+		let checkedDuringRollback = false;
+		let failedInstall = false;
+		publicationHooks.rename = async (original, source, target) => {
+			if (
+				!failedInstall &&
+				source.includes('.wasm-clang.next-') &&
+				target === path.join(staticDir, 'clangd')
+			) {
+				failedInstall = true;
+				throw new Error('injected clangd install failure');
+			}
+			if (
+				source.includes('.wasm-clang.previous-') &&
+				target === path.join(staticDir, 'clang')
+			) {
+				checkedDuringRollback = true;
+				await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+					'publication lock already exists'
+				);
+			}
+			await original(source, target);
+		};
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'injected clangd install failure'
+		);
+		expect(checkedDuringRollback).toBe(true);
+		await expectExistingTargets(staticDir);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+		publicationHooks.rename = undefined;
+		await syncWasmClangDist({ sourceDir, staticDir });
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+		expect(
+			await readFile(path.join(staticDir, 'clang/runtime-manifest.v1.json'), 'utf8')
+		).toContain('clang.wasm.gz');
+	});
+
+	it.each(['not a valid lock', '{"pid":999999999,"token":"old"}'])(
+		'preserves an existing lock without assuming an inactive owner: %s',
+		async (lock) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			await writeFixture(sourceDir);
+			await writeExistingTargets(staticDir);
+			const lockPath = path.join(staticDir, '.wasm-clang.sync.lock');
+			await writeFile(lockPath, lock);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				'publication lock already exists'
+			);
+			expect(await readFile(lockPath, 'utf8')).toBe(lock);
+			await expectExistingTargets(staticDir);
+		}
+	);
+
+	it('does not release a lock replaced by another owner', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		await writeFixture(sourceDir);
+		await writeExistingTargets(staticDir);
+		const lockPath = path.join(staticDir, '.wasm-clang.sync.lock');
+		const replacement = '{"owner":"replacement"}\n';
+		publicationHooks.rename = async (original, source, target) => {
+			await original(source, target);
+			if (source.includes('.wasm-clang.next-') && target === path.join(staticDir, 'clangd')) {
+				await original(lockPath, `${lockPath}.original`);
+				await writeFile(lockPath, replacement);
+			}
+		};
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'publication lock ownership changed'
+		);
+		expect(await readFile(lockPath, 'utf8')).toBe(replacement);
+		expect(JSON.parse(await readFile(`${lockPath}.original`, 'utf8'))).toMatchObject({
+			format: 'wasm-clang-sync-lock-v1',
+			pid: process.pid
+		});
 	});
 
 	it('requires an explicit source directory', async () => {
