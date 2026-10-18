@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import {
 	releaseBaseUrl,
 	syncWasmLean4Assets,
@@ -257,3 +258,131 @@ it('rejects downloads whose size differs from the lock', async () => {
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+async function publicationFixture() {
+	const directory = await mkdtemp(path.join(os.tmpdir(), 'lean4-publication-'));
+	const source = path.join(directory, 'source');
+	const target = path.join(directory, 'target');
+	const version = path.join(directory, 'profile.ts');
+	const { lock, files } = fixture();
+	lock.producer = {
+		repository: 'https://github.com/seo-rii/wasm-llvm',
+		revision: 'b'.repeat(40),
+		path: 'artifacts/lean-browser'
+	};
+	await mkdir(source);
+	await mkdir(target);
+	await writeFile(path.join(target, 'existing.txt'), 'old runtime');
+	await writeFile(version, 'old profile');
+	for (const [name, bytes] of files)
+		await writeFile(path.join(source, name.replace(/\.gz\.bin$/, '.gz')), bytes);
+	const fs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+	const readLockedFile = ((
+		file: Parameters<typeof readFile>[0],
+		options?: Parameters<typeof readFile>[1]
+	) => {
+		const filename = file instanceof URL ? fileURLToPath(file) : String(file);
+		return filename === fileURLToPath(lockUrl)
+			? Promise.resolve(JSON.stringify(lock))
+			: fs.readFile(file, options ?? null);
+	}) as typeof readFile;
+	return { directory, source, target, version, files, fs, readLockedFile };
+}
+
+it.each(['runtime staging', 'profile staging', 'backup'])(
+	'reports success and a recovery path when postcommit %s cleanup fails',
+	async (cleanup) => {
+		const { directory, source, target, version, files, fs, readLockedFile } =
+			await publicationFixture();
+		const prefix =
+			cleanup === 'backup'
+				? `${target}.backup-`
+				: cleanup === 'runtime staging'
+					? `${target}.staging-`
+					: `${version}.staging-`;
+		let failedPath = '';
+		const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.resetModules();
+		vi.doMock('node:fs/promises', () => ({
+			...fs,
+			readFile: readLockedFile,
+			rm: async (file: Parameters<typeof rm>[0], options: Parameters<typeof rm>[1]) => {
+				if (String(file).startsWith(prefix)) {
+					failedPath = String(file);
+					throw Object.assign(new Error('injected cleanup permission failure'), {
+						code: 'EACCES'
+					});
+				}
+				return fs.rm(file, options);
+			}
+		}));
+		try {
+			const { syncWasmLean4Assets: sync } = await import('../../scripts/sync-wasm-lean4.mjs');
+			await expect(
+				sync({ sourceDir: source, targetDir: target, versionModulePath: version })
+			).resolves.toMatchObject({ targetDir: target });
+			expect(failedPath).toMatch(prefix);
+			expect(warning).toHaveBeenCalledWith(expect.stringContaining(failedPath));
+			expect(await readFile(path.join(target, 'lean.mjs'))).toEqual(files.get('lean.mjs'));
+			expect(await readFile(version, 'utf8')).toContain('WASM_LEAN4_PROFILE');
+			expect(await readdir(target)).not.toContain('existing.txt');
+			if (cleanup === 'backup')
+				expect(await readFile(path.join(failedPath, 'existing.txt'), 'utf8')).toBe(
+					'old runtime'
+				);
+			else
+				expect((await readdir(directory)).some((name) => name.includes('.backup-'))).toBe(
+					false
+				);
+		} finally {
+			vi.doUnmock('node:fs/promises');
+			vi.resetModules();
+			warning.mockRestore();
+			await fs.rm(directory, { recursive: true, force: true });
+		}
+	}
+);
+
+it.each(['runtime', 'profile'])(
+	'keeps a precommit %s publication failure as an error and restores the old release',
+	async (publication) => {
+		const { directory, source, target, version, fs, readLockedFile } =
+			await publicationFixture();
+		const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.resetModules();
+		vi.doMock('node:fs/promises', () => ({
+			...fs,
+			readFile: readLockedFile,
+			rename: async (
+				from: Parameters<typeof fs.rename>[0],
+				to: Parameters<typeof fs.rename>[1]
+			) => {
+				if (
+					String(from).startsWith(
+						`${publication === 'runtime' ? target : version}.staging-`
+					)
+				) {
+					throw new Error(`injected ${publication} publication failure`);
+				}
+				return fs.rename(from, to);
+			}
+		}));
+		try {
+			const { syncWasmLean4Assets: sync } = await import('../../scripts/sync-wasm-lean4.mjs');
+			await expect(
+				sync({ sourceDir: source, targetDir: target, versionModulePath: version })
+			).rejects.toThrow(`injected ${publication} publication failure`);
+			expect(await readFile(path.join(target, 'existing.txt'), 'utf8')).toBe('old runtime');
+			expect(await readFile(version, 'utf8')).toBe('old profile');
+			expect((await readdir(directory)).filter((name) => name.includes('.staging-'))).toEqual(
+				[]
+			);
+			expect(warning).not.toHaveBeenCalled();
+		} finally {
+			vi.doUnmock('node:fs/promises');
+			vi.resetModules();
+			warning.mockRestore();
+			await fs.rm(directory, { recursive: true, force: true });
+		}
+	}
+);
