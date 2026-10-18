@@ -891,7 +891,9 @@ export class WorkerAssetBridge {
 		const config = { ...this.config };
 		// Cache identity and verification must observe the same receipt, even if a caller
 		// updates its configuration while an asynchronous asset load is in progress.
-		if (config.integrity) {
+		// The built-in Clang map and its receipts are frozen; its identity also selects
+		// verified streaming, so only caller-owned maps need a new snapshot.
+		if (config.integrity && config.integrity !== BUNDLED_CLANG_ASSET_INTEGRITY) {
 			config.integrity = Object.freeze(
 				Object.fromEntries(
 					Object.entries(config.integrity).map(([asset, receipt]) => [
@@ -999,9 +1001,11 @@ export class WorkerAssetBridge {
 		const reportProgress = (loaded: number, total?: number) => {
 			if (!signal.aborted) context.progress.update(asset, loaded, total);
 		};
-		if (context.config.loader) {
+		// Do not expose the private verification context as a custom loader's receiver.
+		const loader = context.config.loader;
+		if (loader) {
 			const pendingResult = Promise.resolve(
-				context.config.loader({
+				loader({
 					runtime: this.runtime,
 					asset,
 					reportProgress,

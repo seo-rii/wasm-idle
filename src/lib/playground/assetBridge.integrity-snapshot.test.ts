@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkerAssetBridge } from './assetBridge';
-import { resolveRuntimeAssetConfig } from './assets';
+import { resolveRuntimeAssetConfig, type ResolvedRuntimeAssetConfig } from './assets';
 import { RuntimeAssetCache } from './runtimeAssetCache';
 
 // Minimal valid modules exporting f(): i32 with a distinct result for each receipt.
@@ -46,6 +46,71 @@ const wasm = (value: number) =>
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 describe('worker bridge integrity snapshots', () => {
+	it.each([false, true])(
+		'does not expose the verification snapshot as the loader receiver (module=%s)',
+		async (module) => {
+			const asset = 'pyodide.asm.wasm';
+			const expected = wasm(1);
+			const changed = wasm(2);
+			let bytes = changed;
+			const loader = vi.fn(function (this: ResolvedRuntimeAssetConfig | undefined) {
+				if (this)
+					this.integrity = { [asset]: { bytes: changed.length, sha256: hash(changed) } };
+				return bytes;
+			});
+			const postMessage = vi.fn();
+			const cache = new RuntimeAssetCache();
+			const bridge = new WorkerAssetBridge(
+				{ postMessage } as unknown as Worker,
+				'python',
+				{
+					baseUrl: 'https://assets.test/python/',
+					loader,
+					integrity: { [asset]: { bytes: expected.length, sha256: hash(expected) } },
+					persistentCache: false,
+					useAssetBridge: true
+				},
+				undefined,
+				1024,
+				false,
+				cache
+			);
+			const request = (id: number) =>
+				bridge.handleMessage({
+					data: { assetRequest: { id, asset, module } }
+				} as MessageEvent);
+			try {
+				request(1);
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+				expect(postMessage.mock.calls[0][0].assetResponse.ok).toBe(false);
+				expect(loader.mock.contexts).toEqual([undefined]);
+
+				bytes = expected;
+				request(2);
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+				request(3);
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(3));
+				expect(loader).toHaveBeenCalledTimes(2);
+				expect(loader.mock.contexts).toEqual([undefined, undefined]);
+				for (const [message] of postMessage.mock.calls.slice(1)) {
+					const response = message.assetResponse;
+					expect(response.ok).toBe(true);
+					if (module) {
+						const instance = await WebAssembly.instantiate(
+							response.module as WebAssembly.Module
+						);
+						expect((instance.exports.f as () => number)()).toBe(1);
+					} else {
+						expect(new Uint8Array(response.bytes)).toEqual(expected);
+					}
+				}
+			} finally {
+				bridge.dispose();
+				cache.dispose();
+			}
+		}
+	);
+
 	it('replies with an error when a caller-owned receipt getter fails during capture', async () => {
 		const integrity = Object.defineProperty({}, 'pyodide.asm.wasm', {
 			enumerable: true,
