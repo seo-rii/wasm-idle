@@ -536,7 +536,13 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).not.toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).not.toMatch(/preloadBrowserGoRuntime/);
 		expect(pageSource).toMatch(
-			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets, \{ prewarm: true \}\)\);/
+			/const playground = \$derived\.by\(\(\) =>\s+createContainerPlaygroundBinding\(runtimeAssets, \{/s
+		);
+		expect(pageSource).toContain('workspaceId: currentWorkspaceStorageKey');
+		expect(pageSource).toContain('getLanguage: () => untrack(() => language)');
+		expect(pageSource).toContain('void binding.setPrewarmEnabled?.(enabled)');
+		expect(pageSource).toMatch(
+			/if \(enabled && !executing\) void binding\.prewarm\?\.\(selectedLanguage\)/
 		);
 		expect(pageSource).toMatch(/lspEnabled = \$state\(true\),/);
 		expect(pageSource).toMatch(/id="lsp-toggle"/);
