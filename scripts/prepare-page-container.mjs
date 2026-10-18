@@ -10,6 +10,7 @@ import { selectPageContainerSource } from './lib/page-container-source.mjs';
 import { manifest } from './probe-container-shell-acceptance.mjs';
 import {
 	BASH_WASM_SHA256,
+	BUSYBOX_PRODUCER_REVISION,
 	MEMORY,
 	COMMAND_TIMEOUT_MS
 } from './probe-container-shell-acceptance-lib.mjs';
@@ -285,8 +286,7 @@ export async function preparePageContainer(configuration, options = {}) {
 		}
 		const license = await readFile(join(containerRoot, 'LICENSE.txt'));
 		await writeFile(join(stage, 'sources', 'LICENSE.container.txt'), license);
-		const releaseSource =
-			'https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d';
+		const releaseSource = `https://github.com/seo-rii/wasm-idle/tree/${BUSYBOX_PRODUCER_REVISION}`;
 		await writeFile(
 			join(stage, 'LICENSES.md'),
 			[
@@ -314,8 +314,7 @@ export async function preparePageContainer(configuration, options = {}) {
 			busybox: await readJSON(configuration.busyboxReceipt),
 			container: container.identity,
 			hostSources: sourceHashes,
-			sources:
-				'https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d/runtimes',
+			sources: `${releaseSource}/runtimes`,
 			sourceFiles,
 			containerVersion: container.identity.version
 		};
