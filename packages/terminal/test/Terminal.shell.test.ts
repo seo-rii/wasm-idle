@@ -144,6 +144,46 @@ describe('Terminal host shell binding', () => {
 		expect(shell.binding.connect).toHaveBeenCalledOnce();
 	});
 
+	it('bounds the hidden transcript while forwarding the entire shell output to xterm', async () => {
+		const shell = createShell();
+		const { terminal } = await mountTerminal(shell.binding);
+		const limit = 64 * 1024;
+		const transcript = document.querySelector('[data-testid="terminal-debug-output"]')!;
+		const chunks = Array.from({ length: 32 }, (_, index) => `${index}:${'x'.repeat(8192)}\n`);
+		for (const chunk of chunks) {
+			shell.output(chunk);
+			flushSync();
+			expect(transcript.textContent!.length).toBeLessThanOrEqual(limit);
+		}
+		const output = chunks.join('').replaceAll('\n', '\r\n');
+		expect(renderer.writes.join('')).toBe(output);
+		expect(transcript.textContent).toBe(output.slice(-limit));
+
+		const oversizedChunk = `${'y'.repeat(limit * 2)}last output`;
+		shell.output(oversizedChunk);
+		flushSync();
+		expect(renderer.writes.at(-1)).toBe(oversizedChunk);
+		expect(transcript.textContent).toBe(oversizedChunk.slice(-limit));
+		await terminal.clear();
+		flushSync();
+		expect(transcript.textContent).toBe('');
+		shell.output('after clear');
+		flushSync();
+		expect(transcript.textContent).toBe('after clear');
+	});
+
+	it('does not retain half a surrogate pair at the transcript cutoff', async () => {
+		const shell = createShell();
+		await mountTerminal(shell.binding);
+		const suffix = 'z'.repeat(64 * 1024 - 1);
+		shell.output(`prefix😀${suffix}`);
+		flushSync();
+		expect(document.querySelector('[data-testid="terminal-debug-output"]')?.textContent).toBe(
+			suffix
+		);
+		expect(renderer.writes.join('')).toBe(`prefix😀${suffix}`);
+	});
+
 	it('sends idle keyboard text without local echo and maps Ctrl+C/D to shell controls once', async () => {
 		const shell = createShell();
 		await mountTerminal(shell.binding);
