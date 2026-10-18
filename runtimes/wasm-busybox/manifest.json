@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-archive-content-candidate",
+  "status": "producer-reviewed-command-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -123,6 +123,11 @@
       "path": "patches/0015-archive-content-profile.patch",
       "sha256": "1aa4c7abf966c9ec27ac596898e4c1beba2685aaefa7e6498d3df2dc9c8c3932",
       "classification": "real-linked-archive-codecs-and-content-profile"
+    },
+    {
+      "path": "patches/0016-buffered-output-errors.patch",
+      "sha256": "eebaf370861b5409f2bf863efccbb59542095bc026842e08c5ba2a01cc50f7c5",
+      "classification": "real-stdio-error-propagation"
     }
   ],
   "requestedApplets": [
@@ -212,5 +217,8 @@
     "result": "Stored lower nine mode bits or negative WASI errno; libc file type retained",
     "lookupFlags": "0: nofollow, 1: follow",
     "timestamps": "WASI path/fd_filestat_set_times; integer milliseconds; noatime reads"
-  }
+  },
+  "reviewFixes": [
+    "stream-error-status"
+  ]
 }
