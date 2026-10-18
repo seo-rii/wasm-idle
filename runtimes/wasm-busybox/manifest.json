@@ -133,6 +133,11 @@
       "path": "patches/0017-tar-directory-errors.patch",
       "sha256": "82b2aec9cc9ef2e0dd8f85368d0df1815deab920fcabea9cc6b0e09557222b03",
       "classification": "archive-directory-error-propagation"
+    },
+    {
+      "path": "patches/0018-tar-directory-times.patch",
+      "sha256": "ddd7359396e6232c3bcce81d380209ad21b18b1ab26b2e2196d78fc95e72f3db",
+      "classification": "real-deferred-directory-timestamps"
     }
   ],
   "requestedApplets": [
@@ -225,6 +230,7 @@
   },
   "reviewFixes": [
     "stream-error-status",
-    "tar-directory-errors"
+    "tar-directory-errors",
+    "tar-directory-time-order"
   ]
 }
