@@ -136,6 +136,41 @@
 				"path": "scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch",
 				"bytes": 4446,
 				"sha256": "0e52f4dd5c1e7392eb3acfbced274bd1e0134b71804125a4c31615815ebc53ca"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-stdlib-rename.patch",
+				"bytes": 4680,
+				"sha256": "e6d9edfac544c09b1dea1bf8a7dc3691c3b98267cdb099f613bd5751c76e1414"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-enum-constants.patch",
+				"bytes": 5131,
+				"sha256": "0b8907cc32bb12eee450e03d691d4328e6417f2925ee97a982a5df4a7dafcd88"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-annotation-classlib.patch",
+				"bytes": 3462,
+				"sha256": "f1cfcf898a8a96aa9bad16369751735e9cb4e080fcf3d7d87d74968aba2ac12b"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-array-clone.patch",
+				"bytes": 11177,
+				"sha256": "1b0e54b7d10fd57f3c8fc424f110872cb0300c882b2f5d1ddce044d62dd51116"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-reproducible-wasm.patch",
+				"bytes": 20783,
+				"sha256": "f81ab2a7a1c9687f46b9038277663c6f7782b27a593e99dcd537c0149aad9a4d"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-bootstrap-services.patch",
+				"bytes": 4439,
+				"sha256": "f7b58039291c1e0cd55433cde2ab8d465a9acd9ad4754ddfd8b9d7fb4a88b1a9"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-classlib-supplements.patch",
+				"bytes": 38792,
+				"sha256": "302fe3144d9b85df48a947f3657ee014f427a4ae8016a662b5826a0f6ed37a3a"
 			}
 		],
 		"commands": [
@@ -153,8 +188,8 @@
 			},
 			{
 				"path": "compiler.wasm",
-				"bytes": 4313700,
-				"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349"
+				"bytes": 4334204,
+				"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4"
 			},
 			{
 				"path": "compiler.wasm-deobfuscator.wasm",
@@ -163,13 +198,13 @@
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
-				"bytes": 200621,
-				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+				"bytes": 200641,
+				"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733"
 			},
 			{
 				"path": "runtime-classlib-teavm.bin",
-				"bytes": 2394943,
-				"sha256": "107abaf95d66fe1b616914ad07ad07772197c164413b149df85a2d6dd3fca8ca"
+				"bytes": 2397545,
+				"sha256": "97c1efc7c6cb35292892750c1148cba20af75413febaa6ebc35ff4b1dc103ed5"
 			}
 		],
 		"overlay": {
@@ -179,8 +214,8 @@
 			"release": 17,
 			"archiveEntryCount": 2141,
 			"canonicalRuntime": {
-				"bytes": 2394943,
-				"sha256": "107abaf95d66fe1b616914ad07ad07772197c164413b149df85a2d6dd3fca8ca"
+				"bytes": 2397545,
+				"sha256": "97c1efc7c6cb35292892750c1148cba20af75413febaa6ebc35ff4b1dc103ed5"
 			},
 			"classpath": [
 				{
@@ -334,8 +369,8 @@
 				},
 				{
 					"sourcePath": "scripts/teavm/JsConsolePrintStream.java",
-					"sourceBytes": 5110,
-					"sourceSha256": "048c788702e494a9693da9122805a86558d64ae527c4d103bc266577ae5bae86",
+					"sourceBytes": 5210,
+					"sourceSha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2",
 					"upstreamSourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
 					"upstreamSourceBytes": 5042,
 					"upstreamSourceSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
@@ -349,13 +384,18 @@
 							"from": "                buffer.put(b, off, count);\n                len -= count;",
 							"to": "                buffer.put(b, off, count);\n                off += count;\n                len -= count;",
 							"expectedOccurrences": 1
+						},
+						{
+							"from": "            if (buffer.position() > 0) {\n                output(true);\n            }",
+							"to": "            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }",
+							"expectedOccurrences": 1
 						}
 					]
 				},
 				{
 					"sourcePath": "scripts/teavm/TFormatter.java",
-					"sourceBytes": 25582,
-					"sourceSha256": "59673e6ff79b84755730661a6fe2cc5ca83210e6d665693785604ee671c55c98",
+					"sourceBytes": 29792,
+					"sourceSha256": "037e2eea47137516a86863193fd1b69567d87f93b441909208760e23eefd7eeb",
 					"upstreamSourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
 					"upstreamSourceBytes": 24170,
 					"upstreamSourceSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
@@ -383,6 +423,16 @@
 						{
 							"from": "            format.setMinimumFractionDigits(precision);\n",
 							"to": "            format.setMinimumFractionDigits(precision);\n            format.setRoundingMode(RoundingMode.HALF_UP);\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "                case 'f':\n                    formatFloat(specifier, false);\n                    break;\n",
+							"to": "                case 'f':\n                    formatFloat(specifier, false);\n                    break;\n                case 'e':\n                    formatScientific(specifier, false);\n                    break;\n                case 'E':\n                    formatScientific(specifier, true);\n                    break;\n",
+							"expectedOccurrences": 1
+						},
+						{
+							"from": "        private int predictDecimalSize(boolean negative, TDecimalFormat format) {\n",
+							"to": "        private void formatScientific(char specifier, boolean upperCase) throws IOException {\n            verifyFlags(specifier, MASK_FOR_GENERAL_FORMAT | TFormattableFlags.SIGNED\n                    | TFormattableFlags.LEADING_SPACE | TFormattableFlags.ZERO_PADDED\n                    | TFormattableFlags.PARENTHESIZED_NEGATIVE);\n            verifyFloatFlags();\n\n            if (precision == -1) {\n                precision = 6;\n            }\n\n            Object arg = args[argumentIndex];\n            BigDecimal value = null;\n            boolean negative;\n            boolean nan = false;\n            if (arg instanceof Double || arg instanceof Float) {\n                double d = ((Number) arg).doubleValue();\n                negative = Double.compare(d, 0.0) < 0;\n                nan = Double.isNaN(d);\n                if (!nan && !Double.isInfinite(d)) {\n                    // Like the JDK, round the shortest decimal representation of the double value\n                    value = new BigDecimal(Double.toString(Math.abs(d)));\n                }\n            } else if (arg instanceof BigDecimal) {\n                negative = ((BigDecimal) arg).signum() < 0;\n                value = ((BigDecimal) arg).abs();\n            } else if (arg == null) {\n                precision = -1;\n                formatGivenString(upperCase, \"null\");\n                return;\n            } else {\n                throw new IllegalFormatConversionException(specifier, arg.getClass());\n            }\n\n            StringBuilder sb = new StringBuilder();\n            if (value == null) {\n                sb.append(nan ? \"NaN\" : \"Infinity\");\n            } else {\n                int exponent = 0;\n                if (value.signum() != 0) {\n                    sb.append(value.unscaledValue().toString());\n                    exponent = sb.length() - value.scale() - 1;\n                }\n                if (sb.length() > precision + 1) {\n                    // Round half up by hand: BigDecimal.round does not round when it drops a single digit\n                    boolean roundUp = sb.charAt(precision + 1) >= '5';\n                    sb.setLength(precision + 1);\n                    int i = precision;\n                    while (roundUp && i >= 0) {\n                        roundUp = sb.charAt(i) == '9';\n                        sb.setCharAt(i, roundUp ? '0' : (char) (sb.charAt(i) + 1));\n                        --i;\n                    }\n                    if (roundUp) {\n                        sb.insert(0, '1').setLength(precision + 1);\n                        ++exponent;\n                    }\n                }\n                while (sb.length() < precision + 1) {\n                    sb.append('0');\n                }\n                if (precision > 0 || (flags & TFormattableFlags.ALTERNATE) != 0) {\n                    sb.insert(1, '.');\n                }\n                sb.append(exponent < 0 ? \"e-\" : \"e+\");\n                if (Math.abs(exponent) < 10) {\n                    sb.append('0');\n                }\n                sb.append(Math.abs(exponent));\n            }\n\n            String prefix = \"\";\n            String suffix = \"\";\n            if (negative) {\n                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {\n                    prefix = \"(\";\n                    suffix = \")\";\n                } else {\n                    prefix = \"-\";\n                }\n            } else if (!nan && (flags & TFormattableFlags.SIGNED) != 0) {\n                prefix = \"+\";\n            } else if (!nan && (flags & TFormattableFlags.LEADING_SPACE) != 0) {\n                prefix = \" \";\n            }\n            if (value != null && (flags & TFormattableFlags.ZERO_PADDED) != 0) {\n                while (prefix.length() + sb.length() + suffix.length() < width) {\n                    sb.insert(0, '0');\n                }\n            }\n\n            precision = -1; // prevent formatGivenString from trimming\n            formatGivenString(upperCase, prefix + sb + suffix);\n        }\n\n        private int predictDecimalSize(boolean negative, TDecimalFormat format) {\n",
 							"expectedOccurrences": 1
 						}
 					]
@@ -450,7 +500,7 @@
 					"canonicalClassBytes": 3634,
 					"canonicalClassSha256": "4f8db161a099a53146f1162de3939d9d1a1fcd58097a0fc0a78754cdd13f6fcf",
 					"classBytes": 3291,
-					"classSha256": "7b998cd8c4730eb1f3c68b4d41d43497adacbd746e2e58853f73bcca97a45954"
+					"classSha256": "05f574c8f74dca5bea3374aae23deeb372e3d4d0f6c6a8916b500343739cb97a"
 				},
 				{
 					"targetEntry": "org/teavm/classlib/java/util/TFormatter.class",
@@ -463,8 +513,8 @@
 					"targetEntry": "org/teavm/classlib/java/util/TFormatter$FormatWriter.class",
 					"canonicalClassBytes": 13376,
 					"canonicalClassSha256": "714ab8ce856032d688853f12ffd860c6c7970849b1eab05e5c142be970162985",
-					"classBytes": 12323,
-					"classSha256": "8be01c2606a2221b5af4a7a15059ab352815e78b4463c2b23be7c3690dd028ff"
+					"classBytes": 14229,
+					"classSha256": "dcdec1669940afa13806ed90f7bc82781a26e54c3a16f40ec8a82d89327468c0"
 				}
 			],
 			"addedSources": [
@@ -501,8 +551,8 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39743,
-			"sha256": "4fbf5538136d5b9b95c5df0a994ab31b59efe703a81521303734645197b98441"
+			"bytes": 40369,
+			"sha256": "ca8bb133115c5dcd6a675201faeab7746b0d238fc2910d7856fe01c61a5635c0"
 		}
 	],
 	"assets": [
@@ -521,13 +571,13 @@
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4313700,
-			"sha256": "9e6f10ae0abe71740acd054b8e393ee40f7561f62ff17dd8e8ecfa9b63e6f349",
+			"bytes": 4334204,
+			"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1683774,
-				"sha256": "94980cdb4eae7ba057845108c7f890b5115ea318f119119427c6c52b0605ba45"
+				"bytes": 1691491,
+				"sha256": "a73734d930d0559518eb5751482d5256b64da12c7d46b71df4adcee54ba54ceb"
 			}
 		},
 		{
@@ -545,27 +595,27 @@
 		{
 			"path": "compile-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 200621,
-			"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d",
+			"bytes": 200641,
+			"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733",
 			"storage": {
 				"path": "compile-classlib-teavm.bin",
 				"encoding": "identity",
-				"bytes": 200621,
-				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+				"bytes": 200641,
+				"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733"
 			}
 		},
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2388980,
-			"sha256": "b2b7ce397700b65cab0beee8a365ef79fe8fb1ebfe7ccf19e189630cb3838bbe",
+			"bytes": 2392921,
+			"sha256": "e06ea60036c383004a43f1b01b108e07271b1ffc67f9906505873ff8a5c1e7a6",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2353467,
-				"sha256": "6ac7125040dad57a4e86df8e67a4790a731cf25bb1ed8c23d6bd1ba8b71d9e56"
+				"bytes": 2357917,
+				"sha256": "fa1eb45fea1c86652e8a55c607b0a2c8cfb36c9320e84f39d3247f502de204c6"
 			}
 		}
 	],
-	"fingerprint": "311d77b9340f74cf2d44bfbec79ef4966208e3e0533b129f8f4b99dea41ec369"
+	"fingerprint": "b913ae6e9294153a261ba9e612a2032241e99293eddcef154c8868f2f5977cd0"
 }

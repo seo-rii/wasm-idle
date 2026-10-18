@@ -1,0 +1,550 @@
+diff --git a/compiler/build.gradle b/compiler/build.gradle
+index 5598351..ef22a4a 100644
+--- a/compiler/build.gradle
++++ b/compiler/build.gradle
+@@ -35,12 +35,39 @@ dependencies {
+ sourceSets {
+     classlibEmu {
+     }
++    teavmDeterminism {
++    }
++}
++
++dependencies {
++    // Non-transitive: only artifacts that the TeaVM build daemon already resolves.
++    teavmDeterminismCompileOnly(libs.teavm.core) {
++        transitive = false
++    }
++    teavmDeterminismCompileOnly("org.teavm:teavm-relocated-libs-hppc:${libs.versions.teavm.get()}") {
++        transitive = false
++    }
+ }
+ 
+ compileJava {
+     options.compilerArgs.addAll("--limit-modules", "java.base")
+ }
+ 
++// TeaVM 0.13.1 does not produce a byte-reproducible compiler.wasm: the order in which dependency
++// analysis reaches classes follows identity hash codes (TypeSet keeps DependencyNode domains in a
++// HashSet), and TagRegistry assigns the class tags used by Class.isInstance/isAssignableFrom range
++// checks in that order. src/teavmDeterminism holds copies of these two TeaVM 0.13.1 classes with
++// deterministic iteration; they go first on the classpath of the out-of-process TeaVM build daemon
++// and are not part of the compiled program.
++if (libs.versions.teavm.get() != "0.13.1") {
++    throw new GradleException("src/teavmDeterminism patches TeaVM 0.13.1 classes; "
++            + "re-check them against TeaVM ${libs.versions.teavm.get()}")
++}
++tasks.named("generateWasmGC") {
++    def teavmDaemonClasspath = new ArrayList<Object>(daemonClasspath.from)
++    daemonClasspath.setFrom(sourceSets.teavmDeterminism.output, teavmDaemonClasspath)
++}
++
+ teavm {
+     all {
+         mainClass = "org.teavm.javac.CompilerLib"
+diff --git a/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java b/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java
+new file mode 100644
+index 0000000..cf37f0e
+--- /dev/null
++++ b/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java
+@@ -0,0 +1,338 @@
++/*
++ *  Copyright 2018 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++/*
++ *  Modified for teavm-javac: copy of TeaVM 0.13.1 org.teavm.dependency.TypeSet that keeps a multi-node
++ *  domain in a LinkedHashSet instead of a HashSet. DependencyNode has identity hash codes, so iterating a
++ *  HashSet domain (transitions and consumers) made the dependency propagation order, and hence the order
++ *  of reached classes, differ between JVM runs. Imports use TeaVM's relocated HPPC package.
++ *  Put ahead of teavm-core on the TeaVM build daemon classpath (compiler/build.gradle).
++ */
++package org.teavm.dependency;
++
++import org.teavm.hppc.ObjectArrayList;
++import org.teavm.hppc.cursors.ObjectCursor;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.BitSet;
++import java.util.Collection;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Set;
++import java.util.function.Predicate;
++
++class TypeSet {
++    private static final int SMALL_TYPES_THRESHOLD = 3;
++    static final DependencyType[] EMPTY_TYPES = new DependencyType[0];
++    private DependencyAnalyzer dependencyAnalyzer;
++    DependencyNode origin;
++    private int[] smallTypes;
++    private BitSet types;
++    private int typesCount;
++
++    private Object domain;
++    ObjectArrayList<Transition> transitions;
++    ArrayList<ConsumerWithNode> consumers;
++
++    TypeSet(DependencyAnalyzer dependencyAnalyzer, DependencyNode origin) {
++        this.dependencyAnalyzer = dependencyAnalyzer;
++        this.origin = origin;
++        domain = origin;
++    }
++
++    void addType(DependencyType type) {
++        if (types == null) {
++            if (smallTypes == null) {
++                smallTypes = new int[] { type.index };
++                return;
++            }
++        }
++        if (smallTypes != null) {
++            if (smallTypes.length == SMALL_TYPES_THRESHOLD) {
++                types = new BitSet(dependencyAnalyzer.types.size() * 2);
++                for (int existingType : smallTypes) {
++                    types.set(existingType);
++                }
++                typesCount = smallTypes.length;
++                smallTypes = null;
++            } else {
++                smallTypes = Arrays.copyOf(smallTypes, smallTypes.length + 1);
++                smallTypes[smallTypes.length - 1] = type.index;
++                return;
++            }
++        }
++        types.set(type.index);
++        typesCount++;
++    }
++
++    DependencyType[] getTypes() {
++        if (this.types != null) {
++            DependencyType[] types = new DependencyType[this.types.cardinality()];
++            int j = 0;
++            for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                DependencyType type = dependencyAnalyzer.types.get(index);
++                types[j++] = type;
++            }
++            return types;
++        } else if (this.smallTypes != null) {
++            DependencyType[] types = new DependencyType[smallTypes.length];
++            for (int i = 0; i < types.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                types[i] = type;
++            }
++            return types;
++        } else {
++            return EMPTY_TYPES;
++        }
++    }
++
++    boolean hasMoreTypesThan(int limit, Predicate<DependencyType> filter) {
++        if (this.types != null) {
++            if (filter == null) {
++                return this.types.cardinality() > limit;
++            }
++            for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                DependencyType type = dependencyAnalyzer.types.get(index);
++                if (filter.test(type)) {
++                    if (--limit < 0) {
++                        return true;
++                    }
++                }
++            }
++            return false;
++        } else if (this.smallTypes != null) {
++            if (this.smallTypes.length <= limit) {
++                return false;
++            }
++            if (filter == null) {
++                return true;
++            }
++            for (int i = 0; i < smallTypes.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                if (filter.test(type)) {
++                    if (--limit < 0) {
++                        return true;
++                    }
++                }
++            }
++            return false;
++        } else {
++            return false;
++        }
++    }
++
++    DependencyType[] getTypesForNode(DependencyNode sourceNode, DependencyNode targetNode,
++            DependencyTypeFilter filter) {
++        int j = 0;
++        DependencyType[] types;
++        if (this.types != null) {
++            int[] filteredTypes = null;
++            if (typesCount > 15) {
++                filteredTypes = filter != null ? filter.tryExtract(this.types) : null;
++                if (filteredTypes == null) {
++                    filteredTypes = sourceNode.getFilter().tryExtract(this.types);
++                }
++                if (filteredTypes == null) {
++                    filteredTypes = targetNode.getFilter().tryExtract(this.types);
++                }
++            }
++            if (filteredTypes != null) {
++                types = new DependencyType[filteredTypes.length];
++                for (int index : filteredTypes) {
++                    DependencyType type = dependencyAnalyzer.types.get(index);
++                    if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                            && (filter == null || filter.match(type))) {
++                        types[j++] = type;
++                    }
++                }
++            } else {
++                types = new DependencyType[typesCount];
++                for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                    DependencyType type = dependencyAnalyzer.types.get(index);
++                    if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                            && (filter == null || filter.match(type))) {
++                        types[j++] = type;
++                    }
++                }
++            }
++        } else if (this.smallTypes != null) {
++            types = new DependencyType[smallTypes.length];
++            for (int i = 0; i < types.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                        && (filter == null || filter.match(type))) {
++                    types[j++] = type;
++                }
++            }
++        } else {
++            return EMPTY_TYPES;
++        }
++
++        if (j == 0) {
++            return EMPTY_TYPES;
++        }
++        if (j < types.length) {
++            types = Arrays.copyOf(types, j);
++        }
++        return types;
++    }
++
++    boolean hasType(DependencyType type) {
++        if (smallTypes != null) {
++            for (int i = 0; i < smallTypes.length; ++i) {
++                if (smallTypes[i] == type.index) {
++                    return true;
++                }
++            }
++            return false;
++        }
++        return types != null && types.get(type.index);
++    }
++
++    boolean hasAnyType() {
++        return types != null || smallTypes != null;
++    }
++
++    TypeSet copy(DependencyNode origin) {
++        TypeSet result = new TypeSet(dependencyAnalyzer, origin);
++        result.types = types != null ? (BitSet) types.clone() : null;
++        result.smallTypes = smallTypes;
++        result.typesCount = typesCount;
++        return result;
++    }
++
++    void invalidate() {
++        transitions = null;
++        consumers = null;
++    }
++
++    Set<? extends DependencyNode> domain() {
++        if (domain == null) {
++            return Set.of();
++        } else if (domain instanceof DependencyNode) {
++            return Set.of((DependencyNode) domain);
++        } else {
++            //noinspection unchecked
++            return (Set<? extends DependencyNode>) domain;
++        }
++    }
++
++    void addDomain(DependencyNode node) {
++        if (domain == null) {
++            domain = node;
++        } else if (domain instanceof DependencyNode) {
++            if (domain == node) {
++                return;
++            }
++            domain = new LinkedHashSet<>(Set.of((DependencyNode) domain));
++        }
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.add(node);
++    }
++
++    void addDomain(Collection<? extends DependencyNode> nodes) {
++        if (nodes.isEmpty()) {
++            return;
++        }
++        if (domain == null) {
++            if (nodes.size() == 1) {
++                domain = nodes.iterator().next();
++            }
++            return;
++        } else if (domain instanceof DependencyNode) {
++            if (nodes.contains(domain) && nodes.size() == 1) {
++                return;
++            }
++            domain = new LinkedHashSet<>(Set.of((DependencyNode) domain));
++        }
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.addAll(nodes);
++    }
++
++    void removeDomain(Collection<? extends DependencyNode> nodes) {
++        if (domain == null || nodes.isEmpty()) {
++            return;
++        }
++        if (domain instanceof DependencyNode) {
++            if (nodes.contains(domain)) {
++                domain = null;
++            }
++            return;
++        }
++
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.removeAll(nodes);
++        if (set.isEmpty()) {
++            domain = null;
++        } else if (set.size() == 1) {
++            domain = set.iterator().next();
++        }
++    }
++
++    ObjectArrayList<Transition> getTransitions() {
++        if (transitions == null) {
++            transitions = new ObjectArrayList<>();
++            for (DependencyNode node : domain()) {
++                if (node.transitions != null) {
++                    for (ObjectCursor<Transition> cursor : node.transitionList) {
++                        Transition transition = cursor.value;
++                        if (transition.filter != null || transition.destination.typeSet != this) {
++                            transitions.add(transition);
++                        }
++                    }
++                }
++            }
++        }
++        return transitions;
++    }
++
++    List<ConsumerWithNode> getConsumers() {
++        if (domain == null) {
++            return List.of();
++        } else if (domain instanceof DependencyNode) {
++            var node = (DependencyNode) domain;
++            if (node.followers == null) {
++                return List.of();
++            } else {
++                return List.of(new ConsumerWithNode(node.followers.toArray(new DependencyConsumer[0]), node));
++            }
++        } else {
++            if (consumers == null) {
++                consumers = new ArrayList<>();
++                for (var node : domain()) {
++                    if (node.followers != null) {
++                        consumers.add(new ConsumerWithNode(node.followers.toArray(new DependencyConsumer[0]), node));
++                    }
++                }
++                consumers.trimToSize();
++            }
++            return consumers;
++        }
++    }
++
++    int typeCount() {
++        return smallTypes != null ? smallTypes.length : types != null ? typesCount : 0;
++    }
++
++    void cleanup() {
++        origin = null;
++        domain = null;
++        transitions = null;
++        consumers = null;
++    }
++}
+diff --git a/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java b/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java
+new file mode 100644
+index 0000000..4e9d602
+--- /dev/null
++++ b/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java
+@@ -0,0 +1,156 @@
++/*
++ *  Copyright 2016 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++/*
++ *  Modified for teavm-javac: copy of TeaVM 0.13.1 org.teavm.model.classes.TagRegistry that assigns
++ *  class tag ranges in sorted class-name order. The original iterates the class source, whose order
++ *  follows TeaVM's dependency-discovery order and differs between JVM runs, so compiler.wasm was not
++ *  byte-reproducible. Put ahead of teavm-core on the TeaVM build daemon classpath (compiler/build.gradle).
++ */
++package org.teavm.model.classes;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.HashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.Set;
++import java.util.stream.Collectors;
++import org.teavm.model.ClassHierarchy;
++import org.teavm.model.ClassReader;
++import org.teavm.model.ElementModifier;
++import org.teavm.model.ListableClassReaderSource;
++
++public class TagRegistry {
++    private Map<String, List<Range>> ranges = new HashMap<>();
++
++    public TagRegistry(ListableClassReaderSource classSource, ClassHierarchy classHierarchy) {
++        List<String> roots = new ArrayList<>();
++        Map<String, Set<String>> implementedBy = new HashMap<>();
++
++        Map<String, List<String>> hierarchy = new HashMap<>();
++        List<String> classNames = new ArrayList<>(classSource.getClassNames());
++        Collections.sort(classNames);
++        for (String className : classNames) {
++            ClassReader cls = classSource.get(className);
++            if (cls == null || cls.hasModifier(ElementModifier.INTERFACE)) {
++                continue;
++            }
++            for (String iface : cls.getInterfaces()) {
++                markImplementor(classHierarchy, className, iface, implementedBy);
++            }
++            if (cls.getParent() == null || cls.getParent().equals(cls.getName())) {
++                roots.add(className);
++            } else {
++                hierarchy.computeIfAbsent(cls.getParent(), key -> new ArrayList<>()).add(className);
++            }
++        }
++
++        Map<String, Range> simpleRanges = new HashMap<>();
++        int current = 0;
++        for (String root : roots) {
++            current = 1 + assignRange(current, hierarchy, root, simpleRanges);
++        }
++
++        for (String className : classNames) {
++            ClassReader cls = classSource.get(className);
++            if (cls == null) {
++                continue;
++            }
++            if (cls.hasModifier(ElementModifier.INTERFACE)) {
++                Set<String> implementorRoots = implementedBy.get(cls.getName());
++                if (implementorRoots != null) {
++                    List<Range> ifaceRanges = implementorRoots.stream()
++                            .map(simpleRanges::get)
++                            .filter(Objects::nonNull)
++                            .sorted(Comparator.comparing(range -> range.lower))
++                            .collect(Collectors.toList());
++                    if (!ifaceRanges.isEmpty()) {
++                        ranges.put(className, ifaceRanges);
++                    }
++                }
++            } else {
++                Range simpleRange = simpleRanges.get(className);
++                if (simpleRange != null) {
++                    ranges.put(className, new ArrayList<>(Arrays.asList(simpleRange)));
++                }
++            }
++        }
++
++    }
++
++    private String findTopmostImplementor(ClassHierarchy hierarchy, String className, String ifaceName) {
++        ClassReader cls = hierarchy.getClassSource().get(className);
++        if (cls == null) {
++            return null;
++        }
++
++        if (cls.getParent() != null) {
++            String candidate = findTopmostImplementor(hierarchy, cls.getParent(), ifaceName);
++            if (candidate != null) {
++                return candidate;
++            }
++        }
++
++        return hierarchy.isSuperType(ifaceName, className, false) ? className : null;
++    }
++
++    private void markImplementor(ClassHierarchy hierarchy, String className, String ifaceName,
++            Map<String, Set<String>> implementedBy) {
++        className = findTopmostImplementor(hierarchy, className, ifaceName);
++
++        if (!implementedBy.computeIfAbsent(ifaceName, key -> new LinkedHashSet<>()).add(className)) {
++            return;
++        }
++
++        ClassReader iface = hierarchy.getClassSource().get(ifaceName);
++        if (iface == null) {
++            return;
++        }
++
++        for (String superIface : iface.getInterfaces()) {
++            markImplementor(hierarchy, className, superIface, implementedBy);
++        }
++    }
++
++    private int assignRange(int start, Map<String, List<String>> hierarchy, String className,
++            Map<String, Range> ranges) {
++        int end = start + 1;
++        for (String childClass : hierarchy.getOrDefault(className, Collections.emptyList())) {
++            end = assignRange(end, hierarchy, childClass, ranges);
++        }
++        ++end;
++        ranges.put(className, new Range(start, end));
++        return end;
++    }
++
++    public List<Range> getRanges(String className) {
++        return new ArrayList<>(ranges.getOrDefault(className, Collections.emptyList()));
++    }
++
++    public static class Range {
++        public int lower;
++        public int upper;
++
++        private Range(int lower, int upper) {
++            this.lower = lower;
++            this.upper = upper;
++        }
++    }
++}
