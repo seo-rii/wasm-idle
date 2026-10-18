@@ -30,6 +30,93 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('downloads current receipt-pinned clangd assets and headers from their configured group base', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-clangd-group-base-'));
+		temporaryDirectories.push(root);
+		const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const rawHeaders = Buffer.from(
+			JSON.stringify({
+				schemaVersion: 1,
+				version: 'fixture',
+				targetTriple: 'wasm32-wasi',
+				resourceDir: '/lib/clang/22',
+				files: {
+					'/usr/include/wasm32-wasi/stdio.h': 'C header',
+					'/usr/include/c++/v1/vector': 'C++ header',
+					'/lib/clang/22/include/stddef.h': 'resource header'
+				}
+			})
+		);
+		const encodedHeaders = gzipSync(rawHeaders);
+		const headers = {
+			asset: 'clangd/clangd.headers.json.gz',
+			format: 'clangd-headers-v1',
+			version: hash(rawHeaders),
+			targetTriple: 'wasm32-wasi',
+			resourceDir: '/lib/clang/22',
+			bytes: encodedHeaders.length,
+			sha256: hash(encodedHeaders),
+			uncompressedBytes: rawHeaders.length,
+			uncompressedSha256: hash(rawHeaders)
+		};
+		const contents = new Map([
+			['clangd/clangd.js', Buffer.from('new clangd loader')],
+			['clangd/clangd.wasm.gz', gzipSync(Buffer.from('new clangd wasm'))],
+			[headers.asset, encodedHeaders]
+		]);
+		const assets = [...contents].map(([asset, bytes]) => ({
+			asset,
+			size: bytes.length,
+			sha256: hash(bytes)
+		}));
+		const clangdReceiptPath = path.join(root, 'runtime-build.json');
+		await writeFile(
+			clangdReceiptPath,
+			JSON.stringify({ toolchain: { clangd: { headers } }, assets })
+		);
+		const manifestPath = path.join(root, 'manifest.json');
+		await writeFile(
+			manifestPath,
+			JSON.stringify({
+				format: 'wasm-idle-browser-test-assets-v1',
+				defaultBaseUrl: 'https://assets.example.test/old-immutable-release/',
+				groupBaseUrls: { clangd: 'https://assets.example.test/current-release/' },
+				assets: assets.map(({ asset, ...pin }) => ({
+					group: 'clangd',
+					source: asset,
+					target: asset,
+					...pin
+				}))
+			})
+		);
+		const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+			const url = new URL(input instanceof Request ? input.url : input);
+			expect(url.href).toMatch(
+				/^https:\/\/assets\.example\.test\/current-release\/clangd\//u
+			);
+			return new Response(contents.get(url.pathname.slice('/current-release/'.length))!);
+		});
+		const options = {
+			groups: ['clangd'],
+			manifestPath,
+			clangdReceiptPath,
+			staticDir: path.join(root, 'static'),
+			fetchImpl
+		};
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({
+			downloaded: 3,
+			reused: 0
+		});
+		expect(fetchImpl).toHaveBeenCalledTimes(3);
+		await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({ assetCount: 3 });
+		fetchImpl.mockClear();
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({
+			downloaded: 0,
+			reused: 3
+		});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it('checks the generated OCaml graph using the same fingerprint before and after delivery compression', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-ocaml-fingerprint-'));
 		temporaryDirectories.push(root);

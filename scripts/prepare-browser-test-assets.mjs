@@ -233,6 +233,7 @@ export async function prepareBrowserTestAssets({
 	let preparedClangd = false;
 	const useCurrentClangdReceipt =
 		!!clangdSourceDir ||
+		!!clangdReceiptPath ||
 		(manifestPath === DEFAULT_MANIFEST_PATH &&
 			!baseUrl &&
 			!process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
@@ -251,6 +252,10 @@ export async function prepareBrowserTestAssets({
 			const result = await prepareClangdAssets({
 				receiptPath: clangdReceiptPath || path.join(staticDir, 'clang/runtime-build.json'),
 				staticDir,
+				baseUrl:
+					baseUrl ||
+					process.env.WASM_IDLE_TEST_ASSET_BASE_URL ||
+					manifest.groupBaseUrls?.clangd,
 				sourceDir: clangdSourceDir,
 				bypassCookie,
 				fetchImpl,
