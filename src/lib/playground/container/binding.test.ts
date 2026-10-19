@@ -4,7 +4,7 @@ import type { ContainerWorkerClient } from './client';
 import type { ContainerWorkerEvent } from './protocol';
 function fixture() {
 	let listener: (event: ContainerWorkerEvent) => void = () => {};
-	const call = vi.fn(async (method: string) =>
+	const call = vi.fn(async (method: string): Promise<unknown> =>
 		method === 'prepare' || method === 'run' ? true : undefined
 	);
 	const client = {
