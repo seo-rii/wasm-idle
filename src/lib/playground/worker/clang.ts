@@ -38,6 +38,29 @@ function postProgress(percent: number, stage: string) {
 	postMessage({ progress: { percent, stage } });
 }
 
+function normalizeLldbWorkspaceFiles(
+	files: readonly { path: string; content: string | Uint8Array }[]
+) {
+	// Both compiler phases and LLDB accept text; retain BOMs and original FS bytes.
+	const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+	return files.map((file) => {
+		let content = file.content;
+		if (typeof content !== 'string') {
+			const path = `/workspace/${normalizeDwarfWorkspacePath(file.path)}`;
+			if (!(content instanceof Uint8Array))
+				throw new TypeError(
+					`LLDB workspace file content must be a string or Uint8Array: ${path}`
+				);
+			try {
+				content = decoder.decode(content);
+			} catch (cause) {
+				throw new Error(`LLDB workspace file is not valid UTF-8: ${path}`, { cause });
+			}
+		}
+		return { ...file, content };
+	});
+}
+
 async function loadClang(
 	path: string,
 	log: boolean,
@@ -178,7 +201,10 @@ self.onmessage = async (event: { data: any }) => {
 				compileArgs,
 				programArgs,
 				activePath,
-				workspaceFiles,
+				workspaceFiles:
+					resolvedDebugMode === 'lldb'
+						? normalizeLldbWorkspaceFiles(workspaceFiles || [])
+						: workspaceFiles,
 				cppVersion,
 				cVersion,
 				debugMode: resolvedDebugMode,
@@ -219,28 +245,10 @@ self.onmessage = async (event: { data: any }) => {
 						activePath || (language === 'C' ? 'main.c' : 'main.cc')
 					) || (language === 'C' ? 'main.c' : 'main.cc');
 				const sources = new Map<string, string>();
-				const compilerWorkspaceFiles: Array<{ path: string; content: string }> = [];
-				// Both the compiler and LLDB accept text; retain BOMs and original FS bytes.
-				const sourceDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-				for (const file of workspaceFiles || []) {
+				const compilerWorkspaceFiles = normalizeLldbWorkspaceFiles(workspaceFiles || []);
+				for (const file of compilerWorkspaceFiles) {
 					const sourcePath = normalizeDwarfWorkspacePath(file.path);
-					let content = file.content;
-					if (typeof content !== 'string') {
-						if (!(content instanceof Uint8Array))
-							throw new TypeError(
-								`LLDB workspace file content must be a string or Uint8Array: /workspace/${sourcePath}`
-							);
-						try {
-							content = sourceDecoder.decode(content);
-						} catch (cause) {
-							throw new Error(
-								`LLDB workspace file is not valid UTF-8: /workspace/${sourcePath}`,
-								{ cause }
-							);
-						}
-					}
-					compilerWorkspaceFiles.push({ ...file, content });
-					if (sourcePath) sources.set(`/workspace/${sourcePath}`, content);
+					if (sourcePath) sources.set(`/workspace/${sourcePath}`, file.content);
 				}
 				sources.set(`/workspace/${inputPath}`, code);
 				const artifact = await clang.compileArtifact(code, {

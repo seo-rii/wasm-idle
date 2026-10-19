@@ -66,7 +66,8 @@ describe('Clang worker LLDB sources', () => {
 	});
 
 	async function compileWithWorkspace(
-		workspaceFiles: Array<{ path: string; content: string | Uint8Array }>
+		workspaceFiles: Array<{ path: string; content: string | Uint8Array }>,
+		prepare = false
 	) {
 		await import('./clang');
 		await (globalThis as any).self.onmessage({
@@ -83,7 +84,8 @@ describe('Clang worker LLDB sources', () => {
 				language: 'C',
 				debugMode: 'lldb',
 				activePath: 'main.c',
-				workspaceFiles
+				workspaceFiles,
+				prepare
 			}
 		});
 	}
@@ -140,73 +142,91 @@ describe('Clang worker LLDB sources', () => {
 		expect(clangState.compileLinkRun).not.toHaveBeenCalled();
 	});
 
-	it('normalizes byte source and header files before compiling an LLDB artifact', async () => {
-		const helper = '#include "helper.h"\nint helper(void) { return VALUE; }\n';
-		const header = '\uFEFF#define VALUE 73\n// 한글😀\n';
-		const helperBytes = new TextEncoder().encode(helper);
-		const headerBytes = new TextEncoder().encode(header);
-		const workspaceFiles = [
-			{ path: 'helper.c', content: helperBytes },
-			{ path: 'helper.h', content: headerBytes }
-		];
-		const originals = workspaceFiles.map(({ content }) => new Uint8Array(content));
-		clangState.compileArtifact.mockImplementation(async (_code, options) => {
-			if (
-				options.workspaceFiles.some(
-					({ content }: { content: unknown }) => typeof content !== 'string'
+	it.each([
+		{ phase: 'prepare', prepare: true },
+		{ phase: 'run', prepare: false }
+	])(
+		'normalizes byte source and header files before LLDB $phase compilation',
+		async ({ prepare }) => {
+			const helper = '#include "helper.h"\nint helper(void) { return VALUE; }\n';
+			const header = '\uFEFF#define VALUE 73\n// 한글😀\n';
+			const helperBytes = new TextEncoder().encode(helper);
+			const headerBytes = new TextEncoder().encode(header);
+			const workspaceFiles = [
+				{ path: 'helper.c', content: helperBytes },
+				{ path: 'helper.h', content: headerBytes }
+			];
+			const originals = workspaceFiles.map(({ content }) => new Uint8Array(content));
+			clangState.compileArtifact.mockImplementation(async (_code, options) => {
+				if (
+					options.workspaceFiles.some(
+						({ content }: { content: unknown }) => typeof content !== 'string'
+					)
 				)
-			)
-				throw new TypeError('compiler workspace content must be text');
-			return {
-				bytes: new Uint8Array(8),
-				debug: {
-					files: [
-						{ path: '/workspace/helper.c', contentSha256: 'helper-sha256' },
-						{ path: '/workspace/helper.h', contentSha256: 'header-sha256' }
-					]
-				}
-			};
-		});
-		await compileWithWorkspace(workspaceFiles);
-		expect(clangState.compileArtifact.mock.calls[0][1].workspaceFiles).toEqual([
-			{ path: 'helper.c', content: helper },
-			{ path: 'helper.h', content: header }
-		]);
-		const artifact = (globalThis as any).postMessage.mock.calls.find(
-			([message]: any[]) => message.lldbArtifact
-		)?.[0].lldbArtifact;
-		expect(artifact).toBeDefined();
-		expect(
-			artifact.sources.map(({ content }: { content: string }) =>
-				new TextEncoder().encode(content)
-			)
-		).toEqual(originals);
-		expect(workspaceFiles.map(({ content }) => content)).toEqual(originals);
-		expect(workspaceFiles[0].content).toBe(helperBytes);
-		expect(workspaceFiles[1].content).toBe(headerBytes);
-		expect(clangState.compileLinkRun).not.toHaveBeenCalled();
-	});
+					throw new TypeError('compiler workspace content must be text');
+				return {
+					bytes: new Uint8Array(8),
+					debug: {
+						files: [
+							{ path: '/workspace/helper.c', contentSha256: 'helper-sha256' },
+							{ path: '/workspace/helper.h', contentSha256: 'header-sha256' }
+						]
+					}
+				};
+			});
+			await compileWithWorkspace(workspaceFiles, prepare);
+			expect(clangState.compileArtifact.mock.calls[0][1].workspaceFiles).toEqual([
+				{ path: 'helper.c', content: helper },
+				{ path: 'helper.h', content: header }
+			]);
+			if (prepare) {
+				expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+					expect.objectContaining({ results: true })
+				);
+			} else {
+				const artifact = (globalThis as any).postMessage.mock.calls.find(
+					([message]: any[]) => message.lldbArtifact
+				)?.[0].lldbArtifact;
+				expect(artifact).toBeDefined();
+				expect(
+					artifact.sources.map(({ content }: { content: string }) =>
+						new TextEncoder().encode(content)
+					)
+				).toEqual(originals);
+			}
+			expect(workspaceFiles.map(({ content }) => content)).toEqual(originals);
+			expect(workspaceFiles[0].content).toBe(helperBytes);
+			expect(workspaceFiles[1].content).toBe(headerBytes);
+			expect(clangState.compileLinkRun).not.toHaveBeenCalled();
+		}
+	);
 
-	it('rejects invalid UTF-8 without replacing or mutating auxiliary file bytes', async () => {
-		const content = new Uint8Array([0x37, 0x33, 0xff]);
-		const workspaceFiles = [{ path: 'data/input.bin', content }];
-		clangState.compileArtifact.mockResolvedValue({
-			bytes: new Uint8Array(8),
-			debug: { files: [] }
-		});
-		await compileWithWorkspace(workspaceFiles);
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: 'LLDB workspace file is not valid UTF-8: /workspace/data/input.bin'
-		});
-		expect(
-			(globalThis as any).postMessage.mock.calls.some(
-				([message]: any[]) => message.lldbArtifact
-			)
-		).toBe(false);
-		expect(clangState.compileArtifact).not.toHaveBeenCalled();
-		expect(content).toEqual(new Uint8Array([0x37, 0x33, 0xff]));
-		expect(clangState.compileLinkRun).not.toHaveBeenCalled();
-	});
+	it.each([
+		{ phase: 'prepare', prepare: true },
+		{ phase: 'run', prepare: false }
+	])(
+		'rejects invalid UTF-8 before LLDB $phase compilation without changing bytes',
+		async ({ prepare }) => {
+			const content = new Uint8Array([0x37, 0x33, 0xff]);
+			const workspaceFiles = [{ path: 'data/input.bin', content }];
+			clangState.compileArtifact.mockResolvedValue({
+				bytes: new Uint8Array(8),
+				debug: { files: [] }
+			});
+			await compileWithWorkspace(workspaceFiles, prepare);
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+				error: 'LLDB workspace file is not valid UTF-8: /workspace/data/input.bin'
+			});
+			expect(
+				(globalThis as any).postMessage.mock.calls.some(
+					([message]: any[]) => message.lldbArtifact
+				)
+			).toBe(false);
+			expect(clangState.compileArtifact).not.toHaveBeenCalled();
+			expect(content).toEqual(new Uint8Array([0x37, 0x33, 0xff]));
+			expect(clangState.compileLinkRun).not.toHaveBeenCalled();
+		}
+	);
 
 	it('uses the descriptor canonical paths for Windows and backtracking workspace paths', async () => {
 		const source = '#include "../include/value.hpp"\nint main() { return value; }\n';
