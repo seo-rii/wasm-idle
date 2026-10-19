@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdir } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -76,6 +76,10 @@ const swcBrowserShimPlugin = {
 };
 
 await mkdir(path.join(REPO_ROOT, 'dist'), { recursive: true });
+await copyFile(
+	path.join(REPO_ROOT, 'node_modules', 'acorn', 'LICENSE'),
+	path.join(REPO_ROOT, 'dist', 'LICENSE.acorn.txt')
+);
 
 // The JavaScript entry executes the same native-JS runner without linking SWC.
 // A TypeScript request against this entry fails explicitly, never as a subset interpreter.

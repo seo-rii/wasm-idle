@@ -21,6 +21,7 @@
 	},
 	"dependencies": {
 		"@swc/wasm-typescript": "^1.16.13",
+		"acorn": "8.19.0",
 		"buffer": "^6.0.3"
 	},
 	"devDependencies": {
