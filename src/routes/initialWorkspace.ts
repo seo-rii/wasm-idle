@@ -34,7 +34,7 @@ export interface InitialWorkspaceOptions<Language extends string> {
 	normalizeLanguage: (value: string | null) => Language | null;
 	languageForPath?: (path: string) => Language | null;
 	fallbackLanguage: Language;
-	createWorkspaceId?: () => string;
+	createWorkspaceId?: () => ReturnType<typeof crypto.randomUUID>;
 }
 
 function decodeBase64Url(value: string | null) {
