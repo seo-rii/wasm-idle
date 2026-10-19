@@ -214,31 +214,16 @@ self.onmessage = async (event: { data: any }) => {
 
 		try {
 			if (resolvedDebugMode === 'lldb') {
-				const artifact = await clang.compileArtifact(code, {
-					language,
-					compileArgs,
-					programArgs,
-					activePath,
-					workspaceFiles,
-					cppVersion,
-					cVersion,
-					debugMode: 'lldb',
-					precompiledHeader: precompiledHeaderClang,
-					persistentCache
-				});
-				if (!artifact.debug) {
-					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
-				}
 				const inputPath =
 					normalizeDwarfWorkspacePath(
 						activePath || (language === 'C' ? 'main.c' : 'main.cc')
 					) || (language === 'C' ? 'main.c' : 'main.cc');
 				const sources = new Map<string, string>();
-				// Container files are bytes; retain BOMs so source hashes still match those bytes.
+				const compilerWorkspaceFiles: Array<{ path: string; content: string }> = [];
+				// Both the compiler and LLDB accept text; retain BOMs and original FS bytes.
 				const sourceDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 				for (const file of workspaceFiles || []) {
 					const sourcePath = normalizeDwarfWorkspacePath(file.path);
-					if (!sourcePath) continue;
 					let content = file.content;
 					if (typeof content !== 'string') {
 						if (!(content instanceof Uint8Array))
@@ -254,9 +239,25 @@ self.onmessage = async (event: { data: any }) => {
 							);
 						}
 					}
-					sources.set(`/workspace/${sourcePath}`, content);
+					compilerWorkspaceFiles.push({ ...file, content });
+					if (sourcePath) sources.set(`/workspace/${sourcePath}`, content);
 				}
 				sources.set(`/workspace/${inputPath}`, code);
+				const artifact = await clang.compileArtifact(code, {
+					language,
+					compileArgs,
+					programArgs,
+					activePath,
+					workspaceFiles: compilerWorkspaceFiles,
+					cppVersion,
+					cVersion,
+					debugMode: 'lldb',
+					precompiledHeader: precompiledHeaderClang,
+					persistentCache
+				});
+				if (!artifact.debug) {
+					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
+				}
 				self.postMessage({
 					lldbArtifact: {
 						bytes: new Uint8Array(artifact.bytes),
