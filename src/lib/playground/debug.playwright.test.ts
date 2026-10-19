@@ -1065,12 +1065,13 @@ async function installOwnerDebugTransportProbe(worker: BrowserWorker) {
 				data.method === 'debugPause'
 			) {
 				pauseSaturation = readOutputMetrics();
-				// The real Pause RPC is admitted while both rings are held full. Let
-				// readers drain afterward so native fd_write can service that request.
-				queueMicrotask(() => {
+				// A microtask can run before the production message listener. Keep
+				// readers held until that listener and its DAP write have run, then
+				// drain output so native fd_write can service the pending interrupt.
+				setTimeout(() => {
 					holdOutputReads = false;
 					releaseOutputReads();
-				});
+				}, 0);
 			}
 		});
 		const atomics = Atomics as unknown as {
@@ -1252,6 +1253,13 @@ async function installOwnerDebugTransportProbe(worker: BrowserWorker) {
 					);
 					worker.terminate();
 					return true;
+				},
+				saturationState() {
+					return {
+						holdOutputReads,
+						atPause: pauseSaturation,
+						output: readOutputMetrics()
+					};
 				},
 				metrics() {
 					return {
@@ -3710,6 +3718,7 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 							try {
 								if (testCase.transportStress === 'output') {
+									expect(await beginTransportCapture()).toBe(true);
 									const saturation = await saturateDebugOutputAndPause(
 										page,
 										3_000
@@ -3757,7 +3766,58 @@ describe('native-source browser debugging in Chromium', () => {
 								}
 								await page
 									.locator('.debug-status-pill--paused')
-									.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs });
+									.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs })
+									.catch(async (cause) => {
+										let timer: ReturnType<typeof setTimeout> | undefined;
+										try {
+											const snapshot = await Promise.race([
+												Promise.all([
+													page.evaluate(() => ({
+														state: (
+															window as any
+														).__wasmIdleDebug.getDebugState(),
+														terminalTail: document
+															.querySelector(
+																'[data-testid="terminal-debug-output"]'
+															)
+															?.textContent?.slice(-3000)
+													})),
+													(await ownerTransportProbe)?.evaluate(() =>
+														(
+															globalThis as any
+														).__wasmIdleOwnerDebugTransport.saturationState()
+													),
+													readTransportCapture().then((sample) =>
+														Object.fromEntries(
+															Object.entries(sample).map(
+																([key, value]) => [
+																	key,
+																	{
+																		...(value as any),
+																		text: (
+																			value as any
+																		).text?.slice(-4000)
+																	}
+																]
+															)
+														)
+													)
+												]),
+												new Promise((resolve) => {
+													timer = setTimeout(
+														() => resolve('diagnostic timed out'),
+														3000
+													);
+												})
+											]);
+											throw new Error(
+												`Stress Pause did not complete within ${stressPauseTimeoutMs}ms: ${JSON.stringify({ snapshot, pageErrors, consoleTail: consoleMessages.slice(-10) })}`,
+												{ cause }
+											);
+										} finally {
+											clearTimeout(timer);
+										}
+									});
 								const pausedStressState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
