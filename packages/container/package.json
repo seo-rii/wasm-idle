@@ -1,6 +1,6 @@
 {
   "name": "@wasm-idle/container",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.1",
   "description": "Experimental browser command containers with explicit resource and asset contracts",
   "license": "MIT",
   "type": "module",
@@ -59,7 +59,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "alpha"
+    "tag": "latest"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
