@@ -10,8 +10,8 @@
   "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
   "patch": {
     "path": "readline-control.patch",
-    "bytes": 5765,
-    "sha256": "6ad35b7a5dd3a20d5a04eda76b346af63c03d96749d41776f7b3d99ef9670056"
+    "bytes": 6819,
+    "sha256": "2449fba8df113b7633e11b7da8cd594756dd37d1cf1460799cab35d38c777026"
   },
   "files": {
     "bashline.c": {
@@ -43,6 +43,16 @@
         "bytes": 21593,
         "sha256": "f72dd2a260526a64b910b467a83a1b44bd51297ae55df01f8757b4c66e8dba72"
       }
+    },
+    "lib/readline/input.c": {
+      "original": {
+        "bytes": 16504,
+        "sha256": "1bc7cd66a233a92ca62819280ae5ba5503a0b48381c80619d501ca1a1d3413a1"
+      },
+      "patched": {
+        "bytes": 16970,
+        "sha256": "b6585eb04bab39b84497e8e2a65f00cbdada1366f18bb801f74f16fa8addf7f2"
+      }
     }
   },
   "qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
@@ -51,5 +61,16 @@
     "readonly": true,
     "exported": false,
     "requiresImportedAttribute": true
+  },
+  "inputReadiness": {
+    "target": "__wasi__",
+    "exceptionSet": false,
+    "readReadiness": true,
+    "idleTimeout": "existing Readline keyboard timeout",
+    "reason": "pinned WASIX pselect rejects nonempty exceptfds with ENOSYS",
+    "paths": [
+      "rl_gather_tyi",
+      "_rl_input_available"
+    ]
   }
 }

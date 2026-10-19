@@ -15,7 +15,7 @@ const REPOSITORY = path.resolve(HERE, '../../../..');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const STARTUP_CWD_LOCK_SHA256 = '6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5';
 const READLINE_CONTROL_LOCK_SHA256 =
-	'd443badb0532e8b085cc51b329fa91683e97ac0125129b4cf2351514b2b75b22';
+	'726c155a9d2d75c49167466b4d6c64e817b7bd457c537ce619767a32be7c9eb5';
 const REDIRECT_HOSTS = new Set([
 	'github.com',
 	'codeload.github.com',
@@ -269,7 +269,8 @@ export async function buildBashShim(options) {
 					'readline-control.lock.json',
 					'readline-control.patch',
 					'readline-control.test.mjs',
-					'readline-control.fixture.c'
+					'readline-control.fixture.c',
+					'readline-input.fixture.c'
 				]
 			: [])
 	]) {

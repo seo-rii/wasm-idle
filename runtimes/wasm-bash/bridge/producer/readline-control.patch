@@ -181,3 +181,32 @@
  		command->flags |= CMD_IGNORE_RETURN;
  
  #if defined (ONESHOT)
+--- a/lib/readline/input.c
++++ b/lib/readline/input.c
+@@ -229,7 +229,13 @@
+   FD_SET (tty, &readfds);
+   FD_SET (tty, &exceptfds);
+   USEC_TO_TIMEVAL (_keyboard_input_timeout, timeout);
++#if defined (__wasi__)
++  /* WASIX pselect rejects any exception set with ENOSYS before polling.
++     Only read readiness is needed here; keep the existing bounded timeout. */
++  result = select (tty + 1, &readfds, (fd_set *)NULL, (fd_set *)NULL, &timeout);
++#else
+   result = select (tty + 1, &readfds, (fd_set *)NULL, &exceptfds, &timeout);
++#endif
+   if (result <= 0)
+     return 0;	/* Nothing to read. */
+ #endif
+@@ -350,7 +356,12 @@
+   FD_SET (tty, &readfds);
+   FD_SET (tty, &exceptfds);
+   USEC_TO_TIMEVAL (_keyboard_input_timeout, timeout);
++#if defined (__wasi__)
++  /* Typeahead, key sequences and search use this second readiness path. */
++  return (select (tty + 1, &readfds, (fd_set *)NULL, (fd_set *)NULL, &timeout) > 0);
++#else
+   return (select (tty + 1, &readfds, (fd_set *)NULL, &exceptfds, &timeout) > 0);
++#endif
+ #else
+ 
+ #if defined (FIONREAD)

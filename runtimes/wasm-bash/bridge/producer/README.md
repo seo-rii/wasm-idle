@@ -214,6 +214,12 @@ intermediate directories and must keep its original nightly/lockfile pins.
 
 ## Opt-in primary Readline workspace control
 
+The WASI Readline input-gathering and queued-input checks omit exception sets: the pinned
+WASIX libc rejects any nonempty exception set with `ENOSYS` before polling input.
+The read descriptor and existing keyboard timeout remain in place, so terminal
+input and bounded idle callbacks both keep working. A native pipe fixture checks
+ready input, the idle timeout, and subsequent input using both actual patched calls.
+
 `--readline-control` additionally applies `readline-control.patch` to the exact
 pinned `bashline.c`; both the original and patched file identities are verified
 before compilation. Ordinary builds leave Bash sources unchanged. The resulting

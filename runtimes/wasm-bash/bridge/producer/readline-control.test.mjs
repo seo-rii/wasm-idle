@@ -61,6 +61,32 @@ printf alive
 	assert.equal(result, 'alive');
 });
 
+test('WASI Readline readiness accepts terminal input and retains the bounded idle timeout', async () => {
+	const patch = await readFile(new URL('readline-control.patch', here), 'utf8');
+	const branches = [...patch.matchAll(/\+#if defined \(__wasi__\)\n(?:\+.*\n)*?\+#else/g)];
+	assert.equal(branches.length, 2, 'both actual WASI readiness branches must be present');
+	const calls = branches.map(([branch]) =>
+		branch.split('\n').find((line) => /^\+  (?:result = select|return \(select)/.test(line)).slice(1)
+	);
+	const fixture = await readFile(new URL('readline-input.fixture.c', here), 'utf8');
+	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-input-'));
+	try {
+		const source = path.join(directory, 'input.c');
+		const binary = path.join(directory, 'input');
+		for (const call of calls) {
+			const body = call.includes('result =') ? `int result;\n${call}\nreturn result;` : call;
+			await writeFile(source, fixture.replace('/* READINESS_SOURCE */', body));
+			execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', source, '-o', binary]);
+			assert.equal(
+				execFileSync(binary, { encoding: 'utf8' }),
+				'ready; idle timeout; subsequent input: passed\n'
+			);
+		}
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 test('exact C initialization protects only imported control, and the hook defers unsafe states', async () => {
 	const patch = await readFile(new URL('readline-control.patch', here), 'utf8');
 	const match = patch.match(
