@@ -38,6 +38,14 @@ it(
 							serverMode: 'preview'
 						});
 			let browser: Browser | undefined;
+			const errors: string[] = [];
+			const diagnostics = {
+				consoleErrors: [] as string[],
+				failedRequests: [] as { path: string; failure: string | null }[],
+				httpErrors: [] as { path: string; status: number }[],
+				workers: [] as { path: string; event: string }[]
+			};
+			let capturePageState: () => Promise<unknown> = async () => null;
 			try {
 				browser = await chromium.launch({
 					executablePath: await resolveChromiumExecutable(
@@ -54,8 +62,40 @@ it(
 				await disableBrowserPrewarm(context);
 				const page = await context.newPage();
 				page.setDefaultTimeout(30_000);
-				const errors: string[] = [];
 				page.on('pageerror', (error) => errors.push(error.message));
+				page.on('console', (message) => {
+					if (message.type() === 'error')
+						diagnostics.consoleErrors.push(message.text().slice(0, 1500));
+				});
+				page.on('requestfailed', (request) =>
+					diagnostics.failedRequests.push({
+						path: new URL(request.url()).pathname,
+						failure: request.failure()?.errorText ?? null
+					})
+				);
+				page.on('response', (response) => {
+					if (response.status() >= 400)
+						diagnostics.httpErrors.push({
+							path: new URL(response.url()).pathname,
+							status: response.status()
+						});
+				});
+				page.on('worker', (worker) => {
+					const path = new URL(worker.url()).pathname;
+					diagnostics.workers.push({ path, event: 'created' });
+					worker.on('close', () => diagnostics.workers.push({ path, event: 'closed' }));
+				});
+				capturePageState = () =>
+					page.evaluate(() => ({
+						language:
+							document.querySelector<HTMLSelectElement>('#language-select')?.value,
+						isolated: crossOriginIsolated,
+						serviceWorker: navigator.serviceWorker.controller?.scriptURL ?? null,
+						terminal: document
+							.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent?.slice(-5000),
+						status: document.querySelector('.statusbar__message')?.textContent
+					}));
 				await page.addInitScript(() => {
 					const observer = setInterval(() => {
 						const target = globalThis as SiteWindow;
@@ -215,6 +255,26 @@ it(
 					.toBe(true);
 				await file.waitFor();
 				expect(errors).toEqual([]);
+			} catch (error) {
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				const state = await Promise.race([
+					capturePageState().catch((failure) => ({ failure: String(failure) })),
+					new Promise((resolve) => {
+						timer = setTimeout(() => resolve({ timedOut: true }), 3000);
+					})
+				]);
+				clearTimeout(timer);
+				throw new Error(
+					`${String(error)}\nContainer sidebar failure context: ${JSON.stringify({
+						pageErrors: errors.slice(-20),
+						consoleErrors: diagnostics.consoleErrors.slice(-20),
+						failedRequests: diagnostics.failedRequests.slice(-20),
+						httpErrors: diagnostics.httpErrors.slice(-20),
+						workers: diagnostics.workers.slice(-20),
+						state
+					})}`,
+					{ cause: error }
+				);
 			} finally {
 				await browser?.close();
 				await server.close();
