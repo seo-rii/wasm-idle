@@ -144,7 +144,7 @@ describe('browser test asset preparation', () => {
 		const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 		const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 		expect(manifest.groupBaseUrls.container).toMatch(
-			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/_ci\/container\/[a-f0-9]{64}\/$/u
 		);
 
 		const objects = release.distribution.packages.flatMap(
