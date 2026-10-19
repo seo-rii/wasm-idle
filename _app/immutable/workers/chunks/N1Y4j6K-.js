@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../elixir-BSleky1M.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

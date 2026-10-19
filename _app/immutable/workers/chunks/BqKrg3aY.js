@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../bash-CDFB9cI1.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

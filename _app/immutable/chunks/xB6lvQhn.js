@@ -1,1 +1,0 @@
-import e from"./Ci_rMkeC.js";var t=class extends e{constructor(){super(`golfscript`)}};export{t as default};
