@@ -13,7 +13,7 @@ import {
 const MiB = 1024 * 1024;
 
 describe('published SDK test fixtures', () => {
-	it('omits shared Python cases from the actual npm archive', async () => {
+	it('omits shared Python cases and historical fixtures from the actual npm archive', async () => {
 		const packagePath = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-test-fixture-pack-'));
 		try {
 			const root = JSON.parse(await readFile('package.json', 'utf8')) as { files: string[] };
@@ -31,6 +31,9 @@ describe('published SDK test fixtures', () => {
 			for (const name of ['python.runtime.cases.js', 'python.runtime.cases.d.ts']) {
 				await writeFile(path.join(directory, name), 'export {};\n');
 			}
+			const fixturePath = path.join(packagePath, 'dist/test-fixtures');
+			await mkdir(fixturePath, { recursive: true });
+			await writeFile(path.join(fixturePath, 'historical-runtime-build.json'), '{}\n');
 			const output = execFileSync(
 				'npm',
 				['pack', '--dry-run', '--ignore-scripts', '--json'],
@@ -68,6 +71,16 @@ describe('published SDK test fixtures', () => {
 			}
 		}
 	);
+
+	it('rejects JSON in test fixture directories before inspecting its contents', async () => {
+		const files = [
+			'dist/test-fixtures/clang-legacy-runtime-build.json',
+			'dist/playground/test-fixtures/program.json'
+		];
+		await expect(
+			assertFrameworkIndependentPackage('/unused-package-path', { name: 'wasm-idle' }, files)
+		).rejects.toThrow(`wasm-idle contains test fixtures: ${files.join(', ')}`);
+	});
 });
 
 describe('published SDK framework independence', () => {
@@ -173,7 +186,7 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 5.8 * MiB + 80 * 1024,
+				maxBytes: 6 * MiB + 80 * 1024,
 				maxFiles: 700,
 				maxPackages: 6
 			},

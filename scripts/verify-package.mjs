@@ -46,9 +46,9 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		// Preserve the independent C10 tool-host and main verified-module allowances together.
-		// Their existing 5.8 MiB and 80 KiB bounds retain the same file/package caps.
-		budget: { maxBytes: 5.8 * MiB + 80 * 1024, maxFiles: 700, maxPackages: 6 },
+		// The root install includes container execution modules and release metadata.
+		// Keep a bounded 80 KiB allowance above 6 MiB with the same file/package caps.
+		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -250,8 +250,10 @@ export async function assertFrameworkIndependentPackage(packagePath, manifest, p
 			}
 		}
 	}
-	const testFixtures = packedPaths.filter((packedPath) =>
-		/\.(?:test|spec|cases)\./iu.test(path.basename(packedPath))
+	const testFixtures = packedPaths.filter(
+		(packedPath) =>
+			/(^|\/)test-fixtures(\/|$)/iu.test(packedPath) ||
+			/\.(?:test|spec|cases)\./iu.test(path.basename(packedPath))
 	);
 	if (testFixtures.length) {
 		throw new Error(`${manifest.name} contains test fixtures: ${testFixtures.join(', ')}`);

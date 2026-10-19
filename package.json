@@ -261,6 +261,7 @@
 	},
 	"files": [
 		"dist",
+		"!dist/test-fixtures/**",
 		"!dist/**/*.test.*",
 		"!dist/**/*.spec.*",
 		"!dist/**/*.cases.*"
