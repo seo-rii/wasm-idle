@@ -234,9 +234,27 @@ self.onmessage = async (event: { data: any }) => {
 						activePath || (language === 'C' ? 'main.c' : 'main.cc')
 					) || (language === 'C' ? 'main.c' : 'main.cc');
 				const sources = new Map<string, string>();
+				// Container files are bytes; retain BOMs so source hashes still match those bytes.
+				const sourceDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 				for (const file of workspaceFiles || []) {
 					const sourcePath = normalizeDwarfWorkspacePath(file.path);
-					if (sourcePath) sources.set(`/workspace/${sourcePath}`, file.content);
+					if (!sourcePath) continue;
+					let content = file.content;
+					if (typeof content !== 'string') {
+						if (!(content instanceof Uint8Array))
+							throw new TypeError(
+								`LLDB workspace file content must be a string or Uint8Array: /workspace/${sourcePath}`
+							);
+						try {
+							content = sourceDecoder.decode(content);
+						} catch (cause) {
+							throw new Error(
+								`LLDB workspace file is not valid UTF-8: /workspace/${sourcePath}`,
+								{ cause }
+							);
+						}
+					}
+					sources.set(`/workspace/${sourcePath}`, content);
 				}
 				sources.set(`/workspace/${inputPath}`, code);
 				self.postMessage({

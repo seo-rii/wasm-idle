@@ -65,6 +65,96 @@ describe('Clang worker LLDB sources', () => {
 		(globalThis as any).postMessage = vi.fn();
 	});
 
+	async function compileWithWorkspace(
+		workspaceFiles: Array<{ path: string; content: string | Uint8Array }>
+	) {
+		await import('./clang');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, path: '/clang/', log: false }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'int main(void) { return 0; }',
+				buffer: new SharedArrayBuffer(1024),
+				debugBuffer: new SharedArrayBuffer(1024),
+				watchBuffer: new SharedArrayBuffer(1024),
+				watchResultBuffer: new SharedArrayBuffer(1024),
+				interrupt: new SharedArrayBuffer(1024),
+				language: 'C',
+				debugMode: 'lldb',
+				activePath: 'main.c',
+				workspaceFiles
+			}
+		});
+	}
+
+	it.each([
+		{ name: 'string', content: '73\n' },
+		{
+			name: 'UTF-8 bytes with BOM, NUL and Unicode',
+			content: new TextEncoder().encode('\uFEFF73\0 한글😀\n')
+		}
+	])('preserves $name auxiliary content in the LLDB string payload', async ({ content }) => {
+		const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+		const original = new Uint8Array(bytes);
+		const workspaceFiles = [{ path: 'data/input.txt', content }];
+		const descriptor = {
+			kind: 'dwarf',
+			sourceRoot: '/workspace',
+			moduleSha256: 'module-sha256',
+			files: [
+				{ path: '/workspace/data/input.txt', contentSha256: 'input-sha256' },
+				{ path: '/workspace/main.c', contentSha256: 'source-sha256' }
+			]
+		};
+		clangState.compileArtifact.mockResolvedValue({
+			bytes: new Uint8Array(8),
+			debug: descriptor
+		});
+		await compileWithWorkspace(workspaceFiles);
+		const artifact = (globalThis as any).postMessage.mock.calls.find(
+			([message]: any[]) => message.lldbArtifact
+		)?.[0].lldbArtifact;
+		expect(artifact).toBeDefined();
+		expect(artifact.sources).toEqual([
+			{
+				path: '/workspace/data/input.txt',
+				content: typeof content === 'string' ? content : '\uFEFF73\0 한글😀\n',
+				contentSha256: 'input-sha256'
+			},
+			{
+				path: '/workspace/main.c',
+				content: 'int main(void) { return 0; }',
+				contentSha256: 'source-sha256'
+			}
+		]);
+		expect(new TextEncoder().encode(artifact.sources[0].content)).toEqual(original);
+		expect(clangState.compileArtifact.mock.calls[0][1].workspaceFiles).toBe(workspaceFiles);
+		expect(bytes).toEqual(original);
+		expect(clangState.compileLinkRun).not.toHaveBeenCalled();
+	});
+
+	it('rejects invalid UTF-8 without replacing or mutating auxiliary file bytes', async () => {
+		const content = new Uint8Array([0x37, 0x33, 0xff]);
+		const workspaceFiles = [{ path: 'data/input.bin', content }];
+		clangState.compileArtifact.mockResolvedValue({
+			bytes: new Uint8Array(8),
+			debug: { files: [] }
+		});
+		await compileWithWorkspace(workspaceFiles);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'LLDB workspace file is not valid UTF-8: /workspace/data/input.bin'
+		});
+		expect(
+			(globalThis as any).postMessage.mock.calls.some(
+				([message]: any[]) => message.lldbArtifact
+			)
+		).toBe(false);
+		expect(clangState.compileArtifact.mock.calls[0][1].workspaceFiles).toBe(workspaceFiles);
+		expect(content).toEqual(new Uint8Array([0x37, 0x33, 0xff]));
+		expect(clangState.compileLinkRun).not.toHaveBeenCalled();
+	});
+
 	it('uses the descriptor canonical paths for Windows and backtracking workspace paths', async () => {
 		const source = '#include "../include/value.hpp"\nint main() { return value; }\n';
 		const header = 'constexpr int value = 42;\n';
