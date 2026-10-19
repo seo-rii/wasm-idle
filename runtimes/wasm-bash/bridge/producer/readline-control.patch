@@ -9,7 +9,7 @@
  
  #if defined (PROGRAMMABLE_COMPLETION)
  static int find_cmd_start PARAMS((int));
-@@ -634,6 +636,12 @@
+@@ -634,6 +636,25 @@
    if (posixly_correct)
      posix_readline_initialize (1);
  #endif
@@ -18,11 +18,24 @@
 +  if (getenv ("WASM_IDLE_SHELL_CONTROL") &&
 +      strcmp (getenv ("WASM_IDLE_SHELL_CONTROL"), "1") == 0 &&
 +      rl_event_hook == 0)
-+    rl_event_hook = wasm_idle_readline_poll;
++    {
++      SHELL_VAR *function;
++
++      /* Bash imported this exact host function through its normal function
++         import path. Lock only that function, never evaluate an env bootstrap. */
++      function = find_function ("__wasm_idle_poll");
++      if (function && imported_p (function))
++        {
++          function->attributes |= att_readonly;
++          function->attributes &= ~att_exported;
++          array_needs_making = 1;
++        }
++      rl_event_hook = wasm_idle_readline_poll;
++    }
  
    bash_readline_initialized = 1;
  }
-@@ -4419,12 +4427,7 @@
+@@ -4419,12 +4440,7 @@
  )
  {
    int type;
@@ -36,7 +49,7 @@
    Keymap cmd_xmap;
  
    /* First, we need to find the right command to execute.  This is tricky,
-@@ -4444,13 +4447,29 @@
+@@ -4444,13 +4460,29 @@
        return 1;
      }
  
@@ -68,7 +81,7 @@
      rl_crlf ();	/* move to a new line */
  
    v = bind_variable ("READLINE_LINE", rl_line_buffer, 0);
-@@ -4471,9 +4490,19 @@
+@@ -4471,9 +4503,19 @@
    array_needs_making = 1;
  
    save_parser_state (&ps);
@@ -89,7 +102,7 @@
    restore_parser_state (&ps);
  
    v = find_variable ("READLINE_LINE");
-@@ -4496,11 +4525,55 @@
+@@ -4496,11 +4538,55 @@
    /* If we clear the last line of the prompt above, redraw only that last
       line.  If the command returns 124, we redraw unconditionally as in
       previous versions. */

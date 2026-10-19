@@ -10,8 +10,8 @@
   "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
   "patch": {
     "path": "readline-control.patch",
-    "bytes": 5302,
-    "sha256": "ca12b998efa3bcfc1c58bfb3a6dd851d7853a6f744a2c297110ece08f4b53140"
+    "bytes": 5765,
+    "sha256": "6ad35b7a5dd3a20d5a04eda76b346af63c03d96749d41776f7b3d99ef9670056"
   },
   "files": {
     "bashline.c": {
@@ -20,8 +20,8 @@
         "sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
       },
       "patched": {
-        "bytes": 131602,
-        "sha256": "a9821c112b053b92ba91283d06c138a92403c09c38275e5c8657c9396fcf63e8"
+        "bytes": 132052,
+        "sha256": "a79eb1469bb497e1af1605025eae1342f27b3af4c370659f5d0c4c05fc5af50b"
       }
     },
     "builtins/common.h": {
@@ -46,5 +46,10 @@
     }
   },
   "qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
-  "ignoreReturnFlag": "SEVAL_IGNORE_RETURN"
+  "ignoreReturnFlag": "SEVAL_IGNORE_RETURN",
+  "importedFunctionInitialization": {
+    "readonly": true,
+    "exported": false,
+    "requiresImportedAttribute": true
+  }
 }

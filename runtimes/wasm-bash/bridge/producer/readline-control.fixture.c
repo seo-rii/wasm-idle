@@ -7,7 +7,11 @@
 #include <string.h>
 
 typedef struct { int attributes; } SHELL_VAR;
-#define readonly_p(v) ((v)->attributes & 1)
+#define att_readonly 1
+#define att_imported 2
+#define att_exported 4
+#define readonly_p(v) ((v)->attributes & att_readonly)
+#define imported_p(v) ((v)->attributes & att_imported)
 #define FREE(v) free(v)
 #define RL_STATE_READCMD 0x8
 #define RL_STATE_METANEXT 0x10
@@ -37,6 +41,14 @@ static SHELL_VAR function_value = { 1 };
 static char *lastarg_value = "previous argument";
 static char restored_lastarg[128];
 static int wasm_idle_readline_poll(void);
+static int (*rl_event_hook)(void);
+static int array_needs_making;
+static char *control_environment;
+static char *control_getenv(const char *name) {
+  assert(strcmp(name, "WASM_IDLE_SHELL_CONTROL") == 0);
+  return control_environment;
+}
+#define getenv control_getenv
 static int get_current_prompt_level(void) { return prompt_level; }
 static SHELL_VAR *find_function(const char *name) {
   assert(strcmp(name, "__wasm_idle_poll") == 0);
@@ -66,7 +78,48 @@ static int bash_execute_readline_command(char *command, int poll) {
 
 /* POLL_SOURCE */
 
+static void initialize_control(void) {
+/* INIT_SOURCE */
+}
+
 int main(void) {
+  /* Only normal Bash-imported host control is made readonly and nonexported.
+     An absent or invalid opt-in leaves all existing function state untouched. */
+  function_value.attributes = att_imported | att_exported;
+  initialize_control();
+  assert(rl_event_hook == NULL);
+  assert(array_needs_making == 0);
+  assert(function_value.attributes == (att_imported | att_exported));
+  control_environment = "0";
+  initialize_control();
+  assert(rl_event_hook == NULL);
+  assert(function_value.attributes == (att_imported | att_exported));
+  control_environment = "1";
+  initialize_control();
+  assert(rl_event_hook == wasm_idle_readline_poll);
+  assert(function_value.attributes == (att_imported | att_readonly));
+  assert(array_needs_making == 1);
+  array_needs_making = 0;
+  function_value.attributes = att_imported | att_exported;
+  initialize_control();
+  assert(rl_event_hook == wasm_idle_readline_poll);
+  assert(function_value.attributes == (att_imported | att_exported));
+  assert(array_needs_making == 0);
+  rl_event_hook = NULL;
+  function_value.attributes = att_exported;
+  initialize_control();
+  assert(function_value.attributes == att_exported);
+  rl_event_hook = NULL;
+  function_value.attributes = att_readonly | att_exported;
+  initialize_control();
+  assert(function_value.attributes == (att_readonly | att_exported));
+  rl_event_hook = NULL;
+  function_present = 0;
+  initialize_control();
+  assert(rl_event_hook == wasm_idle_readline_poll);
+  function_present = 1;
+  function_value.attributes = att_readonly;
+
   const int blocked[] = { RL_STATE_METANEXT, RL_STATE_DISPATCHING,
     RL_STATE_MOREINPUT, RL_STATE_ISEARCH, RL_STATE_NSEARCH, RL_STATE_SEARCH,
     RL_STATE_NUMERICARG, RL_STATE_MACROINPUT, RL_STATE_MACRODEF,

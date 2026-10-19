@@ -26,6 +26,11 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	assert.equal(policy.readonlyFunctionRequired, true);
 	assert.equal(policy.redrawExitCode, 124);
 	assert.equal(policy.ignoreReturnFlag, 'SEVAL_IGNORE_RETURN');
+	assert.deepEqual(policy.importedFunctionInitialization, {
+		readonly: true,
+		exported: false,
+		requiresImportedAttribute: true
+	});
 	assert.equal(opted.producerFiles['readline-control.patch'].sha256, policy.patch.sha256);
 	assert.throws(
 		() => parseOptions(['--plan', '--readline-control', '--readline-control']),
@@ -56,7 +61,7 @@ printf alive
 	assert.equal(result, 'alive');
 });
 
-test('exact C hook defers foreground/read/continuation/editing operations and preserves its outer state', async () => {
+test('exact C initialization protects only imported control, and the hook defers unsafe states', async () => {
 	const patch = await readFile(new URL('readline-control.patch', here), 'utf8');
 	const match = patch.match(
 		/\+static int\n\+wasm_idle_readline_poll \(void\)\n\+\{[\s\S]+?\n[ +]\}/
@@ -66,12 +71,23 @@ test('exact C hook defers foreground/read/continuation/editing operations and pr
 		.split('\n')
 		.map((line) => line.slice(1))
 		.join('\n');
+	const initialization = patch.match(
+		/\+  \/\* Only the explicit website control profile installs this idle callback\. \*\/[\s\S]+?\n\+    \}/
+	);
+	assert(initialization, 'the actual imported-function initialization must be present');
+	const initialize = initialization[0]
+		.split('\n')
+		.map((line) => line.slice(1))
+		.join('\n');
 	const fixture = await readFile(new URL('readline-control.fixture.c', here), 'utf8');
 	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-control-'));
 	try {
 		const source = path.join(directory, 'hook.c');
 		const binary = path.join(directory, 'hook');
-		await writeFile(source, fixture.replace('/* POLL_SOURCE */', hook));
+		await writeFile(
+			source,
+			fixture.replace('/* POLL_SOURCE */', hook).replace('/* INIT_SOURCE */', initialize)
+		);
 		execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', source, '-o', binary]);
 		execFileSync(binary);
 	} finally {

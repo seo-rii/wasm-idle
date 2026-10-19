@@ -219,8 +219,13 @@ pinned `bashline.c`; both the original and patched file identities are verified
 before compilation. Ordinary builds leave Bash sources unchanged. The resulting
 candidate enables the hook only when `WASM_IDLE_SHELL_CONTROL=1` at Readline
 initialization and the running shell defines a readonly `__wasm_idle_poll`
-function. The trusted application rcfile supplies that function and may also
-call it from `PROMPT_COMMAND`.
+function. The application supplies that fixed function through Bash's standard
+`BASH_FUNC___wasm_idle_poll%%` environment-function import. In this opt-in profile
+only, initialization makes that exact imported function readonly and clears its
+export attribute, so commands do not inherit the host control body. Functions
+without Bash's imported attribute remain unchanged; an ordinary rcfile may still
+define the fixed function as readonly. There is no environment bootstrap eval or
+special parser for the function body.
 
 The callback runs at real primary Readline idle boundaries. It defers while a
 foreground command, `read -e`, heredoc, secondary prompt, search, completion,
@@ -239,7 +244,7 @@ requires a redraw. On `124`, Bash decodes the current `PS1` again and redraws th
 preserved editing line. The function must not read terminal input, replace the
 editing variables, execute an unbounded command, or print terminal output.
 Mailbox handling, allowed cwd targets, and actual `builtin cd` belong to the
-trusted rcfile and application. This cooperative hook is not an isolation
+trusted function and application. This cooperative hook is not an isolation
 boundary against arbitrary shell code. A language switch during a foreground
 command or continuation remains queued until a genuine primary prompt boundary.
 
