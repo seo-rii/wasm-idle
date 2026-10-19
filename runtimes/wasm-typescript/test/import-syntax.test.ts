@@ -35,6 +35,34 @@ describe('builtin import syntax', () => {
 	});
 
 	it.each([
+		{ name: 'LF', newline: '\n' },
+		{ name: 'CRLF', newline: '\r\n' },
+		{ name: 'CR', newline: '\r' },
+		{ name: 'line separator', newline: '\u2028' },
+		{ name: 'paragraph separator', newline: '\u2029' }
+	])('preserves runtime error lines after imports with $name', async ({ newline }) => {
+		const fileName = 'import-lines.js';
+		const following = `${newline}throw new Error('after import');`;
+		const code = `import {${newline}readFileSync as read${newline}} from 'fs';${following}`;
+		const compiled = await compileTypeScript({ language: 'javascript', code, fileName });
+		expect(compiled.success).toBe(true);
+		expect(compiled.artifact!.javascript.endsWith(following)).toBe(true);
+		const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+		let nativeLocation: string | undefined;
+		try {
+			await new AsyncFunction(
+				`${newline.repeat(2)}${following}\n//# sourceURL=${fileName}`
+			)();
+		} catch (error) {
+			nativeLocation = (error as Error).stack?.match(/import-lines\.js:\d+:\d+/u)?.[0];
+		}
+		expect(nativeLocation).toBeTruthy();
+		const result = await executeBrowserTypeScriptArtifact(compiled.artifact!);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(nativeLocation);
+	});
+
+	it.each([
 		"console.log(`한글🙂\nimport fs from 'fs';\n\\0끝`);",
 		"console.log(`\nimport fs from 'fs';\nexport default 7;\n`);",
 		"/*\nimport helper from './helper';\nexport default 1;\n*/\nconsole.log('ok');",

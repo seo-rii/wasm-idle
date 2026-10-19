@@ -133,7 +133,9 @@ function rewriteNodeBuiltinImports(code: string, fileName: string) {
 				javascript += code.slice(offset, start);
 				javascript += statements.length ? statements.join(' ') : `${requireCall};`;
 				// Keep the following source's line numbers stable after multiline imports.
-				javascript += '\n'.repeat((code.slice(start, end).match(/\n/g) || []).length);
+				javascript += '\n'.repeat(
+					(code.slice(start, end).match(/\r\n|[\n\r\u2028\u2029]/g) || []).length
+				);
 				offset = end;
 				continue;
 			}
