@@ -57,9 +57,18 @@ function rcfile(session: string, languages: readonly string[]) {
 	return [
 		'# Trusted application rcfile. The mailbox is data and is never evaluated.',
 		'__wasm_idle_poll() {',
-		'  local __wic_version __wic_session __wic_generation __wic_language __wic_extra __wic_oldpwd',
+		'  local __wic_version __wic_session __wic_generation __wic_language __wic_extra __wic_oldpwd __wic_fd',
 		`  local __wic_expected_session='${session}'`,
-		`  if IFS=' ' builtin read -r -n 160 __wic_version __wic_session __wic_generation __wic_language __wic_extra 2>/dev/null < '${SHELL_CONTROL_REQUEST}'; then :; else return 0; fi`,
+		// WASIX dup2 restoration loses stdin's polling rights. Read through a fresh
+		// descriptor instead of temporarily replacing the live terminal's fd 0.
+		`  [[ -f '${SHELL_CONTROL_REQUEST}' && -r '${SHELL_CONTROL_REQUEST}' ]] || return 0`,
+		`  if builtin exec {__wic_fd}< '${SHELL_CONTROL_REQUEST}'; then :; else return 0; fi`,
+		'  if IFS=\' \' builtin read -r -n 160 -u "$__wic_fd" __wic_version __wic_session __wic_generation __wic_language __wic_extra; then',
+		'    builtin exec {__wic_fd}<&-',
+		'  else',
+		'    builtin exec {__wic_fd}<&-',
+		'    return 0',
+		'  fi',
 		'  [[ "$__wic_version" == 1 && "$__wic_session" == "$__wic_expected_session" && -z "$__wic_extra" ]] || return 0',
 		'  [[ "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] || return 0',
 		`  (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_control_generation:-0} )) || return 0`,
