@@ -291,9 +291,14 @@ describe('workspace storage browser integration', () => {
 				);
 				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 				await page.locator('[data-workspace-recovery]').waitFor();
-				await page.evaluate(() =>
-					(window as any).__wasmIdleDebug.setEditorValue('int recovered_new_work = 42;')
-				);
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				expect(
+					await page.evaluate(() =>
+						(window as any).__wasmIdleDebug.setEditorValue(
+							'int recovered_new_work = 42;'
+						)
+					)
+				).toBe(true);
 				await page.waitForTimeout(700);
 				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				expect(
@@ -732,10 +737,14 @@ describe('workspace storage browser integration', () => {
 					await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 					await moduleRequested;
 					// This hook is installed by the hydrated page's effect, after its window
-					// handlers exist. The editor import is still pending, so restoration has not run.
+					// handlers exist. The saved selection is restored, but editor readiness and saving
+					// must still wait for the pending editor import.
 					await page.waitForFunction(
 						() => typeof (window as any).__wasmIdleDebug?.getEditorValue === 'function'
 					);
+					expect(
+						await page.locator('#language-select').getAttribute('data-workspace-ready')
+					).toBe('false');
 					expect(
 						await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 					).toBe('');

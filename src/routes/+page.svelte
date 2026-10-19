@@ -336,6 +336,8 @@
 		}
 	);
 	let workspaceInitialized = $state(false);
+	let workspaceEditorInitialized = $state(false);
+	const workspaceEditorReady = $derived(workspaceInitialized && !!editor);
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let activeProgressSession: ProgressLike | undefined;
 	let executionAbortController: AbortController | undefined;
@@ -1510,7 +1512,7 @@
 	}
 
 	function saveWorkspace(showStatus = false) {
-		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return false;
+		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return false;
 		const saved = workspaceStorage.save(workspaceSaveKey, currentWorkspaceStorageKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
@@ -1551,7 +1553,7 @@
 	}
 
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
-		if (!workspaceInitialized) return;
+		if (!workspaceEditorInitialized) return;
 		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
 		if (state.revision === state.savedRevision || saveWorkspace()) return;
@@ -2518,7 +2520,11 @@
 	});
 
 	$effect(() => {
-		if (!browser || !workspaceInitialized || unrestoredWorkspace !== null) return;
+		if (workspaceEditorReady) workspaceEditorInitialized = true;
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return;
 		const key = workspaceSaveKey;
 		if (!key) return;
 		workspaceStorage.observe(key, currentWorkspaceStorageKey);
@@ -3687,7 +3693,7 @@
 						aria-hidden="true"
 						value={language}
 						disabled={!workspaceInitialized || !!runningMode}
-						data-workspace-ready={workspaceInitialized}
+						data-workspace-ready={workspaceEditorReady}
 						onchange={handleLanguageChange}
 					>
 						{#each playgroundLanguages as languageOption (languageOption)}
