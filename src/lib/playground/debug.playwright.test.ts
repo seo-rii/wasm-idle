@@ -2831,44 +2831,101 @@ describe('native-source browser debugging in Chromium', () => {
 									.getByRole('button', { name: 'Continue', exact: true })
 									.click();
 							} else {
-								expect(await beginTransportCapture()).toBe(true);
-								await page
-									.getByRole('button', { name: 'Continue', exact: true })
-									.click();
-								await waitForTerminalOutput(page, 'lldb-buffer-input? ', 30_000);
-								await waitForTerminalOutput(page, 'lldb-buffer-stderr', 10_000);
-								const transcript = (
-									(await page
-										.locator('[data-testid="terminal-debug-output"]')
-										.textContent()) || ''
-								).replaceAll('\r\n', '\n');
-								const stdout = transcript.replace('lldb-buffer-stderr\n', '');
-								const startMarker = 'lldb-buffer-begin\n';
-								const endMarker = '\nlldb-buffer-end\n';
-								const start = stdout.indexOf(startMarker);
-								const end = stdout.indexOf(endMarker, start + startMarker.length);
-								expect(start).toBeGreaterThanOrEqual(0);
-								expect(end).toBeGreaterThan(start);
-								const payload = stdout.slice(start + startMarker.length, end);
-								const expectedPayload = Array.from(
-									{ length: testCase.expectedBufferedOutputBytes },
-									(_, i) => String.fromCharCode(65 + (i % 26))
-								).join('');
-								expect(payload.length).toBe(testCase.expectedBufferedOutputBytes);
-								expect(createHash('sha256').update(payload).digest('hex')).toBe(
-									createHash('sha256').update(expectedPayload).digest('hex')
-								);
-								const sample = await readTransportCapture();
-								expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
-									testCase.expectedBufferedOutputBytes
-								);
-								expect(sample.stdout.notifications).toBeGreaterThan(0);
-								expect(sample.stdout.notifications).toBeLessThanOrEqual(2048);
-								expect(sample.stderr.bytes).toBe('lldb-buffer-stderr\n'.length);
-								console.info(
-									`[wasm-idle:buffered-output] ${JSON.stringify({ bytes: sample.stdout.bytes, notifications: sample.stdout.notifications })}`
-								);
-								await typeTerminalLine(page, '73');
+								const outputOwner = await ownerTransportProbe;
+								expect(outputOwner).toBeDefined();
+								// The UI intentionally retains only a 64 KiB tail. Capture the
+								// real owner output events before that tail drops the begin marker.
+								await outputOwner!.evaluate((limit) => {
+									const scope = globalThis as any;
+									const original = scope.postMessage;
+									const capture = {
+										text: '',
+										overflow: false,
+										restore: () => {
+											scope.postMessage = original;
+										}
+									};
+									scope.__wasmIdleBufferedOutput = capture;
+									scope.postMessage = (message: any, ...args: any[]) => {
+										if (
+											message?.version === 1 &&
+											message.type === 'event' &&
+											message.event?.name === 'output' &&
+											message.event.language === 'C' &&
+											typeof message.event.data === 'string'
+										) {
+											const text = capture.text + message.event.data;
+											capture.overflow ||= text.length > limit;
+											capture.text = text.slice(0, limit);
+										}
+										return Reflect.apply(original, globalThis, [
+											message,
+											...args
+										]);
+									};
+								}, testCase.expectedBufferedOutputBytes + 4096);
+								try {
+									expect(await beginTransportCapture()).toBe(true);
+									await page
+										.getByRole('button', { name: 'Continue', exact: true })
+										.click();
+									await waitForTerminalOutput(
+										page,
+										'lldb-buffer-input? ',
+										30_000
+									);
+									await waitForTerminalOutput(page, 'lldb-buffer-stderr', 10_000);
+									const captured = await outputOwner!.evaluate(() => {
+										const capture = (globalThis as any)
+											.__wasmIdleBufferedOutput;
+										return {
+											text: capture.text as string,
+											overflow: capture.overflow as boolean
+										};
+									});
+									expect(captured.overflow).toBe(false);
+									const transcript = captured.text.replaceAll('\r\n', '\n');
+									const stdout = transcript.replace('lldb-buffer-stderr\n', '');
+									const startMarker = 'lldb-buffer-begin\n';
+									const endMarker = '\nlldb-buffer-end\n';
+									const start = stdout.indexOf(startMarker);
+									const end = stdout.indexOf(
+										endMarker,
+										start + startMarker.length
+									);
+									expect(start).toBeGreaterThanOrEqual(0);
+									expect(end).toBeGreaterThan(start);
+									const payload = stdout.slice(start + startMarker.length, end);
+									const expectedPayload = Array.from(
+										{ length: testCase.expectedBufferedOutputBytes },
+										(_, i) => String.fromCharCode(65 + (i % 26))
+									).join('');
+									expect(payload.length).toBe(
+										testCase.expectedBufferedOutputBytes
+									);
+									expect(createHash('sha256').update(payload).digest('hex')).toBe(
+										createHash('sha256').update(expectedPayload).digest('hex')
+									);
+									const sample = await readTransportCapture();
+									expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
+										testCase.expectedBufferedOutputBytes
+									);
+									expect(sample.stdout.notifications).toBeGreaterThan(0);
+									expect(sample.stdout.notifications).toBeLessThanOrEqual(2048);
+									expect(sample.stderr.bytes).toBe('lldb-buffer-stderr\n'.length);
+									console.info(
+										`[wasm-idle:buffered-output] ${JSON.stringify({ bytes: sample.stdout.bytes, notifications: sample.stdout.notifications })}`
+									);
+									await typeTerminalLine(page, '73');
+								} finally {
+									await outputOwner!
+										.evaluate(() => {
+											const scope = globalThis as any;
+											scope.__wasmIdleBufferedOutput?.restore();
+											delete scope.__wasmIdleBufferedOutput;
+										})
+										.catch(() => undefined);
+								}
 							}
 							await waitForTerminalOutput(page, testCase.expectedOutput, 10_000);
 							await debugButton.waitFor({ state: 'visible', timeout: 10_000 });
