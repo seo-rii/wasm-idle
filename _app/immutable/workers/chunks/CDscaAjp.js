@@ -1,1 +1,0 @@
-import e from"./BN67_9sz.js";var t=class extends e{constructor(){super(`golfscript`)}};export{t as default};

@@ -64,6 +64,902 @@
       "Complete dependency source/license notices"
     ]
   },
+  "bash": {
+    "schemaVersion": 1,
+    "status": "built-imports-verified-not-runtime-qualified",
+    "producerVerified": true,
+    "runtimeQualified": false,
+    "startedAt": "2026-10-19T06:37:59.585Z",
+    "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+    "lockSha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1",
+    "baselineRecipe": {
+      "path": "../../scripts/prepare-runtime.mjs",
+      "sha256": "696a0033d6116d4649bfee1ffdf6c556d0f7cf250b69c7aa50809d9ff1a99e53"
+    },
+    "inputs": {
+      "source": {
+        "filename": "bash-fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+        "url": "https://github.com/wasix-org/bash/archive/fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+        "sha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41",
+        "bytes": 10401294
+      },
+      "sysroot": {
+        "filename": "wasix-sysroot-v2024-07-08.1.tar.gz",
+        "url": "https://github.com/wasix-org/wasix-libc/releases/download/v2024-07-08.1/sysroot.tar.gz",
+        "sha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9",
+        "bytes": 2134068
+      },
+      "toolchain": {
+        "filename": "wasi-sdk-20.0-linux.tar.gz",
+        "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz",
+        "sha256": "7030139d495a19fbeccb9449150c2b1531e15d8fb74419872a719a7580aad0f9",
+        "bytes": 79570956
+      },
+      "binaryen": {
+        "filename": "binaryen-version_108-x86_64-linux.tar.gz",
+        "url": "https://github.com/WebAssembly/binaryen/releases/download/version_108/binaryen-version_108-x86_64-linux.tar.gz",
+        "sha256": "7bb8a2d97214f40bf34abc31d49b34aa5deab10b25d6d13c5f72cb395cf142fb",
+        "bytes": 42446797
+      },
+      "wasmer": {
+        "filename": "wasmer-7.2.0-linux-amd64.tar.gz",
+        "url": "https://github.com/wasmerio/wasmer/releases/download/v7.2.0/wasmer-linux-amd64.tar.gz",
+        "sha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2",
+        "bytes": 256943735
+      }
+    },
+    "localFiles": {
+      "execve.c": {
+        "bytes": 2533,
+        "sha256": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5"
+      },
+      "exec_frame.rs": {
+        "bytes": 3717,
+        "sha256": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a"
+      },
+      "proc_exec_v1.rs": {
+        "bytes": 2377,
+        "sha256": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63"
+      },
+      "host_command_compile_probe.rs": {
+        "bytes": 1750,
+        "sha256": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07"
+      },
+      "patches/0001-preserve-exec-unwind.patch": {
+        "bytes": 438,
+        "sha256": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315"
+      },
+      "patches/0002-replace-explicit-environment.patch": {
+        "bytes": 1318,
+        "sha256": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934"
+      },
+      "patches/0003-add-lossless-exec-frame.patch": {
+        "bytes": 1839,
+        "sha256": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d"
+      },
+      "patches/0004-expose-host-command-hook.patch": {
+        "bytes": 1878,
+        "sha256": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442"
+      },
+      "patches/0005-owned-command-snapshot.patch": {
+        "bytes": 3880,
+        "sha256": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad"
+      },
+      "startup_cwd.c": {
+        "bytes": 1253,
+        "sha256": "dd86c46ce5e835ff5bdd67b32eb0e9ca330fe5e4b66f2f2706ccd9448d2dd3f0"
+      }
+    },
+    "producerFiles": {
+      "build.mjs": {
+        "bytes": 24800,
+        "sha256": "2276902fe7c8b28d16d6db22e561c455218145459e47661b9e57f7addebcbe79"
+      },
+      "verify.mjs": {
+        "bytes": 4690,
+        "sha256": "e9a4615dd9282c2f015d6faa8566ef7239924720e994831ecec3b5ea5f1c2016"
+      },
+      "inputs.lock.json": {
+        "bytes": 9025,
+        "sha256": "44b9cb3b80911460f10ba439dfbbdfe1a050f349d908133b68e42ada061b1ce1"
+      },
+      "README.md": {
+        "bytes": 17898,
+        "sha256": "9f6dd4ddf45052d62c31fcbc1ab17d5870818a67ec08b3e62d3762b59fae6ad2"
+      },
+      "build.test.mjs": {
+        "bytes": 10122,
+        "sha256": "75cb0769788fe79f2039a4f0d7c05718a5bb33cf6089e457501004779bcfc165"
+      },
+      "startup-cwd.lock.json": {
+        "bytes": 751,
+        "sha256": "6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5"
+      },
+      "startup-cwd.test.mjs": {
+        "bytes": 2235,
+        "sha256": "448bd2004707badae72c632953dc238b90b3f5ae1247c0e8fba0cc47e2ad31cb"
+      },
+      "startup-cwd.fixture.c": {
+        "bytes": 2539,
+        "sha256": "f24434071580fcd98004a7fe2b4426469f97f4e8ea420a13c1c469aa5cdd6239"
+      },
+      "readline-control.lock.json": {
+        "bytes": 2290,
+        "sha256": "726c155a9d2d75c49167466b4d6c64e817b7bd457c537ce619767a32be7c9eb5"
+      },
+      "readline-control.patch": {
+        "bytes": 6819,
+        "sha256": "2449fba8df113b7633e11b7da8cd594756dd37d1cf1460799cab35d38c777026"
+      },
+      "readline-control.test.mjs": {
+        "bytes": 6293,
+        "sha256": "bb49ed87e930f5ae9abf098d0cce5d9698f0f5a5d16de624807dd3f74bd8048f"
+      },
+      "readline-control.fixture.c": {
+        "bytes": 6039,
+        "sha256": "c697edfc0091353623bcf1d6c13d10b56e0a276e95941c8d69b77758cd405847"
+      },
+      "readline-input.fixture.c": {
+        "bytes": 1662,
+        "sha256": "aad4e71637bc95cb898061e509e2c01c3135e4cbe4d5bfc14024974c2ad42ce1"
+      }
+    },
+    "sdkPrerequisite": {
+      "revision": "93b8b738ebd3ee57e118da0f0eb795b97d5b999e",
+      "sdkArchiveSha256": "ca5df306ffcb260fb3086e89d450aafac106e200ccf7b49bb03c348bc2208712",
+      "wasixVersion": "0.601.0",
+      "wasixArchiveSha256": "a9a804fcfbdbbfe5b2d6fb30e741e22a21e88e964dedfea9e609f13a52823bfe",
+      "localFiles": {
+        "execve.c": "eb284f3f5c31e23a142f67128e9198fdbda04549b3ef319448db4d3ee59d26a5",
+        "exec_frame.rs": "8a79343e3baf7c95f4b4e1489d02d0b40b954e6bf19b3a90c9320eae3d6b4f4a",
+        "proc_exec_v1.rs": "c477b0ee53d19aefdd04ef6be2969c354aaa11f1616e4d46e2af9b8be209fa63",
+        "host_command_compile_probe.rs": "dbd85016d8f68b5b63ab20c6c6c84c41e4e5412ba5ea2ef4a1679e409ad29c07",
+        "patches/0001-preserve-exec-unwind.patch": "dc89d0989f2837c899f70deebc11a123e0a827691dbe0b302f38e312abfa8315",
+        "patches/0002-replace-explicit-environment.patch": "8c0d6b3b7dfa180d0546ef9df05b2aa83ddc703932b51a3fc1ba9fbb1e1af934",
+        "patches/0003-add-lossless-exec-frame.patch": "2e27b352ff9757e75ff956c2b160060016d23fc141dcb0ae9c7dbc04be45df5d",
+        "patches/0004-expose-host-command-hook.patch": "cd1493fd5bb3255d520c63dac47377da0d9167d149658afc5c82ecfb17737442",
+        "patches/0005-owned-command-snapshot.patch": "c2a0631b823ab312c0d82b3bd3f51d34dc04943402354851ff90404768ce76ad"
+      }
+    },
+    "recipe": {
+      "jobs": 1,
+      "upstreamTarget": "shell",
+      "sourceDateEpoch": "1771323411",
+      "shimTarget": "wasm32-wasmer-wasi",
+      "wrapper": "link-time execve and startup cwd objects; original configure and Asyncify recipe unchanged",
+      "startupCwd": {
+        "schemaVersion": 1,
+        "profile": "bash-wasix-startup-cwd-v1",
+        "constructorPriority": 65535,
+        "pinnedPreopenConstructorPriority": 51,
+        "failureExitCode": 125,
+        "source": {
+          "path": "startup_cwd.c",
+          "bytes": 1253,
+          "sha256": "dd86c46ce5e835ff5bdd67b32eb0e9ca330fe5e4b66f2f2706ccd9448d2dd3f0"
+        },
+        "sysrootFiles": {
+          "lib/wasm32-wasi/libc.a": {
+            "bytes": 1672622,
+            "sha256": "00196f7b61519380e3b6c7cc84d1fb7772f2d73e581ddee9cbed37d9555e4585"
+          },
+          "lib/wasm32-wasi/crt1-command.o": {
+            "bytes": 574,
+            "sha256": "fc6b75a476c6b920e4e32775a6f2ba4c2bfb32306aea688054ba6c241da14f54"
+          }
+        },
+        "qualification": "Selected Bash producer initialization only; rebuilt guest/browser acceptance remains required",
+        "manifest": {
+          "bytes": 751,
+          "sha256": "6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5"
+        }
+      },
+      "readlineControl": {
+        "schemaVersion": 1,
+        "profile": "bash-readline-workspace-control-v1",
+        "environment": {
+          "WASM_IDLE_SHELL_CONTROL": "1"
+        },
+        "function": "__wasm_idle_poll",
+        "readonlyFunctionRequired": true,
+        "redrawExitCode": 124,
+        "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+        "patch": {
+          "path": "readline-control.patch",
+          "bytes": 6819,
+          "sha256": "2449fba8df113b7633e11b7da8cd594756dd37d1cf1460799cab35d38c777026"
+        },
+        "files": {
+          "bashline.c": {
+            "original": {
+              "bytes": 129048,
+              "sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
+            },
+            "patched": {
+              "bytes": 132052,
+              "sha256": "a79eb1469bb497e1af1605025eae1342f27b3af4c370659f5d0c4c05fc5af50b"
+            }
+          },
+          "builtins/common.h": {
+            "original": {
+              "bytes": 9077,
+              "sha256": "b19017c4179334ecf1122ce1b3d25ee7e98d11b278cb27e3d176567b16e90226"
+            },
+            "patched": {
+              "bytes": 9156,
+              "sha256": "2322aa5ad7aad205702ff82b47832c0a9bac27dac26ef9e7a2ba762240871cda"
+            }
+          },
+          "builtins/evalstring.c": {
+            "original": {
+              "bytes": 21554,
+              "sha256": "443c216249f97eb515ba05a7b641a93677c29393baccc2e7019445ea5cfd5604"
+            },
+            "patched": {
+              "bytes": 21593,
+              "sha256": "f72dd2a260526a64b910b467a83a1b44bd51297ae55df01f8757b4c66e8dba72"
+            }
+          },
+          "lib/readline/input.c": {
+            "original": {
+              "bytes": 16504,
+              "sha256": "1bc7cd66a233a92ca62819280ae5ba5503a0b48381c80619d501ca1a1d3413a1"
+            },
+            "patched": {
+              "bytes": 16970,
+              "sha256": "b6585eb04bab39b84497e8e2a65f00cbdada1366f18bb801f74f16fa8addf7f2"
+            }
+          }
+        },
+        "qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
+        "ignoreReturnFlag": "SEVAL_IGNORE_RETURN",
+        "importedFunctionInitialization": {
+          "readonly": true,
+          "exported": false,
+          "requiresImportedAttribute": true
+        },
+        "inputReadiness": {
+          "target": "__wasi__",
+          "exceptionSet": false,
+          "readReadiness": true,
+          "idleTimeout": "existing Readline keyboard timeout",
+          "reason": "pinned WASIX pselect rejects nonempty exceptfds with ENOSYS",
+          "paths": [
+            "rl_gather_tyi",
+            "_rl_input_available"
+          ]
+        },
+        "manifest": {
+          "bytes": 2290,
+          "sha256": "726c155a9d2d75c49167466b4d6c64e817b7bd457c537ce619767a32be7c9eb5"
+        }
+      },
+      "upstreamBuildFiles": [
+        {
+          "path": "Makefile",
+          "bytes": 9090,
+          "sha256": "bf63c849a0fc2d826db88ab384719f95022b8e8f18fe3648f3905eb8e25efff0"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tar",
+        "args": [
+          "-xzf",
+          "/data/seorii-container-20261014/bash-shim-inputs/bash-fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/bash",
+          "--no-same-owner",
+          "--strip-components=1"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:37:59.604Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 1031.4766510000004
+      },
+      {
+        "command": "tar",
+        "args": [
+          "-xzf",
+          "/data/seorii-container-20261014/bash-shim-inputs/wasix-sysroot-v2024-07-08.1.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasix-libc/sysroot32",
+          "--no-same-owner",
+          "--strip-components=1"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:00.641Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 532.3576649999995
+      },
+      {
+        "command": "tar",
+        "args": [
+          "-xzf",
+          "/data/seorii-container-20261014/bash-shim-inputs/wasi-sdk-20.0-linux.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk",
+          "--no-same-owner",
+          "--strip-components=1"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:01.178Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 7390.871806000001
+      },
+      {
+        "command": "tar",
+        "args": [
+          "-xzf",
+          "/data/seorii-container-20261014/bash-shim-inputs/binaryen-version_108-x86_64-linux.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/binaryen",
+          "--no-same-owner",
+          "--strip-components=1"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:08.573Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 4509.83958
+      },
+      {
+        "command": "tar",
+        "args": [
+          "-xzf",
+          "/data/seorii-container-20261014/bash-shim-inputs/wasmer-7.2.0-linux-amd64.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasmer",
+          "--no-same-owner"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:13.085Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 26952.777402000003
+      },
+      {
+        "command": "patch",
+        "args": [
+          "--batch",
+          "--fuzz=0",
+          "--no-backup-if-mismatch",
+          "-p1",
+          "-i",
+          "/home/seorii/dev/hancomac/tmp/container-site-20261016-30lpyztt/source/runtimes/wasm-bash/bridge/producer/readline-control.patch"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/bash",
+        "startedAt": "2026-10-19T06:38:40.045Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 19.618396000005305
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk/bin/clang-16",
+        "args": [
+          "--version"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:40.528Z",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "clang version 16.0.0\nTarget: wasm32-unknown-wasi\nThread model: posix\nInstalledDir: /home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk/bin\n",
+        "elapsedMs": 85.11585500000365
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/binaryen/bin/wasm-opt",
+        "args": [
+          "--version"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:40.615Z",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "wasm-opt version 108 (version_108)\n",
+        "elapsedMs": 29.445598999998765
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk/bin/clang-16",
+        "args": [
+          "--target=wasm32-wasmer-wasi",
+          "--sysroot=/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasix-libc/sysroot32",
+          "-resource-dir",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/clang-resource",
+          "-O2",
+          "-pthread",
+          "-matomics",
+          "-mbulk-memory",
+          "-mmutable-globals",
+          "-msign-ext",
+          "-c",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/execve.c",
+          "-o",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/execve.o"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:40.651Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 213.21874099999695
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk/bin/clang-16",
+        "args": [
+          "--target=wasm32-wasmer-wasi",
+          "--sysroot=/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasix-libc/sysroot32",
+          "-resource-dir",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/clang-resource",
+          "-O2",
+          "-pthread",
+          "-matomics",
+          "-mbulk-memory",
+          "-mmutable-globals",
+          "-msign-ext",
+          "-c",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/startup_cwd.c",
+          "-o",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/startup_cwd.o"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:38:40.873Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 161.65954700000293
+      },
+      {
+        "command": "make",
+        "args": [
+          "-j1",
+          "CC=/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/clang-with-exec-shim",
+          "LLD_PATH=/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasi-sdk/bin",
+          "shell"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/bash",
+        "startedAt": "2026-10-19T06:38:41.037Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 205524.082071
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/binaryen/bin/wasm-opt",
+        "args": [
+          "--strip-debug",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/bash/shell.wasm",
+          "-o",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/candidate/bash-exec-shim.wasm"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:42:06.564Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 670.5391339999915
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasmer/bin/wasmer",
+        "args": [
+          "--version"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:42:07.261Z",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "wasmer 7.2.0\n",
+        "elapsedMs": 657.439280999999
+      },
+      {
+        "command": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work/wasmer/bin/wasmer",
+        "args": [
+          "package",
+          "build",
+          "--out",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/candidate/bash-exec-shim.webc"
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/candidate",
+        "startedAt": "2026-10-19T06:42:07.921Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 246.26162000000477
+      },
+      {
+        "command": "tar",
+        "args": [
+          "--sort=name",
+          "--mtime=@1771323411",
+          "--owner=0",
+          "--group=0",
+          "--numeric-owner",
+          "-czf",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/source-materials.tar.gz",
+          "-C",
+          "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/source-materials",
+          "."
+        ],
+        "cwd": "/home/seorii/dev/hancomac/tmp/container-shell-cwd-producer-20261017-59pb962i/build-import-readiness-final-20261019/work",
+        "startedAt": "2026-10-19T06:42:08.303Z",
+        "exitCode": 0,
+        "signal": null,
+        "elapsedMs": 504.5879910000076
+      }
+    ],
+    "artifacts": {
+      "shimObject": {
+        "bytes": 1097,
+        "sha256": "8259636b4cc3f4638176a6ab5d71219d8a090fa033d25a36e6fef40cbb8cb4b9"
+      },
+      "startupCwdObject": {
+        "bytes": 708,
+        "sha256": "653f5b867e93d0a1a9059e2a60bf479d3e531ff6a0308d25bc9cc71cb4699a7a"
+      },
+      "wasm": {
+        "imports": [
+          {
+            "module": "wasm_idle_shell_v1",
+            "name": "exec_v1",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "args_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "args_sizes_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "environ_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "environ_sizes_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "clock_time_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_close",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_fdstat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_fdstat_set_flags",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_filestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_prestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_prestat_dir_name",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_read",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_readdir",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_renumber",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_seek",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_tell",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "fd_write",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_filestat_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_open",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_rename",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "path_unlink_file",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "poll_oneoff",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "proc_exit",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "sched_yield",
+            "kind": "function"
+          },
+          {
+            "module": "wasi_snapshot_preview1",
+            "name": "random_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "fd_dup",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "fd_pipe",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "tty_get",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "tty_set",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "getcwd",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "chdir",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "callback_signal",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "thread_id",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "thread_signal",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "futex_wait",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "futex_wake",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "futex_wake_all",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "thread_exit",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "stack_checkpoint",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "stack_restore",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_raise_interval",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_fork",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_id",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_parent",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_join",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "proc_signal",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "sock_open",
+            "kind": "function"
+          },
+          {
+            "module": "wasix_32v1",
+            "name": "sock_connect",
+            "kind": "function"
+          },
+          {
+            "module": "env",
+            "name": "memory",
+            "kind": "memory"
+          }
+        ],
+        "exports": [
+          {
+            "name": "__stack_pointer",
+            "kind": "global"
+          },
+          {
+            "name": "__tls_base",
+            "kind": "global"
+          },
+          {
+            "name": "__tls_size",
+            "kind": "global"
+          },
+          {
+            "name": "__tls_align",
+            "kind": "global"
+          },
+          {
+            "name": "__wasm_init_tls",
+            "kind": "function"
+          },
+          {
+            "name": "_start",
+            "kind": "function"
+          },
+          {
+            "name": "__heap_base",
+            "kind": "global"
+          },
+          {
+            "name": "__data_end",
+            "kind": "global"
+          },
+          {
+            "name": "__wasm_signal",
+            "kind": "function"
+          },
+          {
+            "name": "wasi_thread_start",
+            "kind": "function"
+          },
+          {
+            "name": "asyncify_start_unwind",
+            "kind": "function"
+          },
+          {
+            "name": "asyncify_stop_unwind",
+            "kind": "function"
+          },
+          {
+            "name": "asyncify_start_rewind",
+            "kind": "function"
+          },
+          {
+            "name": "asyncify_stop_rewind",
+            "kind": "function"
+          },
+          {
+            "name": "asyncify_get_state",
+            "kind": "function"
+          }
+        ],
+        "memories": [
+          {
+            "module": "env",
+            "name": "memory",
+            "flags": 3,
+            "initial": 133,
+            "maximum": 65536
+          }
+        ],
+        "execSignature": {
+          "params": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "results": [
+            127
+          ]
+        },
+        "bytes": 1812873,
+        "sha256": "b960085bf67b064f73658fb2678f2d9d87eda448a74840d582f1d615f1a94a8f",
+        "qualification": "producer-import-profile-only; no guest execution"
+      },
+      "license": {
+        "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+        "bytes": 35147,
+        "spdx": "GPL-3.0-or-later"
+      },
+      "webc": {
+        "bytes": 1814180,
+        "sha256": "7b96d6c3fba3c6978fa16c0bb523ce76a106ba006e6a9104384ad61336617604",
+        "packagingVerified": true,
+        "guestExecution": "not-run"
+      },
+      "sourceMaterials": {
+        "bytes": 10457860,
+        "sha256": "4f3749aa1fc950fa1806b6808534d55f98c1c799a4f1867caecb37c992668b54",
+        "completeReleaseSourcePack": false
+      }
+    },
+    "limitations": [
+      "No SDK binary, real Bash execution, JS host command registry or common fd/VFS qualification",
+      "No shell MVP, terminal/job-control, cancellation or performance qualification",
+      "Bash source and local bridge materials are included; corresponding-source review for linked WASIX libc/runtime libraries remains a release gate"
+    ],
+    "finishedAt": "2026-10-19T06:42:09.948Z"
+  },
   "clang": {
     "schemaVersion": 1,
     "profile": {
@@ -1651,6 +2547,26 @@
         "path": "patches/0015-archive-content-profile.patch",
         "sha256": "1aa4c7abf966c9ec27ac596898e4c1beba2685aaefa7e6498d3df2dc9c8c3932",
         "classification": "real-linked-archive-codecs-and-content-profile"
+      },
+      {
+        "path": "patches/0016-buffered-output-errors.patch",
+        "sha256": "eebaf370861b5409f2bf863efccbb59542095bc026842e08c5ba2a01cc50f7c5",
+        "classification": "real-stdio-error-propagation"
+      },
+      {
+        "path": "patches/0017-tar-directory-errors.patch",
+        "sha256": "82b2aec9cc9ef2e0dd8f85368d0df1815deab920fcabea9cc6b0e09557222b03",
+        "classification": "archive-directory-error-propagation"
+      },
+      {
+        "path": "patches/0018-tar-directory-times.patch",
+        "sha256": "ddd7359396e6232c3bcce81d380209ad21b18b1ab26b2e2196d78fc95e72f3db",
+        "classification": "real-deferred-directory-timestamps"
+      },
+      {
+        "path": "patches/0019-zip-stored-crc.patch",
+        "sha256": "fba2691ae4085976d73f9bd375cb03d87f08e843e8bc46ccca05668bf69bacdc",
+        "classification": "real-stored-zip-crc-validation"
       }
     ],
     "toolchain": {
@@ -1696,7 +2612,7 @@
       "failureExitCode": 125,
       "action": "validate result then call actual libc chdir before upstream main"
     },
-    "probeScriptSha256": "d63cdf347d125f6ee8c407309e5093023e35e1b5dcecb031430288837fbe5542",
+    "probeScriptSha256": "c534c0551243206dabde6129b6b40d9fce87e64f5e91a8092aed4be75f420b52",
     "smokeScriptSha256": "6bf8bff85d2710daede062ec1351e8fff582495e7b811c9dc6eedf229ad8fd48",
     "b1Scripts": {
       "test/b1-smoke.mjs": "cfaa62e5b18764b7e5579b81f3d0eb4b4b11a6f02512cc01c28556b6e89f04e7",
@@ -1713,13 +2629,20 @@
       "lookupFlags": "0: nofollow, 1: follow",
       "timestamps": "WASI path/fd_filestat_set_times; integer milliseconds; noatime reads"
     },
+    "reviewFixes": [
+      "stream-error-status",
+      "tar-directory-errors",
+      "tar-directory-time-order",
+      "stored-zip-crc"
+    ],
     "commandScripts": {
       "commands.mjs": "a610c7eaf2f5c34d16322814094411b3cb4323d3daa3ca19f584fad13507778b",
       "test/node-wasi-fixture.mjs": "8f66b7a4314f923c5a304fb5a74f1527c1268ade165f2c249f95643d2b0afa77",
       "test/command-cases.mjs": "6bb61e86574f018a3a52c84ce0c3650fce1064bed8f41442ef89330450b27b32",
       "test/command-smoke.mjs": "30a26a97d2576658e587195e0cf1ebaf36587990a963ed4d16176692bd1bc2a3",
-      "test/command-container.mjs": "ecce1de1d02db126fb1ba515bfe0d9cee8d5b46407d7225b09c0d3aa9ae321c1",
-      "scripts/test-commands.mjs": "7526d671f528d7f3a42cf1966994aa4fd47dfc648a9c88509bae71027e00df46"
+      "test/command-container.mjs": "861bcbd41cc91fe648190ae7f0ab8f471699f52551db41551e346506568a0ad8",
+      "test/archive-regression-fixtures.mjs": "08d06033021d1b6f1b3df73c55647d7272cd21f714d182265f125115931a17de",
+      "scripts/test-commands.mjs": "c9e0c9ce30bbda597e76526bb24639af60bdc57567c7996bda3c22c27a5078a8"
     },
     "jobs": 2,
     "host": {
@@ -1727,7 +2650,7 @@
       "ccSha256": "75e997ec62297a6484f491bae28ab0ccb489daba23e398fd10fe68e9e6f0def8",
       "ccVersion": "cc (Debian 12.2.0-14+deb12u1) 12.2.0"
     },
-    "startedAt": "2026-10-18T02:37:22Z",
+    "startedAt": "2026-10-18T04:11:08Z",
     "qualifiedWasiApplets": [],
     "browserSmoke": "not-run",
     "wasi": {
@@ -1736,14 +2659,14 @@
         "timeout": false,
         "diagnostics": [],
         "log": "wasi-configure.log",
-        "logSha256": "1ae531c19c3f6601baa9e3780e7c84a5868b07b7d0d946fb63c9524fd856749e"
+        "logSha256": "52e662fb0673139b3a1a9cf21cd0684dfb0cd89ef944acaa4abb916691411d57"
       },
       "resolveConfig": {
         "exitCode": 0,
         "timeout": false,
         "diagnostics": [],
         "log": "wasi-resolve-config.log",
-        "logSha256": "19e1db291c1f97339eea633ad066cafeb220231eb936e813aee7d52ee4cadd24"
+        "logSha256": "f81b5c329bc7724bd3fc26121c19c3308697ae41d27a92b4e602b332adb576f1"
       },
       "selectedConfigFlags": [
         "BASE64",
@@ -1841,26 +2764,26 @@
         "timeout": false,
         "diagnostics": [],
         "log": "wasi-build.log",
-        "logSha256": "e00bb310f91dc02703986504b96b9ca9f6c7c59845b69f6e980ea665dbba18d8"
+        "logSha256": "0d73a24f1459efa234ef3bb7aa72630655e96b191b6d862fe948517bfb9d3d54"
       },
       "artifact": {
-        "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
-        "size": 634131
+        "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
+        "size": 634885
       },
       "nodeSmoke": {
         "exitCode": 0,
         "timeout": false,
         "diagnostics": [],
         "log": "wasi-smoke.log",
-        "logSha256": "0742617370e4f5684a79e78a1e1321262bb720cdac64c60eb895a4a4e459e04c"
+        "logSha256": "2f8c1c01db55ea93686df3726e7f752f1a0199277a8183c073ffecad9d807c92"
       },
       "smoke": {
         "schemaVersion": 1,
         "runtime": "v24.1.0",
         "profile": "wasi_snapshot_preview1",
         "artifact": {
-          "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
-          "size": 634131
+          "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
+          "size": 634885
         },
         "processAbi": "wasm_idle_process_v1",
         "cwd": "/workspace/a b",
@@ -2213,14 +3136,14 @@
         "timeout": false,
         "diagnostics": [],
         "log": "native-configure.log",
-        "logSha256": "cc3b603ab442842af024170421e51ef68ab500f900af03d0f3becc2b2cd346a5"
+        "logSha256": "e3e0aa125a0d141b05a4f163d428fc5b8d9339b35925381aef11f489594b5725"
       },
       "resolveConfig": {
         "exitCode": 0,
         "timeout": false,
         "diagnostics": [],
         "log": "native-resolve-config.log",
-        "logSha256": "0d869b66a2003c61035317b08519b82cb2ae7d40c11d8a2726d9f02cf513ba53"
+        "logSha256": "439f0610f191b10cd713b53c85ff614602e2ff3a7469dec145ea8a9946c67697"
       },
       "selectedConfigFlags": [
         "BASE64",
@@ -2318,10 +3241,10 @@
         "timeout": false,
         "diagnostics": [],
         "log": "native-build.log",
-        "logSha256": "92907dc422a6055da619392be7820e8aecd93671b8be385e9092015627fcaa1d"
+        "logSha256": "32ecf13afff46b3028cee7faea66326b0579f0f6ba92d16005c3d4c344a49e1d"
       },
       "artifact": {
-        "sha256": "c71a9c0d5c1bbe752b2f560be4560cfd91661fbbf03fe67294a3dbc01bd2a137",
+        "sha256": "beffdd2c24aae8152f13d33df8f9ac56430b5f7edd8bef62b5f2688831a953ab",
         "size": 147512
       },
       "smoke": [
@@ -2474,7 +3397,7 @@
           "invocation": "multicall",
           "passed": true,
           "exitCode": 0,
-          "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7374616765342d6275696c642d30312f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+          "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722d66696e616c30322f6e61746976652d666978747572652f776f726b73706163652f6120620a",
           "stderrHex": ""
         },
         {
@@ -2482,7 +3405,7 @@
           "invocation": "argv0",
           "passed": true,
           "exitCode": 0,
-          "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7374616765342d6275696c642d30312f6e61746976652d666978747572652f776f726b73706163652f6120620a",
+          "stdoutHex": "2f6d6e742f776f726b2f73656f7269692d7761736d2d69646c652d636f6d6d616e64732d32303236313031382f7265766965772d66697865732d32303236313031382f70726f64756365722d66696e616c30322f6e61746976652d666978747572652f776f726b73706163652f6120620a",
           "stderrHex": ""
         }
       ]
@@ -2495,17 +3418,17 @@
       "timeout": false,
       "diagnostics": [],
       "log": "b1-smoke.log",
-      "logSha256": "f6acae6344d6141ffb0a0c77c6269af33dca081aee5c628f8418c1e51c2b8eae"
+      "logSha256": "bde31859b70647f43746473bf50e54347e55e48c83a621bdf0fffb6d17d7f3b7"
     },
     "b1": {
       "schemaVersion": 1,
       "profile": "busybox-b1-subset",
       "runtime": "v24.1.0",
       "artifact": {
-        "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
-        "size": 634131
+        "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
+        "size": 634885
       },
-      "nativeSha256": "c71a9c0d5c1bbe752b2f560be4560cfd91661fbbf03fe67294a3dbc01bd2a137",
+      "nativeSha256": "beffdd2c24aae8152f13d33df8f9ac56430b5f7edd8bef62b5f2688831a953ab",
       "matrix": {
         "path": "b1-cases.json",
         "sha256": "3de424390f0daccba597d0ce6cc04f2afc6efcc6d35e98e42246ed0770caad26",
@@ -4772,19 +5695,19 @@
       "timeout": false,
       "diagnostics": [],
       "log": "command-smoke.log",
-      "logSha256": "5b951a8f0dc2ed6597749cc2bd99a9f9deaad3e01f11805e448d286bda4fccb6"
+      "logSha256": "d4da55671c5b1037d20ed998f02d78e5e739ead5523ee7873dd05ae1313e93bc"
     },
     "commands": {
       "schemaVersion": 1,
       "profile": "busybox-command-stage-4",
       "stage": 4,
-      "generatedAt": "2026-10-18T02:38:08.124Z",
+      "generatedAt": "2026-10-18T04:11:57.226Z",
       "node": "v24.1.0",
       "artifact": {
-        "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
-        "bytes": 634131
+        "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
+        "bytes": 634885
       },
-      "nativeSha256": "c71a9c0d5c1bbe752b2f560be4560cfd91661fbbf03fe67294a3dbc01bd2a137",
+      "nativeSha256": "beffdd2c24aae8152f13d33df8f9ac56430b5f7edd8bef62b5f2688831a953ab",
       "matrix": {
         "path": "command-smoke/command-cases.json",
         "sha256": "4361df20b7814efcfa8d6338841c00a26ecebe64d4a6579704b5c2730be32c48",
@@ -12510,8 +13433,8 @@
     ],
     "sourcePack": {
       "path": "busybox-source-pack.tar.gz",
-      "sha256": "ecb1db73bb9a1fa9aa2f26d03e3f945b1c2937979b15e80abfb3981e88f39e44",
-      "size": 2613369
+      "sha256": "a00a72146535893e80fd12ddb56c6274daa738f169f75defd031fb0e36ffe8fc",
+      "size": 2619992
     }
   },
   "container": {
@@ -12526,7 +13449,7 @@
       "dist/adapters/clang/index.js": "e6a9662175670cdf1dcc58afc27620e5848b2e2f899c8667b610027cc47dbb5a",
       "dist/adapters/clang-live/index.js": "630cce26bc0ba89a8644043633c21d0cadb8a010546ed3f8f8c760dc40e0051e",
       "dist/adapters/wasi-live/index.js": "a59b80163c9ce907d2602bc92e708581f147ab5b5da3abce47301b7235cfa088",
-      "dist/fs/persistence/index.js": "804025413a8ca14b65c3cc096e2cf381772f765fcf52f5168c9ea05fa6b81926",
+      "dist/fs/persistence/index.js": "ecfb92ffb4a79dab9f17fe44182a0d9f6523f0dcbbecefd44fd9b64aedcf7cf5",
       "dist/workspace/index.js": "ca74765bbdac2827bdcd4992364fe8c5ba316d84c00d280fd4974156375738d9",
       "dist/terminal/index.js": "f6afa89b2554b7212ba40630260f6a3c96b41cfda9957ef48239a0a1467a0269",
       "dist/adapters/wasi-live/worker.js": "847e8cbed2699ef0bc9f0f2dbc6f4af21a0e01360cb53a8a97c83cdbe4148419",
@@ -12536,7 +13459,7 @@
   "hostSources": {
     "packages/container/dist/fs/errors.js": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8",
     "packages/container/dist/fs/watch.js": "182578b450ca974d720f26aa4ba1a85c111245473587f98aa8b03b5cd06c57c8",
-    "packages/container/dist/fs/memory.js": "09b9a835b902c365e25c760d1c31c1c85c9eb470fc31171d5fe36416404e6ab3",
+    "packages/container/dist/fs/memory.js": "f711a415634b3bc7890a96f2b88714123a6f130d87a9a07a53348fee34d0e479",
     "packages/container/dist/fs/index.js": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232",
     "packages/container/dist/transport/rpc.js": "a2bd8c4b81abc641ac5d0305fd27ebf976f63c727c515b584410f81979ca1cb3",
     "packages/container/dist/adapters/wasi/stdio.js": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467",
@@ -12551,7 +13474,7 @@
     "packages/core/dist/runtime-wasm-module-service.js": "426dbe07981a04b5efac1c3fa39c3790475145b6f5417345237b2a922a227872",
     "packages/core/dist/errors.js": "993bf37007430a1180b59efc169f2d4d262239516c160862304b6143dffa2070",
     "packages/core/dist/asset-integrity.js": "75b89cdda3cd1fc2175504c9fdec4e451f3ed81f4790ef99372cc5c3a449089e",
-    "packages/core/dist/runtime-asset-lock.generated.js": "c2ffb5227be1ae35b04f03d5f29689eb300184958fe659b23f66188745a38d4d",
+    "packages/core/dist/runtime-asset-lock.generated.js": "2c94188e6d06bb4a88e3e3540cd1d2d565257ea1f2cf596523de50f9ce95e8ec",
     "packages/core/dist/persistent-asset-cache.js": "078f2e183f34507c95bcf875c66e9826ad7883cae0d949fa973d6b070a4cef90",
     "packages/core/dist/pinned-asset-fetch.js": "0805ffaeae3810c65e853d54aeeb206b26ee8e2ceb81ad96aff63cfc023f2dba",
     "packages/core/dist/runtime-asset-lock.js": "51e720b5241f06a4ffa739bc7de7f29bee22acdd126979ed02d43eb5da028092",
@@ -12595,13 +13518,13 @@
     "packages/container/dist/adapters/clang-live/stdio.js": "c207b14ca35bd06bdd0945a94bbba31b8c0590fb5110b1b4c0ec13ef10b24a37",
     "packages/container/dist/adapters/clang-live/worker.js": "69bc3d7a44ee0897d674ed06dc2baf51bf98f3b4402a34c9bec88df4118538a9"
   },
-  "sources": "https://github.com/seo-rii/wasm-idle/tree/8ead09726cfed3c758c9a6b827bf1fa020549dd4/runtimes",
+  "sources": "https://github.com/seo-rii/wasm-idle/tree/65c335b48fe2fade4f24d4c8ff00c03f5c9b16b3/runtimes",
   "sourceFiles": [
     {
       "package": "busybox",
       "path": "busybox-source.tar.gz",
-      "bytes": 2613369,
-      "sha256": "ecb1db73bb9a1fa9aa2f26d03e3f945b1c2937979b15e80abfb3981e88f39e44"
+      "bytes": 2619992,
+      "sha256": "a00a72146535893e80fd12ddb56c6274daa738f169f75defd031fb0e36ffe8fc"
     },
     {
       "package": "busybox",
@@ -12624,8 +13547,8 @@
     {
       "package": "bash",
       "path": "bash-source-materials.tar.gz",
-      "bytes": 10447539,
-      "sha256": "3cf31065138ded89963bdd8a7a7fe8f4789187cb4876ba26a44e3548eae3754c"
+      "bytes": 10457860,
+      "sha256": "4f3749aa1fc950fa1806b6808534d55f98c1c799a4f1867caecb37c992668b54"
     },
     {
       "package": "shell",

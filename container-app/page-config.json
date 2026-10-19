@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "hostHash": "78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be",
+  "hostHash": "c9dd8f39b4fe219a9e0ce4635ae35e1a909ec4d9156004f46b61a403933af55b",
   "profile": "live",
   "containerVersion": "0.1.0-alpha.0",
   "containerSource": "workspace",
   "containerProfile": "virtual-metadata-v1",
-  "manifestSha256": "46836adc53e41f7a5c3f0866d1969bf483db66f6ca82405cf77db0cb4d7380b2",
+  "manifestSha256": "cd73953077c3157aa1c69ece6ca4160efff63703ce99f4385f1b227bf83c2e2d",
   "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
 }

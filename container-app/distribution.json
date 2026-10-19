@@ -3,13 +3,13 @@
   "packages": [
     {
       "id": "shell",
-      "identity": "sha256:0dc8906c5008efcc460ccdf95fb21e20f035023a5c392f7318ad49734e94242f",
+      "identity": "sha256:e4fe2cf474b0276d79c0899ab233f2f1a0fca3ad494c842345a21ea5ed69c711",
       "dependencies": [],
       "mount": "/opt/toolchains/bash",
       "producer": {
         "repository": "https://github.com/seo-rii/wasm-idle",
-        "revision": "9b3ca1374d68a7a98645131227fe54fcb7ec02be",
-        "receiptSha256": "ee3589f60292b3481e8609c03f4a210120c31b416fbb1ec5d8cac2dd50c22bb0"
+        "revision": "65c335b48fe2fade4f24d4c8ff00c03f5c9b16b3",
+        "receiptSha256": "4953449c949841bdf8cc17d40103e5cf2be466a39da695ef89ebefb1d2645d64"
       },
       "capabilities": [
         "wasix"
@@ -32,16 +32,16 @@
         },
         {
           "id": "bash",
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/7b96d6c3fba3c6978fa16c0bb523ce76a106ba006e6a9104384ad61336617604/bash.webc.bin",
           "encoding": "identity",
           "delivery": {
-            "bytes": 1812678,
-            "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4",
+            "bytes": 1814180,
+            "sha256": "7b96d6c3fba3c6978fa16c0bb523ce76a106ba006e6a9104384ad61336617604",
             "mediaType": "application/octet-stream"
           },
           "logical": {
-            "bytes": 1812678,
-            "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4",
+            "bytes": 1814180,
+            "sha256": "7b96d6c3fba3c6978fa16c0bb523ce76a106ba006e6a9104384ad61336617604",
             "mediaType": "application/octet-stream"
           }
         }
@@ -61,13 +61,13 @@
     },
     {
       "id": "busybox",
-      "identity": "sha256:3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
+      "identity": "sha256:30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
       "dependencies": [],
       "mount": "/opt/toolchains/busybox",
       "producer": {
         "repository": "https://github.com/seo-rii/wasm-idle",
         "revision": "8ead09726cfed3c758c9a6b827bf1fa020549dd4",
-        "receiptSha256": "5a77ca0e31fcde279b4a90195377d666d227ce6974070c90f6e146a557b13f84"
+        "receiptSha256": "a726fa35c9959dbe85c9dfec17ddad9004ef43c403658d71c2080180afa084ad"
       },
       "capabilities": [
         "wasi-preview1"
@@ -75,16 +75,16 @@
       "assets": [
         {
           "id": "busybox",
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9/busybox.wasm",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40/busybox.wasm",
           "encoding": "identity",
           "delivery": {
-            "bytes": 634131,
-            "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
+            "bytes": 634885,
+            "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
             "mediaType": "application/wasm"
           },
           "logical": {
-            "bytes": 634131,
-            "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
+            "bytes": 634885,
+            "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
             "mediaType": "application/wasm"
           }
         }
@@ -522,5 +522,5 @@
       ]
     }
   ],
-  "distributionId": "website-37eb63559917c5267483145b7ec1081fec56fea082ac119f78c80988969934bb"
+  "distributionId": "website-aadc62719404966fb4c4d019db5651417854efe47f57582e26612ecc6a36d389"
 }
