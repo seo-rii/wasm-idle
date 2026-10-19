@@ -1,6 +1,7 @@
 import {
 	RUNTIME_LOAD_ASSETS,
 	type ResolvedRuntimeAssetConfig,
+	type RuntimeAssetIntegrityEntry,
 	type RuntimeAssetLoaderResult,
 	type RuntimeAssetRuntime
 } from '$lib/playground/assets';
@@ -284,23 +285,26 @@ const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime, languageSysroots
 	return assets;
 };
 
-const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
-	JSON.stringify(
-		Object.entries(config.integrity || {})
-			.sort(([left], [right]) => left.localeCompare(right))
-			.map(([asset, entry]) => [
-				asset,
-				typeof entry === 'string'
-					? entry
-					: {
-							sha256: entry.sha256,
-							bytes: entry.bytes,
-							mediaType: entry.mediaType,
-							uncompressedSha256: entry.uncompressedSha256,
-							uncompressedBytes: entry.uncompressedBytes
-						}
-			])
+// Read the contract fields directly: valid receipts can use inherited or hidden getters.
+const snapshotIntegrityEntry = (receipt: string | RuntimeAssetIntegrityEntry) =>
+	typeof receipt === 'string'
+		? receipt
+		: Object.freeze({
+				sha256: receipt.sha256,
+				bytes: receipt.bytes,
+				mediaType: receipt.mediaType,
+				uncompressedSha256: receipt.uncompressedSha256,
+				uncompressedBytes: receipt.uncompressedBytes
+			});
+
+const integrityKey = (config: ResolvedRuntimeAssetConfig) => {
+	const integrity = config.integrity || {};
+	return JSON.stringify(
+		Object.getOwnPropertyNames(integrity)
+			.sort((left, right) => left.localeCompare(right))
+			.map((asset) => [asset, snapshotIntegrityEntry(integrity[asset])])
 	);
+};
 
 const allowedBaseUrlsKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify([...(config.allowedBaseUrls || [])].sort());
@@ -889,16 +893,18 @@ export class WorkerAssetBridge {
 
 	private captureLoadContext(): AssetLoadContext {
 		const config = { ...this.config };
+		const integrity = config.integrity;
 		// Cache identity and verification must observe the same receipt, even if a caller
 		// updates its configuration while an asynchronous asset load is in progress.
 		// The built-in Clang map and its receipts are frozen; its identity also selects
 		// verified streaming, so only caller-owned maps need a new snapshot.
-		if (config.integrity && config.integrity !== BUNDLED_CLANG_ASSET_INTEGRITY) {
+		if (integrity && integrity !== BUNDLED_CLANG_ASSET_INTEGRITY) {
 			config.integrity = Object.freeze(
 				Object.fromEntries(
-					Object.entries(config.integrity).map(([asset, receipt]) => [
+					// Authorization accepts own map entries regardless of enumerability.
+					Object.getOwnPropertyNames(integrity).map((asset) => [
 						asset,
-						typeof receipt === 'string' ? receipt : Object.freeze({ ...receipt })
+						snapshotIntegrityEntry(integrity[asset])
 					])
 				)
 			);
