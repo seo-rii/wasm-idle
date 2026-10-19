@@ -69,14 +69,23 @@ describe('workspace import browser integration', () => {
 					activePath: 'restored-status.py',
 					files: [{ path: 'restored-status.py', content: 'print("status")\n' }]
 				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'renamed.backup',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
 				await page
-					.locator('input[type="file"]')
-					.setInputFiles({
-						name: 'renamed.backup',
-						mimeType: 'application/json',
-						buffer: Buffer.from(serializeWorkspaceBackup(backup))
+					.getByText('Workspace backup restored', { exact: true })
+					.waitFor()
+					.catch(async (error) => {
+						const status = await page.locator('.statusbar__message').textContent();
+						throw new Error(
+							`Backup restore confirmation missing; current status: ${status}`,
+							{
+								cause: error
+							}
+						);
 					});
-				await page.getByText('Workspace backup restored', { exact: true }).waitFor();
 				expect(await page.getByText('0 files imported', { exact: true }).count()).toBe(0);
 				expect(
 					await page.locator('button[title="restored-status.py"]').count()
