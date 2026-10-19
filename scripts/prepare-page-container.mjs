@@ -21,6 +21,31 @@ const json = (value) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const identity = (bytes) => ({ bytes: bytes.length, sha256: hash(bytes) });
 const readJSON = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
+/** Keep opaque archive delivery portable while preserving the pinned bytes and package path. */
+export function prepareWebsiteAssetDelivery(asset, base) {
+	const sysroot = asset.id === 'sysroot';
+	const extension =
+		asset.encoding === 'gzip'
+			? 'wasm.gz.bin'
+			: asset.id === 'bash'
+				? 'webc.bin'
+				: sysroot
+					? 'tar.bin'
+					: 'wasm';
+	return {
+		...asset,
+		// Identity encoding authenticates the same MIME for delivery and logical bytes.
+		// Static preview servers do not consistently recognize .tar or .webc.
+		...(sysroot
+			? {
+					delivery: { ...asset.delivery, mediaType: 'application/octet-stream' },
+					logical: { ...asset.logical, mediaType: 'application/octet-stream' }
+				}
+			: {}),
+		url: new URL(`objects/${asset.delivery.sha256}/${asset.id}.${extension}`, base).href
+	};
+}
+
 /** A host-owned immutable asset table. Guests/distribution manifests never select JS modules. */
 function websiteReleaseModule(release) {
 	return (
@@ -146,22 +171,7 @@ export async function preparePageContainer(configuration, options = {}) {
 	distribution.packages.find((pkg) => pkg.id === 'shell').producer.receiptSha256 =
 		configuration.packageReceiptSha256;
 	for (const pkg of distribution.packages)
-		for (const asset of pkg.assets) {
-			const extension =
-				asset.encoding === 'gzip'
-					? 'wasm.gz.bin'
-					: asset.id === 'bash'
-						? // Opaque delivery bytes need a portable application/octet-stream MIME.
-							// Static preview servers leave the unknown .webc MIME empty.
-							'webc.bin'
-						: asset.id === 'sysroot'
-							? 'tar'
-							: 'wasm';
-			asset.url = new URL(
-				`objects/${asset.delivery.sha256}/${asset.id}.${extension}`,
-				base
-			).href;
-		}
+		pkg.assets = pkg.assets.map((asset) => prepareWebsiteAssetDelivery(asset, base));
 	delete distribution.distributionId;
 	distribution.distributionId = `website-${hash(json(distribution))}`;
 	const manifestBytes = json(distribution),

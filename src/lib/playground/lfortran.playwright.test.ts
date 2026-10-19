@@ -9,6 +9,10 @@ import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
+import {
+	prepareContainerRuntimePage,
+	observeContainerRuntimeWorkers
+} from '../../../scripts/container-runtime-browser-observer.mjs';
 
 async function writeAcceptance(phase: string, chromiumVersion: string, result: unknown) {
 	const directory = new URL('../../../.cache/', import.meta.url);
@@ -291,42 +295,18 @@ end program`,
 			const browserUrl = process.env.WASM_IDLE_BROWSER_URL || server.browserUrl;
 			const context = await browser.newContext();
 			await addBrowserTestCookies(context, browserUrl);
-			await context.addInitScript(() => {
-				const target = window as any;
-				target.__lfortranConsumerRuns = [];
-				target.__lfortranConsumerEvidence = [];
-				const BrowserWorker = Worker;
-				target.Worker = class extends BrowserWorker {
-					constructor(url: string | URL, options?: WorkerOptions) {
-						super(url, options);
-						this.addEventListener('message', ({ data }) => {
-							if (data?.evidence?.protocol === 'wasm-idle-lfortran-evidence-v1')
-								target.__lfortranConsumerEvidence.push(data.evidence);
-						});
-					}
-					postMessage(message: any, transfer: any = []) {
-						if (message?.run && message.baseUrl?.includes('/wasm-lfortran/'))
-							target.__lfortranConsumerRuns.push({
-								limits: message.limits,
-								code: message.code
-							});
-						super.postMessage(message, transfer);
-					}
-				};
-			});
 			const page = await context.newPage();
 			const pageErrors: string[] = [];
 			const consoleMessages: string[] = [];
 			page.on('console', (message) => consoleMessages.push(message.text()));
 			page.setDefaultTimeout(60_000);
-			page.on('pageerror', (error) => pageErrors.push(error.message));
 			try {
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() =>
-						crossOriginIsolated &&
-						Boolean((window as any).__wasmIdleDebug?.getEditorValue)
-				);
+				await prepareContainerRuntimePage(page, browserUrl);
+				page.on('pageerror', (error) => pageErrors.push(error.message));
+				const observer = await observeContainerRuntimeWorkers(page, {
+					runtimePath: '/wasm-lfortran/',
+					evidenceProtocol: 'wasm-idle-lfortran-evidence-v1'
+				});
 				await page.locator('#language-select').selectOption('LFORTRAN');
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug.getEditorValue().includes('How many values?')
@@ -360,12 +340,14 @@ end program`,
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
 				).toMatchObject({ status: 'completed', exitCode: 0 });
-				const evidence = await page.evaluate(() => ({
-					runs: (window as any).__lfortranConsumerRuns,
-					memory: (window as any).__lfortranConsumerEvidence.at(-1),
-					transcript: document.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent
-				}));
+				const observed = await observer.read();
+				const evidence = {
+					runs: observed.runs,
+					memory: observed.evidence.at(-1),
+					transcript: await page
+						.locator('[data-testid="terminal-debug-output"]')
+						.textContent()
+				};
 				await writeAcceptance('ui', browser.version(), evidence);
 				expect(evidence.runs).toHaveLength(1);
 				expect(evidence.runs[0].code).toBe(editorDefaults.lfortran);

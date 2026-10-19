@@ -14,12 +14,14 @@ interface Execution {
 	process?: ContainerProcess;
 	writer?: WritableStreamDefaultWriter<Uint8Array>;
 	signal: AbortSignal;
+	stopped?: boolean;
 }
 /** The Run button uses the same real Clang command and artifacts as Bash. Debug uses its qualified backend. */
 export class WebsiteClangRuntime {
 	#active = new Map<string, Execution>();
 	#prepared = new Map<string, string>();
 	#input = new Map<string, { chunks: string[]; size: number; eof: boolean }>();
+	#header?: { key: string; path: string; bytes: Uint8Array };
 	constructor(
 		private readonly profile: Profile,
 		private readonly files: WebsiteRuntimeAdapter,
@@ -37,14 +39,18 @@ export class WebsiteClangRuntime {
 			args,
 			options.cppVersion,
 			options.cVersion,
-			options.compileArgs
+			options.compileArgs,
+			options.activePath,
+			options.env,
+			options.workspaceFiles
 		]);
 	}
 	private async drain(
 		process: ContainerProcess,
 		language: string,
 		requestId: number,
-		diagnostics = false
+		diagnostics = false,
+		quiet = false
 	) {
 		const output = async (stream: ReadableStream<Uint8Array>, stderr: boolean) => {
 			const reader = stream.getReader(),
@@ -54,7 +60,8 @@ export class WebsiteClangRuntime {
 				for (;;) {
 					const { value, done } = await reader.read();
 					const text = done ? decoder.decode() : decoder.decode(value, { stream: true });
-					if (text) this.emit({ language, name: 'output', data: text, requestId });
+					if (text && !quiet)
+						this.emit({ language, name: 'output', data: text, requestId });
 					if (stderr && diagnostics) {
 						pending += text;
 						const lines = pending.split('\n');
@@ -107,6 +114,51 @@ export class WebsiteClangRuntime {
 			throw new Error(`Container command ended with ${result.reason}`);
 		return result.code === 0;
 	}
+	private headerKey(
+		language: string,
+		code: string,
+		compileArgs: string[],
+		options: SandboxExecutionOptions,
+		cwd: string,
+		standard: string | undefined
+	) {
+		// A textual prefix and the fixed system headers are the only admitted inputs.
+		// Custom arguments, environment paths, or workspace headers can alter declarations.
+		if (
+			language !== 'CPP' ||
+			compileArgs.length ||
+			Object.keys(options.env ?? {}).length ||
+			options.workspaceFiles?.some(
+				(file) =>
+					file.path !== options.activePath && !/\.(?:c|cc|cpp|cxx|wasm)$/i.test(file.path)
+			)
+		)
+			return;
+		let rest = code.replace(/^\uFEFF/, '');
+		for (;;) {
+			rest = rest.replace(/^\s+/, '');
+			if (rest.startsWith('//')) {
+				const end = rest.indexOf('\n');
+				if (end < 0 || rest.slice(0, end).trimEnd().endsWith('\\')) return;
+				rest = rest.slice(end + 1);
+			} else if (rest.startsWith('/*')) {
+				const end = rest.indexOf('*/', 2);
+				if (end < 0) return;
+				rest = rest.slice(end + 2);
+			} else break;
+		}
+		if (!/^#[ \t]*include[ \t]*<bits\/stdc\+\+\.h>/.test(rest)) return;
+		return JSON.stringify([cwd, standard, '-fno-exceptions']);
+	}
+	private discardHeader() {
+		if (!this.#header) return;
+		try {
+			this.profile.container.fs.unlink(this.#header.path);
+		} catch {
+			/* Already removed. */
+		}
+		this.#header = undefined;
+	}
 	async prepare(
 		language: string,
 		code: string,
@@ -136,24 +188,105 @@ export class WebsiteClangRuntime {
 				language === 'CPP'
 					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
 					: options.cVersion?.toLowerCase();
-			const argv = [
-				...(language === 'CPP' ? ['--driver-mode=g++'] : []),
+			// An opaque response file or -x override can select C++ for a C editor.
+			// Keep its default source mode C while enabling the C++ driver's link libraries.
+			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
+			const common = [
+				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
+				...(language === 'C' && override ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
 				'-fno-color-diagnostics',
+				'-fno-exceptions',
+				...compileArgs
+			];
+			const compile = async (argv: string[], quiet = false) => {
+				job.process = await this.profile.container.spawn('clang', argv, {
+					cwd,
+					signal,
+					env: options.env
+				});
+				const drained = this.drain(job.process, language, requestId, !quiet, quiet);
+				await job.process.stdin.getWriter().close();
+				const result = await drained;
+				if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
+				return this.success(result, signal);
+			};
+			const headerKey = this.headerKey(
+				language,
+				input.code,
+				compileArgs,
+				input.options,
+				cwd,
+				standard
+			);
+			if (headerKey && this.#header?.key !== headerKey) this.discardHeader();
+			let header = headerKey === this.#header?.key ? this.#header : undefined;
+			if (header) {
+				// Restore owned bytes instead of trusting a writable temporary file.
+				try {
+					try {
+						this.profile.container.fs.unlink(header.path);
+					} catch {
+						/* Already removed. */
+					}
+					this.profile.container.fs.writeFile(header.path, header.bytes);
+				} catch {
+					this.discardHeader();
+					header = undefined;
+				}
+			}
+			let okay = await compile([
+				...common,
+				...(header ? ['-include-pch', header.path] : []),
 				input.options.activePath!,
-				...compileArgs,
+				'-lc-printscan-long-double',
 				'-o',
 				artifact
-			];
-			job.process = await this.profile.container.spawn('clang', argv, {
-				cwd,
-				signal,
-				env: options.env
-			});
-			const drained = this.drain(job.process, language, requestId, true);
-			await job.process.stdin.getWriter().close();
-			const result = await drained;
-			const okay = this.success(result, signal);
+			]);
+			if (header && okay) progress?.set?.(95, 'Compiled with precompiled <bits/stdc++.h>');
+			else if (header) {
+				this.discardHeader();
+				okay = await compile([
+					...common,
+					input.options.activePath!,
+					'-lc-printscan-long-double',
+					'-o',
+					artifact
+				]);
+			}
+			if (okay && headerKey && !this.#header) {
+				const path = `/tmp/wasm-idle-stdcpp-${crypto.randomUUID()}.pch`;
+				try {
+					if (
+						await compile(
+							[
+								...common,
+								'-c',
+								'-x',
+								'c++-header',
+								'/usr/share/wasm-sysroot/include/bits/stdc++.h',
+								'-o',
+								path
+							],
+							true
+						)
+					) {
+						const bytes = this.profile.container.fs.readFile(path);
+						if (bytes.byteLength > 0 && bytes.byteLength <= 32 * 1024 * 1024)
+							this.#header = { key: headerKey, path, bytes };
+					}
+				} catch (error) {
+					if (signal.aborted || job.stopped) throw error;
+				} finally {
+					if (this.#header?.path !== path) {
+						try {
+							this.profile.container.fs.unlink(path);
+						} catch {
+							/* No usable header. */
+						}
+					}
+				}
+			}
 			if (okay) this.#prepared.set(language, this.key(language, input.code, args, options));
 			return okay;
 		} finally {
@@ -233,7 +366,9 @@ export class WebsiteClangRuntime {
 	}
 	async stop(language: string) {
 		this.#input.delete(language);
-		await this.#active.get(language)?.process?.terminate();
+		const job = this.#active.get(language);
+		if (job) job.stopped = true;
+		await job?.process?.terminate();
 	}
 	clear(language: string) {
 		this.#input.delete(language);
@@ -248,5 +383,6 @@ export class WebsiteClangRuntime {
 	}
 	async dispose() {
 		await Promise.allSettled([...this.#active.keys()].map((language) => this.stop(language)));
+		this.discardHeader();
 	}
 }

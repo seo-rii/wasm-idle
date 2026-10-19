@@ -106,6 +106,51 @@ const { openPersistentWorkspace } = await import('../../dist/fs/persistence/inde
 const encode = (text) => new TextEncoder().encode(text);
 const decode = (bytes) => new TextDecoder().decode(bytes);
 const digest = (text) => createHash('sha256').update(text).digest('hex');
+
+test('workspace exports and saves copy no package or temporary file contents', async (t) => {
+  let owner = await openPersistentWorkspace({ id: 'scoped-snapshot' });
+  try {
+    owner.fs.mkdir('project');
+    owner.fs.writeFile('project/main.c', encode('int main() {}'));
+    owner.fs.setTimes('project/main.c', { atimeMs: 123, mtimeMs: 456 });
+    owner.fs.symlink('main.c', 'project/entry');
+    owner.fs.writeFile('/tmp/scratch', new Uint8Array(2048).fill(9));
+    owner.fs.mountReadonly('/opt/toolchain', [
+      { path: 'compiler.wasm', type: 'file', mode: 0o444, data: new Uint8Array(1024 * 1024).fill(7) }
+    ]);
+    const full = owner.fs.exportSnapshot();
+    const slice = Uint8Array.prototype.slice;
+    let copiedBytes = 0;
+    const spy = t.mock.method(Uint8Array.prototype, 'slice', function (...args) {
+      copiedBytes += this.byteLength;
+      return slice.apply(this, args);
+    });
+    let snapshot;
+    try { snapshot = owner.exportSnapshot(); } finally { spy.mock.restore(); }
+    assert.equal(copiedBytes, encode('int main() {}').length, 'copy only workspace file bytes');
+    assert.equal(snapshot.generation, full.generation);
+    assert.equal(snapshot.nextInode, full.nextInode);
+    const workspace = (entries) => entries.filter((entry) => entry.path === '/workspace' || entry.path.startsWith('/workspace/'));
+    assert.deepEqual(workspace(snapshot.entries), workspace(full.entries));
+    assert.equal(snapshot.entries.some((entry) => entry.path.startsWith('/opt/toolchain')), false);
+    assert.equal(snapshot.entries.some((entry) => entry.path === '/tmp/scratch'), false);
+    assert.equal(snapshot.mounts.some((mount) => mount.path === '/opt/toolchain'), false);
+
+    const saving = t.mock.method(Uint8Array.prototype, 'slice', function (...args) {
+      assert.ok(this.byteLength < 2048, 'saving must not copy package or scratch buffers');
+      return slice.apply(this, args);
+    });
+    try { await owner.flush(); } finally { saving.mock.restore(); }
+    await owner.dispose();
+    owner = await openPersistentWorkspace({ id: 'scoped-snapshot' });
+    assert.deepEqual(workspace(owner.exportSnapshot().entries), workspace(snapshot.entries));
+    assert.throws(() => owner.fs.stat('/opt/toolchain'), { code: 'ENOENT' });
+    assert.throws(() => owner.fs.stat('/tmp/scratch'), { code: 'ENOENT' });
+    owner.fs.writeFile('new', encode('next'));
+    assert.ok(owner.fs.stat('new').inode >= snapshot.nextInode, 'preserve the global inode high watermark');
+  } finally { await owner.dispose(); }
+});
+
 async function twoGenerations(id) {
   const owner = await openPersistentWorkspace({ id });
   owner.fs.writeFile('/workspace/file', encode('version-one')); await owner.flush();

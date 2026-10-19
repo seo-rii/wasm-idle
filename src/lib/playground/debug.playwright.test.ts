@@ -3,7 +3,12 @@
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { createHash } from 'node:crypto';
 import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
-import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import {
+	chromium,
+	type BrowserContext,
+	type Page,
+	type Worker as BrowserWorker
+} from 'playwright-core';
 
 import {
 	runBrowserPreparationScripts,
@@ -992,6 +997,85 @@ async function prepareDebugBrowserContext(context: BrowserContext, browserUrl: s
 	);
 }
 
+async function installOwnerDebugTransportProbe(worker: BrowserWorker) {
+	await worker.evaluate(() => {
+		type Descriptor = { control: SharedArrayBuffer; data: SharedArrayBuffer };
+		const descriptors = new Map<'rspInput' | 'dapOutput' | 'stdout' | 'stderr', Descriptor>();
+		let sample: Array<{ name: string; descriptor: Descriptor; write: number; epoch: number }> =
+			[];
+		const prototype = Worker.prototype;
+		const postMessage = prototype.postMessage;
+		// Container engines own their debugger Workers. Observe the native prototype
+		// so the owner's ApplicationWorker/RoutedWorker constructors keep their ownership.
+		prototype.postMessage = function (this: Worker, message: any, ...args: any[]) {
+			if (message?.type === 'initialize-target') {
+				for (const name of ['rspInput', 'stdout', 'stderr'] as const) {
+					if (
+						message[name]?.control instanceof SharedArrayBuffer &&
+						message[name]?.data instanceof SharedArrayBuffer
+					)
+						descriptors.set(name, message[name]);
+				}
+			}
+			if (
+				message?.type === 'initialize-lldb' &&
+				message.dapOutput?.control instanceof SharedArrayBuffer &&
+				message.dapOutput?.data instanceof SharedArrayBuffer
+			)
+				descriptors.set('dapOutput', message.dapOutput);
+			return Reflect.apply(postMessage, this, [message, ...args]);
+		};
+		Object.defineProperty(globalThis, '__wasmIdleOwnerDebugTransport', {
+			value: {
+				begin() {
+					sample = [];
+					for (const name of ['rspInput', 'dapOutput', 'stdout', 'stderr'] as const) {
+						const descriptor = descriptors.get(name);
+						if (!descriptor) return false;
+						const header = new Int32Array(descriptor.control);
+						sample.push({
+							name,
+							descriptor,
+							write: Atomics.load(header, 1) >>> 0,
+							epoch: Atomics.load(header, 3) >>> 0
+						});
+					}
+					return true;
+				},
+				read() {
+					return Object.fromEntries(
+						sample.map(({ name, descriptor, write, epoch }) => {
+							const header = new Int32Array(descriptor.control);
+							const bytes = (Atomics.load(header, 1) - write) >>> 0;
+							const capacity = descriptor.data.byteLength;
+							const captureText = name === 'rspInput' || name === 'dapOutput';
+							const overrun = captureText && bytes > capacity;
+							let text = '';
+							if (captureText && !overrun) {
+								const ring = new Uint8Array(descriptor.data);
+								const copy = new Uint8Array(bytes);
+								for (let i = 0; i < bytes; i++)
+									copy[i] = ring[(write + i) & (capacity - 1)];
+								text = new TextDecoder().decode(copy);
+							}
+							return [
+								name,
+								{
+									bytes,
+									capacity,
+									overrun,
+									text,
+									notifications: (Atomics.load(header, 3) - epoch) >>> 0
+								}
+							];
+						})
+					);
+				}
+			}
+		});
+	});
+}
+
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 	let lastState:
@@ -1574,6 +1658,31 @@ describe('native-source browser debugging in Chromium', () => {
 			try {
 				for (const testCase of activeDebugCases) {
 					const page = await context.newPage();
+					let ownerTransportProbe: Promise<BrowserWorker> | undefined;
+					page.on('worker', (worker) => {
+						if (!new URL(worker.url()).pathname.includes('/owner.worker')) return;
+						ownerTransportProbe = installOwnerDebugTransportProbe(worker).then(
+							() => worker
+						);
+						// A navigation can retire an earlier owner before its probe is installed.
+						void ownerTransportProbe.catch(() => undefined);
+					});
+					const beginTransportCapture = async () => {
+						const owner = await ownerTransportProbe;
+						return owner
+							? owner.evaluate(() =>
+									(globalThis as any).__wasmIdleOwnerDebugTransport.begin()
+								)
+							: page.evaluate(() => (window as any).__wasmIdleDebugTransport.begin());
+					};
+					const readTransportCapture = async () => {
+						const owner = await ownerTransportProbe;
+						return owner
+							? owner.evaluate(() =>
+									(globalThis as any).__wasmIdleOwnerDebugTransport.read()
+								)
+							: page.evaluate(() => (window as any).__wasmIdleDebugTransport.read());
+					};
 					page.setDefaultTimeout(
 						Number(process.env.WASM_IDLE_DEBUG_BROWSER_TIMEOUT_MS || '420000')
 					);
@@ -1759,6 +1868,7 @@ describe('native-source browser debugging in Chromium', () => {
 						const debugButton = page.locator('button.action-button--debug');
 						await debugButton.waitFor({ state: 'visible' });
 						expect(await debugButton.isEnabled()).toBe(true);
+						await ownerTransportProbe;
 						const workerMetricsBeforeStart =
 							'expectedNoDebugWorkers' in testCase
 								? await readBrowserLifecycleMetrics(page)
@@ -2214,11 +2324,7 @@ describe('native-source browser debugging in Chromium', () => {
 										)
 									)
 									.toBe(false);
-								expect(
-									await page.evaluate(() =>
-										(window as any).__wasmIdleDebugTransport.begin()
-									)
-								).toBe(true);
+								expect(await beginTransportCapture()).toBe(true);
 								await page
 									.getByRole('button', { name: 'Next Line', exact: true })
 									.click();
@@ -2227,9 +2333,7 @@ describe('native-source browser debugging in Chromium', () => {
 									{ functionName: 'descend', line: 7, sourcePath },
 									10_000
 								);
-								const sample = await page.evaluate(() =>
-									(window as any).__wasmIdleDebugTransport.read()
-								);
+								const sample = await readTransportCapture();
 								expect(sample.rspInput.overrun).toBe(false);
 								expect(sample.dapOutput.overrun).toBe(false);
 								expect(sample.rspInput.text).toContain('$qWasmCallStack');
@@ -2380,11 +2484,7 @@ describe('native-source browser debugging in Chromium', () => {
 									.getByRole('button', { name: 'Continue', exact: true })
 									.click();
 							} else {
-								expect(
-									await page.evaluate(() =>
-										(window as any).__wasmIdleDebugTransport.begin()
-									)
-								).toBe(true);
+								expect(await beginTransportCapture()).toBe(true);
 								await page
 									.getByRole('button', { name: 'Continue', exact: true })
 									.click();
@@ -2411,9 +2511,7 @@ describe('native-source browser debugging in Chromium', () => {
 								expect(createHash('sha256').update(payload).digest('hex')).toBe(
 									createHash('sha256').update(expectedPayload).digest('hex')
 								);
-								const sample = await page.evaluate(() =>
-									(window as any).__wasmIdleDebugTransport.read()
-								);
+								const sample = await readTransportCapture();
 								expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
 									testCase.expectedBufferedOutputBytes
 								);

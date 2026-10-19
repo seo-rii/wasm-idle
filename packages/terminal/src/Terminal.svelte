@@ -98,6 +98,7 @@
 	let shellInput = Promise.resolve();
 	const shellDisposals = new Map<TerminalShellBinding, Promise<void>>();
 	const progressController = new RuntimeProgressController();
+	const maxDebugOutputCharacters = 64 * 1024;
 	const terminalOutputReadinessLanguages = new Set([
 		'C',
 		'CPP',
@@ -166,7 +167,12 @@
 				label: 'Program output received'
 			});
 		}
-		debugOutput += text;
+		const tail =
+			text.length >= maxDebugOutputCharacters
+				? text.slice(-maxDebugOutputCharacters)
+				: (debugOutput + text).slice(-maxDebugOutputCharacters);
+		// Keep a bounded debug tail without starting in the middle of a surrogate pair.
+		debugOutput = /^[\uDC00-\uDFFF]/.test(tail) ? tail.slice(1) : tail;
 		term?.write(text);
 	}
 

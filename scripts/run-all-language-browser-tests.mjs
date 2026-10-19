@@ -78,9 +78,13 @@ const BROWSER_TEST_ASSET_ENVIRONMENTS = {
 /** @param {{ env: Record<string, string> }} plan */
 export function browserTestAssetGroups(plan) {
 	if (plan.env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS === '1') return ['all'];
-	return Object.entries(BROWSER_TEST_ASSET_ENVIRONMENTS)
-		.filter(([, environments]) => environments.some((key) => plan.env[key] === '1'))
-		.map(([group]) => group);
+	// Every editor boot imports the pinned container SDK, including non-LLVM suites.
+	return [
+		'container',
+		...Object.entries(BROWSER_TEST_ASSET_ENVIRONMENTS)
+			.filter(([, environments]) => environments.some((key) => plan.env[key] === '1'))
+			.map(([group]) => group)
+	];
 }
 
 /**

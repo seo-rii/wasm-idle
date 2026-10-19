@@ -117,6 +117,110 @@ describe('browser test asset preparation', () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
+	it('pins the complete container runtime graph to the committed website release', async () => {
+		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
+		const source = ts.createSourceFile(
+			'release.ts',
+			await readFile('src/lib/playground/container/release.ts', 'utf8'),
+			ts.ScriptTarget.Latest,
+			true
+		);
+		const declaration = source.statements
+			.flatMap((statement) =>
+				ts.isVariableStatement(statement) ? [...statement.declarationList.declarations] : []
+			)
+			.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === 'release');
+		expect(declaration?.initializer).toBeDefined();
+		const release = JSON.parse(declaration!.initializer!.getText(source));
+		const assets: Array<{
+			source: string;
+			target: string;
+			size: number;
+			sha256: string;
+			decoded?: unknown;
+		}> = manifest.assets.filter((asset: { group: string }) => asset.group === 'container');
+		const byTarget = new Map(assets.map((asset) => [asset.target, asset]));
+		const expectedTargets: string[] = [];
+		const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
+		expect(manifest.groupBaseUrls.container).toMatch(
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+		);
+
+		const objects = release.distribution.packages.flatMap(
+			(pkg: { assets: Array<{ url: string; delivery: { bytes: number; sha256: string } }> }) =>
+				pkg.assets
+		);
+		expect(objects).toHaveLength(6);
+		for (const object of objects) {
+			const relative = new URL(object.url).pathname.slice(
+				new URL(release.baseURL).pathname.length
+			);
+			expect(relative).toMatch(new RegExp(`^objects/${object.delivery.sha256}/[a-z0-9.-]+$`, 'u'));
+			const target = `container-app/${relative}`;
+			expectedTargets.push(target);
+			expect(byTarget.get(target)).toMatchObject({
+				source: target,
+				size: object.delivery.bytes,
+				sha256: object.delivery.sha256
+			});
+		}
+
+		const files: string[] = [release.config.liveWorkerUrl, release.config.clangWorkerUrl];
+		const sdk: string[] = [release.config.sdkUrl, release.config.sdkWorkerUrl];
+		const hostPins = new Map<string, string>();
+		for (const relative of [...files, ...sdk]) {
+			expect(relative).toMatch(/^\.\/(?:sdk\/)?[a-z-]+\.mjs$/u);
+			const target = `container-app/host/${release.hostHash}/${relative.slice(2)}`;
+			expectedTargets.push(target);
+			const asset = byTarget.get(target);
+			expect(asset?.source).toBe(target);
+			expect(Number.isSafeInteger(asset?.size)).toBe(true);
+			expect(asset?.size).toBeGreaterThan(0);
+			expect(asset?.sha256).toMatch(/^[a-f0-9]{64}$/u);
+			hostPins.set(relative, asset!.sha256);
+		}
+		// The official builder authenticates these four host digests and their order.
+		expect(
+			hash(
+				json({
+					container: release.container,
+					files: files.map((name) => [name.slice(2), hostPins.get(name)]),
+					sdk: sdk.map((name) => [path.posix.basename(name), hostPins.get(name)])
+				})
+			)
+		).toBe(release.hostHash);
+
+		expect(JSON.parse(release.config.manifest)).toEqual(release.distribution);
+		const distribution = Buffer.from(release.config.manifest);
+		expect(hash(distribution)).toBe(release.config.manifestSha256);
+		const pageConfig = json({
+			schemaVersion: 1,
+			hostHash: release.hostHash,
+			profile: 'live',
+			containerVersion: release.container.version,
+			containerSource: release.container.source,
+			containerProfile: release.container.profile,
+			manifestSha256: release.config.manifestSha256,
+			baseURL: release.baseURL
+		});
+		for (const [name, bytes] of [
+			['distribution.json', distribution],
+			['page-config.json', pageConfig]
+		] as const) {
+			const target = `container-app/${name}`;
+			expectedTargets.push(target);
+			expect(byTarget.get(target)).toMatchObject({
+				source: target,
+				size: bytes.length,
+				sha256: hash(bytes)
+			});
+		}
+		expect(expectedTargets).toHaveLength(12);
+		expect(assets.map((asset) => asset.target).sort()).toEqual(expectedTargets.sort());
+		expect(assets.every((asset) => asset.decoded === undefined)).toBe(true);
+	});
+
 	it('checks the generated OCaml graph using the same fingerprint before and after delivery compression', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-ocaml-fingerprint-'));
 		temporaryDirectories.push(root);
@@ -620,6 +724,7 @@ describe('browser test asset preparation', () => {
 
 	it('expands all and rejects unknown groups', () => {
 		expect(normalizeBrowserTestAssetGroups([])).toEqual([
+			'container',
 			'clang',
 			'ocaml',
 			'c3',
@@ -627,6 +732,7 @@ describe('browser test asset preparation', () => {
 			'lean4',
 			'commonlisp'
 		]);
+		expect(normalizeBrowserTestAssetGroups(['--', 'container'])).toEqual(['container']);
 		expect(normalizeBrowserTestAssetGroups(['--', 'clangd'])).toEqual(['clangd']);
 		expect(normalizeBrowserTestAssetGroups(['clangd', 'clangd'])).toEqual(['clangd']);
 		expect(() => normalizeBrowserTestAssetGroups(['missing'])).toThrow(

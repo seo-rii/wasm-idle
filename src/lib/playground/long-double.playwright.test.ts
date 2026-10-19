@@ -57,7 +57,10 @@ const cases: LongDoubleCase[] = [
 		name: 'C printf, snprintf and sscanf',
 		language: 'C',
 		activePath: 'main.c',
-		source: `#include <stdio.h>
+		source: `#if defined(__cplusplus)
+#error The source must compile as C
+#endif
+#include <stdio.h>
 #include <string.h>
 
 int main(void) {
@@ -82,13 +85,12 @@ int main(void) {
 		{ cppVersion: 'CPP20', minimum: 202002, maximum: 202302 },
 		{ cppVersion: 'CPP23', minimum: 202302, maximum: 202400 },
 		{ cppVersion: 'CPP26', minimum: 202400, maximum: undefined }
-	].map(
-		({ cppVersion, minimum, maximum }): LongDoubleCase => ({
-			name: `${cppVersion} cout and cin`,
-			language: 'CPP',
-			activePath: 'main.cpp',
-			cppVersion,
-			source: `#if __cplusplus < ${minimum}L${maximum ? ` || __cplusplus >= ${maximum}L` : ''}
+	].map(({ cppVersion, minimum, maximum }): LongDoubleCase => ({
+		name: `${cppVersion} cout and cin`,
+		language: 'CPP',
+		activePath: 'main.cpp',
+		cppVersion,
+		source: `#if __cplusplus < ${minimum}L${maximum ? ` || __cplusplus >= ${maximum}L` : ''}
 #error The selected C++ standard was not applied
 #endif
 #include <iomanip>
@@ -103,9 +105,8 @@ int main() {
     return 0;
 }
 `,
-			expectedOutput: `${cppVersion} cout=1.250 cin=3.750 precise=1.000000000000000000001`
-		})
-	),
+		expectedOutput: `${cppVersion} cout=1.250 cin=3.750 precise=1.000000000000000000001`
+	})),
 	{
 		name: 'Objective-C printf, snprintf and sscanf',
 		language: 'OBJC',
@@ -196,9 +197,7 @@ describe('long double browser input and output', () => {
 							)
 						).toBe(true);
 					} else {
-						expect(summary.transcript).toContain(
-							language === 'C' ? '-x c main.c' : '-x c++ main.cpp'
-						);
+						expect(summary.execution?.state?.language).toBe(language);
 					}
 					expect(summary.transcript).not.toContain('formatting disabled');
 					expect(summary.transcript).not.toContain('unreachable');

@@ -14,10 +14,37 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { selectPageContainerSource } from './lib/page-container-source.mjs';
+import { prepareWebsiteAssetDelivery } from './prepare-page-container.mjs';
 
 const packageTemplate = JSON.parse(
 	await readFile(new URL('../packages/container/package.json', import.meta.url), 'utf8')
 );
+
+test('sysroot archives retain pinned bytes when using a portable delivery MIME', () => {
+	const receipt = {
+		bytes: 35328000,
+		sha256: 'b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f',
+		mediaType: 'application/x-tar'
+	};
+	const asset = {
+		id: 'sysroot',
+		encoding: 'identity',
+		url: 'https://old.invalid/sysroot.tar',
+		delivery: receipt,
+		logical: receipt
+	};
+	const prepared = prepareWebsiteAssetDelivery(
+		asset,
+		'https://example.com/wasm-idle/container-app/'
+	);
+	assert.equal(
+		prepared.url,
+		`https://example.com/wasm-idle/container-app/objects/${receipt.sha256}/sysroot.tar.bin`
+	);
+	assert.deepEqual(prepared.delivery, { ...receipt, mediaType: 'application/octet-stream' });
+	assert.deepEqual(prepared.logical, prepared.delivery);
+	assert.equal(asset.delivery.mediaType, 'application/x-tar');
+});
 
 async function fixture(t) {
 	const root = await mkdtemp(join(tmpdir(), 'page-container-source-'));

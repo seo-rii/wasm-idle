@@ -1678,18 +1678,22 @@ state main { // Preserve the original grammar and dispatch.
 	}
 ];
 
-async function withBrowserPreview(action: (browserUrl: string) => Promise<void>) {
+async function withBrowserPreview(
+	requiresSourceModule: boolean,
+	action: (browserUrl: string) => Promise<void>
+) {
 	await runWithBrowserProbeSessionLock(async () => {
 		const configuredUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 		const configured = configuredUrl ? new URL(configuredUrl) : undefined;
-		const previewMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'preview';
+		const requiresDevServer =
+			requiresSourceModule && process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'preview';
 		const previousReuse = process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
 		let server: { browserUrl: string; close: () => Promise<void> };
 		try {
 			// The direct-consumer test imports a source module that built previews do not serve.
-			if (previewMode) process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = '0';
+			if (requiresDevServer) process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = '0';
 			server =
-				!previewMode && shouldReuseProvidedBrowserUrl(configuredUrl)
+				!requiresDevServer && shouldReuseProvidedBrowserUrl(configuredUrl)
 					? { browserUrl: configuredUrl, close: async () => {} }
 					: await startBrowserPreviewServer({
 							origin: configured?.origin ?? 'http://127.0.0.1:4980',
@@ -1697,7 +1701,7 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 							serverMode: 'dev'
 						});
 		} finally {
-			if (previewMode) {
+			if (requiresDevServer) {
 				if (previousReuse === undefined) delete process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
 				else process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = previousReuse;
 			}
@@ -1979,7 +1983,7 @@ for (const profile of profiles) {
 			'runs the default editor sample with terminal input and EOF',
 			{ timeout: 180_000, meta: browserMeta },
 			async () => {
-				await withBrowserPreview(async (browserUrl) => {
+				await withBrowserPreview(false, async (browserUrl) => {
 					const expectedOutput = profile.defaultOutput ?? 'default 한글 🦀';
 					const summary = await runStdinBrowserProbe({
 						browserUrl,
@@ -2005,7 +2009,7 @@ for (const profile of profiles) {
 			'uses the real interpreter for I/O, language semantics, failures and recovery',
 			{ timeout: 180_000, meta: browserMeta },
 			async () => {
-				await withBrowserPreview(async (browserUrl) => {
+				await withBrowserPreview(true, async (browserUrl) => {
 					const browser = await chromium.launch({
 						headless: true,
 						executablePath: await resolveChromiumExecutable(

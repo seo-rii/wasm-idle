@@ -10,6 +10,7 @@ interface Inode {
   type: FileType;
   mode: number;
   mount: string;
+  /** Logical file bytes; the owned backing buffer may have spare growth capacity. */
   data: Uint8Array;
   target: string;
   children: Map<string, Inode>;
@@ -697,10 +698,28 @@ export class MemoryFileSystem {
     integer(length, 'length');
     this.file(node);
     this.writable(node);
-    if (this.usedBytes - node.data.length + length > this.maxBytes) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
-    const resized = new Uint8Array(length);
-    resized.set(node.data.subarray(0, length));
-    this.usedBytes += length - node.data.length;
+    const previousLength = node.data.length;
+    const available = this.maxBytes - this.usedBytes + previousLength;
+    if (length > available) throw new FsError('ENOSPC', 'Filesystem byte quota exceeded');
+    let resized = node.data;
+    if (length < previousLength) {
+      // Release spare capacity on truncation and discard bytes that must never
+      // reappear if the file grows again.
+      resized = node.data.slice(0, length);
+    } else if (length > previousLength) {
+      const capacity = node.data.buffer.byteLength - node.data.byteOffset;
+      if (length > capacity) {
+        // Geometric growth amortizes incremental writes without changing the
+        // logical length used by reads, snapshots, EOF or the byte quota.
+        const storage = new Uint8Array(Math.min(available, Math.max(length, capacity * 2)));
+        storage.set(node.data);
+        resized = storage.subarray(0, length);
+      } else {
+        resized = new Uint8Array(node.data.buffer, node.data.byteOffset, length);
+        resized.fill(0, previousLength);
+      }
+    }
+    this.usedBytes += length - previousLength;
     node.data = resized;
     if (notify) { this.changed(node); this.notifyFile(node); }
   }
@@ -712,14 +731,21 @@ export class MemoryFileSystem {
     this.resize(description.node, length);
   }
 
-  exportSnapshot(): FileSystemSnapshot {
+  /**
+   * Copy all entries by default. Selection happens before file bytes are copied;
+   * partial snapshots retain global metadata and need a complete namespace
+   * assembled by the caller before they can be passed to fromSnapshot.
+   */
+  exportSnapshot(options: { includePath?: (path: string) => boolean } = {}): FileSystemSnapshot {
     const entries: SnapshotEntry[] = [];
     const visit = (node: Inode, path: string): void => {
-      entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
-        ...(node.command ? { command: true as const } : {}),
-        ...(node.type === 'file' ? { data: node.data.slice() } : {}),
-        ...(node.type === 'symlink' ? { target: node.target } : {}),
-      });
+      if (!options.includePath || options.includePath(path)) {
+        entries.push({ inode: node.inode, path, type: node.type, mode: node.mode, atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
+          ...(node.command ? { command: true as const } : {}),
+          ...(node.type === 'file' ? { data: node.data.slice() } : {}),
+          ...(node.type === 'symlink' ? { target: node.target } : {}),
+        });
+      }
       for (const [name, child] of [...node.children].sort(([a], [b]) => a.localeCompare(b))) {
         visit(child, `${path === '/' ? '' : path}/${name}`);
       }

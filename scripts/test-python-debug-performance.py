@@ -8,7 +8,7 @@ import unittest
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/lib/playground/worker/python.ts').read_text()
 preview = (root / 'src/lib/playground/worker/pythonDebugPreview.ts').read_text().split('String.raw`', 1)[1].split('`;', 1)[0]
-trace = source[source.index('__wasm_idle_debug_breakpoints = set('):source.index('sys.settrace(__wasm_idle_debug_trace)')]
+trace = source[source.index('import os as __wasm_idle_debug_os'):source.index('sys.settrace(__wasm_idle_debug_trace)')]
 for old, new in {
     '${normalizedBreakpoints}': '[]',
     "${pauseOnEntry ? 'True' : 'False'}": 'False',

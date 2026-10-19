@@ -482,7 +482,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.validateWorkspace(code, options, controls.limits);
 			this.assertOperationNotDisposed();
 			const progressSink = this.selectProgress(progress);
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const currentUrl = globalThis.location?.href ?? '';
 			const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
 			this.assertOperationNotDisposed();
 			this.persistentCache = persistentCache;
@@ -804,10 +804,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 		let workerRequestUrl: URL;
 		try {
-			workerRequestUrl =
-				typeof window === 'undefined'
-					? new URL(this.workerUrl)
-					: new URL(this.workerUrl, window.location.href);
+			workerRequestUrl = new URL(this.workerUrl, globalThis.location?.href);
 		} catch {
 			throw new RuntimeConfigurationError(
 				`${this.config.displayName} worker script URL is invalid`,

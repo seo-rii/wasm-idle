@@ -272,14 +272,99 @@
       "target": "wasm-lfortran/producer-receipt.json",
       "size": 6932,
       "sha256": "11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/clang-worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/clang-worker.mjs",
+      "size": 671466,
+      "sha256": "017adadf44c02fdabf1725ca5f7ab6695f727c8689249f089833f3dac4c15b45"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/live-worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/live-worker.mjs",
+      "size": 37274,
+      "sha256": "091dee7a06c1825eb56e83cbfcffb9fac3f8aade0881419b3155b1c72183eabb"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/index.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/index.mjs",
+      "size": 104199,
+      "sha256": "4851df0f9e5f26e87eae6ea077e024e69360c28ff2bcb6afee767a737cdcde1d"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/worker.mjs",
+      "size": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+      "target": "container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+      "size": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9/busybox.wasm",
+      "target": "container-app/objects/3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9/busybox.wasm",
+      "size": 634131,
+      "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+      "target": "container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+      "size": 9246938,
+      "sha256": "522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar.bin",
+      "target": "container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar.bin",
+      "size": 35328000,
+      "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin",
+      "target": "container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin",
+      "size": 8178107,
+      "sha256": "dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin",
+      "target": "container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin",
+      "size": 16270174,
+      "sha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba"
+    },
+    {
+      "group": "container",
+      "source": "container-app/distribution.json",
+      "target": "container-app/distribution.json",
+      "size": 14099,
+      "sha256": "46836adc53e41f7a5c3f0866d1969bf483db66f6ca82405cf77db0cb4d7380b2"
+    },
+    {
+      "group": "container",
+      "source": "container-app/page-config.json",
+      "target": "container-app/page-config.json",
+      "size": 401,
+      "sha256": "cc3dd5ab16817fc20bf479314004dc304a9707dd529620e96756b702cc503766"
     }
   ],
   "groupBaseUrls": {
     "c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
     "lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
-    "clang": "https://seo-rii.github.io/wasm-idle/",
-    "clangd": "https://seo-rii.github.io/wasm-idle/",
-    "ocaml": "https://seo-rii.github.io/wasm-idle/"
+    "clang": "https://seorii.page/wasm-idle/",
+    "clangd": "https://seorii.page/wasm-idle/",
+    "ocaml": "https://seorii.page/wasm-idle/",
+    "container": "https://raw.githubusercontent.com/seo-rii/wasm-idle/55b3db8b2784423704fc8608fb4a9409dc6607d7/"
   },
   "generatedWorkers": [
     "c3",

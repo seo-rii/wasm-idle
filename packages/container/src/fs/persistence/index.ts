@@ -180,11 +180,10 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
     let maintenance: Promise<PersistentWorkspaceGarbageCollectionResult> | undefined;
 
     const workspaceSnapshot = (): FileSystemSnapshot => {
-      const snapshot = fs.exportSnapshot();
-      const workspace = snapshot.entries.filter((entry) => entry.path === '/workspace' || entry.path.startsWith('/workspace/'));
+      const snapshot = fs.exportSnapshot({ includePath: (path) => path === '/workspace' || path.startsWith('/workspace/') });
       return {
         generation: snapshot.generation, nextInode: snapshot.nextInode, mounts: base.mounts,
-        entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...workspace]
+        entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...snapshot.entries]
       };
     };
     const readBlob = async (identity: { sha256: string; bytes: number }): Promise<Uint8Array> => {

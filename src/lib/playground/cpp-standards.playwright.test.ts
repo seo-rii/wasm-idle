@@ -9,6 +9,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { expectPinnedContainerClangAssets } from '../../../scripts/container-clang-browser-assertions.mjs';
 
 const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS === '1';
 const runTimeoutMs = Number(process.env.WASM_IDLE_CPP_STANDARDS_RUN_TIMEOUT_MS || '420000');
@@ -138,16 +139,7 @@ int main() {
 				});
 				expect(summary.transcript).toContain(expectedOutput);
 				expect(summary.pageErrors).toEqual([]);
-				const requestedPaths = summary.runtimeRequests.map((url) => new URL(url).pathname);
-				expect(
-					requestedPaths.some((name) => name.endsWith('/clang/bin/c-sysroot.tar.gz'))
-				).toBe(true);
-				expect(
-					requestedPaths.some((name) => name.endsWith('/clang/bin/cpp-addon.tar.gz'))
-				).toBe(true);
-				expect(
-					requestedPaths.some((name) => name.endsWith('/clang/bin/sysroot.tar.gz'))
-				).toBe(false);
+				await expectPinnedContainerClangAssets(preview.browserUrl, summary.runtimeRequests);
 			});
 		}
 	);

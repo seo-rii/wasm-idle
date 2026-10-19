@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, describe, expect, it } from 'vitest';
+import { expectPinnedContainerClangAssets } from '../../../scripts/container-clang-browser-assertions.mjs';
 
 import {
 	runBrowserPreparationScripts,
@@ -671,24 +672,7 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText
 				});
 				expect(summary.transcript).toContain(expectedOutput);
-				const requestedPaths = summary.runtimeRequests.map(
-					(request) => new URL(request).pathname
-				);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/c-sysroot.tar.gz')
-					)
-				).toBe(true);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
-					)
-				).toBe(language === 'CPP');
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/sysroot.tar.gz')
-					)
-				).toBe(false);
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
 			});
 		}
 	);
@@ -788,19 +772,7 @@ int main() {
 					workspaceFiles: [{ path: 'flags.rsp', content: '-x c++ -std=c++20' }]
 				});
 				expect(summary.transcript).toContain('main=73');
-				const requestedPaths = summary.runtimeRequests.map(
-					(request) => new URL(request).pathname
-				);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
-					)
-				).toBe(true);
-				expect(
-					requestedPaths.some((pathname) =>
-						pathname.endsWith('/clang/bin/sysroot.tar.gz')
-					)
-				).toBe(false);
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
 			});
 		}
 	);
@@ -1128,11 +1100,15 @@ int main() {
 						expectedOutput: 'invalid expression: unexpected token',
 						language: 'V',
 						requireSharedArrayBuffer: false,
-						runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+						runTimeoutMs: Number(
+							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'
+						),
 						source: vInvalidSource,
 						stdinText: ''
 					})
-				).rejects.toThrow(/"status": "failed"[\s\S]*main\.v:3:1:[\s\S]*invalid expression: unexpected token/);
+				).rejects.toThrow(
+					/"status": "failed"[\s\S]*main\.v:3:1:[\s\S]*invalid expression: unexpected token/
+				);
 			});
 		}
 	);

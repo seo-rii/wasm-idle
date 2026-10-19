@@ -149,6 +149,27 @@ describe('Rust sandbox', () => {
 		}));
 	});
 
+	it('resolves the executable graph against the owner Worker location without a window', async () => {
+		const currentUrl = 'https://example.test/wasm-idle/_app/immutable/workers/owner.worker.js';
+		const location = new URL(currentUrl);
+		vi.stubGlobal('window', undefined);
+		vi.stubGlobal('location', location);
+		const sandbox = new Rust();
+		try {
+			await sandbox.load(TEST_RUNTIME_ASSETS);
+			expect(executableGraphFixture.load).toHaveBeenCalledWith(
+				expect.objectContaining({
+					moduleUrl: 'https://example.test/wasm-rust/index.js',
+					currentUrl
+				})
+			);
+			expect(sandbox.assetPath).toBe(location.pathname);
+		} finally {
+			await sandbox.clear();
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it('forwards a serializable load policy and restores it after a one-run false override', async () => {
 		const sandbox = new Rust();
 		sandbox.output = vi.fn();

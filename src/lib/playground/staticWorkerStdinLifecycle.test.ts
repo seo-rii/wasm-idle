@@ -90,6 +90,34 @@ describe('static worker stdin lifecycle', () => {
 		}
 	});
 
+	it('starts a static runtime from a worker realm with no window', async () => {
+		const currentUrl = 'https://example.test/wasm-idle/owner.worker.js';
+		vi.stubGlobal('window', undefined);
+		vi.stubGlobal('location', { href: currentUrl });
+		const resolveRuntimeAssets = vi.fn((_assets: unknown, base: string) => ({
+			baseUrl: new URL('./runtime/', base).href,
+			workerUrl: './runtime/worker.js'
+		}));
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'WORKER_REALM_TEST',
+			displayName: 'Worker realm test',
+			defaultActivePath: 'main.txt',
+			stdin: { mode: 'none' },
+			resolveRuntimeAssets
+		});
+		try {
+			await sandbox.load();
+			expect(resolveRuntimeAssets).toHaveBeenCalledWith('', currentUrl);
+			expect(fetch).toHaveBeenCalledWith(
+				'https://example.test/wasm-idle/runtime/worker.js',
+				expect.anything()
+			);
+			expect(workers).toHaveLength(1);
+		} finally {
+			await sandbox.dispose();
+		}
+	});
+
 	it('does not let a buffered-stdin waiter from a failed run consume the next run input', async () => {
 		const sandbox = createSandbox('prebuffered');
 		await sandbox.load();

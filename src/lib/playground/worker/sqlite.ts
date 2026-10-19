@@ -76,11 +76,16 @@ function normalizeWorkspacePath(path: string) {
 		.join('/');
 }
 
-function loadWorkspaceFiles(db: Database, workspaceFiles: { path: string; content: string }[]) {
+function loadWorkspaceFiles(
+	db: Database,
+	workspaceFiles: { path: string; content: string }[],
+	activePath: string
+) {
+	const normalizedActivePath = normalizeWorkspacePath(activePath);
 	for (const file of workspaceFiles) {
 		const normalizedPath = normalizeWorkspacePath(file.path);
 		if (!normalizedPath || !normalizedPath.endsWith('.sql')) continue;
-		if (normalizedPath === 'main.sql') continue;
+		if (normalizedPath === normalizedActivePath) continue;
 		db.exec(file.content);
 	}
 }
@@ -118,7 +123,7 @@ self.onmessage = async (event: { data: any }) => {
 
 		const db = new SQL.Database();
 		try {
-			loadWorkspaceFiles(db, workspaceFiles);
+			loadWorkspaceFiles(db, workspaceFiles, activePath);
 			postMessage({
 				progress: {
 					kind: 'ready',

@@ -176,7 +176,7 @@ class Rust implements Sandbox {
 			let candidateLoadReject: ((reason?: unknown) => void) | null = null;
 			let clearCandidateWait = () => {};
 			try {
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const currentUrl = globalThis.location?.href ?? '';
 				const persistentCache = resolveRuntimeAssetCacheOptions(
 					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
 					_options.persistentCache
@@ -192,9 +192,8 @@ class Rust implements Sandbox {
 					typeof runtimeAssets === 'string'
 						? runtimeAssets
 						: runtimeAssets?.rootUrl ||
-							(typeof window !== 'undefined'
-								? window.location.pathname.replace(/\/$/, '')
-								: '');
+							globalThis.location?.pathname.replace(/\/$/, '') ||
+							'';
 				if (!nextCompilerUrl) {
 					throw new Error(
 						'Rust runtime is not configured. Set runtimeAssets.rust.compilerUrl.'

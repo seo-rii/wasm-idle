@@ -3,6 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright-core';
 import { startBrowserPreviewServer } from '../../../scripts/browser-preview-server.mjs';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import {
+	prepareContainerRuntimePage,
+	observeContainerRuntimeWorkers
+} from '../../../scripts/container-runtime-browser-observer.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 
@@ -299,29 +303,12 @@ describe.skipIf(!enabled)('real Grain compiler in Chromium', () => {
 			const browserUrl = process.env.WASM_IDLE_BROWSER_URL || server.browserUrl;
 			const context = await browser.newContext();
 			await addBrowserTestCookies(context, browserUrl);
-			await context.addInitScript(() => {
-				const target = window as any;
-				target.__grainRuns = [];
-				const BrowserWorker = Worker;
-				target.Worker = class extends BrowserWorker {
-					postMessage(message: any, transfer: any = []) {
-						if (message?.run && message.baseUrl?.includes('/wasm-grain/'))
-							target.__grainRuns.push({ code: message.code, limits: message.limits });
-						super.postMessage(message, transfer);
-					}
-				};
-			});
 			const page = await context.newPage();
 			const pageErrors: string[] = [];
 			page.setDefaultTimeout(120_000);
-			page.on('pageerror', (error) => pageErrors.push(error.message));
 			try {
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() =>
-						crossOriginIsolated &&
-						Boolean((window as any).__wasmIdleDebug?.getEditorValue)
-				);
+				await prepareContainerRuntimePage(page, browserUrl);
+				page.on('pageerror', (error) => pageErrors.push(error.message));
 				await page.locator('#language-select').selectOption('GRAIN');
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug.getEditorValue().includes('What is your name?')
@@ -329,6 +316,9 @@ describe.skipIf(!enabled)('real Grain compiler in Chromium', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 				).toBe(editorDefaults.grain);
+				const runtimeObservation = await observeContainerRuntimeWorkers(page, {
+					runtimePath: '/wasm-grain/'
+				});
 				await page.locator('button.action-button--run').first().click();
 				await page.waitForFunction(() =>
 					document
@@ -348,11 +338,12 @@ describe.skipIf(!enabled)('real Grain compiler in Chromium', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
 				).toMatchObject({ status: 'completed', exitCode: 0 });
-				const evidence = await page.evaluate(() => ({
-					runs: (window as any).__grainRuns,
-					transcript: document.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent
-				}));
+				const evidence = {
+					...(await runtimeObservation.read()),
+					transcript: await page
+						.locator('[data-testid="terminal-debug-output"]')
+						.textContent()
+				};
 				expect(evidence.runs).toHaveLength(1);
 				expect(evidence.runs[0].code).toBe(editorDefaults.grain);
 				expect(evidence.transcript).toContain('Hello, Grace Hopper!');
