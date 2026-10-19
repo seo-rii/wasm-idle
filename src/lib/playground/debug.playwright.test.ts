@@ -1972,8 +1972,24 @@ describe('native-source browser debugging in Chromium', () => {
 			});
 
 			try {
+				const failedCases: Array<{ name: string; error: unknown }> = [];
 				for (const testCase of activeDebugCases) {
-					const page = await context.newPage();
+					const caseName = `${testCase.language}/${'testId' in testCase ? testCase.testId : testCase.activePath}`;
+					let caseFailed = false;
+					const recordFailure = (error: unknown) => {
+						caseFailed = true;
+						failedCases.push({ name: caseName, error });
+						console.error(
+							`[wasm-idle:debug-case] FAIL ${caseName}\n${error instanceof Error ? error.stack || error.message : String(error)}`
+						);
+					};
+					let page: Page;
+					try {
+						page = await context.newPage();
+					} catch (error) {
+						recordFailure(error);
+						continue;
+					}
 					let ownerTransportProbe: Promise<BrowserWorker> | undefined;
 					page.on('worker', (worker) => {
 						if (!new URL(worker.url()).pathname.includes('/owner.worker')) return;
@@ -4118,9 +4134,27 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 						}
 						expect(pageErrors).toEqual([]);
+					} catch (error) {
+						recordFailure(error);
 					} finally {
-						await page.close();
+						try {
+							await page.close();
+						} catch (error) {
+							recordFailure(error);
+						}
+						if (!caseFailed) console.info(`[wasm-idle:debug-case] PASS ${caseName}`);
 					}
+				}
+				if (failedCases.length > 0) {
+					throw new AggregateError(
+						failedCases.map(({ error }) => error),
+						`Browser debug cases failed:\n${failedCases
+							.map(
+								({ name, error }) =>
+									`${name}: ${error instanceof Error ? error.message : String(error)}`
+							)
+							.join('\n')}`
+					);
 				}
 			} finally {
 				await context.close();
