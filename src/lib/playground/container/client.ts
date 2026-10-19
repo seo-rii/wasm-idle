@@ -51,11 +51,13 @@ export function createContainerWorkerClient(options: ClientOptions): ContainerWo
 	let nextId = 1,
 		disposed = false,
 		disposal: Promise<void> | undefined;
+	let retirementError: unknown;
 	const cleanupDeadlineMs = options.cleanupDeadlineMs ?? OWNER_CLEANUP_DEADLINE_MS;
 	const abortError = () => new DOMException('Container operation cancelled', 'AbortError');
 	const post = (data: ContainerWorkerRequest) => worker.postMessage(data);
 	const retire = (error: unknown) => {
 		if (disposed) return;
+		retirementError = error;
 		disposed = true;
 		worker.removeEventListener('message', message);
 		worker.removeEventListener('error', crash);
@@ -68,8 +70,14 @@ export function createContainerWorkerClient(options: ClientOptions): ContainerWo
 		pending.clear();
 		listeners.clear();
 	};
-	const crash = () =>
-		retire(new Error('The container owner Worker crashed or its message could not be decoded'));
+	const crash = (event: Event) => {
+		if (event.type === 'messageerror') {
+			retire(new Error('The container owner Worker message could not be decoded'));
+			return;
+		}
+		const failure = event as ErrorEvent;
+		retire(failure.error ?? new Error(failure.message || 'The container owner Worker crashed'));
+	};
 	const message = (event: MessageEvent<ContainerWorkerResponse>) => {
 		const data = event.data;
 		if (!data || data.version !== CONTAINER_WORKER_PROTOCOL || data.channel !== channel) return;
@@ -138,12 +146,12 @@ export function createContainerWorkerClient(options: ClientOptions): ContainerWo
 		args: unknown[] = [],
 		settings: ContainerWorkerCallOptions = {}
 	): Promise<T> => {
-		if (disposed) throw new Error('Container owner has been disposed');
+		if (disposed) throw retirementError;
 		if (settings.signal?.aborted) throw abortError();
 		// Snapshot before the first await; caller mutation never changes a pending request.
 		const values = snapshotContainerArguments(args);
 		await initialized;
-		if (disposed) throw new Error('Container owner has been disposed');
+		if (disposed) throw retirementError;
 		if (settings.signal?.aborted) throw abortError();
 		const id = nextId++;
 		return await new Promise<T>((resolve, reject) => {
