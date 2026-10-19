@@ -2,6 +2,7 @@ import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
 import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
+import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it, vi } from 'vitest';
@@ -35,7 +36,7 @@ describe('shared workspace refresh scheduling', () => {
 		source.indexOf('\n\tfunction sharedFileProject(', refreshStart)
 	);
 	function fixture() {
-		const baseline = [{ path: 'main.c', content: 'int main(){}' }];
+		const baseline: WorkspaceFile[] = [{ path: 'main.c', content: 'int main(){}' }];
 		const remote = [...baseline, { path: 'during-run.txt', content: 'created by guest\n' }];
 		const binding = {
 			listWorkspaceFiles: vi.fn(async () => [
@@ -71,6 +72,19 @@ describe('shared workspace refresh scheduling', () => {
 		) => Promise<void>;
 		return { context, binding, refresh };
 	}
+
+	it('keeps restored status and editor metadata when terminal bytes are unchanged', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		context.saveStatus = 'Workspace backup restored';
+		binding.readWorkspace.mockResolvedValueOnce([
+			{ path: 'main.c', content: 'int main(){}', encoding: 'utf-8' }
+		]);
+		await refresh();
+		expect(context.files).toEqual([{ path: 'main.c', content: 'int main(){}' }]);
+		expect(context.saveStatus).toBe('Workspace backup restored');
+		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+	});
 
 	it('publishes guest-created file metadata during Run and replays editor reconciliation on Stop', async () => {
 		const { context, binding, refresh } = fixture();

@@ -454,7 +454,8 @@ describe('workspace storage browser integration', () => {
 				if (!backupPath) throw new Error('Missing workspace backup');
 				const backup = JSON.parse(await readFile(backupPath, 'utf8'));
 				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
-				expect(backup.snapshot.files).toContainEqual({ ...helper, encoding: 'utf-8' });
+				// Backup serialization preserves the file metadata, including omitted legacy encoding.
+				expect(backup.snapshot.files).toContainEqual(helper);
 			});
 		}
 	);

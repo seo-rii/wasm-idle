@@ -1106,7 +1106,18 @@
 					}).files
 				: result.files;
 			binding.acceptWorkspace(selectedLanguage, remote);
-			if (JSON.stringify(files) === JSON.stringify(nextFiles)) return;
+			if (
+				files.length === nextFiles.length &&
+				files.every((file, index) => {
+					const next = nextFiles[index];
+					return (
+						file.path === next.path &&
+						file.content === next.content &&
+						(file.encoding ?? 'utf-8') === (next.encoding ?? 'utf-8')
+					);
+				})
+			)
+				return;
 			const activeBefore = activeFile?.content;
 			files = nextFiles;
 			openTabs = openTabs.filter((path) => files.some((file) => file.path === path));
