@@ -997,6 +997,28 @@ async function prepareDebugBrowserContext(context: BrowserContext, browserUrl: s
 	);
 }
 
+function installMissingDebugResource(resourcePath: string) {
+	const nativeFetch = globalThis.fetch.bind(globalThis);
+	(globalThis as any).__wasmIdleMissingDebugResourceRequests = 0;
+	Object.defineProperty(globalThis, 'fetch', {
+		configurable: true,
+		value: (input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+			const url =
+				input instanceof URL
+					? input
+					: new URL(typeof input === 'string' ? input : input.url, location.href);
+			if (url.pathname.endsWith(`/${resourcePath}`)) {
+				(globalThis as any).__wasmIdleMissingDebugResourceRequests += 1;
+				return Promise.resolve(
+					new Response('missing debug runtime resource fixture', { status: 404 })
+				);
+			}
+			return nativeFetch(input, init);
+		},
+		writable: true
+	});
+}
+
 async function installOwnerDebugTransportProbe(worker: BrowserWorker) {
 	await worker.evaluate(() => {
 		type Descriptor = { control: SharedArrayBuffer; data: SharedArrayBuffer };
@@ -1994,7 +2016,15 @@ describe('native-source browser debugging in Chromium', () => {
 					page.on('worker', (worker) => {
 						if (!new URL(worker.url()).pathname.includes('/owner.worker')) return;
 						ownerTransportProbe = installOwnerDebugTransportProbe(worker).then(
-							() => worker
+							async () => {
+								if ('missingDebugResource' in testCase) {
+									await worker.evaluate(
+										installMissingDebugResource,
+										testCase.missingDebugResource
+									);
+								}
+								return worker;
+							}
 						);
 						// A navigation can retire an earlier owner before its probe is installed.
 						void ownerTransportProbe.catch(() => undefined);
@@ -2060,38 +2090,10 @@ describe('native-source browser debugging in Chromium', () => {
 							await storageSession.detach();
 						}
 						if ('missingDebugResource' in testCase) {
-							await page.addInitScript((resourcePath) => {
-								const nativeFetch = globalThis.fetch.bind(globalThis);
-								Object.defineProperty(globalThis, 'fetch', {
-									configurable: true,
-									value: (
-										input: URL | RequestInfo,
-										init?: RequestInit
-									): Promise<Response> => {
-										const url =
-											input instanceof URL
-												? input
-												: new URL(
-														typeof input === 'string'
-															? input
-															: input.url,
-														location.href
-													);
-										if (url.pathname.endsWith(`/${resourcePath}`)) {
-											return Promise.resolve(
-												new Response(
-													'missing debug runtime resource fixture',
-													{
-														status: 404
-													}
-												)
-											);
-										}
-										return nativeFetch(input, init);
-									},
-									writable: true
-								});
-							}, testCase.missingDebugResource);
+							await page.addInitScript(
+								installMissingDebugResource,
+								testCase.missingDebugResource
+							);
 						}
 						const activeState = await ensureSharedBrowserPage(
 							page,
@@ -2225,6 +2227,19 @@ describe('native-source browser debugging in Chromium', () => {
 									.locator('[data-testid="terminal-debug-output"]')
 									.textContent()) || '';
 							expect(transcript).toContain(testCase.expectedSessionFailure);
+							const owner = await ownerTransportProbe;
+							const interceptedRequests = owner
+								? await owner.evaluate(
+										() =>
+											(globalThis as any)
+												.__wasmIdleMissingDebugResourceRequests || 0
+									)
+								: await page.evaluate(
+										() =>
+											(window as any)
+												.__wasmIdleMissingDebugResourceRequests || 0
+									);
+							expect(interceptedRequests).toBeGreaterThan(0);
 							expect(transcript).not.toContain(testCase.forbiddenOutput);
 							expect(
 								consoleMessages.some((message) =>
