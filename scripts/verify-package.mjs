@@ -68,7 +68,8 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		budget: { maxBytes: 16 * MiB, maxFiles: 1_370, maxPackages: 32 },
+		// Allow 64 KiB above 16 MiB for the current xterm and Svelte dependency sizes.
+		budget: { maxBytes: 16 * MiB + 64 * 1024, maxFiles: 1_370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',

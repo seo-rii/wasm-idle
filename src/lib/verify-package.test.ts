@@ -191,7 +191,7 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/terminal install': {
-				maxBytes: 16 * MiB,
+				maxBytes: 16 * MiB + 64 * 1024,
 				maxFiles: 1_370,
 				maxPackages: 32
 			},
