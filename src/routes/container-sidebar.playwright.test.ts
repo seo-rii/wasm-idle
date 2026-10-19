@@ -59,7 +59,8 @@ it(
 				await page.addInitScript(() => {
 					const observer = setInterval(() => {
 						const target = globalThis as SiteWindow;
-						const select = document.querySelector<HTMLSelectElement>('#language-select');
+						const select =
+							document.querySelector<HTMLSelectElement>('#language-select');
 						const source = target.__wasmIdleDebug?.getEditorValue();
 						if (!select || !source || !document.querySelector('.monaco-editor')) return;
 						target.__sidebarInitialEditor = { language: select.value, source };
@@ -85,9 +86,12 @@ it(
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const initial = await page.locator('#language-select').inputValue();
 				expect(initial).toBe('PYTHON');
-				await page.waitForFunction(() => !!(globalThis as SiteWindow).__sidebarInitialEditor);
-				expect(await page.evaluate(() => (globalThis as SiteWindow).__sidebarInitialEditor))
-					.toEqual({ language: 'PYTHON', source: initialSource });
+				await page.waitForFunction(
+					() => !!(globalThis as SiteWindow).__sidebarInitialEditor
+				);
+				expect(
+					await page.evaluate(() => (globalThis as SiteWindow).__sidebarInitialEditor)
+				).toEqual({ language: 'PYTHON', source: initialSource });
 				await page.evaluate(async () => {
 					await (globalThis as SiteWindow).__wasmIdleDebug!.writeTerminalInput(
 						"printf 'SIDEBAR-%s\\n' READY\n",
@@ -99,19 +103,37 @@ it(
 						.querySelector('[data-testid="terminal-debug-output"]')
 						?.textContent?.includes('SIDEBAR-READY')
 				);
-				await page.waitForFunction(async () => {
-					const { shell } = await (
-						globalThis as SiteWindow
-					).__wasmIdleContainer!.inspect();
-					return shell?.control?.cwd === '/workspace/PYTHON' && !shell.control.pendingCwd;
-				});
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const { shell } = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.inspect();
+								return (
+									shell?.control?.cwd === '/workspace/PYTHON' &&
+									!shell.control.pendingCwd
+								);
+							}),
+						{ timeout: 30_000 }
+					)
+					.toBe(true);
 				await page.locator('#language-select').selectOption('BASH');
-				await page.waitForFunction(async () => {
-					const { shell } = await (
-						globalThis as SiteWindow
-					).__wasmIdleContainer!.inspect();
-					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
-				});
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const { shell } = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.inspect();
+								return (
+									shell?.control?.cwd === '/workspace/BASH' &&
+									!shell.control.pendingCwd
+								);
+							}),
+						{ timeout: 30_000 }
+					)
+					.toBe(true);
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 				await page.keyboard.type('echo 1 >> hi.txt');
@@ -147,12 +169,21 @@ it(
 					await page.locator('[data-container-directory="BASH/nested/deeper"]').count()
 				).toBe(0);
 				await page.locator('[data-container-directory="BASH/nested"]').click();
-				await page.waitForFunction(async () => {
-					const { shell } = await (
-						globalThis as SiteWindow
-					).__wasmIdleContainer!.inspect();
-					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
-				});
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const { shell } = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.inspect();
+								return (
+									shell?.control?.cwd === '/workspace/BASH' &&
+									!shell.control.pendingCwd
+								);
+							}),
+						{ timeout: 30_000 }
+					)
+					.toBe(true);
 				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 				await page.keyboard.type('echo folder-relative > nested/here.txt');
 				await page.keyboard.press('Enter');
@@ -167,12 +198,21 @@ it(
 				await page
 					.getByRole('button', { name: 'Go to parent folder', exact: true })
 					.click();
-				await page.waitForFunction(async () => {
-					const { shell } = await (
-						globalThis as SiteWindow
-					).__wasmIdleContainer!.inspect();
-					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
-				});
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const { shell } = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.inspect();
+								return (
+									shell?.control?.cwd === '/workspace/BASH' &&
+									!shell.control.pendingCwd
+								);
+							}),
+						{ timeout: 30_000 }
+					)
+					.toBe(true);
 				await file.waitFor();
 				expect(errors).toEqual([]);
 			} finally {
