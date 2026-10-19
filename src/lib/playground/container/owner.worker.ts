@@ -3,6 +3,8 @@ import { installWasixWorkerGroup } from '@wasm-idle/container/adapters/wasix';
 import type { ProgressLike, WorkspaceFile } from '@wasm-idle/core';
 import { createBashProfile } from '../../../../examples/container/bash-profile.mjs';
 import { createWebsiteBashConfiguration } from './release';
+import { createShellControl } from './shell-control';
+import { playgroundLanguages } from '../../../routes/language-registry';
 import { WebsiteRuntimeAdapter } from './runtime-adapter';
 import { WebsiteClangRuntime } from './clang-runtime';
 import {
@@ -25,6 +27,7 @@ let channel = '',
 	retired = false;
 let container: Container, engines: WebsiteRuntimeAdapter, clang: WebsiteClangRuntime | undefined;
 let profile: Awaited<ReturnType<typeof createBashProfile>> | undefined;
+let shellControl: ReturnType<typeof createShellControl> | undefined;
 let shell: Awaited<ReturnType<NonNullable<typeof profile>['startShell']>> | undefined;
 let shellStarting: Promise<void> | undefined,
 	shellClosed = false;
@@ -94,12 +97,17 @@ async function initialize(settings: ContainerWorkerInitialization) {
 		Object.setPrototypeOf(RoutedWorker, NativeWorker);
 		Object.defineProperty(RoutedWorker, 'prototype', { value: NativeWorker.prototype });
 		globalThis.Worker = RoutedWorker;
+		shellControl = createShellControl({ languages: playgroundLanguages });
 		profile = await createBashProfile({
 			config,
 			sdk,
 			workerGroup: group,
-			adapters: [engines.adapter],
-			commands: engines.commands
+			adapters: [engines.adapter, shellControl.adapter],
+			commands: { ...engines.commands, ...shellControl.commands },
+			shellRoutes: { [shellControl.route.path]: { command: shellControl.route.command } },
+			onInvocation: (invocation) => {
+				shellControl?.onInvocation(invocation);
+			}
 		});
 		container = profile.container;
 		clang = new WebsiteClangRuntime(profile as never, engines, emit);
@@ -142,10 +150,27 @@ async function startShell(
 		if (!/^\/workspace(?:\/[A-Z][A-Z0-9_]*)?$/.test(cwd))
 			throw new Error('Invalid shell directory');
 		container.fs.mkdir(cwd, { recursive: true });
-		shell = await profile!.startShell(
-			{ cwd, args: options.args, env: options.env },
-			lifetime.signal
-		);
+		const control = shellControl!.setup(container.fs);
+		const initialDirectory =
+			cwd === '/workspace'
+				? Promise.resolve()
+				: shellControl!.requestDirectory(cwd.slice('/workspace/'.length));
+		// Keep a rejection observed while the actual SDK startup is still pending.
+		void initialDirectory.catch(() => {});
+		try {
+			shell = await profile!.startShell(
+				{
+					cwd,
+					args: [...control.args],
+					mounts: ['/workspace', '/tmp', '/home/user', control.mountPath],
+					env: { ...options.env, ...control.env }
+				},
+				lifetime.signal
+			);
+		} catch (error) {
+			shellControl?.dispose();
+			throw error;
+		}
 		shellWriter = shell.stdin.getWriter();
 		const drain = async (stream: ReadableStream<Uint8Array>, name: string) => {
 			const reader = stream.getReader();
@@ -166,6 +191,7 @@ async function startShell(
 		])
 			.then(([result]) => {
 				shellClosed = true;
+				shellControl?.dispose();
 				emit({
 					name: 'shell-output',
 					data: {
@@ -178,11 +204,35 @@ async function startShell(
 			})
 			.catch((error) => {
 				shellClosed = true;
+				shellControl?.dispose();
 				emit({
 					name: 'shell-output',
 					data: { error: error instanceof Error ? error.message : String(error) }
 				});
 			});
+		let readyTimeout: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				initialDirectory,
+				new Promise<never>((_, reject) => {
+					readyTimeout = setTimeout(
+						() =>
+							reject(
+								new Error(
+									'Bash workspace control did not become ready within 10 seconds'
+								)
+							),
+						10_000
+					);
+				})
+			]);
+		} catch (error) {
+			shellControl?.dispose();
+			await shell?.dispose();
+			throw error;
+		} finally {
+			clearTimeout(readyTimeout);
+		}
 	})();
 	return shellStarting;
 }
@@ -201,6 +251,7 @@ async function dispose() {
 	if (retired) return;
 	retired = true;
 	lifetime.abort();
+	shellControl?.dispose();
 	for (const request of requests.values()) request.abort();
 	await Promise.allSettled([
 		shell?.dispose(),
@@ -317,10 +368,19 @@ async function call(
 		return {
 			...(await container.inspect()),
 			runtimeJobs: [...engines.inspect(), ...(clang?.inspect() ?? [])],
-			shell: { running: !!shell && !shellClosed, closed: shellClosed },
+			shell: {
+				running: !!shell && !shellClosed,
+				closed: shellClosed,
+				control: shellControl?.inspect()
+			},
 			ownedWorkers: children.size
 		};
 	if (method === 'shellStart') return await startShell(args[0] as never);
+	if (method === 'shellSetDirectory') {
+		await shellStarting;
+		if (!shell || shellClosed || !shellControl) throw new Error('Shell is not running');
+		return await shellControl.requestDirectory(language);
+	}
 	if (method === 'shellWrite') return await shellWrite(args[0] as string);
 	if (method === 'shellEof') {
 		await shellWrites;
@@ -334,6 +394,7 @@ async function call(
 	}
 	if (method === 'shellDispose') {
 		await shell?.dispose();
+		shellControl?.dispose();
 		shellClosed = true;
 		return;
 	}

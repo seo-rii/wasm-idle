@@ -97,6 +97,31 @@ export async function preparePageContainer(configuration, options = {}) {
 		readJSON(configuration.clangProducerReceipt),
 		readJSON(configuration.processSysrootReceipt)
 	]);
+	let bashProducer = null;
+	if (configuration.bashProducerReceipt || configuration.bashProducerReceiptSha256) {
+		const receiptBytes = await readFile(configuration.bashProducerReceipt);
+		assert.equal(
+			hash(receiptBytes),
+			configuration.bashProducerReceiptSha256,
+			'Explicit Bash producer receipt pin required'
+		);
+		bashProducer = JSON.parse(receiptBytes);
+		assert.equal(bashProducer.producerVerified, true, 'Verified Bash producer required');
+		assert.deepEqual(
+			identity(bash),
+			{
+				bytes: bashProducer.artifacts.webc.bytes,
+				sha256: bashProducer.artifacts.webc.sha256
+			},
+			'Bash delivery bytes must match its producer receipt'
+		);
+		assert.equal(
+			configuration.bashWasmSha256,
+			bashProducer.artifacts.wasm.sha256,
+			'Bash executable must match its producer receipt'
+		);
+	}
+
 	const sources = new Map([
 		['sdk', join(sdkRoot, 'wasmer_js_bg.wasm')],
 		['bash', configuration.bashWebc],
@@ -142,16 +167,24 @@ export async function preparePageContainer(configuration, options = {}) {
 	};
 	const distribution = JSON.parse(manifest(base.origin, inputs, 'busybox', 'live'));
 	distribution.packages.find((pkg) => pkg.id === 'shell').producer.receiptSha256 =
-		configuration.packageReceiptSha256;
+		configuration.bashProducerReceiptSha256 ?? configuration.packageReceiptSha256;
+	if (bashProducer) {
+		assert(
+			/^[a-f0-9]{40}$/.test(configuration.sourceRevision),
+			'Pinned Bash application source revision required'
+		);
+		distribution.packages.find((pkg) => pkg.id === 'shell').producer.revision =
+			configuration.sourceRevision;
+	}
 	for (const pkg of distribution.packages)
 		for (const asset of pkg.assets) {
 			const extension =
 				asset.encoding === 'gzip'
 					? 'wasm.gz.bin'
 					: asset.id === 'bash'
-						// Opaque delivery bytes need a portable application/octet-stream MIME.
-						// Static preview servers leave the unknown .webc MIME empty.
-						? 'webc.bin'
+						? // Opaque delivery bytes need a portable application/octet-stream MIME.
+							// Static preview servers leave the unknown .webc MIME empty.
+							'webc.bin'
 						: asset.id === 'sysroot'
 							? 'tar'
 							: 'wasm';
@@ -292,8 +325,13 @@ export async function preparePageContainer(configuration, options = {}) {
 		}
 		const license = await readFile(join(containerRoot, 'LICENSE.txt'));
 		await writeFile(join(stage, 'sources', 'LICENSE.container.txt'), license);
-		const releaseSource =
-			'https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d';
+		const sourceRevision =
+			configuration.sourceRevision ?? '59c92df3ad12efe9f0b95f9364822938d181187d';
+		assert(
+			/^[a-f0-9]{40}$/.test(sourceRevision),
+			'Immutable application source revision required'
+		);
+		const releaseSource = `https://github.com/seo-rii/wasm-idle/tree/${sourceRevision}`;
 		await writeFile(
 			join(stage, 'LICENSES.md'),
 			[
@@ -316,12 +354,12 @@ export async function preparePageContainer(configuration, options = {}) {
 		const provenance = {
 			schemaVersion: 1,
 			sdk: receipt,
+			bash: bashProducer,
 			clang: producer,
 			processSysroot: processReceipt,
 			busybox: await readJSON(configuration.busyboxReceipt),
 			hostSources: sourceHashes,
-			sources:
-				'https://github.com/seo-rii/wasm-idle/tree/59c92df3ad12efe9f0b95f9364822938d181187d/runtimes',
+			sources: `${releaseSource}/runtimes`,
 			sourceFiles,
 			containerVersion: containerPackage.version
 		};

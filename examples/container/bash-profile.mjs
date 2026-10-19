@@ -24,7 +24,7 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
  * clangFilesystem is snapshot by default, or an explicit live application profile.
  * The injecting host retains the lifetime of an optional persistence workspace.
  */
-export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation, adapters = [], commands = {}, workerGroup }) {
+export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation, adapters = [], commands = {}, workerGroup, shellRoutes = {} }) {
   const clangProfile = selectClangProfile(config.clangFilesystem);
   const distribution = await validateDistribution({
     bytes: new TextEncoder().encode(config.manifest), expectedSha256: config.manifestSha256,
@@ -56,7 +56,8 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
   const routes = {
     ...Object.fromEntries(BASH_APPLETS.map(name => [`${BASH_BIN}/${name}`, { command: name }])),
     [`${BASH_BIN}/clang`]: { command: 'clang', stdio: clangProfile.stdio },
-    [`${BASH_BIN}/wasm-run`]: { command: 'wasm-run' }
+    [`${BASH_BIN}/wasm-run`]: { command: 'wasm-run' },
+    ...shellRoutes
   };
   let sysroot, session, starting, disposal;
   const stop = new AbortController();
@@ -84,7 +85,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
         sdkAsset: config.sdkAsset ?? { packageId: 'shell', assetId: 'sdk' },
         shellAsset: config.shellAsset ?? { packageId: 'shell', assetId: 'bash' },
         shellWasmSha256: config.bashWasmSha256, sdkUrl: config.sdkUrl, workerUrl: config.sdkWorkerUrl,
-        memory: config.memory, routes, moduleDirectories: ['/workspace'], timeoutMs: config.commandTimeoutMs,
+        memory: config.memory, routes, mounts: options.mounts, moduleDirectories: ['/workspace'], timeoutMs: config.commandTimeoutMs,
         args: options.args ?? ['--noprofile', '--norc'], cwd: options.cwd ?? '/workspace',
         env: { PATH: `${BASH_BIN}:/usr/bin:/bin`, HOME: '/workspace', LANG: 'C', ...options.env },
         signal: signal ? AbortSignal.any([signal, stop.signal]) : stop.signal,

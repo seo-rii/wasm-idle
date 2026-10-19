@@ -40,6 +40,7 @@ function sameFiles(
 export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	readonly shell: TerminalShellBinding;
 	inspect(): Promise<unknown>;
+	setShellDirectory(language: string): Promise<void>;
 	syncWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): Promise<void>;
 	readWorkspace(language: string): Promise<ContainerWorkspaceFile[]>;
 	listWorkspaceFiles(): Promise<ContainerWorkspaceEntry[]>;
@@ -62,6 +63,7 @@ export function createContainerPlaygroundBinding(
 	let shellOutput: ((text: string) => void) | undefined;
 	let shellError: ((error: unknown) => void) | undefined;
 	let shellConnection: Promise<void> | undefined;
+	let requestedShellLanguage: string | undefined;
 	const decoders = new Map<string, TextDecoder>();
 	const decoder = (key: string) => {
 		let value = decoders.get(key);
@@ -131,7 +133,7 @@ export function createContainerPlaygroundBinding(
 			shellOutput = output;
 			shellError = error;
 			return (shellConnection ??= (async () => {
-				const language = options.getLanguage?.() ?? 'CPP';
+				const language = requestedShellLanguage ?? options.getLanguage?.() ?? 'CPP';
 				await queues.get(language)?.catch(() => {});
 				await connection().call('shellStart', [
 					{ cwd: `/workspace/${language}`, env: { PS1: '\\w $ ' } }
@@ -155,6 +157,14 @@ export function createContainerPlaygroundBinding(
 		}
 	};
 	const binding: ContainerPlaygroundBinding = {
+		async setShellDirectory(language) {
+			if (!/^[A-Z][A-Z0-9_]*$/.test(language)) throw new TypeError('Invalid shell language');
+			requestedShellLanguage = language;
+			// Selecting a language before Terminal mounts must not start a temporary shell.
+			if (!shellConnection) return;
+			await shellConnection;
+			await connection().call('shellSetDirectory', [language]);
+		},
 		runtimeAssets,
 		terminalProps: undefined as never,
 		shell,

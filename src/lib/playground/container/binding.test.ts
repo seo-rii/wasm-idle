@@ -79,6 +79,36 @@ describe('existing playground container binding', () => {
 		expect(shell).toHaveBeenCalledExactlyOnceWith('B');
 		expect(watch).toHaveBeenCalledTimes(1);
 	});
+	it('starts Bash in the selected language without starting a temporary default session', async () => {
+		const { binding, call } = fixture();
+		await binding.setShellDirectory('PYTHON');
+		expect(call).not.toHaveBeenCalled();
+		await binding.shell.connect(() => {});
+		expect(call).toHaveBeenCalledExactlyOnceWith('shellStart', [
+			{ cwd: '/workspace/PYTHON', env: { PS1: '\\w $ ' } }
+		]);
+	});
+
+	it('requests a directory change through the control channel after shell startup', async () => {
+		const { binding, call } = fixture();
+		let started!: () => void;
+		call.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					started = resolve;
+				})
+		);
+		const connecting = binding.shell.connect(() => {});
+		await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
+		const switching = binding.setShellDirectory('PYTHON');
+		expect(call).toHaveBeenCalledOnce();
+		started();
+		await Promise.all([connecting, switching]);
+		expect(call.mock.calls.map((row) => row[0])).toEqual(['shellStart', 'shellSetDirectory']);
+		expect((call.mock.calls[1] as unknown[])[1]).toEqual(['PYTHON']);
+		expect(call.mock.calls.some((row) => row[0] === 'shellWrite')).toBe(false);
+	});
+
 	it('passes an AbortSignal through the transport cancellation contract', async () => {
 		const { binding, call } = fixture();
 		const sandbox = await binding.load('C');

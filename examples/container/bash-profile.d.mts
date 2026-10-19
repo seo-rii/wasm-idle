@@ -5,6 +5,7 @@ import type {
 	ContainerPackageManager,
 	VerifiedAssetLoader,
 	HostCommandInvocation,
+	HostCommandRoute,
 	HostCommandRecord
 } from '@wasm-idle/container';
 import type {
@@ -55,6 +56,7 @@ export interface BashProfile {
 	startShell(
 		options?: {
 			args?: readonly string[];
+			mounts?: readonly string[];
 			cwd?: string;
 			env?: Readonly<Record<string, string>>;
 		},
@@ -72,4 +74,5 @@ export function createBashProfile(options: {
 	adapters?: readonly CommandAdapter[];
 	commands?: Readonly<Record<string, CommandDefinition>>;
 	workerGroup?: WasixWorkerGroup;
+	shellRoutes?: Readonly<Record<string, HostCommandRoute>>;
 }): Promise<BashProfile>;

@@ -264,14 +264,15 @@
 				readStorage: (key) => localStorage.getItem(key),
 				normalizeLanguage: normalizeRequestedLanguage,
 				languageForPath,
-				fallbackLanguage: language
+				fallbackLanguage: 'CPP' as PlaygroundLanguage
 			})
 		: null;
-	if (initialSelection) language = initialSelection.language;
-	const initialWorkspace = createDefaultWorkspace(language);
+	const initialLanguage = initialSelection?.language ?? 'CPP';
+	if (initialSelection) language = initialLanguage;
+	const initialWorkspace = createDefaultWorkspace(initialLanguage);
 	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
 		...createDefaultLanguageWorkspaces(),
-		[language]: cloneWorkspace(initialWorkspace)
+		[initialLanguage]: cloneWorkspace(initialWorkspace)
 	});
 	let files = $state<WorkspaceFile[]>(cloneFiles(initialWorkspace.files));
 	let activePath = $state(initialWorkspace.activePath);
@@ -1034,6 +1035,8 @@
 	let containerRefreshForcePending = false;
 	let containerEditorRefreshDeferred = $state(false);
 	let sharedWorkspaceFiles = $state<ContainerWorkspaceEntry[]>([]);
+	let shellDirectoryPending = $state(false);
+	let shellDirectoryGeneration = 0;
 	let sharedWorkspaceOpening = $state(false);
 	const containerFiles = (values: readonly WorkspaceFile[]) =>
 		values.map((file) => ({ path: file.path, content: workspaceFileBytes(file) }));
@@ -2613,6 +2616,24 @@
 
 	$effect(() => {
 		if (!browser || !workspaceInitialized) return;
+		const binding = playground;
+		const selectedLanguage = language;
+		const generation = ++shellDirectoryGeneration;
+		shellDirectoryPending = true;
+		void binding.setShellDirectory(selectedLanguage).then(
+			() => {
+				if (generation === shellDirectoryGeneration) shellDirectoryPending = false;
+			},
+			(error) => {
+				if (generation !== shellDirectoryGeneration) return;
+				shellDirectoryPending = false;
+				saveStatus = `Shell directory change failed: ${error instanceof Error ? error.message : String(error)}`;
+			}
+		);
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceInitialized) return;
 		const binding = playground,
 			selectedLanguage = language;
 		const values = files.map((file) => ({ ...file }));
@@ -2853,55 +2874,57 @@
 			debug.reset();
 		}
 	});
-	if (initialSelection) {
-		if (initialSelection.snapshot) {
-			applySnapshot(
-				initialSelection.snapshot,
-				initialSelection.source === 'share'
-					? 'Shared workspace loaded'
-					: 'Workspace restored'
-			);
-		} else {
-			const {
-				code,
-				argsInput: restoredArgs,
-				rustTargetTriple: restoredRustTarget,
-				goTarget: restoredGoTarget,
-				ocamlBackend: restoredOcamlBackend,
-				ocamlWasmBinaryenMode: restoredBinaryenMode
-			} = initialSelection.overrides;
-			if (code !== null && activeFile) activeFile.content = code;
-			if (restoredArgs !== null) argsInput = restoredArgs;
-			if (
-				restoredRustTarget === 'wasm32-wasip1' ||
-				restoredRustTarget === 'wasm32-wasip2' ||
-				restoredRustTarget === 'wasm32-wasip3'
-			)
-				rustTargetTriple = restoredRustTarget;
-			if (
-				restoredGoTarget === 'wasip1/wasm' ||
-				restoredGoTarget === 'wasip2/wasm' ||
-				restoredGoTarget === 'wasip3/wasm' ||
-				restoredGoTarget === 'js/wasm'
-			)
-				goTarget = restoredGoTarget;
-			if (restoredOcamlBackend === 'js' || restoredOcamlBackend === 'wasm')
-				ocamlBackend = restoredOcamlBackend;
-			if (restoredBinaryenMode === 'fast' || restoredBinaryenMode === 'full')
-				ocamlWasmBinaryenMode = restoredBinaryenMode;
-			if (initialSelection.source === 'query') saveStatus = 'URL workspace loaded';
+	untrack(() => {
+		if (initialSelection) {
+			if (initialSelection.snapshot) {
+				applySnapshot(
+					initialSelection.snapshot,
+					initialSelection.source === 'share'
+						? 'Shared workspace loaded'
+						: 'Workspace restored'
+				);
+			} else {
+				const {
+					code,
+					argsInput: restoredArgs,
+					rustTargetTriple: restoredRustTarget,
+					goTarget: restoredGoTarget,
+					ocamlBackend: restoredOcamlBackend,
+					ocamlWasmBinaryenMode: restoredBinaryenMode
+				} = initialSelection.overrides;
+				if (code !== null && activeFile) activeFile.content = code;
+				if (restoredArgs !== null) argsInput = restoredArgs;
+				if (
+					restoredRustTarget === 'wasm32-wasip1' ||
+					restoredRustTarget === 'wasm32-wasip2' ||
+					restoredRustTarget === 'wasm32-wasip3'
+				)
+					rustTargetTriple = restoredRustTarget;
+				if (
+					restoredGoTarget === 'wasip1/wasm' ||
+					restoredGoTarget === 'wasip2/wasm' ||
+					restoredGoTarget === 'wasip3/wasm' ||
+					restoredGoTarget === 'js/wasm'
+				)
+					goTarget = restoredGoTarget;
+				if (restoredOcamlBackend === 'js' || restoredOcamlBackend === 'wasm')
+					ocamlBackend = restoredOcamlBackend;
+				if (restoredBinaryenMode === 'fast' || restoredBinaryenMode === 'full')
+					ocamlWasmBinaryenMode = restoredBinaryenMode;
+				if (initialSelection.source === 'query') saveStatus = 'URL workspace loaded';
+			}
+			if (initialSelection.unrestoredWorkspace !== null) {
+				unrestoredWorkspace = initialSelection.unrestoredWorkspace;
+				workspaceRecoveryKey = preserveUnrestoredWorkspace(
+					(key, value) => localStorage.setItem(key, value),
+					currentWorkspaceStorageKey,
+					unrestoredWorkspace
+				);
+				saveStatus = 'Stored workspace could not be restored';
+			} else if (initialSelection.invalidShare) saveStatus = 'Invalid share URL';
+			workspaceInitialized = true;
 		}
-		if (initialSelection.unrestoredWorkspace !== null) {
-			unrestoredWorkspace = initialSelection.unrestoredWorkspace;
-			workspaceRecoveryKey = preserveUnrestoredWorkspace(
-				(key, value) => localStorage.setItem(key, value),
-				currentWorkspaceStorageKey,
-				unrestoredWorkspace
-			);
-			saveStatus = 'Stored workspace could not be restored';
-		} else if (initialSelection.invalidShare) saveStatus = 'Invalid share URL';
-		workspaceInitialized = true;
-	}
+	});
 </script>
 
 <svelte:head>
@@ -4020,9 +4043,10 @@
 						<strong>/workspace</strong>
 						<span class="count-badge">{sharedWorkspaceFiles.length}</span>
 					</header>
-					<p>
-						Shared with Bash. Selecting a project leaves the shell directory unchanged.
-					</p>
+					<p>Shared with Bash. Selecting a language also changes the shell directory.</p>
+					{#if shellDirectoryPending}
+						<p role="status">Shell directory change queued until Bash is ready.</p>
+					{/if}
 					<ContainerExplorer
 						entries={sharedWorkspaceFiles}
 						selectedPath={`${language}/${activePath}`}

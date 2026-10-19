@@ -23,12 +23,23 @@ filesystems; those private runtime writes are not claimed as live shared files.
 
 Shell-created files and compiled artifacts appear in the existing explorer.
 The selected language's editor project is labelled `/workspace/<LANGUAGE>`.
-The shared `/workspace` list also shows files in other projects and at the root,
-so changing the editor language cannot hide a file written by the persistent
-Bash session. Selecting a language leaves Bash's real cwd and shell state intact.
+The shared `/workspace` explorer supports folder entry, breadcrumbs, parent
+navigation and independent expansion/collapse. It also shows empty directories.
+Selecting a language opens its project and changes the persistent Bash session's
+actual cwd to `/workspace/<LANGUAGE>` while retaining variables and editing state.
+The opt-in producer imports one host-supplied Bash function through Bash's
+standard environment function-import path, makes it readonly and removes its
+export flag before reading terminal input. The fixed SDK requests inherited write
+access even for `O_RDONLY`, so startup does not attempt to read a readonly rcfile.
+The source copy remains readonly in the host VFS for inspection. The host publishes a bounded generation-tagged mailbox; the opt-in native Bash
+Readline hook applies it only at a genuine primary input boundary. No `cd` text
+or control keystrokes are injected into stdin. Foreground commands, `read`,
+heredocs and continuation prompts retain their current input and directory;
+the latest requested language is applied when Bash returns to its primary prompt.
+A visible pending status distinguishes that queued transition from completion.
 Clicking a shared file inside a language project opens that project's current
 bytes in the editor; root files and symlinks are listed for terminal access.
-The list uses metadata only, does not follow symlinks, and pages its rendered
+The explorer uses metadata only, does not follow symlinks, and pages its rendered
 rows. File events update it during Run/Debug; editor reconciliation resumes after
 execution releases the buffers, without requiring a manual refresh.
 Reconciliation preserves concurrent editor buffers and reports conflicts. The
@@ -36,6 +47,12 @@ explorer's refresh control explicitly resolves conflicting revisions. Existing
 workspace saving/export remains responsible for the editor workspace; the
 container owner itself has page lifetime, and asset-cache eviction never deletes
 user workspace storage.
+
+Initial language and files resolve before the editor, terminal or runtime starts.
+A valid shared snapshot takes precedence, followed by explicit URL inputs, the
+current workspace snapshot, legacy preferences in the base workspace, and the
+default. URL imports receive their own storage context and do not read unrelated
+private files. Invalid saved bytes remain available through workspace recovery.
 
 The terminal is a byte stream UI, without a full PTY or job-control promise.
 Closing Bash input ends that shell session; reload opens a fresh SDK realm.

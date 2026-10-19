@@ -12,7 +12,12 @@ import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.
 
 const enabled = process.env.WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER === '1';
 type SiteWindow = typeof globalThis & {
-	__wasmIdleContainer?: unknown;
+	__sidebarInitialEditor?: { language: string; source: string };
+	__wasmIdleContainer?: {
+		inspect(): Promise<{
+			shell?: { running: boolean; control?: { cwd: string; pendingCwd: string | null } };
+		}>;
+	};
 	__wasmIdleDebug?: {
 		writeTerminalInput(text: string, eof: boolean): Promise<void>;
 		getEditorValue(): string;
@@ -20,7 +25,7 @@ type SiteWindow = typeof globalThis & {
 };
 
 it(
-	'shows real Bash redirections after a language change without manually refreshing files',
+	'navigates shared folders and writes relative files in the selected language project automatically',
 	{ skip: !enabled, timeout: 180_000, meta: { browser: true, requiredBrowser: enabled } },
 	async () => {
 		await runWithBrowserProbeSessionLock(async () => {
@@ -41,15 +46,31 @@ it(
 					headless: true,
 					args: ['--no-sandbox']
 				});
-				const context = await browser.newContext({ serviceWorkers: 'allow' });
+				const context = await browser.newContext({
+					serviceWorkers: 'allow',
+					viewport: { width: 1600, height: 1050 }
+				});
 				await addBrowserTestCookies(context, server.browserUrl);
 				await disableBrowserPrewarm(context);
 				const page = await context.newPage();
 				page.setDefaultTimeout(30_000);
 				const errors: string[] = [];
 				page.on('pageerror', (error) => errors.push(error.message));
+				await page.addInitScript(() => {
+					const observer = setInterval(() => {
+						const target = globalThis as SiteWindow;
+						const select = document.querySelector<HTMLSelectElement>('#language-select');
+						const source = target.__wasmIdleDebug?.getEditorValue();
+						if (!select || !source || !document.querySelector('.monaco-editor')) return;
+						target.__sidebarInitialEditor = { language: select.value, source };
+						clearInterval(observer);
+					}, 5);
+				});
+				const initialSource = 'print("initial-language-sidebar")\n';
 				const url = new URL(server.browserUrl);
 				url.searchParams.set('lsp-test', '1');
+				url.searchParams.set('lang', 'PYTHON');
+				url.searchParams.set('code', initialSource);
 				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
 				await page.waitForFunction(
 					() =>
@@ -63,7 +84,10 @@ it(
 					await page.locator('#lsp-toggle').uncheck();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const initial = await page.locator('#language-select').inputValue();
-				expect(initial).toBe('CPP');
+				expect(initial).toBe('PYTHON');
+				await page.waitForFunction(() => !!(globalThis as SiteWindow).__sidebarInitialEditor);
+				expect(await page.evaluate(() => (globalThis as SiteWindow).__sidebarInitialEditor))
+					.toEqual({ language: 'PYTHON', source: initialSource });
 				await page.evaluate(async () => {
 					await (globalThis as SiteWindow).__wasmIdleDebug!.writeTerminalInput(
 						"printf 'SIDEBAR-%s\\n' READY\n",
@@ -75,25 +99,81 @@ it(
 						.querySelector('[data-testid="terminal-debug-output"]')
 						?.textContent?.includes('SIDEBAR-READY')
 				);
+				await page.waitForFunction(async () => {
+					const { shell } = await (
+						globalThis as SiteWindow
+					).__wasmIdleContainer!.inspect();
+					return shell?.control?.cwd === '/workspace/PYTHON' && !shell.control.pendingCwd;
+				});
 				await page.locator('#language-select').selectOption('BASH');
+				await page.waitForFunction(async () => {
+					const { shell } = await (
+						globalThis as SiteWindow
+					).__wasmIdleContainer!.inspect();
+					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
+				});
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 				await page.keyboard.type('echo 1 >> hi.txt');
 				await page.keyboard.press('Enter');
-				const file = page.locator('[data-container-path="CPP/hi.txt"]');
+				const file = page.locator('[data-container-path="BASH/hi.txt"]');
 				await file.waitFor();
 				expect(await page.locator('#language-select').inputValue()).toBe('BASH');
 				await file.click();
 				await page.waitForFunction(
 					() => (globalThis as SiteWindow).__wasmIdleDebug!.getEditorValue() === '1\n'
 				);
-				expect(await page.locator('#language-select').inputValue()).toBe('CPP');
+				expect(await page.locator('#language-select').inputValue()).toBe('BASH');
 				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 				await page.keyboard.type('echo 2 >> hi.txt');
 				await page.keyboard.press('Enter');
 				await page.waitForFunction(
 					() => (globalThis as SiteWindow).__wasmIdleDebug!.getEditorValue() === '1\n2\n'
 				);
+				await page.evaluate(async () => {
+					await (globalThis as SiteWindow).__wasmIdleDebug!.writeTerminalInput(
+						'mkdir -p nested/deeper\necho leaf > nested/deeper/leaf.txt\n',
+						false
+					);
+				});
+				await page
+					.getByRole('button', { name: 'Expand /workspace/BASH/nested', exact: true })
+					.click();
+				await page.locator('[data-container-directory="BASH/nested/deeper"]').waitFor();
+				await page
+					.getByRole('button', { name: 'Collapse /workspace/BASH/nested', exact: true })
+					.click();
+				expect(
+					await page.locator('[data-container-directory="BASH/nested/deeper"]').count()
+				).toBe(0);
+				await page.locator('[data-container-directory="BASH/nested"]').click();
+				await page.waitForFunction(async () => {
+					const { shell } = await (
+						globalThis as SiteWindow
+					).__wasmIdleContainer!.inspect();
+					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
+				});
+				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+				await page.keyboard.type('echo folder-relative > nested/here.txt');
+				await page.keyboard.press('Enter');
+				const nested = page.locator('[data-container-path="BASH/nested/here.txt"]');
+				await nested.waitFor();
+				await nested.click();
+				await page.waitForFunction(
+					() =>
+						(globalThis as SiteWindow).__wasmIdleDebug!.getEditorValue() ===
+						'folder-relative\n'
+				);
+				await page
+					.getByRole('button', { name: 'Go to parent folder', exact: true })
+					.click();
+				await page.waitForFunction(async () => {
+					const { shell } = await (
+						globalThis as SiteWindow
+					).__wasmIdleContainer!.inspect();
+					return shell?.control?.cwd === '/workspace/BASH' && !shell.control.pendingCwd;
+				});
+				await file.waitFor();
 				expect(errors).toEqual([]);
 			} finally {
 				await browser?.close();
