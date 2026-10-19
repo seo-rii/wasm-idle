@@ -26,7 +26,8 @@ const workspaceFiles = [
 	'src/routes/workspace-share-paths.playwright.test.ts',
 	'src/routes/workspace-banners.playwright.test.ts',
 	'src/routes/workspace-whitespace-paths.playwright.test.ts',
-	'src/routes/debugger-toolbar-layout.playwright.test.ts'
+	'src/routes/debugger-toolbar-layout.playwright.test.ts',
+	'src/routes/container-sidebar.playwright.test.ts'
 ];
 
 describe('all-language browser test runner', () => {
@@ -51,7 +52,8 @@ describe('all-language browser test runner', () => {
 			expect(plan.testFiles).toEqual(workspaceFiles);
 			expect(plan.env).toEqual({
 				WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
-				WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1'
+				WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1',
+				WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER: '1'
 			});
 			expect(browserTestAssetGroups(plan)).toEqual(['container', 'clang']);
 			const child = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
@@ -62,6 +64,18 @@ describe('all-language browser test runner', () => {
 				expect(createAllLanguageBrowserTestPlan().testFiles).toContain(file);
 		}
 	);
+	it.each([
+		['PR workspace family', { family: 'workspace' }],
+		['scheduled workspace shard', { shard: 'workspace' }],
+		['full matrix', {}]
+	] as const)('requires real Bash and folder navigation in the %s', (_name, options) => {
+		const plan = createAllLanguageBrowserTestPlan(options);
+		const child = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
+		expect(child.args).toContain('src/routes/container-sidebar.playwright.test.ts');
+		expect(child.env.WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER).toBe('1');
+		expect(child.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
+		expect(browserTestAssetGroups(plan)).toContain('container');
+	});
 	it.each([
 		[
 			'go',
@@ -170,7 +184,8 @@ describe('all-language browser test runner', () => {
 				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON',
 				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG',
 				'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE',
-				'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS'
+				'WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS',
+				'WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER'
 			].sort()
 		);
 		for (const row of supportMatrixRows) {
@@ -299,6 +314,7 @@ describe('all-language browser test runner', () => {
 				for (const file of workspaceFiles) expectedFiles.add(file);
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS');
+				expectedEnvironments.add('WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER');
 			}
 			expect(new Set(plan.testFiles)).toEqual(expectedFiles);
 			expect(new Set(Object.keys(plan.env))).toEqual(expectedEnvironments);

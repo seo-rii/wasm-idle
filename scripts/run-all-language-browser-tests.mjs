@@ -32,11 +32,13 @@ const WORKSPACE_TEST_FILES = [
 	'src/routes/workspace-share-paths.playwright.test.ts',
 	'src/routes/workspace-banners.playwright.test.ts',
 	'src/routes/workspace-whitespace-paths.playwright.test.ts',
-	'src/routes/debugger-toolbar-layout.playwright.test.ts'
+	'src/routes/debugger-toolbar-layout.playwright.test.ts',
+	'src/routes/container-sidebar.playwright.test.ts'
 ];
 const WORKSPACE_BROWSER_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
-	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1'
+	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS: '1',
+	WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER: '1'
 };
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
