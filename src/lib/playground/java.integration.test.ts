@@ -398,6 +398,204 @@ public class Main {
 				expected: '0.3 0.13 3 1.01 2.68   -12.35|\n'
 			},
 			{
+				// A flush must not end the console decoder's input: a later byte write threw
+				// IllegalStateException and a split UTF-8 character was replaced.
+				name: 'System.out byte writes across flushes',
+				code: `public class Main {
+    public static void main(String[] args) throws Exception {
+        System.out.write('a');
+        System.out.flush();
+        System.out.write("bc\\n".getBytes());
+        System.out.flush();
+        byte[] euro = "\\u20ac\\n".getBytes("UTF-8");
+        System.out.write(euro, 0, 1);
+        System.out.flush();
+        System.out.write(euro, 1, euro.length - 1);
+        System.out.flush();
+    }
+}`,
+				stdin: '',
+				expected: 'abc\n\u20ac\n'
+			},
+			{
+				// The javac SDK must expose @Rename'd class library methods under their Java names.
+				name: 'exception methods, getClass and collection clone',
+				code: `import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        try {
+            throw new IllegalStateException("boom");
+        } catch (RuntimeException e) {
+            System.out.println(e.getClass().getName() + ": " + e.getMessage());
+        }
+        Object list = new ArrayList<>(List.of(3, 1, 2));
+        System.out.println(list.getClass().getSimpleName());
+        ArrayList<Integer> original = new ArrayList<>(List.of(1, 2));
+        HashMap<String, Integer> map = new HashMap<>(Map.of("a", 1));
+        System.out.println(original.clone() + " " + map.clone());
+    }
+}`,
+				stdin: '',
+				expected: 'java.lang.IllegalStateException: boom\nArrayList\n[1, 2] {a=1}\n'
+			},
+			{
+				// Enum reflection must link values(): getEnumConstants() was empty and valueOf,
+				// EnumSet and EnumMap trapped or printed Main$Color@...
+				name: 'enum reflection',
+				code: `import java.util.*;
+
+public class Main {
+    enum Color { RED, GREEN, BLUE }
+
+    enum Op {
+        ADD { int apply(int a, int b) { return a + b; } },
+        MUL { int apply(int a, int b) { return a * b; } };
+
+        abstract int apply(int a, int b);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(Color.class.getEnumConstants().length + " " + Color.valueOf("GREEN"));
+        System.out.println(EnumSet.allOf(Color.class) + " " + EnumSet.complementOf(EnumSet.of(Color.RED)));
+        EnumMap<Color, Integer> map = new EnumMap<>(Color.class);
+        map.put(Color.BLUE, 3);
+        map.put(Color.RED, 1);
+        System.out.println(map);
+        Op op = Enum.valueOf(Op.class, "MUL");
+        System.out.println(op + " " + op.apply(6, 7) + " " + EnumSet.allOf(Op.class));
+    }
+}`,
+				stdin: '',
+				expected:
+					'3 GREEN\n[RED, GREEN, BLUE] [GREEN, BLUE]\n{RED=1, BLUE=3}\nMUL 42 [ADD, MUL]\n'
+			},
+			{
+				// Annotation element values overflowed javac's stack: the SDK's Annotation extended itself.
+				name: 'annotations with element values',
+				code: `import java.lang.annotation.*;
+import java.util.*;
+
+public class Main {
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Label {
+        String value() default "none";
+    }
+
+    @Label("main")
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public static void main(String[] args) {
+        @SuppressWarnings("unchecked")
+        List<Integer> list = (List<Integer>) (List) new ArrayList<>(List.of(3, 1, 2));
+        for (@SuppressWarnings("unused") int i = 0; i < 1; i++) {
+            Collections.sort(list);
+        }
+        System.out.println(list);
+    }
+}`,
+				stdin: '',
+				expected: '[1, 2, 3]\n'
+			},
+			{
+				// A primitive array clone that does not escape its method trapped: int[] had no clone function.
+				name: 'primitive array clone',
+				code: `import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] dp = { 1, 2, 3 };
+        int[] next = dp.clone();
+        next[0] = 9;
+        long[] sums = { 4L };
+        long[] copy = sums.clone();
+        char[] word = "ab".toCharArray().clone();
+        int[][] grid = { { 1, 2 }, { 3, 4 } };
+        int[] row = grid[1].clone();
+        row[0] = 7;
+        System.out.println(dp[0] + " " + next[0] + " " + next.length + " " + copy[0] + " " + word[1]
+            + " " + grid[1][0] + " " + row[0] + " " + Arrays.toString(dp));
+    }
+}`,
+				stdin: '',
+				expected: '1 9 3 4 b 3 7 [1, 2, 3]\n'
+			},
+			{
+				// JCLPlugin skips ServiceLoader and runtime-annotation support when TeaVM is compiled by
+				// TeaVM, and String element values got no type, so concatenating one trapped.
+				name: 'runtime annotations and ServiceLoader',
+				code: `import java.lang.annotation.*;
+import java.util.ServiceLoader;
+
+public class Main {
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Tag {
+        String value();
+        int level() default 1;
+        String[] aliases() default {};
+    }
+
+    @interface Hidden {}
+
+    @Tag(value = "solver", level = 3, aliases = { "s", "sv" })
+    @Hidden
+    static class Solver {}
+
+    @Tag("plain")
+    static class Plain {}
+
+    public static void main(String[] args) {
+        Tag tag = Solver.class.getAnnotation(Tag.class);
+        Tag plain = Plain.class.getAnnotation(Tag.class);
+        int services = 0;
+        for (Runnable service : ServiceLoader.load(Runnable.class)) {
+            services++;
+        }
+        System.out.println(tag.value() + " " + tag.level() + " " + String.join("/", tag.aliases()) + " "
+            + plain.value() + " " + plain.level() + " " + plain.aliases().length
+            + " " + Solver.class.isAnnotationPresent(Hidden.class)
+            + " " + (Main.class.getAnnotation(Tag.class) == null) + " " + services);
+    }
+}`,
+				stdin: '',
+				expected: 'solver 3 s/sv plain 1 0 false true 0\n'
+			},
+			{
+				// TeaVM 0.13.1 lacks these methods: print(float) and println(char[]) resolved to
+				// print(double) and println(Object), and %e was an unknown format conversion.
+				name: 'class library methods missing from TeaVM 0.13.1',
+				code: `import java.util.*;
+import java.util.stream.*;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.print(0.1f);
+        System.out.print(' ');
+        System.out.print(true);
+        System.out.print(' ');
+        System.out.println(new char[] { 'o', 'k' });
+        System.out.writeBytes("bytes\\n".getBytes());
+        Map<String, Integer> counts = new TreeMap<>();
+        for (String word : "b a b".split(" ")) {
+            counts.merge(word, 1, Integer::sum);
+        }
+        TreeMap<Integer, Long> parity = Stream.of(1, 2, 3, 4, 5)
+            .collect(Collectors.groupingBy(x -> x % 2, TreeMap::new, Collectors.counting()));
+        System.out.println(counts + " " + parity + " " + Long.max(3L, 5L) + " " + Long.sum(3L, 5L)
+            + " " + Double.sum(1.5, 2.0) + " " + Float.min(1.5f, 2.0f));
+        System.out.println(Math.multiplyHigh(Long.MAX_VALUE, 3L) + " " + Math.multiplyFull(100000, 100000)
+            + " " + Character.toString(0x1F600).length() + " " + Integer.toUnsignedLong(-1)
+            + " " + Integer.parseUnsignedInt("4294967295") + " " + Long.parseUnsignedLong("18446744073709551615"));
+        System.out.println(List.of(1, 2, 3).parallelStream().mapToInt(Integer::intValue).sum()
+            + " " + Stream.ofNullable(null).count() + " " + "a\\r\\nb\\nc".lines().collect(Collectors.toList())
+            + " " + "x".transform(s -> s + "y"));
+        System.out.println(String.format("%e|%.2e|%E|%+.1e|%010.2e|%.0e", 12345.678, 0.000123, 1.0, 99.95, -1.5, 2.5));
+    }
+}`,
+				stdin: '',
+				expected:
+					'0.1 true ok\nbytes\n{a=1, b=2} {0=2, 1=3} 5 8 3.5 1.5\n1 10000000000 2 4294967295 -1 -1\n6 0 [a, b, c] xy\n1.234568e+04|1.23e-04|1.000000E+00|+1.0e+02|-01.50e+00|3e+00\n'
+			},
+			{
 				name: 'typed NIO buffers',
 				code: `import java.nio.*;
 
@@ -474,7 +672,7 @@ public class Main {
 
 			expect(outputs.join(''), testCase.name).toBe(testCase.expected);
 		}
-	}, 120_000);
+	}, 180_000);
 
 	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();

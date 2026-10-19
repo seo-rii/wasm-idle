@@ -354,7 +354,8 @@ describe('runtime browser CI selection', () => {
 			'src/lib/playground/go.playwright.test.ts'
 		]);
 		expect(createAllLanguageBrowserTestPlan({ family: 'python' }).testFiles).toEqual([
-			'src/lib/playground/python.playwright.test.ts'
+			'src/lib/playground/python.playwright.test.ts',
+			'src/lib/playground/python-debug.playwright.test.ts'
 		]);
 	});
 

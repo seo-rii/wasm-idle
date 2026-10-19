@@ -1,4 +1,4 @@
-// Build the website's fixed application graph using the published Container SDK.
+// Build the website's fixed application graph using the selected Container SDK.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -6,9 +6,11 @@ import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:f
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { selectPageContainerSource } from './lib/page-container-source.mjs';
 import { manifest } from './probe-container-shell-acceptance.mjs';
 import {
 	BASH_WASM_SHA256,
+	BUSYBOX_PRODUCER_REVISION,
 	MEMORY,
 	COMMAND_TIMEOUT_MS
 } from './probe-container-shell-acceptance-lib.mjs';
@@ -18,6 +20,31 @@ const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const json = (value) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 const identity = (bytes) => ({ bytes: bytes.length, sha256: hash(bytes) });
 const readJSON = async (path) => JSON.parse(await readFile(path, 'utf8'));
+
+/** Keep opaque archive delivery portable while preserving the pinned bytes and package path. */
+export function prepareWebsiteAssetDelivery(asset, base) {
+	const sysroot = asset.id === 'sysroot';
+	const extension =
+		asset.encoding === 'gzip'
+			? 'wasm.gz.bin'
+			: asset.id === 'bash'
+				? 'webc.bin'
+				: sysroot
+					? 'tar.bin'
+					: 'wasm';
+	return {
+		...asset,
+		// Identity encoding authenticates the same MIME for delivery and logical bytes.
+		// Static preview servers do not consistently recognize .tar or .webc.
+		...(sysroot
+			? {
+					delivery: { ...asset.delivery, mediaType: 'application/octet-stream' },
+					logical: { ...asset.logical, mediaType: 'application/octet-stream' }
+				}
+			: {}),
+		url: new URL(`objects/${asset.delivery.sha256}/${asset.id}.${extension}`, base).href
+	};
+}
 
 /** A host-owned immutable asset table. Guests/distribution manifests never select JS modules. */
 function websiteReleaseModule(release) {
@@ -177,47 +204,26 @@ export async function preparePageContainer(configuration, options = {}) {
 			configuration.sourceRevision;
 	}
 	for (const pkg of distribution.packages)
-		for (const asset of pkg.assets) {
-			const extension =
-				asset.encoding === 'gzip'
-					? 'wasm.gz.bin'
-					: asset.id === 'bash'
-						? // Opaque delivery bytes need a portable application/octet-stream MIME.
-							// Static preview servers leave the unknown .webc MIME empty.
-							'webc.bin'
-						: asset.id === 'sysroot'
-							? 'tar'
-							: 'wasm';
-			asset.url = new URL(
-				`objects/${asset.delivery.sha256}/${asset.id}.${extension}`,
-				base
-			).href;
-		}
+		pkg.assets = pkg.assets.map((asset) => prepareWebsiteAssetDelivery(asset, base));
 	delete distribution.distributionId;
 	distribution.distributionId = `website-${hash(json(distribution))}`;
 	const manifestBytes = json(distribution),
 		manifestSha256 = hash(manifestBytes);
 
-	const containerEntry = fileURLToPath(import.meta.resolve('@wasm-idle/container'));
-	const containerRoot = dirname(dirname(containerEntry));
-	const containerPackage = await readJSON(join(containerRoot, 'package.json'));
-	assert.equal(containerPackage.version, '0.1.0', 'Website uses the released Container SDK');
+	const container = await selectPageContainerSource({
+		workspaceRoot: root,
+		source: configuration.containerSource,
+		resolvedEntry:
+			configuration.containerSource === 'workspace'
+				? undefined
+				: fileURLToPath(import.meta.resolve('@wasm-idle/container')),
+		requiresMetadata: WebAssembly.Module.imports(new WebAssembly.Module(busybox)).some(
+			(item) => item.module === 'wasm_idle_fs_v1'
+		)
+	});
+	const containerRoot = container.packageRoot;
 	const containerRequire = createRequire(join(containerRoot, 'package.json'));
-	const aliases = Object.fromEntries(
-		[
-			'adapters/wasix',
-			'adapters/clang',
-			'adapters/clang-live',
-			'adapters/wasi-live',
-			'persistence',
-			'workspace',
-			'terminal'
-		].map((name) => [
-			`@wasm-idle/container/${name}`,
-			join(containerRoot, containerPackage.exports[`./${name}`].import)
-		])
-	);
-	aliases['@wasm-idle/container'] = containerEntry;
+	const aliases = container.aliases;
 	aliases['@wasm-idle/core'] = containerRequire.resolve('@wasm-idle/core');
 	const llvmPackage = containerRequire.resolve('@wasm-idle/llvm-core/package.json');
 	const llvm = await readJSON(llvmPackage);
@@ -245,10 +251,7 @@ export async function preparePageContainer(configuration, options = {}) {
 	};
 	const compiled = await build({
 		absWorkingDir: root,
-		entryPoints: {
-			'live-worker': join(containerRoot, 'dist/adapters/wasi-live/worker.js'),
-			'clang-worker': join(containerRoot, 'dist/adapters/clang-live/worker.js')
-		},
+		entryPoints: container.entryPoints,
 		outdir: join(root, '.cache/container-page-workers'),
 		bundle: true,
 		format: 'esm',
@@ -274,6 +277,7 @@ export async function preparePageContainer(configuration, options = {}) {
 		sourceHashes[name] = hash(await readFile(resolve(root, name)));
 	const hostHash = hash(
 		json({
+			container: container.identity,
 			files: [...resources].map(([name, bytes]) => [name, hash(bytes)]),
 			sdk: ['index.mjs', 'worker.mjs'].map((name) => [name, hash(entries.get(name))])
 		})
@@ -325,8 +329,7 @@ export async function preparePageContainer(configuration, options = {}) {
 		}
 		const license = await readFile(join(containerRoot, 'LICENSE.txt'));
 		await writeFile(join(stage, 'sources', 'LICENSE.container.txt'), license);
-		const sourceRevision =
-			configuration.sourceRevision ?? '59c92df3ad12efe9f0b95f9364822938d181187d';
+		const sourceRevision = configuration.sourceRevision ?? BUSYBOX_PRODUCER_REVISION;
 		assert(
 			/^[a-f0-9]{40}$/.test(sourceRevision),
 			'Immutable application source revision required'
@@ -337,7 +340,7 @@ export async function preparePageContainer(configuration, options = {}) {
 			[
 				'# Container workspace sources and licenses',
 				'',
-				'Host SDK: [MIT license](sources/LICENSE.container.txt).',
+				`Host SDK: ${container.identity.package}@${container.identity.version} (${container.identity.source}, ${container.identity.profile}); [MIT license](sources/LICENSE.container.txt).`,
 				'',
 				'GNU Bash: GPL-3.0-or-later. BusyBox: GPL-2.0-only. SDK, LLVM and linked-runtime notices are retained below.',
 				'',
@@ -358,10 +361,11 @@ export async function preparePageContainer(configuration, options = {}) {
 			clang: producer,
 			processSysroot: processReceipt,
 			busybox: await readJSON(configuration.busyboxReceipt),
+			container: container.identity,
 			hostSources: sourceHashes,
 			sources: `${releaseSource}/runtimes`,
 			sourceFiles,
-			containerVersion: containerPackage.version
+			containerVersion: container.identity.version
 		};
 		await writeFile(join(stage, 'provenance.json'), json(provenance));
 		await writeFile(join(stage, 'distribution.json'), manifestBytes);
@@ -371,7 +375,9 @@ export async function preparePageContainer(configuration, options = {}) {
 				schemaVersion: 1,
 				hostHash,
 				profile: 'live',
-				containerVersion: containerPackage.version,
+				containerVersion: container.identity.version,
+				containerSource: container.identity.source,
+				containerProfile: container.identity.profile,
 				manifestSha256,
 				baseURL: base.href
 			})
@@ -382,7 +388,13 @@ export async function preparePageContainer(configuration, options = {}) {
 		await mkdir(dirname(releasePath), { recursive: true });
 		await writeFile(
 			releasePath,
-			websiteReleaseModule({ distribution, config, hostHash, baseURL: base.href })
+			websiteReleaseModule({
+				distribution,
+				config,
+				hostHash,
+				container: container.identity,
+				baseURL: base.href
+			})
 		);
 	} finally {
 		await rm(stage, { recursive: true, force: true });
@@ -391,7 +403,9 @@ export async function preparePageContainer(configuration, options = {}) {
 		output,
 		hostHash,
 		manifestSha256,
-		containerVersion: containerPackage.version,
+		containerVersion: container.identity.version,
+		containerSource: container.identity.source,
+		containerProfile: container.identity.profile,
 		assetBytes: distribution.packages
 			.flatMap((pkg) => pkg.assets)
 			.reduce((total, asset) => total + asset.delivery.bytes, 0)

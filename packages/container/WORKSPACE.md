@@ -67,7 +67,9 @@ exclusive writer lease and atomically publishing the replacement. A running live
 process, snapshot writer or open host descriptor returns `EBUSY`. Existing editor
 buffers retain their unsaved content and detect the replacement on publication.
 Restoration allocates new inode identities and retains the target workspace mount
-root's identity/metadata; file and nested directory timestamps/modes are restored.
+root's identity/metadata; file, symlink and nested directory timestamps/modes are
+restored. Access, modification and change times use integer milliseconds. Older
+archives without access time initialize it from modification time.
 The result reports the source and new generation. It does **not** call `flush()`;
 the host must show this replacement as unsaved until explicit durable publication.
 

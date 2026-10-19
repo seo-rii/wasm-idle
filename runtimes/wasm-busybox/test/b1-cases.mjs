@@ -1,3 +1,4 @@
+import { BUSYBOX_COMMAND_STAGE } from '../commands.mjs';
 // Shared data fixtures: the native producer and real WASI/container executions
 // must independently produce these bytes and filesystem trees.
 const hex = (data) => Buffer.from(data).toString('hex');
@@ -91,7 +92,7 @@ add('cp-same-file', 'cp', ['source', 'source'], {
   tree: { source: file(binary) }, code: 1, error: "cp: 'source' and 'source' are the same file\n",
 });
 add('cp-missing', 'cp', ['missing', 'dest'], { code: 1, error: "cp: can't stat 'missing': No such file or directory\n" });
-for (const option of ['-p', '-r', '-R', '-a', '-l', '-s']) {
+for (const option of ['-p', '-a', '-l', '-s', ...(BUSYBOX_COMMAND_STAGE < 2 ? ['-r', '-R'] : [])]) {
   add(`cp-${option.slice(1)}-rejected`, 'cp', [option, 'source', 'dest'], {
     tree: { source: file(binary), dest: file('preserve existing destination') },
     code: 1, wasiOnly: true, stderrMode: 'nonempty-profile-diagnostic',

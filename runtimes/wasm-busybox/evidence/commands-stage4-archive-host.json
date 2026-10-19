@@ -1,0 +1,100 @@
+{
+  "complete": true,
+  "passed": true,
+  "artifactPath": "/mnt/work/seorii-wasm-idle-commands-20261018/stage4-build-01/busybox.wasm",
+  "sourceRoot": "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018",
+  "sourceIdentities": {
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/scripts/container-archive-qualification/test-archive-host.mjs": "d8a11b378799f18ae3c3009afc31c1dffa1aa5c1f87d45d87e8591ae1252f966",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/scripts/container-archive-qualification/fixtures.py": "1fee19ebff070146304490b025ec395460ad41f243c5cc9fdc01886d480b3d42",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/adapters/wasi/host.ts": "c1dd403fd046487d3f831111d758acb224ee5ff46b7d743642bbc0936ace0253",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/fs/index.ts": "d684f6364803d5b1dadd16f545282075417505f651f2dd19addaf0d2c3a66686",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/fs/errors.ts": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/fs/memory.ts": "40e07874058b6f771fab232a5c5c59bc7675983b65c478c0a97aa675b5d23d2f",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/adapters/wasi/stdio.ts": "c1df62c017fe8f5543354c66652a4051376541654babae367412bd0f8f984690",
+    "/home/seorii/dev/hancomac/wasm-idle-container-commands-stage4-20261018/packages/container/src/fs/watch.ts": "df7d0c1e3bc72b87d1e19fed986afcf36e3f63034e8764bc731269a7479b58cc"
+  },
+  "hostBundleSha256": "b87e615908d3fb66275d4265de6c858b231dbe6da3f7e1d77d21ff4206d6c86c",
+  "scope": "Actual stage 3 batch WASI host and MemoryFileSystem with stored mode imports and default tar timestamp restoration; no browser/live qualification",
+  "artifactSha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9",
+  "cases": [
+    {
+      "id": "tar-content-existing-host",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "id": "tar-create-with-real-metadata",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "id": "tar-list-host-created",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "id": "unzip-content-existing-host",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "id": "unzip-existing-file-conflict",
+      "code": 1,
+      "stderr": "unzip: tree/text.txt exists; WASI unzip requires a fresh destination\n",
+      "passed": true
+    },
+    {
+      "id": "gunzip-content-existing-host",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "id": "tar-readonly",
+      "code": 1,
+      "stderr": "tar: can't make dir tree: Read-only file system\ntar: cannot restore timestamp for tree: No such file or directory\n",
+      "passed": true
+    },
+    {
+      "id": "unzip-readonly",
+      "code": 1,
+      "stderr": "unzip: can't create directory 'tree/': Read-only file system\n",
+      "passed": true
+    },
+    {
+      "id": "gzip-readonly",
+      "code": 1,
+      "stderr": "gzip: can't open '/opt/codec-readonly/payload.bin.gz': Read-only file system\n",
+      "passed": true
+    },
+    {
+      "id": "gunzip-readonly",
+      "code": 1,
+      "stderr": "gunzip: can't open '/opt/codec-readonly/packed': Read-only file system\n",
+      "passed": true
+    },
+    {
+      "id": "tar-quota",
+      "code": 1,
+      "stderr": "tar: write error: No space left on device\n",
+      "passed": true
+    },
+    {
+      "id": "unzip-quota",
+      "code": 1,
+      "stderr": "unzip: write: No space left on device\nunzip: inflate error\n",
+      "passed": true
+    },
+    {
+      "id": "gunzip-quota",
+      "code": 1,
+      "stderr": "gunzip: write: No space left on device\n",
+      "passed": true
+    },
+    {
+      "id": "gzip-quota",
+      "code": 1,
+      "stderr": "gzip: write error: No space left on device\n",
+      "passed": true
+    }
+  ]
+}

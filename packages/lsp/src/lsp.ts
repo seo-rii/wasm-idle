@@ -153,7 +153,7 @@ export function uriToPath(uri: string) {
 
 export function pathToUri(path: string) {
 	const normalized = path.startsWith('/') ? path : `/${path}`;
-	return `file://${normalized}`;
+	return `file://${normalized.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 export function fullDocumentRange(text: string): LspRange {

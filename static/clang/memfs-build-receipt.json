@@ -1,0 +1,314 @@
+{
+  "format": "wasm-llvm-memfs-build-v1",
+  "maxNodes": 8192,
+  "abi": {
+    "imports": [
+      {
+        "module": "env",
+        "name": "memfs_log",
+        "kind": "function"
+      },
+      {
+        "module": "env",
+        "name": "copy_out",
+        "kind": "function"
+      },
+      {
+        "module": "env",
+        "name": "copy_in",
+        "kind": "function"
+      },
+      {
+        "module": "env",
+        "name": "host_read",
+        "kind": "function"
+      },
+      {
+        "module": "env",
+        "name": "host_write",
+        "kind": "function"
+      }
+    ],
+    "exports": [
+      {
+        "name": "memory",
+        "kind": "memory"
+      },
+      {
+        "name": "init",
+        "kind": "function"
+      },
+      {
+        "name": "fd_allocate",
+        "kind": "function"
+      },
+      {
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "name": "fd_fdstat_set_flags",
+        "kind": "function"
+      },
+      {
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "name": "fd_filestat_set_size",
+        "kind": "function"
+      },
+      {
+        "name": "fd_pread",
+        "kind": "function"
+      },
+      {
+        "name": "fd_prestat_dir_name",
+        "kind": "function"
+      },
+      {
+        "name": "fd_prestat_get",
+        "kind": "function"
+      },
+      {
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "name": "path_create_directory",
+        "kind": "function"
+      },
+      {
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "name": "path_readlink",
+        "kind": "function"
+      },
+      {
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "name": "path_symlink",
+        "kind": "function"
+      },
+      {
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "name": "GetPathBuf",
+        "kind": "function"
+      },
+      {
+        "name": "GetPathBufLen",
+        "kind": "function"
+      },
+      {
+        "name": "FindNode",
+        "kind": "function"
+      },
+      {
+        "name": "AddDirectoryNode",
+        "kind": "function"
+      },
+      {
+        "name": "AddFileNode",
+        "kind": "function"
+      },
+      {
+        "name": "GetFileNodeAddress",
+        "kind": "function"
+      },
+      {
+        "name": "GetFileNodeSize",
+        "kind": "function"
+      }
+    ],
+    "functionArity": {
+      "init": 0,
+      "fd_allocate": 3,
+      "fd_close": 1,
+      "fd_fdstat_get": 2,
+      "fd_fdstat_set_flags": 2,
+      "fd_filestat_get": 2,
+      "fd_filestat_set_size": 2,
+      "fd_pread": 5,
+      "fd_prestat_dir_name": 3,
+      "fd_prestat_get": 2,
+      "fd_read": 4,
+      "fd_readdir": 5,
+      "fd_seek": 4,
+      "fd_write": 4,
+      "path_create_directory": 3,
+      "path_filestat_get": 5,
+      "path_open": 9,
+      "path_readlink": 6,
+      "path_remove_directory": 3,
+      "path_rename": 6,
+      "path_symlink": 5,
+      "path_unlink_file": 3,
+      "GetPathBuf": 0,
+      "GetPathBufLen": 0,
+      "FindNode": 1,
+      "AddDirectoryNode": 1,
+      "AddFileNode": 2,
+      "GetFileNodeAddress": 1,
+      "GetFileNodeSize": 1
+    },
+    "maxNodes": 8192,
+    "usableNodes": 8188,
+    "initialMemoryBytes": 1179648
+  },
+  "source": {
+    "repository": "https://github.com/binji/llvm-project",
+    "commit": "5dc09c94393510bc8d042a9f07382b53e845c0f2",
+    "files": {
+      "memfs.c": {
+        "url": "https://raw.githubusercontent.com/binji/llvm-project/5dc09c94393510bc8d042a9f07382b53e845c0f2/binji/memfs.c",
+        "bytes": 35435,
+        "sha256": "10e73c8a1cad2ed8da0eb9095253b1477b06a218ab90cab4337988816468ba8b"
+      },
+      "stb_sprintf.h": {
+        "url": "https://raw.githubusercontent.com/binji/llvm-project/5dc09c94393510bc8d042a9f07382b53e845c0f2/binji/stb_sprintf.h",
+        "bytes": 56600,
+        "sha256": "2f985eb41aae52d1853fe4f90693bb899305d734e04ecad9346356037873d3f7"
+      },
+      "Makefile": {
+        "url": "https://raw.githubusercontent.com/binji/llvm-project/5dc09c94393510bc8d042a9f07382b53e845c0f2/binji/Makefile",
+        "bytes": 533,
+        "sha256": "c7cc94a866553f6cfc1a0b0d69a35dbe3617348336ccf28216ea981bc7e0e7da"
+      },
+      "imports.txt": {
+        "url": "https://raw.githubusercontent.com/binji/llvm-project/5dc09c94393510bc8d042a9f07382b53e845c0f2/binji/imports.txt",
+        "bytes": 808,
+        "sha256": "9df02710e96167ac0be79edf86548d16f81ac75f5f5a19a615bb7a4dedaec9d9"
+      },
+      "LICENSE.llvm.txt": {
+        "url": "https://raw.githubusercontent.com/binji/llvm-project/5dc09c94393510bc8d042a9f07382b53e845c0f2/llvm/LICENSE.TXT",
+        "bytes": 3192,
+        "sha256": "24b67da19b1422a819395738cb83ea34eee3fdce52870b0d1758524ba1615069"
+      }
+    }
+  },
+  "license": {
+    "llvmLicenseAtPinnedRevision": "NCSA",
+    "stbSprintfSelectedLicense": "MIT",
+    "notice": "memfs.c has no per-file license header. Preserve the LLVM release license at this revision and stb_sprintf's MIT notice; do not infer Apache licensing from newer LLVM revisions. Modified for MAX_NODES=8192 and modern WASI API names, retaining abort's trap behavior."
+  },
+  "patch": {
+    "description": "MAX_NODES; WASI header, errno, flag and field renames; preserve abort trap",
+    "originalSha256": "10e73c8a1cad2ed8da0eb9095253b1477b06a218ab90cab4337988816468ba8b",
+    "patchedSha256": "6e1cdbb4cdc223c5eadb71cd3ceccbe6d4256d043febae97ff61d9e0e1ef6f95",
+    "builderSha256": "a7e2bc27013c054698a78e222c5bd623c03d688475491a6784771cca86a5022b"
+  },
+  "toolchain": {
+    "wasiSdkVersion": "33",
+    "sdkVersion": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+    "clangVersion": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+  },
+  "commands": [
+    [
+      "${WASI_SDK_PATH}/bin/clang",
+      "--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-c",
+      "-o",
+      "memfs.o",
+      "memfs.c"
+    ],
+    [
+      "${WASI_SDK_PATH}/bin/clang",
+      "--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot",
+      "-DSTB_SPRINTF_IMPLEMENTATION",
+      "-x",
+      "c",
+      "-O2",
+      "-c",
+      "-o",
+      "stb_sprintf.o",
+      "stb_sprintf.h"
+    ],
+    [
+      "${WASI_SDK_PATH}/bin/wasm-ld",
+      "-L${WASI_SDK_PATH}/share/wasi-sysroot/lib/wasm32-wasi",
+      "--no-entry",
+      "--strip-all",
+      "--export-memory",
+      "--export=init",
+      "--export=fd_allocate",
+      "--export=fd_close",
+      "--export=fd_fdstat_get",
+      "--export=fd_fdstat_set_flags",
+      "--export=fd_filestat_get",
+      "--export=fd_filestat_set_size",
+      "--export=fd_pread",
+      "--export=fd_prestat_dir_name",
+      "--export=fd_prestat_get",
+      "--export=fd_read",
+      "--export=fd_readdir",
+      "--export=fd_seek",
+      "--export=fd_write",
+      "--export=path_create_directory",
+      "--export=path_filestat_get",
+      "--export=path_open",
+      "--export=path_readlink",
+      "--export=path_remove_directory",
+      "--export=path_rename",
+      "--export=path_symlink",
+      "--export=path_unlink_file",
+      "--export=GetPathBuf",
+      "--export=GetPathBufLen",
+      "--export=FindNode",
+      "--export=AddDirectoryNode",
+      "--export=AddFileNode",
+      "--export=GetFileNodeAddress",
+      "--export=GetFileNodeSize",
+      "--allow-undefined",
+      "-o",
+      "memfs.wasm",
+      "memfs.o",
+      "stb_sprintf.o",
+      "-lc"
+    ]
+  ],
+  "outputs": {
+    "memfs.wasm": {
+      "bytes": 38071,
+      "sha256": "5b741e03dd3502bcfd80e4e5055232b5d633604e1461752efed0189f93407dc3"
+    },
+    "memfs.wasm.gz": {
+      "bytes": 16111,
+      "sha256": "a3e43451bc15ae69a7f113009e2ee82ab4db711625c1782cd45d0d3c4d38175a"
+    }
+  }
+}

@@ -10,7 +10,16 @@ const source = await readFile(
 );
 
 function harness(initialize: (module: any, context: any) => void = () => {}) {
-	const context: any = { TextEncoder, TextDecoder, Blob, URL, setTimeout, clearTimeout, console };
+	const context: any = {
+		TextEncoder,
+		TextDecoder,
+		Blob,
+		URL,
+		setTimeout,
+		clearTimeout,
+		console,
+		WebAssembly
+	};
 	const listeners = new Map<string, (event: unknown) => void>();
 	context.addEventListener = (name: string, listener: (event: unknown) => void) =>
 		listeners.set(name, listener);
@@ -77,6 +86,38 @@ describe('Nim initialization and translation contract', () => {
 			FS: api.context.FS,
 			callMain: api.context.callMain
 		});
+	});
+
+	it('instantiates a supplied compiler module without compiling its bytes again', async () => {
+		const compiler = await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+		let instantiated: WebAssembly.Instance | undefined;
+		const api = harness((module, context) => {
+			module.instantiateWasm(
+				{},
+				(instance: WebAssembly.Instance, supplied: WebAssembly.Module) => {
+					instantiated = instance;
+					expect(supplied).toBe(compiler);
+					context.FS = {};
+					context.callMain = () => 0;
+					module.onRuntimeInitialized();
+				}
+			);
+		});
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		try {
+			await api.loadNimCompiler(api.assets, [], [], 1000, compiler, new Uint8Array([0]));
+			expect(instantiated).toBeInstanceOf(WebAssembly.Instance);
+			expect(compile).not.toHaveBeenCalled();
+		} finally {
+			compile.mockRestore();
+		}
+	});
+
+	it('rejects failure to instantiate a shared compiler module instead of hanging', async () => {
+		const api = harness((module) => module.instantiateWasm({}, () => {}));
+		await expect(
+			api.loadNimCompiler(api.assets, [], [], 1000, {}, new Uint8Array([0]))
+		).rejects.toThrow();
 	});
 
 	it.each([1, -1, undefined])(

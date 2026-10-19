@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright-core';
 import { startBrowserPreviewServer } from '../../../scripts/browser-preview-server.mjs';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import { prepareContainerRuntimePage } from '../../../scripts/container-runtime-browser-observer.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
@@ -237,14 +238,9 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 			const page = await context.newPage();
 			const pageErrors: string[] = [];
 			page.setDefaultTimeout(240_000);
-			page.on('pageerror', (error) => pageErrors.push(error.message));
 			try {
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() =>
-						crossOriginIsolated &&
-						Boolean((window as any).__wasmIdleDebug?.getEditorValue)
-				);
+				await prepareContainerRuntimePage(page, browserUrl);
+				page.on('pageerror', (error) => pageErrors.push(error.message));
 				await page.locator('#language-select').selectOption('LEAN4');
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug.getEditorValue().includes('What is your name?')

@@ -1,348 +1,149 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import os from 'node:os';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { gunzipSync, gzip } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const runtimeRoot = path.resolve(scriptDir, '..');
-const wasmIdleRoot = path.resolve(runtimeRoot, '..', '..');
-const workspaceRoot = path.resolve(wasmIdleRoot, '..');
-const defaultSourceDir = path.resolve(workspaceRoot, 'ldc-wasm', 'dist', 'wasm-idle');
-const defaultTargetDir = path.resolve(runtimeRoot, 'dist', 'runtime');
+const THIS_FILE = fileURLToPath(import.meta.url);
+const RUNTIME_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
+const LOCK_PATH = path.join(RUNTIME_ROOT, 'producer-lock.json');
+export const D_PRODUCER_ARTIFACTS = Object.freeze([
+	'bin/ldc2.wasm.gz',
+	'bin/lld.js',
+	'bin/lld.wasm.gz',
+	'bin/lld.data.gz',
+	'toolchain/toolchain.tar.gz',
+	'runtime-manifest.v1.json',
+	'runtime-build.json'
+]);
 
-const gzipAsync = promisify(gzip);
+/** @typedef {{ schemaVersion: number, producerId: string, manifestSha256: string, sourceLockSha256: string, receiptSha256: string }} DProducerLock */
 
-const TOOLCHAIN_ASSET = 'toolchain/toolchain.tar.gz';
+/** @param {Uint8Array} bytes */
+function sha256(bytes) {
+	return createHash('sha256').update(bytes).digest('hex');
+}
 
-const USAGE = `Usage: node runtimes/wasm-d/scripts/prepare-runtime.mjs [--source DIR] [--out DIR]
-
-Creates browser-ready wasm-idle D runtime assets from finalized ldc-wasm assets.
-
-Defaults:
-  --source ${path.relative(wasmIdleRoot, defaultSourceDir)}
-  --out    ${path.relative(wasmIdleRoot, defaultTargetDir)}
-`;
-
-function parseArgs(argv) {
-	const options = {
-		sourceDir: process.env.LDC_WASM_ASSET_DIR || defaultSourceDir,
-		targetDir: process.env.WASM_IDLE_D_RUNTIME_DIR || defaultTargetDir
-	};
-	function readOptionValue(index, optionName) {
-		const value = argv[index + 1];
-		if (!value || value.startsWith('--')) {
-			throw new Error(`${optionName} requires a value`);
-		}
-		return value;
+/**
+ * Verify the immutable producer receipt before trusting any receipt-selected bytes.
+ * @param {string} sourceDir
+ * @param {DProducerLock} [lock]
+ */
+export async function verifyDProducerArtifacts(sourceDir, lock) {
+	lock ??= JSON.parse(await readFile(LOCK_PATH, 'utf8'));
+	if (
+		!lock ||
+		lock.schemaVersion !== 1 ||
+		lock.producerId !== 'wasm-llvm/d-browser' ||
+		!/^[a-f0-9]{64}$/.test(lock.receiptSha256)
+	) {
+		throw new Error('Invalid wasm-d producer lock');
 	}
+	const receiptBytes = await readFile(path.join(sourceDir, 'producer-receipt.json'));
+	if (sha256(receiptBytes) !== lock.receiptSha256) {
+		throw new Error('wasm-d producer receipt integrity mismatch');
+	}
+	const receipt = JSON.parse(receiptBytes.toString('utf8'));
+	if (
+		receipt.schemaVersion !== 1 ||
+		receipt.format !== 'wasm-llvm-d-browser-artifacts-v1' ||
+		receipt.producerId !== lock.producerId ||
+		receipt.manifestSha256 !== lock.manifestSha256 ||
+		receipt.sourceLockSha256 !== lock.sourceLockSha256
+	) {
+		throw new Error('wasm-d producer receipt does not match the pinned producer contract');
+	}
+	if (
+		!Array.isArray(receipt.artifacts) ||
+		receipt.artifacts.length !== D_PRODUCER_ARTIFACTS.length ||
+		new Set(receipt.artifacts.map((entry) => entry.path)).size !==
+			D_PRODUCER_ARTIFACTS.length ||
+		receipt.artifacts.some((entry) => !D_PRODUCER_ARTIFACTS.includes(entry.path))
+	) {
+		throw new Error(
+			'wasm-d producer receipt must contain exactly the required runtime artifacts'
+		);
+	}
+	/** @type {Map<string, Buffer>} */
+	const files = new Map([['producer-receipt.json', receiptBytes]]);
+	for (const entry of receipt.artifacts) {
+		if (
+			!Number.isSafeInteger(entry.bytes) ||
+			entry.bytes <= 0 ||
+			!/^[a-f0-9]{64}$/.test(entry.sha256)
+		) {
+			throw new Error(`Invalid wasm-d producer artifact receipt: ${entry.path}`);
+		}
+		const bytes = await readFile(path.join(sourceDir, entry.path));
+		if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256) {
+			throw new Error(`wasm-d producer artifact integrity mismatch: ${entry.path}`);
+		}
+		if (entry.path.endsWith('.gz')) {
+			if (
+				!Number.isSafeInteger(entry.uncompressedBytes) ||
+				entry.uncompressedBytes <= 0 ||
+				!/^[a-f0-9]{64}$/.test(entry.uncompressedSha256)
+			) {
+				throw new Error(`Missing wasm-d producer logical receipt: ${entry.path}`);
+			}
+			const logical = gunzipSync(bytes, { maxOutputLength: entry.uncompressedBytes });
+			if (
+				logical.length !== entry.uncompressedBytes ||
+				sha256(logical) !== entry.uncompressedSha256
+			) {
+				throw new Error(`wasm-d producer logical integrity mismatch: ${entry.path}`);
+			}
+		}
+		files.set(entry.path, bytes);
+	}
+	return { receipt, files };
+}
+
+/** @param {{ sourceDir: string, targetDir: string, lock?: DProducerLock }} options */
+export async function prepareDProducerRuntime({ sourceDir, targetDir, lock }) {
+	if (!sourceDir) {
+		throw new Error(
+			'Set WASM_LLVM_D_ARTIFACT_DIR or --source to the pinned wasm-llvm d-browser artifact directory'
+		);
+	}
+	if (path.resolve(sourceDir) === path.resolve(targetDir)) {
+		throw new Error('wasm-d producer source and output directories must differ');
+	}
+	const { files } = await verifyDProducerArtifacts(sourceDir, lock);
+	await mkdir(path.dirname(targetDir), { recursive: true });
+	const stagedDir = await mkdtemp(path.join(path.dirname(targetDir), '.wasm-d-import-'));
+	try {
+		for (const [relativePath, bytes] of files) {
+			const destination = path.join(stagedDir, relativePath);
+			await mkdir(path.dirname(destination), { recursive: true });
+			await writeFile(destination, bytes);
+		}
+		await rm(targetDir, { recursive: true, force: true });
+		await rename(stagedDir, targetDir);
+	} finally {
+		await rm(stagedDir, { recursive: true, force: true });
+	}
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
+	let sourceDir = process.env.WASM_LLVM_D_ARTIFACT_DIR;
+	let targetDir =
+		process.env.WASM_IDLE_D_RUNTIME_DIR || path.join(RUNTIME_ROOT, 'dist', 'runtime');
+	const argv = process.argv.slice(2);
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		if (arg === '--help' || arg === '-h') {
-			console.log(USAGE.trimEnd());
+			console.log(
+				'Usage: node prepare-runtime.mjs --source WASM_LLVM_D_ARTIFACT_DIR [--out DIR]'
+			);
 			process.exit(0);
 		}
-		if (arg === '--source') {
-			options.sourceDir = readOptionValue(index, arg);
-			index += 1;
-			continue;
-		}
-		if (arg === '--out') {
-			options.targetDir = readOptionValue(index, arg);
-			index += 1;
-			continue;
-		}
-		throw new Error(`unexpected argument: ${arg}`);
+		const value = argv[++index];
+		if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
+		if (arg === '--source') sourceDir = value;
+		else if (arg === '--out') targetDir = value;
+		else throw new Error(`unexpected argument: ${arg}`);
 	}
-	return {
-		sourceDir: path.resolve(options.sourceDir),
-		targetDir: path.resolve(options.targetDir)
-	};
+	await prepareDProducerRuntime({ sourceDir, targetDir: path.resolve(targetDir) });
+	console.log(`Imported pinned wasm-llvm D browser artifacts into ${targetDir}`);
 }
-
-function assertAssetPath(assetPath) {
-	if (typeof assetPath !== 'string' || assetPath.length === 0) {
-		throw new Error(`invalid ldc-wasm asset path: ${String(assetPath)}`);
-	}
-	if (path.isAbsolute(assetPath)) {
-		throw new Error(`ldc-wasm asset paths must be relative: ${assetPath}`);
-	}
-	const normalized = path.posix.normalize(assetPath);
-	if (normalized === '..' || normalized.startsWith('../') || normalized !== assetPath) {
-		throw new Error(`ldc-wasm asset path must stay inside the asset dir: ${assetPath}`);
-	}
-	return normalized;
-}
-
-function collectAssetPaths(value, found = new Set()) {
-	if (!value || typeof value !== 'object') return found;
-	if (Array.isArray(value)) {
-		for (const item of value) collectAssetPaths(item, found);
-		return found;
-	}
-	for (const [key, child] of Object.entries(value)) {
-		if (key === 'asset') found.add(assertAssetPath(child));
-		collectAssetPaths(child, found);
-	}
-	return found;
-}
-
-async function sha256File(filePath) {
-	const hash = crypto.createHash('sha256');
-	hash.update(await fs.readFile(filePath));
-	return hash.digest('hex');
-}
-
-async function pairedAssetReceipt(deliveryPath, compression) {
-	const deliveryBytes = await fs.readFile(deliveryPath);
-	const runtimeBytes = compression === 'gzip' ? gunzipSync(deliveryBytes) : deliveryBytes;
-	if (deliveryBytes.byteLength <= 0 || runtimeBytes.byteLength <= 0) {
-		throw new Error(`wasm-d runtime asset must be non-empty: ${deliveryPath}`);
-	}
-	return {
-		bytes: deliveryBytes.byteLength,
-		sha256: crypto.createHash('sha256').update(deliveryBytes).digest('hex'),
-		uncompressedBytes: runtimeBytes.byteLength,
-		uncompressedSha256: crypto.createHash('sha256').update(runtimeBytes).digest('hex')
-	};
-}
-
-async function run(command, args, options = {}) {
-	return await new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
-			stdio: ['ignore', 'pipe', 'pipe'],
-			...options
-		});
-		const stdout = [];
-		const stderr = [];
-		child.stdout?.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
-		child.stderr?.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
-		child.on('error', reject);
-		child.on('close', (code, signal) => {
-			const output = Buffer.concat(stdout).toString('utf8');
-			const error = Buffer.concat(stderr).toString('utf8');
-			if (code === 0) {
-				resolve({ stdout: output, stderr: error });
-				return;
-			}
-			reject(
-				new Error(
-					`${command} ${args.join(' ')} failed${signal ? ` with signal ${signal}` : ` with code ${code}`}${error ? `\n${error}` : ''}`
-				)
-			);
-		});
-	});
-}
-
-async function extractTarZst(archivePath, targetDir) {
-	await fs.mkdir(targetDir, { recursive: true });
-	await run('tar', ['--zstd', '-xf', archivePath, '-C', targetDir]);
-}
-
-async function createUncompressedTar(sourceDir, archivePath) {
-	await fs.mkdir(path.dirname(archivePath), { recursive: true });
-	await run('tar', [
-		'--sort=name',
-		'--mtime=@0',
-		'--owner=0',
-		'--group=0',
-		'--numeric-owner',
-		'-cf',
-		archivePath,
-		'-C',
-		sourceDir,
-		'.'
-	]);
-}
-
-async function gzipFile(sourcePath, targetPath) {
-	await fs.mkdir(path.dirname(targetPath), { recursive: true });
-	await fs.writeFile(targetPath, await gzipAsync(await fs.readFile(sourcePath), { level: 9 }));
-}
-
-const options = parseArgs(process.argv.slice(2));
-const sourceDateEpoch = Number(process.env.SOURCE_DATE_EPOCH || 0);
-if (!Number.isSafeInteger(sourceDateEpoch) || sourceDateEpoch < 0) {
-	throw new Error('SOURCE_DATE_EPOCH must be a non-negative safe integer');
-}
-const sourceManifestPath = path.join(options.sourceDir, 'runtime-manifest.v1.json');
-const sourceManifest = JSON.parse(await fs.readFile(sourceManifestPath, 'utf8'));
-if (sourceManifest.manifestVersion !== 1) {
-	throw new Error(`unsupported ldc-wasm manifestVersion: ${sourceManifest.manifestVersion}`);
-}
-if (sourceManifest.name !== 'ldc-wasm') {
-	throw new Error(`unexpected ldc-wasm manifest name: ${sourceManifest.name}`);
-}
-
-const sourceAssets = [...collectAssetPaths(sourceManifest)].sort();
-if (sourceAssets.length === 0) {
-	throw new Error(`ldc-wasm manifest does not reference any assets: ${sourceManifestPath}`);
-}
-
-const requiredAssets = {
-	ldc2: assertAssetPath(sourceManifest.compiler?.ldc2?.asset),
-	config: assertAssetPath(sourceManifest.compiler?.config?.asset),
-	imports: assertAssetPath(sourceManifest.compiler?.imports?.asset),
-	runtimeLibraries: assertAssetPath(sourceManifest.compiler?.runtimeLibraries?.asset),
-	lldJs: assertAssetPath(sourceManifest.compiler?.linker?.js?.asset),
-	lldWasm: assertAssetPath(sourceManifest.compiler?.linker?.wasm?.asset),
-	lldData: assertAssetPath(sourceManifest.compiler?.linker?.data?.asset)
-};
-
-await fs.rm(options.targetDir, { recursive: true, force: true });
-await fs.mkdir(options.targetDir, { recursive: true });
-
-for (const asset of Object.values(requiredAssets)) {
-	const stat = await fs.stat(path.join(options.sourceDir, asset)).catch(() => null);
-	if (!stat?.isFile()) throw new Error(`ldc-wasm manifest asset is not a file: ${asset}`);
-}
-
-const targetLdc2Asset = 'bin/ldc2.wasm.gz';
-await fs.mkdir(path.join(options.targetDir, 'bin'), { recursive: true });
-await gzipFile(
-	path.join(options.sourceDir, requiredAssets.ldc2),
-	path.join(options.targetDir, targetLdc2Asset)
-);
-const linkerAssets = {
-	js: 'bin/lld.js',
-	wasm: 'bin/lld.wasm.gz',
-	data: 'bin/lld.data.gz'
-};
-await fs.copyFile(
-	path.join(options.sourceDir, requiredAssets.lldJs),
-	path.join(options.targetDir, linkerAssets.js)
-);
-await gzipFile(
-	path.join(options.sourceDir, requiredAssets.lldWasm),
-	path.join(options.targetDir, linkerAssets.wasm)
-);
-await gzipFile(
-	path.join(options.sourceDir, requiredAssets.lldData),
-	path.join(options.targetDir, linkerAssets.data)
-);
-
-const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-idle-d-runtime-'));
-let toolchainIntegrity;
-try {
-	const toolchainRoot = path.join(tempRoot, 'toolchain');
-	await fs.mkdir(path.join(toolchainRoot, 'etc'), { recursive: true });
-	await fs.mkdir(path.join(toolchainRoot, 'imports'), { recursive: true });
-	await extractTarZst(
-		path.join(options.sourceDir, requiredAssets.config),
-		path.join(toolchainRoot, 'etc')
-	);
-	await extractTarZst(
-		path.join(options.sourceDir, requiredAssets.imports),
-		path.join(toolchainRoot, 'imports')
-	);
-	await extractTarZst(
-		path.join(options.sourceDir, requiredAssets.runtimeLibraries),
-		toolchainRoot
-	);
-	const toolchainTarPath = path.join(tempRoot, 'toolchain.tar');
-	await createUncompressedTar(toolchainRoot, toolchainTarPath);
-	const toolchainDeliveryPath = path.join(options.targetDir, TOOLCHAIN_ASSET);
-	await gzipFile(toolchainTarPath, toolchainDeliveryPath);
-	toolchainIntegrity = await pairedAssetReceipt(toolchainDeliveryPath, 'gzip');
-} finally {
-	await fs.rm(tempRoot, { recursive: true, force: true });
-}
-
-if (!toolchainIntegrity) {
-	throw new Error('wasm-d toolchain integrity metadata was not produced');
-}
-
-const assetIntegrity = {
-	ldc2: await pairedAssetReceipt(path.join(options.targetDir, targetLdc2Asset), 'gzip'),
-	toolchain: toolchainIntegrity,
-	linkerJs: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.js)),
-	linkerWasm: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.wasm), 'gzip'),
-	linkerData: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.data), 'gzip')
-};
-
-const targetManifest = {
-	manifestVersion: 1,
-	name: 'wasm-d',
-	version: sourceManifest.version,
-	defaultTarget: 'wasm32-wasi',
-	compiler: {
-		ldc2: {
-			asset: targetLdc2Asset,
-			argv0: sourceManifest.compiler.ldc2.argv0 || 'ldc2',
-			compression: 'gzip',
-			integrity: assetIntegrity.ldc2
-		},
-		toolchain: {
-			asset: TOOLCHAIN_ASSET,
-			compression: 'gzip',
-			integrity: assetIntegrity.toolchain
-		},
-		linker: {
-			kind: 'emscripten-lld',
-			argv0: sourceManifest.compiler.linker.argv0 || 'wasm-ld',
-			js: {
-				asset: linkerAssets.js,
-				integrity: assetIntegrity.linkerJs
-			},
-			wasm: {
-				asset: linkerAssets.wasm,
-				compression: 'gzip',
-				integrity: assetIntegrity.linkerWasm
-			},
-			data: {
-				asset: linkerAssets.data,
-				compression: 'gzip',
-				integrity: assetIntegrity.linkerData
-			}
-		}
-	},
-	targets: {
-		'wasm32-wasi': {
-			artifactFormat: 'wasi-core-wasm',
-			execution: {
-				kind: 'wasi-preview1'
-			}
-		}
-	}
-};
-
-const targetManifestPath = path.join(options.targetDir, 'runtime-manifest.v1.json');
-await fs.writeFile(targetManifestPath, `${JSON.stringify(targetManifest, null, 2)}\n`, 'utf8');
-
-const targetAssets = [
-	[targetLdc2Asset, assetIntegrity.ldc2],
-	[linkerAssets.js, assetIntegrity.linkerJs],
-	[linkerAssets.wasm, assetIntegrity.linkerWasm],
-	[linkerAssets.data, assetIntegrity.linkerData],
-	[TOOLCHAIN_ASSET, assetIntegrity.toolchain]
-];
-const preparedAssets = [];
-for (const [asset, integrity] of targetAssets) {
-	preparedAssets.push({
-		asset,
-		size: integrity.bytes,
-		sha256: integrity.sha256,
-		uncompressedSize: integrity.uncompressedBytes,
-		uncompressedSha256: integrity.uncompressedSha256
-	});
-}
-
-await fs.writeFile(
-	path.join(options.targetDir, 'runtime-build.json'),
-	`${JSON.stringify(
-		{
-			generatedAt: new Date(sourceDateEpoch * 1000).toISOString(),
-			source: path.relative(wasmIdleRoot, options.sourceDir),
-			manifestSha256: await sha256File(targetManifestPath),
-			sourceAssets,
-			assets: preparedAssets
-		},
-		null,
-		2
-	)}\n`
-);
-
-console.log(`Prepared wasm-idle D runtime assets in ${options.targetDir}`);

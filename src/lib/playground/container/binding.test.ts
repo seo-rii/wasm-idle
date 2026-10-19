@@ -39,8 +39,8 @@ describe('existing playground container binding', () => {
 			'run',
 			'debugCommand'
 		]);
-		await binding.dispose();
-		await binding.dispose();
+		await binding.dispose?.();
+		await binding.dispose?.();
 		expect(client.dispose).toHaveBeenCalledTimes(1);
 	});
 	it('clones queued file bytes and sends previous published bytes as conflict precondition', async () => {

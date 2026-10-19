@@ -81,6 +81,34 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	}, 15000);
 
+	it.each(['query.sql', 'reports/query.sql'])(
+		'loads auxiliary main.sql and excludes the active %s from setup',
+		async (activePath) => {
+			await loadWorker();
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'SELECT n FROM numbers;',
+					activePath,
+					workspaceFiles: [
+						{
+							path: 'main.sql',
+							content:
+								'CREATE TABLE numbers(n INTEGER); INSERT INTO numbers VALUES(7);'
+						},
+						{ path: activePath, content: 'INSERT INTO numbers VALUES(99);' }
+					]
+				}
+			});
+
+			expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+				error: expect.anything()
+			});
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'n\n7\n' });
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		},
+		15000
+	);
+
 	it('reports ready after every workspace setup query and before the main query', async () => {
 		const exec = vi.fn(() => []);
 		const close = vi.fn();

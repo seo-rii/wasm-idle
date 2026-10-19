@@ -38,6 +38,29 @@ function postProgress(percent: number, stage: string) {
 	postMessage({ progress: { percent, stage } });
 }
 
+function normalizeLldbWorkspaceFiles(
+	files: readonly { path: string; content: string | Uint8Array }[]
+) {
+	// Both compiler phases and LLDB accept text; retain BOMs and original FS bytes.
+	const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+	return files.map((file) => {
+		let content = file.content;
+		if (typeof content !== 'string') {
+			const path = `/workspace/${normalizeDwarfWorkspacePath(file.path)}`;
+			if (!(content instanceof Uint8Array))
+				throw new TypeError(
+					`LLDB workspace file content must be a string or Uint8Array: ${path}`
+				);
+			try {
+				content = decoder.decode(content);
+			} catch (cause) {
+				throw new Error(`LLDB workspace file is not valid UTF-8: ${path}`, { cause });
+			}
+		}
+		return { ...file, content };
+	});
+}
+
 async function loadClang(
 	path: string,
 	log: boolean,
@@ -178,7 +201,10 @@ self.onmessage = async (event: { data: any }) => {
 				compileArgs,
 				programArgs,
 				activePath,
-				workspaceFiles,
+				workspaceFiles:
+					resolvedDebugMode === 'lldb'
+						? normalizeLldbWorkspaceFiles(workspaceFiles || [])
+						: workspaceFiles,
 				cppVersion,
 				cVersion,
 				debugMode: resolvedDebugMode,
@@ -214,12 +240,23 @@ self.onmessage = async (event: { data: any }) => {
 
 		try {
 			if (resolvedDebugMode === 'lldb') {
+				const inputPath =
+					normalizeDwarfWorkspacePath(
+						activePath || (language === 'C' ? 'main.c' : 'main.cc')
+					) || (language === 'C' ? 'main.c' : 'main.cc');
+				const sources = new Map<string, string>();
+				const compilerWorkspaceFiles = normalizeLldbWorkspaceFiles(workspaceFiles || []);
+				for (const file of compilerWorkspaceFiles) {
+					const sourcePath = normalizeDwarfWorkspacePath(file.path);
+					if (sourcePath) sources.set(`/workspace/${sourcePath}`, file.content);
+				}
+				sources.set(`/workspace/${inputPath}`, code);
 				const artifact = await clang.compileArtifact(code, {
 					language,
 					compileArgs,
 					programArgs,
 					activePath,
-					workspaceFiles,
+					workspaceFiles: compilerWorkspaceFiles,
 					cppVersion,
 					cVersion,
 					debugMode: 'lldb',
@@ -229,16 +266,6 @@ self.onmessage = async (event: { data: any }) => {
 				if (!artifact.debug) {
 					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
 				}
-				const inputPath =
-					normalizeDwarfWorkspacePath(
-						activePath || (language === 'C' ? 'main.c' : 'main.cc')
-					) || (language === 'C' ? 'main.c' : 'main.cc');
-				const sources = new Map<string, string>();
-				for (const file of workspaceFiles || []) {
-					const sourcePath = normalizeDwarfWorkspacePath(file.path);
-					if (sourcePath) sources.set(`/workspace/${sourcePath}`, file.content);
-				}
-				sources.set(`/workspace/${inputPath}`, code);
 				self.postMessage({
 					lldbArtifact: {
 						bytes: new Uint8Array(artifact.bytes),

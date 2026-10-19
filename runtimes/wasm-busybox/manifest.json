@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runtime": "wasm-busybox",
-  "status": "producer-b1-subset-candidate",
+  "status": "producer-reviewed-command-candidate",
   "profile": "wasm32-wasip1",
   "source": {
     "version": "1.37.0",
@@ -45,7 +45,7 @@
   },
   "config": {
     "path": "config/b1.config",
-    "sha256": "8b842510f2d758ee4cf416449db59963e990a37a5bb8d9a6fd9d4fdae9581c36",
+    "sha256": "a92ab9c2363f33d8e28b011d22a13468312e9d5797c5e804ae8a9431f2b3d7cc",
     "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
   },
   "patches": [
@@ -103,20 +103,89 @@
       "path": "patches/0011-b1-text-grep-profile.patch",
       "sha256": "6d1561c7c34a3996f201de3e522745fecc62773b0883246b360330dcbfe09313",
       "classification": "unsupported-binary-grep-explicit-rejection"
+    },
+    {
+      "path": "patches/0012-b2-command-profile.patch",
+      "sha256": "4e9b5da8e2cff7278e1ebc61611340011eb97e21c21f7cdfe54fb041b34c3aa6",
+      "classification": "noninteractive-directory-and-text-profile"
+    },
+    {
+      "path": "patches/0013-b3-development-commands.patch",
+      "sha256": "0d0e9dd8214fc2ae57b68ce3098b7301de8b0c4ec94a11a24915222b0e9d96da",
+      "classification": "development-text-tree-and-binary-profile"
+    },
+    {
+      "path": "patches/0014-virtual-metadata-profile.patch",
+      "sha256": "c3380e890d90d501035ace7d35272b0f3c1e514c2b25f98cdd3b0923b65d2292",
+      "classification": "real-virtual-mode-and-timestamp-metadata"
+    },
+    {
+      "path": "patches/0015-archive-content-profile.patch",
+      "sha256": "1aa4c7abf966c9ec27ac596898e4c1beba2685aaefa7e6498d3df2dc9c8c3932",
+      "classification": "real-linked-archive-codecs-and-content-profile"
+    },
+    {
+      "path": "patches/0016-buffered-output-errors.patch",
+      "sha256": "eebaf370861b5409f2bf863efccbb59542095bc026842e08c5ba2a01cc50f7c5",
+      "classification": "real-stdio-error-propagation"
+    },
+    {
+      "path": "patches/0017-tar-directory-errors.patch",
+      "sha256": "82b2aec9cc9ef2e0dd8f85368d0df1815deab920fcabea9cc6b0e09557222b03",
+      "classification": "archive-directory-error-propagation"
+    },
+    {
+      "path": "patches/0018-tar-directory-times.patch",
+      "sha256": "ddd7359396e6232c3bcce81d380209ad21b18b1ab26b2e2196d78fc95e72f3db",
+      "classification": "real-deferred-directory-timestamps"
+    },
+    {
+      "path": "patches/0019-zip-stored-crc.patch",
+      "sha256": "fba2691ae4085976d73f9bd375cb03d87f08e843e8bc46ccca05668bf69bacdc",
+      "classification": "real-stored-zip-crc-validation"
     }
   ],
   "requestedApplets": [
+    "base64",
+    "basename",
     "cat",
+    "cmp",
     "cp",
+    "cut",
+    "diff",
+    "dirname",
     "echo",
     "false",
+    "find",
     "grep",
+    "gunzip",
+    "gzip",
+    "head",
+    "hexdump",
+    "ln",
+    "ls",
     "mkdir",
     "mv",
+    "od",
     "printf",
     "pwd",
+    "readlink",
+    "realpath",
     "rm",
-    "true"
+    "rmdir",
+    "sed",
+    "sha256sum",
+    "sort",
+    "stat",
+    "tail",
+    "tar",
+    "tee",
+    "touch",
+    "tr",
+    "true",
+    "uniq",
+    "unzip",
+    "wc"
   ],
   "qualifiedWasiApplets": [],
   "license": {
@@ -136,11 +205,38 @@
     "action": "validate result then call actual libc chdir before upstream main"
   },
   "limitations": [
-    "Batch byte streams; no PTY, shell or live-pipe qualification",
     "Host owns creation modes; mkdir -m is rejected",
-    "cp regular files and symlinks only; -p/-a/-r/-R/-l/-s are rejected before destination mutation",
+    "cp recursive directory/regular/symlink content uses host creation modes; -p/-a/-l/-s are rejected before destination mutation",
     "mv uses same-mount rename only; cross-mount fallback is rejected without copy or unlink",
-    "No ownership, timestamps, permission mutation, hardlink preservation or device/FIFO/socket copying",
-    "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated"
+    "grep -a/-I and NUL text input are rejected; no GNU regex extensions are emulated",
+    "Noninteractive applets; tail -f/-F and tee -i are explicitly rejected",
+    "sed -i and find -exec/-ok/-delete are unsupported; ln requires symbolic -s mode",
+    "No ownership or permission mutation, hardlink preservation or device/FIFO/socket copying",
+    "touch and stat require the workspace Container virtual-metadata-v1 host; timestamps use integer milliseconds with noatime reads",
+    "Numeric uid/gid 0 and nlink 1 describe the virtual filesystem; account names, allocated blocks and physical-device fields report UNKNOWN",
+    "ls -l/-n show stored mode, type, size and timestamps; ls -s remains explicitly unsupported",
+    "Pinned libc rejects pre-epoch or overflow touch dates before mutation",
+    "tar supports regular files, directories and symbolic links; hard/special extraction and permission/owner restoration are unsupported",
+    "tar -z/-a and child-process transformations are unsupported; use real tar/gzip/gunzip shell pipelines",
+    "Archive output and extracted files use exclusive creation; conflicts fail nonzero while retaining existing bytes",
+    "gzip/gunzip file overwrite -f and unzip -n/-o/-K/-t fail explicitly; gzip/gunzip stream -c/-t integrity operations use the real codec",
+    "Archive extraction is not transactional; partial new entries can remain after an error; existing symlink parents and parent extraction paths are rejected"
+  ],
+  "commandStage": 4,
+  "metadataAbi": {
+    "namespace": "wasm_idle_fs_v1",
+    "functions": {
+      "path_mode": "(dirfd:i32, path:i32, length:i32, lookupFlags:i32)->i32",
+      "fd_mode": "(fd:i32)->i32"
+    },
+    "result": "Stored lower nine mode bits or negative WASI errno; libc file type retained",
+    "lookupFlags": "0: nofollow, 1: follow",
+    "timestamps": "WASI path/fd_filestat_set_times; integer milliseconds; noatime reads"
+  },
+  "reviewFixes": [
+    "stream-error-status",
+    "tar-directory-errors",
+    "tar-directory-time-order",
+    "stored-zip-crc"
   ]
 }

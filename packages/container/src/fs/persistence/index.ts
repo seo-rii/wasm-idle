@@ -180,11 +180,10 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
     let maintenance: Promise<PersistentWorkspaceGarbageCollectionResult> | undefined;
 
     const workspaceSnapshot = (): FileSystemSnapshot => {
-      const snapshot = fs.exportSnapshot();
-      const workspace = snapshot.entries.filter((entry) => entry.path === '/workspace' || entry.path.startsWith('/workspace/'));
+      const snapshot = fs.exportSnapshot({ includePath: (path) => path === '/workspace' || path.startsWith('/workspace/') });
       return {
         generation: snapshot.generation, nextInode: snapshot.nextInode, mounts: base.mounts,
-        entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...workspace]
+        entries: [...base.entries.filter((entry) => entry.path !== '/workspace'), ...snapshot.entries]
       };
     };
     const readBlob = async (identity: { sha256: string; bytes: number }): Promise<Uint8Array> => {
@@ -226,7 +225,7 @@ export async function openPersistentWorkspace(options: OpenPersistentWorkspaceOp
           total += blob.bytes;
           if (total > fs.maxBytes) throw new PersistentWorkspaceError('RESOURCE_LIMIT', 'Workspace root exceeds the current byte budget');
         } else if (entry.blob !== undefined) corrupt('Non-file entry references blob data');
-        return { inode: entry.inode, path: entry.path, type: entry.type, mode: entry.mode, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs,
+        return { inode: entry.inode, path: entry.path, type: entry.type, mode: entry.mode, atimeMs: entry.atimeMs, mtimeMs: entry.mtimeMs, ctimeMs: entry.ctimeMs,
           ...(entry.type === 'file' ? { data: new Uint8Array() } : {}),
           ...(entry.type === 'symlink' ? { target: entry.target } : {}) };
       });

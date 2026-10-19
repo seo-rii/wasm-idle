@@ -1,275 +1,373 @@
 {
-	"format": "wasm-idle-browser-test-assets-v1",
-	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/8d37e074d817f13a28f2621fb97c96cd6f62d9ab/",
-	"assets": [
-		{
-			"group": "clang",
-			"source": "clang/bin/clang.wasm.gz",
-			"target": "clang/bin/clang.wasm.gz",
-			"size": 13121917,
-			"sha256": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75"
-		},
-		{
-			"group": "clang",
-			"source": "clang/bin/lld.wasm.gz",
-			"target": "clang/bin/lld.wasm.gz",
-			"size": 6417339,
-			"sha256": "495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11"
-		},
-		{
-			"group": "clang",
-			"source": "clangd/clangd.js",
-			"target": "clangd/clangd.js",
-			"size": 97002,
-			"sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
-		},
-		{
-			"group": "clang",
-			"source": "clangd/clangd.wasm.gz",
-			"target": "clangd/clangd.wasm.gz",
-			"size": 16723115,
-			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
-		},
-		{
-			"group": "clangd",
-			"source": "clangd/clangd.js",
-			"target": "clangd/clangd.js",
-			"size": 97002,
-			"sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
-		},
-		{
-			"group": "clangd",
-			"source": "clangd/clangd.wasm.gz",
-			"target": "clangd/clangd.wasm.gz",
-			"size": 16723115,
-			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
-			"size": 60019,
-			"sha256": "675984c035de0e09c0f83eca08d54b5bb87657cf0ac6dd1a68529b265da1f190"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
-			"size": 18132361,
-			"sha256": "3aaa3dec4bdce49f1786eb2373c782d0bf2803013ee105dc81791ef6b936f2da"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
-			"size": 70441,
-			"sha256": "ac426368561253a13f6b645e09d7278ffab2fc80816c6ad1096f9e9919050d59"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
-			"size": 181,
-			"sha256": "7a3f7339e24631f266e25a996a2001eca1633fcd4a66cc9b3074863ffee572b7"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
-			"size": 912890,
-			"sha256": "84187e16cf17380b09e4d77fd271d12f4fa20ae16026e5f300cf14ab71b50605"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
-			"size": 592521,
-			"sha256": "6c5b08402094e1b9aff93fb84b000d92941dd1b55a89b936cf4723db541a42d9"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
-			"size": 2262168,
-			"sha256": "9089923b7f5cdceaeb779d684ca8090e745276cd11e53d832a1660094ee99726"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
-			"size": 2270320,
-			"sha256": "361b932dbde1ee3d2fc68ff65d9480b154930c8d7c140c0ae9aee38aae41d452"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
-			"size": 2503199,
-			"sha256": "5d6d3f31579a91229dd24d3b0bfd1e7abf0614123ba9d5ed2cf3147894f7b349"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
-			"target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
-			"size": 1162811,
-			"sha256": "dd886dbca4e07341f07ae29f2f338f58926576a868fda72ac4fc2f070424736b"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
-			"size": 2442,
-			"sha256": "f339e720e1b3e26c8e124f557c96669359cd3248b6371fa47a3328015f7ed731"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
-			"size": 11365,
-			"sha256": "c3bf2bc4f4ef64c91749fcb795c5654a4b033726e98e1c9618fd957d1ab7f2fa"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
-			"size": 42698,
-			"sha256": "1211186180762e4b94c031572684e84d5ac1ef9ec2599cc3d70a407008bc5e58"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
-			"size": 14035,
-			"sha256": "2799bd95f813dab3893112fdca1e1ed1e11b7a6b9d47a43318e78981859967bd"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
-			"size": 4673,
-			"sha256": "b1c44dbd8edbd92b27f66c1adcc62354622906196e601cadb0b87ca205855982"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
-			"size": 36157,
-			"sha256": "a403d0d2e37f75cd60b0d6d95b847f2301c005a89265edd50ea2c5354214e738"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
-			"size": 4875,
-			"sha256": "eba03289849e7c3e63e061729996cfacd94c91d2c2f3ba3c3125fae4fa82897a"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
-			"size": 1105,
-			"sha256": "5cc5b27c952875f370049633336584e2af16bd85e81705431b69c9eeadd48387"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
-			"size": 12331,
-			"sha256": "d57997796a1a1c284c15ba1049f795addad24b02bc2e1ef1dee2cd1dcb1f6aae"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/src/index.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/src/index.js",
-			"size": 1892,
-			"sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/src/node.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/src/node.js",
-			"size": 6026,
-			"sha256": "34afac088667b55a8fde8b8b5a95126b5bf2307f0c786875217cb294d497750d"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/src/types.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/src/types.js",
-			"size": 11,
-			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
-		},
-		{
-			"group": "ocaml",
-			"source": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
-			"target": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
-			"size": 11,
-			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
-		},
-		{
-			"group": "c3",
-			"source": "wasm-c3/c3c.wasm.gz",
-			"target": "wasm-c3/c3c.wasm",
-			"size": 13195546,
-			"sha256": "ec1e5babdf7d20a180d3dfd262c0374d3dd72737e50a27c551c582d41c8e9da4",
-			"decoded": {
-				"size": 39058650,
-				"sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
-			}
-		},
-		{
-			"group": "lfortran",
-			"source": "wasm-lfortran/lfortran.js.gz",
-			"target": "wasm-lfortran/lfortran.js",
-			"size": 205454,
-			"sha256": "dce3c058984ff07a9ff5edb867d07afc830dd195f2e279cb7031d0f8f02a5aae",
-			"decoded": {
-				"size": 968283,
-				"sha256": "348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3"
-			}
-		},
-		{
-			"group": "lfortran",
-			"source": "wasm-lfortran/lfortran.wasm.gz",
-			"target": "wasm-lfortran/lfortran.wasm",
-			"size": 20044335,
-			"sha256": "8689eff2f78bbe3116032a5978208ee1d142e3ed5a562dfc8633a336929e7451",
-			"decoded": {
-				"size": 80662569,
-				"sha256": "b7c8ef4e942e9965a511b8700955c47c1f48d4ef18c61953a4847a6dcd680181"
-			}
-		},
-		{
-			"group": "c3",
-			"source": "wasm-c3/c3c.mjs",
-			"target": "wasm-c3/c3c.mjs",
-			"size": 101743,
-			"sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
-		},
-		{
-			"group": "c3",
-			"source": "wasm-c3/producer-receipt.json",
-			"target": "wasm-c3/producer-receipt.json",
-			"size": 13996,
-			"sha256": "3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8"
-		},
-		{
-			"group": "lfortran",
-			"source": "wasm-lfortran/lfortran.data.bin",
-			"target": "wasm-lfortran/lfortran.data.bin",
-			"size": 179758,
-			"sha256": "6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f"
-		},
-		{
-			"group": "lfortran",
-			"source": "wasm-lfortran/producer-receipt.json",
-			"target": "wasm-lfortran/producer-receipt.json",
-			"size": 6932,
-			"sha256": "11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"
-		}
-	],
-	"groupBaseUrls": {
-		"c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
-		"lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/"
-	},
-	"generatedWorkers": ["c3", "lfortran"]
+  "format": "wasm-idle-browser-test-assets-v1",
+  "defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/8d37e074d817f13a28f2621fb97c96cd6f62d9ab/",
+  "assets": [
+    {
+      "group": "clang",
+      "source": "clang/bin/clang.wasm.gz",
+      "target": "clang/bin/clang.wasm.gz",
+      "size": 13124999,
+      "sha256": "cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982"
+    },
+    {
+      "group": "clang",
+      "source": "clang/bin/lld.wasm.gz",
+      "target": "clang/bin/lld.wasm.gz",
+      "size": 6421841,
+      "sha256": "798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20"
+    },
+    {
+      "group": "clang",
+      "source": "clangd/clangd.js",
+      "target": "clangd/clangd.js",
+      "size": 97002,
+      "sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
+    },
+    {
+      "group": "clang",
+      "source": "clangd/clangd.wasm.gz",
+      "target": "clangd/clangd.wasm.gz",
+      "size": 16722963,
+      "sha256": "17a447dff61020664c23dd8c8516e2cd6bdb93cf244a4e6ee19078b0948fe566"
+    },
+    {
+      "group": "clangd",
+      "source": "clangd/clangd.js",
+      "target": "clangd/clangd.js",
+      "size": 97002,
+      "sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
+    },
+    {
+      "group": "clangd",
+      "source": "clangd/clangd.wasm.gz",
+      "target": "clangd/clangd.wasm.gz",
+      "size": 16722963,
+      "sha256": "17a447dff61020664c23dd8c8516e2cd6bdb93cf244a4e6ee19078b0948fe566"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
+      "size": 60021,
+      "sha256": "968ae852c9a244a19f6bdef12e42e0495ad38b1e1f29bdeb5534bb178c85768e"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
+      "size": 18132361,
+      "sha256": "3aaa3dec4bdce49f1786eb2373c782d0bf2803013ee105dc81791ef6b936f2da"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
+      "size": 70441,
+      "sha256": "ac426368561253a13f6b645e09d7278ffab2fc80816c6ad1096f9e9919050d59"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+      "size": 181,
+      "sha256": "7a3f7339e24631f266e25a996a2001eca1633fcd4a66cc9b3074863ffee572b7"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
+      "size": 912890,
+      "sha256": "84187e16cf17380b09e4d77fd271d12f4fa20ae16026e5f300cf14ab71b50605"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
+      "size": 592521,
+      "sha256": "6c5b08402094e1b9aff93fb84b000d92941dd1b55a89b936cf4723db541a42d9"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
+      "size": 2225185,
+      "sha256": "63286543870887744eb7cb0cc5020c6bfe569d26583f207beb51e41add831128"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
+      "size": 2237479,
+      "sha256": "bbf23b5d597e9cbdaa6cfc1b44483343917c4a5d7000e852f6b4046eca22cd57"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
+      "size": 2483619,
+      "sha256": "3e1a6d2dd24fe4a45627068075dead99e4bf8d829347b346b6167b7d8f9b26a8"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
+      "target": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
+      "size": 1162811,
+      "sha256": "dd886dbca4e07341f07ae29f2f338f58926576a868fda72ac4fc2f070424736b"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
+      "size": 2442,
+      "sha256": "f339e720e1b3e26c8e124f557c96669359cd3248b6371fa47a3328015f7ed731"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
+      "size": 11365,
+      "sha256": "c3bf2bc4f4ef64c91749fcb795c5654a4b033726e98e1c9618fd957d1ab7f2fa"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
+      "size": 43310,
+      "sha256": "ed4e5423a79b46e67d60455e57d6a1b6595021b917b1dbeac63187c790f59e30"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-asset-cache.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-asset-cache.js",
+      "size": 4882,
+      "sha256": "643986ac8187348ccd0dc71964bf76b409e95b5453b96654d3b05363442ce745"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
+      "size": 15018,
+      "sha256": "7e66fe28000e5921e82445e8dc6ecc09dbcd2d088608e7372e451012297e833d"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
+      "size": 4673,
+      "sha256": "b1c44dbd8edbd92b27f66c1adcc62354622906196e601cadb0b87ca205855982"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
+      "size": 40078,
+      "sha256": "5b04545b7dcb4e72cfefac2b162624fa98462907d829a716caf26318f456eca1"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
+      "size": 4875,
+      "sha256": "eba03289849e7c3e63e061729996cfacd94c91d2c2f3ba3c3125fae4fa82897a"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
+      "size": 1105,
+      "sha256": "5cc5b27c952875f370049633336584e2af16bd85e81705431b69c9eeadd48387"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
+      "size": 13322,
+      "sha256": "d9c74f0f6b23bb420d81ca35262ef97886d3e4308f77c9910ce7598b27d1f109"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/src/index.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/src/index.js",
+      "size": 1892,
+      "sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/src/node.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/src/node.js",
+      "size": 6026,
+      "sha256": "34afac088667b55a8fde8b8b5a95126b5bf2307f0c786875217cb294d497750d"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/src/types.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/src/types.js",
+      "size": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "group": "ocaml",
+      "source": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
+      "target": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
+      "size": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "group": "c3",
+      "source": "wasm-c3/c3c.wasm.gz",
+      "target": "wasm-c3/c3c.wasm",
+      "size": 13195546,
+      "sha256": "ec1e5babdf7d20a180d3dfd262c0374d3dd72737e50a27c551c582d41c8e9da4",
+      "decoded": {
+        "size": 39058650,
+        "sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+      }
+    },
+    {
+      "group": "lfortran",
+      "source": "wasm-lfortran/lfortran.js.gz",
+      "target": "wasm-lfortran/lfortran.js",
+      "size": 205454,
+      "sha256": "dce3c058984ff07a9ff5edb867d07afc830dd195f2e279cb7031d0f8f02a5aae",
+      "decoded": {
+        "size": 968283,
+        "sha256": "348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3"
+      }
+    },
+    {
+      "group": "lfortran",
+      "source": "wasm-lfortran/lfortran.wasm.gz",
+      "target": "wasm-lfortran/lfortran.wasm",
+      "size": 20044335,
+      "sha256": "8689eff2f78bbe3116032a5978208ee1d142e3ed5a562dfc8633a336929e7451",
+      "decoded": {
+        "size": 80662569,
+        "sha256": "b7c8ef4e942e9965a511b8700955c47c1f48d4ef18c61953a4847a6dcd680181"
+      }
+    },
+    {
+      "group": "c3",
+      "source": "wasm-c3/c3c.mjs",
+      "target": "wasm-c3/c3c.mjs",
+      "size": 101743,
+      "sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
+    },
+    {
+      "group": "c3",
+      "source": "wasm-c3/producer-receipt.json",
+      "target": "wasm-c3/producer-receipt.json",
+      "size": 13996,
+      "sha256": "3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8"
+    },
+    {
+      "group": "lfortran",
+      "source": "wasm-lfortran/lfortran.data.bin",
+      "target": "wasm-lfortran/lfortran.data.bin",
+      "size": 179758,
+      "sha256": "6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f"
+    },
+    {
+      "group": "lfortran",
+      "source": "wasm-lfortran/producer-receipt.json",
+      "target": "wasm-lfortran/producer-receipt.json",
+      "size": 6932,
+      "sha256": "11c9baef85c5221440edc4462690312cda62b48998a133b9a397ce32c6a97c45"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/clang-worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/clang-worker.mjs",
+      "size": 671466,
+      "sha256": "017adadf44c02fdabf1725ca5f7ab6695f727c8689249f089833f3dac4c15b45"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/live-worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/live-worker.mjs",
+      "size": 37274,
+      "sha256": "091dee7a06c1825eb56e83cbfcffb9fac3f8aade0881419b3155b1c72183eabb"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/index.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/index.mjs",
+      "size": 104199,
+      "sha256": "4851df0f9e5f26e87eae6ea077e024e69360c28ff2bcb6afee767a737cdcde1d"
+    },
+    {
+      "group": "container",
+      "source": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/worker.mjs",
+      "target": "container-app/host/78a3279d549e967946f7f265f8ccc9b885d93abca8c0e7e1d670a672cc9587be/sdk/worker.mjs",
+      "size": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+      "target": "container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+      "size": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9/busybox.wasm",
+      "target": "container-app/objects/3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9/busybox.wasm",
+      "size": 634131,
+      "sha256": "3170b30f9200ef58f38f7cfa54bb7fbf855065a4cc444a461d458c62510d19e9"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+      "target": "container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+      "size": 9246938,
+      "sha256": "522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar.bin",
+      "target": "container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar.bin",
+      "size": 35328000,
+      "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin",
+      "target": "container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin",
+      "size": 8178107,
+      "sha256": "dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d"
+    },
+    {
+      "group": "container",
+      "source": "container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin",
+      "target": "container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin",
+      "size": 16270174,
+      "sha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba"
+    },
+    {
+      "group": "container",
+      "source": "container-app/distribution.json",
+      "target": "container-app/distribution.json",
+      "size": 14099,
+      "sha256": "46836adc53e41f7a5c3f0866d1969bf483db66f6ca82405cf77db0cb4d7380b2"
+    },
+    {
+      "group": "container",
+      "source": "container-app/page-config.json",
+      "target": "container-app/page-config.json",
+      "size": 401,
+      "sha256": "cc3dd5ab16817fc20bf479314004dc304a9707dd529620e96756b702cc503766"
+    }
+  ],
+  "groupBaseUrls": {
+    "c3": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
+    "lfortran": "https://raw.githubusercontent.com/seo-rii/wasm-idle/f8339639c3e9fbb96b63cc8ed4d3abf55d38f622/",
+    "clang": "https://seorii.page/wasm-idle/",
+    "clangd": "https://seorii.page/wasm-idle/",
+    "ocaml": "https://seorii.page/wasm-idle/",
+    "container": "https://raw.githubusercontent.com/seo-rii/wasm-idle/55b3db8b2784423704fc8608fb4a9409dc6607d7/"
+  },
+  "generatedWorkers": [
+    "c3",
+    "lfortran"
+  ]
 }

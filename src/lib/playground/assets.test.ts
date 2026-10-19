@@ -400,7 +400,7 @@ describe('runtime asset config resolution', () => {
 					integrity: { 'compiler.wasm': TEAVM_RUNTIME_ASSET_RECEIPTS['compiler.wasm'] }
 				}
 			})
-		).toThrow('exactly four assets');
+		).toThrow('exactly five assets');
 		expect(() =>
 			resolveRuntimeAssetConfig('java', {
 				java: {
@@ -410,7 +410,7 @@ describe('runtime asset config resolution', () => {
 					}
 				}
 			})
-		).toThrow('exactly four assets');
+		).toThrow('exactly five assets');
 	});
 
 	it('derives the default clang asset base url from the shared root path', () => {

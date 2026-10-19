@@ -1,3 +1,5 @@
+(()=>{var g=e=>e.reason??new DOMException("Runtime Wasm module request aborted","AbortError");var l=e=>{try{e.onmessage=null}catch{}try{e.onmessageerror=null}catch{}try{e.close()}catch{}};function c(e,s,u={}){let o=u.timeoutMs??12e4;if(!Number.isSafeInteger(o)||o<=0||o>2147483647)return l(s),Promise.reject(new TypeError("Runtime Wasm module timeout must be a positive integer"));let i=u.signal;return new Promise((d,f)=>{let m=!1,n=(t,r,b=!1)=>{if(!m){if(m=!0,clearTimeout(y),i?.removeEventListener("abort",a),b)try{s.postMessage({type:"cancel"})}catch{}l(s),t!==void 0?f(t):d(r)}},a=()=>n(g(i),void 0,!0),y=setTimeout(()=>n(new Error("Runtime Wasm module service timed out"),void 0,!0),o);if(s.onmessageerror=()=>n(new Error("Runtime Wasm module response could not be cloned"),void 0,!0),s.onmessage=t=>{let r=t.data;r?.type==="module"&&r.module instanceof WebAssembly.Module?n(void 0,r.module):n(new Error(r?.type==="error"&&typeof r.message=="string"?r.message:"Invalid runtime Wasm module response"),void 0,!0)},i?.addEventListener("abort",a,{once:!0}),i?.aborted){a();return}try{let t=e.buffer instanceof ArrayBuffer&&e.byteOffset===0&&e.byteLength===e.buffer.byteLength?e.buffer:Uint8Array.from(e).buffer;s.postMessage({type:"compile",bytes:t},[t]),s.start()}catch(t){n(t instanceof Error?t:new Error(String(t)),void 0,!0)}})}globalThis.__wasmIdleRequestRuntimeWasmModule=c;})();
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
@@ -16,7 +18,7 @@ const expectedIdentity = Object.freeze({
 	llvmRevision: '8e78cdb9caa80f75ed86d6632cb4e9310b22748c',
 	memfsRevision: '0399d5a9682b3cef71c653373e38890c63c4c365',
 	emscriptenRevision: 'unrecorded',
-	manifestFingerprint: 'ee0d08a6d723d4a1afe2ce909bfed2f4d01eb71ddd330898c85c543218b6d2cf'
+	manifestFingerprint: '0b31736fcfc4151d192dcc2cc2b95ae2470908b073964921be3ec4ade47fcec8'
 });
 const expectedLicenseExpression =
 	'MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party';
@@ -713,7 +715,7 @@ function restoreRuntimeGlobals(snapshot) {
 	}
 }
 
-function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) {
+function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000, compilerModule, compilerBytes) {
 	return new Promise((resolve, reject) => {
 		let settled = false;
 		let failed = false;
@@ -761,7 +763,15 @@ function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) 
 		};
 		self.addEventListener?.('unhandledrejection', onRejection);
 		try {
-			module.wasmBinary = exactArrayBuffer(verifiedRuntime.take('nim/nim.wasm'));
+			module.wasmBinary = exactArrayBuffer(compilerBytes ?? verifiedRuntime.take('nim/nim.wasm'));
+			if (compilerModule) {
+				module.instantiateWasm = (imports, receiveInstance) => {
+					WebAssembly.instantiate(compilerModule, imports)
+						.then((instance) => receiveInstance(instance, compilerModule))
+						.catch((error) => finish(error));
+					return {};
+				};
+			}
 			self.Nim = module;
 			self.Module = module;
 			importVerifiedRuntimeScript(verifiedRuntime.take('nim/nim-bundle.js'));
@@ -771,8 +781,8 @@ function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) 
 	});
 }
 
-async function loadNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs) {
-	return await installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs);
+async function loadNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs, compilerModule, compilerBytes) {
+	return await installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs, compilerModule, compilerBytes);
 }
 
 function withCapturedConsole(stdout, stderr, callback) {
@@ -907,9 +917,21 @@ static int wasm_idle_errno;
 	return `${header}\n${cleaned}\n`;
 }
 
-async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
+async function buildWasm({ verifiedRuntime, code, stdout, stderr, runtimeWasmModulePorts, compileTimeoutMs }) {
+	const shared = runtimeWasmModulePorts !== undefined;
+	if (shared && (
+		!hasExactKeys(runtimeWasmModulePorts, ['clang', 'lld', 'memfs', 'nim']) ||
+		typeof globalThis.__wasmIdleRequestRuntimeWasmModule !== 'function' ||
+		Object.values(runtimeWasmModulePorts).some((port) =>
+			!(port instanceof MessagePort)
+		)
+	)) throw new Error('Nim compiler module service is invalid.');
+	const nimBytes = verifiedRuntime.take('nim/nim.wasm');
+	const nimModule = shared
+		? await globalThis.__wasmIdleRequestRuntimeWasmModule(nimBytes.slice(), runtimeWasmModulePorts.nim, { timeoutMs: compileTimeoutMs })
+		: undefined;
 	postProgress(5, 'Loading Nim compiler');
-	const nim = await loadNimCompiler(verifiedRuntime, stdout, stderr);
+	const nim = await loadNimCompiler(verifiedRuntime, stdout, stderr, compileTimeoutMs, nimModule, nimBytes);
 	postProgress(20, 'Translating Nim to C');
 	const { cacheDir, cFiles } = compileNimToC(nim, code, stdout, stderr);
 	let nimbaseContent;
@@ -940,10 +962,16 @@ async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
 		throw new Error('Nim verified clang module evaluation is unavailable.');
 	}
 	const compilerAssets = {};
+	const compilerModules = shared ? {} : undefined;
 	for (const assetName of ['clang.wasm', 'lld.wasm', 'memfs.wasm', 'sysroot.tar']) {
-		compilerAssets[assetName] = exactArrayBuffer(
-			await verifiedRuntime.take(`clang/${assetName}`)
-		);
+		const bytes = verifiedRuntime.take(`clang/${assetName}`);
+		compilerAssets[assetName] = exactArrayBuffer(bytes);
+		if (shared && assetName.endsWith('.wasm')) {
+			const key = assetName.slice(0, -5);
+			compilerModules[assetName] = await globalThis.__wasmIdleRequestRuntimeWasmModule(
+				bytes.slice(), runtimeWasmModulePorts[key], { timeoutMs: compileTimeoutMs }
+			);
+		}
 	}
 	const clangModuleUrl = URL.createObjectURL(
 		new Blob([clangSourceBytes], { type: 'text/javascript' })
@@ -954,7 +982,7 @@ async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
 	try {
 		const clangModule = await import(clangModuleUrl);
 		console.log = (...args) => clangLogs.push(args.map(String).join(' '));
-		await clangModule.init({ assets: compilerAssets });
+		await clangModule.init({ assets: compilerAssets, ...(shared ? { modules: compilerModules } : {}) });
 		postProgress(50, 'Compiling and linking Nim output');
 		const result = await clangModule.compileEachLink(files, 'app.wasm');
 		if (result?.ok !== true) {
@@ -1284,7 +1312,9 @@ async function runVerifiedNim({
 	args,
 	activePath,
 	compilerStdout,
-	compilerStderr
+	compilerStderr,
+	runtimeWasmModulePorts,
+	compileTimeoutMs
 }) {
 	const snapshot = snapshotRuntimeGlobals();
 	let failure;
@@ -1295,7 +1325,9 @@ async function runVerifiedNim({
 			verifiedRuntime,
 			code,
 			stdout: compilerStdout,
-			stderr: compilerStderr
+			stderr: compilerStderr,
+			runtimeWasmModulePorts,
+			compileTimeoutMs
 		});
 		result = await createWasiRunner({
 			stdinReader,
@@ -1335,7 +1367,9 @@ self.onmessage = async (event) => {
 		stdinChannel,
 		args,
 		activePath = 'main.nim',
-		log
+		log,
+		runtimeWasmModulePorts,
+		limits: executionLimits
 	} = event.data || {};
 	const compilerStdout = [];
 	const compilerStderr = [];
@@ -1359,7 +1393,9 @@ self.onmessage = async (event) => {
 			args: args || [],
 			activePath,
 			compilerStdout,
-			compilerStderr
+			compilerStderr,
+			runtimeWasmModulePorts,
+			compileTimeoutMs: executionLimits?.compileTimeoutMs
 		});
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);

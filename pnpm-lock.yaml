@@ -243,6 +243,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.71.1
         version: 8.71.1(eslint@10.12.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+      '@wasm-idle/container':
+        specifier: workspace:*
+        version: link:packages/container
       '@wasm-idle/debug':
         specifier: workspace:*
         version: link:packages/debug
@@ -816,6 +819,9 @@ importers:
       '@swc/wasm-typescript':
         specifier: ^1.16.13
         version: 1.16.13
+      acorn:
+        specifier: 8.19.0
+        version: 8.19.0
       buffer:
         specifier: ^6.0.3
         version: 6.0.3

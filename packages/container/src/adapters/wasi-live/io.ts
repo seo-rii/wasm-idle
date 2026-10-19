@@ -1,4 +1,4 @@
-import { FsError, type FsErrorCode, type MemoryFileSystem, type PathOptions, type OpenOptions, type FileVersion } from '../../fs/index.js';
+import { FsError, type FsErrorCode, type MemoryFileSystem, type PathOptions, type OpenOptions, type FileVersion, type FileTimes } from '../../fs/index.js';
 import { createPipe, pipeReadable, PipeError } from '../../fd/pipe.js';
 import { ContainerError } from '../../errors.js';
 import { Operation, RPC_BYTES, type RpcCall, type RpcReply } from '../../transport/rpc.js';
@@ -45,6 +45,7 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
     paths: {
       open: (reference, options, follow) => call(Operation.PathOpen, [reference, options, follow]).value as number,
       stat: (reference, follow) => call(Operation.PathStat, [reference, follow]).value as ReturnType<WasiFileSystem['stat']>,
+      setTimes: (reference, times, follow) => { call(Operation.PathSetTimes, [reference, times, follow]); },
       mkdir: reference => { call(Operation.PathMkdir, [reference]); },
       unlink: reference => { call(Operation.PathUnlink, [reference]); },
       rmdir: reference => { call(Operation.PathRmdir, [reference]); },
@@ -58,6 +59,8 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
     stat: (path, options) => call(Operation.Stat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['stat']>,
     lstat: (path, options) => call(Operation.Lstat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['lstat']>,
     fstat: (fd) => call(Operation.Fstat, [fd]).value as ReturnType<WasiFileSystem['fstat']>,
+    setTimes: (path, times, options, follow) => { call(Operation.SetTimes, [path, times, options ?? {}, follow ?? true]); },
+    fsetTimes: (fd, times) => { call(Operation.FsetTimes, [fd, times]); },
     getDirectoryPath: (fd) => call(Operation.DirectoryPath, [fd]).value as string,
     read: (fd, length) => readChunks(length, (_, n) => call(Operation.Read, [fd, n]).bytes!),
     pread: (fd, length, offset) => readChunks(length, (done, n) => call(Operation.Pread, [fd, n, offset + done]).bytes!),
@@ -155,6 +158,14 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
     return { path: name, cwd: fs.getDirectoryPath(owner.fd), root: owner.root };
   };
   const follow = (value: unknown) => { if (typeof value !== 'boolean') throw new FsError('EINVAL', 'Invalid lookup flags'); return value; };
+  const times = (value: unknown): FileTimes => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new FsError('EINVAL', 'Invalid timestamp update');
+    for (const [key, item] of Object.entries(value)) {
+      if (key !== 'atimeMs' && key !== 'mtimeMs') throw new FsError('EINVAL', 'Unsupported timestamp field');
+      if (item !== 'now') number(item);
+    }
+    return value as FileTimes;
+  };
   const open = (name: string, flags: OpenOptions, root: string, allowSymlink = true) => {
     if (descriptors.size >= 256 || nextFd >= 0x7fffffff) throw new FsError('ENOSPC', 'Descriptor budget exceeded');
     if (!allowSymlink) {
@@ -221,10 +232,11 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
         [Operation.Rename]: 3, [Operation.Stdin]: 1, [Operation.Stdout]: 1, [Operation.StdioClose]: 1,
         [Operation.PathOpen]: 3, [Operation.PathStat]: 2, [Operation.PathMkdir]: 1, [Operation.PathUnlink]: 1,
         [Operation.PathRmdir]: 1, [Operation.PathReadlink]: 1, [Operation.PathSymlink]: 2,
-        [Operation.PathRename]: 2, [Operation.DirectoryEntries]: 1
+        [Operation.PathRename]: 2, [Operation.DirectoryEntries]: 1, [Operation.SetTimes]: 4,
+        [Operation.FsetTimes]: 2, [Operation.PathSetTimes]: 3
       };
       if (args.length !== arities[op] || bytes.length > RPC_BYTES || bytes.length && ![Operation.Write, Operation.Pwrite, Operation.Stdout].includes(op)) throw new FsError('EINVAL', 'Invalid I/O arguments');
-      const [a, b, c] = args;
+      const [a, b, c, d] = args;
       let value: unknown = null;
       try {
         switch (op) {
@@ -236,6 +248,8 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.Stat: value = fs.stat(path(a), options(b)); break;
           case Operation.Lstat: value = fs.lstat(path(a), options(b)); break;
           case Operation.Fstat: value = fs.fstat(fd(a)); break;
+          case Operation.SetTimes: fs.setTimes(path(a), times(b), options(c), follow(d)); break;
+          case Operation.FsetTimes: fs.fsetTimes(fd(a), times(b)); break;
           case Operation.DirectoryPath: value = fs.getDirectoryPath(fd(a)); break;
           case Operation.Read: return { bytes: fs.read(fd(a), length(b)) };
           case Operation.Pread: return { bytes: fs.pread(fd(a), length(b), number(c)) };
@@ -284,6 +298,7 @@ export function createLiveIo(fs: MemoryFileSystem, limits: RuntimeLimits, capaci
           case Operation.PathStat: {
             const ref = reference(a); value = follow(b) ? fs.stat(ref.path, ref) : fs.lstat(ref.path, ref); break;
           }
+          case Operation.PathSetTimes: { const ref = reference(a); fs.setTimes(ref.path, times(b), ref, follow(c)); break; }
           case Operation.PathMkdir: { const ref = reference(a); fs.mkdir(ref.path, ref); break; }
           case Operation.PathUnlink: { const ref = reference(a); fs.unlink(ref.path, ref); break; }
           case Operation.PathRmdir: { const ref = reference(a); fs.rmdir(ref.path, ref); break; }

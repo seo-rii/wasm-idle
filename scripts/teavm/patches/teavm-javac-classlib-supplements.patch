@@ -1,0 +1,966 @@
+diff --git a/compiler/build.gradle b/compiler/build.gradle
+index ef22a4a..6a34d6b 100644
+--- a/compiler/build.gradle
++++ b/compiler/build.gradle
+@@ -35,10 +35,22 @@ dependencies {
+ sourceSets {
+     classlibEmu {
+     }
++    // Methods that ClasslibSupplements adds to TeaVM class library classes, both in the javac SDK and in the
++    // runtime class library.
++    classlibSupplement {
++        compileClasspath = files(configurations.classlibInput, configurations.classlibAuxInput)
++    }
+     teavmDeterminism {
+     }
+ }
+ 
++tasks.named("compileClasslibSupplementJava") {
++    // Methods are copied as is into classes of the TeaVM class library, which is Java 11 bytecode.
++    options.release = 11
++}
++
++def classlibSupplementDir = sourceSets.classlibSupplement.java.destinationDirectory
++
+ dependencies {
+     // Non-transitive: only artifacts that the TeaVM build daemon already resolves.
+     teavmDeterminismCompileOnly(libs.teavm.core) {
+@@ -85,14 +97,17 @@ tasks.register("generateClassLib", JavaExec) {
+     def output = classlibOutDir.map { it.file("compile-classlib-teavm.bin") }
+     dependsOn configurations.classlibInput
+     dependsOn sourceSets.classlibEmu.output
++    dependsOn sourceSets.classlibSupplement.output
+     inputs.files configurations.classlibInput
+     inputs.files {
+         sourceSets.classlibEmu.output.classesDirs.collect { fileTree(it) }
+     }
++    inputs.dir classlibSupplementDir
+     outputs.file output
+     args {
+         [
+             output.get().asFile.absolutePath,
++            classlibSupplementDir.get().asFile.absolutePath,
+             *configurations.classlibInput.files.collect { it.absolutePath },
+             *sourceSets.classlibEmu.output.classesDirs.files.collect { it.absolutePath }
+         ].iterator()
+@@ -157,16 +172,18 @@ def prepareTeaVMClassLib = tasks.register("prepareTeaVMClassLib", Copy) {
+ }
+ 
+ def buildTeaVMClassLib = tasks.register("buildTeaVMClassLib", JavaExec) {
+-    dependsOn prepareTeaVMClassLib, compileJava
++    dependsOn prepareTeaVMClassLib, compileJava, sourceSets.classlibSupplement.output
+     classpath sourceSets.main.runtimeClasspath
+     def inputDir = project.layout.buildDirectory.dir("tmp/classlib-runtime")
+     def outputFile = project.layout.buildDirectory.file("classlib/runtime-classlib-teavm.bin")
+     inputs.dir inputDir
++    inputs.dir classlibSupplementDir
+     outputs.file outputFile
+     args  {
+         [
+                 inputDir.get().asFile.absolutePath,
+-                outputFile.get().asFile.absolutePath
++                outputFile.get().asFile.absolutePath,
++                classlibSupplementDir.get().asFile.absolutePath
+         ].iterator()
+     }
+     mainClass = "org.teavm.javac.ArchiveBuilder"
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java
+new file mode 100644
+index 0000000..6833e1d
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java
+@@ -0,0 +1,29 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TCharacter;
++
++@Supplement(TCharacter.class)
++final class CharacterSupplement {
++    private CharacterSupplement() {
++    }
++
++    public static String toString(int codePoint) {
++        return String.valueOf(Character.toChars(codePoint));
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java
+new file mode 100644
+index 0000000..45312ff
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java
+@@ -0,0 +1,28 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.util.TCollection;
++import org.teavm.classlib.java.util.stream.TStream;
++
++@Supplement(TCollection.class)
++interface CollectionSupplement<E> extends TCollection<E> {
++    // Streams of the TeaVM class library are sequential.
++    default TStream<E> parallelStream() {
++        return stream();
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/DoubleSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/DoubleSupplement.java
+new file mode 100644
+index 0000000..f496794
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/DoubleSupplement.java
+@@ -0,0 +1,37 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TDouble;
++
++@Supplement(TDouble.class)
++final class DoubleSupplement {
++    private DoubleSupplement() {
++    }
++
++    public static double sum(double a, double b) {
++        return a + b;
++    }
++
++    public static double max(double a, double b) {
++        return Math.max(a, b);
++    }
++
++    public static double min(double a, double b) {
++        return Math.min(a, b);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/FloatSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/FloatSupplement.java
+new file mode 100644
+index 0000000..f2e0813
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/FloatSupplement.java
+@@ -0,0 +1,37 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TFloat;
++
++@Supplement(TFloat.class)
++final class FloatSupplement {
++    private FloatSupplement() {
++    }
++
++    public static float sum(float a, float b) {
++        return a + b;
++    }
++
++    public static float max(float a, float b) {
++        return Math.max(a, b);
++    }
++
++    public static float min(float a, float b) {
++        return Math.min(a, b);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java
+new file mode 100644
+index 0000000..4ed66d8
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java
+@@ -0,0 +1,51 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TInteger;
++
++@Supplement(TInteger.class)
++final class IntegerSupplement {
++    private IntegerSupplement() {
++    }
++
++    public static int sum(int a, int b) {
++        return a + b;
++    }
++
++    public static long toUnsignedLong(int x) {
++        return x & 0xFFFFFFFFL;
++    }
++
++    public static int parseUnsignedInt(String s) throws NumberFormatException {
++        return parseUnsignedInt(s, 10);
++    }
++
++    public static int parseUnsignedInt(String s, int radix) throws NumberFormatException {
++        if (s == null) {
++            throw new NumberFormatException("Cannot parse null string");
++        }
++        if (!s.isEmpty() && s.charAt(0) == '-') {
++            throw new NumberFormatException("Illegal leading minus sign on unsigned string " + s);
++        }
++        long value = Long.parseLong(s, radix);
++        if (value >>> 32 != 0) {
++            throw new NumberFormatException("String value " + s + " exceeds range of unsigned int");
++        }
++        return (int) value;
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java
+new file mode 100644
+index 0000000..9ab93a7
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java
+@@ -0,0 +1,74 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TLong;
++
++@Supplement(TLong.class)
++final class LongSupplement {
++    private LongSupplement() {
++    }
++
++    public static long sum(long a, long b) {
++        return a + b;
++    }
++
++    public static long max(long a, long b) {
++        return Math.max(a, b);
++    }
++
++    public static long min(long a, long b) {
++        return Math.min(a, b);
++    }
++
++    public static long parseUnsignedLong(String s) throws NumberFormatException {
++        return parseUnsignedLong(s, 10);
++    }
++
++    public static long parseUnsignedLong(String s, int radix) throws NumberFormatException {
++        if (s == null) {
++            throw new NumberFormatException("Cannot parse null string");
++        }
++        if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX) {
++            throw new NumberFormatException("Illegal radix " + radix);
++        }
++        int start = !s.isEmpty() && s.charAt(0) == '+' ? 1 : 0;
++        if (start == s.length()) {
++            throw new NumberFormatException("For input string: \"" + s + "\"");
++        }
++        if (s.charAt(0) == '-') {
++            throw new NumberFormatException("Illegal leading minus sign on unsigned string " + s);
++        }
++        long limit = Long.divideUnsigned(-1L, radix);
++        long result = 0;
++        for (int i = start; i < s.length(); ++i) {
++            int digit = Character.digit(s.charAt(i), radix);
++            if (digit < 0) {
++                throw new NumberFormatException("For input string: \"" + s + "\"");
++            }
++            if (Long.compareUnsigned(result, limit) > 0) {
++                throw new NumberFormatException("String value " + s + " exceeds range of unsigned long");
++            }
++            long shifted = result * radix;
++            result = shifted + digit;
++            if (Long.compareUnsigned(result, shifted) < 0) {
++                throw new NumberFormatException("String value " + s + " exceeds range of unsigned long");
++            }
++        }
++        return result;
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java
+new file mode 100644
+index 0000000..4f16e07
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java
+@@ -0,0 +1,41 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TMath;
++
++@Supplement(TMath.class)
++final class MathSupplement {
++    private MathSupplement() {
++    }
++
++    public static long multiplyFull(int x, int y) {
++        return (long) x * (long) y;
++    }
++
++    // The high 64 bits of the signed 128-bit product, from products of 32-bit halves.
++    public static long multiplyHigh(long x, long y) {
++        long xHigh = x >> 32;
++        long xLow = x & 0xFFFFFFFFL;
++        long yHigh = y >> 32;
++        long yLow = y & 0xFFFFFFFFL;
++        long lowProduct = xLow * yLow;
++        long middle = xHigh * yLow + (lowProduct >>> 32);
++        long middleLow = xLow * yHigh + (middle & 0xFFFFFFFFL);
++        return xHigh * yHigh + (middle >> 32) + (middleLow >> 32);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java
+new file mode 100644
+index 0000000..408ab29
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java
+@@ -0,0 +1,47 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.io.OutputStream;
++import org.teavm.classlib.java.io.TPrintStream;
++
++@Supplement(TPrintStream.class)
++abstract class PrintStreamSupplement extends TPrintStream {
++    PrintStreamSupplement() {
++        super((OutputStream) null);
++    }
++
++    // Without print(boolean) and print(float), javac picks print(Object) and print(double), which prints
++    // 0.1f as 0.10000000149011612.
++    public void print(boolean b) {
++        print(String.valueOf(b));
++    }
++
++    public void print(float f) {
++        print(String.valueOf(f));
++    }
++
++    // Without it, javac picks println(Object), which prints the array identity.
++    public void println(char[] s) {
++        print(s);
++        println();
++    }
++
++    public void writeBytes(byte[] buf) {
++        write(buf, 0, buf.length);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java
+new file mode 100644
+index 0000000..9f7cdb1
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java
+@@ -0,0 +1,26 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.util.stream.TStream;
++
++@Supplement(TStream.class)
++interface StreamSupplement<T> extends TStream<T> {
++    static <T> TStream<T> ofNullable(T t) {
++        return t == null ? TStream.empty() : TStream.of(t);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java
+new file mode 100644
+index 0000000..48490f0
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java
+@@ -0,0 +1,48 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Function;
++import java.util.stream.Stream;
++import org.teavm.classlib.java.lang.TString;
++
++@Supplement(TString.class)
++abstract class StringSupplement extends TString {
++    public Stream<String> lines() {
++        String s = toString();
++        List<String> lines = new ArrayList<>();
++        int start = 0;
++        while (start < s.length()) {
++            int end = start;
++            while (end < s.length() && s.charAt(end) != '\n' && s.charAt(end) != '\r') {
++                ++end;
++            }
++            lines.add(s.substring(start, end));
++            if (end + 1 < s.length() && s.charAt(end) == '\r' && s.charAt(end + 1) == '\n') {
++                ++end;
++            }
++            start = end + 1;
++        }
++        return lines.stream();
++    }
++
++    public <R> R transform(Function<? super String, ? extends R> f) {
++        return f.apply(toString());
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java
+new file mode 100644
+index 0000000..d7761eb
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java
+@@ -0,0 +1,32 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Marks a class whose methods {@code org.teavm.javac.ClasslibSupplements} adds to the given TeaVM class library
++ * class.
++ */
++@Retention(RetentionPolicy.CLASS)
++@Target(ElementType.TYPE)
++@interface Supplement {
++    Class<?> value();
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java b/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
+index 187d714..481d943 100644
+--- a/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
++++ b/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
+@@ -50,6 +50,7 @@ public class ArchiveBuilder implements Closeable {
+     public static void main(String[] args) throws IOException {
+         var root = Path.of(args[0]);
+         var outPath = Path.of(args[1]);
++        var supplements = ClasslibSupplements.load(Path.of(args[2]));
+         Files.createDirectories(outPath.getParent());
+         try (var input = Files.walk(root);
+                 var output = new ArchiveBuilder(Files.newOutputStream(outPath))) {
+@@ -57,12 +58,17 @@ public class ArchiveBuilder implements Closeable {
+                 if (Files.isRegularFile(file)) {
+                     var relName = root.relativize(file).toString();
+                     try {
+-                        output.append(relName, Files.readAllBytes(file));
++                        var data = Files.readAllBytes(file);
++                        if (relName.endsWith(".class")) {
++                            data = supplements.apply(data);
++                        }
++                        output.append(relName, data);
+                     } catch (IOException e) {
+                         throw new UncheckedIOException(e);
+                     }
+                 }
+             });
+         }
++        supplements.checkApplied();
+     }
+ }
+diff --git a/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java b/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java
+new file mode 100644
+index 0000000..1a3e97a
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java
+@@ -0,0 +1,285 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.TreeSet;
++import org.objectweb.asm.AnnotationVisitor;
++import org.objectweb.asm.ClassReader;
++import org.objectweb.asm.ClassVisitor;
++import org.objectweb.asm.ClassWriter;
++import org.objectweb.asm.FieldVisitor;
++import org.objectweb.asm.Handle;
++import org.objectweb.asm.Label;
++import org.objectweb.asm.MethodVisitor;
++import org.objectweb.asm.Opcodes;
++import org.objectweb.asm.Type;
++
++/**
++ * Adds methods that the TeaVM class library lacks to its classes, in both the javac SDK and the runtime class
++ * library, so that both always declare the same API.
++ * <p>
++ * A supplement is a class of the {@code classlibSupplement} source set annotated with
++ * {@code @org.teavm.javac.supplement.Supplement(Target.class)}. To call members of the target, it extends the
++ * target, or for an interface, extends it. All its methods except constructors are copied to the target, with
++ * references to the supplement replaced by the target. The supplement may only add methods: it must not declare
++ * fields, static initializers, synthetic methods (lambdas) or methods the target already declares, and must not
++ * call {@code super} methods.
++ */
++public final class ClasslibSupplements {
++    private static final String SUPPLEMENT_DESC = "Lorg/teavm/javac/supplement/Supplement;";
++    private static final String SUPPLEMENT_ANNOTATION = "org/teavm/javac/supplement/Supplement";
++    private final Map<String, List<byte[]>> supplements = new LinkedHashMap<>();
++    private final Set<String> applied = new HashSet<>();
++
++    private ClasslibSupplements() {
++    }
++
++    public static ClasslibSupplements load(Path dir) throws IOException {
++        var result = new ClasslibSupplements();
++        var files = new TreeSet<Path>();
++        try (var stream = Files.walk(dir)) {
++            stream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".class")).forEach(files::add);
++        }
++        for (var file : files) {
++            var bytes = Files.readAllBytes(file);
++            var reader = new ClassReader(bytes);
++            if (reader.getClassName().equals(SUPPLEMENT_ANNOTATION)) {
++                continue;
++            }
++            var target = findTarget(reader);
++            if (target == null) {
++                throw new IllegalStateException(reader.getClassName() + " is not annotated with @Supplement");
++            }
++            result.supplements.computeIfAbsent(target, key -> new ArrayList<>()).add(bytes);
++        }
++        return result;
++    }
++
++    private static String findTarget(ClassReader reader) {
++        var target = new String[1];
++        reader.accept(new ClassVisitor(Opcodes.ASM9) {
++            @Override
++            public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
++                if (!desc.equals(SUPPLEMENT_DESC)) {
++                    return null;
++                }
++                return new AnnotationVisitor(Opcodes.ASM9) {
++                    @Override
++                    public void visit(String name, Object value) {
++                        if (name.equals("value")) {
++                            target[0] = ((Type) value).getInternalName();
++                        }
++                    }
++                };
++            }
++        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
++        return target[0];
++    }
++
++    /**
++     * Returns the class with its supplements' methods added, or the class itself when it has no supplements.
++     */
++    public byte[] apply(byte[] bytes) {
++        var reader = new ClassReader(bytes);
++        var className = reader.getClassName();
++        var classSupplements = supplements.get(className);
++        if (classSupplements == null) {
++            return bytes;
++        }
++        if (!applied.add(className)) {
++            throw new IllegalStateException("Supplements of " + className + " are applied twice");
++        }
++        var writer = new ClassWriter(0);
++        var declared = new HashSet<String>();
++        reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
++            @Override
++            public MethodVisitor visitMethod(int access, String name, String desc, String signature,
++                    String[] exceptions) {
++                declared.add(name + desc);
++                return super.visitMethod(access, name, desc, signature, exceptions);
++            }
++
++            @Override
++            public void visitEnd() {
++                for (var supplement : classSupplements) {
++                    copyMethods(new ClassReader(supplement), className, declared, writer);
++                }
++                super.visitEnd();
++            }
++        }, 0);
++        return writer.toByteArray();
++    }
++
++    /**
++     * Fails unless every supplement was applied, i.e. the class library contained every target.
++     */
++    public void checkApplied() {
++        for (var target : supplements.keySet()) {
++            if (!applied.contains(target)) {
++                throw new IllegalStateException("Supplemented class " + target + " was not found");
++            }
++        }
++    }
++
++    private static void copyMethods(ClassReader supplement, String target, Set<String> declared, ClassWriter writer) {
++        var name = supplement.getClassName();
++        var supertypes = new ArrayList<String>(List.of(supplement.getInterfaces()));
++        if (!supplement.getSuperName().equals("java/lang/Object")) {
++            supertypes.add(supplement.getSuperName());
++        }
++        if (!supertypes.isEmpty() && !supertypes.equals(List.of(target))) {
++            throw new IllegalStateException(name + " must extend nothing but " + target);
++        }
++        var remapper = new Remapper(name, target);
++        supplement.accept(new ClassVisitor(Opcodes.ASM9) {
++            @Override
++            public FieldVisitor visitField(int access, String fieldName, String desc, String signature,
++                    Object value) {
++                throw new IllegalStateException(name + " must not declare fields");
++            }
++
++            @Override
++            public MethodVisitor visitMethod(int access, String methodName, String desc, String signature,
++                    String[] exceptions) {
++                if (methodName.equals("<init>")) {
++                    return null;
++                }
++                if (methodName.equals("<clinit>") || (access & (Opcodes.ACC_SYNTHETIC | Opcodes.ACC_BRIDGE)) != 0) {
++                    throw new IllegalStateException(name + "." + methodName + " can't be added to " + target);
++                }
++                desc = remapper.desc(desc);
++                if (!declared.add(methodName + desc)) {
++                    throw new IllegalStateException(target + " already declares " + methodName + desc);
++                }
++                var method = writer.visitMethod(access, methodName, desc, remapper.desc(signature), exceptions);
++                return new RemappingMethodVisitor(method, remapper, name + "." + methodName);
++            }
++        }, ClassReader.SKIP_DEBUG);
++    }
++
++    private static final class Remapper {
++        private final String from;
++        private final String to;
++
++        Remapper(String from, String to) {
++            this.from = from;
++            this.to = to;
++        }
++
++        String name(String name) {
++            return from.equals(name) ? to : name;
++        }
++
++        String desc(String desc) {
++            return desc == null ? null : desc.replace("L" + from + ";", "L" + to + ";");
++        }
++
++        Object value(Object value) {
++            if (value instanceof Type) {
++                var type = (Type) value;
++                return type.getSort() == Type.OBJECT ? Type.getObjectType(name(type.getInternalName()))
++                        : Type.getType(desc(type.getDescriptor()));
++            }
++            if (value instanceof Handle) {
++                var handle = (Handle) value;
++                return new Handle(handle.getTag(), name(handle.getOwner()), handle.getName(), desc(handle.getDesc()),
++                        handle.isInterface());
++            }
++            return value;
++        }
++
++        Object[] frame(Object[] values) {
++            if (values == null) {
++                return null;
++            }
++            var result = values.clone();
++            for (var i = 0; i < result.length; ++i) {
++                if (result[i] instanceof String) {
++                    result[i] = name((String) result[i]);
++                }
++            }
++            return result;
++        }
++    }
++
++    private static final class RemappingMethodVisitor extends MethodVisitor {
++        private final Remapper remapper;
++        private final String location;
++
++        RemappingMethodVisitor(MethodVisitor mv, Remapper remapper, String location) {
++            super(Opcodes.ASM9, mv);
++            this.remapper = remapper;
++            this.location = location;
++        }
++
++        @Override
++        public void visitFrame(int type, int numLocal, Object[] local, int numStack, Object[] stack) {
++            super.visitFrame(type, numLocal, remapper.frame(local), numStack, remapper.frame(stack));
++        }
++
++        @Override
++        public void visitTypeInsn(int opcode, String type) {
++            super.visitTypeInsn(opcode, remapper.name(type));
++        }
++
++        @Override
++        public void visitFieldInsn(int opcode, String owner, String name, String desc) {
++            super.visitFieldInsn(opcode, remapper.name(owner), name, remapper.desc(desc));
++        }
++
++        @Override
++        public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean isInterface) {
++            if (opcode == Opcodes.INVOKESPECIAL && !name.equals("<init>")) {
++                throw new IllegalStateException(location + " must not call super or private methods");
++            }
++            super.visitMethodInsn(opcode, remapper.name(owner), name, remapper.desc(desc), isInterface);
++        }
++
++        @Override
++        public void visitInvokeDynamicInsn(String name, String desc, Handle bsm, Object... bsmArgs) {
++            var args = bsmArgs.clone();
++            for (var i = 0; i < args.length; ++i) {
++                args[i] = remapper.value(args[i]);
++            }
++            super.visitInvokeDynamicInsn(name, remapper.desc(desc), (Handle) remapper.value(bsm), args);
++        }
++
++        @Override
++        public void visitLdcInsn(Object value) {
++            super.visitLdcInsn(remapper.value(value));
++        }
++
++        @Override
++        public void visitMultiANewArrayInsn(String desc, int numDimensions) {
++            super.visitMultiANewArrayInsn(remapper.desc(desc), numDimensions);
++        }
++
++        @Override
++        public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
++            super.visitTryCatchBlock(start, end, handler, type == null ? null : remapper.name(type));
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+index 0f403be..d5b6c6d 100644
+--- a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
++++ b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+@@ -23,6 +23,7 @@ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.UncheckedIOException;
+ import java.nio.file.Files;
++import java.nio.file.Path;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.LinkedHashSet;
+@@ -477,9 +478,10 @@ public class StdlibConverter extends ClassVisitor {
+     }
+ 
+     public static void main(String[] args) throws IOException {
++        var supplements = ClasslibSupplements.load(Path.of(args[1]));
+         try (var output = new ArchiveBuilder(new FileOutputStream(args[0]))) {
+             var packageNames = new LinkedHashSet<String>();
+-            for (var i = 1; i < args.length; ++i) {
++            for (var i = 2; i < args.length; ++i) {
+                 var file = new File(args[i]);
+                 if (file.isFile()) {
+                     try (var input = new ZipInputStream(new FileInputStream(args[i]))) {
+@@ -492,7 +494,7 @@ public class StdlibConverter extends ClassVisitor {
+                                 continue;
+                             }
+ 
+-                            addFile(input, output, packageNames);
++                            addFile(input, supplements, output, packageNames);
+                         }
+                     }
+                 } else {
+@@ -500,7 +502,7 @@ public class StdlibConverter extends ClassVisitor {
+                         stream.forEach(path -> {
+                             if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(".class")) {
+                                 try {
+-                                    addFile(Files.newInputStream(path), output, packageNames);
++                                    addFile(Files.newInputStream(path), supplements, output, packageNames);
+                                 } catch (IOException e) {
+                                     throw new UncheckedIOException(e);
+                                 }
+@@ -509,6 +511,7 @@ public class StdlibConverter extends ClassVisitor {
+                     }
+                 }
+             }
++            supplements.checkApplied();
+             if (!packageNames.isEmpty()) {
+                 var writer = new ClassWriter(0);
+                 writer.visit(Opcodes.V21, Opcodes.ACC_MODULE, "java.base", null, null, null);
+@@ -522,8 +525,9 @@ public class StdlibConverter extends ClassVisitor {
+         }
+     }
+ 
+-    private static void addFile(InputStream input, ArchiveBuilder output, Set<String> packageNames) throws IOException {
+-        ClassReader reader = new ClassReader(input);
++    private static void addFile(InputStream input, ClasslibSupplements supplements, ArchiveBuilder output,
++            Set<String> packageNames) throws IOException {
++        ClassReader reader = new ClassReader(supplements.apply(input.readAllBytes()));
+         ClassWriter writer = new ClassWriter(0);
+         StdlibConverter converter = new StdlibConverter(writer, collectMethodRenames(reader));
+         reader.accept(converter, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES

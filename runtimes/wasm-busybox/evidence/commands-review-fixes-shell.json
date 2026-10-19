@@ -1,0 +1,3139 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-gnu-bash-busybox-shell",
+  "stage": 4,
+  "complete": true,
+  "passed": true,
+  "container": "source",
+  "startedAt": "2026-10-18T04:13:37.032Z",
+  "script": "set -eu\nset -o pipefail\nfor name in busybox base64 basename cat cmp cp cut diff dirname find grep gunzip gzip head hexdump ln ls mkdir mv od readlink realpath rm rmdir sed sha256sum sort stat tail tar tee touch tr uniq unzip wc; do test \"$(command -v \"$name\")\" = \"/usr/local/bin/$name\"; done\nfor name in echo printf pwd true false; do test \"$(command -v \"$name\")\" = \"$name\"; done\nprintf 'stage1:routes-ok\\n'\nmkdir -p \"/workspace/shell smoke\"\ncd \"/workspace/shell smoke\"\nprintf 'beta\\nalpha\\nalpha\\n' > input.txt\nprintf 'hidden\\n' > .hidden\nbusybox --list > applets.txt\ntest \"$(grep -x ls applets.txt)\" = ls\nls -a . > listing.txt\ntest \"$(grep -x \".hidden\" listing.txt)\" = .hidden\ntest \"$(head -n 1 input.txt)\" = beta\ntest \"$(tail -n 1 input.txt)\" = alpha\ntest \"$(wc -l < input.txt)\" -eq 3\ncat input.txt | sort | uniq | tee sorted.txt > pipeline.txt\ntest \"$(cat sorted.txt)\" = \"alpha\nbeta\"\ntest \"$(cat pipeline.txt)\" = \"$(cat sorted.txt)\"\ntest \"$(printf 'name:7\\n' | cut -d ':' -f 2)\" = 7\ntest \"$(printf 'ab\\n' | tr 'a-z' 'A-Z')\" = AB\nprintf 'stage1:streams-ok\\n'\ntest \"$(basename \"/workspace/shell smoke/input.txt\")\" = input.txt\ntest \"$(dirname \"/workspace/shell smoke/input.txt\")\" = \"/workspace/shell smoke\"\ntest \"$(readlink link.txt)\" = input.txt\ntest \"$(realpath link.txt)\" = \"/workspace/shell smoke/input.txt\"\ncp input.txt copy.txt\nmv copy.txt moved.txt\nrm moved.txt\nmkdir removable\nrmdir removable\nprintf 'stage1:paths-ok\\n'\nif ls does-not-exist > missing.out 2> missing.err; then exit 91; else failed=$?; fi\ntest \"$failed\" -eq 1\ntest -s missing.err\nprintf 'stage1:missing-status=%s\\n' \"$failed\"\nsed 's/alpha/ALPHA/g' input.txt > transformed.txt\ntest \"$(tail -n 1 transformed.txt)\" = ALPHA\nmkdir -p copy-source/nested\nprintf 'copy bytes\\n' > copy-source/nested/value.txt\ncp -R copy-source copy-destination\ncmp copy-source/nested/value.txt copy-destination/nested/value.txt\ndiff copy-source/nested/value.txt copy-destination/nested/value.txt\nln -s copy-source/nested/value.txt copied-link\ntest \"$(readlink copied-link)\" = copy-source/nested/value.txt\ntest \"$(find copy-destination -type f)\" = copy-destination/nested/value.txt\nprintf abc > abc.txt\ntest \"$(sha256sum abc.txt | cut -d ' ' -f 1)\" = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\ntest \"$(base64 abc.txt)\" = YWJj\ntest \"$(printf YWJj | base64 -d)\" = abc\ntest \"$(od -An -tx1 abc.txt)\" = \" 61 62 63\"\ntest \"$(hexdump -v -e '1/1 \"%02x\"' abc.txt)\" = 616263\nprintf 'stage2:files-and-text-ok\\n'\nprintf abc > metadata.txt\ntouch -t 202001020304.05 metadata.txt\ntest \"$(cat metadata.txt)\" = abc\ntest \"$(stat -c \"%s|%Y\" metadata.txt)\" = \"3|1577934245\"\ntouch -c not-created\ntest ! -e not-created\nls -ln metadata.txt > metadata.list\nprintf 'stage3:metadata-ok\\n'\nmkdir -p archive-source/nested archive-destination unzip-destination\nprintf 'archive bytes\\n' > archive-source/nested/text.txt\nln -s nested/text.txt archive-source/link\ntar -cf - archive-source | gzip -c > bundle.tar.gz\ngunzip -c bundle.tar.gz | tar -xf - -C archive-destination\ncmp archive-source/nested/text.txt archive-destination/archive-source/nested/text.txt\ntest \"$(readlink archive-destination/archive-source/link)\" = nested/text.txt\ngunzip -c bundle.tar.gz | tar -tf - > members.txt\ntest \"$(grep -x archive-source/nested/text.txt members.txt)\" = archive-source/nested/text.txt\nunzip -q /workspace/shell-fixture.zip -d unzip-destination\ncmp /workspace/shell-archive-expected.bin \"unzip-destination/input file.bin\"\nprintf 'invalid gzip bytes\\n' > invalid.gz\nif gunzip -c invalid.gz > invalid.out 2> invalid.err; then exit 92; else failed=$?; fi\ntest \"$failed\" -ne 0\ntest -s invalid.err\nprintf 'stage4:archives-ok\\n'\nprintf 'busybox-shell-stage-4-ok\\n'\n",
+  "expectedStdout": "stage1:routes-ok\nstage1:streams-ok\nstage1:paths-ok\nstage1:missing-status=1\nstage2:files-and-text-ok\nstage3:metadata-ok\nstage4:archives-ok\nbusybox-shell-stage-4-ok\n",
+  "prepared": {
+    "distribution": {
+      "bytes": 14081,
+      "sha256": "1114cf1b14cd22dc3169f3f6f17bc9cbc3ba42509c065f72f99a8ffc73300d71"
+    },
+    "pageConfig": {
+      "bytes": 401,
+      "sha256": "2b2ac82796d2e5d13f9f95d6a3376980089f334d0537604224ebbf6c7e01632a"
+    },
+    "schemaVersion": 1,
+    "hostHash": "dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d",
+    "profile": "live",
+    "containerVersion": "0.1.0-alpha.0",
+    "containerSource": "workspace",
+    "containerProfile": "virtual-metadata-v1",
+    "manifestSha256": "1114cf1b14cd22dc3169f3f6f17bc9cbc3ba42509c065f72f99a8ffc73300d71",
+    "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
+  },
+  "sourceIdentities": {
+    "scripts/test-container-busybox-shell.mjs": {
+      "bytes": 23242,
+      "sha256": "73f54ee93026d893ce770c025261539d0876e29dc267c0fd5fec81635e2ed13f"
+    },
+    "runtimes/wasm-busybox/test/command-cases.mjs": {
+      "bytes": 19591,
+      "sha256": "6bb61e86574f018a3a52c84ce0c3650fce1064bed8f41442ef89330450b27b32"
+    },
+    "scripts/browser-test-cookies.mjs": {
+      "bytes": 710,
+      "sha256": "8998dd018bff34a5967cffe9d2fd79c891db566cd01a16b3c3af3716d153afe9"
+    },
+    "scripts/rust-browser-probe-lib.mjs": {
+      "bytes": 27609,
+      "sha256": "bb12b4504bc53071a60dd4ea73b65297ed44b088d06e583049dd5420a76b884c"
+    },
+    "src/lib/playground/container/release.ts": {
+      "bytes": 36241,
+      "sha256": "cd8ab65d4e32f1521a5abe434a2b441a9245414f9f13ebf3a70a53778f26bbc8"
+    },
+    "examples/container/bash-profile.mjs": {
+      "bytes": 6639,
+      "sha256": "05b21896bf584a5160531870cc7bb34a6cf7b59cc15dcdc2c8cb960d8b2c20e4"
+    },
+    "packages/container/src/index.ts": {
+      "bytes": 889,
+      "sha256": "70885c9ecfa88127adbe4b86bde1da040a0ab86f015c61cb1fdf6b1584942f46"
+    },
+    "runtimes/wasm-busybox/commands.mjs": {
+      "bytes": 1198,
+      "sha256": "a610c7eaf2f5c34d16322814094411b3cb4323d3daa3ca19f584fad13507778b"
+    },
+    "packages/container/src/adapters/clang-live/index.ts": {
+      "bytes": 2268,
+      "sha256": "4480928a4a2806dce66a73546355577047b5a0302456407edfd767ad47ac70d2"
+    },
+    "examples/container/clang-profile.mjs": {
+      "bytes": 733,
+      "sha256": "d84f36dc8bd370ada4984d736bd7d041e876b47f0a00b21fffdc1ba8104e16b7"
+    },
+    "packages/container/src/adapters/clang/index.ts": {
+      "bytes": 585,
+      "sha256": "0a96d80d246080861d9de15589975c52c0c65491a3727c26eec49d3f147450c1"
+    },
+    "packages/container/src/adapters/wasi-live/index.ts": {
+      "bytes": 639,
+      "sha256": "eb37c42792422a9895bad54d7a1101e3a7435dcc5a5f532bd80009dc7f4fdadf"
+    },
+    "packages/container/src/adapters/wasix/index.ts": {
+      "bytes": 496,
+      "sha256": "153a07b48729907b3567d78533938dde66f5e89e5c30c83e7db29baeccdb8241"
+    },
+    "packages/container/src/shell/filesystem.ts": {
+      "bytes": 6864,
+      "sha256": "4104ce201b64ea2d448bf580a15d6a9feedb574f1e6f6c2ad0bc9aaea2ea5793"
+    },
+    "packages/container/src/errors.ts": {
+      "bytes": 560,
+      "sha256": "a5baaa86b7436669738e4008751f965fbe4f51bdf2beb90d1c85440912b606b8"
+    },
+    "packages/container/src/fs/index.ts": {
+      "bytes": 363,
+      "sha256": "d684f6364803d5b1dadd16f545282075417505f651f2dd19addaf0d2c3a66686"
+    },
+    "packages/container/src/packages/index.ts": {
+      "bytes": 862,
+      "sha256": "1f98a17d5f63fc817848260ab4e375958833ccb2823609aede587ecf478f645f"
+    },
+    "packages/container/src/container.ts": {
+      "bytes": 24177,
+      "sha256": "8e91ec71473c885d91a3c59f95d2734e5c5d91d87f52e391ec8bd5e0668013bd"
+    },
+    "packages/container/src/shell/host-command.ts": {
+      "bytes": 11855,
+      "sha256": "bf4da8d6ba5023f761971d6cba78f59d2a05b490e6c8ea9f610d3ccb01168623"
+    },
+    "packages/container/src/adapters/clang-live/outputs.ts": {
+      "bytes": 2127,
+      "sha256": "bda0fc71c0bd3993d57569165b1311c79d65caa61520c9f271ce234da63a8f33"
+    },
+    "packages/container/src/adapters/live-worker.ts": {
+      "bytes": 6563,
+      "sha256": "a5c397e4bddb33b74fb33acfa51fa6ac056968ae0f2444cdcc3c4d0f8c4bc6d5"
+    },
+    "packages/container/src/adapters/clang/configuration.ts": {
+      "bytes": 2448,
+      "sha256": "c6a51026fb090b29444d6098c19ae16144f7d0c2583753a2cded2837b0d4646c"
+    },
+    "packages/container/src/adapters/wasi/host.ts": {
+      "bytes": 21893,
+      "sha256": "c1dd403fd046487d3f831111d758acb224ee5ff46b7d743642bbc0936ace0253"
+    },
+    "packages/container/src/adapters/worker-adapter.ts": {
+      "bytes": 4234,
+      "sha256": "8d05eec897452c6c935bd2875fe038ae7613e502374190fa8a1fe0daf98f232e"
+    },
+    "packages/container/src/adapters/wasix/workers.ts": {
+      "bytes": 3283,
+      "sha256": "dde7657fd21cde2662b73e596499a04fb08b387552d3e960d6aec23fa32de911"
+    },
+    "packages/container/src/adapters/wasix/owner.ts": {
+      "bytes": 21684,
+      "sha256": "b5ccc95dad2282e4d71b74eddc29e3fc0f7d3d5ea11225fbefe2c56bb6c8b9dc"
+    },
+    "packages/container/src/adapters/wasix/session.ts": {
+      "bytes": 15291,
+      "sha256": "2c6a47d92103504130603fd6f0ed7aac596d00318d906d6a0a406e773f0e2527"
+    },
+    "packages/container/src/packages/manager.ts": {
+      "bytes": 9776,
+      "sha256": "3ad3e334f4d03b9398cca6312ed80cd9e7c872e0fabd2720314113f3f590302c"
+    },
+    "packages/container/src/fs/errors.ts": {
+      "bytes": 520,
+      "sha256": "9550bfcc9e1cb12130f76365a6102fedded39de40c8f1d8edf4fc241e8b8e82a"
+    },
+    "packages/container/src/packages/distribution.ts": {
+      "bytes": 16417,
+      "sha256": "a95d2641e5bc0db731cb8aa4120fe85b1c0702abc8d67408ba0bd3d3eff1fea7"
+    },
+    "packages/container/src/packages/archive.ts": {
+      "bytes": 5205,
+      "sha256": "eb42bef7796e427271de6e1a58e3827771aa0f9c976260fe21f40604aa0e3fa0"
+    },
+    "packages/container/src/packages/assets.ts": {
+      "bytes": 10988,
+      "sha256": "b5f3ce9de6cdbec364d8e977d28f3e9d663ad73a35128243db200d731c55dea5"
+    },
+    "packages/container/src/fs/memory.ts": {
+      "bytes": 53485,
+      "sha256": "40e07874058b6f771fab232a5c5c59bc7675983b65c478c0a97aa675b5d23d2f"
+    },
+    "packages/container/src/transport/rpc.ts": {
+      "bytes": 7600,
+      "sha256": "5895b3bc69575d61d9dc2c2b9ddd49a55b6eb18edf1abbc613148ca72bb6eb7d"
+    },
+    "packages/container/src/adapters/wasi-live/io.ts": {
+      "bytes": 23792,
+      "sha256": "3a5aeb8ca2f69fae562217a8c354c1a3eaa46c18834fe99ee36745003cce78f3"
+    },
+    "packages/container/src/adapters/wasi/profile.ts": {
+      "bytes": 1710,
+      "sha256": "a04e6500cca1c2bd983f7cec53095413d12ad52eda61054bedd2a263e4451fc4"
+    },
+    "packages/container/src/adapters/clang/artifacts.ts": {
+      "bytes": 2326,
+      "sha256": "a673bccb7d2b545179c1ed0f24d006d407a71ade2caf6452bd5882ccdd374905"
+    },
+    "packages/core/src/index.ts": {
+      "bytes": 15146,
+      "sha256": "91a0f2ac490b8bb74241579513a113f030dbd4f167848e0f27272eb02c12cebc"
+    },
+    "packages/container/src/process/lifecycle.ts": {
+      "bytes": 3461,
+      "sha256": "799ff54d4b5e61577504bd6d5a63ac3f7d95b78bde7e651a24265378a89d8437"
+    },
+    "packages/container/src/workspace/index.ts": {
+      "bytes": 4699,
+      "sha256": "42e80709946d479e19e2ff8404e613eafd332d710c79308fa8e80674ffeb732e"
+    },
+    "packages/container/src/fd/pipe.ts": {
+      "bytes": 4787,
+      "sha256": "ff0ba9a7c120b8a5af7610c004efc39aef3f394c22c179f384dfd728d2a0da9c"
+    },
+    "packages/container/src/workspace/save.ts": {
+      "bytes": 6230,
+      "sha256": "241a227fe0ef3090617126a1230fe014425a61086c9ef05c7380f78a1f3529cb"
+    },
+    "packages/container/src/workspace/backup.ts": {
+      "bytes": 9274,
+      "sha256": "3c1a6b72c190421cafad1cfd23a4dfefd68ca0e2ef5937c88bde27395812c797"
+    },
+    "packages/core/src/ruby-split.ts": {
+      "bytes": 19902,
+      "sha256": "0ef1b6eb50af947daa7b1fd1fc6052f12e5511c8cedb5fd5d672fcf42510e8c7"
+    },
+    "packages/container/src/adapters/wasi/stdio.ts": {
+      "bytes": 1544,
+      "sha256": "c1df62c017fe8f5543354c66652a4051376541654babae367412bd0f8f984690"
+    },
+    "packages/core/src/worker-session.ts": {
+      "bytes": 5062,
+      "sha256": "fd708794e0b6540ed15acaf6120327f4e46488ba453d9960a12006d4a00dcbfe"
+    },
+    "packages/core/src/session-asset-cache.ts": {
+      "bytes": 6447,
+      "sha256": "4a29cb7470f606e65afe83cbc3c2837a62daf959f2469e7bb76bba986d6974ee"
+    },
+    "packages/core/src/runtime-wasm-module-service.ts": {
+      "bytes": 8884,
+      "sha256": "44e27c7a31c267291438ab79ebb11073ac868751518120bc09b05e59b01ffae9"
+    },
+    "packages/core/src/pinned-asset-fetch.ts": {
+      "bytes": 10488,
+      "sha256": "6c7d1159934396792c56211e622b5ce5ec9136ed11bd666bb92b1eeeac72314f"
+    },
+    "packages/core/src/persistent-asset-cache.ts": {
+      "bytes": 32273,
+      "sha256": "5664962ed620e76b7ae6fab97a8f8fe1c15437299758e8d838b5e3b8f9933b0c"
+    },
+    "packages/core/src/runtime-asset-lock.ts": {
+      "bytes": 2952,
+      "sha256": "8a6e7f01d32136a52fc17340322ca52d68a4073b18c3c97a76bb83163fd60846"
+    },
+    "packages/core/src/asset-delivery-budget.ts": {
+      "bytes": 10458,
+      "sha256": "cc4f834054234a28eccd5220defd3874e43181c32498ce615fbe7757b39637f1"
+    },
+    "packages/core/src/capabilities.ts": {
+      "bytes": 14736,
+      "sha256": "9c0d0086c4ade511ce11ba06229f9a24023ad213a9965ee83cfd561f0b0cc83d"
+    },
+    "packages/core/src/asset-integrity.ts": {
+      "bytes": 6273,
+      "sha256": "bab908b33160ac19846073ecfa0488b73065dfe0d0a2f795d9f981dee18cb928"
+    },
+    "packages/core/src/languages.ts": {
+      "bytes": 6635,
+      "sha256": "073e932aa5c1e8c3e4a39c482dde3540627d397a3338a30ea243d37faca3c6e9"
+    },
+    "packages/core/src/errors.ts": {
+      "bytes": 7914,
+      "sha256": "36affaa3329c850181848c5a58f09438386837b22ee263092157f65ccb98e0f4"
+    },
+    "packages/core/src/execution.ts": {
+      "bytes": 12003,
+      "sha256": "11e00e3490f1d0ad738d70f29ba62423345cb3a8f218790d40bd80cbb1035c67"
+    },
+    "packages/core/src/protocol.ts": {
+      "bytes": 18047,
+      "sha256": "2b3bba1657ef9c6b65fbb37ad2d94233250381c22dc666397a885e6d6c282f00"
+    },
+    "packages/core/src/progress.ts": {
+      "bytes": 5764,
+      "sha256": "8fb4edba74dcd1b59f7cb5b5eeaff200defe3979b98b78ae75b703b9697b11e9"
+    },
+    "packages/core/src/runtime-assets.ts": {
+      "bytes": 50367,
+      "sha256": "a043ce58da41d619a88e58e4b6274f5c015b60643eaeb10e9765fb3eca111f5e"
+    },
+    "packages/core/src/awk-runtime.ts": {
+      "bytes": 36998,
+      "sha256": "b222301246f57e24eca67d30c5ca0cd9427f9db310bab8cf9476a27e0df78e69"
+    },
+    "packages/core/src/haskell-runtime.ts": {
+      "bytes": 2332,
+      "sha256": "6cf202244afebccea6d84f9da5c255b794a80cfa406d3acf9c9ae301dfe48bc2"
+    },
+    "packages/core/src/ruby-runtime.ts": {
+      "bytes": 57704,
+      "sha256": "e44b347fd1bdabae5112707566fa9ebd3c79b2eb6ad84638157d75fed1a49944"
+    },
+    "packages/core/src/teavm-runtime.ts": {
+      "bytes": 2276,
+      "sha256": "87ce603ba834959ff24781ee7c57b5bb275383e94a3ab41bffd0a9cdf5321876"
+    },
+    "packages/core/src/runtime-manifest.ts": {
+      "bytes": 21784,
+      "sha256": "8e6e944c1801a7168f57bcaac2eb31a417d116ee3a4501a58fb6642547ac4d83"
+    },
+    "packages/core/src/runtime-activation.ts": {
+      "bytes": 7232,
+      "sha256": "f87317deced45fd48929cd970bd85f36ff3c8449d21e340a8b3ce8d3ad37dd07"
+    },
+    "packages/core/src/runtime-preflight.ts": {
+      "bytes": 27324,
+      "sha256": "7bb2b19dacdfe57bbad1cef72694b00ad14623b0106524321e5cea7cfb382041"
+    },
+    "packages/core/src/prolog-runtime.ts": {
+      "bytes": 34547,
+      "sha256": "33277db40269ff0b153170bff98838b14b1f0ef3995de63833c9fe27de35ad5a"
+    },
+    "packages/core/src/perl-runtime.ts": {
+      "bytes": 40832,
+      "sha256": "ba40ee0598f28cf0a3280af5ac73a12ce2d0ecfbe151ebc0e2ac77a6cf60f409"
+    },
+    "packages/core/src/janet-runtime.ts": {
+      "bytes": 37171,
+      "sha256": "4a93f4eee32ea7b11b7b68fe8fbe15689b207da2ca05d1a4ec593beef6430eba"
+    },
+    "packages/core/src/julia-runtime.ts": {
+      "bytes": 45602,
+      "sha256": "6db37d220fe390eb95448c3b614bae86674ee0ef374fa0e1630980e0cfb24fe8"
+    },
+    "packages/core/src/nim-runtime.ts": {
+      "bytes": 50659,
+      "sha256": "bfd1a709c770021acda6d85f5731222a0fe553d989b766505166861ae21762af"
+    },
+    "packages/core/src/bash-runtime.ts": {
+      "bytes": 45961,
+      "sha256": "d4aa2f8bc8bc23b64aa23d88e17674eccebff5862e445f72d4b3327f0777db6a"
+    },
+    "packages/core/src/pascal-runtime.ts": {
+      "bytes": 43200,
+      "sha256": "adc2cdac9ba1404e3b1e4dd82ee11e29f0eecc6ee1588bcde809f27dca076343"
+    },
+    "packages/core/src/tcl-runtime.ts": {
+      "bytes": 47762,
+      "sha256": "5fe706b4ee4a518ce7cb381f25ed182e8bdc798a5aaf75e88d8a07be9ad4b9f1"
+    },
+    "packages/core/src/runtime-preflight-activation.ts": {
+      "bytes": 9654,
+      "sha256": "3a7a6e89a71809a7a723be1a3a3888a1ffa5218abc257a6bbcf9bf035fa3548d"
+    },
+    "packages/core/src/module-asset-rewrite.ts": {
+      "bytes": 2373,
+      "sha256": "8a8142851271559b6b5f0b3319788faa955e6a5350bf0b91254a4f3897ad0e46"
+    },
+    "packages/core/src/lisp-runtime.ts": {
+      "bytes": 20462,
+      "sha256": "5c24735877a926426604eb0c34957830dc1c54c46de7fe229adebcb36ed2c01e"
+    },
+    "packages/core/src/resource-budget.ts": {
+      "bytes": 7222,
+      "sha256": "9cec36db9aa8690586e666ee8fb3df594e49a3f71f77db51bd9b3221aa070a1d"
+    },
+    "packages/core/src/worker-lifetime.ts": {
+      "bytes": 4926,
+      "sha256": "268856eb8d4301c3c43a99558181f554ef54c13039c8844e0cbb1a0f30f80268"
+    },
+    "packages/core/src/workspace.ts": {
+      "bytes": 11074,
+      "sha256": "23ec766e6ed9b45e3168a4102a6d68a2d53d3081ccef46a273d1a181e532839b"
+    },
+    "packages/core/src/runtime-asset-lock.generated.ts": {
+      "bytes": 543105,
+      "sha256": "21dd698fe31a17e92e003e6c93b0688a69235a7170a7b688095e572c938a0e6d"
+    },
+    "packages/core/src/ruby-split.generated.ts": {
+      "bytes": 1794,
+      "sha256": "4a9ee0e9274d1074318fdc6ab38fbd9ad1d781e636307b476a579e3674b591ac"
+    },
+    "packages/core/src/haskell-runtime.generated.ts": {
+      "bytes": 663,
+      "sha256": "85237d1eccd8f9fa939c3884701e3f95ff9968e6109b922f1c779520aff6c554"
+    },
+    "packages/container/src/fs/persistence/index.ts": {
+      "bytes": 25980,
+      "sha256": "e12381aecd845ef4889adcb28ed963586c8cb094fce989a5890d103a62b91d14"
+    },
+    "packages/core/src/sandbox.ts": {
+      "bytes": 32615,
+      "sha256": "0def6a6ce817cdaf5b693ba05bf26e06d911ce6543e6719f8acd558ffb8e9b56"
+    },
+    "packages/container/src/fs/watch.ts": {
+      "bytes": 1476,
+      "sha256": "df7d0c1e3bc72b87d1e19fed986afcf36e3f63034e8764bc731269a7479b58cc"
+    },
+    "packages/core/src/teavm-runtime.generated.ts": {
+      "bytes": 955,
+      "sha256": "61cf13fe1f1866dc496126fa537fa71a3f09e3d1c56d9aac3532858200536b6c"
+    },
+    "packages/core/src/prewarm.ts": {
+      "bytes": 4864,
+      "sha256": "9bddede2dfeff380e891c3bd4b862c5502986e7ff97989aa35c4c99a3fc357c1"
+    },
+    "packages/core/src/ruby-runtime.generated.ts": {
+      "bytes": 1802,
+      "sha256": "382d80a250688b34cd3ac7473d83ddad49e9b875234d30d425a165643ee22a2b"
+    }
+  },
+  "ownerBundle": {
+    "bytes": 876898,
+    "sha256": "2869450121a788a86ac5106822147c3b13b467b0842c143cd9411fc21aedc0ad"
+  },
+  "assetIdentities": {
+    "/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm": {
+      "bytes": 9246938,
+      "sha256": "522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce"
+    },
+    "/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin": {
+      "bytes": 1812678,
+      "sha256": "045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4"
+    },
+    "/container-app/objects/30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40/busybox.wasm": {
+      "bytes": 634885,
+      "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40"
+    },
+    "/container-app/objects/eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba/clang.wasm.gz.bin": {
+      "bytes": 16270174,
+      "sha256": "eeee4f23e80b03cdd7b98c6722801f6e21143e67d83301a667acc7b70aba31ba"
+    },
+    "/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin": {
+      "bytes": 8178107,
+      "sha256": "dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d"
+    },
+    "/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar": {
+      "bytes": 35328000,
+      "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f"
+    },
+    "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/clang-worker.mjs": {
+      "bytes": 664529,
+      "sha256": "a0bb56e6fae19def3bebcfb05e8f8cd45dc267d2ea0177e668e6dfe6c4329fd3"
+    },
+    "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs": {
+      "bytes": 37296,
+      "sha256": "05623738abbb1f888b9667943168d8f701af4e7f8a3fbf95036f64e02a9dd81d"
+    },
+    "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs": {
+      "bytes": 104199,
+      "sha256": "4851df0f9e5f26e87eae6ea077e024e69360c28ff2bcb6afee767a737cdcde1d"
+    },
+    "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs": {
+      "bytes": 2425,
+      "sha256": "ed02122aa9a5903a6bd3d1497fc12bc2e2e4cfa65b479f72e58b10df52ba19d6"
+    }
+  },
+  "requests": [
+    {
+      "path": "/",
+      "accepted": true
+    },
+    {
+      "path": "/owner.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/objects/522a8c74c286f6b69256b537a0d3d8a2c17130f4b855ace9605d7434e3414bce/sdk.wasm",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/objects/045fe12ba2ae1b417c9413f85ac21a7370d9a8ee13a9de9bebaf4682e81e17c4/bash.webc.bin",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/objects/30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40/busybox.wasm",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    },
+    {
+      "path": "/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "accepted": true
+    }
+  ],
+  "consoleErrors": [],
+  "blockedRequests": [],
+  "checks": [
+    {
+      "id": "shell-completed",
+      "passed": true,
+      "observed": {
+        "code": 0,
+        "reason": "exited"
+      }
+    },
+    {
+      "id": "exact-script-output",
+      "passed": true,
+      "observed": {
+        "stdout": "stage1:routes-ok\nstage1:streams-ok\nstage1:paths-ok\nstage1:missing-status=1\nstage2:files-and-text-ok\nstage3:metadata-ok\nstage4:archives-ok\nbusybox-shell-stage-4-ok\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "external-commands-dispatched",
+      "passed": true,
+      "observed": [
+        "mkdir",
+        "busybox",
+        "grep",
+        "ls",
+        "head",
+        "tail",
+        "wc",
+        "sort",
+        "cat",
+        "uniq",
+        "tee",
+        "cut",
+        "tr",
+        "basename",
+        "dirname",
+        "readlink",
+        "realpath",
+        "cp",
+        "mv",
+        "rm",
+        "rmdir",
+        "sed",
+        "cmp",
+        "diff",
+        "ln",
+        "find",
+        "sha256sum",
+        "base64",
+        "od",
+        "hexdump",
+        "touch",
+        "stat",
+        "tar",
+        "gzip",
+        "gunzip",
+        "unzip"
+      ]
+    },
+    {
+      "id": "missing-file-status-forwarded",
+      "passed": true,
+      "observed": [
+        {
+          "path": "/usr/local/bin/ls",
+          "status": 1,
+          "pid": 27,
+          "reason": "exited",
+          "code": 1
+        },
+        {
+          "path": "/usr/local/bin/gunzip",
+          "status": 1,
+          "pid": 61,
+          "reason": "exited",
+          "code": 1
+        }
+      ]
+    },
+    {
+      "id": "supervised-exits",
+      "passed": true,
+      "observed": [
+        {
+          "path": "/usr/local/bin/mkdir",
+          "status": 0,
+          "pid": 1,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/busybox",
+          "status": 0,
+          "pid": 2,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/grep",
+          "status": 0,
+          "pid": 3,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/ls",
+          "status": 0,
+          "pid": 4,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/grep",
+          "status": 0,
+          "pid": 5,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/head",
+          "status": 0,
+          "pid": 6,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tail",
+          "status": 0,
+          "pid": 7,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/wc",
+          "status": 0,
+          "pid": 8,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cat",
+          "status": 0,
+          "pid": 10,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/sort",
+          "status": 0,
+          "pid": 9,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/uniq",
+          "status": 0,
+          "pid": 11,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tee",
+          "status": 0,
+          "pid": 12,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cat",
+          "status": 0,
+          "pid": 13,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cat",
+          "status": 0,
+          "pid": 14,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cat",
+          "status": 0,
+          "pid": 15,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cut",
+          "status": 0,
+          "pid": 16,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tr",
+          "status": 0,
+          "pid": 17,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/basename",
+          "status": 0,
+          "pid": 18,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/dirname",
+          "status": 0,
+          "pid": 19,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/readlink",
+          "status": 0,
+          "pid": 20,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/realpath",
+          "status": 0,
+          "pid": 21,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cp",
+          "status": 0,
+          "pid": 22,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/mv",
+          "status": 0,
+          "pid": 23,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/rm",
+          "status": 0,
+          "pid": 24,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/mkdir",
+          "status": 0,
+          "pid": 25,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/rmdir",
+          "status": 0,
+          "pid": 26,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/ls",
+          "status": 1,
+          "pid": 27,
+          "reason": "exited",
+          "code": 1
+        },
+        {
+          "path": "/usr/local/bin/sed",
+          "status": 0,
+          "pid": 28,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tail",
+          "status": 0,
+          "pid": 29,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/mkdir",
+          "status": 0,
+          "pid": 30,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cp",
+          "status": 0,
+          "pid": 31,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cmp",
+          "status": 0,
+          "pid": 32,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/diff",
+          "status": 0,
+          "pid": 33,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/ln",
+          "status": 0,
+          "pid": 34,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/readlink",
+          "status": 0,
+          "pid": 35,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/find",
+          "status": 0,
+          "pid": 36,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/sha256sum",
+          "status": 0,
+          "pid": 37,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cut",
+          "status": 0,
+          "pid": 38,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/base64",
+          "status": 0,
+          "pid": 39,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/base64",
+          "status": 0,
+          "pid": 40,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/od",
+          "status": 0,
+          "pid": 41,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/hexdump",
+          "status": 0,
+          "pid": 42,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/touch",
+          "status": 0,
+          "pid": 43,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cat",
+          "status": 0,
+          "pid": 44,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/stat",
+          "status": 0,
+          "pid": 45,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/touch",
+          "status": 0,
+          "pid": 46,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/ls",
+          "status": 0,
+          "pid": 47,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/mkdir",
+          "status": 0,
+          "pid": 48,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/ln",
+          "status": 0,
+          "pid": 49,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tar",
+          "status": 0,
+          "pid": 50,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/gzip",
+          "status": 0,
+          "pid": 51,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/gunzip",
+          "status": 0,
+          "pid": 52,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tar",
+          "status": 0,
+          "pid": 53,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cmp",
+          "status": 0,
+          "pid": 54,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/readlink",
+          "status": 0,
+          "pid": 55,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/gunzip",
+          "status": 0,
+          "pid": 56,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/tar",
+          "status": 0,
+          "pid": 57,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/grep",
+          "status": 0,
+          "pid": 58,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/unzip",
+          "status": 0,
+          "pid": 59,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/cmp",
+          "status": 0,
+          "pid": 60,
+          "reason": "exited",
+          "code": 0
+        },
+        {
+          "path": "/usr/local/bin/gunzip",
+          "status": 1,
+          "pid": 61,
+          "reason": "exited",
+          "code": 1
+        }
+      ]
+    },
+    {
+      "id": "filesystem-output",
+      "passed": true,
+      "observed": {
+        "input.txt": [
+          98,
+          101,
+          116,
+          97,
+          10,
+          97,
+          108,
+          112,
+          104,
+          97,
+          10,
+          97,
+          108,
+          112,
+          104,
+          97,
+          10
+        ],
+        "sorted.txt": [
+          97,
+          108,
+          112,
+          104,
+          97,
+          10,
+          98,
+          101,
+          116,
+          97,
+          10
+        ],
+        "pipeline.txt": [
+          97,
+          108,
+          112,
+          104,
+          97,
+          10,
+          98,
+          101,
+          116,
+          97,
+          10
+        ],
+        "missing.err": [
+          108,
+          115,
+          58,
+          32,
+          100,
+          111,
+          101,
+          115,
+          45,
+          110,
+          111,
+          116,
+          45,
+          101,
+          120,
+          105,
+          115,
+          116,
+          58,
+          32,
+          78,
+          111,
+          32,
+          115,
+          117,
+          99,
+          104,
+          32,
+          102,
+          105,
+          108,
+          101,
+          32,
+          111,
+          114,
+          32,
+          100,
+          105,
+          114,
+          101,
+          99,
+          116,
+          111,
+          114,
+          121,
+          10
+        ],
+        "metadata.txt": [
+          97,
+          98,
+          99
+        ],
+        "metadata.list": [
+          45,
+          114,
+          119,
+          45,
+          114,
+          45,
+          45,
+          114,
+          45,
+          45,
+          32,
+          32,
+          32,
+          32,
+          49,
+          32,
+          48,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          48,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          51,
+          32,
+          74,
+          97,
+          110,
+          32,
+          32,
+          50,
+          32,
+          32,
+          50,
+          48,
+          50,
+          48,
+          32,
+          109,
+          101,
+          116,
+          97,
+          100,
+          97,
+          116,
+          97,
+          46,
+          116,
+          120,
+          116,
+          10
+        ],
+        "members.txt": [
+          97,
+          114,
+          99,
+          104,
+          105,
+          118,
+          101,
+          45,
+          115,
+          111,
+          117,
+          114,
+          99,
+          101,
+          47,
+          10,
+          97,
+          114,
+          99,
+          104,
+          105,
+          118,
+          101,
+          45,
+          115,
+          111,
+          117,
+          114,
+          99,
+          101,
+          47,
+          108,
+          105,
+          110,
+          107,
+          10,
+          97,
+          114,
+          99,
+          104,
+          105,
+          118,
+          101,
+          45,
+          115,
+          111,
+          117,
+          114,
+          99,
+          101,
+          47,
+          110,
+          101,
+          115,
+          116,
+          101,
+          100,
+          47,
+          10,
+          97,
+          114,
+          99,
+          104,
+          105,
+          118,
+          101,
+          45,
+          115,
+          111,
+          117,
+          114,
+          99,
+          101,
+          47,
+          110,
+          101,
+          115,
+          116,
+          101,
+          100,
+          47,
+          116,
+          101,
+          120,
+          116,
+          46,
+          116,
+          120,
+          116,
+          10
+        ],
+        "invalid.err": [
+          103,
+          117,
+          110,
+          122,
+          105,
+          112,
+          58,
+          32,
+          105,
+          110,
+          118,
+          97,
+          108,
+          105,
+          100,
+          32,
+          109,
+          97,
+          103,
+          105,
+          99,
+          10
+        ],
+        "unzip-destination/input file.bin": [
+          104,
+          101,
+          108,
+          108,
+          111,
+          10,
+          0,
+          255
+        ]
+      }
+    },
+    {
+      "id": "real-metadata",
+      "passed": true,
+      "observed": {
+        "size": 3,
+        "mode": 420,
+        "mtimeMs": 1577934245000,
+        "atimeMs": 1577934245000
+      }
+    },
+    {
+      "id": "unzip-binary-content",
+      "passed": true,
+      "observed": [
+        104,
+        101,
+        108,
+        108,
+        111,
+        10,
+        0,
+        255
+      ]
+    },
+    {
+      "id": "owned-workers-retired",
+      "passed": true,
+      "observed": {
+        "active": 0,
+        "created": 70,
+        "terminated": 70,
+        "maxWorkers": 32,
+        "disposed": true
+      }
+    },
+    {
+      "id": "browser-errors",
+      "passed": true,
+      "observed": {
+        "errors": [],
+        "blocked": []
+      }
+    }
+  ],
+  "chromium": {
+    "path": "/home/seorii/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "bytes": 293285184,
+    "sha256": "8c599d43aec53f2460a31ae2f4af6bd863f8258b34ff519564bc5d4726bfaa1e"
+  },
+  "browserVersion": "153.0.8010.12",
+  "initialWorkers": 0,
+  "run": {
+    "type": "result",
+    "result": {
+      "code": 0,
+      "reason": "exited"
+    },
+    "stdout": [
+      115,
+      116,
+      97,
+      103,
+      101,
+      49,
+      58,
+      114,
+      111,
+      117,
+      116,
+      101,
+      115,
+      45,
+      111,
+      107,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      49,
+      58,
+      115,
+      116,
+      114,
+      101,
+      97,
+      109,
+      115,
+      45,
+      111,
+      107,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      49,
+      58,
+      112,
+      97,
+      116,
+      104,
+      115,
+      45,
+      111,
+      107,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      49,
+      58,
+      109,
+      105,
+      115,
+      115,
+      105,
+      110,
+      103,
+      45,
+      115,
+      116,
+      97,
+      116,
+      117,
+      115,
+      61,
+      49,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      50,
+      58,
+      102,
+      105,
+      108,
+      101,
+      115,
+      45,
+      97,
+      110,
+      100,
+      45,
+      116,
+      101,
+      120,
+      116,
+      45,
+      111,
+      107,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      51,
+      58,
+      109,
+      101,
+      116,
+      97,
+      100,
+      97,
+      116,
+      97,
+      45,
+      111,
+      107,
+      10,
+      115,
+      116,
+      97,
+      103,
+      101,
+      52,
+      58,
+      97,
+      114,
+      99,
+      104,
+      105,
+      118,
+      101,
+      115,
+      45,
+      111,
+      107,
+      10,
+      98,
+      117,
+      115,
+      121,
+      98,
+      111,
+      120,
+      45,
+      115,
+      104,
+      101,
+      108,
+      108,
+      45,
+      115,
+      116,
+      97,
+      103,
+      101,
+      45,
+      52,
+      45,
+      111,
+      107,
+      10
+    ],
+    "stderr": [],
+    "files": {
+      "input.txt": [
+        98,
+        101,
+        116,
+        97,
+        10,
+        97,
+        108,
+        112,
+        104,
+        97,
+        10,
+        97,
+        108,
+        112,
+        104,
+        97,
+        10
+      ],
+      "sorted.txt": [
+        97,
+        108,
+        112,
+        104,
+        97,
+        10,
+        98,
+        101,
+        116,
+        97,
+        10
+      ],
+      "pipeline.txt": [
+        97,
+        108,
+        112,
+        104,
+        97,
+        10,
+        98,
+        101,
+        116,
+        97,
+        10
+      ],
+      "missing.err": [
+        108,
+        115,
+        58,
+        32,
+        100,
+        111,
+        101,
+        115,
+        45,
+        110,
+        111,
+        116,
+        45,
+        101,
+        120,
+        105,
+        115,
+        116,
+        58,
+        32,
+        78,
+        111,
+        32,
+        115,
+        117,
+        99,
+        104,
+        32,
+        102,
+        105,
+        108,
+        101,
+        32,
+        111,
+        114,
+        32,
+        100,
+        105,
+        114,
+        101,
+        99,
+        116,
+        111,
+        114,
+        121,
+        10
+      ],
+      "metadata.txt": [
+        97,
+        98,
+        99
+      ],
+      "metadata.list": [
+        45,
+        114,
+        119,
+        45,
+        114,
+        45,
+        45,
+        114,
+        45,
+        45,
+        32,
+        32,
+        32,
+        32,
+        49,
+        32,
+        48,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        48,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        51,
+        32,
+        74,
+        97,
+        110,
+        32,
+        32,
+        50,
+        32,
+        32,
+        50,
+        48,
+        50,
+        48,
+        32,
+        109,
+        101,
+        116,
+        97,
+        100,
+        97,
+        116,
+        97,
+        46,
+        116,
+        120,
+        116,
+        10
+      ],
+      "members.txt": [
+        97,
+        114,
+        99,
+        104,
+        105,
+        118,
+        101,
+        45,
+        115,
+        111,
+        117,
+        114,
+        99,
+        101,
+        47,
+        10,
+        97,
+        114,
+        99,
+        104,
+        105,
+        118,
+        101,
+        45,
+        115,
+        111,
+        117,
+        114,
+        99,
+        101,
+        47,
+        108,
+        105,
+        110,
+        107,
+        10,
+        97,
+        114,
+        99,
+        104,
+        105,
+        118,
+        101,
+        45,
+        115,
+        111,
+        117,
+        114,
+        99,
+        101,
+        47,
+        110,
+        101,
+        115,
+        116,
+        101,
+        100,
+        47,
+        10,
+        97,
+        114,
+        99,
+        104,
+        105,
+        118,
+        101,
+        45,
+        115,
+        111,
+        117,
+        114,
+        99,
+        101,
+        47,
+        110,
+        101,
+        115,
+        116,
+        101,
+        100,
+        47,
+        116,
+        101,
+        120,
+        116,
+        46,
+        116,
+        120,
+        116,
+        10
+      ],
+      "invalid.err": [
+        103,
+        117,
+        110,
+        122,
+        105,
+        112,
+        58,
+        32,
+        105,
+        110,
+        118,
+        97,
+        108,
+        105,
+        100,
+        32,
+        109,
+        97,
+        103,
+        105,
+        99,
+        10
+      ],
+      "unzip-destination/input file.bin": [
+        104,
+        101,
+        108,
+        108,
+        111,
+        10,
+        0,
+        255
+      ]
+    },
+    "metadata": {
+      "size": 3,
+      "mode": 420,
+      "mtimeMs": 1577934245000,
+      "atimeMs": 1577934245000
+    },
+    "records": [
+      {
+        "path": "/usr/local/bin/mkdir",
+        "status": 0,
+        "pid": 1,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/busybox",
+        "status": 0,
+        "pid": 2,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "status": 0,
+        "pid": 3,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "status": 0,
+        "pid": 4,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "status": 0,
+        "pid": 5,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/head",
+        "status": 0,
+        "pid": 6,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tail",
+        "status": 0,
+        "pid": 7,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/wc",
+        "status": 0,
+        "pid": 8,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "status": 0,
+        "pid": 10,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/sort",
+        "status": 0,
+        "pid": 9,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/uniq",
+        "status": 0,
+        "pid": 11,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tee",
+        "status": 0,
+        "pid": 12,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "status": 0,
+        "pid": 13,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "status": 0,
+        "pid": 14,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "status": 0,
+        "pid": 15,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cut",
+        "status": 0,
+        "pid": 16,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tr",
+        "status": 0,
+        "pid": 17,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/basename",
+        "status": 0,
+        "pid": 18,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/dirname",
+        "status": 0,
+        "pid": 19,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "status": 0,
+        "pid": 20,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/realpath",
+        "status": 0,
+        "pid": 21,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cp",
+        "status": 0,
+        "pid": 22,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/mv",
+        "status": 0,
+        "pid": 23,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/rm",
+        "status": 0,
+        "pid": 24,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "status": 0,
+        "pid": 25,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/rmdir",
+        "status": 0,
+        "pid": 26,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "status": 1,
+        "pid": 27,
+        "reason": "exited",
+        "code": 1
+      },
+      {
+        "path": "/usr/local/bin/sed",
+        "status": 0,
+        "pid": 28,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tail",
+        "status": 0,
+        "pid": 29,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "status": 0,
+        "pid": 30,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cp",
+        "status": 0,
+        "pid": 31,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "status": 0,
+        "pid": 32,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/diff",
+        "status": 0,
+        "pid": 33,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/ln",
+        "status": 0,
+        "pid": 34,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "status": 0,
+        "pid": 35,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/find",
+        "status": 0,
+        "pid": 36,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/sha256sum",
+        "status": 0,
+        "pid": 37,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cut",
+        "status": 0,
+        "pid": 38,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/base64",
+        "status": 0,
+        "pid": 39,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/base64",
+        "status": 0,
+        "pid": 40,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/od",
+        "status": 0,
+        "pid": 41,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/hexdump",
+        "status": 0,
+        "pid": 42,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/touch",
+        "status": 0,
+        "pid": 43,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "status": 0,
+        "pid": 44,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/stat",
+        "status": 0,
+        "pid": 45,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/touch",
+        "status": 0,
+        "pid": 46,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "status": 0,
+        "pid": 47,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "status": 0,
+        "pid": 48,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/ln",
+        "status": 0,
+        "pid": 49,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "status": 0,
+        "pid": 50,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/gzip",
+        "status": 0,
+        "pid": 51,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "status": 0,
+        "pid": 52,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "status": 0,
+        "pid": 53,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "status": 0,
+        "pid": 54,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "status": 0,
+        "pid": 55,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "status": 0,
+        "pid": 56,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "status": 0,
+        "pid": 57,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "status": 0,
+        "pid": 58,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/unzip",
+        "status": 0,
+        "pid": 59,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "status": 0,
+        "pid": 60,
+        "reason": "exited",
+        "code": 0
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "status": 1,
+        "pid": 61,
+        "reason": "exited",
+        "code": 1
+      }
+    ],
+    "invocations": [
+      {
+        "path": "/usr/local/bin/mkdir",
+        "argv": [
+          "mkdir",
+          "-p",
+          "/workspace/shell smoke"
+        ],
+        "cwd": "/workspace"
+      },
+      {
+        "path": "/usr/local/bin/busybox",
+        "argv": [
+          "busybox",
+          "--list"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "argv": [
+          "grep",
+          "-x",
+          "ls",
+          "applets.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "argv": [
+          "ls",
+          "-a",
+          "."
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "argv": [
+          "grep",
+          "-x",
+          ".hidden",
+          "listing.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/head",
+        "argv": [
+          "head",
+          "-n",
+          "1",
+          "input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tail",
+        "argv": [
+          "tail",
+          "-n",
+          "1",
+          "input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/wc",
+        "argv": [
+          "wc",
+          "-l"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/sort",
+        "argv": [
+          "sort"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "argv": [
+          "cat",
+          "input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/uniq",
+        "argv": [
+          "uniq"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tee",
+        "argv": [
+          "tee",
+          "sorted.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "argv": [
+          "cat",
+          "sorted.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "argv": [
+          "cat",
+          "pipeline.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "argv": [
+          "cat",
+          "sorted.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cut",
+        "argv": [
+          "cut",
+          "-d",
+          ":",
+          "-f",
+          "2"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tr",
+        "argv": [
+          "tr",
+          "a-z",
+          "A-Z"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/basename",
+        "argv": [
+          "basename",
+          "/workspace/shell smoke/input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/dirname",
+        "argv": [
+          "dirname",
+          "/workspace/shell smoke/input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "argv": [
+          "readlink",
+          "link.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/realpath",
+        "argv": [
+          "realpath",
+          "link.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cp",
+        "argv": [
+          "cp",
+          "input.txt",
+          "copy.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/mv",
+        "argv": [
+          "mv",
+          "copy.txt",
+          "moved.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/rm",
+        "argv": [
+          "rm",
+          "moved.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "argv": [
+          "mkdir",
+          "removable"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/rmdir",
+        "argv": [
+          "rmdir",
+          "removable"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "argv": [
+          "ls",
+          "does-not-exist"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/sed",
+        "argv": [
+          "sed",
+          "s/alpha/ALPHA/g",
+          "input.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tail",
+        "argv": [
+          "tail",
+          "-n",
+          "1",
+          "transformed.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "argv": [
+          "mkdir",
+          "-p",
+          "copy-source/nested"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cp",
+        "argv": [
+          "cp",
+          "-R",
+          "copy-source",
+          "copy-destination"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "argv": [
+          "cmp",
+          "copy-source/nested/value.txt",
+          "copy-destination/nested/value.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/diff",
+        "argv": [
+          "diff",
+          "copy-source/nested/value.txt",
+          "copy-destination/nested/value.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/ln",
+        "argv": [
+          "ln",
+          "-s",
+          "copy-source/nested/value.txt",
+          "copied-link"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "argv": [
+          "readlink",
+          "copied-link"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/find",
+        "argv": [
+          "find",
+          "copy-destination",
+          "-type",
+          "f"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/sha256sum",
+        "argv": [
+          "sha256sum",
+          "abc.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cut",
+        "argv": [
+          "cut",
+          "-d",
+          " ",
+          "-f",
+          "1"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/base64",
+        "argv": [
+          "base64",
+          "abc.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/base64",
+        "argv": [
+          "base64",
+          "-d"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/od",
+        "argv": [
+          "od",
+          "-An",
+          "-tx1",
+          "abc.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/hexdump",
+        "argv": [
+          "hexdump",
+          "-v",
+          "-e",
+          "1/1 \"%02x\"",
+          "abc.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/touch",
+        "argv": [
+          "touch",
+          "-t",
+          "202001020304.05",
+          "metadata.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cat",
+        "argv": [
+          "cat",
+          "metadata.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/stat",
+        "argv": [
+          "stat",
+          "-c",
+          "%s|%Y",
+          "metadata.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/touch",
+        "argv": [
+          "touch",
+          "-c",
+          "not-created"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/ls",
+        "argv": [
+          "ls",
+          "-ln",
+          "metadata.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/mkdir",
+        "argv": [
+          "mkdir",
+          "-p",
+          "archive-source/nested",
+          "archive-destination",
+          "unzip-destination"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/ln",
+        "argv": [
+          "ln",
+          "-s",
+          "nested/text.txt",
+          "archive-source/link"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "argv": [
+          "tar",
+          "-cf",
+          "-",
+          "archive-source"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/gzip",
+        "argv": [
+          "gzip",
+          "-c"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "argv": [
+          "gunzip",
+          "-c",
+          "bundle.tar.gz"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "argv": [
+          "tar",
+          "-xf",
+          "-",
+          "-C",
+          "archive-destination"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "argv": [
+          "cmp",
+          "archive-source/nested/text.txt",
+          "archive-destination/archive-source/nested/text.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/readlink",
+        "argv": [
+          "readlink",
+          "archive-destination/archive-source/link"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "argv": [
+          "gunzip",
+          "-c",
+          "bundle.tar.gz"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/tar",
+        "argv": [
+          "tar",
+          "-tf",
+          "-"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/grep",
+        "argv": [
+          "grep",
+          "-x",
+          "archive-source/nested/text.txt",
+          "members.txt"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/unzip",
+        "argv": [
+          "unzip",
+          "-q",
+          "/workspace/shell-fixture.zip",
+          "-d",
+          "unzip-destination"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/cmp",
+        "argv": [
+          "cmp",
+          "/workspace/shell-archive-expected.bin",
+          "unzip-destination/input file.bin"
+        ],
+        "cwd": "/workspace/shell smoke"
+      },
+      {
+        "path": "/usr/local/bin/gunzip",
+        "argv": [
+          "gunzip",
+          "-c",
+          "invalid.gz"
+        ],
+        "cwd": "/workspace/shell smoke"
+      }
+    ],
+    "processes": [],
+    "workers": {
+      "active": 0,
+      "created": 70,
+      "terminated": 70,
+      "maxWorkers": 32,
+      "disposed": true
+    },
+    "configuration": {
+      "manifestSha256": "0d243587c1011ca8691ac835a562146a6b7db3cccb1c8e44b473a0f61a4e2c85",
+      "sdkUrl": "http://127.0.0.1:34825/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/index.mjs",
+      "sdkWorkerUrl": "http://127.0.0.1:34825/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/sdk/worker.mjs",
+      "liveWorkerUrl": "http://127.0.0.1:34825/container-app/host/dd20909c19c3497a2fb4a4452c2a9a4aac3a0f27af39f1355e3fb388681ef81d/live-worker.mjs",
+      "bashWasmSha256": "2728fc7856c5fc4d78da1ad239421b4198fe4f0a78e8d7ae4b244898d8cf770c",
+      "memory": {
+        "initial": 35,
+        "maximum": 16384,
+        "shared": true
+      }
+    }
+  },
+  "ownerCleanup": {
+    "type": "cleanup",
+    "workers": {
+      "active": 0,
+      "created": 70,
+      "terminated": 70,
+      "maxWorkers": 32,
+      "disposed": true
+    }
+  },
+  "workersAfterRun": [],
+  "stdout": "stage1:routes-ok\nstage1:streams-ok\nstage1:paths-ok\nstage1:missing-status=1\nstage2:files-and-text-ok\nstage3:metadata-ok\nstage4:archives-ok\nbusybox-shell-stage-4-ok\n",
+  "stderr": "",
+  "sourcesRechecked": true,
+  "workersAfterContextClose": [],
+  "finishedAt": "2026-10-18T04:13:45.166Z"
+}

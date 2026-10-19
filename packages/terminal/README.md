@@ -60,3 +60,11 @@ callers still receive all six addons.
 The component uses xterm's default renderer. Pass `<Terminal {playground} webgl />` to load the
 optional WebGL renderer after the terminal is ready; it falls back to the default renderer if a
 GPU context is unavailable. The standalone `loadWebglPlugin(terminal)` helper is also exported.
+
+## Debug transcript
+
+The hidden `[data-testid="terminal-debug-output"]` element exposes the latest terminal output for
+browser diagnostics and tests. It retains at most 65,536 UTF-16 code units, dropping the oldest
+output without splitting a surrogate pair at the cutoff. This includes both program and shell
+output; it is a recent transcript, not a complete execution log. `TerminalControl.clear()` resets
+the transcript. The limit does not truncate output sent to xterm or change its scrollback settings.

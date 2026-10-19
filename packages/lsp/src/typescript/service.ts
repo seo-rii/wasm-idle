@@ -132,10 +132,9 @@ export function createTypeScriptWorkerService(
 	};
 
 	const sourceTextForFileName = (fileName: string) =>
-		documentForFileName(fileName)?.text ||
-		extraLibs[normalizePath(fileName)] ||
-		libFiles[basename(fileName)] ||
-		'';
+		documentForFileName(fileName)?.text ??
+		extraLibs[normalizePath(fileName)] ??
+		libFiles[basename(fileName)];
 
 	const host: ts.LanguageServiceHost = {
 		getCompilationSettings: () => compilerOptions,
@@ -151,7 +150,7 @@ export function createTypeScriptWorkerService(
 			String(documentForFileName(fileName)?.version ?? (fileName in extraLibs ? 1 : 0)),
 		getScriptSnapshot(fileName) {
 			const source = sourceTextForFileName(fileName);
-			return source ? ts.ScriptSnapshot.fromString(source) : undefined;
+			return source === undefined ? undefined : ts.ScriptSnapshot.fromString(source);
 		},
 		getScriptKind: scriptKind,
 		getCurrentDirectory: () => '/workspace',
@@ -183,7 +182,7 @@ export function createTypeScriptWorkerService(
 	};
 
 	const locationForSpan = (fileName: string, textSpan: ts.TextSpan) => {
-		const source = sourceTextForFileName(fileName);
+		const source = sourceTextForFileName(fileName) ?? '';
 		return {
 			uri: pathToUri(normalizePath(fileName)),
 			range: {

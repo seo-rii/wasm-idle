@@ -845,6 +845,14 @@ ${imageHook}
 ${
 	debug
 		? `
+import os as __wasm_idle_debug_os
+
+# Direct compilation uses relative paths; imported modules use absolute paths.
+# Capture both identities before user code can change the working directory.
+__wasm_idle_debug_source_filenames = {
+    ${debugFilenameLiteral},
+    __wasm_idle_debug_os.path.abspath(${debugFilenameLiteral}),
+}
 __wasm_idle_debug_breakpoints = set(${normalizedBreakpoints})
 __wasm_idle_debug_breakpoint_version = -1
 __wasm_idle_debug_pause_on_entry = ${pauseOnEntry ? 'True' : 'False'}
@@ -872,7 +880,7 @@ def __wasm_idle_debug_depth(frame):
     depth = 0
     current = frame
     while current is not None:
-        if current.f_code.co_filename == ${debugFilenameLiteral}:
+        if current.f_code.co_filename in __wasm_idle_debug_source_filenames:
             depth += 1
         current = current.f_back
     return depth
@@ -892,7 +900,7 @@ def __wasm_idle_debug_stack(frame):
     stack = []
     current = frame
     while current is not None:
-        if current.f_code.co_filename == ${debugFilenameLiteral}:
+        if current.f_code.co_filename in __wasm_idle_debug_source_filenames:
             stack.append({"functionName": current.f_code.co_name, "line": current.f_lineno})
         current = current.f_back
     return stack
@@ -905,7 +913,7 @@ def __wasm_idle_debug_trace(frame, event, arg):
     global __wasm_idle_debug_next_line
     global __wasm_idle_debug_step_out_depth
 
-    if frame.f_code.co_filename != ${debugFilenameLiteral}:
+    if frame.f_code.co_filename not in __wasm_idle_debug_source_filenames:
         return None
     if event != "line":
         return __wasm_idle_debug_trace

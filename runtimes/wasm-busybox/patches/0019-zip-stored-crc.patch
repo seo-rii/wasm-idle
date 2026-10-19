@@ -1,0 +1,61 @@
+--- a/archival/unzip.c
++++ b/archival/unzip.c
+@@ -368,6 +368,16 @@
+ 	free(name);
+ }
+ 
++#if defined(BB_WASI_B1)
++/* The same upstream CRC32 implementation validates stored bytes and symlinks. */
++static uint32_t wasi_unzip_crc32(uint32_t crc, const void *bytes, unsigned size)
++{
++	if (!global_crc32_table)
++		global_crc32_new_table_le();
++	return crc32_block_endian0(crc, bytes, size, global_crc32_table);
++}
++#endif
++
+ #if ENABLE_FEATURE_UNZIP_CDF
+ static void unzip_extract_symlink(llist_t **symlink_placeholders,
+ 		zip_header_t *zip,
+@@ -379,8 +389,16 @@
+ 
+ 	if (zip->fmt.method == 0) {
+ 		/* Method 0 - stored (not compressed) */
++#if defined(BB_WASI_B1)
++		if (zip->fmt.cmpsize != zip->fmt.ucmpsize)
++			bb_simple_error_msg_and_die("bad stored length");
++#endif
+ 		target = xzalloc(zip->fmt.ucmpsize + 1);
+ 		xread(zip_fd, target, zip->fmt.ucmpsize);
++#if defined(BB_WASI_B1)
++		if ((wasi_unzip_crc32(0xffffffffL, target, zip->fmt.ucmpsize) ^ 0xffffffffL) != zip->fmt.crc32)
++			bb_simple_error_msg_and_die("crc error");
++#endif
+ 	} else {
+ #if 1
+ 		bb_simple_error_msg_and_die("compressed symlink is not supported");
+@@ -411,8 +429,24 @@
+ 	if (zip->fmt.method == 0) {
+ 		/* Method 0 - stored (not compressed) */
+ 		off_t size = zip->fmt.ucmpsize;
++#if defined(BB_WASI_B1)
++		unsigned char buffer[4096];
++		uint32_t crc = 0xffffffffL;
++		if (zip->fmt.cmpsize != zip->fmt.ucmpsize)
++			bb_simple_error_msg_and_die("bad stored length");
++		while (size != 0) {
++			unsigned count = size < (off_t)sizeof(buffer) ? (unsigned)size : sizeof(buffer);
++			xread(zip_fd, buffer, count);
++			crc = wasi_unzip_crc32(crc, buffer, count);
++			xwrite(dst_fd, buffer, count);
++			size -= count;
++		}
++		if ((crc ^ 0xffffffffL) != zip->fmt.crc32)
++			bb_simple_error_msg_and_die("crc error");
++#else
+ 		if (size)
+ 			bb_copyfd_exact_size(zip_fd, dst_fd, size);
++#endif
+ 		return;
+ 	}
+ 

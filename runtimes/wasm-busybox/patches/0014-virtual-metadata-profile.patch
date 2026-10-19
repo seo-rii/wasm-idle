@@ -1,0 +1,184 @@
+--- a/Makefile.flags
++++ b/Makefile.flags
+@@ -223,6 +223,6 @@
+ FLTFLAGS += -s 16000
+ 
+ ifeq ($(ARCH),wasm32)
+-CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1 -DBB_WASI_B2 -DBB_WASI_B3
++CFLAGS += -DBB_WASI_B0 -DBB_WASI_B1 -DBB_WASI_B2 -DBB_WASI_B3 -DBB_WASI_METADATA
+ CFLAGS_busybox += -Wl,--max-memory=67108864 -Wl,--undefined=__main_argc_argv
+ endif
+--- a/coreutils/ls.c
++++ b/coreutils/ls.c
+@@ -1210,6 +1210,10 @@
+ 	if (opt & (OPT_l | OPT_n | OPT_s))
+ 		bb_simple_error_msg_and_die("long and block metadata require the extended filesystem profile");
+ #endif
++#if defined(BB_WASI_METADATA)
++	if (opt & OPT_s)
++		bb_simple_error_msg_and_die("allocated block metadata is unsupported by the WASI profile");
++#endif
+ 	argv += optind;
+ 	if (!argv[0])
+ 		*--argv = (char*)".";
+--- a/coreutils/stat.c
++++ b/coreutils/stat.c
+@@ -310,8 +310,10 @@
+ {
+ #define TYPE_SIGNED(t) (! ((t) 0 < (t) -1))
+ 	struct stat *statbuf = (struct stat *) data;
++#if !defined(BB_WASI_METADATA)
+ 	struct passwd *pw_ent;
+ 	struct group *gw_ent;
++#endif
+ 
+ 	if (m == 'n') {
+ 		printfs(pformat, filename);
+@@ -353,23 +355,38 @@
+ 		strcat(pformat, "lu");
+ 		printf(pformat, (unsigned long) statbuf->st_uid);
+ 	} else if (m == 'U') {
++#if defined(BB_WASI_METADATA)
++		printfs(pformat, "UNKNOWN"); /* No host account database. */
++#else
+ 		pw_ent = getpwuid(statbuf->st_uid);
+ 		printfs(pformat, (pw_ent != NULL) ? pw_ent->pw_name : "UNKNOWN");
++#endif
+ 	} else if (m == 'g') {
+ 		strcat(pformat, "lu");
+ 		printf(pformat, (unsigned long) statbuf->st_gid);
+ 	} else if (m == 'G') {
++#if defined(BB_WASI_METADATA)
++		printfs(pformat, "UNKNOWN");
++#else
+ 		gw_ent = getgrgid(statbuf->st_gid);
+ 		printfs(pformat, (gw_ent != NULL) ? gw_ent->gr_name : "UNKNOWN");
++#endif
++#if defined(BB_WASI_METADATA)
++	} else if (m == 't' || m == 'T' || m == 'b' || m == 'B' || m == 'o') {
++		/* Preview1 has no allocation, I/O block or physical device identity. */
++		printfs(pformat, "UNKNOWN");
++#else
+ 	} else if (m == 't') {
+ 		strcat(pformat, "lx");
+ 		printf(pformat, (unsigned long) major(statbuf->st_rdev));
+ 	} else if (m == 'T') {
+ 		strcat(pformat, "lx");
+ 		printf(pformat, (unsigned long) minor(statbuf->st_rdev));
++#endif
+ 	} else if (m == 's') {
+ 		strcat(pformat, "llu");
+ 		printf(pformat, (unsigned long long) statbuf->st_size);
++#if !defined(BB_WASI_METADATA)
+ 	} else if (m == 'B') {
+ 		strcat(pformat, "lu");
+ 		printf(pformat, (unsigned long) 512); //ST_NBLOCKSIZE
+@@ -379,6 +396,7 @@
+ 	} else if (m == 'o') {
+ 		strcat(pformat, "lu");
+ 		printf(pformat, (unsigned long) statbuf->st_blksize);
++#endif
+ 	} else if (m == 'x') {
+ 		printfs(pformat, human_time(&statbuf->st_atim));
+ 	} else if (m == 'X') {
+@@ -603,7 +621,8 @@
+ 		}
+ 	}
+ #endif
+-	if ((option_mask32 & OPT_DEREFERENCE ? stat : lstat) (filename, &statbuf) != 0) {
++	if ((option_mask32 & OPT_DEREFERENCE
++		? stat(filename, &statbuf) : lstat(filename, &statbuf)) != 0) {
+ 		bb_perror_msg("can't stat '%s'", filename);
+ 		return 0;
+ 	}
+--- a/include/libbb.h
++++ b/include/libbb.h
+@@ -73,6 +73,66 @@
+ #endif
+ #include <time.h>
+ #include <sys/param.h>
++
++#if defined(BB_WASI_METADATA)
++#include <wasi/libc-find-relpath.h>
++__attribute__((import_module("wasm_idle_fs_v1"), import_name("path_mode")))
++extern int bb_wasi_path_mode(int, const char *, unsigned, unsigned);
++__attribute__((import_module("wasm_idle_fs_v1"), import_name("fd_mode")))
++extern int bb_wasi_fd_mode(int);
++
++/* Enrich real libc stat results with stored virtual permissions. libc resolves
++ * cwd/preopens itself; no environment-based path or permission emulation. */
++static inline int bb_wasi_enrich_path(const char *path, struct stat *info, unsigned follow)
++{
++	char storage[4096];
++	char *relative = storage;
++	const char *prefix;
++	int fd = __wasilibc_find_relpath(path, &prefix, &relative, sizeof(storage));
++	int mode;
++	if (fd < 0)
++		return -1;
++	mode = bb_wasi_path_mode(fd, relative, strlen(relative), follow);
++	if (mode < 0) {
++		errno = -mode;
++		return -1;
++	}
++	info->st_mode = (info->st_mode & S_IFMT) | (mode & 0777);
++	return 0;
++}
++static inline int bb_wasi_stat(const char *path, struct stat *info)
++{
++	if (stat(path, info))
++		return -1;
++	return bb_wasi_enrich_path(path, info, 1);
++}
++static inline int bb_wasi_lstat(const char *path, struct stat *info)
++{
++	if (lstat(path, info))
++		return -1;
++	return bb_wasi_enrich_path(path, info, 0);
++}
++static inline int bb_wasi_fstat(int fd, struct stat *info)
++{
++	int mode;
++	if (fstat(fd, info))
++		return -1;
++	mode = bb_wasi_fd_mode(fd);
++	/* Standard byte streams have no VFS inode. Reopened low descriptors still
++	 * receive their real stored mode whenever the import succeeds. */
++	if (mode == -EBADF && fd >= 0 && fd <= 2)
++		return 0;
++	if (mode < 0) {
++		errno = -mode;
++		return -1;
++	}
++	info->st_mode = (info->st_mode & S_IFMT) | (mode & 0777);
++	return 0;
++}
++#define stat(path, info) bb_wasi_stat(path, info)
++#define lstat(path, info) bb_wasi_lstat(path, info)
++#define fstat(fd, info) bb_wasi_fstat(fd, info)
++#endif
+ #if !defined(BB_WASI_B0)
+ #include <pwd.h>
+ #endif
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -228,3 +228,8 @@
+ ifeq ($(ARCH),wasm32)
+ lib-y += hash_md5_sha.o dump.o uuencode.o inode_hash.o bb_qsort.o isqrt.o isdirectory.o bb_bswap_64.o
+ endif
++
++# Virtual metadata consumers use upstream date parsing and file type helpers.
++ifeq ($(ARCH),wasm32)
++lib-y += time.o
++endif
+--- a/libbb/copy_file.c
++++ b/libbb/copy_file.c
+@@ -104,7 +104,7 @@
+ /* Inverse of cp -d ("cp without -d") */
+ #define FLAGS_DEREF (flags & (FILEUTILS_DEREFERENCE + FILEUTILS_DEREFERENCE_L0))
+ 
+-	if ((FLAGS_DEREF ? stat : lstat)(source, &source_stat) < 0) {
++	if ((FLAGS_DEREF ? stat(source, &source_stat) : lstat(source, &source_stat)) < 0) {
+ 		/* This may be a dangling symlink.
+ 		 * Making [sym]links to dangling symlinks works, so... */
+ 		if (flags & (FILEUTILS_MAKE_SOFTLINK|FILEUTILS_MAKE_HARDLINK))

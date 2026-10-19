@@ -146,4 +146,74 @@ describe('TypeScript worker service', () => {
 
 		expect(completions.items.some((item) => item.label === 'amount')).toBe(true);
 	});
+
+	it.each(['typescript', 'javascript'] as const)(
+		'keeps an emptied %s document available to diagnostics and completion',
+		async (language) => {
+			const document: LspDocument = {
+				uri: `file:///workspace/main.${language === 'typescript' ? 'ts' : 'js'}`,
+				languageId: language,
+				version: 1,
+				text: 'const value = 1;'
+			};
+			const documents = new Map([[document.uri, document]]);
+			const context: LspDocumentContext = {
+				documents,
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			const service = createTypeScriptWorkerService(language, async () => ({}));
+			await service.initialize?.({ language, compilerOptions: { noLib: true } }, context);
+			try {
+				expect(await service.diagnostics?.(document, context)).toEqual([]);
+				document.text = '';
+				document.version += 1;
+				expect(await service.diagnostics?.(document, context)).toEqual([]);
+				const completions = (await service.completion?.(
+					document,
+					{ line: 0, character: 0 },
+					context
+				)) as { items: Array<{ label: string }> };
+				expect(completions.items.some(({ label }) => label === 'const')).toBe(true);
+				document.text = 'const restored = 1;';
+				document.version += 1;
+				expect(await service.diagnostics?.(document, context)).toEqual([]);
+				documents.delete(document.uri);
+				expect(() => service.diagnostics?.(document, context)).toThrow(
+					'Could not find source file'
+				);
+			} finally {
+				await service.dispose?.();
+			}
+		}
+	);
+
+	it('resolves an empty extra library without treating it as a missing import', async () => {
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: 'import {} from "./empty";'
+		};
+		const context: LspDocumentContext = {
+			documents: new Map([[document.uri, document]]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const service = createTypeScriptWorkerService('typescript', async () => ({}));
+		await service.initialize?.(
+			{
+				compilerOptions: { noLib: true },
+				extraLibs: { '/workspace/empty.ts': '' }
+			},
+			context
+		);
+		try {
+			const diagnostics = await service.diagnostics?.(document, context);
+			expect(diagnostics?.map(({ code }) => code)).toEqual([2306]);
+			expect(diagnostics?.[0].message).toContain('is not a module');
+		} finally {
+			await service.dispose?.();
+		}
+	});
 });

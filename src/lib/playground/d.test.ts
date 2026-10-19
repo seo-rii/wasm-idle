@@ -67,12 +67,15 @@ import { WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 describe('D sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
+		// Native module-service behavior is covered in d-module-cache.test.ts.
+		vi.stubGlobal('MessageChannel', undefined);
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;
 	});
 
 	afterEach(() => {
 		vi.useRealTimers();
+		vi.unstubAllGlobals();
 	});
 
 	it('loads the D worker and forwards diagnostics plus run output', async () => {
@@ -99,7 +102,10 @@ void main() {
 		).resolves.toBe(true);
 		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(true);
 
+		// The prepared artifact stays in its worker for one execution; that worker then retires.
 		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
 			expect.objectContaining({
@@ -387,13 +393,10 @@ void main() {
 		await expect(firstRun).resolves.toBe(true);
 		expect(outputs).toEqual(['first\n']);
 
-		worker.postMessage.mockImplementationOnce(() => {
-			queueMicrotask(() => {
-				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
-			});
-		});
+		await sandbox.load(TEST_RUNTIME_ASSETS);
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
-		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances[1].postMessage).toHaveBeenCalledTimes(2);
 	});
 
 	it('rejects a pre-aborted D run without changing worker state', async () => {
@@ -461,10 +464,10 @@ void main() {
 				signal: settledController.signal
 			})
 		).resolves.toBe(true);
-		expect(retryWorker.terminate).not.toHaveBeenCalled();
+		expect(retryWorker.terminate).toHaveBeenCalledOnce();
 
 		settledController.abort(new Error('late abort'));
-		expect(retryWorker.terminate).not.toHaveBeenCalled();
+		expect(retryWorker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it('rejects overlapping D startup operations without superseding readiness', async () => {
@@ -632,7 +635,7 @@ void main() {
 		});
 		await expect(running).resolves.toBe(true);
 		expect(worker.onmessage).toBeNull();
-		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it('preserves a replacement after a D callback terminates and throws', async () => {
@@ -833,6 +836,16 @@ void main() {
 				stdin: 'injected\n'
 			})
 		).resolves.toBe(true);
+		const nextWorker = new MockWorker();
+		nextWorker.postMessage.mockImplementation((message) => {
+			runMessages.push(message);
+			queueMicrotask(() => {
+				nextWorker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedValues.push(readBufferedStdin(message.buffer));
+				nextWorker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		sandbox.worker = nextWorker as unknown as Worker;
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 
 		expect(runMessages).toHaveLength(2);
@@ -1039,10 +1052,10 @@ void main() {
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
 		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
-		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+		expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
 	});
 
-	it('clears settled D deadlines before they can retire an idle worker', async () => {
+	it('clears settled D deadlines after retiring the completed worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new D();
 		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
@@ -1056,9 +1069,10 @@ void main() {
 		).resolves.toBe(true);
 
 		await vi.advanceTimersByTimeAsync(10);
-		expect(worker.terminate).not.toHaveBeenCalled();
-		expect(sandbox.worker).toBe(worker);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('keeps clear reusable but disposes an idle D runtime exactly once', async () => {
@@ -1068,11 +1082,13 @@ void main() {
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
 		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
-		const worker = workerInstances[0];
+		const firstWorker = workerInstances[0];
 
 		await sandbox.clear();
-		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(firstWorker.terminate).not.toHaveBeenCalled();
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		const worker = workerInstances[1];
 		sandbox.write('queued input\n');
 		sandbox.eof();
 		expect(sandbox.pendingInput).toEqual(['queued input\n']);
@@ -1158,7 +1174,7 @@ void main() {
 		expect(sandbox.pendingEof).toBe(false);
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		expect(worker.terminate).toHaveBeenCalledOnce();
-		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('settles active D startup with one stable disposal cancellation', async () => {

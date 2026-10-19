@@ -9,10 +9,11 @@ import { createLiveClangAdapter } from '@wasm-idle/container/adapters/clang-live
 import { createLiveWasiAdapter } from '@wasm-idle/container/adapters/wasi-live';
 import { createWasixShellSession, installWasixWorkerGroup } from '@wasm-idle/container/adapters/wasix';
 import { selectClangProfile } from './clang-profile.mjs';
+import { BUSYBOX_SHELL_COMMANDS } from '../../runtimes/wasm-busybox/commands.mjs';
 
 export const BASH_BIN = '/usr/local/bin';
 export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
-export const BASH_APPLETS = Object.freeze(['cat', 'cp', 'grep', 'mkdir', 'mv', 'rm']);
+export const BASH_APPLETS = BUSYBOX_SHELL_COMMANDS;
 const TOOLCHAIN = '/opt/toolchains/llvm';
 const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), value => value.toString(16).padStart(2, '0')).join('');
 

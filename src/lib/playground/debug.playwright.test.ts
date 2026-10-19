@@ -3,7 +3,12 @@
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { createHash } from 'node:crypto';
 import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
-import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import {
+	chromium,
+	type BrowserContext,
+	type Page,
+	type Worker as BrowserWorker
+} from 'playwright-core';
 
 import {
 	runBrowserPreparationScripts,
@@ -992,6 +997,331 @@ async function prepareDebugBrowserContext(context: BrowserContext, browserUrl: s
 	);
 }
 
+function installMissingDebugResource(resourcePath: string) {
+	const nativeFetch = globalThis.fetch.bind(globalThis);
+	(globalThis as any).__wasmIdleMissingDebugResourceRequests = 0;
+	Object.defineProperty(globalThis, 'fetch', {
+		configurable: true,
+		value: (input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+			const url =
+				input instanceof URL
+					? input
+					: new URL(typeof input === 'string' ? input : input.url, location.href);
+			if (url.pathname.endsWith(`/${resourcePath}`)) {
+				(globalThis as any).__wasmIdleMissingDebugResourceRequests += 1;
+				return Promise.resolve(
+					new Response('missing debug runtime resource fixture', { status: 404 })
+				);
+			}
+			return nativeFetch(input, init);
+		},
+		writable: true
+	});
+}
+
+async function installOwnerDebugTransportProbe(worker: BrowserWorker) {
+	await worker.evaluate(() => {
+		type Descriptor = { control: SharedArrayBuffer; data: SharedArrayBuffer };
+		const descriptors = new Map<
+			'stdin' | 'rspInput' | 'dapOutput' | 'stdout' | 'stderr',
+			Descriptor
+		>();
+		let sample: Array<{ name: string; descriptor: Descriptor; write: number; epoch: number }> =
+			[];
+		const debugWorkers = new WeakMap<Worker, 'lldb' | 'target'>();
+		const currentByKind = new Map<'lldb' | 'target', Worker>();
+		const linearMemory = {
+			lldb: { peakBytes: 0, samples: 0 },
+			target: { peakBytes: 0, samples: 0 }
+		};
+		let activeDebug = 0;
+		let createdDebug = 0;
+		let terminatedDebug = 0;
+		let peakActive = 0;
+		let holdOutputReads = false;
+		let outputReadGate = Promise.resolve();
+		let releaseOutputReads = () => {};
+		const readOutputMetrics = () =>
+			Object.fromEntries(
+				(['stdout', 'stderr'] as const).map((name) => {
+					const descriptor = descriptors.get(name);
+					if (!descriptor) return [name, null];
+					const control = new Int32Array(descriptor.control);
+					return [
+						name,
+						{
+							available: (Atomics.load(control, 1) - Atomics.load(control, 0)) >>> 0,
+							capacity: descriptor.data.byteLength
+						}
+					];
+				})
+			);
+		let pauseSaturation: ReturnType<typeof readOutputMetrics> | null = null;
+		globalThis.addEventListener('message', ({ data }) => {
+			if (
+				holdOutputReads &&
+				data?.version === 1 &&
+				data.type === 'call' &&
+				data.method === 'debugPause'
+			) {
+				pauseSaturation = readOutputMetrics();
+				// A microtask can run before the production message listener. Keep
+				// readers held until that listener and its DAP write have run, then
+				// drain output so native fd_write can service the pending interrupt.
+				setTimeout(() => {
+					holdOutputReads = false;
+					releaseOutputReads();
+				}, 0);
+			}
+		});
+		const atomics = Atomics as unknown as {
+			waitAsync?: (...args: any[]) => { async: boolean; value: string | Promise<string> };
+		};
+		const waitAsync = atomics.waitAsync;
+		if (waitAsync)
+			atomics.waitAsync = (...args: any[]) => {
+				const result = Reflect.apply(waitAsync, Atomics, args);
+				const output = (['stdout', 'stderr'] as const).some(
+					(name) => descriptors.get(name)?.control === args[0]?.buffer
+				);
+				if (!output || (!holdOutputReads && typeof result.value === 'string'))
+					return result;
+				return {
+					async: true,
+					value: Promise.resolve(result.value).then(async (status) => {
+						if (holdOutputReads) await outputReadGate;
+						return status;
+					})
+				};
+			};
+		const observeDebugWorker = (worker: Worker, kind: 'lldb' | 'target') => {
+			if (debugWorkers.has(worker)) return;
+			debugWorkers.set(worker, kind);
+			currentByKind.set(kind, worker);
+			activeDebug += 1;
+			createdDebug += 1;
+			peakActive = Math.max(peakActive, activeDebug);
+			worker.addEventListener('message', ({ data }) => {
+				if (
+					data?.type !== 'memory' ||
+					data.worker !== kind ||
+					!Number.isSafeInteger(data.bytes) ||
+					data.bytes <= 0
+				)
+					return;
+				const metric = linearMemory[kind];
+				metric.samples += 1;
+				metric.peakBytes = Math.max(metric.peakBytes, data.bytes);
+			});
+		};
+		const wrapConstructor = (Constructor: typeof Worker): typeof Worker =>
+			new Proxy(Constructor, {
+				construct(target, args, newTarget) {
+					const worker = Reflect.construct(target, args, newTarget) as Worker;
+					const name = args[1]?.name;
+					if (name === 'wasm-lldb-debugger') observeDebugWorker(worker, 'lldb');
+					if (name === 'wasm-target-debugger') observeDebugWorker(worker, 'target');
+					return worker;
+				}
+			});
+		let Constructor = wrapConstructor(Worker);
+		// The owner installs ApplicationWorker and then RoutedWorker. Keep observing
+		// actual constructions through both, including allocations before initialize.
+		Object.defineProperty(globalThis, 'Worker', {
+			configurable: true,
+			get: () => Constructor,
+			set: (value: typeof Worker) => {
+				Constructor = wrapConstructor(value);
+			}
+		});
+		let prototype = Worker.prototype;
+		while (Object.getPrototypeOf(prototype)?.postMessage)
+			prototype = Object.getPrototypeOf(prototype);
+		const postMessage = prototype.postMessage;
+		const terminate = prototype.terminate;
+		// Container engines own their debugger Workers. Observe the native prototype
+		// so the owner's ApplicationWorker/RoutedWorker constructors keep their ownership.
+		prototype.postMessage = function (this: Worker, message: any, ...args: any[]) {
+			const kind =
+				message?.type === 'initialize-lldb'
+					? 'lldb'
+					: message?.type === 'initialize-target'
+						? 'target'
+						: undefined;
+			if (kind) observeDebugWorker(this, kind);
+			if (message?.type === 'initialize-target') {
+				for (const name of ['stdin', 'rspInput', 'stdout', 'stderr'] as const) {
+					if (
+						message[name]?.control instanceof SharedArrayBuffer &&
+						message[name]?.data instanceof SharedArrayBuffer
+					)
+						descriptors.set(name, message[name]);
+				}
+			}
+			if (
+				message?.type === 'initialize-lldb' &&
+				message.dapOutput?.control instanceof SharedArrayBuffer &&
+				message.dapOutput?.data instanceof SharedArrayBuffer
+			)
+				descriptors.set('dapOutput', message.dapOutput);
+			return Reflect.apply(postMessage, this, [message, ...args]);
+		};
+		prototype.terminate = function (this: Worker) {
+			const kind = debugWorkers.get(this);
+			if (debugWorkers.delete(this)) {
+				activeDebug -= 1;
+				terminatedDebug += 1;
+			}
+			if (kind && currentByKind.get(kind) === this) currentByKind.delete(kind);
+			return Reflect.apply(terminate, this, []);
+		};
+		Object.defineProperty(globalThis, '__wasmIdleOwnerDebugTransport', {
+			value: {
+				async saturateOutput(durationMs: number) {
+					if (!waitAsync) throw new Error('Output saturation requires Atomics.waitAsync');
+					if (!Number.isFinite(durationMs) || durationMs < 0) return null;
+					const stdin = descriptors.get('stdin');
+					if (!stdin) return null;
+					const header = new Int32Array(stdin.control);
+					const write = Atomics.load(header, 1) >>> 0;
+					if (write !== Atomics.load(header, 0) >>> 0) return null;
+					// Hold only the real output readers, leaving DAP/RSP and the owner
+					// request loop free to process the document's actual Pause request.
+					holdOutputReads = true;
+					pauseSaturation = null;
+					outputReadGate = new Promise<void>((resolve) => {
+						releaseOutputReads = resolve;
+					});
+					new Uint8Array(stdin.data)[write & (stdin.data.byteLength - 1)] =
+						's'.charCodeAt(0);
+					Atomics.store(header, 1, (write + 1) | 0);
+					Atomics.add(header, 3, 1);
+					Atomics.notify(header, 3);
+					await new Promise((resolve) => setTimeout(resolve, durationMs));
+					return readOutputMetrics();
+				},
+				pauseSaturation() {
+					return pauseSaturation;
+				},
+				releaseOutputReads() {
+					holdOutputReads = false;
+					releaseOutputReads();
+				},
+				injectStaleGeneration() {
+					const lldb = currentByKind.get('lldb');
+					const target = currentByKind.get('target');
+					if (!lldb || !target) return false;
+					const generation = `wasm-debug-stale-${Date.now().toString(36)}`;
+					lldb.postMessage({ type: 'dispose', generation });
+					target.postMessage({ type: 'interrupt-target', generation });
+					target.postMessage({ type: 'dispose', generation });
+					lldb.dispatchEvent(
+						new MessageEvent('message', {
+							data: {
+								type: 'error',
+								worker: 'lldb',
+								message: 'stale-generation-lldb-error',
+								generation
+							}
+						})
+					);
+					for (const data of [
+						{
+							type: 'output',
+							channel: 'stdout',
+							data: 'stale-generation-output',
+							generation
+						},
+						{
+							type: 'error',
+							worker: 'target',
+							message: 'stale-generation-target-error',
+							generation
+						},
+						{ type: 'exit', exitCode: 91, generation }
+					])
+						target.dispatchEvent(new MessageEvent('message', { data }));
+					return true;
+				},
+				terminateWorker(kind: 'lldb' | 'target') {
+					const worker = currentByKind.get(kind);
+					if (!worker) return false;
+					worker.dispatchEvent(
+						new ErrorEvent('error', {
+							message: `injected ${kind} debug worker crash`
+						})
+					);
+					worker.terminate();
+					return true;
+				},
+				saturationState() {
+					return {
+						holdOutputReads,
+						atPause: pauseSaturation,
+						output: readOutputMetrics()
+					};
+				},
+				metrics() {
+					return {
+						activeDebug,
+						createdDebug,
+						terminatedDebug,
+						peakActive,
+						linearMemory: {
+							lldb: { ...linearMemory.lldb },
+							target: { ...linearMemory.target }
+						}
+					};
+				},
+				begin() {
+					sample = [];
+					for (const name of ['rspInput', 'dapOutput', 'stdout', 'stderr'] as const) {
+						const descriptor = descriptors.get(name);
+						if (!descriptor) return false;
+						const header = new Int32Array(descriptor.control);
+						sample.push({
+							name,
+							descriptor,
+							write: Atomics.load(header, 1) >>> 0,
+							epoch: Atomics.load(header, 3) >>> 0
+						});
+					}
+					return true;
+				},
+				read() {
+					return Object.fromEntries(
+						sample.map(({ name, descriptor, write, epoch }) => {
+							const header = new Int32Array(descriptor.control);
+							const bytes = (Atomics.load(header, 1) - write) >>> 0;
+							const capacity = descriptor.data.byteLength;
+							const captureText = name === 'rspInput' || name === 'dapOutput';
+							const overrun = captureText && bytes > capacity;
+							let text = '';
+							if (captureText && !overrun) {
+								const ring = new Uint8Array(descriptor.data);
+								const copy = new Uint8Array(bytes);
+								for (let i = 0; i < bytes; i++)
+									copy[i] = ring[(write + i) & (capacity - 1)];
+								text = new TextDecoder().decode(copy);
+							}
+							return [
+								name,
+								{
+									bytes,
+									capacity,
+									overrun,
+									text,
+									notifications: (Atomics.load(header, 3) - epoch) >>> 0
+								}
+							];
+						})
+					);
+				}
+			}
+		});
+	});
+}
+
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 	let lastState:
@@ -1159,7 +1489,7 @@ async function waitForTerminalOutput(page: Page, output: string, timeoutMs = 5_0
 }
 
 async function readBrowserLifecycleMetrics(page: Page) {
-	return page.evaluate(() => {
+	const metrics = await page.evaluate(() => {
 		const workerMetrics = (
 			globalThis as typeof globalThis & {
 				__wasmIdleWorkerMetrics?: () => {
@@ -1196,6 +1526,106 @@ async function readBrowserLifecycleMetrics(page: Page) {
 			usedJsHeapSize: Number(memory?.usedJSHeapSize ?? 0)
 		};
 	});
+	const owner = page
+		.workers()
+		.find((worker) => new URL(worker.url()).pathname.includes('/owner.worker'));
+	const nested = await owner?.evaluate(() =>
+		(globalThis as any).__wasmIdleOwnerDebugTransport?.metrics()
+	);
+	if (!nested) return metrics;
+	return {
+		...metrics,
+		active: metrics.active + nested.activeDebug,
+		created: metrics.created + nested.createdDebug,
+		terminated: metrics.terminated + nested.terminatedDebug,
+		activeDebug: metrics.activeDebug + nested.activeDebug,
+		createdDebug: metrics.createdDebug + nested.createdDebug,
+		terminatedDebug: metrics.terminatedDebug + nested.terminatedDebug,
+		peakActive: metrics.peakActive + nested.peakActive,
+		linearMemory: Object.fromEntries(
+			(['lldb', 'target'] as const).map((kind) => [
+				kind,
+				{
+					peakBytes: Math.max(
+						metrics.linearMemory[kind].peakBytes,
+						nested.linearMemory[kind].peakBytes
+					),
+					samples: metrics.linearMemory[kind].samples + nested.linearMemory[kind].samples
+				}
+			])
+		) as typeof metrics.linearMemory
+	};
+}
+
+async function injectDebugWorkerFault(
+	page: Page,
+	action: 'injectStaleGeneration' | 'terminateWorker',
+	kind?: 'lldb' | 'target'
+) {
+	const owner = page
+		.workers()
+		.find((worker) => new URL(worker.url()).pathname.includes('/owner.worker'));
+	return owner
+		? owner.evaluate(
+				({ action, kind }) =>
+					(globalThis as any).__wasmIdleOwnerDebugTransport[action](kind),
+				{ action, kind }
+			)
+		: page.evaluate(
+				({ action, kind }) => (window as any).__wasmIdleDebugWorkerFaults?.[action]?.(kind),
+				{ action, kind }
+			);
+}
+
+async function saturateDebugOutputAndPause(page: Page, durationMs: number) {
+	const owner = page
+		.workers()
+		.find((worker) => new URL(worker.url()).pathname.includes('/owner.worker'));
+	if (!owner)
+		return page.evaluate(
+			(durationMs) =>
+				(window as any).__wasmIdleDebugWorkerFaults?.saturateOutputAndPause?.(durationMs) ??
+				null,
+			durationMs
+		);
+	const saturation = await owner.evaluate(
+		(durationMs) =>
+			(globalThis as any).__wasmIdleOwnerDebugTransport.saturateOutput(durationMs),
+		durationMs
+	);
+	const pauseRequested = await page.evaluate(() => {
+		const button = document.querySelector<HTMLButtonElement>('button[aria-label="Pause"]');
+		if (!button || button.disabled) return false;
+		button.click();
+		return true;
+	});
+	return saturation && { ...saturation, pauseRequested };
+}
+
+async function releaseDebugOutputReads(page: Page) {
+	const owner = page
+		.workers()
+		.find((worker) => new URL(worker.url()).pathname.includes('/owner.worker'));
+	await owner?.evaluate(() =>
+		(globalThis as any).__wasmIdleOwnerDebugTransport.releaseOutputReads()
+	);
+}
+
+async function assertDebugPauseOutputSaturation(page: Page) {
+	const owner = page
+		.workers()
+		.find((worker) => new URL(worker.url()).pathname.includes('/owner.worker'));
+	if (!owner) return; // The window probe requests Pause in its atomic saturation task.
+	const atPause = await owner.evaluate(() =>
+		(globalThis as any).__wasmIdleOwnerDebugTransport.pauseSaturation()
+	);
+	expect(atPause).toMatchObject({
+		stdout: { available: expect.any(Number), capacity: expect.any(Number) },
+		stderr: { available: expect.any(Number), capacity: expect.any(Number) }
+	});
+	for (const channel of [atPause.stdout, atPause.stderr])
+		expect(channel.available).toBeGreaterThanOrEqual(channel.capacity - 16_384);
+	console.info(`[wasm-idle:lldb-output-saturation] ${JSON.stringify(atPause)}`);
 }
 
 describe('native-source browser debugging in Chromium', () => {
@@ -1572,8 +2002,57 @@ describe('native-source browser debugging in Chromium', () => {
 			});
 
 			try {
+				const failedCases: Array<{ name: string; error: unknown }> = [];
 				for (const testCase of activeDebugCases) {
-					const page = await context.newPage();
+					const caseName = `${testCase.language}/${'testId' in testCase ? testCase.testId : testCase.activePath}`;
+					let caseFailed = false;
+					const recordFailure = (error: unknown) => {
+						caseFailed = true;
+						failedCases.push({ name: caseName, error });
+						console.error(
+							`[wasm-idle:debug-case] FAIL ${caseName}\n${error instanceof Error ? error.stack || error.message : String(error)}`
+						);
+					};
+					let page: Page;
+					try {
+						page = await context.newPage();
+					} catch (error) {
+						recordFailure(error);
+						continue;
+					}
+					let ownerTransportProbe: Promise<BrowserWorker> | undefined;
+					page.on('worker', (worker) => {
+						if (!new URL(worker.url()).pathname.includes('/owner.worker')) return;
+						ownerTransportProbe = installOwnerDebugTransportProbe(worker).then(
+							async () => {
+								if ('missingDebugResource' in testCase) {
+									await worker.evaluate(
+										installMissingDebugResource,
+										testCase.missingDebugResource
+									);
+								}
+								return worker;
+							}
+						);
+						// A navigation can retire an earlier owner before its probe is installed.
+						void ownerTransportProbe.catch(() => undefined);
+					});
+					const beginTransportCapture = async () => {
+						const owner = await ownerTransportProbe;
+						return owner
+							? owner.evaluate(() =>
+									(globalThis as any).__wasmIdleOwnerDebugTransport.begin()
+								)
+							: page.evaluate(() => (window as any).__wasmIdleDebugTransport.begin());
+					};
+					const readTransportCapture = async () => {
+						const owner = await ownerTransportProbe;
+						return owner
+							? owner.evaluate(() =>
+									(globalThis as any).__wasmIdleOwnerDebugTransport.read()
+								)
+							: page.evaluate(() => (window as any).__wasmIdleDebugTransport.read());
+					};
 					page.setDefaultTimeout(
 						Number(process.env.WASM_IDLE_DEBUG_BROWSER_TIMEOUT_MS || '420000')
 					);
@@ -1619,38 +2098,10 @@ describe('native-source browser debugging in Chromium', () => {
 							await storageSession.detach();
 						}
 						if ('missingDebugResource' in testCase) {
-							await page.addInitScript((resourcePath) => {
-								const nativeFetch = globalThis.fetch.bind(globalThis);
-								Object.defineProperty(globalThis, 'fetch', {
-									configurable: true,
-									value: (
-										input: URL | RequestInfo,
-										init?: RequestInit
-									): Promise<Response> => {
-										const url =
-											input instanceof URL
-												? input
-												: new URL(
-														typeof input === 'string'
-															? input
-															: input.url,
-														location.href
-													);
-										if (url.pathname.endsWith(`/${resourcePath}`)) {
-											return Promise.resolve(
-												new Response(
-													'missing debug runtime resource fixture',
-													{
-														status: 404
-													}
-												)
-											);
-										}
-										return nativeFetch(input, init);
-									},
-									writable: true
-								});
-							}, testCase.missingDebugResource);
+							await page.addInitScript(
+								installMissingDebugResource,
+								testCase.missingDebugResource
+							);
 						}
 						const activeState = await ensureSharedBrowserPage(
 							page,
@@ -1759,6 +2210,7 @@ describe('native-source browser debugging in Chromium', () => {
 						const debugButton = page.locator('button.action-button--debug');
 						await debugButton.waitFor({ state: 'visible' });
 						expect(await debugButton.isEnabled()).toBe(true);
+						await ownerTransportProbe;
 						const workerMetricsBeforeStart =
 							'expectedNoDebugWorkers' in testCase
 								? await readBrowserLifecycleMetrics(page)
@@ -1783,6 +2235,19 @@ describe('native-source browser debugging in Chromium', () => {
 									.locator('[data-testid="terminal-debug-output"]')
 									.textContent()) || '';
 							expect(transcript).toContain(testCase.expectedSessionFailure);
+							const owner = await ownerTransportProbe;
+							const interceptedRequests = owner
+								? await owner.evaluate(
+										() =>
+											(globalThis as any)
+												.__wasmIdleMissingDebugResourceRequests || 0
+									)
+								: await page.evaluate(
+										() =>
+											(window as any)
+												.__wasmIdleMissingDebugResourceRequests || 0
+									);
+							expect(interceptedRequests).toBeGreaterThan(0);
 							expect(transcript).not.toContain(testCase.forbiddenOutput);
 							expect(
 								consoleMessages.some((message) =>
@@ -2214,11 +2679,7 @@ describe('native-source browser debugging in Chromium', () => {
 										)
 									)
 									.toBe(false);
-								expect(
-									await page.evaluate(() =>
-										(window as any).__wasmIdleDebugTransport.begin()
-									)
-								).toBe(true);
+								expect(await beginTransportCapture()).toBe(true);
 								await page
 									.getByRole('button', { name: 'Next Line', exact: true })
 									.click();
@@ -2227,9 +2688,7 @@ describe('native-source browser debugging in Chromium', () => {
 									{ functionName: 'descend', line: 7, sourcePath },
 									10_000
 								);
-								const sample = await page.evaluate(() =>
-									(window as any).__wasmIdleDebugTransport.read()
-								);
+								const sample = await readTransportCapture();
 								expect(sample.rspInput.overrun).toBe(false);
 								expect(sample.dapOutput.overrun).toBe(false);
 								expect(sample.rspInput.text).toContain('$qWasmCallStack');
@@ -2380,50 +2839,101 @@ describe('native-source browser debugging in Chromium', () => {
 									.getByRole('button', { name: 'Continue', exact: true })
 									.click();
 							} else {
-								expect(
-									await page.evaluate(() =>
-										(window as any).__wasmIdleDebugTransport.begin()
-									)
-								).toBe(true);
-								await page
-									.getByRole('button', { name: 'Continue', exact: true })
-									.click();
-								await waitForTerminalOutput(page, 'lldb-buffer-input? ', 30_000);
-								await waitForTerminalOutput(page, 'lldb-buffer-stderr', 10_000);
-								const transcript = (
-									(await page
-										.locator('[data-testid="terminal-debug-output"]')
-										.textContent()) || ''
-								).replaceAll('\r\n', '\n');
-								const stdout = transcript.replace('lldb-buffer-stderr\n', '');
-								const startMarker = 'lldb-buffer-begin\n';
-								const endMarker = '\nlldb-buffer-end\n';
-								const start = stdout.indexOf(startMarker);
-								const end = stdout.indexOf(endMarker, start + startMarker.length);
-								expect(start).toBeGreaterThanOrEqual(0);
-								expect(end).toBeGreaterThan(start);
-								const payload = stdout.slice(start + startMarker.length, end);
-								const expectedPayload = Array.from(
-									{ length: testCase.expectedBufferedOutputBytes },
-									(_, i) => String.fromCharCode(65 + (i % 26))
-								).join('');
-								expect(payload.length).toBe(testCase.expectedBufferedOutputBytes);
-								expect(createHash('sha256').update(payload).digest('hex')).toBe(
-									createHash('sha256').update(expectedPayload).digest('hex')
-								);
-								const sample = await page.evaluate(() =>
-									(window as any).__wasmIdleDebugTransport.read()
-								);
-								expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
-									testCase.expectedBufferedOutputBytes
-								);
-								expect(sample.stdout.notifications).toBeGreaterThan(0);
-								expect(sample.stdout.notifications).toBeLessThanOrEqual(2048);
-								expect(sample.stderr.bytes).toBe('lldb-buffer-stderr\n'.length);
-								console.info(
-									`[wasm-idle:buffered-output] ${JSON.stringify({ bytes: sample.stdout.bytes, notifications: sample.stdout.notifications })}`
-								);
-								await typeTerminalLine(page, '73');
+								const outputOwner = await ownerTransportProbe;
+								expect(outputOwner).toBeDefined();
+								// The UI intentionally retains only a 64 KiB tail. Capture the
+								// real owner output events before that tail drops the begin marker.
+								await outputOwner!.evaluate((limit) => {
+									const scope = globalThis as any;
+									const original = scope.postMessage;
+									const capture = {
+										text: '',
+										overflow: false,
+										restore: () => {
+											scope.postMessage = original;
+										}
+									};
+									scope.__wasmIdleBufferedOutput = capture;
+									scope.postMessage = (message: any, ...args: any[]) => {
+										if (
+											message?.version === 1 &&
+											message.type === 'event' &&
+											message.event?.name === 'output' &&
+											message.event.language === 'C' &&
+											typeof message.event.data === 'string'
+										) {
+											const text = capture.text + message.event.data;
+											capture.overflow ||= text.length > limit;
+											capture.text = text.slice(0, limit);
+										}
+										return Reflect.apply(original, globalThis, [
+											message,
+											...args
+										]);
+									};
+								}, testCase.expectedBufferedOutputBytes + 4096);
+								try {
+									expect(await beginTransportCapture()).toBe(true);
+									await page
+										.getByRole('button', { name: 'Continue', exact: true })
+										.click();
+									await waitForTerminalOutput(
+										page,
+										'lldb-buffer-input? ',
+										30_000
+									);
+									await waitForTerminalOutput(page, 'lldb-buffer-stderr', 10_000);
+									const captured = await outputOwner!.evaluate(() => {
+										const capture = (globalThis as any)
+											.__wasmIdleBufferedOutput;
+										return {
+											text: capture.text as string,
+											overflow: capture.overflow as boolean
+										};
+									});
+									expect(captured.overflow).toBe(false);
+									const transcript = captured.text.replaceAll('\r\n', '\n');
+									const stdout = transcript.replace('lldb-buffer-stderr\n', '');
+									const startMarker = 'lldb-buffer-begin\n';
+									const endMarker = '\nlldb-buffer-end\n';
+									const start = stdout.indexOf(startMarker);
+									const end = stdout.indexOf(
+										endMarker,
+										start + startMarker.length
+									);
+									expect(start).toBeGreaterThanOrEqual(0);
+									expect(end).toBeGreaterThan(start);
+									const payload = stdout.slice(start + startMarker.length, end);
+									const expectedPayload = Array.from(
+										{ length: testCase.expectedBufferedOutputBytes },
+										(_, i) => String.fromCharCode(65 + (i % 26))
+									).join('');
+									expect(payload.length).toBe(
+										testCase.expectedBufferedOutputBytes
+									);
+									expect(createHash('sha256').update(payload).digest('hex')).toBe(
+										createHash('sha256').update(expectedPayload).digest('hex')
+									);
+									const sample = await readTransportCapture();
+									expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
+										testCase.expectedBufferedOutputBytes
+									);
+									expect(sample.stdout.notifications).toBeGreaterThan(0);
+									expect(sample.stdout.notifications).toBeLessThanOrEqual(2048);
+									expect(sample.stderr.bytes).toBe('lldb-buffer-stderr\n'.length);
+									console.info(
+										`[wasm-idle:buffered-output] ${JSON.stringify({ bytes: sample.stdout.bytes, notifications: sample.stdout.notifications })}`
+									);
+									await typeTerminalLine(page, '73');
+								} finally {
+									await outputOwner!
+										.evaluate(() => {
+											const scope = globalThis as any;
+											scope.__wasmIdleBufferedOutput?.restore();
+											delete scope.__wasmIdleBufferedOutput;
+										})
+										.catch(() => undefined);
+								}
 							}
 							await waitForTerminalOutput(page, testCase.expectedOutput, 10_000);
 							await debugButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -2478,12 +2988,9 @@ describe('native-source browser debugging in Chromium', () => {
 							continue;
 						}
 						if ('injectStaleGeneration' in testCase) {
-							const injected = await page.evaluate(
-								() =>
-									(
-										window as any
-									).__wasmIdleDebugWorkerFaults?.injectStaleGeneration?.() ===
-									true
+							const injected = await injectDebugWorkerFault(
+								page,
+								'injectStaleGeneration'
 							);
 							expect(injected).toBe(true);
 							const stateAfterFault = await page.evaluate(() =>
@@ -2499,13 +3006,9 @@ describe('native-source browser debugging in Chromium', () => {
 						if ('workerFailures' in testCase) {
 							for (const worker of testCase.workerFailures) {
 								const beforeFailure = await readBrowserLifecycleMetrics(page);
-								const injected = await page.evaluate(
-									(workerKind) =>
-										(
-											window as any
-										).__wasmIdleDebugWorkerFaults?.terminateWorker?.(
-											workerKind
-										) === true,
+								const injected = await injectDebugWorkerFault(
+									page,
+									'terminateWorker',
 									worker
 								);
 								expect(injected).toBe(true);
@@ -3210,65 +3713,121 @@ describe('native-source browser debugging in Chromium', () => {
 								.locator('.debug-status-pill--active')
 								.waitFor({ state: 'visible' });
 							const beforeStress = await readBrowserLifecycleMetrics(page);
-							if (testCase.transportStress === 'output') {
-								const saturation = await page.evaluate(
-									(durationMs) =>
-										(
-											window as any
-										).__wasmIdleDebugWorkerFaults?.saturateOutputAndPause?.(
-											durationMs
-										) ?? null,
-									3_000
-								);
-								expect(saturation).toMatchObject({
-									pauseRequested: true,
-									stdout: {
-										available: expect.any(Number),
-										capacity: expect.any(Number)
-									},
-									stderr: {
-										available: expect.any(Number),
-										capacity: expect.any(Number)
-									}
-								});
-								if (!saturation)
-									throw new Error('output saturation hook is unavailable');
-								for (const channel of [saturation.stdout, saturation.stderr]) {
-									expect(channel.available).toBeGreaterThanOrEqual(
-										channel.capacity - 16_384
-									);
-								}
-							} else {
-								await page.waitForFunction(
-									(expectedPrompt) =>
-										document
-											.querySelector('[data-testid="terminal-debug-output"]')
-											?.textContent?.includes(expectedPrompt),
-									testCase.expectedPrompt
-								);
-								const pauseRequested = await page.evaluate(() => {
-									const button = document.querySelector<HTMLButtonElement>(
-										'button[aria-label="Pause"]'
-									);
-									if (!button || button.disabled) return false;
-									button.click();
-									return true;
-								});
-								expect(pauseRequested).toBe(true);
-								// Supply input while Pause is pending; native fd_read cannot service
-								// the guest interrupt until the host read returns.
-								await typeTerminalLine(page, '73');
-							}
 							const stressPauseTimeoutMs = Number(
 								process.env.WASM_IDLE_DEBUG_TRANSPORT_PAUSE_TIMEOUT_MS || '5000'
 							);
-							await page
-								.locator('.debug-status-pill--paused')
-								.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs });
-							const pausedStressState = await page.evaluate(() =>
-								(window as any).__wasmIdleDebug.getDebugState()
-							);
-							expect(pausedStressState.paused).toBe(true);
+							try {
+								if (testCase.transportStress === 'output') {
+									expect(await beginTransportCapture()).toBe(true);
+									const saturation = await saturateDebugOutputAndPause(
+										page,
+										3_000
+									);
+									expect(saturation).toMatchObject({
+										pauseRequested: true,
+										stdout: {
+											available: expect.any(Number),
+											capacity: expect.any(Number)
+										},
+										stderr: {
+											available: expect.any(Number),
+											capacity: expect.any(Number)
+										}
+									});
+									if (!saturation)
+										throw new Error('output saturation hook is unavailable');
+									for (const channel of [saturation.stdout, saturation.stderr]) {
+										expect(channel.available).toBeGreaterThanOrEqual(
+											channel.capacity - 16_384
+										);
+									}
+								} else {
+									await page.waitForFunction(
+										(expectedPrompt) =>
+											document
+												.querySelector(
+													'[data-testid="terminal-debug-output"]'
+												)
+												?.textContent?.includes(expectedPrompt),
+										testCase.expectedPrompt
+									);
+									const pauseRequested = await page.evaluate(() => {
+										const button = document.querySelector<HTMLButtonElement>(
+											'button[aria-label="Pause"]'
+										);
+										if (!button || button.disabled) return false;
+										button.click();
+										return true;
+									});
+									expect(pauseRequested).toBe(true);
+									// Supply input while Pause is pending; native fd_read cannot service
+									// the guest interrupt until the host read returns.
+									await typeTerminalLine(page, '73');
+								}
+								await page
+									.locator('.debug-status-pill--paused')
+									.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs })
+									.catch(async (cause) => {
+										let timer: ReturnType<typeof setTimeout> | undefined;
+										try {
+											const snapshot = await Promise.race([
+												Promise.all([
+													page.evaluate(() => ({
+														state: (
+															window as any
+														).__wasmIdleDebug.getDebugState(),
+														terminalTail: document
+															.querySelector(
+																'[data-testid="terminal-debug-output"]'
+															)
+															?.textContent?.slice(-3000)
+													})),
+													(await ownerTransportProbe)?.evaluate(() =>
+														(
+															globalThis as any
+														).__wasmIdleOwnerDebugTransport.saturationState()
+													),
+													readTransportCapture().then((sample) =>
+														Object.fromEntries(
+															Object.entries(sample).map(
+																([key, value]) => [
+																	key,
+																	{
+																		...(value as any),
+																		text: (
+																			value as any
+																		).text?.slice(-4000)
+																	}
+																]
+															)
+														)
+													)
+												]),
+												new Promise((resolve) => {
+													timer = setTimeout(
+														() => resolve('diagnostic timed out'),
+														3000
+													);
+												})
+											]);
+											throw new Error(
+												`Stress Pause did not complete within ${stressPauseTimeoutMs}ms: ${JSON.stringify({ snapshot, pageErrors, consoleTail: consoleMessages.slice(-10) })}`,
+												{ cause }
+											);
+										} finally {
+											clearTimeout(timer);
+										}
+									});
+								const pausedStressState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								expect(pausedStressState.paused).toBe(true);
+								if (testCase.transportStress === 'output')
+									await assertDebugPauseOutputSaturation(page);
+							} finally {
+								if (testCase.transportStress === 'output')
+									await releaseDebugOutputReads(page);
+							}
 							if (testCase.transportStress === 'stdin') {
 								const pausedMetrics = await readBrowserLifecycleMetrics(page);
 								expect(pausedMetrics.createdDebug).toBe(beforeStress.createdDebug);
@@ -3707,9 +4266,27 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 						}
 						expect(pageErrors).toEqual([]);
+					} catch (error) {
+						recordFailure(error);
 					} finally {
-						await page.close();
+						try {
+							await page.close();
+						} catch (error) {
+							recordFailure(error);
+						}
+						if (!caseFailed) console.info(`[wasm-idle:debug-case] PASS ${caseName}`);
 					}
+				}
+				if (failedCases.length > 0) {
+					throw new AggregateError(
+						failedCases.map(({ error }) => error),
+						`Browser debug cases failed:\n${failedCases
+							.map(
+								({ name, error }) =>
+									`${name}: ${error instanceof Error ? error.message : String(error)}`
+							)
+							.join('\n')}`
+					);
 				}
 			} finally {
 				await context.close();

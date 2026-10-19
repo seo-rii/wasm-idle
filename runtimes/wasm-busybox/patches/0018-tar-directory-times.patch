@@ -1,0 +1,131 @@
+--- a/include/bb_archive.h
++++ b/include/bb_archive.h
+@@ -44,6 +44,9 @@
+ } file_header_t;
+ 
+ struct hardlinks_t;
++#if defined(BB_WASI_B1)
++struct wasi_archive_directory_time;
++#endif
+ 
+ typedef struct archive_handle_t {
+ 	/* Flags. 1st since it is most used member */
+@@ -66,6 +69,9 @@
+ 
+ 	/* List of link placeholders */
+ 	llist_t *link_placeholders;
++#if defined(BB_WASI_B1)
++	struct wasi_archive_directory_time *wasi_directory_times;
++#endif
+ 
+ 	/* Process the header component, e.g. tar -t */
+ 	void FAST_FUNC (*action_header)(const file_header_t *);
+@@ -294,6 +300,7 @@
+ 
+ #if defined(BB_WASI_B1)
+ void wasi_archive_check_path(const char *path) FAST_FUNC;
++void wasi_archive_restore_directory_times(archive_handle_t *archive_handle) FAST_FUNC;
+ #endif
+ 
+ POP_SAVED_FUNCTION_VISIBILITY
+--- a/archival/libarchive/data_extract_all.c
++++ b/archival/libarchive/data_extract_all.c
+@@ -4,6 +4,48 @@
+  */
+ #include "libbb.h"
+ #include "bb_archive.h"
++
++#if defined(BB_WASI_B1)
++struct wasi_archive_directory_time {
++	struct wasi_archive_directory_time *next;
++	char *name;
++	time_t mtime;
++};
++
++void FAST_FUNC wasi_archive_restore_directory_times(archive_handle_t *archive_handle)
++{
++	struct wasi_archive_directory_time *entry = archive_handle->wasi_directory_times;
++	struct wasi_archive_directory_time *pending = NULL;
++
++	archive_handle->wasi_directory_times = NULL;
++	/* Restore in header order: duplicate (including ./ aliases) uses the last value.
++	 * This remains linear in archive headers, with no quadratic pathname scans. */
++	while (entry) {
++		struct wasi_archive_directory_time *next = entry->next;
++		entry->next = pending;
++		pending = entry;
++		entry = next;
++	}
++	while (pending) {
++		struct wasi_archive_directory_time *next = pending->next;
++		struct stat st;
++		struct timeval times[2];
++
++		wasi_archive_check_path(pending->name);
++		if (lstat(pending->name, &st) != 0)
++			bb_perror_msg_and_die("can't stat directory %s", pending->name);
++		if (!S_ISDIR(st.st_mode))
++			bb_error_msg_and_die("%s is no longer a directory", pending->name);
++		times[0].tv_sec = times[1].tv_sec = pending->mtime;
++		times[0].tv_usec = times[1].tv_usec = 0;
++		if (utimes(pending->name, times) != 0)
++			bb_perror_msg_and_die("cannot restore timestamp for %s", pending->name);
++		free(pending->name);
++		free(pending);
++		pending = next;
++	}
++}
++#endif
+ 
+ void FAST_FUNC data_extract_all(archive_handle_t *archive_handle)
+ {
+@@ -265,16 +307,27 @@
+ 		}
+ #endif
+ 		if (archive_handle->ah_flags & ARCHIVE_RESTORE_DATE) {
+-			struct timeval t[2];
+-
+-			t[1].tv_sec = t[0].tv_sec = file_header->mtime;
+-			t[1].tv_usec = t[0].tv_usec = 0;
+-#if defined(BB_WASI_B1)
+-			if (utimes(dst_name, t) != 0)
+-				bb_perror_msg_and_die("cannot restore timestamp for %s", dst_name);
++#if defined(BB_WASI_B1)
++			if (S_ISDIR(file_header->mode)) {
++				struct wasi_archive_directory_time *entry = xmalloc(sizeof(*entry));
++				entry->name = xstrdup(dst_name);
++				entry->mtime = file_header->mtime;
++				entry->next = archive_handle->wasi_directory_times;
++				archive_handle->wasi_directory_times = entry;
++			} else
++#endif
++			{
++				struct timeval t[2];
++
++				t[1].tv_sec = t[0].tv_sec = file_header->mtime;
++				t[1].tv_usec = t[0].tv_usec = 0;
++#if defined(BB_WASI_B1)
++				if (utimes(dst_name, t) != 0)
++					bb_perror_msg_and_die("cannot restore timestamp for %s", dst_name);
+ #else
+-			utimes(dst_name, t);
+-#endif
++				utimes(dst_name, t);
++#endif
++			}
+ 		}
+ 	}
+ 
+--- a/archival/tar.c
++++ b/archival/tar.c
+@@ -1295,6 +1295,10 @@
+ 		archive_exitcode = EXIT_SUCCESS; /* saw at least one header, good */
+ 
+ 	create_links_from_list(tar_handle->link_placeholders);
++#if defined(BB_WASI_B1)
++	/* Child creation and deferred symlinks must finish before directory times. */
++	wasi_archive_restore_directory_times(tar_handle);
++#endif
+ 
+ 	/* Check that every file that should have been extracted was */
+ 	while (tar_handle->accept) {

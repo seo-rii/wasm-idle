@@ -1,5 +1,7 @@
 import { Buffer } from 'buffer';
 import { transformSync, type Options as SwcTypeScriptOptions } from '@swc/wasm-typescript';
+import { executionParameterNames } from './execution-parameters.js';
+import { GuestSyntaxError, parseGuestBody } from './guest-syntax.js';
 
 export type BrowserTypeScriptLanguage = 'javascript' | 'typescript';
 export type BrowserTypeScriptDiagnosticSeverity = 'error' | 'warning' | 'other';
@@ -90,15 +92,6 @@ const NODE_BUILTIN_SPECIFIERS = new Set([
 	'process'
 ]);
 
-function escapeRegExp(value: string) {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-const NODE_BUILTIN_PATTERN = [...NODE_BUILTIN_SPECIFIERS]
-	.sort((a, b) => b.length - a.length)
-	.map(escapeRegExp)
-	.join('|');
-
 function createDiagnostic(
 	message: string,
 	fileName: string,
@@ -115,86 +108,59 @@ function createDiagnostic(
 	return diagnostic;
 }
 
-function namedImportToDestructuring(value: string) {
-	const names = value
-		.trim()
-		.replace(/^\{/, '')
-		.replace(/\}$/, '')
-		.split(',')
-		.map((part) => part.trim())
-		.filter(Boolean)
-		.map((part) => part.replace(/\s+as\s+/u, ': '))
-		.join(', ');
-	return names ? `{ ${names} }` : '{}';
-}
-
-function isIdentifier(value: string) {
-	return /^[A-Za-z_$][\w$]*$/u.test(value);
-}
-
-function rewriteImportClause(importClause: string, specifier: string): string | null {
-	const clause = importClause.trim();
-	if (!clause) return `require(${JSON.stringify(specifier)});`;
-	if (clause.startsWith('{')) {
-		return `const ${namedImportToDestructuring(clause)} = require(${JSON.stringify(specifier)});`;
+function rewriteNodeBuiltinImports(code: string, fileName: string) {
+	// Parse the native async body while accepting the builtin imports that this
+	// runner lowers. Source ranges leave comments, strings and templates untouched.
+	const parsed = parseGuestBody(code);
+	let javascript = '';
+	let offset = 0;
+	for (const node of parsed.statements) {
+		const start = node.start - parsed.offset;
+		const end = node.end - parsed.offset;
+		if (node.type === 'ImportDeclaration') {
+			const specifier = String(node.source.value);
+			if (NODE_BUILTIN_SPECIFIERS.has(specifier)) {
+				const requireCall = `require(${JSON.stringify(specifier)})`;
+				const statements = node.specifiers.map((binding) => {
+					if (binding.type !== 'ImportSpecifier') {
+						return `const ${binding.local.name} = ${requireCall};`;
+					}
+					const imported =
+						binding.imported.type === 'Identifier'
+							? binding.imported.name
+							: binding.imported.value;
+					return `const { ${JSON.stringify(imported)}: ${binding.local.name} } = ${requireCall};`;
+				});
+				javascript += code.slice(offset, start);
+				javascript += statements.length ? statements.join(' ') : `${requireCall};`;
+				// Keep the following source's line numbers stable after multiline imports.
+				javascript += '\n'.repeat(
+					(code.slice(start, end).match(/\r\n|[\n\r\u2028\u2029]/g) || []).length
+				);
+				offset = end;
+				continue;
+			}
+		}
+		if (node.type === 'ImportDeclaration' || node.type.startsWith('Export')) {
+			return {
+				javascript: code,
+				diagnostic: createDiagnostic(
+					'Only Node builtin imports are supported in this browser runner. Use require(...) or import from fs/path/process/buffer.',
+					fileName,
+					node.loc!.start.line - parsed.lineOffset,
+					node.loc!.start.column + 1
+				)
+			};
+		}
 	}
-	const namespaceMatch = /^\*\s+as\s+([A-Za-z_$][\w$]*)$/u.exec(clause);
-	if (namespaceMatch) {
-		return `const ${namespaceMatch[1]} = require(${JSON.stringify(specifier)});`;
-	}
-	const commaIndex = clause.indexOf(',');
-	if (commaIndex !== -1) {
-		const defaultName = clause.slice(0, commaIndex).trim();
-		const rest = clause.slice(commaIndex + 1).trim();
-		if (!isIdentifier(defaultName)) return null;
-		const moduleName = `__wasmTypeScriptBuiltin_${defaultName}`;
-		const rewrittenRest: string | null = rewriteImportClause(rest, moduleName);
-		if (!rewrittenRest) return null;
-		return `const ${moduleName} = require(${JSON.stringify(specifier)});\nconst ${defaultName} = ${moduleName};\n${rewrittenRest.replace(
-			`require(${JSON.stringify(moduleName)})`,
-			moduleName
-		)}`;
-	}
-	if (!isIdentifier(clause)) return null;
-	return `const ${clause} = require(${JSON.stringify(specifier)});`;
-}
-
-function rewriteNodeBuiltinImports(code: string) {
-	const sideEffectImport = new RegExp(
-		`^\\s*import\\s+(['"])(${NODE_BUILTIN_PATTERN})\\1\\s*;?`,
-		'gmu'
-	);
-	const fromImport = new RegExp(
-		`^\\s*import\\s+([^;]*?)\\s+from\\s+(['"])(${NODE_BUILTIN_PATTERN})\\2\\s*;?`,
-		'gmu'
-	);
-	return code
-		.replace(fromImport, (_match, importClause: string, _quote: string, specifier: string) => {
-			const rewritten = rewriteImportClause(importClause, specifier);
-			return rewritten ?? _match;
-		})
-		.replace(sideEffectImport, (_match, _quote: string, specifier: string) => {
-			return `require(${JSON.stringify(specifier)});`;
-		});
-}
-
-function findUnsupportedModuleSyntax(code: string, fileName: string) {
-	const pattern = /^(\s*)(import\s+|export\s+)/gmu;
-	const match = pattern.exec(code);
-	if (!match) return null;
-	const before = code.slice(0, match.index);
-	const lineNumber = before.split('\n').length;
-	const columnNumber = (match[1]?.length || 0) + 1;
-	return createDiagnostic(
-		'Only Node builtin imports are supported in this browser runner. Use require(...) or import from fs/path/process/buffer.',
-		fileName,
-		lineNumber,
-		columnNumber
-	);
+	return { javascript: javascript + code.slice(offset), diagnostic: undefined };
 }
 
 function normalizeSwcError(error: unknown, fileName: string) {
 	const message = error instanceof Error ? error.message : String(error);
+	if (error instanceof GuestSyntaxError) {
+		return createDiagnostic(message, fileName, error.loc.line, error.loc.column + 1);
+	}
 	return createDiagnostic(message, fileName);
 }
 
@@ -218,8 +184,10 @@ export async function compileTypeScript(
 						}
 					}).code
 				: request.code;
-		const javascript = rewriteNodeBuiltinImports(stripped);
-		const unsupportedModuleSyntax = findUnsupportedModuleSyntax(javascript, fileName);
+		const { javascript, diagnostic: unsupportedModuleSyntax } = rewriteNodeBuiltinImports(
+			stripped,
+			fileName
+		);
 		const diagnostics = unsupportedModuleSyntax ? [unsupportedModuleSyntax] : [];
 		const success = diagnostics.length === 0;
 		const result: BrowserTypeScriptCompileResult = {
@@ -557,8 +525,10 @@ function createRequire(options: BrowserTypeScriptExecutionOptions) {
 		platform: 'browser',
 		browser: true
 	};
+	const bufferModule = { Buffer };
 	const modules: Record<string, unknown> = {
-		buffer: { Buffer },
+		buffer: bufferModule,
+		'node:buffer': bufferModule,
 		fs: fsModule,
 		'node:fs': fsModule,
 		path: pathModule,
@@ -599,7 +569,7 @@ export async function executeBrowserTypeScriptArtifact(
 	) => (...values: unknown[]) => Promise<unknown>;
 
 	try {
-		const execute = new AsyncFunction(
+		const injectedParameters = [
 			'require',
 			'module',
 			'exports',
@@ -607,9 +577,21 @@ export async function executeBrowserTypeScriptArtifact(
 			'console',
 			'Buffer',
 			'__filename',
-			'__dirname',
-			`${artifact.javascript}\n//# sourceURL=${artifact.fileName}`
-		);
+			'__dirname'
+		];
+		const body = `${artifact.javascript}\n//# sourceURL=${artifact.fileName}`;
+		let execute: (...values: unknown[]) => Promise<unknown>;
+		try {
+			// Keep the native fast path and grammar for programs whose bindings
+			// already work. Only lexical redeclarations need parameter renaming.
+			execute = new AsyncFunction(...injectedParameters, body);
+		} catch (error) {
+			if (!(error instanceof SyntaxError)) throw error;
+			execute = new AsyncFunction(
+				...executionParameterNames(artifact.javascript, injectedParameters),
+				body
+			);
+		}
 		options.onReady?.();
 		await execute(
 			require,

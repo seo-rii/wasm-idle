@@ -235,6 +235,70 @@ describe('clangd request policy', () => {
 		});
 		policy.dispose();
 	});
+	it('settles a retired initialize without activating the disposed transport', async () => {
+		vi.useFakeTimers();
+		const { policy, write, received, receive } = setup();
+		const initialized = new Promise<any>((resolve, reject) => {
+			received.mockImplementation((message) => {
+				if (message.error) reject(new Error(message.error.message));
+				else resolve(message.result);
+			});
+		});
+		// Match the pinned Monaco client's initialize continuation, including its
+		// initialized notification after the response arrives.
+		const activation = initialized.then(async (result) => {
+			await policy.transport.writer.write({
+				jsonrpc: '2.0',
+				method: 'initialized',
+				params: {}
+			});
+			return result.capabilities;
+		});
+		await policy.transport.writer.write({ jsonrpc: '2.0', id: 2, method: 'initialize' });
+		policy.dispose();
+		await expect(activation).resolves.toEqual({});
+		expect(received).toHaveBeenCalledWith({
+			jsonrpc: '2.0',
+			id: 2,
+			result: { capabilities: {} }
+		});
+		expect(write).not.toHaveBeenCalledWith(expect.objectContaining({ method: 'initialized' }));
+		receive({ jsonrpc: '2.0', id: 2, result: { capabilities: { hoverProvider: true } } });
+		expect(received).toHaveBeenCalledTimes(1);
+		expect(policy.trace.find((entry) => entry.requestId === 2)?.outcome).toBe('cancelled');
+		expect(vi.getTimerCount()).toBe(0);
+	});
+	it('settles initialize first written after disposal without using the retired Worker', async () => {
+		const { policy, write, received } = setup();
+		policy.dispose();
+		await policy.transport.writer.write({ jsonrpc: '2.0', id: 2, method: 'initialize' });
+		expect(received).toHaveBeenLastCalledWith({
+			jsonrpc: '2.0',
+			id: 2,
+			result: { capabilities: {} }
+		});
+		expect(write).not.toHaveBeenCalled();
+	});
+	it.each(['client', 'server'] as const)(
+		'preserves %s cancellation errors while initialize is active',
+		async (source) => {
+			const { policy, received, receive } = setup();
+			await policy.transport.writer.write({ jsonrpc: '2.0', id: 2, method: 'initialize' });
+			if (source === 'client')
+				await policy.transport.writer.write({
+					jsonrpc: '2.0',
+					method: '$/cancelRequest',
+					params: { id: 2 }
+				});
+			else receive({ jsonrpc: '2.0', id: 2, error: { code: -32800, message: 'Cancelled' } });
+			expect(received).toHaveBeenLastCalledWith({
+				jsonrpc: '2.0',
+				id: 2,
+				error: { code: -32800, message: 'initialize cancelled' }
+			});
+			policy.dispose();
+		}
+	);
 	it('settles old-model providers after disposal without posting to the retired Worker', async () => {
 		vi.useFakeTimers();
 		const { policy, write, received, receive } = setup();

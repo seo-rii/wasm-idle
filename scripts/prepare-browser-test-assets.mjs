@@ -17,7 +17,16 @@ const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_MANIFEST_PATH = path.join(REPO_ROOT, 'scripts', 'browser-test-assets.v1.json');
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
 const DEFAULT_CACHE_DIR = path.join(REPO_ROOT, '.cache', 'browser-test-assets');
-const ASSET_GROUPS = ['clang', 'clangd', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp'];
+const ASSET_GROUPS = [
+	'container',
+	'clang',
+	'clangd',
+	'ocaml',
+	'c3',
+	'lfortran',
+	'lean4',
+	'commonlisp'
+];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
 
 /**
@@ -233,6 +242,7 @@ export async function prepareBrowserTestAssets({
 	let preparedClangd = false;
 	const useCurrentClangdReceipt =
 		!!clangdSourceDir ||
+		!!clangdReceiptPath ||
 		(manifestPath === DEFAULT_MANIFEST_PATH &&
 			!baseUrl &&
 			!process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
@@ -251,6 +261,10 @@ export async function prepareBrowserTestAssets({
 			const result = await prepareClangdAssets({
 				receiptPath: clangdReceiptPath || path.join(staticDir, 'clang/runtime-build.json'),
 				staticDir,
+				baseUrl:
+					baseUrl ||
+					process.env.WASM_IDLE_TEST_ASSET_BASE_URL ||
+					manifest.groupBaseUrls?.clangd,
 				sourceDir: clangdSourceDir,
 				bypassCookie,
 				fetchImpl,

@@ -308,10 +308,16 @@ function emitProgress(
 /** Parse the packaged V root once; every compilation receives fresh copies of these files. */
 export function readVRootArchive(archive: Uint8Array) {
 	const files = new Map<string, Uint8Array>();
+	const pathDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 	untar(archive, {
 		addDirectory() {},
 		addFile(path, contents) {
-			const normalized = normalizeWorkspacePath(path);
+			// untar preserves raw path bytes for the MemFS ABI. V stores JS strings,
+			// so decode those bytes once at this boundary, before normalization.
+			const decodedPath = pathDecoder.decode(
+				Uint8Array.from(path, (byte) => byte.charCodeAt(0))
+			);
+			const normalized = normalizeWorkspacePath(decodedPath);
 			if (normalized) files.set(normalized, Uint8Array.from(contents));
 		}
 	});

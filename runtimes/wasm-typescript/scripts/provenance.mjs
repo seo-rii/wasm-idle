@@ -9,6 +9,7 @@ const SOURCE_INPUT_FILES = Object.freeze(['package.json', 'tsconfig.json']);
 const SOURCE_INPUT_DIRECTORIES = Object.freeze(['scripts', 'src']);
 const TOOLCHAIN_PACKAGES = Object.freeze([
 	'@swc/wasm-typescript',
+	'acorn',
 	'buffer',
 	'esbuild',
 	'typescript'

@@ -140,7 +140,7 @@ describe('Terminal source', () => {
 		expect(source).not.toContain('const unicode = term?.unicode');
 	});
 
-	it('keeps a hidden transcript mirror for browser debugging and Playwright assertions', () => {
+	it('keeps a hidden transcript tail for browser debugging and Playwright assertions', () => {
 		expect(source).toMatch(/debugOutput = \$state\(''\)/);
 		expect(source).toMatch(/loadedRuntimeAssetsKey: string \| undefined = undefined/);
 		expect(source).not.toMatch(/loadedRuntimeAssets = \$state/);
@@ -155,7 +155,7 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/function writeTerminalOutput\(text: string, executionOutput = false\)/
 		);
-		expect(source).toMatch(/debugOutput \+= text;/);
+		expect(source).not.toMatch(/debugOutput \+= text;/);
 		expect(source).toMatch(/debugOutput = '';/);
 		expect(source).toMatch(
 			/<pre data-testid="terminal-debug-output" style="display: none;">\{debugOutput\}<\/pre>/
@@ -271,9 +271,7 @@ describe('Terminal source', () => {
 	it('preserves timeout errors so the page can report a timed-out outcome', () => {
 		expect(source).toContain('error instanceof TimeoutError');
 		expect(source).toContain("error instanceof Error && error.name === 'TimeoutError'");
-		expect(source).toMatch(
-			/if \(isTimeoutError\(msg\)\) \{[\s\S]+writeTerminalOutput\([\s\S]+throw msg;/s
-		);
+		expect(source).toMatch(/if \(isTimeoutError\(msg\)\) throw msg;/);
 		expect(source).toMatch(
 			/if \(isTimeoutError\(error\)\) \{[\s\S]+outcome: 'timed-out'[\s\S]+throw error;/s
 		);

@@ -21,9 +21,13 @@ import {
 	writePersistentRuntimeAsset,
 	validateExecutionWorkspace,
 	verifyRuntimeAssetIntegrity,
+	createRuntimeWasmModuleService,
 	type ExecutionLimits,
 	type RuntimeAssetIntegrityEntry,
 	type RuntimeAssetCacheOptions,
+	type RuntimeAssetCache,
+	type RuntimeWasmModuleReceipt,
+	type RuntimeWasmModuleService,
 	type RuntimeStdinMode,
 	type RuntimeWorkerLease,
 	type RuntimeWorkerLifetimePolicy
@@ -110,10 +114,20 @@ export interface StaticWorkerRuntimeConfig {
 		urls: StaticWorkerRuntimeUrls,
 		context: StaticWorkerRuntimePreflightContext
 	) => unknown | Promise<unknown>;
+	/** Only the host selects verified logical receipts and deterministic compilation settings. */
+	compilerModules?: (
+		urls: StaticWorkerRuntimeUrls,
+		limits: ExecutionLimits
+	) => Readonly<Record<string, StaticWorkerCompilerModule>>;
 	runtimePreflightDelivery?:
-		| 'structured-clone'
-		| 'transfer-owned'
-		| 'transfer-owned-worker-cache';
+		'structured-clone' | 'transfer-owned' | 'transfer-owned-worker-cache';
+}
+
+export interface StaticWorkerCompilerModule {
+	readonly receipt: RuntimeWasmModuleReceipt;
+	/** Include the transform implementation version, options and any enforced memory cap. */
+	readonly compileKey: string;
+	readonly compile?: (ownedBytes: Uint8Array<ArrayBuffer>) => Promise<WebAssembly.Module>;
 }
 
 type OwnedDeliveryOperation = {
@@ -170,6 +184,7 @@ type ActiveRun = {
 	stdinRing?: StaticStdinRingHost;
 	stdinRingClosed?: boolean;
 	startExecutionDeadline?: () => void;
+	compilerModuleWorker?: Worker;
 };
 
 type StaticWorkerExecutionControls = {
@@ -243,6 +258,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private readonly workerRuntimePreflightMaxAssetBytes = new WeakMap<Worker, number>();
 	private readonly workersWithCachedRuntimePreflight = new WeakSet<Worker>();
 	private workerStartMaxAssetBytes: number | null = null;
+	private runtimeAssetCache?: RuntimeAssetCache;
+	private readonly workerCompilerModuleServices = new WeakMap<
+		Worker,
+		RuntimeWasmModuleService[]
+	>();
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {
 		const workerLifetime = config.workerLifetime ?? { mode: 'per-run' as const };
@@ -282,6 +302,87 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			},
 			disposeWorker: (worker) => this.retireManagedWorker(worker)
 		});
+	}
+
+	/** The application owns this cache; worker or sandbox disposal never disposes it. */
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (cache === this.runtimeAssetCache) return;
+		if (
+			this.disposed ||
+			this.worker ||
+			this.workerStartPromise ||
+			this.activeRun ||
+			this.startingRunId
+		) {
+			throw new RuntimeConfigurationError(
+				`Cannot replace an active ${this.config.displayName} compiler cache`,
+				{ runtimeId: this.config.languageId, phase: 'startup' }
+			);
+		}
+		this.runtimeAssetCache = cache;
+	}
+
+	private createCompilerModulePorts(
+		worker: Worker,
+		activeRun: ActiveRun,
+		limits: ExecutionLimits
+	): Readonly<Record<string, MessagePort>> | undefined {
+		const cache = this.runtimeAssetCache;
+		const factory = this.config.compilerModules;
+		if (!cache || !factory) return undefined;
+		const urls = this.resolvedRuntimeUrls;
+		if (!urls) throw new RuntimeConfigurationError('Compiler module profile is unavailable');
+		const identity = JSON.stringify([
+			'static-runtime-compiler-v1',
+			this.config.languageId,
+			urls.baseUrl,
+			urls.workerUrl,
+			urls.manifestFingerprint,
+			urls.preflightKey,
+			urls.workerReceipt
+		]);
+		const descriptors = Object.entries(factory(urls, limits));
+		if (
+			this.disposed ||
+			this.activeRun !== activeRun ||
+			this.worker !== worker ||
+			descriptors.length === 0 ||
+			descriptors.length > 64
+		) {
+			throw new RuntimeConfigurationError('Compiler module profile is invalid or expired');
+		}
+		const ports: Record<string, MessagePort> = {};
+		const services: RuntimeWasmModuleService[] = [];
+		this.workerCompilerModuleServices.set(worker, services);
+		activeRun.compilerModuleWorker = worker;
+		for (const [name, descriptor] of descriptors) {
+			if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/u.test(name)) {
+				throw new RuntimeConfigurationError('Compiler module name is invalid');
+			}
+			const service = createRuntimeWasmModuleService({
+				cache,
+				receipt: descriptor.receipt,
+				identity: JSON.stringify([identity, name]),
+				compileKey: descriptor.compileKey,
+				maxAssetBytes: limits.maxAssetBytes,
+				compile: descriptor.compile
+			});
+			services.push(service);
+			ports[name] = service.port;
+		}
+		return Object.freeze(ports);
+	}
+
+	private closeCompilerModuleServices(worker: Worker) {
+		const services = this.workerCompilerModuleServices.get(worker);
+		this.workerCompilerModuleServices.delete(worker);
+		for (const service of services ?? []) {
+			try {
+				service.close();
+			} catch {
+				// All subscriptions must be retired even if another endpoint cleanup fails.
+			}
+		}
 	}
 
 	private usesOwnedRuntimePreflight() {
@@ -381,7 +482,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.validateWorkspace(code, options, controls.limits);
 			this.assertOperationNotDisposed();
 			const progressSink = this.selectProgress(progress);
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const currentUrl = globalThis.location?.href ?? '';
 			const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
 			this.assertOperationNotDisposed();
 			this.persistentCache = persistentCache;
@@ -703,10 +804,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 		let workerRequestUrl: URL;
 		try {
-			workerRequestUrl =
-				typeof window === 'undefined'
-					? new URL(this.workerUrl)
-					: new URL(this.workerUrl, window.location.href);
+			workerRequestUrl = new URL(this.workerUrl, globalThis.location?.href);
 		} catch {
 			throw new RuntimeConfigurationError(
 				`${this.config.displayName} worker script URL is invalid`,
@@ -1953,6 +2051,10 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private cleanupRun(activeRun: ActiveRun) {
+		if (activeRun.compilerModuleWorker) {
+			this.closeCompilerModuleServices(activeRun.compilerModuleWorker);
+			activeRun.compilerModuleWorker = undefined;
+		}
 		try {
 			activeRun.cleanup();
 		} catch {
@@ -2011,6 +2113,7 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private detachAndTerminateWorker(worker: Worker) {
+		this.closeCompilerModuleServices(worker);
 		this.retireRuntimePreflight(this.workerRuntimePreflight.get(worker));
 		this.workerRuntimePreflight.delete(worker);
 		this.workerRuntimePreflightMaxAssetBytes.delete(worker);
@@ -2378,6 +2481,11 @@ self.postMessage = (message, transferOrOptions) => {
 									{ phase: 'protocol', runtimeId: this.config.languageId }
 								);
 							}
+							const runtimeWasmModulePorts = this.createCompilerModulePorts(
+								worker,
+								activeRun,
+								controls.limits
+							);
 							const message = {
 								run: true,
 								runId: id,
@@ -2385,6 +2493,7 @@ self.postMessage = (message, transferOrOptions) => {
 								manifestUrl: this.manifestUrl,
 								manifestFingerprint: this.manifestFingerprint,
 								...(runtimePreflight === undefined ? {} : { runtimePreflight }),
+								...(runtimeWasmModulePorts ? { runtimeWasmModulePorts } : {}),
 								maxAssetBytes: controls.limits.maxAssetBytes,
 								...(this.config.includeExecutionLimits
 									? { limits: controls.limits }
@@ -2400,7 +2509,12 @@ self.postMessage = (message, transferOrOptions) => {
 								workspaceFiles: workspace.workspaceFiles,
 								log: _log
 							};
-							if (transferList) worker.postMessage(message, transferList);
+							if (runtimeWasmModulePorts) {
+								worker.postMessage(message, [
+									...(transferList ?? []),
+									...Object.values(runtimeWasmModulePorts)
+								]);
+							} else if (transferList) worker.postMessage(message, transferList);
 							else worker.postMessage(message);
 							if (
 								deliveredOwnedPreflight &&

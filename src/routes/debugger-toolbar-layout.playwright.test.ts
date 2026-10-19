@@ -9,6 +9,7 @@ import {
 	startBrowserPreviewServer
 } from '../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.mjs';
+import { prepareContainerRuntimePage } from '../../scripts/container-runtime-browser-observer.mjs';
 
 const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_REGRESSIONS === '1';
 const browserOptions = {
@@ -18,7 +19,12 @@ const browserOptions = {
 };
 
 async function withWorkspacePage(
-	run: (page: Page, context: BrowserContext, browserUrl: string) => Promise<void>
+	run: (
+		page: Page,
+		context: BrowserContext,
+		browserUrl: string,
+		observeErrors: () => void
+	) => Promise<void>
 ) {
 	await runWithBrowserProbeSessionLock(async () => {
 		const providedUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -39,9 +45,9 @@ async function withWorkspacePage(
 		const page = await context.newPage();
 		page.setDefaultTimeout(60_000);
 		const errors: string[] = [];
-		page.on('pageerror', (error) => errors.push(error.message));
+		const observeErrors = () => page.on('pageerror', (error) => errors.push(error.message));
 		try {
-			await run(page, context, server.browserUrl);
+			await run(page, context, server.browserUrl, observeErrors);
 			expect(errors).toEqual([]);
 		} finally {
 			await context.close();
@@ -56,7 +62,7 @@ describe('narrow paused debugger controls', () => {
 		'keeps every debugger action inside the clipped shell at a 300px pane width',
 		browserOptions,
 		async () => {
-			await withWorkspacePage(async (page, context, browserUrl) => {
+			await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
 				await context.addInitScript(() =>
 					localStorage.setItem(
 						'wasm-idle:example-workspace:v3',
@@ -76,7 +82,8 @@ describe('narrow paused debugger controls', () => {
 					)
 				);
 				await page.setViewportSize({ width: 961, height: 960 });
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await prepareContainerRuntimePage(page, browserUrl);
+				observeErrors();
 				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug?.getEditorValue().includes('debug-layout')
