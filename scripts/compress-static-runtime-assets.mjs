@@ -65,6 +65,10 @@ function relativeToRoot(rootDir, filePath) {
 /** @param {string} rootDir @param {string} filePath */
 function isUnderCompressibleRuntime(rootDir, filePath) {
 	const relativePath = relativeToRoot(rootDir, filePath);
+	// The workspace starts this module Worker before a new page is necessarily
+	// controlled by the decompression service worker. Its initial URL must exist.
+	if (/^_app\/immutable\/workers\/owner\.worker-[^/]+\.js$/u.test(relativePath))
+		return false;
 	// TinyGo's receipt-verified executable graph fetches exact identity URLs. Its
 	// service worker deliberately preserves those network Responses, so replacing
 	// these files with .gz siblings makes the verified URLs disappear.

@@ -136,6 +136,30 @@ describe('compressStaticRuntimeAssets', () => {
 		}
 	}, 30_000);
 
+	it('preserves the initial workspace Worker URL before service worker control', async () => {
+		const rootDir = await makeTempDir();
+		const ownerPath = '_app/immutable/workers/owner.worker-coldStart.js';
+		const runtimePath = '_app/immutable/workers/compiler.1234.js';
+		const bytes = repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 1, 7);
+		await writeAsset(rootDir, ownerPath, bytes);
+		await writeAsset(rootDir, `${ownerPath}.gz`, gzipSync(bytes));
+		await writeAsset(rootDir, runtimePath, bytes);
+		await writeAsset(
+			rootDir,
+			'compressed-runtime-assets.v1.json',
+			new TextEncoder().encode(JSON.stringify({ assets: [ownerPath] }))
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		await expect(readFile(path.join(rootDir, ownerPath))).resolves.toEqual(Buffer.from(bytes));
+		await expect(stat(path.join(rootDir, runtimePath))).rejects.toThrow();
+		await expect(readFile(path.join(rootDir, `${runtimePath}.gz`))).resolves.toEqual(
+			gzipSync(bytes, { level: 9 })
+		);
+		expect(result.manifestAssets).toEqual([runtimePath]);
+	});
+
 	it('leaves inert Rust executable graph storage untouched and unregistered', async () => {
 		const rootDir = await makeTempDir();
 		const identityPath = 'wasm-rust/compiler-worker.js.bin';
