@@ -93,7 +93,10 @@ describe('browser editor workspace readiness', () => {
 		const page = readFileSync('src/routes/+page.svelte', 'utf8');
 		const selector = page.match(/<select\s+id="language-select"[\s\S]*?>/)?.[0];
 		expect(selector).toContain('disabled={!workspaceInitialized || !!runningMode}');
-		expect(selector).toContain('data-workspace-ready={workspaceInitialized}');
+		expect(selector).toContain('data-workspace-ready={workspaceEditorReady}');
+		expect(page).toContain(
+			'const workspaceEditorReady = $derived(workspaceInitialized && !!editor);'
+		);
 		expect(page).toMatch(
 			/function handleLanguageChange\(event: Event\) \{\s*(?:\/\/[^\n]+\n\s*)+if \(!workspaceInitialized \|\| runningMode\) return;/
 		);
