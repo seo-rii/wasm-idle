@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 import { transformSync, type Options as SwcTypeScriptOptions } from '@swc/wasm-typescript';
+import { executionParameterNames } from './execution-parameters.js';
 
 export type BrowserTypeScriptLanguage = 'javascript' | 'typescript';
 export type BrowserTypeScriptDiagnosticSeverity = 'error' | 'warning' | 'other';
@@ -601,7 +602,7 @@ export async function executeBrowserTypeScriptArtifact(
 	) => (...values: unknown[]) => Promise<unknown>;
 
 	try {
-		const execute = new AsyncFunction(
+		const injectedParameters = [
 			'require',
 			'module',
 			'exports',
@@ -609,11 +610,21 @@ export async function executeBrowserTypeScriptArtifact(
 			'console',
 			'Buffer',
 			'__filename',
-			'__dirname',
-			// The guest owns its lexical declarations; builtin imports may shadow the
-			// injected bindings. A function body also preserves directive prologues.
-			`return (async function () {\n${artifact.javascript}\n}).apply(undefined, arguments);\n//# sourceURL=${artifact.fileName}`
-		);
+			'__dirname'
+		];
+		const body = `${artifact.javascript}\n//# sourceURL=${artifact.fileName}`;
+		let execute: (...values: unknown[]) => Promise<unknown>;
+		try {
+			// Keep the native fast path and grammar for programs whose bindings
+			// already work. Only lexical redeclarations need parameter renaming.
+			execute = new AsyncFunction(...injectedParameters, body);
+		} catch (error) {
+			if (!(error instanceof SyntaxError)) throw error;
+			execute = new AsyncFunction(
+				...executionParameterNames(artifact.javascript, injectedParameters),
+				body
+			);
+		}
 		options.onReady?.();
 		await execute(
 			require,

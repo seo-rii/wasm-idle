@@ -44,6 +44,7 @@ async function createFixture() {
 	for (const [packageName, version] of Object.entries({
 		'@swc/wasm-typescript': '1.15.33',
 		buffer: '6.0.3',
+		acorn: '8.19.0',
 		esbuild: '0.27.3',
 		typescript: '5.9.3'
 	})) {
