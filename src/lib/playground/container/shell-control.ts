@@ -11,6 +11,7 @@ export const SHELL_CONTROL_ROUTE = `/usr/local/bin/${SHELL_CONTROL_COMMAND}`;
 export const SHELL_CONTROL_MOUNT = '/usr/share/wasm-idle-shell-control';
 export const SHELL_CONTROL_RCFILE = `${SHELL_CONTROL_MOUNT}/rcfile`;
 export const SHELL_CONTROL_REQUEST = '/tmp/.wasm-idle-shell-control-request';
+const SHELL_INPUTRC = '/tmp/.wasm-idle-shell-inputrc';
 const ADAPTER = 'website-shell-control-v1';
 const MAX_GENERATION = 2147483647;
 const encoder = new TextEncoder();
@@ -255,6 +256,7 @@ export function createShellControl(options: ShellControlOptions) {
 		args: Object.freeze(['--noprofile', '--norc', '-i']),
 		env: Object.freeze({
 			WASM_IDLE_SHELL_CONTROL: '1',
+			INPUTRC: SHELL_INPUTRC,
 			[SHELL_CONTROL_FUNCTION_ENV]: `() ${rcfile(session, languages).match(/__wasm_idle_poll\(\) (\{[\s\S]*?\n\})/)![1]}`
 		})
 	});
@@ -270,6 +272,13 @@ export function createShellControl(options: ShellControlOptions) {
 			}
 			ensureDirectory(fs, cwd);
 			writeRequest(fs, `1 ${session} 0 -\n`);
+			// The pinned C locale otherwise interprets UTF-8 input as Meta keys.
+			// Keep this on the writable mount: WASIX overrequests rights on open.
+			fs.writeFile(
+				SHELL_INPUTRC,
+				encoder.encode('set input-meta on\nset convert-meta off\nset output-meta on\n'),
+				{ mode: 0o600 }
+			);
 			fs.mountReadonly(SHELL_CONTROL_MOUNT, [
 				{
 					path: 'rcfile',
