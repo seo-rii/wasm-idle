@@ -625,9 +625,13 @@ int main(void) {
     memset(chunk, 'x', sizeof(chunk));
     volatile int value = 0;
     if (getchar() != 's') return 2;
-    for (;;) {
+    // Fill both 256 KiB rings while keeping total output below the 1 MiB limit.
+    for (int block = 0; block < 24; block += 1) {
         fwrite(chunk, 1, sizeof(chunk), stdout);
         fwrite(chunk, 1, sizeof(chunk), stderr);
+        value += 1;
+    }
+    for (;;) {
         value += 1;
     }
 }`,
