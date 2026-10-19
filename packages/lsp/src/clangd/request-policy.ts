@@ -76,8 +76,9 @@ export function createClangdRequestPolicy(
 			jsonrpc: '2.0',
 			id,
 			// Monaco 0.55.1's native providers surface RPC cancellation errors as
-			// unhandled errors. Settle features with their empty result instead.
-			...(request.trace.method === 'initialize'
+			// unhandled errors. Settle features and retired initialization with an
+			// empty result; active initialization must still report failures.
+			...(request.trace.method === 'initialize' && !disposed
 				? { error: { code: -32800, message: `initialize ${outcome}` } }
 				: { result: request.emptyResult })
 		} as ResponseMessage);
@@ -85,8 +86,8 @@ export function createClangdRequestPolicy(
 	};
 	const dispose = () => {
 		if (disposed) return;
-		for (const id of [...pending.keys()]) cancel(id, 'cancelled');
 		disposed = true;
+		for (const id of [...pending.keys()]) cancel(id, 'cancelled');
 		versions.clear();
 		hintDocuments.clear();
 	};
@@ -136,11 +137,14 @@ export function createClangdRequestPolicy(
 	};
 	const write = async (message: Message) => {
 		const data = message as RequestMessage & { params?: any };
-		const emptyResult = data.method?.endsWith('/resolve')
-			? data.params
-			: data.method?.startsWith('textDocument/semanticTokens/')
-				? { data: [] }
-				: null;
+		const emptyResult =
+			data.method === 'initialize'
+				? { capabilities: {} }
+				: data.method?.endsWith('/resolve')
+					? data.params
+					: data.method?.startsWith('textDocument/semanticTokens/')
+						? { data: [] }
+						: null;
 		if (disposed) {
 			// Providers already scheduled by the old Monaco model can run after a
 			// language switch. They must finish without reaching the retired Worker.
