@@ -51,41 +51,91 @@ function endpoint(
 }
 
 describe('compiler modules outlive execution worker bridges', () => {
-	it('uses verified streaming for the built-in Clang module and retains it outside the worker', async () => {
-		const cache = new RuntimeAssetCache();
-		const module = await WebAssembly.compile(wasm);
-		vi.mocked(compileVerifiedWasmAsset).mockResolvedValue(module);
-		for (let index = 0; index < 2; index++) {
-			const postMessage = vi.fn();
-			const bridge = new WorkerAssetBridge(
-				{ postMessage } as unknown as Worker,
-				'clang',
-				{
-					baseUrl: 'https://runtime.example/clang/',
-					useAssetBridge: true,
-					integrity: BUNDLED_CLANG_ASSET_INTEGRITY
-				},
-				undefined,
-				128 * 1024 * 1024,
-				false,
-				cache
+	it.each(['bin/clang.wasm.gz', 'bin/lld.wasm.gz'] as const)(
+		'uses verified streaming for the built-in module %s and retains it outside the worker',
+		async (asset) => {
+			const cache = new RuntimeAssetCache();
+			const module = await WebAssembly.compile(wasm);
+			const fetchAsset = vi
+				.spyOn(globalThis, 'fetch')
+				.mockRejectedValue(new Error('buffered asset path'));
+			expect(Object.isFrozen(BUNDLED_CLANG_ASSET_INTEGRITY)).toBe(true);
+			for (const entry of Object.values(BUNDLED_CLANG_ASSET_INTEGRITY))
+				expect(Object.isFrozen(entry)).toBe(true);
+			vi.mocked(compileVerifiedWasmAsset).mockResolvedValue(module);
+			for (let index = 0; index < 2; index++) {
+				const postMessage = vi.fn();
+				const bridge = new WorkerAssetBridge(
+					{ postMessage } as unknown as Worker,
+					'clang',
+					{
+						baseUrl: 'https://runtime.example/clang/',
+						useAssetBridge: true,
+						integrity: BUNDLED_CLANG_ASSET_INTEGRITY
+					},
+					undefined,
+					128 * 1024 * 1024,
+					false,
+					cache
+				);
+				bridge.handleMessage({
+					data: { assetRequest: { id: 1, asset, module: true } }
+				} as MessageEvent);
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+				expect(postMessage.mock.calls[0][0].assetResponse).toMatchObject({
+					ok: true,
+					module
+				});
+				bridge.dispose();
+			}
+			expect(compileVerifiedWasmAsset).toHaveBeenCalledExactlyOnceWith(
+				`https://runtime.example/clang/${asset}`,
+				BUNDLED_CLANG_ASSET_INTEGRITY[asset],
+				expect.objectContaining({
+					fetch: expect.any(Function),
+					signal: expect.any(AbortSignal)
+				})
 			);
-			bridge.handleMessage({
-				data: { assetRequest: { id: 1, asset: 'bin/clang.wasm.gz', module: true } }
-			} as MessageEvent);
-			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
-			expect(postMessage.mock.calls[0][0].assetResponse).toMatchObject({ ok: true, module });
-			bridge.dispose();
+			expect(fetchAsset).not.toHaveBeenCalled();
+			cache.dispose();
 		}
-		expect(compileVerifiedWasmAsset).toHaveBeenCalledExactlyOnceWith(
-			'https://runtime.example/clang/bin/clang.wasm.gz',
-			BUNDLED_CLANG_ASSET_INTEGRITY['bin/clang.wasm.gz'],
-			expect.objectContaining({
-				fetch: expect.any(Function),
-				signal: expect.any(AbortSignal)
-			})
-		);
-	});
+	);
+	it.each(['receipt', 'loader', 'allowlist'] as const)(
+		'keeps the buffered bridge for a custom %s',
+		async (setting) => {
+			const fetchAsset = vi
+				.spyOn(globalThis, 'fetch')
+				.mockRejectedValue(new Error('buffered asset path'));
+			const loader = vi.fn().mockRejectedValue(new Error('custom loader path'));
+			const postMessage = vi.fn();
+			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+				baseUrl: 'https://runtime.example/clang/',
+				useAssetBridge: true,
+				persistentCache: false,
+				integrity:
+					setting === 'receipt'
+						? { ...BUNDLED_CLANG_ASSET_INTEGRITY }
+						: BUNDLED_CLANG_ASSET_INTEGRITY,
+				...(setting === 'loader' ? { loader } : {}),
+				...(setting === 'allowlist' ? { allowedBaseUrls: [] } : {})
+			});
+			try {
+				bridge.handleMessage({
+					data: { assetRequest: { id: 1, asset: 'bin/clang.wasm.gz', module: true } }
+				} as MessageEvent);
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+				expect(postMessage.mock.calls[0][0].assetResponse).toMatchObject({
+					ok: false,
+					error: setting === 'loader' ? 'custom loader path' : 'buffered asset path'
+				});
+				expect(compileVerifiedWasmAsset).not.toHaveBeenCalled();
+				expect(loader).toHaveBeenCalledTimes(setting === 'loader' ? 1 : 0);
+				expect(fetchAsset).toHaveBeenCalledTimes(setting === 'loader' ? 0 : 1);
+			} finally {
+				bridge.dispose();
+			}
+		}
+	);
 	it('compiles trusted bytes once and reuses the module across fresh worker bridges', async () => {
 		const cache = new RuntimeAssetCache();
 		const loader = vi.fn(async () => ({ data: wasm }));
