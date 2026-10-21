@@ -67,9 +67,11 @@ export class WebsiteClangRuntime {
 						const lines = pending.split('\n');
 						pending = lines.pop() ?? '';
 						for (const line of lines) {
+							// Preserve terminal styling in output while editor diagnostics use plain text.
+							const plain = line.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 							const match =
 								/^(.*?):(\d+):(\d+): (fatal error|error|warning|note): (.*)$/.exec(
-									line
+									plain
 								);
 							if (match)
 								this.emit({
@@ -195,7 +197,7 @@ export class WebsiteClangRuntime {
 				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
 				...(language === 'C' && override ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
-				'-fno-color-diagnostics',
+				'-fcolor-diagnostics',
 				'-fno-exceptions',
 				...compileArgs
 			];

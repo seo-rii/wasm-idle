@@ -136,7 +136,10 @@ export function createContainerPlaygroundBinding(
 				const language = requestedShellLanguage ?? options.getLanguage?.() ?? 'CPP';
 				await queues.get(language)?.catch(() => {});
 				await connection().call('shellStart', [
-					{ cwd: `/workspace/${language}`, env: { PS1: '\\w $ ' } }
+					{
+						cwd: `/workspace/${language}`,
+						env: { PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ' }
+					}
 				]);
 			})());
 		},

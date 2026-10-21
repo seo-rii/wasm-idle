@@ -5,7 +5,7 @@ import { WebsiteClangRuntime } from './clang-runtime';
 import type { WebsiteRuntimeAdapter } from './runtime-adapter';
 import type { SandboxExecutionOptions } from '../options';
 
-function fixture() {
+function fixture(stderr: string[] = []) {
 	const files = new Map<string, Uint8Array>();
 	const fs = {
 		readFile: (path: string) => Uint8Array.from(files.get(path) ?? []),
@@ -26,6 +26,7 @@ function fixture() {
 			}),
 			stderr: new ReadableStream({
 				start(controller) {
+					for (const chunk of stderr) controller.enqueue(new TextEncoder().encode(chunk));
 					controller.close();
 				}
 			}),
@@ -44,14 +45,48 @@ function fixture() {
 		})
 	} as unknown as WebsiteRuntimeAdapter;
 	const progress = { set: vi.fn() };
-	const runtime = new WebsiteClangRuntime(profile, adapter, vi.fn());
+	const emit = vi.fn();
+	const runtime = new WebsiteClangRuntime(profile, adapter, emit);
 	const prepare = (code: string, options: SandboxExecutionOptions = {}, language = 'CPP') =>
 		runtime.prepare(language, code, [], options, new AbortController().signal, progress, 1);
-	return { runtime, prepare, spawn, progress, codes, files };
+	return { runtime, prepare, spawn, progress, codes, files, emit };
 }
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
 describe('website container Clang compilation', () => {
+	it('preserves compiler colors in terminal output and extracts plain editor diagnostics across chunks', async () => {
+		const chunks = [
+			'\x1b[1m/workspace/CPP/main.cpp:2:3: \x1b[',
+			'0m\x1b[0;1;31merror: \x1b[0m\x1b[1mexpected expression\x1b[0m\n'
+		];
+		const { prepare, spawn, codes, emit } = fixture(chunks);
+		codes.push(1);
+		expect(await prepare('int main() { invalid }')).toBe(false);
+		expect(spawn.mock.calls[0][1]).toContain('-fcolor-diagnostics');
+		expect(spawn.mock.calls[0][1]).not.toContain('-fno-color-diagnostics');
+		const events = emit.mock.calls.map(([event]) => event);
+		expect(
+			events
+				.filter((event) => event.name === 'output')
+				.map((event) => event.data)
+				.join('')
+		).toBe(chunks.join(''));
+		expect(events.filter((event) => event.name === 'diagnostic')).toEqual([
+			{
+				language: 'CPP',
+				name: 'diagnostic',
+				requestId: 1,
+				data: {
+					fileName: '/workspace/main.cpp',
+					lineNumber: 2,
+					columnNumber: 3,
+					severity: 'error',
+					message: 'expected expression'
+				}
+			}
+		]);
+	});
+
 	it('applies language-changing response files before the input and links C++ safely', async () => {
 		const { prepare, spawn } = fixture();
 		await prepare('int main() {}', { activePath: 'main.c', compileArgs: ['@flags.rsp'] }, 'C');
