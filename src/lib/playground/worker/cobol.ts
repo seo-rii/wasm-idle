@@ -87,7 +87,7 @@ self.onmessage = async (event: { data: any }) => {
 		} catch (error: any) {
 			postMessage({ error: error?.message || String(error) });
 		}
-	} else if (typeof log === 'boolean' && !code) {
+	} else if (code === '' || (typeof log === 'boolean' && code === undefined)) {
 		// The compiler receives the current logging preference for every compilation.
 		if (typeof code === 'string') postMessage({ results: true });
 	} else if (code) {

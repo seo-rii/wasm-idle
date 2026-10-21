@@ -224,7 +224,7 @@ self.onmessage = async (event: { data: any }) => {
 		} catch (error: any) {
 			self.postMessage({ error: error.message, ...missingPrecompiledHeader() });
 		}
-	} else if (code) {
+	} else if (typeof code === 'string') {
 		clang.log = log;
 		stdinBufferClang = new Int32Array(buffer);
 		debugBufferClang = new Int32Array(debugBuffer);
