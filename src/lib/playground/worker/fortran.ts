@@ -379,7 +379,7 @@ self.onmessage = async (event: { data: any }) => {
 		} catch (error: any) {
 			postMessage({ error: error?.message || String(error) });
 		}
-	} else if (typeof log === 'boolean' && !code) {
+	} else if (code === '' || (typeof log === 'boolean' && code === undefined)) {
 		if (clang) clang.log = log;
 		if (typeof code === 'string') postMessage({ results: true });
 	} else if (code) {

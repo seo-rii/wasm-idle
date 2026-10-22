@@ -42,14 +42,24 @@ describe('V worker', () => {
 		});
 	});
 
-	it('settles an empty source request without waiting for compilation', async () => {
-		await import('./v');
-		await (globalThis as any).self.onmessage({
-			data: { code: '', prepare: true, log: false }
-		});
+	it.each([true, false, undefined])(
+		'settles empty source with log=%s and leaves the worker ready for another request',
+		async (log) => {
+			await import('./v');
+			await (globalThis as any).self.onmessage({
+				data: { code: '', prepare: true, log }
+			});
+			await (globalThis as any).self.onmessage({
+				data: { code: '', prepare: false, log }
+			});
 
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
-	});
+			expect((globalThis as any).postMessage.mock.calls).toEqual([
+				[{ results: true }],
+				[{ results: true }]
+			]);
+		},
+		30_000
+	);
 
 	it('loads the V compiler through llvm-core, compiles workspace source, and executes stdin', async () => {
 		await import('./v');

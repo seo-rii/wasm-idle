@@ -156,6 +156,7 @@ describe('real Bash directory control protocol', () => {
 		);
 		expect(result).toMatchObject({ status: 0, stderr: '' });
 		expect(result.stdout.trimEnd().split('\n')).toEqual([
+			'\r',
 			'124',
 			join(local.workspace, 'CPP'),
 			'retained',
@@ -165,6 +166,26 @@ describe('real Bash directory control protocol', () => {
 		expect(readFileSync(local.ack, 'utf8')).toBe(
 			`${join(local.workspace, 'CPP')}|1|${'ab'.repeat(16)}|1|CPP|ok\n`
 		);
+	});
+
+	it('starts a changed directory prompt on a new line without adding lines for an unchanged directory', () => {
+		for (const language of ['CPP', 'C']) {
+			const local = nativeFixture(`1 ${'ab'.repeat(16)} 1 ${language}\n`);
+			const result = local.run(
+				[
+					'builtin printf "old-prompt $ partial-input"',
+					'if __wasm_idle_poll; then status=0; else status=$?; fi',
+					'if [[ "$status" == 124 ]]; then builtin printf "new-prompt $ partial-input"; fi',
+					'if __wasm_idle_poll; then :; else exit 1; fi'
+				].join('\n')
+			);
+			expect(result).toMatchObject({ status: 0, stderr: '' });
+			expect(result.stdout).toBe(
+				language === 'CPP'
+					? 'old-prompt $ partial-input\r\nnew-prompt $ partial-input'
+					: 'old-prompt $ partial-input'
+			);
+		}
 	});
 
 	it('does not execute malformed mailbox bytes and rejects overlong, noncanonical, and foreign requests', () => {

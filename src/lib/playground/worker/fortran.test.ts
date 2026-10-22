@@ -46,6 +46,8 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 
 const assetBaseUrl = 'https://assets.example.test/wasm-fortran/';
 const originalFetch = globalThis.fetch;
+// Initialize Node's HTTP parser before tests mock WebAssembly.compile.
+const NativeHeaders = globalThis.Headers;
 const TEST_RECEIPTS = Object.freeze({
 	'f2c.wasm': Object.freeze({
 		bytes: 4,
@@ -67,7 +69,7 @@ function responseFor(data: Uint8Array, url: string) {
 			return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
 		},
 		body: null,
-		headers: new Headers({ 'content-length': String(data.byteLength) }),
+		headers: new NativeHeaders({ 'content-length': String(data.byteLength) }),
 		ok: true,
 		status: 200,
 		url
@@ -96,14 +98,24 @@ describe('Fortran worker runtime assets', () => {
 		globalThis.fetch = originalFetch;
 	});
 
-	it('settles an empty source request without waiting for compilation', async () => {
-		await import('./fortran');
-		await (globalThis as any).self.onmessage({
-			data: { code: '', prepare: true, log: false }
-		});
+	it.each([true, false, undefined])(
+		'settles empty source with log=%s and leaves the worker ready for another request',
+		async (log) => {
+			await import('./fortran');
+			await (globalThis as any).self.onmessage({
+				data: { code: '', prepare: true, log }
+			});
+			await (globalThis as any).self.onmessage({
+				data: { code: '', prepare: false, log }
+			});
 
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
-	});
+			expect((globalThis as any).postMessage.mock.calls).toEqual([
+				[{ results: true }],
+				[{ results: true }]
+			]);
+		},
+		30_000
+	);
 
 	it('loads every f2c asset through the bounded least-authority fetch boundary', async () => {
 		const assets = new Map([

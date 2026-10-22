@@ -90,6 +90,29 @@ describe('Clang worker LLDB sources', () => {
 		});
 	}
 
+	it.each([true, false, undefined])(
+		'replies to an empty source run with log=%s and accepts the next program',
+		async (log) => {
+			await import('./clang');
+			await (globalThis as any).self.onmessage({
+				data: { load: true, path: '/clang/', log }
+			});
+			const postMessage = (globalThis as any).postMessage;
+			postMessage.mockClear();
+			clangState.compileLinkRun.mockRejectedValueOnce(new Error('missing main'));
+			const request = { language: 'C', prepare: false, log };
+			await (globalThis as any).self.onmessage({ data: { ...request, code: '' } });
+			expect(clangState.compileLinkRun).toHaveBeenCalledWith('', expect.anything());
+			expect(postMessage).toHaveBeenCalledWith({ error: 'missing main' });
+
+			await (globalThis as any).self.onmessage({
+				data: { ...request, code: 'int main(void) { return 0; }' }
+			});
+			expect(postMessage).toHaveBeenLastCalledWith({ results: true });
+		},
+		30_000
+	);
+
 	it.each([
 		{ name: 'string', content: '73\n' },
 		{
