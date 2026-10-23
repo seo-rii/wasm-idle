@@ -22,7 +22,7 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_CLANG_SIMD !== '1')(
 	'real Wasm SIMD compiler',
 	() => {
 		it.each(['C', 'CPP'] as const)(
-			'compiles and runs %s SSE/AVX2 and Wasm intrinsics without user flags',
+			'compiles and runs %s x86intrin SSE/AVX2 and Wasm intrinsics without user flags',
 			{ timeout: 180_000 },
 			async (language) => {
 				const result = await compileClang(
@@ -66,6 +66,8 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_CLANG_SIMD !== '1')(
 			async (language) => {
 				const code = `#include <xmmintrin.h>
 #include <immintrin.h>
+#include <x86intrin.h>
+#include <x86intrin.h>
 int main(void) {
     for (size_t size = 1; size <= 33; size += 16) {
         for (size_t alignment = 1; alignment <= 64; alignment *= 2) {

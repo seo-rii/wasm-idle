@@ -68,10 +68,11 @@ documented stdin limitation, is covered by tests.
 ## C/C++ SIMD
 
 Normal C/C++ runs support `<wasm_simd128.h>` and the SSE through AVX2 intrinsics exposed by
-`<immintrin.h>`, using pinned Emscripten 6.0.0 compatibility headers. The SDK compiler, web
-playground, Bash `clang` command, and bundled LLVM 22 clangd use the same Wasm SIMD profile.
+`<immintrin.h>` or `<x86intrin.h>`, using pinned Emscripten 6.0.0 compatibility headers. The SDK
+compiler, web playground, Bash `clang` command, and bundled LLVM 22 clangd use the same Wasm SIMD profile.
 AVX's 256-bit operations are implemented with pairs of 128-bit Wasm vectors; this does not
-enable native x86 assembly. FMA, AVX-512 and other x86-only intrinsics are outside this profile.
+enable native x86 assembly. `<x86intrin.h>` provides this same SIMD subset; CPU-specific APIs such as
+`__rdtsc` are unsupported. FMA, AVX-512 and other x86-only intrinsics are outside this profile.
 
 The LLDB/WAMR debugger does not support SIMD, so LLDB builds retain their existing scalar target.
 Use normal runs for SIMD programs. The compatibility sources, licenses, and immutable source

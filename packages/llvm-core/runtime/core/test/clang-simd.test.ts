@@ -156,7 +156,12 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 		(mountRoot) => {
 			const nativePath = '/lib/clang/22/include/immintrin.h';
 			const nativeHeader = Buffer.from('original SDK header');
-			const files = new Map<string, Uint8Array>([[nativePath, nativeHeader]]);
+			const nativeX86Path = '/lib/clang/22/include/x86intrin.h';
+			const nativeX86Header = Buffer.from('original SDK x86 intrinsics');
+			const files = new Map<string, Uint8Array>([
+				[nativePath, nativeHeader],
+				[nativeX86Path, nativeX86Header]
+			]);
 			const directories = new Set(['']);
 			const fs = {
 				mkdirTree: vi.fn((path: string) => {
@@ -173,7 +178,7 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			expect(fs.mkdirTree).toHaveBeenCalledWith(directory);
 			expect(clangSimdDriverArgs(mountRoot).at(-1)).toBe(directory);
 			expect(clangSimdFrontendArgs(mountRoot).at(-1)).toBe(directory);
-			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length + 2);
+			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length + 3);
 			for (const name of expectedHeaders) {
 				const installedName = name === 'xmmintrin.h' ? `emscripten/${name}` : name;
 				expect(files.get(`${directory}/${installedName}`)).toEqual(
@@ -184,6 +189,9 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			expect(publicHeader).toMatch(
 				/#include "emscripten\/xmmintrin.h"\s+#undef _mm_malloc\s+#undef _mm_free\s+#include <mm_malloc.h>/
 			);
+			const x86Header = new TextDecoder().decode(files.get(`${directory}/x86intrin.h`));
+			expect(x86Header).toContain('#include <immintrin.h>');
+			expect(x86Header.match(/^#include /gm)).toHaveLength(1);
 			for (const args of [clangSimdDriverArgs(mountRoot), clangSimdFrontendArgs(mountRoot)]) {
 				const targetHeaderPath = args[args.indexOf('-include') + 1];
 				expect(targetHeaderPath).toBe(`${directory}/__wasm_idle_simd_target.h`);
@@ -192,6 +200,7 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 				);
 			}
 			expect(files.get(nativePath)).toBe(nativeHeader);
+			expect(files.get(nativeX86Path)).toBe(nativeX86Header);
 		}
 	);
 });

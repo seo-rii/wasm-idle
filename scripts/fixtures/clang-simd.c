@@ -1,4 +1,4 @@
-#include <immintrin.h>
+#include <x86intrin.h>
 #include <stdio.h>
 #include <wasm_simd128.h>
 

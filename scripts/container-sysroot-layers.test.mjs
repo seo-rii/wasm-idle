@@ -33,6 +33,7 @@ const files = [
 	['lib/wasm32-wasi/libc++unknown.a', 'unreviewed archive stays in the base\n', 0o644],
 	['lib/clang/22/include/stddef.h', '#define SIZE 1\n', 0o644],
 	['lib/clang/22/include/immintrin.h', '/* original x86-only header */\n', 0o644],
+	['lib/clang/22/include/x86intrin.h', '/* original x86 umbrella header */\n', 0o644],
 	['lib/clang/22/include/wasm_simd128.h', '/* original Wasm SIMD header */\n', 0o644]
 ];
 
@@ -391,11 +392,18 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 					'smmintrin.h',
 					'tmmintrin.h',
 					'wasm_simd128.h',
+					'x86intrin.h',
 					'xmmintrin.h'
 				]);
 				assert.equal(
 					args[args.indexOf('-include') + 1],
 					`${directory}/__wasm_idle_simd_target.h`
+				);
+				assert.match(
+					new TextDecoder().decode(
+						f.profile.container.fs.readFile(`${directory}/x86intrin.h`)
+					),
+					/#include <immintrin\.h>/
 				);
 				assert.match(
 					new TextDecoder().decode(
@@ -412,7 +420,7 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 							'#define _mm_malloc(__size, __align) memalign((__align), (__size))'
 						)
 				);
-				for (const header of ['immintrin.h', 'wasm_simd128.h']) {
+				for (const header of ['immintrin.h', 'x86intrin.h', 'wasm_simd128.h']) {
 					const native = `lib/clang/22/include/${header}`;
 					assert.deepEqual(
 						f.profile.container.fs.readFile(`${root}/${native}`),

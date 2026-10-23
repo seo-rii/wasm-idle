@@ -61,13 +61,14 @@ otherwise verified binary.
 ## Wasm SIMD compatibility
 
 The pinned Clang 22.1.8 runtime enables Wasm SIMD for normal C and C++ builds. Alongside
-`<wasm_simd128.h>`, programs can include `<immintrin.h>` and use the SSE through AVX2
+`<wasm_simd128.h>`, programs can include `<immintrin.h>` or `<x86intrin.h>` and use the SSE through AVX2
 intrinsics implemented by Emscripten 6.0.0's compatibility headers. AVX vectors use two Wasm
 128-bit vectors. No extra compile flags are required. The original LLVM resource headers
 remain intact; compatibility headers live in a separate include directory and participate in
 the precompiled-header cache fingerprint.
 
-Native x86 assembly, FMA and AVX-512 are outside this profile. LLDB/WAMR debug builds keep
+The `<x86intrin.h>` wrapper exposes the same SIMD subset, excluding CPU-specific APIs such as
+`__rdtsc`. Native x86 assembly, FMA and AVX-512 are outside this profile. LLDB/WAMR debug builds keep
 their existing scalar target because the debugger does not support SIMD. Legacy and unknown
 compiler manifests retain their original configuration. See `LICENSE.emscripten.txt` and
 `LICENSE.llvm.txt` for the included upstream header licenses.

@@ -81,5 +81,14 @@ export function installClangSimdHeaders(fs: SimdHeaderFileSystem, root = '') {
 #endif
 `)
 	);
+	fs.writeFile(
+		`${directory}/x86intrin.h`,
+		encoder.encode(`#ifndef __wasm_idle_x86intrin_h__
+#define __wasm_idle_x86intrin_h__
+/* Wasm compatibility for SSE through AVX2; native x86-only intrinsics are excluded. */
+#include <immintrin.h>
+#endif
+`)
+	);
 	fs.writeFile(`${directory}/${simdTargetHeaderName}`, encoder.encode(simdTargetHeader));
 }
