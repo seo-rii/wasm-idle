@@ -7,6 +7,7 @@ import {
 	type LanguageToolPersistentOptions
 } from '../persistent-assets.js';
 import { withPersistentPythonLspAssets } from './persistent-fetch.js';
+import { createPythonRequestQueue } from './request-queue.js';
 import { withPythonRuntimeModule } from './runtime-module.js';
 
 interface PythonLspWorkerScope {
@@ -29,6 +30,32 @@ let persistentAssets: LanguageToolPersistentOptions = {};
 let runtimeModule: Promise<WebAssembly.Module | undefined> = Promise.resolve(undefined);
 let receiveRuntimeModule: ((module: WebAssembly.Module | undefined) => void) | undefined;
 let rejectRuntimeModule: ((reason: Error) => void) | undefined;
+const diagnosticTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const requests = createPythonRequestQueue(
+	(message) => bridge?.(JSON.stringify(message)),
+	(message) => self.postMessage(message)
+);
+
+function scheduleDiagnostics(uri: string, version: number | null, cancelled = false) {
+	const previous = diagnosticTimers.get(uri);
+	if (previous !== undefined) clearTimeout(previous);
+	if (cancelled) {
+		diagnosticTimers.delete(uri);
+		return;
+	}
+	diagnosticTimers.set(
+		uri,
+		setTimeout(() => {
+			diagnosticTimers.delete(uri);
+			requests.push({
+				jsonrpc: '2.0',
+				method: 'wasmIdle/publishDiagnostics',
+				params: { uri, version }
+			});
+		}, 120)
+	);
+}
+
 function toErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -72,7 +99,8 @@ async function bootstrapPythonBridge(pyodideBaseUrl: string) {
 			() => loadPyodide({ indexURL: normalizeBaseUrl(pyodideBaseUrl) })
 		);
 		pyodide.registerJsModule('wasm_idle_lsp_bridge', {
-			emit: emitTransportMessage
+			emit: emitTransportMessage,
+			schedule_diagnostics: scheduleDiagnostics
 		});
 		self.postMessage({ type: 'progress', stage: 'load-jedi' });
 		try {
@@ -163,13 +191,13 @@ self.addEventListener('message', (event) => {
 	}
 
 	if (bridge) {
-		bridge!(JSON.stringify(payload));
+		requests.push(payload);
 		return;
 	}
 
 	void bootstrapPythonBridge(configuredPyodideBaseUrl)
 		.then(() => {
-			bridge!(JSON.stringify(payload));
+			requests.push(payload);
 		})
 		.catch((error) => {
 			console.error('Failed to forward LSP message to Python bridge', error);
