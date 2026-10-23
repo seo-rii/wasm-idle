@@ -183,6 +183,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.POSTGRESQL).toBe('postgresql');
 		expect(runtimeLspCapabilities.BASH).toBe('bash');
 		expect(runtimeLspCapabilities.COBOL).toBe('cobol');
+		expect(runtimeLspCapabilities.NIM).toBe('nim');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');

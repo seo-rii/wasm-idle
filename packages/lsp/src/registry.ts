@@ -1,4 +1,5 @@
 import { getReScriptLanguageServer } from './rescript/language-server.js';
+import { getNimLanguageServer } from './nim/language-server.js';
 import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
 import { getCppLanguageServer } from './clangd/language-server.js';
 import { getDLanguageServer } from './d/language-server.js';
@@ -89,6 +90,7 @@ const providerDefinitions = [
 		languages: ['lean4', 'lean'],
 		create: (options) => getLean4LanguageServer(options)
 	},
+	{ id: 'nim', languages: ['nim'], create: (options) => getNimLanguageServer(options) },
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

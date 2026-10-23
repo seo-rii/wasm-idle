@@ -313,6 +313,11 @@
 			"maxBytes": 8000000,
 			"maxFiles": 5,
 			"optional": true
+		},
+		"wasm-nim-lsp": {
+			"maxBytes": 8000000,
+			"maxFiles": 11,
+			"optional": true
 		}
 	}
 }

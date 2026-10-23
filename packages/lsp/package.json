@@ -274,6 +274,11 @@
 			"types": "./dist/lean4/index.d.ts",
 			"import": "./dist/lean4/index.js",
 			"default": "./dist/lean4/index.js"
+		},
+		"./nim": {
+			"types": "./dist/nim/index.d.ts",
+			"import": "./dist/nim/index.js",
+			"default": "./dist/nim/index.js"
 		}
 	},
 	"files": [

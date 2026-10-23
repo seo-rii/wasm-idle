@@ -74,6 +74,13 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** Per-document shared Wasm memory ceiling; defaults to 1 GiB. */
 		maxMemoryBytes?: number;
 	};
+	nim?: {
+		/** External, pinned nimlsp/nimsuggest browser assets. */
+		baseUrl?: string;
+		workspaceFiles?: Array<{ path: string; content: string }>;
+		/** Send standard didSave after opening/full changes for autosaving hosts. Default false. */
+		autoSave?: boolean;
+	};
 	python?: {
 		baseUrl?: string;
 	};

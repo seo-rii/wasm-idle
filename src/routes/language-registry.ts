@@ -46,6 +46,7 @@ export type RuntimeLspCapability =
 	| 'octave'
 	| 'awk'
 	| 'perl'
+	| 'nim'
 	| 'wasm';
 
 export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
@@ -265,7 +266,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		editorLanguage: 'julia',
 		diagnosticMarkers: true
 	},
-	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
+	NIM: {
+		label: 'Nim',
+		editorLanguage: 'nim',
+		diagnosticMarkers: true,
+		runtimeLspCapability: 'nim'
+	},
 	BASH: {
 		label: 'Bash',
 		editorLanguage: 'shell',

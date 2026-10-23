@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { nimInvalidSource, nimValidSource } from '../../packages/lsp/test/fixtures/nim-protocol.js';
+
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import {
@@ -207,6 +209,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 				receipt.sha256
 			])
 		)
+	},
+	{
+		language: 'NIM',
+		label: 'Nim',
+		fileName: 'main.nim',
+		source: nimInvalidSource,
+		validSource: nimValidSource,
+		errorLine: 4,
+		aliases: ['nimlsp'],
+		statusKey: 'nim',
+		assertNoPreEnableRequests: ['/wasm-nim-lsp/'],
+		expectedResponses: [
+			'/wasm-nim-lsp/nimlsp.mjs.gz.bin',
+			'/wasm-nim-lsp/nimlsp.wasm.gz.bin',
+			'/wasm-nim-lsp/stdlib.json.gz.bin'
+		]
 	},
 	{
 		language: 'CPP',
@@ -703,6 +721,7 @@ const lspBrowserMatrixGroups = {
 		'C3',
 		'COBOL',
 		'RESCRIPT',
+		'NIM',
 		'ASSEMBLYSCRIPT',
 		'WAT',
 		'GO',
@@ -753,12 +772,13 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:lean4|v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:nim-lsp|lean4|v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
 const lspStatusKeyByLanguage: Record<string, string> = {
 	LEAN4: 'lean4',
+	NIM: 'nim',
 	TYPESCRIPT: 'typescript',
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
@@ -1798,6 +1818,54 @@ async function runLspCase(
 		await page.keyboard.press('Escape');
 	}
 
+	if (testCase.language === 'NIM') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const end = editor.getModel().getLineMaxColumn(4);
+			editor.pushUndoStop();
+			editor.setSelection({
+				startLineNumber: 4,
+				startColumn: end - 1,
+				endLineNumber: 4,
+				endColumn: end
+			});
+			editor.focus();
+		});
+		// Exercise Monaco's actual edit events with the upstream Full sync contract.
+		await page.keyboard.insertText('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+			return (
+				model &&
+				hooks.__wasmIdleMonacoApi?.editor
+					.getModelMarkers({ resource: model.uri })
+					.some((marker) => marker.severity === 8 && marker.startLineNumber === 4)
+			);
+		});
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction((source) => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			const editor = hooks.__wasmIdleMonacoEditor;
+			const model = editor?.getModel?.();
+			return (
+				model &&
+				editor?.getValue() === source &&
+				hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+					.length === 0
+			);
+		}, testCase.validSource);
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 5, column: 9 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		const hover = page.locator('.monaco-hover').filter({ hasText: 'proc' }).first();
+		await hover.waitFor({ timeout: 10_000 });
+		expect(await hover.innerText()).toMatch(/name:\s+string/);
+		await page.keyboard.press('Escape');
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -2090,6 +2158,11 @@ describe('Monaco LSP browser integration', () => {
 				}
 				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'V'))
 					await runBrowserPreparationScripts(['sync:v-lsp']);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'NIM')
+				)
+					await runBrowserPreparationScripts(['sync:nim-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						...(cases.some((testCase) => testCase.language === 'RESCRIPT')

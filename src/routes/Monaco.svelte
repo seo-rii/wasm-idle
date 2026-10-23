@@ -2353,6 +2353,7 @@
 	let fortranLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let nimLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let postgresqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let bashLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2446,6 +2447,9 @@
 		cobolLspEnabled?: boolean;
 		cobolLspBaseUrl?: string;
 		cobolLspWorkspaceFiles?: Array<{ path: string; content: string }>;
+		nimLspEnabled?: boolean;
+		nimLspBaseUrl?: string;
+		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
 		postgresqlLspEnabled?: boolean;
@@ -2571,6 +2575,9 @@
 		cobolLspEnabled = false,
 		cobolLspBaseUrl,
 		cobolLspWorkspaceFiles,
+		nimLspEnabled = false,
+		nimLspBaseUrl,
+		nimLspWorkspaceFiles,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
 		postgresqlLspEnabled = false,
@@ -2756,6 +2763,8 @@
 			duckDbLspModuleUrl || '',
 			cobolLspEnabled ? cobolLspBaseUrl || '' : '',
 			cobolLspEnabled ? JSON.stringify(cobolLspWorkspaceFiles) : '',
+			nimLspEnabled ? nimLspBaseUrl || '' : '',
+			nimLspEnabled ? JSON.stringify(nimLspWorkspaceFiles) : '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			postgresqlLspEnabled ? postgresqlLspModuleUrl || '' : '',
 			bashLspEnabled ? bashLspModuleUrl || '' : '',
@@ -2933,6 +2942,10 @@
 			case 'duckdb':
 				label = 'DuckDB LSP';
 				status = duckdbLspStatus;
+				break;
+			case 'nim':
+				label = 'Nim LSP';
+				status = nimLspStatus;
 				break;
 			case 'sql':
 				label = 'SQL LSP';
@@ -3673,6 +3686,24 @@
 			}
 		},
 		{
+			languages: ['nim'],
+			isEnabled: () => nimLspEnabled && !!nimLspBaseUrl,
+			setStatus: (status) => (nimLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getNimLanguageServer } = await import('@wasm-idle/lsp/nim');
+				return await getNimLanguageServer({
+					currentUrl,
+					signal,
+					nim: {
+						baseUrl: nimLspBaseUrl,
+						workspaceFiles: $state.snapshot(nimLspWorkspaceFiles),
+						autoSave: true
+					},
+					onStatus: (status) => (nimLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3938,6 +3969,7 @@
 			postgresql: postgresqlLspStatus,
 			bash: bashLspStatus,
 			cobol: cobolLspStatus,
+			nim: nimLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,

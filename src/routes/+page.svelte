@@ -506,6 +506,17 @@
 					.map((file) => ({ path: file.path, content: file.content }))
 			: undefined
 	);
+	const nimLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'nim');
+	const nimLspBaseUrl = $derived(
+		nimLspEnabled ? resolveApplicationAsset('wasm-nim-lsp/') : undefined
+	);
+	const nimLspWorkspaceFiles = $derived.by(() =>
+		nimLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const postgresqlLspEnabled = $derived(
@@ -4617,6 +4628,9 @@
 							{cobolLspEnabled}
 							{cobolLspBaseUrl}
 							{cobolLspWorkspaceFiles}
+							{nimLspEnabled}
+							{nimLspBaseUrl}
+							{nimLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
 							{postgresqlLspEnabled}

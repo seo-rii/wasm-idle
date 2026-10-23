@@ -63,3 +63,5 @@ static/wasm-lfortran/
 /producers/rescript-language-server/node_modules/
 # Original v-analyzer browser LSP assets are produced from pinned sources.
 /static/wasm-v-lsp/
+# Original Nim compiler/nimsuggest LSP assets are deployed externally.
+/static/wasm-nim-lsp/

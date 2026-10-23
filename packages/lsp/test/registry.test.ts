@@ -12,6 +12,7 @@ const expectedLanguagesByProvider = {
 	rescript: ['rescript'],
 	v: ['v', 'vlang'],
 	lean4: ['lean4', 'lean'],
+	nim: ['nim'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],
