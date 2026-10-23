@@ -6,6 +6,7 @@ import {
 	resolveClangLanguageArgs,
 	type ClangSourceLanguage
 } from '@wasm-idle/llvm-core/core/clang-profile';
+import { clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
 export const CLANGD_WORKSPACE_PATH = '/workspace';
 export const CLANGD_WORKSPACE_URI = `file://${CLANGD_WORKSPACE_PATH}`;
 export const CLANGD_CPP_FILE_PATH = `${CLANGD_WORKSPACE_PATH}/main.cpp`;
@@ -31,7 +32,7 @@ export interface ClangdCompileProfile {
 
 export const createClangdCompileFlags = (
 	language: ClangdSourceLanguage = 'CPP',
-	options: ClangdCompileProfile & { resourceDir?: string } = {}
+	options: ClangdCompileProfile & { resourceDir?: string; simd?: boolean } = {}
 ) => {
 	// Objective-C++ uses the C++ standard selection with the Objective-C runtime ABI.
 	const profile =
@@ -60,10 +61,8 @@ export const createClangdCompileFlags = (
 				argument.startsWith('--sysroot=') ||
 				argument.startsWith('-isysroot')
 		);
-	const includeResourceDir =
-		omitStandardIncludes || compileArgs.includes('-nobuiltininc')
-			? undefined
-			: options.resourceDir;
+	const omitBuiltinIncludes = omitStandardIncludes || compileArgs.includes('-nobuiltininc');
+	const includeResourceDir = omitBuiltinIncludes ? undefined : options.resourceDir;
 	const systemIncludes = omitLibraryIncludes
 		? includeResourceDir
 			? [`${includeResourceDir.replace(/\/+$/, '')}/include`]
@@ -78,6 +77,8 @@ export const createClangdCompileFlags = (
 		'-x',
 		profile.languageArg,
 		`--target=${CLANG_WASI_DRIVER_TARGET}`,
+		// Find the Wasm implementations before Clang's native x86 intrinsic headers.
+		...(options.simd === false ? [] : clangSimdDriverArgs('/usr', !omitBuiltinIncludes)),
 		...(options.resourceDir ? ['-resource-dir', options.resourceDir] : []),
 		...systemIncludes.map((path) => `-isystem${path}`),
 		...(language === 'OBJC' || language === 'OBJCXX'
@@ -97,7 +98,7 @@ export const createClangdCompileFlags = (
 };
 
 export const createClangdConfiguration = (
-	options: ClangdCompileProfile & { resourceDir?: string } = {}
+	options: ClangdCompileProfile & { resourceDir?: string; simd?: boolean } = {}
 ) => {
 	const extensions: Record<ClangdSourceLanguage, string[]> = {
 		C: ['c'],
