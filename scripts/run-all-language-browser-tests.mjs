@@ -24,6 +24,7 @@ const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.tes
 const LONG_DOUBLE_TEST_FILE = 'src/lib/playground/long-double.playwright.test.ts';
 const PYTHON_TEST_FILE = 'src/lib/playground/python.playwright.test.ts';
 const PYTHON_DEBUG_TEST_FILE = 'src/lib/playground/python-debug.playwright.test.ts';
+const PYTHON_PERFORMANCE_TEST_FILE = 'src/lib/playground/python-performance.playwright.test.ts';
 const WORKSPACE_TEST_FILES = [
 	'src/routes/workspace-archive.playwright.test.ts',
 	'src/routes/workspace-import.playwright.test.ts',
@@ -172,7 +173,7 @@ export function createAllLanguageBrowserTestPlan({
 					WASM_IDLE_RUN_REAL_BROWSER_PYTHON: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG: '1'
 				},
-				testFiles: [PYTHON_TEST_FILE, PYTHON_DEBUG_TEST_FILE]
+				testFiles: [PYTHON_TEST_FILE, PYTHON_DEBUG_TEST_FILE, PYTHON_PERFORMANCE_TEST_FILE]
 			},
 			debug: { env: { ...DEBUG_REGRESSION_ENV }, testFiles: [DEBUG_TEST_FILE] },
 			dotnet: {
@@ -249,6 +250,7 @@ export function createAllLanguageBrowserTestPlan({
 	if (!shard || shard === 'specialized') {
 		testFiles.add(PYTHON_TEST_FILE);
 		testFiles.add(PYTHON_DEBUG_TEST_FILE);
+		testFiles.add(PYTHON_PERFORMANCE_TEST_FILE);
 		env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON = '1';
 		env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG = '1';
 	}

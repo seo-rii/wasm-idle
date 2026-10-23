@@ -7,7 +7,9 @@ import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 
-const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_PERFORMANCE === '1';
+const enabled =
+	process.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_PERFORMANCE === '1' ||
+	process.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON === '1';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 
 it(
@@ -23,7 +25,10 @@ it(
 			root,
 			publicDir: 'static',
 			cacheDir: `${root}.cache/python-performance-browser-vite`,
-			optimizeDeps: { noDiscovery: true },
+			optimizeDeps: {
+				noDiscovery: true,
+				include: ['@wasm-idle/lsp > vscode-jsonrpc/browser']
+			},
 			resolve: {
 				alias: [
 					{ find: '$lib', replacement: `${root}src/lib` },
@@ -53,6 +58,7 @@ it(
 				}
 			],
 			server: {
+				watch: null,
 				host: '127.0.0.1',
 				port: 0,
 				headers: {
@@ -143,13 +149,17 @@ try {
 } catch (error) { state.error = String(error?.stack || error); }
 `
 			});
-			await page.waitForFunction(
-				() =>
-					(globalThis as any).__pythonPerformance?.ready ||
-					(globalThis as any).__pythonPerformance?.error,
-				undefined,
-				{ timeout: 150_000 }
-			);
+			await page
+				.waitForFunction(
+					() =>
+						(globalThis as any).__pythonPerformance?.ready ||
+						(globalThis as any).__pythonPerformance?.error,
+					undefined,
+					{ timeout: 150_000 }
+				)
+				.catch((error) => {
+					throw new Error(`${String(error)}; page errors: ${errors.join('; ')}`);
+				});
 			const result = await page.evaluate(() => (globalThis as any).__pythonPerformance);
 			expect(result.error, result.error).toBeNull();
 			expect(result.output).toBe('🙂한\n');

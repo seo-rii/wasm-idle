@@ -79,7 +79,8 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 						if (id === 'virtual:python-scope') return '\0python-scope';
 					},
 					load(id) {
-						if (id === '\0python-scope') return scopeView;
+						if (id === '\0python-scope')
+							return scopeView + `\nexport { mount } from 'svelte';`;
 					}
 				},
 				{
@@ -98,6 +99,7 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 				}
 			],
 			server: {
+				watch: null,
 				host: '127.0.0.1',
 				port: 0,
 				headers: {
@@ -121,6 +123,9 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 		page = await context.newPage();
 		page.setDefaultTimeout(30_000);
 		page.on('pageerror', (error) => pageErrors.push(error.message));
+		page.on('requestfailed', (request) =>
+			pageErrors.push(`${request.url()}: ${request.failure()?.errorText}`)
+		);
 		await page.goto(browserUrl);
 		await installBrowserRuntimeDelivery(page, browserUrl);
 		await page.addScriptTag({
@@ -128,8 +133,7 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 			content: `
 import Python from '/src/lib/playground/python.ts';
 import { createDebugSessionController } from '/packages/debug/src/controller.ts';
-import ScopeView from '/@id/virtual:python-scope';
-import { mount } from '/@id/svelte';
+import ScopeView, { mount } from '/@id/virtual:python-scope';
 const python = new Python();
 const session = createDebugSessionController({
     sourcePath: 'main.py',
@@ -165,15 +169,28 @@ python.ondebug = (event) => {
     session.handleEvent(event);
 };
 python.output = (text) => { fixture.output += text; };
-await python.load({ python: { baseUrl: new URL('pyodide/', location.href).href } });
-fixture.worker = python.worker;
-python.worker.addEventListener('message', ({ data }) => {
-    if (data?.pythonDebugTestGate) fixture.gate = new Int32Array(data.pythonDebugTestGate);
-});
-fixture.ready = true;
+try {
+    await python.load({ python: { baseUrl: new URL('pyodide/', location.href).href } });
+    fixture.worker = python.worker;
+    python.worker.addEventListener('message', ({ data }) => {
+        if (data?.pythonDebugTestGate) fixture.gate = new Int32Array(data.pythonDebugTestGate);
+    });
+    fixture.ready = true;
+} catch (error) { fixture.failure = String(error); }
 `
 		});
-		await page.waitForFunction(() => (globalThis.__pythonDebugFixture as any)?.ready);
+		await page
+			.waitForFunction(
+				() =>
+					(globalThis.__pythonDebugFixture as any)?.ready ||
+					globalThis.__pythonDebugFixture?.failure,
+				undefined,
+				{ timeout: 90_000 }
+			)
+			.catch((error) => {
+				throw new Error(`${String(error)}; page errors: ${pageErrors.join('; ')}`);
+			});
+		expect(await page.evaluate(() => globalThis.__pythonDebugFixture.failure)).toBeNull();
 		expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
 	}, 120_000);
 
@@ -411,6 +428,50 @@ print("running=" + str(value))`,
 			expect(inspected.watch).toBe('119');
 			expect(inspected.stale).toEqual([]);
 			await waitForCompletion('locals done', [122]);
+		}
+	);
+
+	it(
+		'steps into, over and out of a function with current locals',
+		browserTestOptions,
+		async () => {
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.start(
+					'def add(value):\n    value += 1\n    return value\nvalue = 10\nresult = add(value)\nprint(f"stepped={result}")',
+					[4]
+				)
+			);
+			await waitForPause(4);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('nextLine')
+			);
+			await waitForPause(5);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('stepInto')
+			);
+			await waitForPause(2);
+			expect(
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+				)
+			).toBe('10');
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('nextLine')
+			);
+			await waitForPause(3);
+			expect(
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+				)
+			).toBe('11');
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('stepOut')
+			);
+			await waitForPause(6);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('continue')
+			);
+			await waitForCompletion('stepped=11', [4, 5, 2, 3, 6]);
 		}
 	);
 

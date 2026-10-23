@@ -46,6 +46,14 @@ and verify execution stdin/Unicode stdout, execution-to-LSP module reuse, two fr
 LSP workers, rapid edits, live breakpoint updates, stepping, watch inspection,
 scope pagination and cancellation. `scripts/test-python-debug-performance.py`
 also checks the embedded tracer with native CPython; it is not browser evidence.
+The Python PR browser family and the scheduled specialized shard include both
+fixtures. After the normal package/asset preparation, focused coverage runs with:
+
+```sh
+WASM_IDLE_RUN_REAL_BROWSER_PYTHON=1 WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG=1 \
+  pnpm exec vitest run src/lib/playground/python-performance.playwright.test.ts \
+  src/lib/playground/python-debug.playwright.test.ts --maxWorkers=1
+```
 
 `scripts/probe-python-breakpoint-polling.mjs` compares the two bridge checks in the
 actual pinned Pyodide runtime. A local Node 22 probe used seven alternating rounds
