@@ -1,0 +1,121 @@
+{
+	"schemaVersion": 1,
+	"inputs": {
+		"nim": {
+			"version": "2.2.4",
+			"revision": "f7145dd26efeeeb6eeae6fff649db244d81b212d",
+			"repository": "https://github.com/nim-lang/Nim",
+			"url": "https://nim-lang.org/download/nim-2.2.4-linux_x64.tar.xz",
+			"archive": "nim-2.2.4-linux_x64.tar.xz",
+			"directory": "nim-toolchain",
+			"bytes": 16154064,
+			"sha256": "791802138aaf19c8579232c50b4998ce2ae2928b791127ce5b4ef3c7af53fb46"
+		},
+		"nimlsp": {
+			"version": "0.4.7",
+			"revision": "5fa2846f04600c2cf1173625976e037389db4489",
+			"repository": "https://github.com/PMunch/nimlsp",
+			"url": "https://codeload.github.com/PMunch/nimlsp/tar.gz/5fa2846f04600c2cf1173625976e037389db4489",
+			"archive": "nimlsp.tar.gz",
+			"directory": "nimlsp",
+			"bytes": 22730,
+			"sha256": "2fab29d246e8f3daf60cf39264a6cab523384948ba56f89c1039e8385d93b38e"
+		},
+		"jsonschema": {
+			"version": "0.2.1",
+			"revision": "7b41c03e3e1a487d5a8f6b940ca8e764dc2cbabf",
+			"repository": "https://github.com/PMunch/jsonschema",
+			"url": "https://codeload.github.com/PMunch/jsonschema/tar.gz/7b41c03e3e1a487d5a8f6b940ca8e764dc2cbabf",
+			"archive": "jsonschema.tar.gz",
+			"directory": "jsonschema",
+			"bytes": 6005,
+			"sha256": "f934fe08e5786a885ca9cc6c1d2425ec51c6d8c3ea92c1220a443c89c1ffe1d9"
+		},
+		"asynctools": {
+			"version": "0.1.1",
+			"revision": "a1a17d06713727d97810cad291e29dd7c672738f",
+			"repository": "https://github.com/cheatfate/asynctools",
+			"url": "https://codeload.github.com/cheatfate/asynctools/tar.gz/a1a17d06713727d97810cad291e29dd7c672738f",
+			"archive": "asynctools.tar.gz",
+			"directory": "asynctools",
+			"bytes": 30164,
+			"sha256": "ece236e36ab7042ae25444b3ad245f439d317f9a162861f153a31135578b668c"
+		},
+		"ast_pattern_matching": {
+			"version": "1.0.0",
+			"revision": "eb8b99d595517fd5d41ccc954edb896267f2db78",
+			"repository": "https://github.com/nim-lang/ast-pattern-matching",
+			"url": "https://codeload.github.com/nim-lang/ast-pattern-matching/tar.gz/eb8b99d595517fd5d41ccc954edb896267f2db78",
+			"archive": "ast-pattern-matching.tar.gz",
+			"directory": "ast-pattern-matching",
+			"bytes": 12719,
+			"sha256": "d7a47f8b3ab82348be4ef08c9715c2d7da2e2001ca0ff6e38ca5aa2e65091e1e"
+		},
+		"emscripten": {
+			"version": "6.0.0",
+			"revision": "772bb4648be4a897ca062d6adc65bc70223d2703",
+			"repository": "https://github.com/emscripten-core/emscripten",
+			"url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/linux/772bb4648be4a897ca062d6adc65bc70223d2703/wasm-binaries.tar.xz",
+			"archive": "emscripten.tar.xz",
+			"directory": "emsdk",
+			"bytes": 269920796,
+			"sha256": "b5ed0963521f1d35b8967f20b1776327980bcfd5133166b40e018f27f2380e89"
+		}
+	},
+	"assets": {
+		"nimlsp.mjs.gz.bin": {
+			"bytes": 45728,
+			"sha256": "a3afea44fc3a1669f3a0e361a4a58194e3875f70908c9f5c831c116977ceb57a"
+		},
+		"nimlsp.wasm.gz.bin": {
+			"bytes": 1993636,
+			"sha256": "a3ab5634f00fafc25f94b73bc5e25f0ad0d0e0aa6aefe01548231e122de6b2bb"
+		},
+		"stdlib.json.gz.bin": {
+			"bytes": 1862740,
+			"sha256": "2a452614ddd2ee7d48f8ca15c97bb9b3b64e1d4a86a441729ee952b4925c7458"
+		},
+		"LICENSE.nim.txt": {
+			"bytes": 1258,
+			"sha256": "c8179122923594d5a54231b10b9fe2ca0861dcf2f0d0f525bae8be24db1893bd"
+		},
+		"LICENSE.nimlsp.txt": {
+			"bytes": 1063,
+			"sha256": "3970411fe551dd234ed5fc03e49e3427d6b7e43dcf2465e96a9a2400c03ea0aa"
+		},
+		"LICENSE.asynctools.txt": {
+			"bytes": 1071,
+			"sha256": "f573bdcd501eda687340c3c4d12181892342a2be112847ab6005c710d26515a4"
+		},
+		"LICENSE.emscripten.txt": {
+			"bytes": 5093,
+			"sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+		},
+		"LICENSE.musl.txt": {
+			"bytes": 6196,
+			"sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
+		},
+		"NOTICES.md": {
+			"bytes": 752,
+			"sha256": "88cabd9230163507ec5d1a798035aa7d4f2a2236b505599a0e5f5577694d3ee8"
+		},
+		"SOURCE.txt": {
+			"bytes": 2356,
+			"sha256": "81627f928b572d21b15b17768426ce3594c9a0fb24297d502b531b7a9a3a3d37"
+		}
+	},
+	"logical": {
+		"nimlsp.mjs.gz.bin": {
+			"bytes": 167636,
+			"sha256": "e7f12e692f2e958f49776557f2c4b9454e48a45ed13b5b4851a4a99ab5a4d478"
+		},
+		"nimlsp.wasm.gz.bin": {
+			"bytes": 6987342,
+			"sha256": "2df81e79dedad0cc2a8c0d72065783b78b6ffd5423687fb8c01fdf052ac23c07"
+		},
+		"stdlib.json.gz.bin": {
+			"bytes": 6519527,
+			"sha256": "74973208f24ad231fbfb61238cafa433a96e2572707b18918599b7ac78a730c1"
+		}
+	}
+}

@@ -169,6 +169,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
+		expect(runtimeLspCapabilities.NIM).toBe('nim');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');

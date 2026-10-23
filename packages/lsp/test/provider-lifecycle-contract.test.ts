@@ -91,9 +91,12 @@ const mockState = vi.hoisted(() => {
 	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter };
 });
 
-vi.mock('../src/jsonrpc.js', () => ({
+vi.mock('../src/jsonrpc.js', async () => ({
 	BrowserMessageReader: mockState.MockReader,
-	BrowserMessageWriter: mockState.MockWriter
+	BrowserMessageWriter: mockState.MockWriter,
+	ReadableStreamMessageReader: mockState.MockReader,
+	WriteableStreamMessageWriter: mockState.MockWriter,
+	Emitter: (await import('vscode-jsonrpc')).Emitter
 }));
 
 const rubyRuntimeMocks = vi.hoisted(() => ({

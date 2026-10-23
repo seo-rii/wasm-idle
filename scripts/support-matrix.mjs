@@ -651,7 +651,7 @@ export const supportMatrixRows = [
 		ids: ['NIM'],
 		runtime: 'Nim 2.2.4 WASM + clang/lld WASM',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Nim LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',

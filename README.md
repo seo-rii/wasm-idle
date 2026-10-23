@@ -106,7 +106,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | BQN            | CBQN WASM worker                             | Yes   | syntax               | -     |
 | Janet          | Janet VM WASM worker                         | Yes   | syntax               | -     |
 | Julia          | Julia 1.3.0-DEV.560 legacy WASM worker       | Yes   | syntax               | -     |
-| Nim            | Nim 2.2.4 WASM + clang/lld WASM              | Yes   | syntax               | -     |
+| Nim            | Nim 2.2.4 WASM + clang/lld WASM              | Yes   | Nim LSP              | -     |
 | Bash           | GNU Bash WASIX / Wasmer SDK                  | Yes   | syntax               | -     |
 | ClojureScript  | cljs.js self-hosted compiler                 | Yes   | syntax               | -     |
 | ReScript       | ReScript 12.3.1 compiler (js_of_ocaml)       | Yes   | compiler diagnostics | -     |

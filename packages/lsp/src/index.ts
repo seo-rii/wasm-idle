@@ -1,3 +1,4 @@
+export { getNimLanguageServer, type NimLanguageServerOptions } from './nim/index.js';
 export {
 	editorLanguageServerProviders,
 	getEditorLanguageServer,

@@ -219,6 +219,11 @@
 			"types": "./dist/document/index.d.ts",
 			"import": "./dist/document/index.js",
 			"default": "./dist/document/index.js"
+		},
+		"./nim": {
+			"types": "./dist/nim/index.d.ts",
+			"import": "./dist/nim/index.js",
+			"default": "./dist/nim/index.js"
 		}
 	},
 	"files": [

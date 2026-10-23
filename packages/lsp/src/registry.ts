@@ -1,3 +1,4 @@
+import { getNimLanguageServer } from './nim/language-server.js';
 import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
 import { getCppLanguageServer } from './clangd/language-server.js';
 import { getDLanguageServer } from './d/language-server.js';
@@ -56,6 +57,7 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{ id: 'nim', languages: ['nim'], create: (options) => getNimLanguageServer(options) },
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

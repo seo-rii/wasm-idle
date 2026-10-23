@@ -11,6 +11,7 @@
 	import type {
 		IMonacoInputEvent,
 		IMonacoLspProvider,
+		IMonacoLspClientOptions,
 		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
@@ -2339,6 +2340,7 @@
 	let fortranLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let nimLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2416,6 +2418,9 @@
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
 		duckDbLspModuleUrl?: string;
+		nimLspEnabled?: boolean;
+		nimLspBaseUrl?: string;
+		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
 		prologLspEnabled?: boolean;
@@ -2513,6 +2518,9 @@
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
 		duckDbLspModuleUrl,
+		nimLspEnabled = false,
+		nimLspBaseUrl,
+		nimLspWorkspaceFiles,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
 		prologLspEnabled = false,
@@ -2553,6 +2561,16 @@
 		lspLanguage === 'duckdb' ? 'duckdb' : (defaultLanguageAliases[language] ?? language)
 	);
 	const activeLspLanguage = $derived(lspLanguage || language);
+	const nimTestLspOptions = $derived.by<IMonacoLspClientOptions | undefined>(() => {
+		if (activeLspLanguage !== 'nim' || !monacoTestHooksEnabled()) return undefined;
+		return {
+			trace(event) {
+				const trace = Reflect.get(globalThis, '__wasmIdleNimLspTrace') || [];
+				trace.push(event);
+				Reflect.set(globalThis, '__wasmIdleNimLspTrace', trace.slice(-80));
+			}
+		};
+	});
 	const defaultValue = $derived(
 		resolveEditorDefaultSource(
 			defaultLanguage as
@@ -2673,6 +2691,8 @@
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
+			nimLspEnabled ? nimLspBaseUrl || '' : '',
+			nimLspEnabled ? JSON.stringify(nimLspWorkspaceFiles) : '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
@@ -2810,6 +2830,10 @@
 			case 'duckdb':
 				label = 'DuckDB LSP';
 				status = duckdbLspStatus;
+				break;
+			case 'nim':
+				label = 'Nim LSP';
+				status = nimLspStatus;
 				break;
 			case 'sql':
 				label = 'SQL LSP';
@@ -3375,6 +3399,48 @@
 			}
 		},
 		{
+			languages: ['nim'],
+			isEnabled: () => nimLspEnabled && !!nimLspBaseUrl,
+			setStatus: (status) => (nimLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const activeModel = model || editor?.getModel();
+				const { getNimLanguageServer } = await import('@wasm-idle/lsp/nim');
+				const handle = await getNimLanguageServer({
+					currentUrl,
+					signal,
+					nim: {
+						baseUrl: nimLspBaseUrl,
+						workspaceFiles: $state.snapshot(nimLspWorkspaceFiles),
+						autoSave: true
+					},
+					onStatus: (status) => (nimLspStatus = status)
+				});
+				// Monaco can emit ranged edits despite nimlsp's original Full sync contract.
+				// Use the editor's actual snapshot; language analysis stays in the server.
+				const write = handle.transport.writer.write.bind(handle.transport.writer);
+				handle.transport.writer.write = (message) => {
+					const notification = message as any;
+					if (
+						notification.method === 'textDocument/didChange' &&
+						activeModel &&
+						!activeModel.isDisposed() &&
+						notification.params?.textDocument?.uri ===
+							activeModel.uri.toString(true).toLowerCase()
+					) {
+						return write({
+							...notification,
+							params: {
+								...notification.params,
+								contentChanges: [{ text: activeModel.getValue() }]
+							}
+						});
+					}
+					return write(message);
+				};
+				return handle;
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3617,6 +3683,7 @@
 			graphql: graphqlLspStatus,
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
+			nim: nimLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,
@@ -4019,6 +4086,7 @@
 				{model}
 				setting={editorSetting}
 				lsp={resolveLspConnection}
+				lspOptions={nimTestLspOptions}
 				onload={handleEditorLoad}
 				oninput={handleEditorInput}
 			/>

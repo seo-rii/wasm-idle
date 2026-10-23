@@ -54,6 +54,13 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
 		headers?: string | false;
 	};
+	nim?: {
+		/** External, pinned nimlsp/nimsuggest browser assets. */
+		baseUrl?: string;
+		workspaceFiles?: Array<{ path: string; content: string }>;
+		/** Send standard didSave after opening/full changes for autosaving hosts. Default false. */
+		autoSave?: boolean;
+	};
 	python?: {
 		baseUrl?: string;
 	};

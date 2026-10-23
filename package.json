@@ -138,7 +138,7 @@
 		"build:static-runtime-modules": "node scripts/build-static-runtime-modules.mjs",
 		"support:matrix": "node scripts/support-matrix.mjs write",
 		"check:support-matrix": "node scripts/support-matrix.mjs check",
-		"sync:page-runtimes": "pnpm run sync:pyodide && pnpm run sync:webr && pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim && pnpm run sync:wasm-ruby && pnpm run sync:wasm-bash && pnpm run sync:wasm-clojurescript && pnpm run sync:wasm-rescript",
+		"sync:page-runtimes": "pnpm run sync:nim-lsp && pnpm run sync:pyodide && pnpm run sync:webr && pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim && pnpm run sync:wasm-ruby && pnpm run sync:wasm-bash && pnpm run sync:wasm-clojurescript && pnpm run sync:wasm-rescript",
 		"page:build": "pnpm run verify:page-c3 && pnpm run verify:page-lfortran && pnpm run sync:wasm-lean4 && pnpm run prepare:test-assets -- clang && pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run prepare:wasm-debug-release && pnpm run sync:wasm-commonlisp && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run assets:lock && pnpm run check:assets-lock && pnpm run prepare:page-container && pnpm run build && pnpm run compress:build-runtimes && pnpm run verify:page-c3 build && pnpm run verify:page-lfortran build",
 		"package:root": "svelte-kit sync && node scripts/clean-package-output.mjs && svelte-package --tsconfig ./tsconfig.package.json && publint",
 		"package": "pnpm run build:publish-deps && pnpm run package:root",
@@ -197,7 +197,10 @@
 		"prepare:container-distribution": "node scripts/prepare-container-distribution.mjs",
 		"verify:container-distribution": "node scripts/verify-container-distribution.mjs",
 		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
-		"benchmark:container": "node scripts/benchmark-container.mjs"
+		"benchmark:container": "node scripts/benchmark-container.mjs",
+		"sync:nim-lsp": "node scripts/sync-nim-lsp.mjs",
+		"test:lsp:assets:nim": "pnpm run sync:nim-lsp && WASM_IDLE_RUN_NIM_LSP_ASSET_BUILD=1 node --test scripts/sync-nim-lsp.test.mjs",
+		"test:lsp:browser:nim": "pnpm run sync:nim-lsp && python3 producers/nim-lsp/build.py --native && WASM_IDLE_RUN_NIM_LSP_BROWSER=1 pnpm --dir packages/lsp exec vitest run test/nim.playwright.test.ts --pool threads --maxWorkers 1 --no-file-parallelism"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

@@ -63,3 +63,34 @@ import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
 
 `@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
 available, including their `create*WorkerService` exports for custom worker hosts.
+
+## Nim (original nimlsp and embedded nimsuggest)
+
+`@wasm-idle/lsp/nim` runs PMunch/nimlsp with the original Nim 2.2.4 compiler/nimsuggest
+in a WebAssembly worker. Build/deploy `static/wasm-nim-lsp/` with `pnpm run sync:nim-lsp`.
+
+```ts
+import { getNimLanguageServer } from '@wasm-idle/lsp/nim';
+
+const nim = await getNimLanguageServer({
+	nim: {
+		baseUrl: 'https://cdn.example.com/wasm-nim-lsp/',
+		workspaceFiles: [{ path: 'helpers.nim', content: 'proc square*(n: int): int = n * n\n' }]
+	}
+});
+// Connect nim.transport to an LSP client rooted at file:///workspace.
+// Original nimlsp computes diagnostics on textDocument/didSave.
+nim.dispose();
+```
+
+An explicit `rootUrl` resolves `wasm-nim-lsp/` under that root. Cross-origin isolation
+and `SharedArrayBuffer` are required. Opened/saved editor documents are mirrored into
+an in-memory project; recreate the provider when other workspace snapshots change.
+`nim.autoSave: true` additionally sends standard `didSave` after `didOpen` and full
+`didChange` notifications for autosaving hosts; the default preserves the client's
+original notification stream. The Playground enables this option and normalizes Monaco's
+ranged edit events to the original server's Full sync contract using the actual editor snapshot.
+
+Diagnostics, completion, hover, definition, references, rename, signature help and
+symbols use the original handlers. External Nimble/other subprocesses are unavailable;
+include dependency source in `workspaceFiles`. See the [build and validation notes](../../docs/performance/nim-lsp.md).

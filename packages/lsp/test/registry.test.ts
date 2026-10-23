@@ -6,6 +6,7 @@ import {
 } from '../src/registry.js';
 
 const expectedLanguagesByProvider = {
+	nim: ['nim'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

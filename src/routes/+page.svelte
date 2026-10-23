@@ -454,6 +454,17 @@
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
+	const nimLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'nim');
+	const nimLspBaseUrl = $derived(
+		nimLspEnabled ? resolveApplicationAsset('wasm-nim-lsp/') : undefined
+	);
+	const nimLspWorkspaceFiles = $derived.by(() =>
+		nimLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
@@ -4205,6 +4216,9 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{nimLspEnabled}
+							{nimLspBaseUrl}
+							{nimLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
 							{prologLspEnabled}
