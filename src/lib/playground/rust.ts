@@ -35,11 +35,17 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	createRuntimeAssetsKey,
+	assertDebugBreakpointSupport,
+	mergeDebugBreakpointLines,
+	normalizeDebugSourceBreakpoints,
 	RuntimeAssetCache,
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
 	serveRuntimeWasmModule,
 	type ResolvedRuntimeAssetCacheOptions,
+	type DebugEvaluateOptions,
+	type DebugSourceBreakpoint,
+	type DebugSteppingOptions,
 	TimeoutError
 } from '@wasm-idle/core';
 
@@ -130,6 +136,10 @@ class Rust implements Sandbox {
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private activeDebugPhaseTimeout?: DebugPhaseTimeoutControl;
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
+	private readonly lldbBreakpointSpecifications = new Map<
+		`/workspace/${string}`,
+		DebugSourceBreakpoint[]
+	>();
 	private lldbEditorSourcePath: `/workspace/${string}` = rustLldbSourcePath;
 
 	private disposeWorkerExecutableGraph(worker: Worker) {
@@ -644,6 +654,7 @@ class Rust implements Sandbox {
 			);
 			this.lldbEditorSourcePath = editorSourcePath;
 			this.lldbBreakpoints.clear();
+			this.lldbBreakpointSpecifications.clear();
 			let lldbBreakpointLines: number[] = [];
 			if (debugMode === 'lldb') {
 				const requestedLines = [...(options.breakpoints || [])];
@@ -653,9 +664,19 @@ class Rust implements Sandbox {
 						editorSourcePath
 					) {
 						requestedLines.push(...sourceBreakpoints.lines);
+						if (sourceBreakpoints.breakpoints)
+							this.lldbBreakpointSpecifications.set(
+								rustLldbSourcePath,
+								normalizeDebugSourceBreakpoints(sourceBreakpoints.breakpoints)
+							);
 					}
 				}
-				lldbBreakpointLines = normalizeRustBreakpointLines(requestedLines);
+				const specifications = this.lldbBreakpointSpecifications.get(rustLldbSourcePath);
+				lldbBreakpointLines = specifications
+					? specifications
+							.filter((value) => value.enabled !== false)
+							.map((value) => value.line)
+					: normalizeRustBreakpointLines(requestedLines);
 				this.lldbBreakpoints.set(rustLldbSourcePath, lldbBreakpointLines);
 			} else {
 				this.setBreakpoints([...(options.breakpoints || [])], editorSourcePath);
@@ -722,9 +743,17 @@ class Rust implements Sandbox {
 							this.lldbBreakpoints,
 							([sourcePath, lines]) => ({
 								sourcePath,
-								lines: [...lines]
+								lines: [...lines],
+								...(this.lldbBreakpointSpecifications.has(sourcePath)
+									? {
+											breakpoints: normalizeDebugSourceBreakpoints(
+												this.lldbBreakpointSpecifications.get(sourcePath)!
+											)
+										}
+									: {})
 							})
 						),
+						debugSteppingOptions: options.debugSteppingOptions,
 						pauseOnEntry: !!options.pauseOnEntry,
 						pauseAtMain: true,
 						entryFunctionName: 'main::main',
@@ -974,6 +1003,14 @@ class Rust implements Sandbox {
 		}
 		if (this.debugMode === 'lldb') {
 			if (resolvedSourcePath !== this.lldbEditorSourcePath) return;
+			if (this.lldbBreakpointSpecifications.has(rustLldbSourcePath))
+				return this.setSourceBreakpoints(
+					mergeDebugBreakpointLines(
+						this.lldbBreakpointSpecifications.get(rustLldbSourcePath)!,
+						normalizeRustBreakpointLines(lines)
+					),
+					resolvedSourcePath
+				);
 			this.lldbBreakpoints.set(rustLldbSourcePath, normalizeRustBreakpointLines(lines));
 			return;
 		}
@@ -984,6 +1021,39 @@ class Rust implements Sandbox {
 		}
 		Atomics.store(control, 3, next.length);
 		Atomics.add(control, 2, 1);
+	}
+
+	async setSourceBreakpoints(breakpoints: DebugSourceBreakpoint[], sourcePath?: string) {
+		const values = normalizeDebugSourceBreakpoints(breakpoints);
+		const path = normalizeRustLldbSourcePath(sourcePath || this.lldbEditorSourcePath);
+		if (this.lldbSession) {
+			if (path !== this.lldbEditorSourcePath) return;
+			return this.lldbSession.setSourceBreakpoints(values, rustLldbSourcePath);
+		}
+		if (this.debugMode === 'lldb') {
+			if (path !== this.lldbEditorSourcePath) return;
+			this.lldbBreakpointSpecifications.set(rustLldbSourcePath, values);
+			this.lldbBreakpoints.set(
+				rustLldbSourcePath,
+				values.filter((value) => value.enabled !== false).map((value) => value.line)
+			);
+			return;
+		}
+		assertDebugBreakpointSupport(values, {});
+		this.setBreakpoints(
+			values.filter((value) => value.enabled !== false).map((value) => value.line),
+			sourcePath
+		);
+	}
+
+	async debugSetSteppingOptions(options: DebugSteppingOptions) {
+		if (!this.lldbSession) throw new Error('Stepping options require an LLDB session.');
+		await this.lldbSession.setSteppingOptions(options);
+	}
+
+	async debugEvaluateValue(expression: string, options?: DebugEvaluateOptions) {
+		if (this.lldbSession) return this.lldbSession.evaluateValue(expression, options);
+		return { result: '?', variablesReference: 0 };
 	}
 
 	debugEvaluate(expression: string) {
