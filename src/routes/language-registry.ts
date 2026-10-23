@@ -18,6 +18,7 @@ export type RuntimeLspCapability =
 	| 'php'
 	| 'forth'
 	| 'c3'
+	| 'rescript'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -274,6 +275,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
 	RESCRIPT: {
 		label: 'ReScript',
+		lspLanguageOverride: 'rescript',
+		runtimeLspCapability: 'rescript',
 		editorLanguage: 'rust',
 		supportsArgs: true,
 		compilerDiagnostics: true,

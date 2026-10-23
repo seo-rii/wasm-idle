@@ -470,3 +470,8 @@ export {
 } from './c3/index.js';
 
 export { getCobolLanguageServer, type CobolLanguageServerOptions } from './cobol/index.js';
+
+export {
+	getReScriptLanguageServer,
+	type ReScriptLanguageServerOptions
+} from './rescript/language-server.js';

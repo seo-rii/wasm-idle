@@ -538,6 +538,16 @@
 			.filter((file) => file.path !== activePath && file.path.endsWith('.gr'))
 			.map((file) => ({ path: file.path, content: file.content }))
 	);
+	const rescriptLspBaseUrl = $derived(resolveApplicationAsset('wasm-rescript-lsp/'));
+	const rescriptLspWorkspaceFiles = $derived(
+		files
+			.filter(
+				(file) =>
+					file.path !== activePath &&
+					(/\.resi?$/.test(file.path) || /(?:^|\/)rescript\.json$/.test(file.path))
+			)
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
 			? runtimeAssets.typescript?.libUrl
@@ -4530,6 +4540,8 @@
 							{lspEnabled}
 							{grainLspBaseUrl}
 							{grainLspWorkspaceFiles}
+							{rescriptLspBaseUrl}
+							{rescriptLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}

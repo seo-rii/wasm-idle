@@ -303,6 +303,11 @@
 			"maxBytes": 4000000,
 			"maxFiles": 8,
 			"optional": true
+		},
+		"wasm-rescript-lsp": {
+			"maxBytes": 12000000,
+			"maxFiles": 5,
+			"optional": true
 		}
 	}
 }

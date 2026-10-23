@@ -259,6 +259,11 @@
 			"types": "./dist/cobol/index.d.ts",
 			"import": "./dist/cobol/index.js",
 			"default": "./dist/cobol/index.js"
+		},
+		"./rescript": {
+			"types": "./dist/rescript/index.d.ts",
+			"import": "./dist/rescript/index.js",
+			"default": "./dist/rescript/index.js"
 		}
 	},
 	"files": [

@@ -9,6 +9,7 @@ const expectedLanguagesByProvider = {
 	php: ['php', 'phpantom'],
 	forth: ['forth', 'fth', '4th'],
 	c3: ['c3'],
+	rescript: ['rescript'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

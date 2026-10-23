@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	classifyTerminalRun,
+	isExecutionRuntimeAssetPath,
 	isStdinEditorReady,
 	withWallClockTimeout
 } from '../../scripts/stdin-browser-probe-lib.mjs';
@@ -153,5 +154,32 @@ describe('stdin browser probe language selector', () => {
 		expect(source).toMatch(/\?\.value\s*===\s*expectedLanguage/u);
 		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
 		expect(source).not.toContain("querySelector('select')");
+	});
+});
+
+describe('execution asset request classification', () => {
+	it('keeps the ReScript execution compiler distinct from its editor server', () => {
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-rescript/compiler.js.gz.bin')).toBe(
+			true
+		);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-rescript/runner-worker.js')).toBe(true);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-rescript-lsp/runtime.mjs.gz.bin')).toBe(
+			false
+		);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-rescript-lsp/stdlib.pack.gz.bin')).toBe(
+			false
+		);
+		expect(isExecutionRuntimeAssetPath('/absproxy/5173/wasm-v-lsp/v_analyzer.wasm')).toBe(
+			false
+		);
+	});
+	it('retains real container compiler requests and ignores development file imports', () => {
+		const prefix = '/wasm-idle/container-app/objects/' + 'a'.repeat(64) + '/';
+		expect(isExecutionRuntimeAssetPath(prefix + 'clang.wasm.gz.bin')).toBe(true);
+		expect(isExecutionRuntimeAssetPath(prefix + 'sysroot.tar.bin')).toBe(true);
+		expect(isExecutionRuntimeAssetPath(prefix + 'unrelated.js')).toBe(false);
+		expect(isExecutionRuntimeAssetPath('/@fs/project/static/wasm-rescript/compiler.js')).toBe(
+			false
+		);
 	});
 });

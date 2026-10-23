@@ -162,3 +162,9 @@ restriction. Completion, hover, copybook navigation, references, paragraph renam
 use the original handlers. This release's optional persistent cache prevents reliable graceful
 protocol shutdown; call `dispose()` to terminate the worker. See the [platform, license and
 validation notes](../../docs/performance/cobol-lsp.md).
+
+ReScript uses the original server, ReScript 12.3.1 compiler and matching editor analysis.
+Pass `rescript.workspaceFiles` with the initial `.res`/`.resi` files; use root URI
+`file:///workspace`. The verified browser profile supports plain projects and the standard
+library. Run `pnpm run sync:rescript-lsp` and deploy `wasm-rescript-lsp/` separately.
+See [the source pins, project limits and reproduction steps](../../docs/performance/rescript-lsp.md).

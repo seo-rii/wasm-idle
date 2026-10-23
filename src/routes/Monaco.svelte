@@ -2343,6 +2343,7 @@
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let fennelLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let grainLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2466,6 +2467,8 @@
 		pythonLspBaseUrl?: string;
 		grainLspBaseUrl?: string;
 		grainLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+		rescriptLspBaseUrl?: string;
+		rescriptLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -2585,6 +2588,8 @@
 		pythonLspBaseUrl,
 		grainLspBaseUrl,
 		grainLspWorkspaceFiles = [],
+		rescriptLspBaseUrl,
+		rescriptLspWorkspaceFiles = [],
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -2661,6 +2666,7 @@
 				| 'html'
 				| 'css'
 				| 'markdown'
+				| 'rescript'
 				| 'rust',
 			rustTargetTriple
 		)
@@ -2755,6 +2761,8 @@
 			fennelLspBaseUrl || '',
 			grainLspBaseUrl || '',
 			activeLspLanguage === 'grain' ? JSON.stringify(grainLspWorkspaceFiles) : '',
+			rescriptLspBaseUrl || '',
+			activeLspLanguage === 'rescript' ? JSON.stringify(rescriptLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2864,6 +2872,10 @@
 			case 'grain':
 				label = 'Grain LSP';
 				status = grainLspStatus;
+				break;
+			case 'rescript':
+				label = 'ReScript LSP';
+				status = rescriptLspStatus;
 				break;
 			case 'lua':
 				label = 'Lua LSP';
@@ -3079,6 +3091,26 @@
 					signal,
 					c3: { baseUrl: c3LspBaseUrl },
 					onStatus: (status) => (c3LspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['rescript'],
+			isEnabled: () => !!rescriptLspBaseUrl,
+			setStatus: (status) => (rescriptLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getReScriptLanguageServer } = await import('@wasm-idle/lsp/rescript');
+				return getReScriptLanguageServer({
+					currentUrl,
+					signal,
+					rescript: {
+						baseUrl: rescriptLspBaseUrl,
+						workspaceFiles: [
+							...rescriptLspWorkspaceFiles,
+							{ path: normalizedFilePath, content: model?.getValue() ?? value ?? '' }
+						]
+					},
+					onStatus: (status) => (rescriptLspStatus = status)
 				});
 			}
 		},
@@ -3843,6 +3875,7 @@
 			lua: luaLspStatus,
 			fennel: fennelLspStatus,
 			grain: grainLspStatus,
+			rescript: rescriptLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,

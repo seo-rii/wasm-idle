@@ -34,6 +34,11 @@ describe('language registry', () => {
 		}
 	});
 
+	it('connects ReScript to its original typed language server', () => {
+		expect(runtimeLspCapabilities.RESCRIPT).toBe('rescript');
+		expect(lspLanguageOverrides.RESCRIPT).toBe('rescript');
+	});
+
 	it('derives page capability indexes from the language descriptors', () => {
 		for (const language of playgroundLanguages) {
 			const descriptor = playgroundLanguageDescriptors[language];

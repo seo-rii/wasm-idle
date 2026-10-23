@@ -1,3 +1,4 @@
+import { getReScriptLanguageServer } from './rescript/language-server.js';
 import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
 import { getCppLanguageServer } from './clangd/language-server.js';
 import { getDLanguageServer } from './d/language-server.js';
@@ -74,6 +75,11 @@ const providerDefinitions = [
 		id: 'forth',
 		languages: ['forth', 'fth', '4th'],
 		create: (options) => getForthLanguageServer(options)
+	},
+	{
+		id: 'rescript',
+		languages: ['rescript'],
+		create: (options) => getReScriptLanguageServer(options)
 	},
 	{
 		id: 'clangd',
