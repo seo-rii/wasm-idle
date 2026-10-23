@@ -24,7 +24,8 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
-import { WASM_LEAN4_PROFILE } from '$lib/playground/wasmLean4Version';
+// Collection precedes the browser build that creates the SDK output.
+import { WASM_LEAN4_PROFILE } from '../../packages/lsp/src/bundledLean4Runtime';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
 
 interface LspBrowserCase {
