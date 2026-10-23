@@ -268,9 +268,9 @@ const lspBrowserCases: LspBrowserCase[] = [
 		language: 'POSTGRESQL',
 		label: 'PostgreSQL',
 		fileName: 'main.sql',
-		source: 'select from;\n',
-		validSource: 'select 1;\n',
-		errorLine: 1,
+		source: '-- Preserve this prefix while editing.\nselect from;\n',
+		validSource: '-- Preserve this prefix while editing.\nselect 1;\n',
+		errorLine: 2,
 		aliases: ['postgres', 'pgsql'],
 		assertNoPreEnableRequests: ['/wasm-postgresql-lsp/'],
 		expectedResponses: [
@@ -1122,6 +1122,40 @@ async function checkClangLanguageSwitches(page: Page) {
 	}
 }
 
+async function checkPostgresqlKeyboardSync(page: Page, validSource: string) {
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		editor.setPosition({ lineNumber: 2, column: 1 });
+		editor.getModel().pushStackElement();
+		editor.focus();
+	});
+	await page.keyboard.type('x');
+	await page.waitForFunction((source) => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		const editor = hooks.__wasmIdleMonacoEditor!;
+		return (
+			editor.getValue() === source.replace('select', 'xselect') &&
+			hooks
+				.__wasmIdleMonacoApi!.editor.getModelMarkers({ resource: editor.getModel!()!.uri })
+				.some((marker) => marker.startLineNumber === 2 && (marker.severity || 0) >= 4)
+		);
+	}, validSource);
+	// The diagnostic must remain on line 2: forwarding only the inserted "x"
+	// makes the original Full-sync server diagnose a one-line replacement instead.
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('Control+z');
+	await page.waitForFunction((source) => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		const editor = hooks.__wasmIdleMonacoEditor!;
+		return (
+			editor.getValue() === source &&
+			hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: editor.getModel!()!.uri
+			}).length === 0
+		);
+	}, validSource);
+}
+
 async function runLspCase(
 	page: Page,
 	browserUrl: string,
@@ -1286,6 +1320,8 @@ async function runLspCase(
 		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
+	if (testCase.language === 'POSTGRESQL')
+		await checkPostgresqlKeyboardSync(page, testCase.validSource!);
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];

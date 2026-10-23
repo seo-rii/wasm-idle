@@ -26,6 +26,11 @@ and hover. Opening/changing documents publishes syntax and lint diagnostics. No 
 list or SQL parser is maintained here. Definition, rename, and formatting are absent from this
 upstream LSP API and remain absent from the provider's capabilities.
 
+Monaco 0.55 emits ranged changes even after negotiating Full synchronization. The playground
+adapts these notifications to the current complete model text when the original initialize
+response requests Full synchronization. The SDK transport and upstream server remain unchanged;
+incremental servers retain their original notifications.
+
 Schema-aware completion and hover require an upstream `SchemaCache` JSON snapshot, produced by
 `postgres-language-server schema-export`. Supply it through `postgresql.schema`,
 `handle.setSchema(json)`, or a raw `pgls/setSchema` notification. `setSchema(null)` forwards
@@ -48,6 +53,8 @@ server, verifies upstream capabilities, opens invalid SQL, changes it to valid S
 diagnostics clear, supplies a real schema snapshot, verifies table completion and column hover,
 clears the snapshot, closes documents, shuts down, and disposes the worker. The shared Monaco
 matrix also covers the user-facing LSP toggle, lazy requests, startup status, and error markers.
+It types a single character into line 2, requires the original diagnostic to retain that line
+after the edit, then undoes the edit and verifies that diagnostics clear.
 The focused unit tests cover cancellation, module failure cleanup, message ordering across
 startup, repeated disposal, and forwarding of upstream extensions without a method whitelist.
 

@@ -37,6 +37,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
+	import { adaptMonacoFullDocumentSync } from './lsp-full-sync';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
@@ -3554,6 +3555,18 @@
 					connection.dispose();
 					return null;
 				}
+				adaptMonacoFullDocumentSync(connection, (uri) => {
+					const document = Monaco?.editor
+						.getModels()
+						.find(
+							(candidate) =>
+								!candidate.isDisposed() &&
+								candidate.uri.toString(true).toLowerCase() === uri.toLowerCase()
+						);
+					return document
+						? { uri: document.uri.toString(true), text: document.getValue() }
+						: undefined;
+				});
 				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
 				if (context?.signal?.aborted || key !== lspConnectionKey) return null;
