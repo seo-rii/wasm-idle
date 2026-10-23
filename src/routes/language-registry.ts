@@ -31,6 +31,7 @@ export type RuntimeLspCapability =
 	| 'haskell'
 	| 'fortran'
 	| 'sql'
+	| 'postgresql'
 	| 'prolog'
 	| 'ruby'
 	| 'r'
@@ -416,7 +417,10 @@ export const playgroundLanguageDescriptors: Readonly<
 	POSTGRESQL: {
 		label: 'SQL — PostgreSQL (PGlite)',
 		editorLanguage: 'pgsql',
-		compilerDiagnostics: true
+		lspLanguageOverride: 'postgresql',
+		runtimeLspCapability: 'postgresql',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
 	},
 	PHP: {
 		label: 'PHP',

@@ -34,6 +34,7 @@ import { getRLanguageServer } from './r/language-server.js';
 import { getRubyLanguageServer } from './ruby/language-server.js';
 import { getRustLanguageServer } from './rust/language-server.js';
 import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/language-server.js';
+import { getPostgresqlLanguageServer } from './postgresql/language-server.js';
 import { getTclLanguageServer } from './tcl/language-server.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './types.js';
 import {
@@ -190,6 +191,11 @@ const providerDefinitions = [
 		id: 'duckdb',
 		languages: ['duckdb'],
 		create: (options) => getDuckDbLanguageServer(options)
+	},
+	{
+		id: 'postgresql',
+		languages: ['postgresql', 'postgres', 'pgsql'],
+		create: (options) => getPostgresqlLanguageServer(options)
 	},
 	{
 		id: 'graphql',

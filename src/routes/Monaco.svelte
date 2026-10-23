@@ -42,6 +42,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
+	import { adaptMonacoFullDocumentSync } from './lsp-full-sync';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
@@ -2345,6 +2346,7 @@
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let postgresqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2423,6 +2425,8 @@
 		duckDbLspModuleUrl?: string;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
+		postgresqlLspEnabled?: boolean;
+		postgresqlLspModuleUrl?: string;
 		prologLspEnabled?: boolean;
 		prologLspBaseUrl?: string;
 		prologLspWorkerUrl?: string;
@@ -2525,6 +2529,8 @@
 		duckDbLspModuleUrl,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
+		postgresqlLspEnabled = false,
+		postgresqlLspModuleUrl,
 		prologLspEnabled = false,
 		prologLspBaseUrl,
 		prologLspWorkerUrl,
@@ -2690,6 +2696,7 @@
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
+			postgresqlLspEnabled ? postgresqlLspModuleUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
 			rubyLspEnabled ? JSON.stringify(rubyLspRuntime) : '',
@@ -2830,6 +2837,10 @@
 			case 'sql':
 				label = 'SQL LSP';
 				status = sqlLspStatus;
+				break;
+			case 'postgresql':
+				label = 'PostgreSQL LSP';
+				status = postgresqlLspStatus;
 				break;
 			case 'prolog':
 				label = 'Prolog LSP';
@@ -3391,6 +3402,20 @@
 			}
 		},
 		{
+			languages: ['postgresql', 'pgsql', 'postgres'],
+			isEnabled: () => postgresqlLspEnabled && !!postgresqlLspModuleUrl,
+			setStatus: (status) => (postgresqlLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getPostgresqlLanguageServer } = await import('@wasm-idle/lsp/postgresql');
+				return await getPostgresqlLanguageServer({
+					currentUrl,
+					signal,
+					postgresql: { moduleUrl: postgresqlLspModuleUrl },
+					onStatus: (status) => (postgresqlLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3546,6 +3571,18 @@
 					connection.dispose();
 					return null;
 				}
+				adaptMonacoFullDocumentSync(connection, (uri) => {
+					const document = Monaco?.editor
+						.getModels()
+						.find(
+							(candidate) =>
+								!candidate.isDisposed() &&
+								candidate.uri.toString(true).toLowerCase() === uri.toLowerCase()
+						);
+					return document
+						? { uri: document.uri.toString(true), text: document.getValue() }
+						: undefined;
+				});
 				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
 				if (context?.signal?.aborted || key !== lspConnectionKey) return null;
@@ -3633,6 +3670,7 @@
 			graphql: graphqlLspStatus,
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
+			postgresql: postgresqlLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,

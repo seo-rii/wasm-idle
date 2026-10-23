@@ -1,0 +1,44 @@
+{
+	"format": "wasm-idle-postgresql-lsp-assets-v1",
+	"package": "@postgres-language-server/wasm",
+	"version": "0.28.2",
+	"revision": "5c2f5d7140b7a9c99654f889c58b49f2d692ad77",
+	"sourceBaseUrl": "https://cdn.jsdelivr.net/npm/@postgres-language-server/wasm@0.28.2/",
+	"assets": [
+		{
+			"sourcePath": "dist/lsp.js",
+			"targetPath": "dist/lsp.js",
+			"size": 2039,
+			"sha256": "9ac1e9454365188d23c3b834cafece386ab161a4968e08fb9199e2e7efdd24ae"
+		},
+		{
+			"sourcePath": "dist/common.js",
+			"targetPath": "dist/common.js",
+			"size": 2763,
+			"sha256": "cb1a4d3c0db772769be4211493fa3587d9518f87bbf71b81e1a197f1c50b3d67"
+		},
+		{
+			"sourcePath": "wasm/pgls.js",
+			"targetPath": "wasm/pgls.js",
+			"size": 20071,
+			"sha256": "3f7e097f9506c8218a740b115f955a276047ba171dd542f468f6f50fa93877a0"
+		},
+		{
+			"sourcePath": "dist/pgls.wasm",
+			"targetPath": "dist/pgls.wasm",
+			"size": 14459953,
+			"sha256": "f025228dbd9533714c37a5c0561dc02f28da3608245c9526460fac6f03137a8f"
+		},
+		{
+			"sourcePath": "package.json",
+			"targetPath": "package.json",
+			"size": 2123,
+			"sha256": "03fde586091734e4f0b13200dccd04fbc9e3efd1d2bdf25dd775e03b6f6b1007"
+		}
+	],
+	"license": {
+		"url": "https://raw.githubusercontent.com/supabase-community/postgres-language-server/5c2f5d7140b7a9c99654f889c58b49f2d692ad77/LICENSE",
+		"size": 1077,
+		"sha256": "fcd3687f0b40662b0abd423979f75484d54e0e4e2b8d0d74a6b2662efeeee375"
+	}
+}

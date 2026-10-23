@@ -23,6 +23,9 @@ In particular:
 - Ruby requires one complete runtime profile: identity, manifest/module/Wasm receipts, and canonical
   URLs. The page host verifies and transfers all three assets before its worker starts; incomplete
   URL-only overrides fail closed.
+- PostgreSQL runs the original `@postgres-language-server/wasm/lsp` server in its worker. Deploy
+  that release's `dist/lsp.js`, `dist/common.js`, `dist/pgls.wasm`, and `wasm/pgls.js` together;
+  pass `postgresql.moduleUrl` pointing to `dist/lsp.js`. The SDK does not ship the upstream WASM.
 - Python and R load their externally deployed Pyodide and WebR trees from `python.baseUrl` and
   `r.baseUrl`.
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.
@@ -63,3 +66,35 @@ import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
 
 `@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
 available, including their `create*WorkerService` exports for custom worker hosts.
+
+## PostgreSQL
+
+The PostgreSQL provider forwards JSON-RPC messages to upstream `LanguageServer.handleMessage`
+without replacing its analysis or LSP handlers. Its current browser API provides full document
+sync, syntax/lint diagnostics, schema completion, and hover. It does not advertise definition,
+rename, or formatting support. The browser server cannot connect directly to PostgreSQL/PGlite.
+
+```ts
+import { getPostgresqlLanguageServer } from '@wasm-idle/lsp/postgresql';
+
+const server = await getPostgresqlLanguageServer({
+	postgresql: { moduleUrl: 'https://cdn.example.com/pgls/dist/lsp.js' }
+});
+// Connect server.transport to your editor's LSP client as usual.
+// Optional: JSON produced by `postgres-language-server schema-export`.
+await server.setSchema(await fetch('/schema.json').then((response) => response.text()));
+// Updating or clearing a schema republishes diagnostics for open documents upstream.
+await server.setSchema(null);
+server.dispose();
+```
+
+An initial snapshot can also be supplied as `postgresql.schema`. The provider registry accepts
+`postgresql`, `postgres`, and `pgsql`. `rootUrl` uses the layout
+`<rootUrl>/wasm-postgresql-lsp/dist/lsp.js`.
+
+In this repository, `pnpm sync:postgresql-lsp` prepares the pinned upstream 0.28.2 release and
+license with size/SHA-256 verification. Generated assets stay outside Git and the SDK tarball.
+The Pages build runs that preparation through `sync:page-runtimes` before its existing static
+compression and asset-lock steps. The playground starts the provider only when PostgreSQL is
+selected and LSP is enabled. Schema snapshots are available through the SDK; the playground does
+not infer a database schema by executing the editor's SQL.
