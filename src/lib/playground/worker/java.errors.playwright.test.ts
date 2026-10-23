@@ -23,6 +23,7 @@ type BrowserProbe = {
 	sandbox: Java;
 	output: string[];
 	diagnostics: Array<{ fileName?: string | null; lineNumber?: number; message?: string }>;
+	compileCalls?: number;
 };
 
 const source = `import java.io.BufferedReader;
@@ -127,8 +128,17 @@ globalThis.JavaSandbox = Java;
 					}
 					if (pathname === '/java.js' || pathname === '/worker.js') {
 						response.setHeader('Content-Type', 'text/javascript');
+						const instrumentation = `
+let auditCompileCalls = 0;
+const auditCompile = WebAssembly.compile;
+WebAssembly.compile = (...args) => { auditCompileCalls++; return auditCompile(...args); };
+const auditPost = self.postMessage.bind(self);
+self.postMessage = (message, ...args) => auditPost({ ...message, auditCompileCalls }, ...args);
+`;
 						response.end(
-							(pathname === '/java.js' ? host : worker).outputFiles[0]!.contents
+							pathname === '/java.js'
+								? host.outputFiles[0]!.contents
+								: instrumentation + worker.outputFiles[0]!.text
 						);
 						return;
 					}
@@ -214,6 +224,14 @@ globalThis.JavaSandbox = Java;
 						TEAVM_RUNTIME_ASSET_NAMES.map((asset) => `/teavm/${asset}`).sort()
 					);
 
+					await page.evaluate(() => {
+						const probe = (globalThis as unknown as { javaErrorProbe: BrowserProbe })
+							.javaErrorProbe;
+						probe.sandbox.worker!.addEventListener('message', (event) => {
+							if (typeof event.data.auditCompileCalls === 'number')
+								probe.compileCalls = event.data.auditCompileCalls;
+						});
+					});
 					const run = (code: string, args: string[], stdin = '') =>
 						page.evaluate(
 							async ({ code, args, stdin }) => {
@@ -242,6 +260,13 @@ globalThis.JavaSandbox = Java;
 										result,
 										error: '',
 										output: output.join(''),
+										chunks: output.length,
+										firstChunks: output.slice(0, 16),
+										compileCalls: (
+											globalThis as unknown as {
+												javaErrorProbe: BrowserProbe;
+											}
+										).javaErrorProbe.compileCalls,
 										diagnostics,
 										elapsedMs: performance.now() - start
 									};
@@ -250,6 +275,13 @@ globalThis.JavaSandbox = Java;
 										result: false,
 										error: typeof error === 'string' ? error : String(error),
 										output: output.join(''),
+										chunks: output.length,
+										firstChunks: output.slice(0, 16),
+										compileCalls: (
+											globalThis as unknown as {
+												javaErrorProbe: BrowserProbe;
+											}
+										).javaErrorProbe.compileCalls,
 										diagnostics,
 										elapsedMs: performance.now() - start
 									};
@@ -296,6 +328,45 @@ globalThis.JavaSandbox = Java;
 						error: '',
 						output: 'second:8\n'
 					});
+					expect(secondSuccess.compileCalls).toBe(firstSuccess.compileCalls);
+					const outputProgram = `public class Main {
+                        static int counter;
+                        public static void main(String[] args) {
+                            System.out.print("한🙂:" + (++counter) + ":");
+                            System.out.flush();
+                            for (int i = 0; i < 10000; i++) System.out.println("x");
+                            for (int i = 0; i < 30000; i++) System.out.print("z");
+                            System.err.print("끝");
+                        }
+                    }`;
+					const outputFirst = await run(outputProgram, []);
+					const outputSecond = await run(outputProgram, []);
+					for (const result of [outputFirst, outputSecond]) {
+						expect(result.error).toBe('');
+						expect(result.output).toBe(
+							'한🙂:1:' + 'x\n'.repeat(10000) + 'z'.repeat(30000) + '끝'
+						);
+						expect(result.chunks).toBeLessThan(500);
+						expect(
+							result.firstChunks.some(
+								(_, index) =>
+									result.firstChunks.slice(0, index + 1).join('') === '한🙂:1:'
+							)
+						).toBe(true);
+					}
+					expect(outputSecond.compileCalls).toBe(outputFirst.compileCalls);
+					console.log(
+						JSON.stringify({
+							javaPerformance: {
+								browser: await browser.version(),
+								firstMs: outputFirst.elapsedMs,
+								warmMs: outputSecond.elapsedMs,
+								outputMessages: outputSecond.chunks,
+								compileCallsFirst: outputFirst.compileCalls,
+								compileCallsWarm: outputSecond.compileCalls
+							}
+						})
+					);
 					const compileFailure = await run(
 						`public class Main {
     public static void main(String[] args) {
