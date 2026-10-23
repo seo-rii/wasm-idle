@@ -1,9 +1,12 @@
 """Authenticated, private producer inputs. Never installs or updates the host JDK."""
 import hashlib
+import io
 import json
 import os
 import pathlib
 import subprocess
+import tarfile
+import tempfile
 import urllib.request
 import uuid
 import zipfile
@@ -56,6 +59,40 @@ def verify_jdk(home):
     return version.strip()
 
 
+def provision_truststore(home):
+    # Debian's JRE package only links cacerts to a system path, populated by a
+    # separate package post-install hook. Build an independent store from an
+    # authenticated CA package; never read or modify the host's Java truststore.
+    receipt = INPUTS['certificates']
+    archive = download(receipt['package'])
+    packed = subprocess.run(['dpkg-deb', '--fsys-tarfile', str(archive)],
+        check=True, stdout=subprocess.PIPE).stdout
+    certificates = {}
+    with tarfile.open(fileobj=io.BytesIO(packed)) as source:
+        for item in source.getmembers():
+            name = item.name.removeprefix('./')
+            if item.isfile() and name.startswith(receipt['directory'] + '/') and name.endswith('.crt'):
+                filename = name.removeprefix(receipt['directory'] + '/')
+                if '/' in filename or filename in certificates:
+                    raise ValueError('Unexpected pinned certificate path: ' + name)
+                certificates[filename] = source.extractfile(item).read()
+    if len(certificates) != receipt['count']:
+        raise ValueError('The pinned CA certificate count differs')
+    with tempfile.TemporaryDirectory(prefix='certificates-', dir=CACHE) as temporary:
+        temporary = pathlib.Path(temporary)
+        source = temporary / 'mozilla'
+        source.mkdir()
+        for name, content in certificates.items():
+            (source / name).write_bytes(content)
+        store = temporary / 'cacerts'
+        subprocess.run([str(home / 'bin/java'), str(HERE / 'BuildTrustStore.java'),
+            str(source), str(store), str(receipt['count'])], check=True)
+        store.chmod(0o644)
+        # Replace the link itself, even when restored from an older cache or
+        # dangling on a machine without /etc/ssl/certs/java/cacerts.
+        store.replace(home / 'lib/security/cacerts')
+
+
 def pinned_jdk():
     packages = [download(item) for item in INPUTS['jdk']['packages']]
     extraction = CACHE / 'jdk'
@@ -73,6 +110,7 @@ def pinned_jdk():
                     path.unlink()
                     path.symlink_to(os.path.relpath(own_target, path.parent))
     verify_jdk(home)
+    provision_truststore(home)
     return home
 
 

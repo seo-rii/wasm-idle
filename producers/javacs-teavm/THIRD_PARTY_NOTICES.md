@@ -37,6 +37,11 @@ The build-only ZIP packager pins Debian zlib 1.2.13; its copyright and license
 are included as build-zlib-copyright.txt. This native library remains a private
 build tool and is not part of the browser assets.
 
+The private build JDK imports Mozilla roots from Debian ca-certificates
+20230311+deb12u1 for verified HTTPS downloads. The complete Debian/Mozilla
+copyright and license notice is included as Debian-ca-certificates-copyright.txt.
+The generated TLS truststore is not part of the browser assets.
+
 OpenJDK 8 StringJoiner.java, Copyright Oracle and/or its affiliates, is included
 with only a namespace/class rename to fill an absent TeaVM class library class.
 Its GPL version 2 with Classpath exception header is preserved in the included

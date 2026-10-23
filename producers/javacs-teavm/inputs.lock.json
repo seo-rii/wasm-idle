@@ -114,6 +114,14 @@
       "sourceSha256": "35ebd67941ce7024e6e7d80b60a4252a9687fa0f909a7079ac904bef6c1658cf",
       "bytes": 1624,
       "sha256": "196ed509bb0fdadac146d556d20a1d211c3d591af94a4db80d7ae0650cabdfc5"
+    },
+    {
+      "path": "licenses/Debian-ca-certificates-copyright.txt",
+      "url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+      "sourceEntry": "usr/share/doc/ca-certificates/copyright",
+      "sourceSha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed",
+      "bytes": 18940,
+      "sha256": "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"
     }
   ],
   "zlib": {
@@ -129,5 +137,16 @@
       "bytes": 121280,
       "sha256": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68"
     }
+  },
+  "certificates": {
+    "version": "20230311+deb12u1",
+    "package": {
+      "path": "ca-certificates_20230311+deb12u1_all.deb",
+      "url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+      "bytes": 155260,
+      "sha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed"
+    },
+    "directory": "usr/share/ca-certificates/mozilla",
+    "count": 142
   }
 }

@@ -19,11 +19,26 @@ checks all seven input JDK module hashes and the actual Java version, and
 checks restored Gradle distribution files against the authenticated archive.
 It never installs packages or modifies the host JDK. Gradle uses the private
 `.cache/javacs-teavm/gradle-user-home/` and reviewed SHA-256 dependency metadata.
+The Debian JRE's system `cacerts` link is replaced privately on every run using
+all 142 Mozilla roots from the size/SHA-256-pinned Debian `ca-certificates`
+20230311+deb12u1 package. The pinned JDK's standard certificate and KeyStore APIs
+create and reload the truststore and check its accepted TLS trust anchors.
+This also repairs restored JDK caches on machines without a host Java CA store;
+no host certificates are read or changed and TLS verification remains enabled.
+The CA package input and bootstrap recipe are recorded in provenance, with the
+Debian/Mozilla copyright notice copied to `notices/`. The generated truststore
+is only a build-transport input, so its creation timestamps are not included in
+the Wasm/SDK artifacts or their receipts.
 The cache may be removed and rebuilt. Cache downloads, the JDK, Gradle and its
 dependency cache; avoid caching generated sources or application outputs.
 The ZIP packaging subprocess also uses a private, authenticated Debian zlib
 1.2.13 shared library. Its actual runtime version is checked before writing
 archives, so a different Linux distribution's deflater cannot change SDK bytes.
+
+Run `python3 producers/javacs-teavm/test_toolchain.py` for the private truststore
+regressions (missing host link, external link preservation, corrupt restored
+store and modified CA download rejection). This provisions the authenticated
+private JDK and CA inputs if they are not already cached.
 
 `prepare.py` authenticates the complete upstream source tree, copies it to a
 separate browser source directory and verifies its generated changes against

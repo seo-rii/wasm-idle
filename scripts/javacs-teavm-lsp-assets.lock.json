@@ -124,6 +124,14 @@
 					"sourceSha256": "35ebd67941ce7024e6e7d80b60a4252a9687fa0f909a7079ac904bef6c1658cf",
 					"bytes": 1624,
 					"sha256": "196ed509bb0fdadac146d556d20a1d211c3d591af94a4db80d7ae0650cabdfc5"
+				},
+				{
+					"path": "licenses/Debian-ca-certificates-copyright.txt",
+					"url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+					"sourceEntry": "usr/share/doc/ca-certificates/copyright",
+					"sourceSha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed",
+					"bytes": 18940,
+					"sha256": "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"
 				}
 			],
 			"zlib": {
@@ -139,6 +147,17 @@
 					"bytes": 121280,
 					"sha256": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68"
 				}
+			},
+			"certificates": {
+				"version": "20230311+deb12u1",
+				"package": {
+					"path": "ca-certificates_20230311+deb12u1_all.deb",
+					"url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+					"bytes": 155260,
+					"sha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed"
+				},
+				"directory": "usr/share/ca-certificates/mozilla",
+				"count": 142
 			}
 		},
 		"recipe": [
@@ -148,14 +167,19 @@
 				"sha256": "afc040134c4593ca2a2d9e9930e05768c8d7b0985584a40c82e00ea7370b13dd"
 			},
 			{
+				"path": "BuildTrustStore.java",
+				"bytes": 2091,
+				"sha256": "18f1bb6353e9ae0e328bbe533d9fc09427c1f90578854e426cfef2ceb31397cb"
+			},
+			{
 				"path": "README.md",
-				"bytes": 5992,
-				"sha256": "5dda41718c7cb665cfe353a8cee09a44b8bde8c25bc1a19d6d8ed28d6043f44c"
+				"bytes": 7039,
+				"sha256": "ed109f7ba668eeb5f92d220a9c1ae22704971642a01c5887e9355d9011fa3c93"
 			},
 			{
 				"path": "THIRD_PARTY_NOTICES.md",
-				"bytes": 3052,
-				"sha256": "aa152c5b31ef148b372817b51d9e835ba3d9cc86ba3c88fcae4c91fa7047bc56"
+				"bytes": 3346,
+				"sha256": "54841bd109aabdb4b4083c149cec1d1883e5b9fe8d2d03f6e87a91b24bc6c2a1"
 			},
 			{
 				"path": "browser-platform.patch",
@@ -184,8 +208,8 @@
 			},
 			{
 				"path": "inputs.lock.json",
-				"bytes": 5121,
-				"sha256": "52a4e489b67a79fea012231b7508af8b029bf37380cb44cdbb65c4b9768f10e1"
+				"bytes": 6005,
+				"sha256": "215fe44cb41e1445e5b8adc7e42d7f78367b06f9989d551ef904acea1ffaf47e"
 			},
 			{
 				"path": "java/org/javacs/BrowserFileManager.java",
@@ -216,6 +240,11 @@
 				"path": "jso-bodies.expected.json",
 				"bytes": 453,
 				"sha256": "f2642e0d089515f62a0d59af055b268c1b58e723bd0257af9040e78ac62fe6e3"
+			},
+			{
+				"path": "licenses/Debian-ca-certificates-copyright.txt",
+				"bytes": 18940,
+				"sha256": "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"
 			},
 			{
 				"path": "licenses/Gson-APACHE-2.0.txt",
@@ -268,9 +297,14 @@
 				"sha256": "fb63acb1be5a81dcaefaeb258c40809d44a49b539604bc69660be78a1aa27a58"
 			},
 			{
+				"path": "test_toolchain.py",
+				"bytes": 3019,
+				"sha256": "0ef64efff72c4e8e4d8d84aef03580ef8cda460730ca3931ebd7851b4b8ff482"
+			},
+			{
 				"path": "toolchain.py",
-				"bytes": 4531,
-				"sha256": "1b4f60ce8d56e645b38b2b3098abb1d689af610d23368ec70811f02968684e11"
+				"bytes": 6476,
+				"sha256": "2cde711c662c77b50218d946ea81312de0bed86d12a4bb0bce6012988428f523"
 			},
 			{
 				"path": "tools/GenerateProtocolAdapters.java",

@@ -109,6 +109,8 @@ jobs:
             - run: pnpm --dir packages/core build
             - run: pnpm --dir packages/llvm-core build
             - run: pnpm exec playwright-core install --with-deps chromium
+            - name: Verify private JDK TLS truststore recovery
+              run: python3 producers/javacs-teavm/test_toolchain.py
             - name: Build original javacs with the pinned TeaVM toolchain
               run: python3 producers/javacs-teavm/build.py
             - name: Verify the static TeaVM bridge without JavaScript string evaluation
