@@ -112,7 +112,10 @@ function worker(
 					'$lib/playground/javaRuntimeStdin',
 					'$lib/playground/javaSource',
 					'$lib/playground/javaRuntimeErrors',
-					'$lib/playground/stdinBuffer'
+					'$lib/playground/stdinBuffer',
+					'../javaDebugBridge',
+					'../debugMailbox',
+					'./javaDebugRuntime'
 				].includes(id)
 			)
 				return {};

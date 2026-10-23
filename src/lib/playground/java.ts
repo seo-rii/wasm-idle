@@ -1,5 +1,7 @@
 import {
 	resolveSandboxExecutionArgs,
+	type DebugCommand,
+	type DebugSessionEvent,
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -31,9 +33,11 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { JavaDebugSession } from './javaDebug';
+import { DebugDeadline } from './debugDeadline';
 
 type JavaOperation = {
 	token: symbol;
@@ -66,6 +70,8 @@ class Java implements Sandbox {
 	exit = true;
 	baseUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	ondebug?: (event: DebugSessionEvent) => void;
+	private debugSession?: JavaDebugSession;
 	waitingForInput = false;
 	pendingEof = false;
 	assetBridge: WorkerAssetBridge | null = null;
@@ -578,6 +584,7 @@ class Java implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
+		let debugMode: 'none' | 'trace';
 		try {
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
@@ -613,6 +620,12 @@ class Java implements Sandbox {
 				)
 			});
 			stdin = options.stdin;
+			const requestedDebugMode = options.debugMode ?? (options.debug ? 'trace' : 'none');
+			if (requestedDebugMode !== 'none' && requestedDebugMode !== 'trace') {
+				throw new Error(`Unsupported Java debugger backend: ${requestedDebugMode}`);
+			}
+			debugMode = requestedDebugMode;
+			if (debugMode === 'trace' && !prepare) requireSharedArrayBuffer('Java debugging');
 			const persistentCache = options.persistentCache;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
@@ -635,6 +648,8 @@ class Java implements Sandbox {
 			this.resetExplicitStdinState();
 		}
 		this.exit = false;
+		let runDebugSession: JavaDebugSession | undefined;
+		let debugDeadline: DebugDeadline | undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			let diagnosticCount = 0;
@@ -644,7 +659,36 @@ class Java implements Sandbox {
 				2_147_483_647,
 				limits.compileTimeoutMs + limits.runTimeoutMs
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			if (debugMode === 'trace' && !prepare) {
+				debugDeadline = new DebugDeadline(timeoutMs, () =>
+					this.cancelOperation(
+						activeOperation,
+						new TimeoutError(`Java execution timed out after ${timeoutMs} ms`, {
+							phase: 'execute',
+							runtimeId: 'JAVA',
+							timeoutMs
+						})
+					)
+				);
+				activeOperation.cleanups.push(() => debugDeadline?.dispose());
+				const session = new JavaDebugSession(
+					options.debugPath || `/workspace/${workspace.activePath}`,
+					(event) => {
+						if (event.type === 'pause') debugDeadline?.pause();
+						else if (event.type === 'resume') debugDeadline?.resume();
+						if (
+							this.debugSession === session &&
+							(this.isOperationActive(activeOperation) || event.type === 'stop')
+						)
+							this.ondebug?.(event);
+					}
+				);
+				this.debugSession = runDebugSession = session;
+				activeOperation.cleanups.push(() => {
+					session.dispose();
+					if (this.debugSession === session) this.debugSession = undefined;
+				});
+			} else this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
@@ -679,7 +723,12 @@ class Java implements Sandbox {
 				try {
 					if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 					if (!ownsRun()) return;
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const { output, results, error, buffer, diagnostic, progress, javaDebug } =
+						event.data;
+					if (javaDebug && runDebugSession) {
+						runDebugSession.handle(javaDebug);
+						return;
+					}
 					if (buffer && !hasExplicitStdin) {
 						if (!prepare) {
 							_prog?.report?.({
@@ -757,6 +806,17 @@ class Java implements Sandbox {
 				worker.postMessage({
 					code,
 					prepare,
+					debugMode,
+					javaDebug: runDebugSession
+						? {
+								buffer: runDebugSession.mailbox.buffer,
+								sourcePath:
+									options.debugPath || `/workspace/${workspace.activePath}`,
+								breakpoints: options.breakpoints || [],
+								sourceBreakpoints: options.sourceBreakpoints,
+								pauseOnEntry: options.pauseOnEntry !== false
+							}
+						: undefined,
 					buffer: this.buffer,
 					args: programArgs,
 					stdin: stdin ?? '',
@@ -770,6 +830,8 @@ class Java implements Sandbox {
 			}
 		});
 		return running.finally(() => {
+			runDebugSession?.dispose();
+			if (this.debugSession === runDebugSession) this.debugSession = undefined;
 			if (this.releaseOperation(activeOperation)) {
 				this.finishExplicitStdin(activeOperation);
 				this.exit = true;
@@ -790,6 +852,28 @@ class Java implements Sandbox {
 		this.exit = true;
 		this.workerSession.terminate(reason);
 		this.cleanupOperation(operation);
+	}
+
+	debugCommand(command: DebugCommand) {
+		return this.debugSession?.command(command);
+	}
+	debugPause() {
+		return this.debugSession?.pause();
+	}
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		return this.debugSession?.setBreakpoints(lines, sourcePath);
+	}
+	async debugEvaluate(_expression: string): Promise<string> {
+		throw new Error('Java expression evaluation is unavailable in the hook debugger');
+	}
+	async debugVariables(_reference: number, _start?: number, _count?: number) {
+		return [];
+	}
+	async debugScopes(_frameId: number) {
+		return [];
+	}
+	async debugFrameScopes(_frameId: number) {
+		return [];
 	}
 
 	kill() {

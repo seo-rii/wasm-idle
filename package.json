@@ -257,7 +257,8 @@
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@wasm-idle/core": "workspace:*",
 		"@wasm-idle/llvm-core": "workspace:*",
-		"fflate": "0.8.3"
+		"fflate": "0.8.3",
+		"java-parser": "3.0.1"
 	},
 	"files": [
 		"dist",

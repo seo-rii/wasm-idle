@@ -14,6 +14,7 @@
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
 		goDebugLanguageAdapter,
+		javaDebugLanguageAdapter,
 		luaDebugLanguageAdapter,
 		vDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
@@ -193,6 +194,7 @@
 		OBJECTIVECXX: cppDebugLanguageAdapter,
 		V: vDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
+		JAVA: javaDebugLanguageAdapter,
 		LUA: luaDebugLanguageAdapter,
 		RUBY: rubyDebugLanguageAdapter,
 		RUST: rustDebugLanguageAdapter,
@@ -205,6 +207,7 @@
 		OBJECTIVECXX: 'Objective-C++ · LLDB / WAMR',
 		V: 'V · LLDB / WAMR',
 		GO: 'Go Trace',
+		JAVA: 'Java · Trace',
 		LUA: 'Lua · MobDebug',
 		RUBY: 'Ruby · TracePoint',
 		RUST: 'Rust · LLDB / WAMR',
@@ -3114,10 +3117,13 @@
 						<button
 							class="action-button debug-control"
 							onclick={() => debug.pause()}
-							disabled={activeDebugBackend !== 'lldb' ||
+							disabled={(activeDebugBackend !== 'lldb' &&
+								!(language === 'JAVA' && activeDebugBackend === 'trace')) ||
 								!debug.active ||
 								debug.paused}
-							title="Pause"
+							title={language === 'JAVA'
+								? 'Pause at the next Java statement'
+								: 'Pause'}
 							aria-label="Pause"
 						>
 							<span class="material-symbols-outlined" aria-hidden="true">pause</span>
@@ -3245,7 +3251,12 @@
 						</header>
 						{#if debugPanelOpen.variables}
 							<div class="debug-panel__body" id="debug-panel-variables">
-								{#if debug.scopes.length}
+								{#if language === 'JAVA'}
+									<p>
+										Java debugging currently does not expose local variables or
+										expression evaluation.
+									</p>
+								{:else if debug.scopes.length}
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
 											{@const loadedScopeVariables =
