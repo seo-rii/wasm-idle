@@ -192,6 +192,7 @@ self.onmessage = async (event: { data: any }) => {
 		language = 'typescript',
 		activePath = language === 'typescript' ? 'main.ts' : 'main.js',
 		workspaceFiles = [],
+		debugSourceUrl,
 		log
 	} = event.data;
 	try {
@@ -263,7 +264,11 @@ self.onmessage = async (event: { data: any }) => {
 
 		const hasInitialStdin = typeof stdin === 'string';
 		let initialStdin: string | null = hasInitialStdin ? stdin : null;
-		const execution = await runtime.executeBrowserTypeScriptArtifact(compiledArtifact, {
+		const executionArtifact =
+			typeof debugSourceUrl === 'string'
+				? { ...compiledArtifact, fileName: debugSourceUrl }
+				: compiledArtifact;
+		const execution = await runtime.executeBrowserTypeScriptArtifact(executionArtifact, {
 			args,
 			env: {
 				USER: 'jungol'

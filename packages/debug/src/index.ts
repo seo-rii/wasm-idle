@@ -1,4 +1,15 @@
 export { evaluateDebugExpression } from './expression.js';
+export {
+	CdpDebugAdapter,
+	createBrowserCdpTransport,
+	isBrowserCdpDebuggerAvailable
+} from './adapter/index.js';
+export type {
+	CdpDebugAdapterOptions,
+	CdpWasmLocation,
+	CdpTransport,
+	CdpEvent
+} from './adapter/index.js';
 export { selectInlineDebugLocals } from './locals.js';
 export {
 	createLldbDapAdapter,
@@ -13,8 +24,14 @@ export { createAdapterDebugSessionController } from './adapter-controller.js';
 export {
 	cppDebugLanguageAdapter,
 	goDebugLanguageAdapter,
+	javaDebugLanguageAdapter,
+	javascriptDebugLanguageAdapter,
+	typescriptDebugLanguageAdapter,
+	luaDebugLanguageAdapter,
 	pythonDebugLanguageAdapter,
-	rustDebugLanguageAdapter
+	rubyDebugLanguageAdapter,
+	rustDebugLanguageAdapter,
+	vDebugLanguageAdapter
 } from './language/index.js';
 export { createDebugSessionController } from './controller.js';
 export { MonacoDebugView, attachMonacoDebugActions } from './editor/index.js';
@@ -57,3 +74,4 @@ export type {
 	DebugWatchValue
 } from './controller.js';
 export type { MonacoDebugActionsOptions } from './editor/index.js';
+export { readTeaVmDebugLocations } from './adapter/teavm.js';

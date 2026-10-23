@@ -1,3 +1,4 @@
+import { DebugDeadline } from './debugDeadline';
 import { resolveTypeScriptModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
 	AssetTooLargeError,
@@ -31,6 +32,8 @@ import {
 } from '$lib/playground/wasmTypeScriptVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { CdpSandboxSession, createCdpWorkerName, cdpSourceUrl } from './cdpSession';
+import type { DebugCommand, DebugSessionEvent } from './options';
 
 type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT';
 
@@ -79,6 +82,9 @@ class TypeScriptSandbox implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	ondebug?: (event: DebugSessionEvent) => void;
+	private cdpWorkerName = createCdpWorkerName();
+	private cdpSession?: CdpSandboxSession;
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: TypeScriptOperation | null = null;
@@ -470,7 +476,8 @@ class TypeScriptSandbox implements Sandbox {
 						await import('$lib/playground/worker/typescript?worker')
 					).default;
 					if (!this.isOperationActive(activeOperation)) return;
-					const worker = new WorkerConstructor();
+					this.cdpWorkerName = createCdpWorkerName();
+					const worker = new WorkerConstructor({ name: this.cdpWorkerName });
 					if (!this.isOperationActive(activeOperation)) {
 						worker.terminate();
 						return;
@@ -761,6 +768,8 @@ class TypeScriptSandbox implements Sandbox {
 			this.resetExplicitStdinState(buffer);
 		}
 		this.exit = false;
+		let runCdpSession: CdpSandboxSession | undefined;
+		let debugDeadline: DebugDeadline | undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			let diagnosticCount = 0;
@@ -778,7 +787,18 @@ class TypeScriptSandbox implements Sandbox {
 				MAX_TIMER_DELAY_MS,
 				limits.compileTimeoutMs + limits.runTimeoutMs
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			if (options.debugMode === 'cdp' && !prepare) {
+				debugDeadline = new DebugDeadline(timeoutMs, () =>
+					this.cancelOperation(
+						activeOperation,
+						new TimeoutError(
+							`${this.languageLabel} execution timed out after ${timeoutMs} ms`,
+							{ phase: 'execute', runtimeId: this.language, timeoutMs }
+						)
+					)
+				);
+				activeOperation.cleanups.push(() => debugDeadline?.dispose());
+			} else this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
@@ -918,23 +938,64 @@ class TypeScriptSandbox implements Sandbox {
 			worker.onmessage = handler;
 			if (!ownsRun()) return;
 			this.begin = Date.now();
-			try {
-				worker.postMessage({
-					code,
-					prepare,
-					buffer,
-					args: executionArgs.programArgs,
-					stdin,
-					language: this.compileLanguage,
-					activePath: workspace.activePath,
-					workspaceFiles: workspace.workspaceFiles,
-					log: _log
-				});
-			} catch (error) {
-				failRun(error, true);
-			}
+			void (async () => {
+				try {
+					let debugSourceUrl: string | undefined;
+					if (!prepare && options.debugMode === 'cdp') {
+						const activePath = workspace.activePath;
+						if (!activePath)
+							throw new Error(
+								`${this.languageLabel} debugger requires an active source path`
+							);
+						const sourcePath = options.debugPath || activePath;
+						debugSourceUrl = cdpSourceUrl(this.cdpWorkerName, sourcePath);
+						const session = new CdpSandboxSession({
+							workerName: this.cdpWorkerName,
+							sourcePath,
+							source: code,
+							url: debugSourceUrl,
+							breakpoints: options.breakpoints || [],
+							sourceBreakpoints: options.sourceBreakpoints,
+							pauseOnEntry: options.pauseOnEntry !== false,
+							onDebugEvent: (event) => {
+								if (event.type === 'pause') debugDeadline?.pause();
+								else if (event.type === 'resume') debugDeadline?.resume();
+								if (
+									this.cdpSession === session &&
+									(ownsRun() || event.type === 'stop')
+								)
+									this.ondebug?.(event);
+							},
+							onFailure: (error) => failRun(error, true)
+						});
+						this.cdpSession = session;
+						runCdpSession = session;
+						await session.start();
+						if (!ownsRun()) {
+							await session.dispose();
+							return;
+						}
+					}
+					worker.postMessage({
+						code,
+						prepare,
+						buffer,
+						args: executionArgs.programArgs,
+						stdin,
+						language: this.compileLanguage,
+						activePath: workspace.activePath,
+						workspaceFiles: workspace.workspaceFiles,
+						debugSourceUrl,
+						log: _log
+					});
+				} catch (error) {
+					failRun(error, true);
+				}
+			})();
 		});
-		return running.finally(() => {
+		return running.finally(async () => {
+			await runCdpSession?.dispose().catch(() => undefined);
+			if (this.cdpSession === runCdpSession) this.cdpSession = undefined;
 			if (this.releaseOperation(activeOperation)) {
 				this.finishExplicitStdin(activeOperation);
 				this.exit = true;
@@ -954,11 +1015,34 @@ class TypeScriptSandbox implements Sandbox {
 		this.pendingEof = false;
 		this.exit = true;
 		this.workerSession.terminate(reason);
+		void this.cdpSession?.dispose().catch(() => undefined);
 		this.cleanupOperation(operation);
 	}
 
 	kill() {
 		this.terminate();
+	}
+
+	debugCommand(command: DebugCommand) {
+		return this.cdpSession?.debugCommand(command);
+	}
+	debugPause() {
+		return this.cdpSession?.pause();
+	}
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		return this.cdpSession?.setBreakpoints(lines, sourcePath);
+	}
+	debugEvaluate(expression: string) {
+		return this.cdpSession?.evaluate(expression) ?? Promise.resolve('?');
+	}
+	debugVariables(reference: number, start?: number, count?: number) {
+		return this.cdpSession?.variables(reference, start, count) ?? Promise.resolve([]);
+	}
+	debugScopes(frameId: number) {
+		return this.cdpSession?.scopes(frameId) ?? Promise.resolve([]);
+	}
+	debugFrameScopes(frameId: number) {
+		return this.cdpSession?.frameScopes(frameId) ?? Promise.resolve([]);
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
