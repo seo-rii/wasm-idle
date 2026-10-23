@@ -148,8 +148,8 @@ describe('wasm-rust compiler edge cases', () => {
 			manifestSource.compiler.workerSharedWorkspaceBytes = 1024;
 			const manifestBytes = new TextEncoder().encode(JSON.stringify(manifestSource));
 			const manifestFingerprint = createHash('sha256').update(manifestBytes).digest('hex');
-			const initialBudget = createRuntimeAssetDeliveryBudget(64 * 1024 * 1024);
-			const replacementBudget = createRuntimeAssetDeliveryBudget(64 * 1024 * 1024);
+			const initialBudget = createRuntimeAssetDeliveryBudget(192 * 1024 * 1024);
+			const replacementBudget = createRuntimeAssetDeliveryBudget(192 * 1024 * 1024);
 			const request: BrowserRustCompileRequest = {
 				code: 'fn main() {}',
 				assetDeliveryBudget: initialBudget
@@ -188,7 +188,7 @@ describe('wasm-rust compiler edge cases', () => {
 				request.assetDeliveryBudget =
 					mutation === 'replacement' ? replacementBudget : undefined;
 				resolveManifest(new Response(manifestBytes));
-				await compiling;
+				expect(await compiling).toMatchObject({ stderr: 'expected test stop' });
 			} finally {
 				vi.unstubAllGlobals();
 			}

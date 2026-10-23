@@ -131,7 +131,7 @@ describe('compiler-worker runtime asset validation', () => {
 		);
 	});
 
-	it('leaves trace compilation flags unchanged', () => {
+	it('keeps trace compilation unoptimized without DWARF', () => {
 		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
 		const args = buildRustcArguments(
 			{
@@ -143,7 +143,7 @@ describe('compiler-worker runtime asset validation', () => {
 		);
 
 		expect(args).not.toContain('-Cdebuginfo=2');
-		expect(args).not.toContain('-Copt-level=0');
+		expect(args).toContain('-Copt-level=0');
 		expect(args).not.toContain('-Cstrip=none');
 		expect(args).not.toContain('--remap-path-prefix=/work=/workspace');
 	});

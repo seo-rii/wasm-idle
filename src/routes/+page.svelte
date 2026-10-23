@@ -46,6 +46,7 @@
 		OcamlBackend,
 		OcamlWasmBinaryenMode,
 		RustTargetTriple,
+		RustOptimizationProfile,
 		SandboxExecutionOptions,
 		DebugFrame,
 		DebugSessionEvent,
@@ -138,6 +139,7 @@
 		ocamlWasmBinaryenMode: OcamlWasmBinaryenMode;
 		openTabs: string[];
 		rustTargetTriple: RustTargetTriple;
+		rustOptimizationProfile: RustOptimizationProfile;
 		sidebarOpen: boolean;
 		version: number;
 		workspaces: Record<PlaygroundLanguage, LanguageWorkspace>;
@@ -228,6 +230,7 @@
 		argsInput = $state(''),
 		cppVersion = $state<CppVersion>('CPP20'),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
+		rustOptimizationProfile = $state<RustOptimizationProfile>('interactive'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
@@ -351,6 +354,7 @@
 		CPP: () => ({ cppVersion }),
 		RUST: () => ({
 			rustTargetTriple,
+			rustOptimizationProfile,
 			limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS
 		}),
 		GO: () => ({ goTarget }),
@@ -1458,6 +1462,7 @@
 			ocamlWasmBinaryenMode,
 			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
 			rustTargetTriple,
+			rustOptimizationProfile,
 			sidebarOpen,
 			version: 6,
 			workspaces: workspaceMapForSnapshot()
@@ -1507,6 +1512,12 @@
 			value?.rustTargetTriple === 'wasm32-wasip3'
 		)
 			rustTargetTriple = value.rustTargetTriple;
+		if (
+			value?.rustOptimizationProfile === 'interactive' ||
+			value?.rustOptimizationProfile === 'speed' ||
+			value?.rustOptimizationProfile === 'size'
+		)
+			rustOptimizationProfile = value.rustOptimizationProfile;
 		if (
 			value?.goTarget === 'wasip1/wasm' ||
 			value?.goTarget === 'wasip2/wasm' ||
@@ -2401,6 +2412,7 @@
 					localStorage.setItem('language', language);
 					localStorage.setItem('argsInput', argsInput);
 					localStorage.setItem('rustTargetTriple', rustTargetTriple);
+					localStorage.setItem('rustOptimizationProfile', rustOptimizationProfile);
 					localStorage.setItem('goTarget', goTarget);
 					localStorage.setItem('ocamlBackend', ocamlBackend);
 					localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
@@ -2905,6 +2917,7 @@
 					code,
 					argsInput: restoredArgs,
 					rustTargetTriple: restoredRustTarget,
+					rustOptimizationProfile: restoredRustOptimizationProfile,
 					goTarget: restoredGoTarget,
 					ocamlBackend: restoredOcamlBackend,
 					ocamlWasmBinaryenMode: restoredBinaryenMode
@@ -2917,6 +2930,12 @@
 					restoredRustTarget === 'wasm32-wasip3'
 				)
 					rustTargetTriple = restoredRustTarget;
+				if (
+					restoredRustOptimizationProfile === 'interactive' ||
+					restoredRustOptimizationProfile === 'speed' ||
+					restoredRustOptimizationProfile === 'size'
+				)
+					rustOptimizationProfile = restoredRustOptimizationProfile;
 				if (
 					restoredGoTarget === 'wasip1/wasm' ||
 					restoredGoTarget === 'wasip2/wasm' ||
@@ -3812,6 +3831,18 @@
 							{#each availableRustTargetTriples as targetTriple (targetTriple)}
 								<option value={targetTriple}>{targetTriple}</option>
 							{/each}
+						</select>
+					</label>
+					<label
+						class="select-chip"
+						title="Optimized runs may take longer to compile. Debug always uses the interactive profile."
+					>
+						<span class="material-symbols-outlined" aria-hidden="true">speed</span>
+						<span class="visually-hidden">Rust run profile</span>
+						<select id="rust-optimization-profile" bind:value={rustOptimizationProfile}>
+							<option value="interactive">Interactive</option>
+							<option value="speed">Optimize speed</option>
+							<option value="size">Optimize size</option>
 						</select>
 					</label>
 				{/if}

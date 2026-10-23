@@ -11,6 +11,7 @@ import type {
 const SUPPORTED_EDITIONS = new Set(['2021', '2024']);
 const SUPPORTED_CRATE_TYPES = new Set(['bin']);
 const SUPPORTED_DEBUG_MODES = new Set<BrowserRustDebugMode>(['none', 'trace', 'lldb']);
+const SUPPORTED_OPTIMIZATION_PROFILES = new Set(['interactive', 'speed', 'size']);
 const SUPPORTED_TARGET_TRIPLES = new Set<SupportedTargetTriple>([
 	'wasm32-wasip1',
 	'wasm32-wasip2',
@@ -77,6 +78,7 @@ export function createBrowserRustCompileRequestIdentity(
 		sourcePath: '/workspace/main.rs',
 		code: request.code,
 		debugMode: resolveBrowserRustDebugMode(request),
+		optimizationProfile: request.optimizationProfile || 'interactive',
 		edition: request.edition || '2024',
 		crateType: request.crateType || 'bin',
 		targetTriple: request.targetTriple || 'wasm32-wasip1'
@@ -148,6 +150,12 @@ export function validateCompileRequest(request: BrowserRustCompileRequest) {
 	if (request.mode !== undefined) {
 		return 'browser compiler mode selection is not supported yet; omit mode';
 	}
+	if (
+		request.optimizationProfile !== undefined &&
+		!SUPPORTED_OPTIMIZATION_PROFILES.has(request.optimizationProfile)
+	) {
+		return `unsupported browser compiler optimization profile: ${String(request.optimizationProfile)}`;
+	}
 	if (request.edition && !SUPPORTED_EDITIONS.has(request.edition)) {
 		return `unsupported browser compiler edition: ${request.edition}`;
 	}
@@ -169,6 +177,9 @@ export function validateCompileRequest(request: BrowserRustCompileRequest) {
 		return error instanceof Error ? error.message : String(error);
 	}
 	const targetTriple = request.targetTriple || 'wasm32-wasip1';
+	if (debugMode !== 'none' && (request.optimizationProfile || 'interactive') !== 'interactive') {
+		return 'browser compiler debugging requires the interactive optimization profile';
+	}
 	if (debugMode === 'lldb' && targetTriple !== 'wasm32-wasip1') {
 		return `browser compiler LLDB debugging currently supports only wasm32-wasip1, not ${targetTriple}`;
 	}
