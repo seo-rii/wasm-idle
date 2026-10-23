@@ -36,6 +36,7 @@ export type RuntimeLspCapability =
 	| 'sql'
 	| 'postgresql'
 	| 'bash'
+	| 'cobol'
 	| 'prolog'
 	| 'ruby'
 	| 'r'
@@ -410,6 +411,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	COBOL: {
 		label: 'COBOL',
 		editorLanguage: 'cobol',
+		runtimeLspCapability: 'cobol',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},

@@ -40,6 +40,7 @@ const expectedLanguagesByProvider = {
 	duckdb: ['duckdb'],
 	postgresql: ['postgresql', 'postgres', 'pgsql'],
 	bash: ['bash', 'shell', 'sh'],
+	cobol: ['cobol', 'cob', 'cbl'],
 	graphql: ['graphql', 'gql'],
 	fortran: ['fortran', 'f90', 'f95'],
 	prolog: ['prolog', 'swipl'],

@@ -10,6 +10,7 @@ import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { cobolFixtureFiles } from '../../packages/lsp/test/fixtures/cobol-protocol.js';
 
 import {
 	runBrowserPreparationScripts,
@@ -38,6 +39,7 @@ interface LspBrowserCase {
 	validSource?: string;
 	errorLine?: number;
 	minimumMarkerSeverity?: number;
+	workspaceFiles?: Array<{ path: string; content: string }>;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	expectedRequestPathnames?: string[];
@@ -326,6 +328,25 @@ const lspBrowserCases: LspBrowserCase[] = [
 			'/wasm-bash-lsp/tree-sitter-bash.wasm',
 			'/wasm-bash-lsp/web-tree-sitter.wasm',
 			'/wasm-bash-lsp/one_ini_bg.wasm'
+		]
+	},
+	{
+		language: 'COBOL',
+		label: 'COBOL',
+		fileName: 'main.cob',
+		source: cobolFixtureFiles['main.cob'].replace('DISPLAY GREETING.', 'DISPLAY "BROKEN.'),
+		validSource: cobolFixtureFiles['main.cob'],
+		errorLine: 8,
+		workspaceFiles: Object.entries(cobolFixtureFiles)
+			.filter(([path]) => path !== 'main.cob')
+			.map(([path, content]) => ({ path, content })),
+		aliases: ['cob', 'cbl', 'superbol'],
+		statusKey: 'cobol',
+		assertNoPreEnableRequests: ['/wasm-cobol-lsp/'],
+		expectedResponses: [
+			'/wasm-cobol-lsp/host.mjs',
+			'/wasm-cobol-lsp/superbol-browser.mjs.gz.bin',
+			'/wasm-cobol-lsp/gnucobol-config.json.gz.bin'
 		]
 	},
 	{
@@ -622,6 +643,7 @@ const lspBrowserMatrixGroups = {
 		'PHP',
 		'FORTH',
 		'C3',
+		'COBOL',
 		'ASSEMBLYSCRIPT',
 		'WAT',
 		'GO',
@@ -671,7 +693,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -707,6 +729,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	SQLITE: 'sql',
 	POSTGRESQL: 'postgresql',
 	BASH: 'bash',
+	COBOL: 'cobol',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
 };
@@ -1312,6 +1335,21 @@ async function runLspCase(
 
 	await waitForPreparedPage(page, browserUrl);
 	await selectLanguage(page, testCase);
+	if (testCase.workspaceFiles) {
+		const configured = await page.evaluate(
+			async ({ files, path, content }) => {
+				const api = Reflect.get(globalThis, '__wasmIdleDebug');
+				return await api.setWorkspaceFiles([...files, { path, content }], path);
+			},
+			{
+				files: testCase.workspaceFiles,
+				path: testCase.fileName,
+				content: testCase.validSource || testCase.source
+			}
+		);
+		expect(configured).toBe(true);
+		await waitForSelectedEditorModel(page, testCase.language, testCase.fileName);
+	}
 	if (testCase.validSource) await replaceEditorSource(page, testCase.validSource);
 	await page
 		.waitForFunction(
@@ -1862,6 +1900,12 @@ describe('Monaco LSP browser integration', () => {
 					await runBrowserPreparationScripts(['sync:grain-lsp']);
 				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'C3'))
 					await runBrowserPreparationScripts(['sync:c3-lsp']);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'COBOL')
+				) {
+					await runBrowserPreparationScripts(['sync:cobol-lsp']);
+				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

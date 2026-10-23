@@ -254,6 +254,11 @@
 			"types": "./dist/c3/index.d.ts",
 			"import": "./dist/c3/index.js",
 			"default": "./dist/c3/index.js"
+		},
+		"./cobol": {
+			"types": "./dist/cobol/index.d.ts",
+			"import": "./dist/cobol/index.js",
+			"default": "./dist/cobol/index.js"
 		}
 	},
 	"files": [

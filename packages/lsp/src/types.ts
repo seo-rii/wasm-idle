@@ -190,6 +190,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		wasmUrl?: string;
 		duckdbBundles?: DuckDBBundles;
 	};
+	cobol?: {
+		baseUrl?: string;
+		workspaceFiles?: Array<{ path: string; content: string }>;
+	};
 	graphql?: {
 		schema?: string;
 	};

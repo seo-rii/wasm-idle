@@ -468,3 +468,5 @@ export {
 	C3_LSP_ASSET_RECEIPTS,
 	type C3LspAssetReceipts
 } from './c3/index.js';
+
+export { getCobolLanguageServer, type CobolLanguageServerOptions } from './cobol/index.js';

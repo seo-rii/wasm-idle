@@ -24,3 +24,6 @@ export const Emitter = browserJsonrpc.Emitter;
 
 export type BrowserMessageReader = BrowserMessageReaderInstance;
 export type BrowserMessageWriter = BrowserMessageWriterInstance;
+
+export type ReadableStreamMessageReader = jsonrpc.ReadableStreamMessageReader;
+export type WriteableStreamMessageWriter = jsonrpc.WriteableStreamMessageWriter;

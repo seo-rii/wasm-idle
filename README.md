@@ -127,7 +127,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | LFortran       | LFortran LLVM evaluator (experimental)       | Yes   | compiler diagnostics | -     |
 | Lean 4         | Lean 4.34.1 lean --run (Emscripten)          | Yes   | compiler diagnostics | -     |
 | Fortran        | f2c + @wasm-idle/llvm-core                   | Yes   | Fortran LSP          | -     |
-| COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core          | Yes   | syntax               | -     |
+| COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core          | Yes   | SuperBOL OSS LSP     | -     |
 | V              | V 0.5.2 + @wasm-idle/llvm-core               | Yes   | syntax               | -     |
 | R              | WebR                                         | Yes   | syntax               | -     |
 | Octave         | wasm-octave                                  | Yes   | syntax               | -     |

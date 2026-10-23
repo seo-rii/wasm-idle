@@ -57,3 +57,5 @@ static/wasm-lfortran/
 /static/wasm-fennel-lsp/
 # Original Grain LSP and its verified runtime host are prepared locally.
 /static/wasm-grain-lsp/
+# Original SuperBOL OSS JavaScript and dialect data are mirrored from pinned assets.
+/static/wasm-cobol-lsp/
