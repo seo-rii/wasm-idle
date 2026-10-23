@@ -434,13 +434,16 @@ export function buildJavaDebugEvaluationProgram(request: JavaDebugEvaluationRequ
 		bindings.set(binding.name, { ...binding });
 	}
 	const referenced = validateExpression(request.expression, bindings);
-	let stem: string;
-	do {
-		stem = `WasmIdleEval_${crypto.randomUUID().replaceAll('-', '')}`;
-	} while (
+	// Values are runtime arguments. Keep the template stable so the same expression
+	// and binding types can reuse compiled code, while avoiding user identifier collisions.
+	let suffix = 0;
+	let stem = 'WasmIdleEval';
+	while (
 		request.expression.includes(stem) ||
 		[...bindings.keys()].some((name) => name.includes(stem))
-	);
+	) {
+		stem = `WasmIdleEval_${++suffix}`;
+	}
 	const argumentName = `${stem}_args`;
 	const args: string[] = [];
 	const declarations: string[] = [];

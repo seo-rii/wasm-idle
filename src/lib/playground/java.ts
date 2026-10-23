@@ -75,6 +75,7 @@ class Java implements Sandbox {
 	private evaluationAssets?: PlaygroundRuntimeAssets;
 	private evaluationLimits?: ReturnType<typeof resolveExecutionLimits>;
 	private evaluationSandbox?: Java;
+	private cacheEvaluationArtifacts = false;
 	private evaluationQueue: Promise<void> = Promise.resolve();
 	waitingForInput = false;
 	pendingEof = false;
@@ -826,6 +827,7 @@ class Java implements Sandbox {
 					code,
 					prepare,
 					debugMode,
+					cacheEvaluationArtifacts: this.cacheEvaluationArtifacts,
 					javaDebug: runDebugSession
 						? {
 								buffer: runDebugSession.mailbox.buffer,
@@ -918,6 +920,7 @@ class Java implements Sandbox {
 				bindings: context.bindings
 			});
 			const sandbox = (this.evaluationSandbox ??= new Java());
+			sandbox.cacheEvaluationArtifacts = true;
 			const abort = () => {
 				if (this.evaluationSandbox === sandbox) this.evaluationSandbox = undefined;
 				void sandbox.dispose();

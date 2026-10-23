@@ -172,6 +172,8 @@ it(
 									await sandbox.debugCommand('nextLine');
 								} else {
 									nextVariables = variables;
+									evaluations['number + 5 after step'] =
+										await sandbox.debugEvaluate('number + 5');
 									try {
 										await sandbox.debugVariables(oldReference, 0, 1);
 									} catch (error) {
@@ -269,7 +271,8 @@ it(
 				'missing == null': 'true',
 				'unit + 1': '66',
 				'1.0 / negativeZero': '-Infinity',
-				'number unchanged': '68'
+				'number unchanged': '68',
+				'number + 5 after step': '74'
 			});
 			expect(Object.keys(result.rejected)).toEqual([
 				'values[0]',

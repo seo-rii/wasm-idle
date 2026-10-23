@@ -45,6 +45,22 @@ let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
 let compiledDebugEnabled = false;
 let compiledDebugFiles: JavaDebugFile[] = [];
+// Only the isolated debugger evaluator opts in. Entries contain immutable compiled
+// code, never instances/imports/heap state; every evaluation still loads a fresh instance.
+const evaluationArtifacts = new Map<
+	string,
+	{
+		wasm: Uint8Array;
+		module: WebAssembly.Module;
+		mainClass: string;
+		formatter: string;
+		diagnostics: object[];
+		bytes: number;
+	}
+>();
+const MAX_EVALUATION_ARTIFACTS = 8;
+const MAX_EVALUATION_ARTIFACT_BYTES = 16 * 1024 * 1024;
+let evaluationArtifactBytes = 0;
 let currentSourcePaths = new Set<string>();
 const decoder = new TextDecoder();
 
@@ -65,6 +81,7 @@ self.addEventListener('message', async (event) => {
 		code,
 		prepare,
 		debugMode,
+		cacheEvaluationArtifacts,
 		javaDebug,
 		args = [],
 		stdin = '',
@@ -161,6 +178,8 @@ self.addEventListener('message', async (event) => {
 				compiledWorkspaceFiles = [];
 				compiledDebugEnabled = false;
 				compiledDebugFiles = [];
+				evaluationArtifacts.clear();
+				evaluationArtifactBytes = 0;
 				currentSourcePaths = new Set();
 			}
 			self.postMessage({ load: true });
@@ -220,12 +239,35 @@ self.addEventListener('message', async (event) => {
 				`Java workspace conflicts with generated stdin helper: ${stdinInjection.helperSourcePath}`
 			);
 		}
+		const evaluationKey =
+			cacheEvaluationArtifacts === true &&
+			acceptsCompiledModule &&
+			!debugEnabled &&
+			sourceFiles.length === 0
+				? JSON.stringify([code, sourcePath, stdinInjection.stdinCacheKey])
+				: undefined;
+		const cachedEvaluation = evaluationKey ? evaluationArtifacts.get(evaluationKey) : undefined;
+		if (evaluationKey && cachedEvaluation) {
+			evaluationArtifacts.delete(evaluationKey);
+			evaluationArtifacts.set(evaluationKey, cachedEvaluation);
+			compiledCode = code;
+			compiledStdin = stdinInjection.stdinCacheKey;
+			compiledMainClass = cachedEvaluation.mainClass;
+			compiledExceptionFormatter = cachedEvaluation.formatter;
+			compiledWasm = cachedEvaluation.wasm;
+			compiledModule = cachedEvaluation.module;
+			compiledDiagnostics = cachedEvaluation.diagnostics;
+			compiledActivePath = sourcePath;
+			compiledWorkspaceFiles = [];
+			compiledDebugEnabled = false;
+			compiledDebugFiles = [];
+		}
 
 		if (
 			compiledCode !== code ||
 			compiledDebugEnabled !== debugEnabled ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
-			workspaceChanged ||
+			(!cachedEvaluation && workspaceChanged) ||
 			!compiledWasm
 		) {
 			// A failed rebuild must never leave a previous artifact eligible for reuse.
@@ -435,6 +477,32 @@ self.addEventListener('message', async (event) => {
 			compiledDebugEnabled = debugEnabled;
 			compiledDebugFiles = debugFiles;
 			compiledDiagnostics = diagnosticMessages;
+			if (evaluationKey && nextModule) {
+				// Bound source, diagnostic and Wasm input bytes, not engine compiled-code RSS.
+				const bytes =
+					nextWasm.byteLength +
+					evaluationKey.length * 2 +
+					JSON.stringify(diagnosticMessages).length * 2;
+				if (bytes <= MAX_EVALUATION_ARTIFACT_BYTES) {
+					while (
+						evaluationArtifacts.size >= MAX_EVALUATION_ARTIFACTS ||
+						evaluationArtifactBytes + bytes > MAX_EVALUATION_ARTIFACT_BYTES
+					) {
+						const oldest = evaluationArtifacts.keys().next().value!;
+						evaluationArtifactBytes -= evaluationArtifacts.get(oldest)!.bytes;
+						evaluationArtifacts.delete(oldest);
+					}
+					evaluationArtifacts.set(evaluationKey, {
+						wasm: nextWasm,
+						module: nextModule,
+						mainClass,
+						formatter: exceptionBridge.formatExport,
+						diagnostics: diagnosticMessages,
+						bytes
+					});
+					evaluationArtifactBytes += bytes;
+				}
+			}
 		} else {
 			// Every operation has its own diagnostic sink, even when compilation is reused.
 			for (const diagnostic of compiledDiagnostics) self.postMessage(diagnostic);
