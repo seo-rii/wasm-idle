@@ -296,9 +296,19 @@ change and restoration across tabs, and sibling deletion/recreation while
 This coverage is in
 [`monaco-lsp.playwright.test.ts`](../../src/routes/monaco-lsp.playwright.test.ts).
 
-The existing Java execution path separately passed all three selected stdin
-browser cases against that completed production build. The run took about
-38 seconds; the other 35 language cases were excluded by the Java name filter.
+After merging compiler-option support from main at `27996430`, a fresh
+production build passed all five Monaco Java tests under strict CSP with no
+skips, and Svelte checking reported zero errors and warnings. The focused
+editor/workspace/compiler-option unit run passed 292 tests and skipped one
+opt-in browser case. One route-compilation test exceeded its explicit 15-second
+timeout on the loaded shared machine. Its isolated semantic check passed in
+11.396 seconds with only that timeout raised to 60 seconds in memory; the
+original test bytes, assertions and repository timeout remain unchanged.
+
+The earlier Java execution acceptance run passed all three selected stdin
+browser cases. That production build preceded the compiler-option merge. The
+run took about 38 seconds; the other 35 language cases were excluded by the
+Java name filter.
 The JSON report verifies exactly these three passes and zero failures:
 
 | Java execution case             | Input    | Observed output | Case time |
@@ -401,6 +411,9 @@ distribution. The npm SDK remains code-only.
 All six fresh package-install scenarios pass, including the standalone
 container consumer's TypeScript check with Java runtime configuration and
 without installing `@wasm-idle/lsp`. Production install budgets are unchanged.
-After the diagnostic metadata change, the affected LSP and aggregate scenarios
-pass again at 5,418,922 bytes / 820 files / 9 packages and 41,808,289 bytes /
-3,313 files / 65 packages, respectively.
+After merging main's compiler-option support at `27996430`, all six scenarios
+pass again. The LSP and aggregate installs measure 5,422,320 bytes / 820 files /
+9 packages and 41,818,799 bytes / 3,313 files / 65 packages, respectively.
+All eleven tarballs pass the code-only checks, and the package verifier's
+36 unit tests pass. The Java aggregate budget remains 40 MiB / 3,350 files /
+70 packages, including the compiler-option changes.
