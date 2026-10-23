@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
 	argsHelpLanguages,
-	argsLabels,
 	compilerDiagnosticLanguages,
 	editorLanguages,
 	editorOnlyLanguages,
@@ -892,7 +891,7 @@ describe('example route debug actions', () => {
 	it('persists and forwards the selected C++ standard', () => {
 		expect(source).toMatch(/cppVersion = \$state<CppVersion>\('CPP20'\),/);
 		expect(source).toMatch(
-			/const knownCppVersions = \[\s*'CPP03',\s*'CPP11',\s*'CPP14',\s*'CPP17',\s*'CPP20',\s*'CPP23',\s*'CPP26'\s*\] as const;/s
+			/const knownCppVersions = \[\s*'CPP98',\s*'CPP03',\s*'CPP11',\s*'CPP14',\s*'CPP17',\s*'CPP20',\s*'CPP23',\s*'CPP26'\s*\] as const;/s
 		);
 		expect(source).toMatch(/CPP: \(\) => \(\{ cppVersion \}\)/);
 		expect(source).toMatch(/cppVersion,/);
@@ -1043,7 +1042,6 @@ describe('example route debug actions', () => {
 			'ZIG',
 			'LISP',
 			'RUBY',
-			'HASKELL',
 			'R',
 			'OCTAVE',
 			'PHP'
@@ -1272,7 +1270,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.hs': 'HASKELL'/);
 		expect(source).toMatch(/HASKELL: 'main\.hs'/);
 		expect(source).toMatch(/HASKELL: 'haskell'/);
-		expect(argsLabels.HASKELL).toBe('GHC Args');
+		expect(argsHelpLanguages.has('HASKELL')).toBe(false);
 		expect(source).toMatch(/<span>\{argsLabel\}<\/span>/);
 	});
 

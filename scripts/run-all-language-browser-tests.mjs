@@ -22,6 +22,7 @@ const COMPRESSED_ASSET_TEST_FILE =
 const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
 const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.test.ts';
 const LONG_DOUBLE_TEST_FILE = 'src/lib/playground/long-double.playwright.test.ts';
+const COMPILER_OPTIONS_TEST_FILE = 'src/routes/compiler-options.playwright.test.ts';
 const PYTHON_TEST_FILE = 'src/lib/playground/python.playwright.test.ts';
 const PYTHON_DEBUG_TEST_FILE = 'src/lib/playground/python-debug.playwright.test.ts';
 const PYTHON_PERFORMANCE_TEST_FILE = 'src/lib/playground/python-performance.playwright.test.ts';
@@ -63,6 +64,7 @@ const LLVM_BROWSER_TEST_ENVIRONMENTS = new Set([
 
 const BROWSER_TEST_ASSET_ENVIRONMENTS = {
 	clang: [
+		'WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS',
 		...LLVM_BROWSER_TEST_ENVIRONMENTS,
 		'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
 		'WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS',
@@ -194,11 +196,16 @@ export function createAllLanguageBrowserTestPlan({
 			},
 			clang: {
 				env: {
+					WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1'
 				},
-				testFiles: [CPP_STANDARDS_TEST_FILE, LONG_DOUBLE_TEST_FILE]
+				testFiles: [
+					CPP_STANDARDS_TEST_FILE,
+					LONG_DOUBLE_TEST_FILE,
+					COMPILER_OPTIONS_TEST_FILE
+				]
 			}
 		};
 		const additional = additionalCoverage[family];
@@ -232,6 +239,8 @@ export function createAllLanguageBrowserTestPlan({
 		testFiles.add(DEBUG_TEST_FILE);
 		testFiles.add(CPP_STANDARDS_TEST_FILE);
 		testFiles.add(LONG_DOUBLE_TEST_FILE);
+		testFiles.add(COMPILER_OPTIONS_TEST_FILE);
+		env.WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS = '1';
 		env.WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS = '1';
 		env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE = '1';
 		env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE = '1';

@@ -13,7 +13,7 @@ import type {
 	EditorLanguageServerRuntimeOptions
 } from '../types.js';
 import { createLanguageServerProgressReporter } from '../worker-client.js';
-import type { ClangdStatus } from './config.js';
+import type { ClangdCompileProfile, ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
 import { createClangdRequestPolicy, type ClangdRequestTrace } from './request-policy.js';
 import { ClangdWorkspaceFileRegistry } from './workspace.js';
@@ -26,7 +26,7 @@ export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntime
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	onStatus?: (status: ClangdStatus) => void;
-	compileProfile?: { cppVersion?: string; cVersion?: string };
+	compileProfile?: ClangdCompileProfile;
 	objectiveC?: {
 		baseUrl: string;
 		headersUrl: string;
@@ -173,6 +173,15 @@ async function createServer(
 	debug = false,
 	hostOptions?: ClangdLanguageServerOptions
 ) {
+	// Reactive framework values may be proxies, and callers can edit them while
+	// assets load. Snapshot only the public fields into cloneable worker data.
+	const profile = hostOptions?.compileProfile;
+	const compileProfile: ClangdCompileProfile | undefined = profile && {
+		cppVersion: profile.cppVersion,
+		cVersion: profile.cVersion,
+		sourceLanguage: profile.sourceLanguage,
+		compileArgs: profile.compileArgs ? [...profile.compileArgs] : undefined
+	};
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
 	let preloaded: Awaited<ReturnType<typeof preloadClangdAssets>>;
@@ -256,7 +265,7 @@ async function createServer(
 							type: 'init',
 							baseUrl: assetConfig.baseUrl,
 							...(debug ? { debug } : {}),
-							compileProfile: hostOptions?.compileProfile,
+							compileProfile,
 							assets: preloaded.assets
 						},
 						preloaded.transfer

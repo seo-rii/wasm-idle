@@ -63,6 +63,17 @@
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
+	import CompilerOptions from './CompilerOptions.svelte';
+	import {
+		clangCompilerLanguages,
+		compilerArgumentConfig,
+		defaultCompilerSettings,
+		resolveClangdCompilerArguments,
+		resolveCompilerArguments,
+		resolveCompilerSourceLanguage,
+		restoreCompilerOptions,
+		type CompilerOptionsByLanguage
+	} from './compilerOptions';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
 	import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
 	import {
@@ -114,6 +125,7 @@
 		openTabs: string[];
 	};
 	const knownCppVersions = [
+		'CPP98',
 		'CPP03',
 		'CPP11',
 		'CPP14',
@@ -124,6 +136,7 @@
 	] as const;
 	type CppVersion = (typeof knownCppVersions)[number];
 	const cppVersionLabels: Record<CppVersion, string> = {
+		CPP98: 'C++98',
 		CPP03: 'C++03',
 		CPP11: 'C++11',
 		CPP14: 'C++14',
@@ -136,6 +149,7 @@
 	type WorkspaceSnapshot = {
 		activePath: string;
 		argsInput: string;
+		compilerOptions: CompilerOptionsByLanguage;
 		cppVersion: CppVersion;
 		files: WorkspaceFile[];
 		goTarget: GoTarget;
@@ -253,6 +267,7 @@
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
 		clangdRequested = $state(false),
 		argsInput = $state(''),
+		compilerOptions = $state<CompilerOptionsByLanguage>({}),
 		cppVersion = $state<CppVersion>('CPP20'),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		rustOptimizationProfile = $state<RustOptimizationProfile>('interactive'),
@@ -387,9 +402,47 @@
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
 		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
 	};
-	const languageExecutionOptions = $derived.by<Partial<SandboxExecutionOptions>>(
-		() => executionOptionResolvers[language]?.() ?? {}
-	);
+	const currentCompilerSettings = $derived(compilerOptions[language] ?? defaultCompilerSettings);
+	const compilerSourceLanguage = $derived(resolveCompilerSourceLanguage(language, activePath));
+	const parsedCompilerArgs = $derived.by(() => {
+		try {
+			return {
+				args: resolveCompilerArguments(
+					language,
+					currentCompilerSettings,
+					cppVersion,
+					activePath
+				),
+				error: null
+			};
+		} catch (error) {
+			return { args: null, error: error instanceof Error ? error.message : String(error) };
+		}
+	});
+	const clangdCompilerArgs = $derived.by(() => {
+		try {
+			return resolveClangdCompilerArguments(
+				language,
+				currentCompilerSettings,
+				cppVersion,
+				activePath
+			);
+		} catch {
+			return [];
+		}
+	});
+	const languageExecutionOptions = $derived.by<Partial<SandboxExecutionOptions>>(() => ({
+		...executionOptionResolvers[compilerSourceLanguage]?.(),
+		...(compilerArgumentConfig[language] ? { compileArgs: parsedCompilerArgs.args ?? [] } : {}),
+		...(language === 'C' ? { cVersion: currentCompilerSettings.cVersion } : {}),
+		...(language === 'OBJC' || language === 'OBJECTIVECXX'
+			? {
+					cVersion: currentCompilerSettings.cVersion,
+					cppVersion,
+					objectivecGnuExtensions: currentCompilerSettings.gnuExtensions
+				}
+			: {})
+	}));
 	const editorLanguage = $derived(editorLanguages[language]);
 	const executionAvailable = $derived(!editorOnlyLanguages.has(language));
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
@@ -1631,6 +1684,9 @@
 		return {
 			activePath,
 			argsInput,
+			compilerOptions: Object.fromEntries(
+				Object.entries(compilerOptions).map(([key, value]) => [key, { ...value }])
+			),
 			cppVersion,
 			files: files.map((file) => ({ ...file })),
 			goTarget,
@@ -1680,7 +1736,13 @@
 		languageWorkspaces = nextWorkspaces;
 		language = nextLanguage;
 		activateWorkspace(nextWorkspaces[nextLanguage]);
-		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
+		const restoredCompilerOptions = restoreCompilerOptions(
+			value.compilerOptions,
+			nextLanguage,
+			typeof value.argsInput === 'string' ? value.argsInput : ''
+		);
+		compilerOptions = restoredCompilerOptions.compilerOptions;
+		argsInput = restoredCompilerOptions.argsInput;
 		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
 			cppVersion = value?.cppVersion as CppVersion;
 		if (typeof value?.log === 'boolean') log = value.log;
@@ -2578,8 +2640,9 @@
 	}
 
 	function exec(enableDebug = false): Promise<void> {
-		const args = parsedArgs.args;
+		const args = argsHelpLanguages.has(language) ? parsedArgs.args : [];
 		if (!args) return Promise.resolve();
+		if (compilerArgumentConfig[language] && !parsedCompilerArgs.args) return Promise.resolve();
 		if (!editor || !terminal || !activeFile) return Promise.resolve();
 		if (!executionAvailable) return Promise.resolve();
 		if (enableDebug && !debugLanguage) return Promise.resolve();
@@ -2624,6 +2687,12 @@
 				path: file.path,
 				content: file.path === runActivePath ? codeToRun : file.content
 			}));
+			const runLanguageOptions = {
+				...languageExecutionOptions,
+				...(languageExecutionOptions.compileArgs
+					? { compileArgs: [...languageExecutionOptions.compileArgs] }
+					: {})
+			};
 			if (browser) {
 				saveWorkspace();
 				try {
@@ -2724,7 +2793,9 @@
 						activePath: runActivePath,
 						workspaceFiles: runWorkspaceFiles,
 						pauseOnEntry: enableDebug,
-						...languageExecutionOptions,
+						...runLanguageOptions,
+						...(clangCompilerLanguages.has(language) ? { programArgs: args } : {}),
+						...(language === 'HASKELL' ? { programArgs: [] } : {}),
 						signal: abortController.signal,
 						stdin: preloadedStdin
 					}
@@ -3148,7 +3219,11 @@
 					ocamlWasmBinaryenMode: restoredBinaryenMode
 				} = initialSelection.overrides;
 				if (code !== null && activeFile) activeFile.content = code;
-				if (restoredArgs !== null) argsInput = restoredArgs;
+				if (restoredArgs !== null) {
+					const restored = restoreCompilerOptions(undefined, language, restoredArgs);
+					compilerOptions = restored.compilerOptions;
+					argsInput = restored.argsInput;
+				}
 				if (
 					restoredRustTarget === 'wasm32-wasip1' ||
 					restoredRustTarget === 'wasm32-wasip2' ||
@@ -4253,7 +4328,7 @@
 						<span role="alert">{parsedArgs.error}</span>
 					{/if}
 				{/if}
-				{#if language === 'CPP'}
+				{#if compilerSourceLanguage === 'CPP' || compilerSourceLanguage === 'OBJECTIVECXX'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined" aria-hidden="true">tune</span>
 						<span class="visually-hidden">C++ standard</span>
@@ -4445,16 +4520,27 @@
 			</div>
 		</div>
 	</header>
-	{#if unrestoredWorkspace !== null}
-		<div class="workspace-save-error" role="alert" data-workspace-recovery>
-			<span>
-				Stored workspace could not be restored. The original snapshot is kept; automatic
-				saving is paused.
-			</span>
-			<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
-			<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
-		</div>
-	{/if}
+	<div class="workspace-configuration">
+		{#if compilerArgumentConfig[language]}
+			<CompilerOptions
+				language={compilerSourceLanguage}
+				settings={currentCompilerSettings}
+				error={parsedCompilerArgs.error}
+				onchange={(settings) =>
+					(compilerOptions = { ...compilerOptions, [language]: settings })}
+			/>
+		{/if}
+		{#if unrestoredWorkspace !== null}
+			<div class="workspace-save-error" role="alert" data-workspace-recovery>
+				<span>
+					Stored workspace could not be restored. The original snapshot is kept; automatic
+					saving is paused.
+				</span>
+				<button onclick={downloadUnrestoredWorkspace}>Download original snapshot</button>
+				<button onclick={startNewWorkspaceAfterRecovery}>Start new workspace</button>
+			</div>
+		{/if}
+	</div>
 	{#if manualShareUrl}
 		<div class="workspace-share">
 			<label class="args-chip">
@@ -4638,6 +4724,14 @@
 							clangdRuntimeAssets={runtimeAssets}
 							clangdCppVersion={cppVersion}
 							clangdCVersion={languageExecutionOptions.cVersion}
+							clangdCompileArgs={clangdCompilerArgs}
+							clangdSourceLanguage={compilerSourceLanguage === 'C'
+								? 'C'
+								: compilerSourceLanguage === 'OBJC'
+									? 'OBJC'
+									: compilerSourceLanguage === 'OBJECTIVECXX'
+										? 'OBJCXX'
+										: 'CPP'}
 							{dotnetLspEnabled}
 							{dotnetLspModuleUrl}
 							{elixirLspEnabled}
@@ -6170,8 +6264,11 @@
 		width: 100%;
 	}
 
-	.ide > .workspace-save-error {
+	.workspace-configuration {
 		grid-row: 2;
+		min-width: 0;
+		max-height: 40dvh;
+		overflow: auto;
 	}
 
 	.workspace-save-error {

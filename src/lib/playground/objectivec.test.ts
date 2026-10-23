@@ -212,4 +212,27 @@ describe('Objective-C sandbox debugging', () => {
 
 		expect(workerInstances[0].postMessage.mock.calls[1]?.[0]?.activePath).toBeUndefined();
 	});
+
+	it('forwards per-language standards and the Objective-C dialect separately from flags and argv', async () => {
+		const sandbox = new ObjectiveC();
+		await sandbox.load('/');
+		await expect(
+			sandbox.run('int main() {}', false, false, undefined, [], {
+				activePath: 'main.mm',
+				cVersion: 'C99',
+				cppVersion: 'CPP17',
+				objectivecGnuExtensions: false,
+				compileArgs: ['-Wall'],
+				programArgs: ['two words']
+			})
+		).resolves.toBe(true);
+		expect(workerInstances[0].postMessage.mock.calls[1]?.[0]).toMatchObject({
+			activePath: 'main.mm',
+			cVersion: 'C99',
+			cppVersion: 'CPP17',
+			gnuExtensions: false,
+			compileArgs: ['-Wall'],
+			programArgs: ['two words']
+		});
+	});
 });

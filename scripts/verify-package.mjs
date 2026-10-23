@@ -203,9 +203,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes the public container, reviewed LSP providers and Java's XML adapter.
-		// Measured 41,801,934 bytes / 3,307 files / 65 packages; 141,106 bytes headroom.
-		// Root, container, terminal, debug and aggregate package-count limits stay unchanged.
+		// Includes compiler options, the public container, reviewed LSP providers and Java's XML adapter.
+		// The Java aggregate limit also covers the reviewed compiler-option API growth.
+		// Separate plugin budgets and the production-package limit stay unchanged.
 		budget: { maxBytes: 40 * MiB, maxFiles: 3_350, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",

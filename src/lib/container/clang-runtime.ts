@@ -10,6 +10,10 @@ import {
 	type SandboxExecutionOptions
 } from '../playground/options.js';
 import type { ProgressLike } from '@wasm-idle/core';
+import {
+	CLANG_WASI_DRIVER_TARGET,
+	resolveClangLanguageArgs
+} from '@wasm-idle/llvm-core/core/clang-profile';
 import type { ContainerWorkerEvent } from './protocol.js';
 import type { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 
@@ -322,17 +326,74 @@ export class ContainerClangRuntime {
 			} catch {
 				/* No previous output. */
 			}
-			const standard =
-				language === 'CPP'
-					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
-					: options.cVersion?.toLowerCase();
+			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(input.options.activePath ?? '');
+			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
+			let sourceLanguage: 'C' | 'CPP' | undefined = filenameLanguage;
+			for (let index = 0; index < compileArgs.length; index++) {
+				const argument = compileArgs[index];
+				// Paths and forwarded arguments can themselves start with -x or @.
+				if (
+					[
+						'-I',
+						'-isystem',
+						'-iquote',
+						'-idirafter',
+						'-include',
+						'-include-pch',
+						'-imacros',
+						'-isysroot',
+						'--sysroot',
+						'-resource-dir',
+						'-D',
+						'-U',
+						'-o',
+						'-L',
+						'-l',
+						'-B',
+						'-target',
+						'--target',
+						'-Xclang',
+						'-Xpreprocessor',
+						'-Xassembler',
+						'-Xlinker',
+						'-mllvm',
+						'-MF',
+						'-MT',
+						'-MQ'
+					].includes(argument)
+				) {
+					index++;
+					continue;
+				}
+				if (argument.startsWith('@')) sourceLanguage = undefined;
+				else if (argument.startsWith('-x')) {
+					const value = argument === '-x' ? compileArgs[++index] : argument.slice(2);
+					if (value === 'none') sourceLanguage = filenameLanguage;
+					else if (value === 'c' || value === 'c-header' || value === 'cpp-output')
+						sourceLanguage = 'C';
+					else if (
+						value === 'c++' ||
+						value === 'c++-header' ||
+						value === 'c++-cpp-output'
+					)
+						sourceLanguage = 'CPP';
+					else sourceLanguage = undefined;
+				}
+			}
+			// Opaque response files choose their own source mode and standard.
+			const standard = sourceLanguage
+				? resolveClangLanguageArgs(sourceLanguage, options).standardArg.slice(
+						'-std='.length
+					)
+				: undefined;
 			// An opaque response file or -x override can select C++ for a C editor.
 			// Keep its default source mode C while enabling the C++ driver's link libraries.
 			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
 			const common = [
 				...sysrootArgs,
-				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
-				...(language === 'C' && override ? ['-x', 'c'] : []),
+				`--target=${CLANG_WASI_DRIVER_TARGET}`,
+				...(sourceLanguage !== 'C' ? ['--driver-mode=g++'] : []),
+				...(language === 'C' && override && !filenameCpp ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
 				'-fcolor-diagnostics',
 				'-fno-exceptions',

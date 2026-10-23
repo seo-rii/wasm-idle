@@ -104,12 +104,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'C',
 		editorLanguage: 'c',
 		lspProvider: 'clangd',
+		supportsArgs: true,
 		diagnosticMarkers: true
 	},
 	CPP: {
 		label: 'C++',
 		editorLanguage: 'cpp',
 		lspProvider: 'clangd',
+		supportsArgs: true,
 		diagnosticMarkers: true
 	},
 	OBJC: {
@@ -382,8 +384,6 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'Haskell',
 		editorLanguage: 'haskell',
 		runtimeLspCapability: 'haskell',
-		supportsArgs: true,
-		argsLabel: 'GHC Args',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
