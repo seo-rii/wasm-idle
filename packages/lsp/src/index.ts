@@ -429,3 +429,10 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+export {
+	getForthLanguageServer,
+	type ForthLanguageServerOptions,
+	FORTH_LSP_VERSION,
+	FORTH_LSP_WASM_ASSET,
+	FORTH_LSP_WASM_RECEIPT
+} from './forth/index.js';

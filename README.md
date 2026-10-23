@@ -101,7 +101,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Tcl            | Wacl Tcl WASM worker                         | Yes   | syntax               | -     |
 | AWK            | GoAWK WASM worker                            | Yes   | syntax               | -     |
 | Pascal         | pas2js worker                                | Yes   | syntax               | -     |
-| Forth          | WAForth WASM worker                          | Yes   | syntax               | -     |
+| Forth          | WAForth WASM worker                          | Yes   | forth-lsp            | -     |
 | J              | J playground WASM worker                     | Yes   | syntax               | -     |
 | BQN            | CBQN WASM worker                             | Yes   | syntax               | -     |
 | Janet          | Janet VM WASM worker                         | Yes   | syntax               | -     |

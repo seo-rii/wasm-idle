@@ -586,7 +586,7 @@ export const supportMatrixRows = [
 		ids: ['FORTH'],
 		runtime: 'WAForth WASM worker',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'forth-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',

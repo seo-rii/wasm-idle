@@ -1,0 +1,18 @@
+{
+	"version": "0.9.0",
+	"commit": "cbb3df83efd683d2c40693731c23e27efb05f451",
+	"sourceUrl": "https://github.com/alexanderbrevig/forth-lsp/tree/cbb3df83efd683d2c40693731c23e27efb05f451",
+	"archive": {
+		"url": "https://codeload.github.com/alexanderbrevig/forth-lsp/tar.gz/cbb3df83efd683d2c40693731c23e27efb05f451",
+		"bytes": 85036,
+		"sha256": "92922eb6cc95d0ac335b96cc95afa976c61a7deeb9c1de24f80280b453a84cea"
+	},
+	"cargoLockSha256": "b0985f3cb3c34ad9efb2f3ac21b3f1af5f3de06abcf041b3bf606ae1dc2b838a",
+	"patchSha256": "9b7da798ee9bb30aeda41c14d976dbd7174ed8714745624b30a107b60f03c7a3",
+	"rustVersion": "1.94.0",
+	"target": "wasm32-wasip1",
+	"wasm": {
+		"bytes": 1143181,
+		"sha256": "56ba115989549564a1642ccc0540f362cd54af90480b714507c11c94cea90e42"
+	}
+}

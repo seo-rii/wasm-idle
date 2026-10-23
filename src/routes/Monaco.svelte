@@ -2321,6 +2321,7 @@
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let forthLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2377,6 +2378,8 @@
 		erlangLspWorkerUrl?: string;
 		erlangLspIntegrity?: ElixirRuntimeAssetReceipts;
 		gleamLspEnabled?: boolean;
+		forthLspEnabled?: boolean;
+		forthLspWasmUrl?: string;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
 		gleamLspManifestFingerprint?: string;
@@ -2474,6 +2477,8 @@
 		erlangLspWorkerUrl,
 		erlangLspIntegrity = WASM_ELIXIR_ASSET_RECEIPTS,
 		gleamLspEnabled = false,
+		forthLspEnabled = false,
+		forthLspWasmUrl,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
 		gleamLspManifestFingerprint,
@@ -2644,6 +2649,7 @@
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			erlangLspEnabled ? JSON.stringify(erlangLspIntegrity) : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
+			forthLspEnabled ? forthLspWasmUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
@@ -2734,6 +2740,10 @@
 			case 'gleam':
 				label = 'Gleam LSP';
 				status = gleamLspStatus;
+				break;
+			case 'forth':
+				label = 'Forth LSP';
+				status = forthLspStatus;
 				break;
 			case 'd':
 				label = 'D LSP';
@@ -2910,6 +2920,20 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['forth'],
+			isEnabled: () => forthLspEnabled && !!forthLspWasmUrl,
+			setStatus: (status) => (forthLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getForthLanguageServer } = await import('@wasm-idle/lsp/forth');
+				return await getForthLanguageServer({
+					currentUrl,
+					signal,
+					forth: { wasmUrl: forthLspWasmUrl },
+					onStatus: (status) => (forthLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3598,6 +3622,7 @@
 			elixir: elixirLspStatus,
 			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
+			forth: forthLspStatus,
 			d: dLspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,

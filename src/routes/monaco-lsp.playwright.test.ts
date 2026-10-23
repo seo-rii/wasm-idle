@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -113,6 +116,14 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 ]);
 
 const lspBrowserCases: LspBrowserCase[] = [
+	{
+		language: 'FORTH',
+		label: 'Forth',
+		fileName: 'main.fth',
+		source: ': square ( n -- n ) dup * ;\n5 not-defined . cr\n',
+		expectedResponses: ['/wasm-forth-lsp/forth_lsp.wasm'],
+		assertNoPreEnableRequests: ['/wasm-forth-lsp/']
+	},
 	{
 		language: 'CPP',
 		label: 'C++',
@@ -519,7 +530,17 @@ const lspBrowserCases: LspBrowserCase[] = [
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
-	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
+	'runtime-small': [
+		'FORTH',
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'GO',
+		'GLEAM',
+		'PASCAL',
+		'LUA',
+		'PROLOG',
+		'RUBY'
+	],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
 		'OBJC',
@@ -558,7 +579,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:forth-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1474,6 +1495,12 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FORTH')
+				) {
+					await runBrowserPreparationScripts(['sync:forth-lsp']);
+				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

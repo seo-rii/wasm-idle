@@ -391,6 +391,10 @@
 		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
 	);
 	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
+	const forthLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'forth');
+	const forthLspWasmUrl = $derived(
+		forthLspEnabled ? resolveApplicationAsset('wasm-forth-lsp/forth_lsp.wasm') : undefined
+	);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -4167,6 +4171,8 @@
 							erlangLspWorkerUrl={beamLspWorkerUrl}
 							{erlangLspIntegrity}
 							{gleamLspEnabled}
+							{forthLspEnabled}
+							{forthLspWasmUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}

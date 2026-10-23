@@ -5,6 +5,11 @@
 	"license": "MIT",
 	"type": "module",
 	"exports": {
+		"./forth": {
+			"types": "./dist/forth/index.d.ts",
+			"import": "./dist/forth/index.js",
+			"default": "./dist/forth/index.js"
+		},
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
