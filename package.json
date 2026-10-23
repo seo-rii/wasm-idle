@@ -81,6 +81,7 @@
 		"sync:runtimes": "node scripts/sync-runtime.mjs all",
 		"sync:wasm-php": "node scripts/sync-wasm-php.mjs",
 		"sync:bash-lsp": "node scripts/sync-bash-lsp.mjs",
+		"test:lsp:assets:bash": "pnpm run sync:bash-lsp && WASM_IDLE_RUN_BASH_LSP_ASSET_BUILD=1 node --test scripts/sync-bash-lsp.test.mjs",
 		"test:lsp:browser:bash": "pnpm run sync:bash-lsp && WASM_IDLE_RUN_BASH_LSP_BROWSER=1 pnpm --dir packages/lsp exec vitest run test/bash.playwright.test.ts --pool threads --maxWorkers 1 --no-file-parallelism",
 		"verify:wasm-php": "node scripts/verify-wasm-php-assets.mjs",
 		"sync:wasm-clang": "node scripts/sync-wasm-clang.mjs",

@@ -32,8 +32,12 @@ executable discovery sees an empty `/bin`, so executable-specific metadata is un
 ```sh
 pnpm run sync:bash-lsp
 pnpm run test:lsp:browser:bash
-node --test scripts/sync-bash-lsp.test.mjs
+pnpm run test:lsp:assets:bash
 ```
+
+The dedicated asset test installs the frozen producer before its real build comparison. The
+general Node test suite skips this build unless `WASM_IDLE_RUN_BASH_LSP_ASSET_BUILD=1` is set,
+so it does not require isolated producer dependencies after a root-only workspace install.
 
 The isolated producer in `producers/bash-language-server` pins all npm dependency versions and
 integrities in its own lockfile. `scripts/bash-lsp-assets.lock.json` additionally verifies the

@@ -90,7 +90,8 @@ UTF-8 workspace text files, with paths relative to `/workspace`; recreate the se
 closed files. Open documents are synchronized through the original LSP document manager.
 
 Run `pnpm run sync:bash-lsp` to reproduce the external bundle from the frozen, isolated producer
-lockfile. Deploy the whole `static/wasm-bash-lsp/` directory together, including all three Wasm
+lockfile. `pnpm run test:lsp:assets:bash` prepares that producer and checks reproducibility.
+Deploy the whole `static/wasm-bash-lsp/` directory together, including all three Wasm
 binaries and `THIRD_PARTY_NOTICES.txt`. These assets are excluded from Git and the SDK tarball.
 
 Completion, hover, definitions, references, rename, document/workspace symbols and unresolved
