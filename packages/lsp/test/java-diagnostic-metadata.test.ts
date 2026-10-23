@@ -29,6 +29,13 @@ const withoutDiagnostics = (message = request()) => ({
 	...message,
 	params: { ...message.params, context: { ...message.params.context, diagnostics: [] } }
 });
+const equivalentUris = [
+	['file:///workspace/Foo$Bar.java', 'file:///workspace/Foo%24Bar.java'],
+	[
+		'file:///workspace/build;generated/Foo$Bar.java',
+		'file:///workspace/build%3bgenerated/%46oo%24Bar.java'
+	]
+];
 
 describe('Java code-action diagnostic metadata', () => {
 	it('restores the exact original diagnostic without changing the request or published objects', () => {
@@ -39,6 +46,79 @@ describe('Java code-action diagnostic metadata', () => {
 		expect(metadata.prepare(input)).toEqual(request(original));
 		expect(input).toEqual(request(omitted));
 		expect(output).toEqual(published());
+	});
+
+	it.each(equivalentUris)(
+		'restores metadata across equivalent URI encodings in both directions: %s, %s',
+		(left, right) => {
+			for (const [publishedUri, requestedUri] of [
+				[left, right],
+				[right, left]
+			]) {
+				const metadata = new JavaDiagnosticMetadata();
+				const output = published([original], publishedUri);
+				const input = request(omitted, requestedUri);
+				metadata.observe(output);
+				expect(metadata.prepare(input)).toEqual(request(original, requestedUri));
+				expect(input).toEqual(request(omitted, requestedUri));
+				expect(output).toEqual(published([original], publishedUri));
+			}
+		}
+	);
+
+	it.each(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose'])(
+		'invalidates equivalent URI encodings after %s in both directions',
+		(method) => {
+			for (const [left, right] of equivalentUris) {
+				for (const [publishedUri, changedUri] of [
+					[left, right],
+					[right, left]
+				]) {
+					const metadata = new JavaDiagnosticMetadata();
+					metadata.observe(published([original], publishedUri));
+					const event = { method, params: { textDocument: { uri: changedUri } } };
+					expect(metadata.prepare(event)).toBe(event);
+					for (const targetUri of [publishedUri, changedUri]) {
+						const input = request(omitted, targetUri);
+						expect(metadata.prepare(input)).toEqual(withoutDiagnostics(input));
+					}
+					metadata.observe(published([original], changedUri));
+					expect(metadata.prepare(request(omitted, publishedUri))).toEqual(
+						request(original, publishedUri)
+					);
+				}
+			}
+		}
+	);
+
+	it.each(equivalentUris)(
+		'replaces and clears diagnostics across equivalent URI encodings: %s, %s',
+		(left, right) => {
+			for (const [publishedUri, nextUri] of [
+				[left, right],
+				[right, left]
+			]) {
+				const metadata = new JavaDiagnosticMetadata();
+				metadata.observe(published([original], publishedUri));
+				const replacement = { ...original, code: 'new-code' };
+				metadata.observe(published([replacement], nextUri));
+				expect(metadata.prepare(request(omitted, publishedUri))).toEqual(
+					request(replacement, publishedUri)
+				);
+				metadata.observe(published([], publishedUri));
+				for (const targetUri of [publishedUri, nextUri]) {
+					const input = request(omitted, targetUri);
+					expect(metadata.prepare(input)).toEqual(withoutDiagnostics(input));
+				}
+			}
+		}
+	);
+
+	it('does not merge case-distinct physical files when URI encodings differ', () => {
+		const metadata = new JavaDiagnosticMetadata();
+		metadata.observe(published([original], 'file:///workspace/Foo$Bar.java'));
+		const input = request(omitted, 'file:///workspace/foo%24bar.java');
+		expect(metadata.prepare(input)).toEqual(withoutDiagnostics(input));
 	});
 
 	it('preserves explicitly supplied client metadata, including a different code and null source', () => {

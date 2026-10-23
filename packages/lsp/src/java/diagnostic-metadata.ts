@@ -1,3 +1,5 @@
+import { normalizeJavaFileUri } from './source-uri.js';
+
 type JsonObject = Record<string, unknown>;
 
 function object(value: unknown): value is JsonObject {
@@ -40,12 +42,11 @@ export class JavaDiagnosticMetadata {
 			!Array.isArray(message.params.diagnostics)
 		)
 			return;
-		if (message.params.diagnostics.length === 0) this.published.delete(message.params.uri);
-		else
-			this.published.set(
-				message.params.uri,
-				structuredClone(message.params.diagnostics.filter(object))
-			);
+		// Path.toUri preserves characters such as '$' that editor URIs percent-encode.
+		// Key the physical file consistently without rewriting either JSON-RPC message.
+		const uri = normalizeJavaFileUri(message.params.uri).uri;
+		if (message.params.diagnostics.length === 0) this.published.delete(uri);
+		else this.published.set(uri, structuredClone(message.params.diagnostics.filter(object)));
 	}
 
 	prepare(message: unknown): unknown {
@@ -58,7 +59,7 @@ export class JavaDiagnosticMetadata {
 				String(message.method)
 			)
 		) {
-			this.published.delete(document.uri);
+			this.published.delete(normalizeJavaFileUri(document.uri).uri);
 			return message;
 		}
 		if (
@@ -67,7 +68,7 @@ export class JavaDiagnosticMetadata {
 			!Array.isArray(params.context.diagnostics)
 		)
 			return message;
-		const originals = this.published.get(document.uri) || [];
+		const originals = this.published.get(normalizeJavaFileUri(document.uri).uri) || [];
 		return {
 			...message,
 			params: {

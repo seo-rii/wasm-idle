@@ -148,6 +148,9 @@ Monaco's marker conversion omits diagnostic metadata in code-action requests.
 The Worker retains the original published diagnostics and restores missing
 fields only for matching document, range, message and severity. Explicit client
 fields are preserved, and document changes invalidate old diagnostic snapshots.
+Cache keys normalize equivalent URI encodings without folding filename case:
+the native `Foo$Bar.java` URI and an editor's `Foo%24Bar.java` URI identify the
+same diagnostic snapshot. Original JSON-RPC messages retain their URI spelling.
 Diagnostics without a code that no longer match a current published diagnostic
 are excluded from the request context. This handles stale markers sent during
 rapid typing without guessing their old codes. The request range and other
@@ -275,7 +278,7 @@ replies, receipts, timings and lifecycle evidence to
 is preserved as
 `browser-evidence-stale-diagnostics-20261023T145436Z.json` in the same
 directory. The focused source snapshot, dynamic URI and diagnostic metadata unit
-tests pass 80 cases, including 23 metadata restoration and invalidation cases.
+tests pass 88 cases, including 31 metadata restoration and invalidation cases.
 
 Native platform controls additionally pass 30 path/URI, directory and
 stream-transfer checks against JDK APIs. The bounded source-I/O comparison passes

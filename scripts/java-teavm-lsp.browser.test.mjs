@@ -180,6 +180,55 @@ async function exerciseJavaUriBoundaries(client, snapshot, metadataFixture) {
 	}
 	const clearedCodeActions = await codeAction({ range, message, severity });
 	assert.deepEqual(clearedCodeActions, []);
+
+	// Java Path.toUri keeps '$', while the worker's canonical editor URI escapes it.
+	// Exercise the actual compiler publication and original import handler across both spellings.
+	const dollarUri = 'file:///workspace/src/Foo$Bar.java';
+	const encodedDollarUri = 'file:///workspace/src/Foo%24Bar.java';
+	const dollarCursor = client.notifications.length;
+	await open(encodedDollarUri, metadataFixture.source.replace('class Main', 'class Foo$Bar'));
+	const dollarDeadline = Date.now() + 10000;
+	let dollarDiagnostic;
+	while (!dollarDiagnostic) {
+		dollarDiagnostic = client.notifications
+			.slice(dollarCursor)
+			.filter(
+				(notification) =>
+					notification.method === 'textDocument/publishDiagnostics' &&
+					notification.params.uri === dollarUri
+			)
+			.flatMap((notification) => notification.params.diagnostics)
+			.find((diagnostic) => diagnostic.code === metadataFixture.diagnostic.code);
+		if (Date.now() > dollarDeadline)
+			throw new Error('Missing original Java UUID diagnostic for a dollar filename');
+		if (!dollarDiagnostic) await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+	const dollarCodeAction = (diagnostic, targetUri = encodedDollarUri) =>
+		client.request('textDocument/codeAction', {
+			textDocument: { uri: targetUri },
+			range: diagnostic.range,
+			context: { diagnostics: [diagnostic] }
+		});
+	const dollarOriginalCodeActions = await dollarCodeAction(dollarDiagnostic);
+	const dollarImport = dollarOriginalCodeActions.find(
+		(action) => action.title === "Import 'java.util.UUID'"
+	);
+	assert.deepEqual(
+		dollarImport?.edit.changes[dollarUri],
+		metadataFixture.codeActions[0].edit.changes[uri],
+		'the original handler must keep its native UUID import edit for the dollar filename'
+	);
+	const dollarMarker = {
+		range: dollarDiagnostic.range,
+		message: dollarDiagnostic.message,
+		severity: dollarDiagnostic.severity
+	};
+	const dollarMonacoCodeActions = await dollarCodeAction(dollarMarker);
+	assert.deepEqual(dollarMonacoCodeActions, dollarOriginalCodeActions);
+	assert.deepEqual(await dollarCodeAction(dollarMarker, dollarUri), dollarOriginalCodeActions);
+	await client.notify('textDocument/didClose', { textDocument: { uri: encodedDollarUri } });
+	const dollarClosedCodeActions = await dollarCodeAction(dollarMarker);
+	assert.deepEqual(dollarClosedCodeActions, []);
 	await client.request('shutdown', null);
 	await client.notify('exit', null);
 	return {
@@ -194,7 +243,15 @@ async function exerciseJavaUriBoundaries(client, snapshot, metadataFixture) {
 		monacoCodeActions,
 		explicitCodeActions,
 		staleCodeActions,
-		clearedCodeActions
+		clearedCodeActions,
+		dollarUriDiagnostics: {
+			publishedUri: dollarUri,
+			requestedUri: encodedDollarUri,
+			diagnostic: dollarDiagnostic,
+			originalCodeActions: dollarOriginalCodeActions,
+			monacoCodeActions: dollarMonacoCodeActions,
+			closedCodeActions: dollarClosedCodeActions
+		}
 	};
 }
 
