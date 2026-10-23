@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { snapshotContainerArguments } from './protocol';
+import { snapshotContainerArguments } from './protocol.js';
 describe('container call snapshot', () => {
 	it('uses cancellation messages while retaining a process env variable named signal', () => {
 		const signal = new AbortController().signal;

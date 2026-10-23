@@ -263,6 +263,7 @@ export class TraceDebugAdapter implements DebugAdapter {
 	}
 
 	handleEvent(event: DebugSessionEvent) {
+		if (event.type === 'pauseDetails') return;
 		if (event.type === 'pause') {
 			this.#active = true;
 			this.#populatePauseState(event);

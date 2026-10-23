@@ -1,0 +1,240 @@
+{
+	"chromium": "153.0.8010.12",
+	"crossOriginIsolated": true,
+	"violations": [],
+	"immutableModuleReuse": {
+		"lldb": true,
+		"target": true
+	},
+	"timingInterpretation": "Exploratory sequential samples in one Chromium context; engine warmup is not isolated.",
+	"freshWorkers": 8,
+	"freshQueues": 8,
+	"manifestReceipt": {
+		"sha256": "2aea44a9820f5204438b5dd72d586588448b1b81a1597521ed076a71f3deb529",
+		"bytes": 3007
+	},
+	"runtimeAssets": {
+		"protocolVersion": 1,
+		"transport": "shared-ring-v1",
+		"lldb": {
+			"js": "debug/lldb-web-dap.js",
+			"wasm": "debug/lldb-web-dap.wasm",
+			"worker": "debug/lldb-web-dap.pthread.mjs",
+			"jsSha256": "a1500477e01c8071c5fbf2e1b720af8d5d5172c501eb1c9f59881505f53036d0",
+			"wasmSha256": "7a8942ab101dfb1cba1acdd055828ec6049974627e00addf4583df1434f149ec",
+			"workerSha256": "d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d",
+			"llvmVersion": "22.1.8",
+			"llvmRevision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+			"patchesSha256": "5812710a11b6d9a83b30981753123f9de0b0931a1c13eda07d20f4a4556c081f",
+			"sourcesLockSha256": "1e36651feb328680d3ab72e41881e90c619622cb9354cd030b43ce7c68c1112e",
+			"moduleInstantiation": "emscripten-instantiate-wasm-v1"
+		},
+		"targetRuntime": {
+			"name": "wamr",
+			"js": "debug/wamr-debug.js",
+			"wasm": "debug/wamr-debug.wasm",
+			"worker": "debug/wamr-debug.worker.mjs",
+			"jsSha256": "b0b55a0f63d0fc8ed620bd1a348531cabf35816b8dc465ee882da9fc5684a5a2",
+			"wasmSha256": "35e53c222ec5cde0935d48bdd5fd1897de91622619f78e9b939170e67792b95b",
+			"workerSha256": "7a42988a701fca14caacfbca44611e3809297ea58f946c64d05254ea9908ec82",
+			"revision": "25bd7eb63e828e4bd242cc9b38d260b4b31c6605",
+			"provenance": {
+				"sourcesLockSha256": "18f924fa418c7dccb0c557c1310ae877f5e5ab41ce34256230565879fe1f2727",
+				"producerManifestSha256": "6c34e6544d28e5b235c81320147751e687b9c73c24afd2f03995608f52e8d2e6",
+				"patchesSha256": "6c6bcf6037fc33378ea290a6a263fb60eaaf5a82a12bd6687c6b78fb0cf25289",
+				"overlaysSha256": "59a504fb047a67577202b4ff9a79f056d080fa6a39ca3eb6bd27118d497b14d7"
+			},
+			"moduleInstantiation": "emscripten-instantiate-wasm-v1"
+		},
+		"capabilities": {
+			"breakpoints": true,
+			"stepping": true,
+			"stackTrace": true,
+			"locals": true,
+			"globals": true,
+			"readMemory": true,
+			"writeMemory": true,
+			"evaluateExpressions": false,
+			"dataBreakpoints": true,
+			"wasmThreads": false
+		}
+	},
+	"results": [
+		{
+			"iteration": 0,
+			"compiledModuleCache": false,
+			"cachedModules": {
+				"target": null,
+				"lldb": null
+			},
+			"instantiationCalls": {
+				"target": 0,
+				"lldb": 0
+			},
+			"firstPauseMs": 1747.4350000023842,
+			"fullStackMs": 1875.1949999928474,
+			"scopesMs": 1759.4950000047684,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkinbpp-1\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\nProcess 1 exited with status = 0 (0x00000000) \n"
+		},
+		{
+			"iteration": 1,
+			"compiledModuleCache": false,
+			"cachedModules": {
+				"target": null,
+				"lldb": null
+			},
+			"instantiationCalls": {
+				"target": 0,
+				"lldb": 0
+			},
+			"firstPauseMs": 1568.375,
+			"fullStackMs": 1715.1850000023842,
+			"scopesMs": 1577.7400000095367,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkind8y-2\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\nProcess 1 exited with status = 0 (0x00000000) \n"
+		},
+		{
+			"iteration": 2,
+			"compiledModuleCache": true,
+			"cachedModules": {
+				"target": 1,
+				"lldb": 2
+			},
+			"instantiationCalls": {
+				"target": 1,
+				"lldb": 1
+			},
+			"firstPauseMs": 1460.5799999833107,
+			"fullStackMs": 1626.789999961853,
+			"scopesMs": 1467.554999947548,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkinemk-3\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\nProcess 1 exited with status = 0 (0x00000000) \n"
+		},
+		{
+			"iteration": 3,
+			"compiledModuleCache": true,
+			"cachedModules": {
+				"target": 1,
+				"lldb": 2
+			},
+			"instantiationCalls": {
+				"target": 1,
+				"lldb": 1
+			},
+			"firstPauseMs": 975.285000026226,
+			"fullStackMs": 1045.320000052452,
+			"scopesMs": 981.4800000190735,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkinfy2-4\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\n"
+		}
+	]
+}

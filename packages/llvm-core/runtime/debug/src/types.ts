@@ -141,6 +141,8 @@ export interface DapRequestSession {
 }
 
 export interface RuntimeDebugAsset {
+	/** Producer-verified support for a fresh instance of a precompiled runtime module. */
+	moduleInstantiation?: 'emscripten-instantiate-wasm-v1';
 	js: string;
 	wasm: string;
 	worker: string;
@@ -244,6 +246,7 @@ export interface SharedByteQueueDescriptor {
 }
 
 export interface LldbWorkerInitializeMessage {
+	compiledModule?: WebAssembly.Module;
 	type: 'initialize-lldb';
 	generation: DebugSessionGeneration;
 	module: Uint8Array;
@@ -260,6 +263,7 @@ export interface LldbWorkerInitializeMessage {
 }
 
 export interface TargetWorkerInitializeMessage {
+	compiledModule?: WebAssembly.Module;
 	type: 'initialize-target';
 	generation: DebugSessionGeneration;
 	module: Uint8Array;
@@ -342,6 +346,8 @@ export interface WorkerLike {
 }
 
 export interface BrowserLldbSessionOptions {
+	/** Opt in to at most two verified runtime Modules; requires producer support. Default false. */
+	compiledModuleCache?: boolean;
 	manifest: RuntimeManifestV2;
 	runtimeBaseUrl: string | URL;
 	module: Uint8Array | ArrayBuffer;

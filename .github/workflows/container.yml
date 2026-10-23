@@ -6,6 +6,9 @@ on:
       - 'packages/container/**'
       - 'packages/core/**'
       - 'packages/llvm-core/**'
+      - 'src/lib/container/**'
+      - 'src/lib/playground/container/**'
+      - 'package.json'
       - 'pnpm-lock.yaml'
       - 'docs/container-*.md'
       - 'examples/container/**'
@@ -37,6 +40,8 @@ jobs:
       - run: pnpm --dir packages/core build
       - run: pnpm --dir packages/llvm-core build
       - run: pnpm --dir packages/container build
+      - run: pnpm exec svelte-kit sync
+      - run: pnpm exec vitest run src/lib/container src/lib/playground/container
       - run: node --test packages/container/test/unit/*.test.mjs packages/container/test/contract/*.test.mjs
       - run: node --test scripts/container-distribution.test.mjs scripts/container-release-server.test.mjs scripts/probe-container-shell-acceptance.test.mjs
       - run: pnpm --dir packages/llvm-core exec vitest run runtime/clang/test --maxWorkers=2

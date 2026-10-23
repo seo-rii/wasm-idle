@@ -118,6 +118,11 @@ The playground controller automatically loads the first 50 variables from at mos
 Locals/Arguments scopes after a stop or frame selection. The panel, inline values, and watches share
 the same cache; nested arrays and objects remain lazy. Scope disclosure state persists across stops.
 `debugScopes(frameId)` selects the evaluation frame; `debugFrameScopes(frameId)` only reads metadata.
+
+An LLDB `pause` may initially contain only the top frame and empty scopes. Matching
+`pauseDetails` events fill in the same stop's stack and scopes; `stopId` prevents a late
+response from updating a newer stop. Pass both event types to the controller so detail
+updates preserve frame selection and already loaded values.
 When the adapter advertises `supportsValueFormattingOptions`, `debugFrameName(frameId)` requests a
 single frame with the standard `stackTrace.format` parameter name/value options. The controller
 preserves `functionName` for identity and puts the bounded adapter label in `displayName`, so the UI
