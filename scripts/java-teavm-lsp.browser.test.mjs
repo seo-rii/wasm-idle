@@ -39,7 +39,7 @@ async function assetFiles(directory, prefix = '') {
 	return files;
 }
 
-async function exerciseJavaUriBoundaries(client, snapshot) {
+async function exerciseJavaUriBoundaries(client, snapshot, metadataFixture) {
 	await client.request('initialize', {
 		processId: null,
 		rootUri: null,
@@ -116,9 +116,60 @@ async function exerciseJavaUriBoundaries(client, snapshot) {
 		textDocument: { uri: snapshotAlias }
 	});
 	assert.match(JSON.stringify(snapshotAfterReopen), /SnapshotMain/);
+	const metadataCursor = client.notifications.length;
+	await client.notify('textDocument/didChange', {
+		textDocument: { uri: alias, version: 4 },
+		contentChanges: [{ text: metadataFixture.source }]
+	});
+	const metadataDeadline = Date.now() + 10000;
+	let importDiagnostic;
+	while (!importDiagnostic) {
+		importDiagnostic = client.notifications
+			.slice(metadataCursor)
+			.filter(
+				(message) =>
+					message.method === 'textDocument/publishDiagnostics' &&
+					message.params.uri === uri
+			)
+			.flatMap((message) => message.params.diagnostics)
+			.find((diagnostic) => diagnostic.code === metadataFixture.diagnostic.code);
+		if (Date.now() > metadataDeadline) throw new Error('Missing original Java UUID diagnostic');
+		if (!importDiagnostic) await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+	assert.deepEqual(importDiagnostic, metadataFixture.diagnostic);
+	const codeAction = (diagnostic) =>
+		client.request('textDocument/codeAction', {
+			textDocument: { uri: alias },
+			range: diagnostic.range,
+			context: { diagnostics: [diagnostic] }
+		});
+	const originalCodeActions = await codeAction(importDiagnostic);
+	assert.deepEqual(originalCodeActions, metadataFixture.codeActions);
+	assert.ok(originalCodeActions.some((action) => action.title === "Import 'java.util.UUID'"));
+	const { range, message, severity } = importDiagnostic;
+	const monacoCodeActions = await codeAction({ range, message, severity });
+	assert.deepEqual(monacoCodeActions, originalCodeActions);
+	const explicitCodeActions = await codeAction({
+		range,
+		message,
+		severity,
+		code: 'explicit-client-code'
+	});
+	assert.deepEqual(explicitCodeActions, []);
 	await client.request('shutdown', null);
 	await client.notify('exit', null);
-	return { snapshotSymbols, symbols, rejection, hover, afterReopen, snapshotAfterReopen };
+	return {
+		snapshotSymbols,
+		symbols,
+		rejection,
+		hover,
+		afterReopen,
+		snapshotAfterReopen,
+		importDiagnostic,
+		originalCodeActions,
+		monacoCodeActions,
+		explicitCodeActions
+	};
 }
 
 export async function probeJavaTeavmLspBrowser(options = {}) {
@@ -161,6 +212,12 @@ export async function probeJavaTeavmLspBrowser(options = {}) {
 	const allowed = new Set(files);
 	const oracle = JSON.parse(
 		await readFile(path.join(JAVA_TEAVM_FIXTURE_DIRECTORY, 'native-oracle.json'), 'utf8')
+	);
+	const metadataFixture = JSON.parse(
+		await readFile(
+			path.join(JAVA_TEAVM_FIXTURE_DIRECTORY, 'diagnostic-metadata-native.json'),
+			'utf8'
+		)
 	);
 	const evidence = {
 		schema: 'wasm-idle-javacs-teavm-sdk-browser-v1',
@@ -385,7 +442,7 @@ export async function probeJavaTeavmLspBrowser(options = {}) {
 			const protocolStarted = Date.now();
 			run.results =
 				profile === 'uri-boundaries'
-					? await exerciseJavaUriBoundaries(activeClient, fixture)
+					? await exerciseJavaUriBoundaries(activeClient, fixture, metadataFixture)
 					: await exerciseJavaTeavmLsp(activeClient, 'file:///workspace', {
 							profile,
 							files: fixture,

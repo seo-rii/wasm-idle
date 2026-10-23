@@ -7,6 +7,7 @@ import { runWithSignalAndTimeout } from '../lifecycle.js';
 import { snapshotJavaLanguageServerAssets, type JavaLanguageServerAsset } from './assets.js';
 import { formatJavaDocHtml } from './markdown.js';
 import { JavaDocumentUriError, JavaDocumentUris } from './document-uris.js';
+import { JavaDiagnosticMetadata } from './diagnostic-metadata.js';
 
 interface JavaSession {
 	dispatch(json: string): void;
@@ -46,6 +47,7 @@ const scope = globalThis as unknown as {
 let initialized = false;
 let session: JavaSession | undefined;
 let documentUris = new JavaDocumentUris({});
+const diagnosticMetadata = new JavaDiagnosticMetadata();
 
 async function initialize(
 	options: JavaWorkerOptions,
@@ -111,6 +113,7 @@ async function initialize(
 					(message as { jsonrpc?: unknown }).jsonrpc !== '2.0'
 				)
 					throw new Error('Invalid upstream javacs JSON-RPC message');
+				diagnosticMetadata.observe(message);
 				scope.postMessage(message);
 			},
 			formatJavaDocHtml
@@ -148,7 +151,9 @@ scope.addEventListener('message', (event) => {
 		if (message.method === 'textDocument/didOpen') {
 			documentUris.registerOpen(message.params.textDocument.uri);
 		}
-		session.dispatch(JSON.stringify(documentUris.canonicalize(message)));
+		session.dispatch(
+			JSON.stringify(diagnosticMetadata.prepare(documentUris.canonicalize(message)))
+		);
 	} catch (error) {
 		if (message.id !== undefined)
 			scope.postMessage({
