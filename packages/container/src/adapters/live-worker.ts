@@ -67,7 +67,10 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
       try {
         setup = configure?.(request);
         io = createLiveIo(request.fs, request.limits, pipeBytes, (error) => fail(error), request.stdio, setup?.onFileChange);
-        server = createRpcServer(buffer, request.generation, io.dispatch);
+        // Filesystem syscalls finish synchronously before dispatch can await stdio.
+        // The source is bound by this owner, never supplied by guest RPC metadata.
+        server = createRpcServer(buffer, request.generation, (...args) =>
+          request.fs.withMutationSource(request.mutationSource ?? request.generation, () => io!.dispatch(...args)));
         worker = workerFactory();
         worker.onmessage = ({ data }) => {
           if (dead) return;

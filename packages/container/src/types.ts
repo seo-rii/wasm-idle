@@ -12,6 +12,8 @@ export interface ProcessResult {
 }
 export interface ContainerProcess {
   readonly pid: number;
+  /** Opaque owner-only attribution token; independent of other containers' pid namespaces. */
+  readonly mutationSource?: object;
   readonly stdin: WritableStream<Uint8Array>;
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
