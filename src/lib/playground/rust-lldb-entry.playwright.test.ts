@@ -68,7 +68,8 @@ it(
 						pauses.push(pause);
 						void (async () => {
 							if (pauses.length === 2) {
-								for (const scope of event.scopes || []) {
+								const scopes = await sandbox.debugScopes(event.frameId);
+								for (const scope of scopes) {
 									if (!scope.expensive)
 										pause.variables.push(
 											...(await sandbox.debugVariables(

@@ -144,7 +144,8 @@ describe('compiled language LLDB in Chromium', () => {
 								if (event.type !== 'pause') return;
 								void (async () => {
 									const variables = [];
-									for (const scope of event.scopes || []) {
+									const scopes = await sandbox.debugScopes(event.frameId);
+									for (const scope of scopes) {
 										if (!scope.expensive)
 											variables.push(
 												...(await sandbox.debugVariables(
