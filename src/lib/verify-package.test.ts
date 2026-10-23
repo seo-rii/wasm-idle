@@ -206,13 +206,13 @@ describe('package install budgets', () => {
 				maxPackages: 25
 			},
 			'@wasm-idle/lsp install': {
-				maxBytes: 5 * MiB,
+				maxBytes: 5.25 * MiB + 384 * 1024,
 				maxFiles: 1_050,
-				maxPackages: 7
+				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 39 * MiB + 656 * 1024,
-				maxFiles: 3_300,
+				maxBytes: 40 * MiB + 384 * 1024,
+				maxFiles: 3_350,
 				maxPackages: 70
 			}
 		});

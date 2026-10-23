@@ -182,4 +182,15 @@ describe('execution asset request classification', () => {
 			false
 		);
 	});
+	it('classifies the Java execution compiler and its separate javacs TeaVM assets', () => {
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/teavm/compiler.wasm')).toBe(true);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/teavm/compiler.wasm-runtime.js')).toBe(true);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-java-lsp/javacs.wasm')).toBe(false);
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-java-lsp/javacs-runtime.mjs')).toBe(
+			false
+		);
+		expect(isExecutionRuntimeAssetPath('/absproxy/5173/wasm-java-lsp/jdk-platform.zip')).toBe(
+			false
+		);
+	});
 });

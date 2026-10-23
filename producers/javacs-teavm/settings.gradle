@@ -1,0 +1,4 @@
+pluginManagement {
+    repositories { mavenCentral(); gradlePluginPortal() }
+}
+rootProject.name = 'wasm-idle-javacs-teavm'

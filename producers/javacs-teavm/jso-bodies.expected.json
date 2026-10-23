@@ -1,0 +1,36 @@
+[
+  {
+    "params": [
+      "str"
+    ],
+    "body": "return str;"
+  },
+  {
+    "params": [
+      "number"
+    ],
+    "body": "return number;"
+  },
+  {
+    "params": [
+      "obj"
+    ],
+    "body": "return typeof obj=='undefined';"
+  },
+  {
+    "params": [
+      "object"
+    ],
+    "body": "return object.toString();"
+  },
+  {
+    "params": [],
+    "body": "{return {};}"
+  },
+  {
+    "params": [
+      "value"
+    ],
+    "body": "return value;"
+  }
+]

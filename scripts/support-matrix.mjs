@@ -379,7 +379,7 @@ export const supportMatrixRows = [
 		ids: ['JAVA'],
 		runtime: 'TeaVM',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'javacs LSP (TeaVM)',
 		debug: 'Trace (source)',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -1280,11 +1280,11 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Java',
 		{
-			packageBase: `${workspacePackage('runtimes/teavm')} / TeaVM compiler assets`,
+			packageBase: `${workspacePackage('runtimes/teavm')} / TeaVM compiler assets; javacs 0.2.38 LSP via TeaVM 0.16.0`,
 			execution:
 				`${code('compiler.wasm')} compiles Java to browser WASM/JS; ` +
 				`supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: `${code('runtimeAssets.java.baseUrl')}/${code('loader')} or ${code('rootUrl')}`
+			customization: `${code('runtimeAssets.java.baseUrl')}/${code('loader')} or ${code('rootUrl')}; editor: ${code('runtimeAssets.javaLsp.baseUrl')}/${code('assets')}`
 		}
 	],
 	[

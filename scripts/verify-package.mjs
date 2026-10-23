@@ -118,6 +118,17 @@ import { createContainerPlaygroundBinding, serveContainerWorker, mergeContainerW
 declare const worker: ContainerOwnerWorker;
 declare const createBinding: (assets: SandboxRuntimeAssets) => PlaygroundBinding;
 declare const configuration: ContainerWorkerOptions['createBashConfiguration'];
+// Runtime assets remain usable without installing the optional editor package.
+const javaAssets: SandboxRuntimeAssets = {
+  javaLsp: {
+    baseUrl: 'https://example.invalid/wasm-java-lsp/',
+    assets: [
+      { path: 'javacs-runtime.mjs', bytes: 1, sha256: '0'.repeat(64) },
+      { path: 'javacs.wasm', bytes: 1, sha256: '1'.repeat(64) },
+      { path: 'jdk-platform.zip', bytes: 1, sha256: '2'.repeat(64) }
+    ]
+  }
+};
 const binding = createContainerPlaygroundBinding('', {
   applicationRootURL: 'https://example.invalid/', workspaceId: 'type-smoke', workerFactory: () => worker
 });
@@ -125,7 +136,7 @@ const shell: ContainerShellBinding = binding.shell;
 const options: ContainerWorkerOptions = { languages: ['CPP'], createBinding, createBashConfiguration: configuration };
 const serve: typeof serveContainerWorker = serveContainerWorker;
 const result = mergeContainerWorkspace([{ path: 'main.cpp', content: '' }], [], []);
-void [shell, options, serve, result, binding.dispose()];
+void [shell, options, serve, result, javaAssets, binding.dispose()];
 `
 	},
 	{
@@ -166,9 +177,9 @@ void [shell, options, serve, result, binding.dispose()];
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		// Includes llvm-core's SIMD headers for clangd. Before merging compiler options:
-		// 5,093,249 bytes / 769 files.
-		budget: { maxBytes: 5 * MiB, maxFiles: 1_050, maxPackages: 7 },
+		// Java's XML platform adapter and llvm-core's pinned SIMD compatibility headers.
+		// Add 384 KiB for the reviewed SIMD integration to the Java install limit.
+		budget: { maxBytes: 5.25 * MiB + 384 * 1024, maxFiles: 1_050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -178,6 +189,10 @@ void [shell, options, serve, result, binding.dispose()];
 			'svelte'
 		],
 		imports: [
+			'const savedFetch = globalThis.fetch;',
+			"globalThis.fetch = () => { throw new Error('Java LSP fetched assets during SSR import'); };",
+			"if (typeof (await import('@wasm-idle/lsp/java')).getJavaLanguageServer !== 'function') throw new Error('Missing Java LSP API');",
+			'globalThis.fetch = savedFetch;',
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/lsp');",
 			"await import('@wasm-idle/lsp/clangd');"
@@ -188,11 +203,9 @@ void [shell, options, serve, result, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes the public container package, reviewed LSP providers, SIMD, and compiler options.
-		// Before merging, SIMD measured 41,484,544 bytes / 3,262 files / 62 packages;
-		// main's compiler-option changes added 10,510 bytes to their prior install.
-		// Reserve 16 KiB above the SIMD budget pending measurement of the merged install.
-		budget: { maxBytes: 39 * MiB + 656 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
+		// Preserve the Java aggregate headroom while adding the reviewed SIMD payload.
+		budget: { maxBytes: 40 * MiB + 384 * 1024, maxFiles: 3_350, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

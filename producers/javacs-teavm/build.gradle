@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'org.teavm' version '0.16.0'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    compileOnly 'com.google.code.gson:gson:2.8.5'
+    implementation 'com.google.protobuf:protobuf-java:3.9.1'
+    implementation 'org.teavm:teavm-jso:0.16.0'
+    implementation 'org.teavm:teavm-jso-apis:0.16.0'
+    implementation 'org.teavm:teavm-core:0.16.0'
+    implementation files('../../.cache/javacs-teavm/jdk-compiler.jar', '../../.cache/javacs-teavm/java-compiler.jar',
+        '../../.cache/javacs-teavm/jdk-support.jar')
+}
+
+sourceSets.main {
+    java.srcDirs = ['java', '../../.cache/javacs-teavm/browser-source']
+    resources.srcDirs = ['resources']
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['--add-exports', 'jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+        '--add-exports', 'jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED']
+}
+
+teavm {
+    all {
+        mainClass = 'org.javacs.BrowserJavacs'
+        optimization = org.teavm.gradle.api.OptimizationLevel.NONE
+    }
+    wasmGC {
+        outOfProcess = true
+        processMemory = 4096
+        modularRuntime = true
+        strict = true
+        obfuscated = true
+    }
+    js {
+        outOfProcess = true
+        processMemory = 4096
+        moduleType = org.teavm.gradle.api.JSModuleType.ES2015
+    }
+}

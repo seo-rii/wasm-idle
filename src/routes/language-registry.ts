@@ -21,6 +21,7 @@ export type RuntimeLspCapability =
 	| 'rescript'
 	| 'v'
 	| 'lean4'
+	| 'java'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -133,6 +134,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	JAVA: {
 		label: 'Java',
 		editorLanguage: 'java',
+		runtimeLspCapability: 'java',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true

@@ -171,9 +171,9 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('keeps application runtime asset keys aligned with the Core contract', () => {
+	it('keeps execution asset keys aligned with the Core contract', () => {
 		expectTypeOf<PlaygroundRuntimeAssets>().toMatchTypeOf<RuntimeAssetKeySource>();
-		expectTypeOf<Exclude<keyof PlaygroundRuntimeAssets, 'debug'>>().toEqualTypeOf<
+		expectTypeOf<Exclude<keyof PlaygroundRuntimeAssets, 'debug' | 'javaLsp'>>().toEqualTypeOf<
 			keyof RuntimeAssetKeySource
 		>();
 	});

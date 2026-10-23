@@ -79,6 +79,10 @@
 		load: (currentUrl: string, signal?: AbortSignal) => Promise<EditorLanguageServerHandle>;
 	}
 	type PerlLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['perl']>;
+	type JavaLspRuntimeConfig = Pick<
+		NonNullable<EditorLanguageServerRuntimeOptions['java']>,
+		'baseUrl' | 'assets'
+	>;
 	type JanetLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['janet']>;
 	type PascalLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['pascal']>;
 	type RubyLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['ruby']>;
@@ -2323,6 +2327,7 @@
 
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pythonLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let javaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dotnetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2379,6 +2384,9 @@
 		rustTargetTriple?: RustTargetTriple;
 		goTarget?: GoTarget;
 		lspEnabled?: boolean;
+		javaLspEnabled?: boolean;
+		javaLspRuntime?: JavaLspRuntimeConfig;
+		javaLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
 		clangdRuntimeAssets?: PlaygroundRuntimeAssets;
@@ -2509,6 +2517,9 @@
 		rustTargetTriple = 'wasm32-wasip1',
 		goTarget = 'wasip1/wasm',
 		lspEnabled = false,
+		javaLspEnabled = false,
+		javaLspRuntime,
+		javaLspWorkspaceFiles = [],
 		clangdEnabled = false,
 		clangdBaseUrl,
 		clangdRuntimeAssets,
@@ -2726,6 +2737,8 @@
 		[
 			language,
 			normalizedFilePath,
+			javaLspEnabled ? JSON.stringify(javaLspRuntime) : '',
+			javaLspEnabled ? JSON.stringify(javaLspWorkspaceFiles) : '',
 			clangdEnabled ? clangdBaseUrl || '' : '',
 			clangdCppVersion || '',
 			clangdCVersion || '',
@@ -2807,6 +2820,10 @@
 		let label = '';
 		let status: LanguageServerStatus | null = null;
 		switch (activeLspLanguage) {
+			case 'java':
+				label = 'Java LSP';
+				status = javaLspStatus;
+				break;
 			case 'c':
 				label = 'C LSP';
 				status = clangdStatus;
@@ -3070,6 +3087,35 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['java'],
+			isEnabled: () => javaLspEnabled && !!javaLspRuntime?.baseUrl,
+			setStatus: (status) => (javaLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getJavaLanguageServer } = await import('@wasm-idle/lsp/java');
+				const monacoApi = Monaco;
+				if (!monacoApi) throw new Error('Java LSP requires the Monaco URI factory');
+				const currentModel = model && !model.isDisposed() ? model : undefined;
+				const activeUri =
+					currentModel?.uri ?? createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
+				const initialFiles = Object.fromEntries([
+					...javaLspWorkspaceFiles.map((file) => [
+						createWorkspaceModelUri(monacoApi.Uri, file.path).toString(true),
+						file.content
+					]),
+					[activeUri.toString(true), currentModel?.getValue() ?? value ?? '']
+				]);
+				return await getJavaLanguageServer({
+					currentUrl,
+					signal,
+					java: {
+						...javaLspRuntime,
+						initialFiles
+					},
+					onStatus: (status) => (javaLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['php'],
 			isEnabled: () => phpLspEnabled && !!phpLspWasmUrl,
@@ -3950,6 +3996,7 @@
 		const testGlobal = globalThis as MonacoTestGlobal;
 		testGlobal.__wasmIdleMonacoApi = Monaco;
 		testGlobal.__wasmIdleMonacoLspStatus = {
+			java: javaLspStatus,
 			clangd: clangdStatus,
 			python: pythonLspStatus,
 			dotnet: dotnetLspStatus,

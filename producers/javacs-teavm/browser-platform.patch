@@ -1,0 +1,366 @@
+--- a/src/main/java/org/javacs/SourceFileManager.java
++++ b/src/main/java/org/javacs/SourceFileManager.java
+@@ -14,8 +14,7 @@
+     }
+ 
+     private static StandardJavaFileManager createDelegateFileManager() {
+-        var compiler = ServiceLoader.load(JavaCompiler.class).iterator().next();
+-        return compiler.getStandardFileManager(SourceFileManager::logError, null, Charset.defaultCharset());
++        return BrowserFileManager.create();
+     }
+ 
+     private static void logError(Diagnostic<?> error) {
+--- a/src/main/java/org/javacs/ScanClassPath.java
++++ b/src/main/java/org/javacs/ScanClassPath.java
+@@ -112,52 +112,12 @@
+     };
+ 
+     static Set<String> jdkTopLevelClasses() {
+-        LOG.info("Searching for top-level classes in the JDK");
+-
+-        var classes = new HashSet<String>();
+-        var fs = FileSystems.getFileSystem(URI.create("jrt:/"));
+-        for (var m : JDK_MODULES) {
+-            var moduleRoot = fs.getPath(String.format("/modules/%s/", m));
+-            try (var stream = Files.walk(moduleRoot)) {
+-                var it = stream.iterator();
+-                while (it.hasNext()) {
+-                    var classFile = it.next();
+-                    var relative = moduleRoot.relativize(classFile).toString();
+-                    if (relative.endsWith(".class") && !relative.contains("$")) {
+-                        var trim = relative.substring(0, relative.length() - ".class".length());
+-                        var qualifiedName = trim.replace(File.separatorChar, '.');
+-                        classes.add(qualifiedName);
+-                    }
+-                }
+-            } catch (IOException e) {
+-                // LOG.log(Level.WARNING, "Failed indexing module " + m + "(" + e.getMessage() + ")");
+-            }
+-        }
+-
+-        LOG.info(String.format("Found %d classes in the java platform", classes.size()));
+-
+-        return classes;
++        return BrowserFileManager.platformClassNames();
+     }
+ 
+     static Set<String> classPathTopLevelClasses(Set<Path> classPath) {
+-        LOG.info(String.format("Searching for top-level classes in %d classpath locations", classPath.size()));
+-
+-        var urls = classPath.stream().map(ScanClassPath::toUrl).toArray(URL[]::new);
+-        var classLoader = new URLClassLoader(urls, null);
+-        ClassPath scanner;
+-        try {
+-            scanner = ClassPath.from(classLoader);
+-        } catch (IOException e) {
+-            throw new RuntimeException(e);
+-        }
+-        var classes = new HashSet<String>();
+-        for (var c : scanner.getTopLevelClasses()) {
+-            classes.add(c.getName());
+-        }
+-
+-        LOG.info(String.format("Found %d classes in classpath", classes.size()));
+-
+-        return classes;
++        if (!classPath.isEmpty()) throw new UnsupportedOperationException("External class paths are unavailable in this browser profile");
++        return Set.of();
+     }
+ 
+     private static URL toUrl(Path p) {
+--- a/src/main/java/org/javacs/JavaLanguageServer.java
++++ b/src/main/java/org/javacs/JavaLanguageServer.java
+@@ -85,32 +85,10 @@
+     }
+ 
+     private JavaCompilerService createCompiler() {
+-        Objects.requireNonNull(workspaceRoot, "Can't create compiler because workspaceRoot has not been initialized");
+-
+-        javaStartProgress(new JavaStartProgressParams("Configure javac"));
+-        javaReportProgress(new JavaReportProgressParams("Finding source roots"));
+-
+-        var externalDependencies = externalDependencies();
+-        var classPath = classPath();
+-        var addExports = addExports();
+-        // If classpath is specified by the user, don't infer anything
+-        if (!classPath.isEmpty()) {
+-            javaEndProgress();
+-            return new JavaCompilerService(classPath, Collections.emptySet(), addExports);
+-        }
+-        // Otherwise, combine inference with user-specified external dependencies
+-        else {
+-            var infer = new InferConfig(workspaceRoot, externalDependencies);
+-
+-            javaReportProgress(new JavaReportProgressParams("Inferring class path"));
+-            classPath = infer.classPath();
+-
+-            javaReportProgress(new JavaReportProgressParams("Inferring doc path"));
+-            var docPath = infer.buildDocPath();
+-
+-            javaEndProgress();
+-            return new JavaCompilerService(classPath, docPath, addExports);
+-        }
++        Objects.requireNonNull(workspaceRoot);
++        if (!classPath().isEmpty() || !externalDependencies().isEmpty())
++            throw new UnsupportedOperationException("External dependency projects are unavailable in this browser profile");
++        return new JavaCompilerService(Set.of(), Set.of(), addExports());
+     }
+ 
+     private Set<String> externalDependencies() {
+--- a/src/main/java/org/javacs/Docs.java
++++ b/src/main/java/org/javacs/Docs.java
+@@ -34,20 +34,7 @@
+     private static final Path NOT_FOUND = Paths.get("");
+     private static Path cacheSrcZip;
+ 
+-    private static Path srcZip() {
+-        if (cacheSrcZip == null) {
+-            cacheSrcZip = findSrcZip();
+-        }
+-        if (cacheSrcZip == NOT_FOUND) {
+-            return NOT_FOUND;
+-        }
+-        try {
+-            var fs = FileSystems.newFileSystem(cacheSrcZip, Docs.class.getClassLoader());
+-            return fs.getPath("/");
+-        } catch (IOException e) {
+-            throw new RuntimeException(e);
+-        }
+-    }
++    private static Path srcZip() { return NOT_FOUND; }
+ 
+     private static Path findSrcZip() {
+         var javaHome = JavaHomeHelper.javaHome();
+--- a/src/main/java/org/javacs/MarkdownHelper.java
++++ b/src/main/java/org/javacs/MarkdownHelper.java
+@@ -161,17 +161,7 @@
+     }
+ 
+     private static String htmlToMarkdown(String html) {
+-        html = replaceTags(html);
+-
+-        var doc = parse(html);
+-
+-        replaceNodes(doc, "i", contents -> String.format("*%s*", contents));
+-        replaceNodes(doc, "b", contents -> String.format("**%s**", contents));
+-        replaceNodes(doc, "pre", contents -> String.format("`%s`", contents));
+-        replaceNodes(doc, "code", contents -> String.format("`%s`", contents));
+-        replaceNodes(doc, "a", contents -> contents);
+-
+-        return print(doc);
++        return BrowserJavacs.formatHtml(replaceTags(html));
+     }
+ 
+     private static final Pattern HTML_TAG = Pattern.compile("<(\\w+)[^>]*>");
+--- a/src/main/java/org/javacs/JsonHelper.java
++++ b/src/main/java/org/javacs/JsonHelper.java
+@@ -4,5 +4,5 @@
+ import com.google.gson.GsonBuilder;
+ 
+ public class JsonHelper {
+-    public static final Gson GSON = new GsonBuilder().create();
++    public static final Gson GSON = new GsonBuilder().registerTypeAdapterFactory(new org.wasmidle.javacs.ProtocolAdapters()).create();
+ }
+--- a/src/main/java/org/javacs/StringSearch.java
++++ b/src/main/java/org/javacs/StringSearch.java
+@@ -204,12 +204,11 @@
+             var text = FileStore.contents(java);
+             return matchesTitleCase(text, query);
+         }
+-        try (var channel = FileChannel.open(java)) {
+-            // Read up to 1 MB of data from file
+-            var limit = Math.min((int) channel.size(), SEARCH_BUFFER.capacity());
+-            SEARCH_BUFFER.position(0);
+-            SEARCH_BUFFER.limit(limit);
+-            channel.read(SEARCH_BUFFER);
++        try (var input = Files.newInputStream(java)) {
++            var bytes = input.readNBytes(SEARCH_BUFFER.capacity());
++            SEARCH_BUFFER.position(0);
++            SEARCH_BUFFER.limit(bytes.length);
++            SEARCH_BUFFER.put(bytes);
+             SEARCH_BUFFER.position(0);
+             var chars = StandardCharsets.UTF_8.decode(SEARCH_BUFFER);
+             return matchesTitleCase(chars, query);
+@@ -227,12 +226,11 @@
+             var text = FileStore.contents(java).getBytes();
+             return search.nextWord(text) != -1;
+         }
+-        try (var channel = FileChannel.open(java)) {
+-            // Read up to 1 MB of data from file
+-            var limit = Math.min((int) channel.size(), SEARCH_BUFFER.capacity());
+-            SEARCH_BUFFER.position(0);
+-            SEARCH_BUFFER.limit(limit);
+-            channel.read(SEARCH_BUFFER);
++        try (var input = Files.newInputStream(java)) {
++            var bytes = input.readNBytes(SEARCH_BUFFER.capacity());
++            SEARCH_BUFFER.position(0);
++            SEARCH_BUFFER.limit(bytes.length);
++            SEARCH_BUFFER.put(bytes);
+             SEARCH_BUFFER.position(0);
+             return search.nextWord(SEARCH_BUFFER) != -1;
+         } catch (NoSuchFileException e) {
+@@ -249,12 +247,11 @@
+             var text = FileStore.contents(java).getBytes();
+             return search.next(text) != -1;
+         }
+-        try (var channel = FileChannel.open(java)) {
+-            // Read up to 1 MB of data from file
+-            var limit = Math.min((int) channel.size(), SEARCH_BUFFER.capacity());
+-            SEARCH_BUFFER.position(0);
+-            SEARCH_BUFFER.limit(limit);
+-            channel.read(SEARCH_BUFFER);
++        try (var input = Files.newInputStream(java)) {
++            var bytes = input.readNBytes(SEARCH_BUFFER.capacity());
++            SEARCH_BUFFER.position(0);
++            SEARCH_BUFFER.limit(bytes.length);
++            SEARCH_BUFFER.put(bytes);
+             SEARCH_BUFFER.position(0);
+             return search.next(SEARCH_BUFFER) != -1;
+         } catch (NoSuchFileException e) {
+--- gson-2.8.5/com/google/gson/Gson.java
++++ gson-browser/com/google/gson/Gson.java
+@@ -225,7 +225,6 @@
+     factories.add(ObjectTypeAdapter.FACTORY);
+ 
+     // the excluder must precede all adapters that handle user-defined types
+-    factories.add(excluder);
+ 
+     // users' type adapters
+     factories.addAll(factoriesToBeAdded);
+@@ -246,8 +245,6 @@
+     factories.add(TypeAdapters.ATOMIC_INTEGER_FACTORY);
+     factories.add(TypeAdapters.ATOMIC_BOOLEAN_FACTORY);
+     factories.add(TypeAdapters.newFactory(AtomicLong.class, atomicLongAdapter(longAdapter)));
+-    factories.add(TypeAdapters.newFactory(AtomicLongArray.class, atomicLongArrayAdapter(longAdapter)));
+-    factories.add(TypeAdapters.ATOMIC_INTEGER_ARRAY_FACTORY);
+     factories.add(TypeAdapters.CHARACTER_FACTORY);
+     factories.add(TypeAdapters.STRING_BUILDER_FACTORY);
+     factories.add(TypeAdapters.STRING_BUFFER_FACTORY);
+@@ -258,24 +255,15 @@
+     factories.add(TypeAdapters.UUID_FACTORY);
+     factories.add(TypeAdapters.CURRENCY_FACTORY);
+     factories.add(TypeAdapters.LOCALE_FACTORY);
+-    factories.add(TypeAdapters.INET_ADDRESS_FACTORY);
+     factories.add(TypeAdapters.BIT_SET_FACTORY);
+     factories.add(DateTypeAdapter.FACTORY);
+     factories.add(TypeAdapters.CALENDAR_FACTORY);
+-    factories.add(TimeTypeAdapter.FACTORY);
+-    factories.add(SqlDateTypeAdapter.FACTORY);
+-    factories.add(TypeAdapters.TIMESTAMP_FACTORY);
+     factories.add(ArrayTypeAdapter.FACTORY);
+     factories.add(TypeAdapters.CLASS_FACTORY);
+ 
+     // type adapters for composite and user-defined types
+-    factories.add(new CollectionTypeAdapterFactory(constructorConstructor));
+-    factories.add(new MapTypeAdapterFactory(constructorConstructor, complexMapKeySerialization));
+-    this.jsonAdapterFactory = new JsonAdapterAnnotationTypeAdapterFactory(constructorConstructor);
+-    factories.add(jsonAdapterFactory);
++    this.jsonAdapterFactory = null;
+     factories.add(TypeAdapters.ENUM_FACTORY);
+-    factories.add(new ReflectiveTypeAdapterFactory(
+-        constructorConstructor, fieldNamingStrategy, excluder, jsonAdapterFactory));
+ 
+     this.factories = Collections.unmodifiableList(factories);
+   }
+--- gson-2.8.5/com/google/gson/GsonBuilder.java
++++ gson-browser/com/google/gson/GsonBuilder.java
+@@ -592,7 +592,7 @@
+     Collections.reverse(hierarchyFactories);
+     factories.addAll(hierarchyFactories);
+ 
+-    addTypeAdaptersForDate(datePattern, dateStyle, timeStyle, factories);
++
+ 
+     return new Gson(excluder, fieldNamingPolicy, instanceCreators,
+         serializeNulls, complexMapKeySerialization,
+--- gson-2.8.5/com/google/gson/internal/bind/TypeAdapters.java
++++ gson-browser/com/google/gson/internal/bind/TypeAdapters.java
+@@ -262,36 +262,6 @@
+   public static final TypeAdapterFactory ATOMIC_BOOLEAN_FACTORY =
+       newFactory(AtomicBoolean.class, TypeAdapters.ATOMIC_BOOLEAN);
+ 
+-  public static final TypeAdapter<AtomicIntegerArray> ATOMIC_INTEGER_ARRAY = new TypeAdapter<AtomicIntegerArray>() {
+-    @Override public AtomicIntegerArray read(JsonReader in) throws IOException {
+-        List<Integer> list = new ArrayList<Integer>();
+-        in.beginArray();
+-        while (in.hasNext()) {
+-          try {
+-            int integer = in.nextInt();
+-            list.add(integer);
+-          } catch (NumberFormatException e) {
+-            throw new JsonSyntaxException(e);
+-          }
+-        }
+-        in.endArray();
+-        int length = list.size();
+-        AtomicIntegerArray array = new AtomicIntegerArray(length);
+-        for (int i = 0; i < length; ++i) {
+-          array.set(i, list.get(i));
+-        }
+-        return array;
+-    }
+-    @Override public void write(JsonWriter out, AtomicIntegerArray value) throws IOException {
+-      out.beginArray();
+-      for (int i = 0, length = value.length(); i < length; i++) {
+-        out.value(value.get(i));
+-      }
+-      out.endArray();
+-    }
+-  }.nullSafe();
+-  public static final TypeAdapterFactory ATOMIC_INTEGER_ARRAY_FACTORY =
+-      newFactory(AtomicIntegerArray.class, TypeAdapters.ATOMIC_INTEGER_ARRAY);
+ 
+   public static final TypeAdapter<Number> LONG = new TypeAdapter<Number>() {
+     @Override
+@@ -521,24 +491,6 @@
+ 
+   public static final TypeAdapterFactory URI_FACTORY = newFactory(URI.class, URI);
+ 
+-  public static final TypeAdapter<InetAddress> INET_ADDRESS = new TypeAdapter<InetAddress>() {
+-    @Override
+-    public InetAddress read(JsonReader in) throws IOException {
+-      if (in.peek() == JsonToken.NULL) {
+-        in.nextNull();
+-        return null;
+-      }
+-      // regrettably, this should have included both the host name and the host address
+-      return InetAddress.getByName(in.nextString());
+-    }
+-    @Override
+-    public void write(JsonWriter out, InetAddress value) throws IOException {
+-      out.value(value == null ? null : value.getHostAddress());
+-    }
+-  };
+-
+-  public static final TypeAdapterFactory INET_ADDRESS_FACTORY =
+-    newTypeHierarchyFactory(InetAddress.class, INET_ADDRESS);
+ 
+   public static final TypeAdapter<UUID> UUID = new TypeAdapter<UUID>() {
+     @Override
+@@ -569,26 +521,6 @@
+   }.nullSafe();
+   public static final TypeAdapterFactory CURRENCY_FACTORY = newFactory(Currency.class, CURRENCY);
+ 
+-  public static final TypeAdapterFactory TIMESTAMP_FACTORY = new TypeAdapterFactory() {
+-    @SuppressWarnings("unchecked") // we use a runtime check to make sure the 'T's equal
+-    @Override public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> typeToken) {
+-      if (typeToken.getRawType() != Timestamp.class) {
+-        return null;
+-      }
+-
+-      final TypeAdapter<Date> dateTypeAdapter = gson.getAdapter(Date.class);
+-      return (TypeAdapter<T>) new TypeAdapter<Timestamp>() {
+-        @Override public Timestamp read(JsonReader in) throws IOException {
+-          Date date = dateTypeAdapter.read(in);
+-          return date != null ? new Timestamp(date.getTime()) : null;
+-        }
+-
+-        @Override public void write(JsonWriter out, Timestamp value) throws IOException {
+-          dateTypeAdapter.write(out, value);
+-        }
+-      };
+-    }
+-  };
+ 
+   public static final TypeAdapter<Calendar> CALENDAR = new TypeAdapter<Calendar>() {
+     private static final String YEAR = "year";

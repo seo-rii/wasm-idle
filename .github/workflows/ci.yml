@@ -198,6 +198,10 @@ jobs:
                       exit 1
                   fi
             - run: pnpm run prepare:test-assets -- clangd ocaml container
+            - name: Build original javacs with the pinned TeaVM toolchain
+              run: python3 producers/javacs-teavm/build.py
+            - name: Verify and synchronize Java LSP assets
+              run: pnpm run sync:java-lsp
             - run: pnpm run test:lsp:browser:full
             - run: pnpm run test:lsp:browser:gleam:csp
 

@@ -1,0 +1,404 @@
+{
+	"schema": "wasm-idle-original-javacs-semantic-oracle-v1",
+	"inputs": {
+		"upstream": {
+			"version": "0.2.38",
+			"commit": "7fffb6c5929fe02c52e1c823ae990bad2b540ad1",
+			"archiveBytes": 6538580,
+			"archiveSha256": "fb7e94a7594f2e6bc9031b328ac38841d28270043a3dd9cb1f1f23ab7bc46674"
+		},
+		"originalSourceModifications": [],
+		"javaVersion": "openjdk version \"17.0.20.1\" 2026-08-18\nOpenJDK Runtime Environment (build 17.0.20.1+1-1-deb12u1-Debian)\nOpenJDK 64-Bit Server VM (build 17.0.20.1+1-1-deb12u1-Debian, mixed mode, sharing)",
+		"dependencies": [
+			{
+				"file": "gson-2.8.5.jar",
+				"sha256": "233a0149fc365c9f6edbd683cfe266b19bdc773be98eabdaf6b3c924b48e7d81"
+			},
+			{
+				"file": "protobuf-java-3.9.1.jar",
+				"sha256": "5a1e5c225791eccd3d67a598922e637406190c90155fb97f38e4eab29719324d"
+			}
+		]
+	},
+	"profiles": {
+		"project": {
+			"initialize": {
+				"capabilities": {
+					"textDocumentSync": 2,
+					"hoverProvider": true,
+					"completionProvider": {
+						"resolveProvider": true,
+						"triggerCharacters": ["."]
+					},
+					"signatureHelpProvider": {
+						"triggerCharacters": ["(", ","]
+					},
+					"referencesProvider": true,
+					"definitionProvider": true,
+					"workspaceSymbolProvider": true,
+					"documentSymbolProvider": true,
+					"documentFormattingProvider": true,
+					"codeLensProvider": {},
+					"foldingRangeProvider": true,
+					"codeActionProvider": true,
+					"renameProvider": {
+						"prepareProvider": true
+					}
+				}
+			},
+			"baselineDiagnostics": {
+				"uri": "file:///workspace/src/probe/Main.java",
+				"diagnostics": []
+			},
+			"localHover": {
+				"contents": [
+					{
+						"language": "java",
+						"value": "int answer"
+					}
+				]
+			},
+			"methodHover": {
+				"contents": [
+					{
+						"language": "java",
+						"value": "static int doubleValue(int value)"
+					},
+					"Doubles a value using the original Java compiler."
+				]
+			},
+			"definition": [
+				{
+					"uri": "file:///workspace/src/probe/Helper.java",
+					"range": {
+						"start": {
+							"line": 8,
+							"character": 22
+						},
+						"end": {
+							"line": 8,
+							"character": 33
+						}
+					}
+				}
+			],
+			"completion": {
+				"isIncomplete": false,
+				"items": [
+					{
+						"label": "doubleValue",
+						"kind": 2,
+						"detail": "int doubleValue(int)",
+						"data": {
+							"className": "probe.Helper",
+							"memberName": "doubleValue",
+							"erasedParameterTypes": ["int"],
+							"plusOverloads": 0
+						}
+					},
+					{
+						"label": "class",
+						"kind": 14,
+						"detail": "keyword",
+						"sortText": "10class"
+					}
+				]
+			},
+			"completionResolve": {
+				"label": "doubleValue",
+				"kind": 2,
+				"detail": "int doubleValue(int value)",
+				"documentation": {
+					"kind": "markdown",
+					"value": "Doubles a value using the original Java compiler."
+				},
+				"data": {
+					"className": "probe.Helper",
+					"memberName": "doubleValue",
+					"erasedParameterTypes": ["int"],
+					"plusOverloads": 0
+				}
+			},
+			"signatureHelp": {
+				"signatures": [
+					{
+						"label": "doubleValue(int value)",
+						"documentation": {
+							"kind": "markdown",
+							"value": "Doubles a value using the original Java compiler."
+						},
+						"parameters": [
+							{
+								"label": "int value"
+							}
+						]
+					}
+				],
+				"activeSignature": 0,
+				"activeParameter": 0
+			},
+			"references": [
+				{
+					"uri": "file:///workspace/src/probe/Main.java",
+					"range": {
+						"start": {
+							"line": 4,
+							"character": 33
+						},
+						"end": {
+							"line": 4,
+							"character": 51
+						}
+					}
+				}
+			],
+			"prepareRename": {
+				"range": {
+					"start": {
+						"line": 4,
+						"character": 33
+					},
+					"end": {
+						"line": 4,
+						"character": 51
+					}
+				},
+				"placeholder": "doubleValue"
+			},
+			"rename": {
+				"changes": {
+					"file:///workspace/src/probe/Main.java": [
+						{
+							"range": {
+								"start": {
+									"line": 4,
+									"character": 40
+								},
+								"end": {
+									"line": 4,
+									"character": 51
+								}
+							},
+							"newText": "twice"
+						}
+					],
+					"file:///workspace/src/probe/Helper.java": [
+						{
+							"range": {
+								"start": {
+									"line": 8,
+									"character": 22
+								},
+								"end": {
+									"line": 8,
+									"character": 33
+								}
+							},
+							"newText": "twice"
+						}
+					]
+				}
+			},
+			"documentSymbols": [
+				{
+					"name": "Main",
+					"kind": 5,
+					"deprecated": false,
+					"location": {
+						"uri": "file:///workspace/src/probe/Main.java",
+						"range": {
+							"start": {
+								"line": 2,
+								"character": 0
+							},
+							"end": {
+								"line": 7,
+								"character": 1
+							}
+						}
+					},
+					"containerName": "probe"
+				},
+				{
+					"name": "main",
+					"kind": 6,
+					"deprecated": false,
+					"location": {
+						"uri": "file:///workspace/src/probe/Main.java",
+						"range": {
+							"start": {
+								"line": 3,
+								"character": 4
+							},
+							"end": {
+								"line": 6,
+								"character": 5
+							}
+						}
+					},
+					"containerName": "Main"
+				}
+			],
+			"workspaceSymbols": [
+				{
+					"name": "Helper",
+					"kind": 5,
+					"deprecated": false,
+					"location": {
+						"uri": "file:///workspace/src/probe/Helper.java",
+						"range": {
+							"start": {
+								"line": 2,
+								"character": 0
+							},
+							"end": {
+								"line": 11,
+								"character": 1
+							}
+						}
+					},
+					"containerName": "probe"
+				}
+			],
+			"foldingRanges": [
+				{
+					"startLine": 2,
+					"startCharacter": 18,
+					"endLine": 6,
+					"endCharacter": 1,
+					"kind": "region"
+				},
+				{
+					"startLine": 3,
+					"startCharacter": 43,
+					"endLine": 5,
+					"endCharacter": 5,
+					"kind": "region"
+				}
+			],
+			"formatting": [
+				{
+					"range": {
+						"start": {
+							"line": 1,
+							"character": 0
+						},
+						"end": {
+							"line": 1,
+							"character": 0
+						}
+					},
+					"newText": ""
+				}
+			],
+			"errorDiagnostics": {
+				"uri": "file:///workspace/src/probe/Main.java",
+				"diagnostics": [
+					{
+						"range": {
+							"start": {
+								"line": 4,
+								"character": 36
+							},
+							"end": {
+								"line": 4,
+								"character": 58
+							}
+						},
+						"severity": 1,
+						"code": "compiler.err.prob.found.req",
+						"message": "incompatible types: int cannot be converted to java.lang.String"
+					}
+				]
+			},
+			"clearedDiagnostics": {
+				"uri": "file:///workspace/src/probe/Main.java",
+				"diagnostics": []
+			},
+			"hoverAfterEdit": {
+				"contents": [
+					{
+						"language": "java",
+						"value": "int answer"
+					}
+				]
+			},
+			"shutdown": null
+		},
+		"default-package": {
+			"initialize": {
+				"capabilities": {
+					"textDocumentSync": 2,
+					"hoverProvider": true,
+					"completionProvider": {
+						"resolveProvider": true,
+						"triggerCharacters": ["."]
+					},
+					"signatureHelpProvider": {
+						"triggerCharacters": ["(", ","]
+					},
+					"referencesProvider": true,
+					"definitionProvider": true,
+					"workspaceSymbolProvider": true,
+					"documentSymbolProvider": true,
+					"documentFormattingProvider": true,
+					"codeLensProvider": {},
+					"foldingRangeProvider": true,
+					"codeActionProvider": true,
+					"renameProvider": {
+						"prepareProvider": true
+					}
+				}
+			},
+			"baselineDiagnostics": {
+				"uri": "file:///workspace/Main.java",
+				"diagnostics": []
+			},
+			"localHover": {
+				"contents": [
+					{
+						"language": "java",
+						"value": "int answer"
+					}
+				]
+			},
+			"defaultPackageMethodHoverError": {
+				"code": -32603,
+				"message": "Cannot invoke \"com.sun.source.tree.ClassTree.getMembers()\" because \"<local4>\" is null"
+			},
+			"errorDiagnostics": {
+				"uri": "file:///workspace/Main.java",
+				"diagnostics": [
+					{
+						"range": {
+							"start": {
+								"line": 2,
+								"character": 24
+							},
+							"end": {
+								"line": 2,
+								"character": 39
+							}
+						},
+						"severity": 1,
+						"code": "compiler.err.prob.found.req",
+						"message": "incompatible types: int cannot be converted to java.lang.String"
+					}
+				]
+			},
+			"clearedDiagnostics": {
+				"uri": "file:///workspace/Main.java",
+				"diagnostics": []
+			},
+			"hoverAfterEdit": {
+				"contents": [
+					{
+						"language": "java",
+						"value": "int answer"
+					}
+				]
+			},
+			"shutdown": null
+		}
+	}
+}

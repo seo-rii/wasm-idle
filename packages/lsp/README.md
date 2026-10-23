@@ -32,6 +32,9 @@ In particular:
   `@wasm-idle/lsp/v` and supply `rootUrl` or `v.baseUrl`; custom assets require all three
   `v.integrity` receipts. Compiler diagnostics and formatting require an external V process and
   are disabled in this profile. See [the producer and browser profile](../../docs/v-lsp.md).
+- Java uses upstream javacs and the OpenJDK compiler compiled with TeaVM, in a dedicated worker.
+  Deploy the verified producer assets separately and pass `java.baseUrl`; `rootUrl` resolves them
+  under `wasm-java-lsp/`. The Java execution runtime has a separate asset configuration.
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.
 
 Clangd and Python deliberately have no document-relative fallback. Supply their individual asset
@@ -217,3 +220,45 @@ ranged edit events to the original server's Full sync contract using the actual 
 Diagnostics, completion, hover, definition, references, rename, signature help and
 symbols use the original handlers. External Nimble/other subprocesses are unavailable;
 include dependency source in `workspaceFiles`. See the [build and validation notes](../../docs/performance/nim-lsp.md).
+
+## Java
+
+```ts
+import { getJavaLanguageServer } from '@wasm-idle/lsp/java';
+
+const java = await getJavaLanguageServer({
+	java: {
+		baseUrl: 'https://cdn.example.com/wasm-java-lsp/',
+		initialFiles: {
+			'file:///workspace/Main.java': 'class Main { int answer = 42; }'
+		}
+	},
+	signal: startupAbortController.signal
+});
+// Attach java.transport to the editor's JSON-RPC client, initialize at file:///workspace,
+// then send the normal didOpen/didChange notifications. Upstream uses incremental edits.
+// Stop the server and release its compiler, filesystem, and static state:
+java.dispose();
+```
+
+`initialFiles` provides the original source text before initialize scans the workspace. Use local
+file URIs under `file:///workspace/`; Java filename case is preserved. The total source snapshot
+is limited to 16 MiB. Each server owns a worker and compiler instance. `signal` cancels startup;
+`startupTimeoutMs` bounds startup; `dispose()` terminates the worker and is idempotent.
+
+The snapshot rejects duplicate decoded paths, including repeated slashes and equivalent URI
+encodings. Request and change URIs may be lowercased by Monaco. The first `didOpen` owns its
+filename spelling for the session, including after `didClose`; a subsequent `didOpen` with
+conflicting case is rejected without changing the existing document. Rejected notifications
+emit `window/logMessage` with type 1; requests receive JSON-RPC error `-32602`.
+
+The worker verifies the loader, Wasm, and JDK API archive against pinned size/SHA-256 receipts before
+executing them and reuses the shared verified asset cache. `persistentCache: false` disables that
+cache. Custom builds can supply a complete `java.assets` receipt array. The browser profile supports
+plain Java source projects with its shipped JDK APIs; it does not run Maven/Gradle or download
+dependencies. See [producer and acceptance details](../../docs/performance/java-javacs-teavm-browser.md).
+
+`pnpm run build:java-lsp` builds the pinned original server and compiler;
+`pnpm run sync:java-lsp` verifies and copies their assets into `static/wasm-java-lsp/`.
+The existing page build runs both before static asset compression and locking. The npm SDK
+includes the Java host code and receipts; runtime binaries are prepared separately.

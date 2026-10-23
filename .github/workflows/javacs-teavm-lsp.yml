@@ -1,0 +1,131 @@
+name: javacs TeaVM browser LSP
+
+on:
+    pull_request:
+        branches: [main]
+        paths:
+            - 'packages/lsp/src/java/**'
+            - 'packages/lsp/src/*.ts'
+            - 'packages/lsp/test/java*.test.ts'
+            - 'packages/lsp/test/fixtures/java-teavm/**'
+            - 'packages/lsp/scripts/**'
+            - 'packages/lsp/package.json'
+            - 'packages/lsp/tsconfig.json'
+            - 'producers/javacs-teavm/**'
+            - 'scripts/java-teavm-lsp*'
+            - 'scripts/java-teavm-csp-runtime.test.mjs'
+            - 'scripts/sync-javacs-teavm-lsp.mjs'
+            - 'scripts/javacs-teavm-lsp-assets.lock.json'
+            - 'scripts/teavm/**'
+            - 'scripts/content-security-policy.mjs'
+            - 'scripts/browser-preview-server.mjs'
+            - 'src/routes/+page.svelte'
+            - 'src/routes/Monaco.svelte'
+            - 'src/routes/language-registry*.ts'
+            - 'src/routes/monaco-lsp.playwright.test.ts'
+            - 'src/routes/workspace-model-uri*.ts'
+            - 'src/lib/playground/assets*.ts'
+            - 'src/lib/playground/applicationAssets*.ts'
+            - 'src/lib/playground/container/release.ts'
+            - 'static/_headers'
+            - 'static/worker.js'
+            - 'package.json'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - 'vite.config.ts'
+            - 'sveltekit.config.mjs'
+            - '.github/workflows/javacs-teavm-lsp.yml'
+            - '.github/workflows/ci.yml'
+    push:
+        branches: [main]
+        paths:
+            - 'packages/lsp/src/java/**'
+            - 'packages/lsp/src/*.ts'
+            - 'packages/lsp/test/java*.test.ts'
+            - 'packages/lsp/test/fixtures/java-teavm/**'
+            - 'packages/lsp/scripts/**'
+            - 'packages/lsp/package.json'
+            - 'packages/lsp/tsconfig.json'
+            - 'producers/javacs-teavm/**'
+            - 'scripts/java-teavm-lsp*'
+            - 'scripts/java-teavm-csp-runtime.test.mjs'
+            - 'scripts/sync-javacs-teavm-lsp.mjs'
+            - 'scripts/javacs-teavm-lsp-assets.lock.json'
+            - 'scripts/teavm/**'
+            - 'scripts/content-security-policy.mjs'
+            - 'scripts/browser-preview-server.mjs'
+            - 'src/routes/+page.svelte'
+            - 'src/routes/Monaco.svelte'
+            - 'src/routes/language-registry*.ts'
+            - 'src/routes/monaco-lsp.playwright.test.ts'
+            - 'src/routes/workspace-model-uri*.ts'
+            - 'src/lib/playground/assets*.ts'
+            - 'src/lib/playground/applicationAssets*.ts'
+            - 'src/lib/playground/container/release.ts'
+            - 'static/_headers'
+            - 'static/worker.js'
+            - 'package.json'
+            - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - 'vite.config.ts'
+            - 'sveltekit.config.mjs'
+            - '.github/workflows/javacs-teavm-lsp.yml'
+            - '.github/workflows/ci.yml'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: javacs-teavm-lsp-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+    javacs-teavm-browser:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+            NODE_OPTIONS: --max-old-space-size=4096
+            WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Cache pinned toolchain and dependency downloads
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      .cache/javacs-teavm/downloads
+                      .cache/javacs-teavm/jdk
+                      .cache/javacs-teavm/gradle
+                      .cache/javacs-teavm/gradle-user-home
+                  key: ${{ runner.os }}-javacs-teavm-v1-${{ hashFiles('producers/javacs-teavm/**', 'scripts/javacs-teavm-lsp-assets.lock.json') }}
+            - run: pnpm --dir packages/core build
+            - run: pnpm --dir packages/llvm-core build
+            - run: pnpm exec playwright-core install --with-deps chromium
+            - name: Verify private JDK TLS truststore recovery
+              run: python3 producers/javacs-teavm/test_toolchain.py
+            - name: Build original javacs with the pinned TeaVM toolchain
+              run: python3 producers/javacs-teavm/build.py
+            - name: Verify the static TeaVM bridge without JavaScript string evaluation
+              run: node --test scripts/java-teavm-csp-runtime.test.mjs
+            - name: Verify and synchronize Java LSP assets
+              run: pnpm run sync:java-lsp
+            - name: Prepare pinned editor container assets
+              run: pnpm run prepare:test-assets -- container
+            - name: Compare the public SDK with original javacs under strict CSP
+              env:
+                  WASM_IDLE_RUN_REAL_BROWSER_LSP: '1'
+              run: node --test scripts/java-teavm-lsp.browser.test.mjs
+            - name: Exercise Monaco Java typing, undo, diagnostics, and hover under strict CSP
+              env:
+                  WASM_IDLE_STRICT_CSP: '1'
+                  WASM_IDLE_RUN_REAL_BROWSER_LSP: '1'
+                  WASM_IDLE_LSP_BROWSER_LANGUAGES: JAVA
+              run: pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts

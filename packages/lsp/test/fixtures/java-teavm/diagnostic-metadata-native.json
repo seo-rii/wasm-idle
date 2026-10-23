@@ -1,0 +1,50 @@
+{
+	"schema": "wasm-idle-original-javacs-diagnostic-metadata-v1",
+	"upstream": {
+		"version": "0.2.38",
+		"commit": "7fffb6c5929fe02c52e1c823ae990bad2b540ad1",
+		"originalSourceModifications": []
+	},
+	"source": "package src;\npublic class Main { UUID value; }\n",
+	"diagnostic": {
+		"range": {
+			"start": {
+				"line": 1,
+				"character": 20
+			},
+			"end": {
+				"line": 1,
+				"character": 24
+			}
+		},
+		"severity": 1,
+		"code": "compiler.err.cant.resolve.location",
+		"message": "cannot find symbol\n  symbol:   class UUID\n  location: class src.Main"
+	},
+	"codeActions": [
+		{
+			"title": "Import 'java.util.UUID'",
+			"kind": "quickfix",
+			"edit": {
+				"changes": {
+					"file:///workspace/src/Main.java": [
+						{
+							"range": {
+								"start": {
+									"line": 1,
+									"character": 0
+								},
+								"end": {
+									"line": 1,
+									"character": 0
+								}
+							},
+							"newText": "import java.util.UUID;\n"
+						}
+					]
+				}
+			}
+		}
+	],
+	"withoutCodeError": -32603
+}

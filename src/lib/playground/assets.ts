@@ -653,6 +653,14 @@ export interface PhpRuntimeAssetConfig {
 }
 
 export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
+	javaLsp?: {
+		baseUrl?: string;
+		assets?: readonly {
+			readonly path: 'javacs-runtime.mjs' | 'javacs.wasm' | 'jdk-platform.zip';
+			readonly bytes: number;
+			readonly sha256: string;
+		}[];
+	};
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	clang?: RuntimeAssetConfig;

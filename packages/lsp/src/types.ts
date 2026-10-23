@@ -6,6 +6,7 @@ import type { LanguageToolAssetConfig } from './assets.js';
 import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
+import type { JavaLanguageServerConfig } from './java/language-server.js';
 import type {
 	AwkRuntimePreflightProfile,
 	HaskellRuntimeAssetReceipts,
@@ -94,6 +95,7 @@ export interface EditorLanguageServerRuntimeOptions {
 		wasmUrl?: string;
 		wasmReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	java?: JavaLanguageServerConfig;
 	rust?: {
 		compilerUrl?: string;
 		expectedNetworkModuleUrls?: readonly string[];

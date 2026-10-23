@@ -27,6 +27,7 @@ import { getGoLanguageServer } from './go/language-server.js';
 import { getGraphqlLanguageServer } from './graphql/language-server.js';
 import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
+import { getJavaLanguageServer } from './java/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
 import { getLean4LanguageServer } from './lean4/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
@@ -91,6 +92,11 @@ const providerDefinitions = [
 		create: (options) => getLean4LanguageServer(options)
 	},
 	{ id: 'nim', languages: ['nim'], create: (options) => getNimLanguageServer(options) },
+	{
+		id: 'java',
+		languages: ['java'],
+		create: (options) => getJavaLanguageServer(options)
+	},
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

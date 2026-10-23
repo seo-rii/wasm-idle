@@ -65,3 +65,7 @@ static/wasm-lfortran/
 /static/wasm-v-lsp/
 # Original Nim compiler/nimsuggest LSP assets are deployed externally.
 /static/wasm-nim-lsp/
+# Original javacs + TeaVM assets are built and verified locally.
+/static/wasm-java-lsp/
+/static/wasm-java-lsp.preparing-*/
+/static/wasm-java-lsp.previous-*/
