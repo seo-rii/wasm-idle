@@ -5,7 +5,11 @@ import { WebsiteClangRuntime } from './clang-runtime';
 import { WebsiteRuntimeAdapter } from './runtime-adapter';
 import type { SandboxExecutionOptions } from '../options';
 
-function fixture(stderr: string[] = []) {
+function fixture(
+	stderr: string[] = [],
+	layered = false,
+	sysrootProfile: 'full' | 'c-base-v1' = 'c-base-v1'
+) {
 	const fs = new MemoryFileSystem();
 	const codes: number[] = [];
 	const hooks: { compile?: (signal?: AbortSignal) => Promise<void> | void } = {};
@@ -51,7 +55,20 @@ function fixture(stderr: string[] = []) {
 	);
 	const profile = {
 		container: { spawn, fs } as unknown as Container,
-		prepareCommand: vi.fn(async () => {})
+		prepareCommand: vi.fn(async () => {}),
+		...(layered
+			? {
+					sysrootProfile,
+					prepareClang: vi.fn(async (profile: 'c' | 'full') =>
+						profile === 'c'
+							? [
+									'--sysroot=/usr/share/wasm-sysroot-c',
+									'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
+								]
+							: []
+					)
+				}
+			: {})
 	};
 	const adapter = new WebsiteRuntimeAdapter({ runtimeAssets: '/wasm-idle/', emit: vi.fn() });
 	adapter.attach(profile.container);
@@ -105,6 +122,38 @@ function fixture(stderr: string[] = []) {
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
 describe('website container Clang compilation', () => {
+	it('uses the explicitly selected C delivery profile for stock C and preserves compiler arguments', async () => {
+		const { prepare, profile, spawn } = fixture([], true);
+		expect(await prepare('int main(void) { return 0; }', { activePath: 'main.c' }, 'C')).toBe(
+			true
+		);
+		expect(profile.prepareClang).toHaveBeenCalledWith('c', expect.any(AbortSignal));
+		expect(profile.prepareCommand).not.toHaveBeenCalled();
+		expect(spawn.mock.calls[0][1]).toContain('--sysroot=/usr/share/wasm-sysroot-c');
+		expect(spawn.mock.calls[0][1]).toContain(
+			'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
+		);
+		expect(spawn.mock.calls[0][1]).toContain('-lc-printscan-long-double');
+	});
+	it('keeps the complete sysroot by default even when the profile supports layered preparation', async () => {
+		const { prepare, profile, spawn } = fixture([], true, 'full');
+		await prepare('int main(void) { return 0; }', { activePath: 'main.c' }, 'C');
+		expect(profile.prepareClang).toHaveBeenCalledWith('full', expect.any(AbortSignal));
+		expect(spawn.mock.calls[0][1]).not.toContain('--sysroot=/usr/share/wasm-sysroot-c');
+	});
+	it.each<[string, SandboxExecutionOptions]>([
+		['CPP', { activePath: 'main.cpp' }],
+		['C', { activePath: 'main.c', compileArgs: ['-Icustom'] }],
+		['C', { activePath: 'main.c', compileArgs: ['@flags.rsp'] }],
+		['C', { activePath: 'main.c', env: { C_INCLUDE_PATH: '/custom' } }],
+		['C', { activePath: 'main.C' }],
+		['C', { activePath: 'main.cpp' }]
+	])('retains the full tree for %s %j', async (language, options) => {
+		const { prepare, profile, spawn } = fixture([], true);
+		await prepare('int main() {}', options, language);
+		expect(profile.prepareClang).toHaveBeenCalledWith('full', expect.any(AbortSignal));
+		expect(spawn.mock.calls[0][1]).not.toContain('--sysroot=/usr/share/wasm-sysroot-c');
+	});
 	it('preserves compiler colors in terminal output and extracts plain editor diagnostics across chunks', async () => {
 		const chunks = [
 			'\x1b[1m/workspace/CPP/main.cpp:2:3: \x1b[',

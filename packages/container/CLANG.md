@@ -153,6 +153,43 @@ resolves its own cc1 job to the same multicall executable without rewriting argv
 Other `compilerPaths` remain explicit trusted host aliases: dispatch uses the
 configured pinned compiler module, rather than loading code from the alias file.
 
+The live owner retains up to two immutable compiler/linker modules, bounded by
+`moduleCacheBytes` (256 MiB by default, charged by logical source bytes plus cache
+keys; zero disables retention). This module-service path is enabled by default for
+the built-in matching Worker. A custom `workerFactory` uses the legacy verified-byte
+path unless the trusted caller explicitly sets `moduleServices: true`; set it to
+`false` to force byte preparation. An older pinned Worker cannot consume service
+ports, even when its `postMessage` supports transfers. The Bash profile therefore
+requires `config.clangModuleServices === true`, emitted by builders that bundle a
+matching live Worker. Existing release configurations without that flag retain
+their byte preparation behavior. Newly bundled workspace page releases and live
+Bash releases enable module services together with their Worker.
+
+With module services, each command still snapshots and hashes its actual
+owner-side input bytes, including cache hits. The key includes the pinned digest,
+logical length, native compilation key, memory/cwd admission profile and asset
+limit. Workers receive single-use owner service ports instead of compiler/linker
+byte buffers, and repeat import/export/cwd admission before creating fresh tool
+instances, memories and descriptors. Cancellation closes those ports and retires
+the command Worker; abandoned native compilation cannot publish a cached module.
+At most two native preparation operations (hashing or compilation) run at once,
+including abandoned work that the engine cannot cancel; cancelled queued requests
+are removed before they can start native work.
+Module service preparation has an independent two-minute request deadline;
+`maxBlockedIoMs` controls only blocked guest syscalls. `SpawnOptions.timeoutMs`
+still bounds overall startup and execution, retiring preparation endpoints and
+the Worker when the command is cancelled.
+
+The owner-side executable reads, snapshots and integrity hashes remain costs of
+each invocation. Cache accounting does not measure native compiled-code memory.
+`adapter.clearModuleCache()` explicitly releases retained module references; the
+bounded cache otherwise lives with the adapter so sharing it between containers
+remains supported. Disposing a container closes its command endpoints and Workers
+without clearing another owner's shared adapter. Custom Worker proxies should
+forward the optional `postMessage(message, transfer)` list. A synchronous
+`DataCloneError` falls back to the original verified-byte preparation path for
+older proxies that cannot transfer ports. The snapshot adapter is unchanged.
+
 Each actual driver, cc1 and linker file operation reaches the common owner VFS.
 Other live processes and the editor can observe completed writes while compilation
 continues. There is no writer lease or implicit rollback: normal errors, crashes
