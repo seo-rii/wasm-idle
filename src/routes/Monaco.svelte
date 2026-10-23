@@ -2332,6 +2332,7 @@
 	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let grainLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2435,6 +2436,8 @@
 		perlLspEnabled?: boolean;
 		perlLspRuntime?: PerlLspRuntimeConfig;
 		pythonLspBaseUrl?: string;
+		grainLspBaseUrl?: string;
+		grainLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -2532,6 +2535,8 @@
 		perlLspEnabled = false,
 		perlLspRuntime,
 		pythonLspBaseUrl,
+		grainLspBaseUrl,
+		grainLspWorkspaceFiles = [],
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -2685,6 +2690,8 @@
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
+			grainLspBaseUrl || '',
+			activeLspLanguage === 'grain' ? JSON.stringify(grainLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2778,6 +2785,10 @@
 			case 'zig':
 				label = 'Zig LSP';
 				status = zigLspStatus;
+				break;
+			case 'grain':
+				label = 'Grain LSP';
+				status = grainLspStatus;
 				break;
 			case 'lua':
 				label = 'Lua LSP';
@@ -2910,6 +2921,20 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['grain'],
+			isEnabled: () => !!grainLspBaseUrl,
+			setStatus: (status) => (grainLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getGrainLanguageServer } = await import('@wasm-idle/lsp/grain');
+				return getGrainLanguageServer({
+					currentUrl,
+					signal,
+					grain: { baseUrl: grainLspBaseUrl, workspaceFiles: grainLspWorkspaceFiles },
+					onStatus: (status) => (grainLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3609,6 +3634,7 @@
 			wasm: wasmLspStatus,
 			zig: zigLspStatus,
 			lua: luaLspStatus,
+			grain: grainLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,

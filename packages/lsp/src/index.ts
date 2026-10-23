@@ -429,3 +429,5 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export { getGrainLanguageServer, type GrainLanguageServerOptions } from './grain/index.js';

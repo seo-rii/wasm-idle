@@ -24,6 +24,7 @@ import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
+import { getGrainLanguageServer } from './grain/language-server.js';
 import { getOcamlLanguageServer } from './ocaml/language-server.js';
 import { getOctaveLanguageServer } from './octave/language-server.js';
 import { getPascalLanguageServer } from './pascal/language-server.js';
@@ -150,6 +151,11 @@ const providerDefinitions = [
 		id: 'zig',
 		languages: ['zig'],
 		create: (options) => getZigLanguageServer(options)
+	},
+	{
+		id: 'grain',
+		languages: ['grain', 'gr'],
+		create: (options) => getGrainLanguageServer(options)
 	},
 	{
 		id: 'lua',

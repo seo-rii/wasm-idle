@@ -88,12 +88,21 @@ const mockState = vi.hoisted(() => {
 		}
 	}
 
-	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter };
+	class MockEmitter {
+		event = () => ({ dispose() {} });
+		fire() {}
+		dispose() {}
+	}
+
+	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter, MockEmitter };
 });
 
 vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageReader: mockState.MockReader,
-	BrowserMessageWriter: mockState.MockWriter
+	BrowserMessageWriter: mockState.MockWriter,
+	ReadableStreamMessageReader: mockState.MockReader,
+	WriteableStreamMessageWriter: mockState.MockWriter,
+	Emitter: mockState.MockEmitter
 }));
 
 const rubyRuntimeMocks = vi.hoisted(() => ({

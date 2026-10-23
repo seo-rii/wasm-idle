@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -448,6 +451,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		timeoutMs: 240_000
 	},
 	{
+		language: 'GRAIN',
+		label: 'Grain',
+		fileName: 'main.gr',
+		aliases: ['gr'],
+		source: 'module Main\nlet value: Number = "text"\nprint(value)\n',
+		validSource: 'module Main\nlet value: Number = 42\nprint(value)\n',
+		errorLine: 2,
+		expectedResponses: [
+			'/wasm-grain-lsp/host.mjs',
+			'/wasm-grain-lsp/grainlsp.js.gz.bin',
+			'/wasm-grain-lsp/stdlib.pack.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-grain-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'TCL',
 		label: 'Tcl',
 		fileName: 'main.tcl',
@@ -526,6 +545,7 @@ const lspBrowserMatrixGroups = {
 		'D',
 		'ELIXIR',
 		'ERLANG',
+		'GRAIN',
 		'TCL',
 		'JANET',
 		'LISP',
@@ -558,7 +578,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:grain-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1188,7 +1208,8 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
@@ -1232,7 +1253,8 @@ async function runLspCase(
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		const markers = await page.evaluate(() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
 			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
@@ -1251,7 +1273,19 @@ async function runLspCase(
 			)
 		).toBe(false);
 		await replaceEditorSource(page, testCase.validSource);
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd') {
+			await waitForClangdDiagnosticsForCurrentVersion(page);
+		} else {
+			await page.waitForFunction(() => {
+				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+				return (
+					model &&
+					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+						.length === 0
+				);
+			});
+		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
@@ -1403,6 +1437,7 @@ describe('Monaco LSP browser integration', () => {
 				'D',
 				'ELIXIR',
 				'ERLANG',
+				'GRAIN',
 				'TCL',
 				'JANET',
 				'LISP',
@@ -1474,6 +1509,11 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'GRAIN')
+				)
+					await runBrowserPreparationScripts(['sync:grain-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

@@ -479,6 +479,12 @@
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspRuntime = $derived(perlLspEnabled ? runtimeAssets.perl : undefined);
 	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
+	const grainLspBaseUrl = $derived(resolveApplicationAsset('wasm-grain-lsp/'));
+	const grainLspWorkspaceFiles = $derived(
+		files
+			.filter((file) => file.path !== activePath && file.path.endsWith('.gr'))
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
 			? runtimeAssets.typescript?.libUrl
@@ -4151,6 +4157,8 @@
 							{compact}
 							dark={darkMode}
 							{lspEnabled}
+							{grainLspBaseUrl}
+							{grainLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}

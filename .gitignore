@@ -45,3 +45,6 @@ static/wasm-lfortran/
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+# Original Grain LSP and its verified runtime host are prepared locally.
+/static/wasm-grain-lsp/

@@ -26,6 +26,7 @@ const expectedLanguagesByProvider = {
 	assemblyscript: ['assemblyscript', 'as'],
 	zig: ['zig'],
 	lua: ['lua'],
+	grain: ['grain', 'gr'],
 	janet: ['janet'],
 	lisp: ['lisp', 'scheme', 'scm'],
 	octave: ['octave', 'matlab', 'm'],

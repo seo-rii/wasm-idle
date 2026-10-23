@@ -521,7 +521,7 @@ export const supportMatrixRows = [
 		ids: ['GRAIN'],
 		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Grain LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/grain.playwright.test.ts',

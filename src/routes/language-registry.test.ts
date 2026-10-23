@@ -116,6 +116,7 @@ describe('language registry', () => {
 		expect(typescriptLspLanguages.has('TYPESCRIPT')).toBe(true);
 		expect(lspLanguageOverrides.ASSEMBLYSCRIPT).toBe('assemblyscript');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
+		expect(lspLanguageOverrides.GRAIN).toBe('grain');
 	});
 
 	it('registers Bash with shell syntax and CLI args', () => {
