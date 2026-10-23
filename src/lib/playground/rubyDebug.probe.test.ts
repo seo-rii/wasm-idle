@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { executeRubyTracepoint } from './worker/rubyTracepoint';
+import { RUBY_DEBUG_PREVIEW } from './worker/rubyDebugPreview';
 import {
 	preflightRubySplitRuntimeAssets,
 	rewriteRubySplitRuntimeModule,
@@ -266,4 +267,36 @@ puts $preview_calls
 	expect(safePreviewResponses.get(201)).toBe('0');
 	expect(safePreviewResponses.get(202)).toBe('"explicit inspection"');
 	expect(output).toBe('1\n');
+	output = '';
+	vm.eval(`${RUBY_DEBUG_PREVIEW}
+values = [1 << 300, Array.new(8, 'a' * 200), {a: [1]}]
+originals = {
+  Integer => [:to_s, :bit_length, :+, :succ, :times, :>, :>=, :<=],
+  Float => [:to_s], Symbol => [:name],
+  String => [:to_s, :+, :<<, :length, :[], :byteslice, :bytesize, :encode, :inspect],
+  Array => [:length, :[], :<<, :join, :min], Hash => [:length, :each_pair],
+  Module => [:name], Kernel => [:class], BasicObject => [:equal?]
+}.flat_map { |type, names| names.map { |name| [type, name, type.instance_method(name)] } }
+calls = []
+append = Array.instance_method(:<<)
+previews = []
+begin
+  originals.each do |type, name, original|
+    type.define_method(name) do |*args, **kwargs, &block|
+      append.bind_call(calls, name)
+      original.bind_call(self, *args, **kwargs, &block)
+    end
+  end
+  values.each { |value| append.bind_call(previews, preview_value.call(value)) }
+ensure
+  originals.each { |type, name, original| type.define_method(name, original) }
+end
+puts JSON.generate({previews:previews,calls:calls})
+`);
+	const formattingPreview = JSON.parse(output.trim());
+	expect(formattingPreview.calls).toEqual([]);
+	expect(formattingPreview.previews[0]).toBe('<Integer: 301 bits>');
+	expect(formattingPreview.previews[1]).toHaveLength(512);
+	expect(formattingPreview.previews[1].endsWith('...')).toBe(true);
+	expect(formattingPreview.previews[2]).toBe('{:"a"=>[...]}');
 }, 30_000);

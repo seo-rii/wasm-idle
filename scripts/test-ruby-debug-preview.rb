@@ -73,4 +73,56 @@ class RubyDebugPreviewTest < Minitest::Test
       assert_operator text.length, :<=, 512
     end
   end
+
+  def test_large_integer_bit_count_does_not_call_replaced_integer_to_s
+    preview, calls = with_core_overrides(Integer => [:to_s]) { @preview.call(1 << 300) }
+    assert_equal '<Integer: 301 bits>', preview
+    assert_empty calls
+  end
+
+  def test_preview_formatting_uses_captured_core_methods
+    values = [nil, true, false, 42, 1 << 300, 1.25, 'hello', :hello,
+              [1, [2], Dangerous.new], {a: [3]}, Dangerous.new,
+              Array.new(8, 'a' * 200), Array.new(8, '한' * 100),
+              Array.new(9, 1), (1..7).to_h { |n| [n, n] }]
+    expected = values.map { |value| @preview.call(value) }
+    append = Array.instance_method(:<<)
+    previews, calls = with_core_overrides(
+      Integer => [:to_s, :bit_length, :+, :succ, :times, :>, :>=, :<=],
+      Float => [:to_s], Symbol => [:name],
+      String => [:to_s, :+, :<<, :length, :[], :byteslice, :bytesize, :encode, :inspect],
+      Array => [:length, :[], :<<, :join, :min], Hash => [:length, :each_pair],
+      Module => [:name], Kernel => [:class], BasicObject => [:equal?]
+    ) do
+      result = []
+      values.each { |value| append.bind_call(result, @preview.call(value)) }
+      result
+    end
+    assert_equal expected, previews
+    assert_empty calls
+  end
+
+  private
+
+  # Replace methods only after the debugger captured them, as user source can do.
+  # Restore before assertions so test-framework formatting cannot affect the count.
+  def with_core_overrides(methods)
+    originals = methods.flat_map do |type, names|
+      names.map { |name| [type, name, type.instance_method(name)] }
+    end
+    calls = []
+    append = Array.instance_method(:<<)
+    begin
+      originals.each do |type, name, original|
+        type.define_method(name) do |*args, **kwargs, &block|
+          append.bind_call(calls, [type, name])
+          original.bind_call(self, *args, **kwargs, &block)
+        end
+      end
+      result = yield
+    ensure
+      originals.each { |type, name, original| type.define_method(name, original) }
+    end
+    [result, calls]
+  end
 end
