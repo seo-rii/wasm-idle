@@ -10,6 +10,7 @@ const ASSET_VERIFIERS = new Set(['verify:page-c3', 'verify:page-lfortran', 'chec
 const ASSET_PREPARATION = new Set([
 	'sync:phpantom-lsp',
 	'sync:forth-lsp',
+	'sync:c3-lsp',
 	'sync:wasm-lean4',
 	'prepare:test-assets',
 	'build:page-runtimes',

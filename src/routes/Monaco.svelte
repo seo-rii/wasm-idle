@@ -2329,6 +2329,7 @@
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let forthLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let c3LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2393,6 +2394,8 @@
 		phpLspWasmUrl?: string;
 		forthLspEnabled?: boolean;
 		forthLspWasmUrl?: string;
+		c3LspEnabled?: boolean;
+		c3LspBaseUrl?: string;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
 		gleamLspManifestFingerprint?: string;
@@ -2507,6 +2510,8 @@
 		phpLspWasmUrl,
 		forthLspEnabled = false,
 		forthLspWasmUrl,
+		c3LspEnabled = false,
+		c3LspBaseUrl,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
 		gleamLspManifestFingerprint,
@@ -2693,6 +2698,7 @@
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			phpLspEnabled ? phpLspWasmUrl || '' : '',
 			forthLspEnabled ? forthLspWasmUrl || '' : '',
+			c3LspEnabled ? c3LspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
@@ -2797,6 +2803,10 @@
 			case 'forth':
 				label = 'Forth LSP';
 				status = forthLspStatus;
+				break;
+			case 'c3':
+				label = 'C3 LSP';
+				status = c3LspStatus;
 				break;
 			case 'd':
 				label = 'D LSP';
@@ -3042,6 +3052,20 @@
 					signal,
 					grain: { baseUrl: grainLspBaseUrl, workspaceFiles: grainLspWorkspaceFiles },
 					onStatus: (status) => (grainLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['c3'],
+			isEnabled: () => c3LspEnabled && !!c3LspBaseUrl,
+			setStatus: (status) => (c3LspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getC3LanguageServer } = await import('@wasm-idle/lsp/c3');
+				return await getC3LanguageServer({
+					currentUrl,
+					signal,
+					c3: { baseUrl: c3LspBaseUrl },
+					onStatus: (status) => (c3LspStatus = status)
 				});
 			}
 		},
@@ -3775,6 +3799,7 @@
 			gleam: gleamLspStatus,
 			php: phpLspStatus,
 			forth: forthLspStatus,
+			c3: c3LspStatus,
 			d: dLspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,

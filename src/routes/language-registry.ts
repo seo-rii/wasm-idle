@@ -17,6 +17,7 @@ export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyL
 export type RuntimeLspCapability =
 	| 'php'
 	| 'forth'
+	| 'c3'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -88,6 +89,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',
+		runtimeLspCapability: 'c3',
+		lspLanguageOverride: 'c3',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},

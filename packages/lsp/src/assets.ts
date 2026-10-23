@@ -16,6 +16,7 @@ import {
 } from './persistent-assets.js';
 
 export type LanguageToolAssetRuntime =
+	| 'c3'
 	| 'awk'
 	| 'clangd'
 	| 'objectivec'

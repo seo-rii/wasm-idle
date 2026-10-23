@@ -460,3 +460,11 @@ export {
 } from './forth/index.js';
 
 export { getGrainLanguageServer, type GrainLanguageServerOptions } from './grain/index.js';
+
+export {
+	getC3LanguageServer,
+	type C3LanguageServerOptions,
+	C3_LSP_VERSION,
+	C3_LSP_ASSET_RECEIPTS,
+	type C3LspAssetReceipts
+} from './c3/index.js';

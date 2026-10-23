@@ -8,6 +8,7 @@ import {
 const expectedLanguagesByProvider = {
 	php: ['php', 'phpantom'],
 	forth: ['forth', 'fth', '4th'],
+	c3: ['c3'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

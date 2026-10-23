@@ -405,6 +405,10 @@
 	const forthLspWasmUrl = $derived(
 		forthLspEnabled ? resolveApplicationAsset('wasm-forth-lsp/forth_lsp.wasm') : undefined
 	);
+	const c3LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'c3');
+	const c3LspBaseUrl = $derived(
+		c3LspEnabled ? resolveApplicationAsset('wasm-c3-lsp/') : undefined
+	);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -4535,6 +4539,8 @@
 							{phpLspWasmUrl}
 							{forthLspEnabled}
 							{forthLspWasmUrl}
+							{c3LspEnabled}
+							{c3LspBaseUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}

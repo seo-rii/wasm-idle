@@ -1,0 +1,87 @@
+--- a/project.json
++++ b/project.json
+@@ -12,0 +13 @@
++    "wasm-reactor": { "type": "object-files", "target": "emscripten" },
+--- a/lib/lexer.c3l/manifest.json
++++ b/lib/lexer.c3l/manifest.json
+@@ -3,0 +4 @@
++    "emscripten": {},
+--- a/lib/argparse.c3l/manifest.json
++++ b/lib/argparse.c3l/manifest.json
+@@ -5,0 +6 @@
++    "emscripten": {},
+--- a/src/main.c3
++++ b/src/main.c3
+@@ -12 +12 @@
+-fn int main(String[] args_in)
++fn int main(String[] args_in) @feat(!EMSCRIPTEN)
+--- a/src/server/transport.c3
++++ b/src/server/transport.c3
+@@ -7 +7 @@
+-fn String read_message(InStream stream)
++fn String read_message(InStream stream) @feat(!EMSCRIPTEN)
+@@ -84 +84 @@
+-fn void send_message(String json)
++fn void send_message(String json) @feat(!EMSCRIPTEN)
+--- a/src/server/stdlib_detect.c3
++++ b/src/server/stdlib_detect.c3
+@@ -20 +20 @@
+-fn String detect_stdlib_path(String compiler_path)
++fn String detect_stdlib_path(String compiler_path) @feat(!EMSCRIPTEN)
+--- a/src/analysis/compiler_diagnostics.c3
++++ b/src/analysis/compiler_diagnostics.c3
+@@ -29 +29 @@
+-fn void LspServer.publish_compiler_diagnostics(&self, String uri)
++fn void LspServer.publish_compiler_diagnostics(&self, String uri) @feat(!EMSCRIPTEN)
+--- /dev/null
++++ b/src/wasm_reactor.c3
+@@ -0,0 +1,49 @@
++module lsp;
++import std::core::mem;
++import std::core::dstring;
++
++LspServer wasm_server;
++DString wasm_output;
++bool wasm_started;
++
++fn void lsp_init() @cname("lsp_init") @wasm
++{
++ if (wasm_started) return;
++ wasm_started = true;
++ wasm_output = dstring::new(mem);
++ wasm_server.init("/c3/lib/std", "", 0);
++}
++fn char* lsp_alloc(sz len) @cname("lsp_alloc") @wasm
++{
++ char[] bytes = mem::new_array(char, len);
++ return bytes.ptr;
++}
++fn void lsp_free(char* ptr) @cname("lsp_free") @wasm
++{
++ mem::free(ptr);
++}
++fn void lsp_handle(char* ptr, sz len) @cname("lsp_handle") @wasm
++{
++ lsp_init();
++ wasm_output.clear();
++ @pool()
++ {
++  wasm_server.handle_message((String)ptr[:len]);
++ };
++}
++fn char* lsp_response_ptr() @cname("lsp_response_ptr") @wasm
++{
++ return (char*)wasm_output.str_view().ptr;
++}
++fn sz lsp_response_len() @cname("lsp_response_len") @wasm
++{
++ return wasm_output.len();
++}
++fn void send_message(String json) @feat(EMSCRIPTEN)
++{
++ wasm_output.append(json);
++ wasm_output.append("\n");
++}
++fn String detect_stdlib_path(String compiler_path) @feat(EMSCRIPTEN) => "";
++// Browser builds preserve the upstream lexer diagnostics; no subprocess is available.
++fn void LspServer.publish_compiler_diagnostics(&self, String uri) @feat(EMSCRIPTEN) {}

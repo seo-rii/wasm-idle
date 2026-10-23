@@ -137,6 +137,18 @@ const lspBrowserCases: LspBrowserCase[] = [
 		assertNoPreEnableRequests: ['/wasm-forth-lsp/']
 	},
 	{
+		language: 'C3',
+		label: 'C3',
+		fileName: 'main.c3',
+		source: 'module main;\nfn void main() { \\ }\n',
+		expectedResponses: [
+			'/wasm-c3-lsp/c3_lsp.mjs',
+			'/wasm-c3-lsp/c3_lsp.wasm',
+			'/wasm-c3-lsp/stdlib.json.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-c3-lsp/']
+	},
+	{
 		language: 'CPP',
 		label: 'C++',
 		fileName: 'main.cpp',
@@ -609,6 +621,7 @@ const lspBrowserMatrixGroups = {
 	'runtime-small': [
 		'PHP',
 		'FORTH',
+		'C3',
 		'ASSEMBLYSCRIPT',
 		'WAT',
 		'GO',
@@ -658,7 +671,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1527,6 +1540,46 @@ async function runLspCase(
 			.waitFor({ timeout: 10_000 });
 		await page.keyboard.press('Escape');
 	}
+	if (testCase.language === 'C3') {
+		const validSource =
+			'module main;\nfn int square(int value) { return value * value; }\nfn void main() { int n = square(5); }\n';
+		await replaceEditorSource(page, validSource);
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: editor.getModel().getLineMaxColumn(2) });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('\\');
+		await waitForDiagnostics(page, testCase);
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction((source) => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === source &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		}, validSource);
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 9 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page.locator('.monaco-hover').filter({ hasText: 'square' }).first().waitFor();
+		await page.keyboard.press('Escape');
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1807,6 +1860,8 @@ describe('Monaco LSP browser integration', () => {
 					cases.some((testCase) => testCase.language === 'GRAIN')
 				)
 					await runBrowserPreparationScripts(['sync:grain-lsp']);
+				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'C3'))
+					await runBrowserPreparationScripts(['sync:c3-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

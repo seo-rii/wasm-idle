@@ -249,6 +249,11 @@
 			"types": "./dist/grain/index.d.ts",
 			"import": "./dist/grain/index.js",
 			"default": "./dist/grain/index.js"
+		},
+		"./c3": {
+			"types": "./dist/c3/index.d.ts",
+			"import": "./dist/c3/index.js",
+			"default": "./dist/c3/index.js"
 		}
 	},
 	"files": [

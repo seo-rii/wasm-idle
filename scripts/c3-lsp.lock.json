@@ -1,0 +1,54 @@
+{
+	"version": "0.4.0",
+	"sources": {
+		"server": {
+			"repository": "https://github.com/tonis2/lsp",
+			"commit": "466764b2fe4faf3818cf5fe230228b8a651e28ca",
+			"url": "https://codeload.github.com/tonis2/lsp/tar.gz/466764b2fe4faf3818cf5fe230228b8a651e28ca",
+			"bytes": 185658,
+			"sha256": "79e27a909ae2adeab795bb9fb911d728c7e761e5bb9bc9f27368205807cbbd25"
+		},
+		"lexer": {
+			"repository": "https://github.com/tonis2/lexer.c3l",
+			"commit": "268b6f84517579d349df512eab489020b280b9b4",
+			"url": "https://codeload.github.com/tonis2/lexer.c3l/tar.gz/268b6f84517579d349df512eab489020b280b9b4",
+			"bytes": 11686,
+			"sha256": "bfa7fe2b4ae4df8f8017fec7fdb736f8defa05da237d5e9a66867f6fc18244ac"
+		},
+		"argparse": {
+			"repository": "https://github.com/tonis2/argparse",
+			"commit": "88990be9183812f8118cccab54c84213f828d2be",
+			"url": "https://codeload.github.com/tonis2/argparse/tar.gz/88990be9183812f8118cccab54c84213f828d2be",
+			"bytes": 7526,
+			"sha256": "2779db62f079bb2b8b74ff5f03e36868999282cc627c9abe2d8a70e9cefdcd5e"
+		}
+	},
+	"patchSha256": "18ad816a62d915a79df5cf566800eacd37a90d47d5e5c42df6824ffbb3d577b1",
+	"compiler": {
+		"version": "0.8.3",
+		"commit": "1d155ee04d3b607261b99aa15ed5eefd6d7db284",
+		"url": "https://github.com/c3lang/c3c/releases/download/v0.8.3/c3-linux-static.tar.gz",
+		"bytes": 49451830,
+		"sha256": "bc3c276dd6f8ce36584b6f289c872a83c448053ee0a2d23b2ec90d7a32dd423e"
+	},
+	"emscripten": {
+		"version": "6.0.0",
+		"url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/linux/772bb4648be4a897ca062d6adc65bc70223d2703/wasm-binaries.tar.xz",
+		"bytes": 269920796,
+		"sha256": "b5ed0963521f1d35b8967f20b1776327980bcfd5133166b40e018f27f2380e89"
+	},
+	"assets": {
+		"c3_lsp.mjs": {
+			"bytes": 59746,
+			"sha256": "3908187e77957e3c2cfd58ee053971752233ea48cf18f174a5f2a207c03f46f7"
+		},
+		"c3_lsp.wasm": {
+			"bytes": 275565,
+			"sha256": "2a15e2240a63ca40d3fa800ad172fc5a36a86de2f63343ef23a075e4c82a12a2"
+		},
+		"stdlib.json.gz.bin": {
+			"bytes": 561963,
+			"sha256": "3c350d0356dd9b7bc23cb084ee39a79c43314d49ccf250c4897c2528ba786785"
+		}
+	}
+}

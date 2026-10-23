@@ -261,7 +261,7 @@ export const supportMatrixRows = [
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'c3-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/c3.playwright.test.ts',

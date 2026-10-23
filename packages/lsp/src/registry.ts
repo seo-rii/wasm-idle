@@ -16,6 +16,7 @@ import {
 } from './dotnet/language-server.js';
 import { getElixirLanguageServer } from './elixir/language-server.js';
 import { getErlangLanguageServer } from './erlang/language-server.js';
+import { getC3LanguageServer } from './c3/language-server.js';
 import { getFortranLanguageServer } from './fortran/language-server.js';
 import { getForthLanguageServer } from './forth/language-server.js';
 import { getGleamLanguageServer } from './gleam/language-server.js';
@@ -62,6 +63,7 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{ id: 'c3', languages: ['c3'], create: (options) => getC3LanguageServer(options) },
 	{
 		id: 'php',
 		languages: ['php', 'phpantom'],

@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1136750000,
-		"maxFiles": 1967
+		"maxBytes": 1140750000,
+		"maxFiles": 1972
 	},
 	"directories": {
 		"clang": {
@@ -291,6 +291,11 @@
 		},
 		"wasm-grain-lsp": {
 			"maxBytes": 5300000,
+			"maxFiles": 5,
+			"optional": true
+		},
+		"wasm-c3-lsp": {
+			"maxBytes": 4000000,
 			"maxFiles": 5,
 			"optional": true
 		}
