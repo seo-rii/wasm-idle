@@ -1297,6 +1297,35 @@ async function runLspCase(
 	if (testCase.language === 'RESCRIPT') {
 		await page.evaluate(() => {
 			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 1, column: 19 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === 'let answer: int = x42\n' &&
+				hooks
+					.__wasmIdleMonacoApi!.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+					})
+					.some((marker) => (marker.severity || 0) >= 4)
+			);
+		});
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === 'let answer: int = 42\n' &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
 			editor.setPosition({ lineNumber: 1, column: 6 });
 			editor.focus();
 			editor.trigger('browser-regression', 'editor.action.showHover', {});
