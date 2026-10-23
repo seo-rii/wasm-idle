@@ -45,3 +45,6 @@ static/wasm-lfortran/
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+# Original v-analyzer browser LSP assets are produced from pinned sources.
+/static/wasm-v-lsp/

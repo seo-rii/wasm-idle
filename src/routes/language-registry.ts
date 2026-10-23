@@ -15,6 +15,7 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'v'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -395,6 +396,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	V: {
 		label: 'V',
 		editorLanguage: 'go',
+		runtimeLspCapability: 'v',
+		lspLanguageOverride: 'v',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},

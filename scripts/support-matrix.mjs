@@ -937,7 +937,7 @@ export const supportMatrixRows = [
 		ids: ['V'],
 		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'v-analyzer LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

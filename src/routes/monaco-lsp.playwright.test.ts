@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -66,6 +69,8 @@ interface MonacoTestStatus {
 interface MonacoTestEditor {
 	focus(): void;
 	getModel?(): { uri: unknown } | null;
+	setPosition(position: { lineNumber: number; column: number }): void;
+	trigger(source: string, action: string, args: unknown): void;
 	getValue(): string;
 	setValue(value: string): void;
 }
@@ -113,6 +118,21 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 ]);
 
 const lspBrowserCases: LspBrowserCase[] = [
+	{
+		language: 'V',
+		label: 'V',
+		fileName: 'main.v',
+		statusKey: 'v',
+		source: 'module main\n// Squares an integer.\nfn square(value int) int {\n return value * value\n}\nfn main() {\n n := square(5)\n println(n)\n}\n',
+		expectDiagnostics: false,
+		expectedResponses: [
+			'/wasm-v-lsp/v_analyzer.mjs',
+			'/wasm-v-lsp/v_analyzer.wasm',
+			'/wasm-v-lsp/stdlib.json.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-v-lsp/'],
+		timeoutMs: 180_000
+	},
 	{
 		language: 'CPP',
 		label: 'C++',
@@ -522,6 +542,7 @@ const lspBrowserMatrixGroups = {
 	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
+		'V',
 		'OBJC',
 		'D',
 		'ELIXIR',
@@ -558,7 +579,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:v-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1254,6 +1275,39 @@ async function runLspCase(
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
+	if (testCase.language === 'V') {
+		// The upstream initial index runs after initialize. Wait for an editor feature
+		// from the opened document before triggering a hover at a fixed position.
+		await expect
+			.poll(
+				async () =>
+					(await page.locator('.view-lines').innerText()).replaceAll('\u00a0', ' '),
+				{
+					timeout: 120_000
+				}
+			)
+			.toContain('n: int');
+		await page.evaluate(() => {
+			const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+				.__wasmIdleMonacoEditor!;
+			editor.setPosition({ lineNumber: 7, column: 8 });
+			editor.focus();
+			editor.trigger('browser-test', 'editor.action.showHover', {});
+		});
+		await expect
+			.poll(
+				async () =>
+					await page
+						.locator('.monaco-hover')
+						.innerText()
+						.catch(() => ''),
+				{
+					timeout: 30_000
+				}
+			)
+			.toContain('Squares an integer.');
+	}
+
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1399,6 +1453,7 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-extra';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'V',
 				'OBJC',
 				'D',
 				'ELIXIR',
@@ -1474,6 +1529,8 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'V'))
+					await runBrowserPreparationScripts(['sync:v-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

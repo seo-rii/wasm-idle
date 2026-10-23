@@ -25,6 +25,10 @@ In particular:
   URL-only overrides fail closed.
 - Python and R load their externally deployed Pyodide and WebR trees from `python.baseUrl` and
   `r.baseUrl`.
+- V runs the original v-analyzer in a Worker. Import `getVLanguageServer` from
+  `@wasm-idle/lsp/v` and supply `rootUrl` or `v.baseUrl`; custom assets require all three
+  `v.integrity` receipts. Compiler diagnostics and formatting require an external V process and
+  are disabled in this profile. See [the producer and browser profile](../../docs/v-lsp.md).
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.
 
 Clangd and Python deliberately have no document-relative fallback. Supply their individual asset

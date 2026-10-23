@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1110000000,
-		"maxFiles": 1951
+		"maxBytes": 1118000000,
+		"maxFiles": 1956
 	},
 	"directories": {
 		"clang": { "maxBytes": 36000000, "maxFiles": 17 },
@@ -26,6 +26,7 @@
 		"wasm-clojurescript": { "maxBytes": 1500000, "maxFiles": 8 },
 		"wasm-cobol": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-v": { "maxBytes": 4400000, "maxFiles": 8 },
+		"wasm-v-lsp": { "maxBytes": 8000000, "maxFiles": 5, "optional": true },
 		"wasm-d": { "maxBytes": 18000000, "maxFiles": 20 },
 		"wasm-debug": { "maxBytes": 55000000, "maxFiles": 10, "optional": true },
 		"wasm-dotnet": { "maxBytes": 52000000, "maxFiles": 25 },

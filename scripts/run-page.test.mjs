@@ -29,6 +29,7 @@ test('skipping deployment checks retains asset preparation and the website build
 	])
 		assert(!names.includes(name), name);
 	for (const name of [
+		'sync:v-lsp',
 		'prepare:test-assets',
 		'build:page-runtimes',
 		'layer:static-runtimes',
@@ -62,6 +63,7 @@ test('asset reuse alone preserves verification and the full browser audit', () =
 	assert(names.includes('test:browser:audit:full'));
 	assert(!names.includes('assets:lock'));
 	assert(!names.includes('sync:page-runtimes'));
+	assert(!names.includes('sync:v-lsp'));
 });
 
 test('only explicit 1 flags opt out, and unknown build command forms fail closed', () => {

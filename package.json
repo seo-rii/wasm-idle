@@ -139,7 +139,7 @@
 		"support:matrix": "node scripts/support-matrix.mjs write",
 		"check:support-matrix": "node scripts/support-matrix.mjs check",
 		"sync:page-runtimes": "pnpm run sync:pyodide && pnpm run sync:webr && pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim && pnpm run sync:wasm-ruby && pnpm run sync:wasm-bash && pnpm run sync:wasm-clojurescript && pnpm run sync:wasm-rescript",
-		"page:build": "pnpm run verify:page-c3 && pnpm run verify:page-lfortran && pnpm run sync:wasm-lean4 && pnpm run prepare:test-assets -- clang && pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run prepare:wasm-debug-release && pnpm run sync:wasm-commonlisp && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run assets:lock && pnpm run check:assets-lock && pnpm run prepare:page-container && pnpm run build && pnpm run compress:build-runtimes && pnpm run verify:page-c3 build && pnpm run verify:page-lfortran build",
+		"page:build": "pnpm run sync:v-lsp && pnpm run verify:page-c3 && pnpm run verify:page-lfortran && pnpm run sync:wasm-lean4 && pnpm run prepare:test-assets -- clang && pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run prepare:wasm-debug-release && pnpm run sync:wasm-commonlisp && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run assets:lock && pnpm run check:assets-lock && pnpm run prepare:page-container && pnpm run build && pnpm run compress:build-runtimes && pnpm run verify:page-c3 build && pnpm run verify:page-lfortran build",
 		"package:root": "svelte-kit sync && node scripts/clean-package-output.mjs && svelte-package --tsconfig ./tsconfig.package.json && publint",
 		"package": "pnpm run build:publish-deps && pnpm run package:root",
 		"prepack": "pnpm run package",
@@ -197,7 +197,9 @@
 		"prepare:container-distribution": "node scripts/prepare-container-distribution.mjs",
 		"verify:container-distribution": "node scripts/verify-container-distribution.mjs",
 		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
-		"benchmark:container": "node scripts/benchmark-container.mjs"
+		"benchmark:container": "node scripts/benchmark-container.mjs",
+		"sync:v-lsp": "node scripts/build-v-lsp.mjs",
+		"test:lsp:browser:v": "WASM_IDLE_RUN_REAL_BROWSER_V_LSP=1 node --test scripts/v-lsp.browser.test.mjs"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

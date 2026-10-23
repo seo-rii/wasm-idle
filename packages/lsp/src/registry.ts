@@ -16,6 +16,7 @@ import {
 } from './dotnet/language-server.js';
 import { getElixirLanguageServer } from './elixir/language-server.js';
 import { getErlangLanguageServer } from './erlang/language-server.js';
+import { getVLanguageServer } from './v/language-server.js';
 import { getFortranLanguageServer } from './fortran/language-server.js';
 import { getGleamLanguageServer } from './gleam/language-server.js';
 import { getGoLanguageServer } from './go/language-server.js';
@@ -56,6 +57,7 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{ id: 'v', languages: ['v', 'vlang'], create: (options) => getVLanguageServer(options) },
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

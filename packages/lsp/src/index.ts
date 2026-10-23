@@ -429,3 +429,11 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export {
+	getVLanguageServer,
+	type VLanguageServerOptions,
+	V_LSP_VERSION,
+	V_LSP_ASSET_RECEIPTS,
+	type VLspAssetReceipts
+} from './v/index.js';
