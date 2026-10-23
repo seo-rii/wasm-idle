@@ -145,6 +145,11 @@
 			"import": "./dist/sql/index.js",
 			"default": "./dist/sql/index.js"
 		},
+		"./postgresql": {
+			"types": "./dist/postgresql/index.d.ts",
+			"import": "./dist/postgresql/index.js",
+			"default": "./dist/postgresql/index.js"
+		},
 		"./graphql": {
 			"types": "./dist/graphql/index.d.ts",
 			"import": "./dist/graphql/index.js",

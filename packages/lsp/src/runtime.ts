@@ -827,6 +827,18 @@ export function resolveDuckDbLanguageServerModuleUrl(
 	);
 }
 
+export function resolvePostgresqlLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.postgresql?.moduleUrl : undefined,
+		'/wasm-postgresql-lsp/dist/lsp.js',
+		currentUrl
+	);
+}
+
 export function resolveFortranLanguageServerAnalyzerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

@@ -456,6 +456,14 @@
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
+	const postgresqlLspEnabled = $derived(
+		lspEnabled && activeRuntimeLspCapability === 'postgresql'
+	);
+	const postgresqlLspModuleUrl = $derived(
+		postgresqlLspEnabled
+			? resolveApplicationAsset('wasm-postgresql-lsp/dist/lsp.js', '0.28.2')
+			: undefined
+	);
 	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
 	const prologLspBaseUrl = $derived(prologLspEnabled ? runtimeAssets.prolog?.baseUrl : undefined);
 	const prologLspWorkerUrl = $derived(
@@ -4207,6 +4215,8 @@
 							{duckDbLspModuleUrl}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
+							{postgresqlLspEnabled}
+							{postgresqlLspModuleUrl}
 							{prologLspEnabled}
 							{prologLspBaseUrl}
 							{prologLspWorkerUrl}

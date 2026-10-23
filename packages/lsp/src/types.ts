@@ -170,6 +170,12 @@ export interface EditorLanguageServerRuntimeOptions {
 	graphql?: {
 		schema?: string;
 	};
+	postgresql?: {
+		/** Unmodified @postgres-language-server/wasm/lsp deployed outside the SDK. */
+		moduleUrl?: string;
+		/** JSON exported by postgres-language-server schema-export. */
+		schema?: string;
+	};
 	fortran?: {
 		analyzerUrl?: string;
 	};
