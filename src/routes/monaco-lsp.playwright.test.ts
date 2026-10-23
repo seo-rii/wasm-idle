@@ -128,6 +128,14 @@ const lspBrowserCases: LspBrowserCase[] = [
 		assertNoPreEnableRequests: ['/wasm-phpantom-lsp/']
 	},
 	{
+		language: 'FORTH',
+		label: 'Forth',
+		fileName: 'main.fth',
+		source: ': square ( n -- n ) dup * ;\n5 not-defined . cr\n',
+		expectedResponses: ['/wasm-forth-lsp/forth_lsp.wasm'],
+		assertNoPreEnableRequests: ['/wasm-forth-lsp/']
+	},
+	{
 		language: 'CPP',
 		label: 'C++',
 		fileName: 'main.cpp',
@@ -565,6 +573,7 @@ const lspBrowserMatrixGroups = {
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
 	'runtime-small': [
 		'PHP',
+		'FORTH',
 		'ASSEMBLYSCRIPT',
 		'WAT',
 		'GO',
@@ -613,7 +622,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1691,6 +1700,12 @@ describe('Monaco LSP browser integration', () => {
 					cases.some((testCase) => testCase.language === 'FENNEL')
 				) {
 					await runBrowserPreparationScripts(['sync:fennel-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FORTH')
+				) {
+					await runBrowserPreparationScripts(['sync:forth-lsp']);
 				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([

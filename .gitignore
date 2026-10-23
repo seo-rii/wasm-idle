@@ -14,6 +14,7 @@ runtimes/wasm-clang/artifacts/
 # Local build caches and generated sync outputs
 .cache/
 /static/wasm-phpantom-lsp/
+/static/wasm-forth-lsp/
 **/.svelte-kit/
 static/.cache/
 static/clang/bin/

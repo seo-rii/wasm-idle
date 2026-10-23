@@ -17,6 +17,7 @@ import {
 import { getElixirLanguageServer } from './elixir/language-server.js';
 import { getErlangLanguageServer } from './erlang/language-server.js';
 import { getFortranLanguageServer } from './fortran/language-server.js';
+import { getForthLanguageServer } from './forth/language-server.js';
 import { getGleamLanguageServer } from './gleam/language-server.js';
 import { getGoLanguageServer } from './go/language-server.js';
 import { getGraphqlLanguageServer } from './graphql/language-server.js';
@@ -63,6 +64,11 @@ const providerDefinitions = [
 		id: 'php',
 		languages: ['php', 'phpantom'],
 		create: (options) => getPhpLanguageServer(options)
+	},
+	{
+		id: 'forth',
+		languages: ['forth', 'fth', '4th'],
+		create: (options) => getForthLanguageServer(options)
 	},
 	{
 		id: 'clangd',

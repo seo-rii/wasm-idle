@@ -24,6 +24,7 @@ export type LanguageToolAssetRuntime =
 	| 'pascal'
 	| 'perl'
 	| 'php'
+	| 'forth'
 	| 'prolog'
 	| 'ruby'
 	| 'tcl';

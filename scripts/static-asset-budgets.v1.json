@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1129450000,
-		"maxFiles": 1959
+		"maxBytes": 1131450000,
+		"maxFiles": 1962
 	},
 	"directories": {
 		"clang": {
@@ -277,6 +277,11 @@
 		"wasm-fennel-lsp": {
 			"maxBytes": 1450000,
 			"maxFiles": 5,
+			"optional": true
+		},
+		"wasm-forth-lsp": {
+			"maxBytes": 2000000,
+			"maxFiles": 3,
 			"optional": true
 		}
 	}

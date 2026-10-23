@@ -62,6 +62,11 @@ export interface EditorLanguageServerRuntimeOptions {
 		wasmUrl?: string;
 		wasmReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	/** Upstream forth-lsp compiled as a WASI reactor. */
+	forth?: {
+		wasmUrl?: string;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	rust?: {
 		compilerUrl?: string;
 		expectedNetworkModuleUrls?: readonly string[];

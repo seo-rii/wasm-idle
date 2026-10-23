@@ -445,3 +445,10 @@ export {
 } from './php/index.js';
 
 export { getFennelLanguageServer, type FennelLanguageServerOptions } from './fennel/index.js';
+export {
+	getForthLanguageServer,
+	type ForthLanguageServerOptions,
+	FORTH_LSP_VERSION,
+	FORTH_LSP_WASM_ASSET,
+	FORTH_LSP_WASM_RECEIPT
+} from './forth/index.js';

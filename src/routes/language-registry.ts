@@ -16,6 +16,7 @@ export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyL
 
 export type RuntimeLspCapability =
 	| 'php'
+	| 'forth'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -236,7 +237,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		runtimeLspCapability: 'pascal',
 		diagnosticMarkers: true
 	},
-	FORTH: { label: 'Forth', editorLanguage: 'forth' },
+	FORTH: {
+		label: 'Forth',
+		editorLanguage: 'forth',
+		runtimeLspCapability: 'forth',
+		diagnosticMarkers: true
+	},
 	J: { label: 'J', editorLanguage: 'j' },
 	BQN: { label: 'BQN', editorLanguage: 'bqn' },
 	JANET: {
