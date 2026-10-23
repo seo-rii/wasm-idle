@@ -10,6 +10,7 @@ export interface PythonLspWorkerInitMessage {
 	type: 'init';
 	pyodideBaseUrl: string;
 	persistentAssets?: LanguageToolPersistentOptions;
+	runtimeModuleBridge?: boolean;
 }
 
 export type PythonLspWorkerInboundMessage = PythonLspWorkerInitMessage | Record<string, unknown>;
@@ -17,4 +18,5 @@ export type PythonLspWorkerInboundMessage = PythonLspWorkerInitMessage | Record<
 export type PythonLspWorkerOutboundMessage =
 	| { type: 'progress'; stage: string }
 	| { type: 'ready' }
+	| { type: 'runtime-module-request' }
 	| { type: 'error'; error: string };

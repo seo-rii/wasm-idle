@@ -69,7 +69,7 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 		interrupt: new SharedArrayBuffer(4)
 	} });
 	for (const source of sources) {
-		execFileSync('python', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<expanded-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: source });
+		execFileSync(process.env.PYTHON ?? 'python3', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<expanded-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: source });
 		assert.ok(!source.includes('builtins.print = __wasm_idle_output'));
 	}
 	assert.equal(messages.filter((m) => m.output).map((m) => m.output).join(''), 'pending');
@@ -85,7 +85,7 @@ test('normal worker uses native stdio and drains before results', async () => {
 });
 test('debug wrapper is valid Python and flushes before pausing', async () => {
 	const r = await execute({ debug: true });
-	assert.match(r.sources[0], /sys.stdout.flush\(\)\n    sys.stderr.flush\(\)\n    __wasm_idle_python_debug_pause_/);
+	assert.match(r.sources[0], /sys.stdout.flush\(\)\n    sys.stderr.flush\(\)\n    pause_reference = __wasm_idle_python_debug_pause_/);
 });
 test('Hy wrapper remains valid Python and follows the same stream lifecycle', () => execute({ language: 'hy' }));
 test('execution errors drain output and dispose hooks before error notification', async () => {

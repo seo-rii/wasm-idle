@@ -90,7 +90,8 @@ describe('all-language browser test runner', () => {
 			},
 			[
 				'src/lib/playground/python.playwright.test.ts',
-				'src/lib/playground/python-debug.playwright.test.ts'
+				'src/lib/playground/python-debug.playwright.test.ts',
+				'src/lib/playground/python-performance.playwright.test.ts'
 			]
 		]
 	] as const)(
@@ -200,6 +201,9 @@ describe('all-language browser test runner', () => {
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE).toBe('1');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE).toBe('1');
 		expect(plan.testFiles).toContain('src/lib/playground/python-debug.playwright.test.ts');
+		expect(plan.testFiles).toContain(
+			'src/lib/playground/python-performance.playwright.test.ts'
+		);
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG).toBe('1');
 	});
 
@@ -307,6 +311,7 @@ describe('all-language browser test runner', () => {
 			if (shard === 'specialized') {
 				expectedFiles.add('src/lib/playground/python.playwright.test.ts');
 				expectedFiles.add('src/lib/playground/python-debug.playwright.test.ts');
+				expectedFiles.add('src/lib/playground/python-performance.playwright.test.ts');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG');
 			}

@@ -16,6 +16,9 @@ function load(relative, dependencies = {}) {
 	const exports = {};
 	vm.runInNewContext(transpile(readFileSync(new URL(relative, import.meta.url), 'utf8')), {
 		exports,
+		performance,
+		setTimeout,
+		clearTimeout,
 		TextEncoder,
 		Uint8Array,
 		Int8Array,
@@ -29,6 +32,7 @@ function load(relative, dependencies = {}) {
 const snapshot = load('../src/lib/playground/javaStdin.ts');
 const helpers = load('../src/lib/playground/javaRuntimeStdin.ts', { './javaStdin': snapshot });
 const exceptionHelpers = load('../src/lib/playground/javaRuntimeErrors.ts');
+const outputHelpers = load('../src/lib/playground/worker/javaOutput.ts');
 const { prepareJavaRuntimeStdinInjection: prepare, createJavaStdinBridge: bridge } = helpers;
 const source =
 	'public class Main { public static void main(String[] args) throws Exception { System.out.println(System.in.read()); } }';
@@ -166,6 +170,7 @@ function worker() {
 			}
 		},
 		require(id) {
+			if (id === './javaOutput') return outputHelpers;
 			if (id === '$lib/playground/javaRuntimeStdin') return helpers;
 			if (id === '$lib/playground/javaRuntimeErrors') return exceptionHelpers;
 			if (id === '$lib/playground/javaSource')

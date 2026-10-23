@@ -28,6 +28,11 @@ it('continues real Pyodide tracing when the unchanged breakpoint bridge returns 
 	let lines: number[] = [];
 	const pauses: number[] = [];
 	runtime.registerJsModule('debug_bridge', {
+		state: {
+			get version() {
+				return version;
+			}
+		},
 		read_breakpoints: (known: number) =>
 			known === version ? null : JSON.stringify({ version, lines }),
 		pause: (line: number) => pauses.push(line),
@@ -37,7 +42,7 @@ it('continues real Pyodide tracing when the unchanged breakpoint bridge returns 
 	});
 	try {
 		runtime.runPython(
-			`import sys, json\nfrom debug_bridge import read_breakpoints, pause, wait, read_watch, write_watch\n${trace}`
+			`import sys, json\nfrom debug_bridge import read_breakpoints, pause, wait, read_watch, write_watch, state as __wasm_idle_debug_breakpoint_state\n${trace}`
 		);
 		const run = () =>
 			runtime.runPython(

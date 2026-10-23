@@ -1,14 +1,20 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkerAssetBridge } from './assetBridge';
 import { RuntimeAssetCache } from './runtimeAssetCache';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { compileVerifiedWasmAsset } from '@wasm-idle/llvm-core/core/verified-wasm';
 
 vi.mock('@wasm-idle/llvm-core/core/verified-wasm', () => ({ compileVerifiedWasmAsset: vi.fn() }));
-const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
-const receipt = { sha256: createHash('sha256').update(wasm).digest('hex'), bytes: wasm.length };
+let wasm: Uint8Array<ArrayBuffer>;
+let receipt: { sha256: string; bytes: number };
+let fixtureId = 0;
+beforeEach(() => {
+	// Each test owns distinct real module bytes; the immutable engine cache spans owners.
+	wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 0, 2, 0, ++fixtureId]);
+	receipt = { sha256: createHash('sha256').update(wasm).digest('hex'), bytes: wasm.length };
+});
 const baseUrl = 'https://runtime.example/pyodide/';
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -152,6 +158,28 @@ describe('compiler modules outlive execution worker bridges', () => {
 		expect(cache.stats().hits).toBe(1);
 	});
 
+	it('shares identical immutable engine code across independent owners after both loaders validate', async () => {
+		const firstCache = new RuntimeAssetCache();
+		const firstLoader = vi.fn(async () => ({ data: wasm }));
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const first = endpoint(firstCache, firstLoader, { 'pyodide.asm.wasm': receipt });
+		const firstResponse = await first.request('pyodide.asm.wasm', true);
+		expect(firstResponse.ok).toBe(true);
+		first.bridge.dispose();
+		firstCache.dispose();
+		const secondCache = new RuntimeAssetCache();
+		const secondLoader = vi.fn(async () => ({ data: wasm.slice() }));
+		const second = endpoint(secondCache, secondLoader, { 'pyodide.asm.wasm': receipt });
+		const secondResponse = await second.request('pyodide.asm.wasm', true);
+		expect(secondResponse.ok).toBe(true);
+		expect(secondResponse.module).toBe(firstResponse.module);
+		expect(firstLoader).toHaveBeenCalledOnce();
+		expect(secondLoader).toHaveBeenCalledOnce();
+		expect(compile).toHaveBeenCalledOnce();
+		second.bridge.dispose();
+		secondCache.dispose();
+	});
+
 	it('copies cached bootstrap bytes without lending the owner buffer to a worker', async () => {
 		const cache = new RuntimeAssetCache();
 		const source = new Uint8Array([1, 2, 3]);
@@ -165,7 +193,7 @@ describe('compiler modules outlive execution worker bridges', () => {
 		expect(loader).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not reuse a module for another loader, receipt, or lower size limit', async () => {
+	it('reauthorizes bytes for another loader and rejects changed receipts or lower limits', async () => {
 		const cache = new RuntimeAssetCache();
 		const loader = vi.fn(async () => ({ data: wasm }));
 		await endpoint(cache, loader).request('pyodide.asm.wasm', true);

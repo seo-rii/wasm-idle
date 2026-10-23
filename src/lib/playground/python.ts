@@ -1,6 +1,7 @@
 import type {
 	DebugCommand,
 	DebugSessionEvent,
+	DebugVariable,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
@@ -60,7 +61,12 @@ class Python implements Sandbox {
 		Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts
 	);
 	watchBuffer = createWasmIdleSharedBuffer(1024);
-	watchResultBuffer = createWasmIdleSharedBuffer(1024);
+	// Fifty locals of 256 name + 200 preview code points fit even if JSON needs
+	// two six-character surrogate escapes per point. Watch/page requests share it.
+	watchResultBuffer = createWasmIdleSharedBuffer(320 * 1024);
+	private pausedVariablesReference: number | undefined;
+	private inspectionController = new AbortController();
+	private inspectionQueue: Promise<unknown> = Promise.resolve();
 	interruptBuffer = createWasmIdleSharedBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
@@ -170,6 +176,7 @@ class Python implements Sandbox {
 
 	private cancelOperation(operation: PythonOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
+		this.setInspectionPause();
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
 		this.activeOperation = null;
@@ -516,6 +523,7 @@ class Python implements Sandbox {
 			this.pendingEof = false;
 		}
 
+		this.setInspectionPause();
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const workerOperation = this.workerSession.beginRun(worker, reject);
@@ -536,6 +544,7 @@ class Python implements Sandbox {
 				worker.onmessage === handler &&
 				runUid === this.uid;
 			const settleRunState = () => {
+				this.setInspectionPause();
 				this.elapse = Date.now() - this.begin;
 				this.exit = true;
 				this.waitingForInput = false;
@@ -617,7 +626,14 @@ class Python implements Sandbox {
 						this.output?.(output);
 					}
 					if (!ownsRun()) return;
-					if (debugEvent) this.ondebug?.(debugEvent);
+					if (debugEvent) {
+						this.setInspectionPause(
+							debugEvent.type === 'pause'
+								? debugEvent.scopes?.[0]?.variablesReference
+								: undefined
+						);
+						this.ondebug?.(debugEvent);
+					}
 					if (!ownsRun()) return;
 					if (log) console.log(log);
 					if (results !== undefined) {
@@ -673,6 +689,7 @@ class Python implements Sandbox {
 	}
 
 	debugCommand(command: DebugCommand) {
+		this.setInspectionPause();
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.store(
 			control,
@@ -696,19 +713,77 @@ class Python implements Sandbox {
 		Atomics.add(control, 2, 1);
 	}
 
-	async debugEvaluate(expression: string) {
+	private setInspectionPause(reference?: number) {
+		this.inspectionController.abort();
+		this.inspectionController = new AbortController();
+		this.pausedVariablesReference = reference;
+	}
+
+	private async inspect(command: number, expression: string, signal: AbortSignal) {
+		if (signal.aborted) return '?';
 		if (!this.worker) throw new Error('Worker not loaded');
 		resetBufferedStdin(this.watchResultBuffer);
 		const previousSequence = bufferedSequence(this.watchResultBuffer);
 		flushQueuedStdin([expression], this.watchBuffer);
 		const control = new Int32Array(this.debugBuffer);
-		Atomics.store(control, 1, 5);
+		Atomics.store(control, 1, command);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		return (
-			(await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ??
-			'?'
-		);
+		try {
+			return (
+				(await waitForBufferedSequenceChange(
+					this.watchResultBuffer,
+					previousSequence,
+					5000,
+					signal
+				)) ?? '?'
+			);
+		} catch (error) {
+			if (signal.aborted) return '?';
+			throw error;
+		}
+	}
+
+	debugEvaluate(expression: string) {
+		const reference = this.pausedVariablesReference;
+		const signal = this.inspectionController.signal;
+		const request = this.inspectionQueue.then(async () => {
+			if (
+				signal.aborted ||
+				reference === undefined ||
+				reference !== this.pausedVariablesReference
+			)
+				return '?';
+			const value = await this.inspect(5, expression, signal);
+			return !signal.aborted && reference === this.pausedVariablesReference ? value : '?';
+		});
+		this.inspectionQueue = request.catch(() => {});
+		return request;
+	}
+
+	debugVariables(reference: number, start = 0, count = 50): Promise<DebugVariable[]> {
+		if (
+			!Number.isSafeInteger(reference) ||
+			!Number.isSafeInteger(start) ||
+			start < 0 ||
+			!Number.isSafeInteger(count) ||
+			count < 1
+		)
+			return Promise.resolve([]);
+		const signal = this.inspectionController.signal;
+		const request = this.inspectionQueue.then(async () => {
+			if (signal.aborted || reference !== this.pausedVariablesReference) return [];
+			const result = await this.inspect(
+				6,
+				JSON.stringify({ reference, start, count: Math.min(50, count) }),
+				signal
+			);
+			if (signal.aborted || reference !== this.pausedVariablesReference) return [];
+			const page: unknown = JSON.parse(result);
+			return Array.isArray(page) ? (page as DebugVariable[]) : [];
+		});
+		this.inspectionQueue = request.catch(() => {});
+		return request;
 	}
 
 	kill() {
@@ -716,6 +791,7 @@ class Python implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		this.setInspectionPause();
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
