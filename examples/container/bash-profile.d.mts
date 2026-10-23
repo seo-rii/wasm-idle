@@ -16,6 +16,7 @@ import type {
 import type { PersistentWorkspace } from '@wasm-idle/container/persistence';
 export const BASH_BIN: '/usr/local/bin';
 export const BASH_SYSROOT: '/usr/share/wasm-sysroot';
+export const C_SYSROOT: '/usr/share/wasm-sysroot-c';
 export const BASH_APPLETS: readonly string[];
 export interface BashProfileConfiguration {
 	manifest: string;
@@ -37,6 +38,13 @@ export interface BashProfileConfiguration {
 	clangFilesystem?: string;
 	/** Only true when the trusted builder bundles a matching module-service Worker. */
 	clangModuleServices?: boolean;
+	sysrootProfile?: string;
+	sysrootLayers?: {
+		schemaVersion: number;
+		basePackage: string;
+		cxxPackage: string;
+		full: { bytes: number; sha256: string };
+	};
 }
 export interface BashProfile {
 	readonly container: Container;
@@ -50,7 +58,11 @@ export interface BashProfile {
 		storageReserveBytes: number;
 	};
 	readonly clangFilesystem: 'snapshot' | 'live';
-	inspectSysroot(): { sha256: string; entries: number; files: number } | null;
+	readonly sysrootProfile: 'full' | 'c-base-v1';
+	inspectSysroot(
+		profile?: 'c' | 'full'
+	): { sha256: string; entries: number; files: number } | null;
+	prepareClang(profile: 'c' | 'full', signal: AbortSignal): Promise<string[]>;
 	prepareCommand(
 		invocation: Pick<HostCommandInvocation, 'path'>,
 		signal: AbortSignal

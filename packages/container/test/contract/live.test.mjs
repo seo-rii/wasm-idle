@@ -15,6 +15,22 @@ const make = (options = {}, adapterOptions = {}) => createContainer({
 const encode = (value) => new TextEncoder().encode(value), decode = (value) => new TextDecoder().decode(value);
 async function drain(stream) { return new Uint8Array(await new Response(stream).arrayBuffer()); }
 
+test('owner-only process token attributes real live Worker writes without hiding editor changes', { timeout: 30000 }, async () => {
+  const c = make(), observer = c.fs.observeMutations();
+  let reader;
+  try {
+    const process = await c.spawn('tool', ['visible']);
+    assert.equal(typeof process.mutationSource, 'object');
+    reader = process.stdout.getReader();
+    assert.equal(decode((await reader.read()).value), 'ready');
+    assert.equal(observer.hasChangesOutside(new Set()), true);
+    assert.equal(observer.hasChangesOutside(new Set([process.mutationSource])), false);
+    c.fs.writeFile('/workspace/header.h', encode('editor'));
+    assert.equal(observer.hasChangesOutside(new Set([process.mutationSource])), true);
+    await process.terminate();
+  } finally { reader?.releaseLock(); observer.dispose(); await c.dispose(); }
+});
+
 test('live reads and writes preserve partial binary data larger than RPC and pipe buffers', { timeout: 30000 }, async () => {
   const c = make({}, { pipeBytes: 4093 });
   try {

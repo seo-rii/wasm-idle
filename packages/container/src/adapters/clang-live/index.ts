@@ -61,7 +61,7 @@ export function createLiveClangAdapter(options: LiveClangAdapterOptions): LiveCl
       const linker = fs.readFile(configuration.linkerPath);
       const probe = createWasiHost({ ...request.invocation, args: [], fs, stdin: new Uint8Array(), maxOutputBytes: 0 });
       const imports = new Set(Object.keys(probe.imports)); probe.dispose();
-      const outputs = createCompilerOutputs(fs, request.limits.maxWorkspaceInodes);
+      const outputs = createCompilerOutputs(fs, request.limits.maxWorkspaceInodes, request.mutationSource ?? request.generation);
       const profile = JSON.stringify(['container-live-llvm-v1', request.limits.maxMemoryBytes, request.invocation.cwd !== '/']);
       const compileKey = 'native-default-v1';
       const maxAssetBytes = Math.max(request.limits.maxWorkspaceBytes, request.command.bytes.length, linker.length);

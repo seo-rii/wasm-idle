@@ -92,6 +92,24 @@ for (const capability of [true, false, undefined]) {
 	});
 }
 
+test('prepared sysroot layers use portable gzip delivery with separate logical receipts', () => {
+	const asset = {
+		id: 'sysroot-c',
+		url: 'https://old.invalid/base.tar.gz',
+		encoding: 'gzip',
+		delivery: { bytes: 123, sha256: 'a'.repeat(64), mediaType: 'application/octet-stream' },
+		logical: { bytes: 456, sha256: 'b'.repeat(64), mediaType: 'application/x-tar' }
+	};
+	const prepared = prepareWebsiteAssetDelivery(asset, 'https://example.com/container-app/');
+	assert.equal(
+		prepared.url,
+		`https://example.com/container-app/objects/${asset.delivery.sha256}/sysroot-c.tar.gz.bin`
+	);
+	assert.equal(prepared.encoding, 'gzip');
+	assert.deepEqual(prepared.delivery, asset.delivery);
+	assert.deepEqual(prepared.logical, { ...asset.logical, mediaType: 'application/octet-stream' });
+});
+
 async function fixture(t) {
 	const root = await mkdtemp(join(tmpdir(), 'page-container-source-'));
 	t.after(() => rm(root, { recursive: true, force: true }));

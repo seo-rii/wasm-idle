@@ -9,10 +9,12 @@ import { createLiveClangAdapter } from '@wasm-idle/container/adapters/clang-live
 import { createLiveWasiAdapter } from '@wasm-idle/container/adapters/wasi-live';
 import { createWasixShellSession, installWasixWorkerGroup } from '@wasm-idle/container/adapters/wasix';
 import { selectClangProfile } from './clang-profile.mjs';
+import { composeSysrootLayers } from './sysroot-layers.mjs';
 import { BUSYBOX_SHELL_COMMANDS } from '../../runtimes/wasm-busybox/commands.mjs';
 
 export const BASH_BIN = '/usr/local/bin';
 export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
+export const C_SYSROOT = '/usr/share/wasm-sysroot-c';
 export const BASH_APPLETS = BUSYBOX_SHELL_COMMANDS;
 const TOOLCHAIN = '/opt/toolchains/llvm';
 const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), value => value.toString(16).padStart(2, '0')).join('');
@@ -24,10 +26,19 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
  * linkerSha256; cacheNamespace; and an optional commandTimeoutMs/maxWorkers.
  * clangFilesystem is snapshot by default, or an explicit live application profile.
  * clangModuleServices is enabled only by a builder that bundles a matching Worker.
+ * sysrootProfile defaults to full; c-base-v1 requires pinned sysrootLayers and
+ * explicitly omits the C++ subtree from eligible C runs.
  * The injecting host retains the lifetime of an optional persistence workspace.
  */
 export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation, adapters = [], commands = {}, workerGroup, shellRoutes = {} }) {
   const clangProfile = selectClangProfile(config.clangFilesystem);
+  const layers = config.sysrootLayers;
+  if ((config.sysrootProfile !== undefined && !['full', 'c-base-v1'].includes(config.sysrootProfile)) ||
+    Boolean(layers) !== (config.sysrootProfile === 'c-base-v1')) throw new Error('Explicit C base profile and pinned layers must be configured together');
+  if (layers && (layers.schemaVersion !== 1 || layers.basePackage !== 'llvm-sysroot-c' || layers.cxxPackage !== 'llvm-sysroot-cxx' ||
+    !/^[a-f0-9]{64}$/.test(layers.full?.sha256) || !Number.isSafeInteger(layers.full?.bytes) || layers.full.bytes < 1024 || layers.full.bytes > 128 * 1024 * 1024)) {
+    throw new Error('Invalid pinned sysroot layer configuration');
+  }
   const distribution = await validateDistribution({
     bytes: new TextEncoder().encode(config.manifest), expectedSha256: config.manifestSha256,
     adapterIds: ['wasi-preview1-live', clangProfile.adapterId], allowedAssetURLs: config.assetURLs
@@ -63,25 +74,53 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
     [`${BASH_BIN}/wasm-run`]: { command: 'wasm-run' },
     ...shellRoutes
   };
-  let sysroot, session, starting, disposal;
+  let session, starting, disposal;
+  const sysroots = new Map();
   const stop = new AbortController();
-  const prepareCommand = async (invocation, signal) => {
-    onInvocation?.(invocation);
-    if (invocation.path !== `${BASH_BIN}/clang` || sysroot) return;
+  const prepareSysroot = async (requestedProfile, signal) => {
+    if (requestedProfile !== 'c' && requestedProfile !== 'full') throw new Error('Unknown Clang sysroot profile');
+    const profile = !layers || requestedProfile === 'full' || sysroots.has('full') ? 'full' : 'c';
+    const root = profile === 'c' ? C_SYSROOT : BASH_SYSROOT;
+    const args = profile === 'c' ? [`--sysroot=${C_SYSROOT}`, `-resource-dir=${C_SYSROOT}/lib/clang/22`] : [];
+    if (sysroots.has(profile)) return args;
     // Each consumer has its own signal. The verified asset loader shares only
     // fetches, so cancelling one preparation cannot cancel another consumer.
     const prepared = await manager.prepare('llvm', { signal });
-    const archive = prepared.packages.find(pkg => pkg.id === 'llvm')?.files.find(file => file.path === 'sysroot.tar')?.bytes;
+    let archive;
+    if (layers) {
+      const base = await manager.prepare(layers.basePackage, { signal });
+      archive = base.packages.find(pkg => pkg.id === layers.basePackage)?.files.find(file => file.path === 'sysroot.tar')?.bytes;
+      if (!archive) throw new Error('Pinned LLVM profile has no base sysroot archive');
+      if (profile === 'full') {
+        const cxx = await manager.prepare(layers.cxxPackage, { signal });
+        const delta = cxx.packages.find(pkg => pkg.id === layers.cxxPackage)?.files.find(file => file.path === 'sysroot.tar')?.bytes;
+        if (!delta) throw new Error('Pinned LLVM profile has no C++ sysroot archive');
+        archive = composeSysrootLayers(archive, delta);
+      }
+    } else archive = prepared.packages.find(pkg => pkg.id === 'llvm')?.files.find(file => file.path === 'sysroot.tar')?.bytes;
     if (!archive) throw new Error('Pinned LLVM profile has no sysroot archive');
-    const entries = extractTarPackage(archive);
-    const metadata = { sha256: await digest(archive), entries: entries.length, files: entries.filter(file => file.type === 'file').length };
+    const sha256 = await digest(archive);
     signal.throwIfAborted();
-    if (!sysroot) { container.fs.mountReadonly(BASH_SYSROOT, entries); sysroot = metadata; }
+    if (layers && profile === 'full' && (archive.length !== layers.full.bytes || sha256 !== layers.full.sha256)) throw new Error('Composed sysroot does not match its pinned identity');
+    const entries = extractTarPackage(archive);
+    const metadata = { sha256, entries: entries.length, files: entries.filter(file => file.type === 'file').length };
+    signal.throwIfAborted();
+    if (!sysroots.has(profile)) { container.fs.mountReadonly(root, entries); sysroots.set(profile, metadata); }
+    return args;
+  };
+  const prepareCommand = async (invocation, signal) => {
+    onInvocation?.(invocation);
+    if (invocation.path === `${BASH_BIN}/clang`) await prepareSysroot('full', signal);
   };
   return Object.freeze({
     container, manager, shellAssets, workers, cache, clangFilesystem: clangProfile.filesystem,
-    inspectSysroot: () => sysroot ?? null,
+    sysrootProfile: layers ? 'c-base-v1' : 'full',
+    inspectSysroot: (profile = 'full') => sysroots.get(profile) ?? null,
     prepareCommand,
+    prepareClang(profile, signal) {
+      onInvocation?.({ path: `${BASH_BIN}/clang` });
+      return prepareSysroot(profile, signal);
+    },
     startShell(options = {}, signal) {
       if (starting || stop.signal.aborted) return Promise.reject(new Error('The dedicated Bash owner has already started or retired'));
       starting = createWasixShellSession({

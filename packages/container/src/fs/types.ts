@@ -21,6 +21,13 @@ export interface FileVersion {
   readonly revision: bigint;
 }
 
+/** Owner-only, bounded synchronous mutation accounting; independent of lossy watches. */
+export interface FileSystemMutationObserver {
+  /** Also returns true after disposal or source-accounting overflow. */
+  hasChangesOutside(sources: ReadonlySet<unknown>): boolean;
+  dispose(): void;
+}
+
 export interface PathOptions {
   /** Absolute working directory. Defaults to /workspace (or root for a narrower capability). */
   cwd?: string;
