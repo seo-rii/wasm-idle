@@ -3,7 +3,7 @@ import { snapshotInvocation } from '../../process/lifecycle.js';
 import { createHostCommandHandler, HOST_COMMAND_STATUS, type HostCommandInvocation } from '../../shell/host-command.js';
 import { createShellFilesystem, type ShellFilesystemBinding } from '../../shell/filesystem.js';
 import type { ProcessResult } from '../../types.js';
-import type { WasixShellOptions, WasixShellSession, WasixRuntime, WasixDirectory, WasixCommand, WasixInstance } from './types.js';
+import type { WasixShellOptions, WasixShellSession, WasixRuntime, WasixDirectory, WasixCommand, WasixInstance, WasixAssetReference } from './types.js';
 
 const owners = new WeakSet<object>();
 const canonical = (path: string) => typeof path === 'string' && path.startsWith('/') && path.length > 1 && path.length <= 4096 &&
@@ -105,6 +105,7 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
   let runtime: WasixRuntime | undefined, pkg: { free?(): void } | undefined, command: WasixCommand | undefined;
   const directories: WasixDirectory[] = [];
   const filesystems: ShellFilesystemBinding[] = [];
+  let startupAssets: Promise<unknown>[] = [];
   let resources: Promise<void> | undefined;
   const release = () => resources ??= (async () => {
     interrupt();
@@ -122,14 +123,25 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
   })();
   try {
     stop.signal.throwIfAborted();
-    const sdkBytes = await abortable(options.assets.load(options.sdkAsset.packageId, options.sdkAsset.assetId, { signal: stop.signal }), stop.signal);
+    const capacity = options.assets.inspect?.();
+    const parallel = !capacity || Math.min((capacity.maxPendingAssets ?? Infinity) - capacity.pendingRequests, (capacity.maxConsumers ?? Infinity) - capacity.consumers) >= 2;
+    const loadAsset = (asset: WasixAssetReference) => abortable(new Promise<Uint8Array>(resolve => {
+      stop.signal.throwIfAborted();
+      resolve(options.assets.load(asset.packageId, asset.assetId, { signal: stop.signal }));
+    }), stop.signal);
+    const sdkAsset = loadAsset(options.sdkAsset);
+    const shellAsset = parallel ? loadAsset(options.shellAsset) : sdkAsset.then(() => loadAsset(options.shellAsset));
+    const initialized = sdkAsset.then(async sdkBytes => {
+      stop.signal.throwIfAborted();
+      const module = await abortable(WebAssembly.compile(Uint8Array.from(sdkBytes)), stop.signal);
+      await abortable(options.sdk.init({ module, memory: new WebAssembly.Memory({ initial, maximum, shared: true }), sdkUrl: options.sdkUrl, workerUrl: options.workerUrl }), stop.signal);
+    });
+    startupAssets = [sdkAsset, shellAsset, initialized];
+    const [, shellBytes] = await Promise.all([initialized, shellAsset]);
     stop.signal.throwIfAborted();
-    const module = await abortable(WebAssembly.compile(Uint8Array.from(sdkBytes)), stop.signal);
-    await abortable(options.sdk.init({ module, memory: new WebAssembly.Memory({ initial, maximum, shared: true }), sdkUrl: options.sdkUrl, workerUrl: options.workerUrl }), stop.signal);
     runtime = new options.sdk.Runtime({ registry: null });
     for (const path of Object.keys(options.routes)) runtime.registerHostCommand(path, dispatch);
     for (const path of options.moduleDirectories ?? []) runtime.registerHostCommandDirectory(path, dispatch);
-    const shellBytes = await abortable(options.assets.load(options.shellAsset.packageId, options.shellAsset.assetId, { signal: stop.signal }), stop.signal);
     const loaded = await abortable(options.sdk.Wasmer.fromFile(shellBytes, runtime), stop.signal, value => { try { value.entrypoint?.free?.(); } finally { value.free?.(); } }); pkg = loaded;
     command = loaded.entrypoint;
     if (!command || await sha256(command.binary()) !== options.shellWasmSha256) throw new ContainerError('INTEGRITY', 'Bash executable identity does not match the trusted pin');
@@ -201,6 +213,7 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
   } catch (error) {
     const cancelled = stop.signal.aborted;
     stop.abort(error);
+    await Promise.allSettled(startupAssets);
     await release().catch(() => {});
     if (error instanceof ContainerError) throw error;
     throw new ContainerError(cancelled ? 'ABORTED' : 'STARTUP_FAILED', 'WASIX shell could not start', { cause: error });

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { createContainer } from '../../dist/container.js';
+import { createVerifiedAssetLoader, validateDistribution } from '../../dist/packages/index.js';
 import { installWasixWorkerGroup, createWasixShellSession } from '../../dist/adapters/wasix/index.js';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -112,6 +113,138 @@ test('startup abort stops a pending asset request and leaves no SDK workers', as
   await assert.rejects(pending, { code: 'ABORTED' });
   assert(signal.aborted); assert.equal(f.workers.inspect().active, 0); assert.equal(f.state.initialization, undefined);
   await f.container.dispose();
+});
+
+test('SDK and Bash assets load together before ordered SDK initialization and shell execution', { timeout: 5000 }, async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), started = deferred(), sdk = deferred(), bash = deferred();
+  const originalInit = f.options.sdk.init, originalFromFile = f.options.sdk.Wasmer.fromFile;
+  const order = [];
+  f.options.assets.load = async (pkg, id) => {
+    f.state.loads.push([pkg, id]);
+    if (f.state.loads.length === 2) started.resolve();
+    return id === 'sdk' ? sdk.promise : bash.promise;
+  };
+  f.options.sdk.init = async options => {
+    order.push('init'); assert(options.module instanceof WebAssembly.Module); return originalInit(options);
+  };
+  f.options.sdk.Wasmer.fromFile = async (bytes, runtime) => {
+    order.push('fromFile'); assert.deepEqual(bytes, new Uint8Array([42])); return originalFromFile(bytes, runtime);
+  };
+  const pending = createWasixShellSession(f.options);
+  try {
+    await started.promise;
+    assert.deepEqual(f.state.loads, [['shell', 'sdk'], ['shell', 'webc']]);
+    assert.deepEqual(order, []);
+    bash.resolve(new Uint8Array([42]));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(order, [], 'Bash cannot initialize or execute before the verified SDK asset is ready');
+    sdk.resolve(wasm.slice());
+    const session = await pending;
+    assert.deepEqual(order, ['init', 'fromFile']);
+    assert.equal(f.state.run.rawStdin, true);
+    await session.dispose();
+  } finally { sdk.resolve(wasm.slice()); bash.resolve(new Uint8Array([42])); await f.workers.dispose(); await f.container.dispose(); await Promise.allSettled([pending]); }
+});
+
+test('verified SDK initialization overlaps a pending Bash download and shell execution waits for both', { timeout: 5000 }, async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), initialized = deferred(), bash = deferred();
+  const originalInit = f.options.sdk.init;
+  f.options.assets.load = async (pkg, id) => {
+    f.state.loads.push([pkg, id]); return id === 'sdk' ? wasm.slice() : bash.promise;
+  };
+  f.options.sdk.init = async options => { await originalInit(options); initialized.resolve(); };
+  const pending = createWasixShellSession(f.options);
+  try {
+    await initialized.promise;
+    assert.deepEqual(f.state.loads, [['shell', 'sdk'], ['shell', 'webc']]);
+    assert.equal(f.state.webc, undefined); assert.equal(f.state.run, undefined);
+    bash.resolve(new Uint8Array([42]));
+    const session = await pending;
+    assert.deepEqual(f.state.webc, new Uint8Array([42])); assert.equal(f.state.run.rawStdin, true);
+    await session.dispose();
+  } finally { bash.resolve(new Uint8Array([42])); await f.workers.dispose(); await f.container.dispose(); await Promise.allSettled([pending]); }
+});
+
+test('shell startup respects a verified loader with only one available request or consumer slot', { timeout: 10000 }, async (t) => {
+  globalThis.crossOriginIsolated = true;
+  for (const [limits, expected] of [[{ maxPendingAssets: 1 }, 1], [{ maxConsumers: 1 }, 1], [{ maxPendingAssets: 2 }, 2]]) {
+    await t.test(JSON.stringify(limits), { timeout: 3000 }, async () => {
+      const f = fixture(), started = deferred(), release = deferred(), requested = [];
+      const bodies = new Map([['sdk', wasm.slice()], ['webc', new Uint8Array([42])]]);
+      const assets = [...bodies].map(([id, bytes]) => {
+        const identity = { sha256: digest(bytes), bytes: bytes.byteLength, mediaType: 'application/octet-stream' };
+        return { id, url: `https://app.test/${id}`, encoding: 'identity', delivery: identity, logical: identity };
+      });
+      const manifest = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, distributionId: 'shell-startup', commands: [], packages: [{
+        id: 'shell', identity: `sha256:${digest(wasm)}`, dependencies: [], capabilities: [], mount: '/opt/toolchains/bash',
+        producer: { repository: 'https://github.com/seo-rii/wasm-idle', revision: 'b'.repeat(40), receiptSha256: 'c'.repeat(64) },
+        assets, files: assets.map(asset => ({ path: asset.id, asset: asset.id, executable: false }))
+      }] }));
+      const distribution = await validateDistribution({ bytes: manifest, expectedSha256: digest(manifest), adapterIds: [], allowedAssetURLs: assets.map(asset => asset.url) });
+      const loader = createVerifiedAssetLoader({ distribution, persistentCache: false, ...limits, fetch: async url => {
+        requested.push(url); started.resolve(); await release.promise;
+        const result = new Response(bodies.get(url.split('/').at(-1)), { headers: { 'content-type': 'application/octet-stream' } });
+        Object.defineProperty(result, 'url', { value: url }); return result;
+      } });
+      f.options.assets = loader;
+      const pending = createWasixShellSession(f.options);
+      try {
+        await started.promise; await new Promise(resolve => setImmediate(resolve));
+        assert.equal(requested.length, expected);
+        assert.equal(loader.inspect().maxPendingAssets, limits.maxPendingAssets ?? 8);
+        assert.equal(loader.inspect().maxConsumers, limits.maxConsumers ?? 128);
+        release.resolve();
+        const session = await pending;
+        assert.deepEqual(requested, ['https://app.test/sdk', 'https://app.test/webc']);
+        assert.deepEqual(f.state.webc, new Uint8Array([42]));
+        await session.dispose();
+      } finally { release.resolve(); await loader.dispose(); await f.workers.dispose(); await f.container.dispose(); await Promise.allSettled([pending]); }
+    });
+  }
+});
+
+test('either startup asset failure cancels the other request without initializing or running the SDK', { timeout: 10000 }, async (t) => {
+  globalThis.crossOriginIsolated = true;
+  for (const failing of ['sdk', 'webc']) {
+    await t.test(failing, { timeout: 4000 }, async () => {
+      const f = fixture(), started = deferred(), fail = deferred(), signals = [];
+      const cause = new Error(`${failing} download failed`);
+      f.options.assets.load = async (_pkg, id, { signal }) => {
+        signals.push(signal); if (signals.length === 2) started.resolve();
+        if (id === failing) { await fail.promise; throw cause; }
+        return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      };
+      const pending = createWasixShellSession(f.options);
+      const failure = assert.rejects(pending, error => error.code === 'STARTUP_FAILED' && error.cause === cause);
+      try {
+        await started.promise; fail.resolve(); await failure;
+        assert.equal(signals.length, 2); assert(signals.every(signal => signal.aborted));
+        assert.equal(f.state.initialization, undefined); assert.equal(f.state.run, undefined);
+        assert.equal(f.workers.inspect().active, 0);
+        assert.deepEqual(f.container.fs.readdir('/usr/bin'), []);
+      } finally { fail.resolve(); await f.workers.dispose(); await f.container.dispose(); await failure; }
+    });
+  }
+});
+
+test('startup cancellation observes both concurrent loads even when their loader settles late', { timeout: 5000 }, async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), started = deferred(), abort = new AbortController(), late = deferred(), signals = [];
+  f.options.signal = abort.signal;
+  f.options.assets.load = async (_pkg, _id, { signal }) => {
+    signals.push(signal); if (signals.length === 2) started.resolve(); return late.promise;
+  };
+  const pending = createWasixShellSession(f.options);
+  const failure = assert.rejects(pending, { code: 'ABORTED' });
+  try {
+    await started.promise; abort.abort(); await failure;
+    assert.equal(signals.length, 2); assert(signals.every(signal => signal.aborted));
+    assert.equal(f.state.initialization, undefined); assert.equal(f.workers.inspect().active, 0);
+    late.reject(new Error('late asset failure'));
+    await new Promise(resolve => setImmediate(resolve));
+  } finally { await f.workers.dispose(); await f.container.dispose(); }
 });
 
 test('routed preparation can be interrupted and direct artifacts require executable metadata', async () => {
