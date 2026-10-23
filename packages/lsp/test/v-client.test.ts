@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadLanguageToolAsset } from '../src/assets.js';
+import { V_LSP_ASSET_RECEIPTS } from '../src/v/assets.js';
 import { getVLanguageServer } from '../src/v/language-server.js';
 import type { LanguageServerStatus } from '../src/worker-client.js';
 
@@ -10,6 +11,37 @@ vi.mock('../src/assets.js', async (original) => ({
 
 describe('V multi-asset startup', () => {
 	afterEach(() => vi.mocked(loadLanguageToolAsset).mockReset());
+	it('permits a limit that fits each pinned asset even when their combined size is larger', async () => {
+		const workerReached = new Error('asset loading completed');
+		const createWorker = vi.fn(() => {
+			throw workerReached;
+		});
+		vi.mocked(loadLanguageToolAsset).mockResolvedValue({ bytes: new Uint8Array([1]) });
+		const largestAsset = Math.max(
+			...Object.values(V_LSP_ASSET_RECEIPTS).map((asset) => asset.bytes)
+		);
+		await expect(
+			getVLanguageServer({
+				rootUrl: 'https://app.example/',
+				maxAssetBytes: largestAsset,
+				createWorker
+			})
+		).rejects.toBe(workerReached);
+		expect(loadLanguageToolAsset).toHaveBeenCalledTimes(3);
+		expect(createWorker).toHaveBeenCalledOnce();
+	});
+	it('rejects an individually oversized asset before loading any assets', async () => {
+		const largestAsset = Math.max(
+			...Object.values(V_LSP_ASSET_RECEIPTS).map((asset) => asset.bytes)
+		);
+		await expect(
+			getVLanguageServer({
+				rootUrl: 'https://app.example/',
+				maxAssetBytes: largestAsset - 1
+			})
+		).rejects.toThrow('exceed maxAssetBytes');
+		expect(loadLanguageToolAsset).not.toHaveBeenCalled();
+	});
 	it('cancels other downloads on an integrity failure and keeps the error status terminal', async () => {
 		const failure = new Error('V loader SHA-256 mismatch');
 		const aborted: string[] = [];
