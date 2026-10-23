@@ -138,6 +138,7 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'Main.java',
 		source: 'public class Main {\n  public static void main(String[] args) {\n    String answer = 42;\n    System.out.println(answer + args.length);\n    int shared = Helper.VALUE;\n    System.out.println(shared);\n  }\n}\n',
 		validSource: javaValidSource,
+		errorLine: 3,
 		workspaceFiles: [{ path: 'Helper.java', content: javaHelperSource }],
 		statusKey: 'java',
 		assertNoPreEnableRequests: ['/wasm-java-lsp/'],
