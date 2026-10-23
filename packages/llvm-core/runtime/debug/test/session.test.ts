@@ -1407,7 +1407,7 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
-	it('verifies large debug assets one at a time before creating workers', async () => {
+	it('verifies large debug assets with at most three concurrent requests before creating workers', async () => {
 		const workers: FakeWorker[] = [];
 		let activeFetches = 0;
 		let maximumActiveFetches = 0;
@@ -1437,7 +1437,7 @@ describe('BrowserLldbSession', () => {
 		await session.initialize();
 
 		expect(fetchCount).toBe(6);
-		expect(maximumActiveFetches).toBe(1);
+		expect(maximumActiveFetches).toBe(3);
 		expect(workers).toHaveLength(2);
 		await session.dispose();
 	});

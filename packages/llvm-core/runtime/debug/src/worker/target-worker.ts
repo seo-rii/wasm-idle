@@ -3,6 +3,7 @@ import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared
 import { validateWamrDebugModule } from '../wasm-module-preflight.js';
 import {
 	createEmscriptenAssetUrls,
+	compiledModuleInstantiation,
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
@@ -153,6 +154,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
 		if (disposed) return;
 		const module = await factory({
+			...compiledModuleInstantiation(message.assets.compiledModule),
 			noInitialRun: true,
 			wasmIdleDebugTransport: transport,
 			mainScriptUrlOrBlob: assetUrls.worker,
