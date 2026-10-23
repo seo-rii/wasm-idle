@@ -14,6 +14,9 @@ interface Inode {
   data: Uint8Array;
   target: string;
   children: Map<string, Inode>;
+  /** One namespace name per inode; hardlinks are not supported. Root has no parent. */
+  parent?: Inode;
+  name: string;
   references: number;
   linked: boolean;
   atimeMs: number;
@@ -102,11 +105,11 @@ export class MemoryFileSystem {
       const parent = this.walk(absolute(parts), '/', true).node;
       const writable = path === '/workspace' || path === '/tmp' || path === '/home/user';
       if (writable) this.mounts.set(path, false);
-      parent.children.set(name, this.allocate('directory', writable ? path : parent.mount, 0o755));
+      this.attach(parent, name, this.allocate('directory', writable ? path : parent.mount, 0o755));
     }
     // A reserved identity keeps existing persisted workspace inode numbers stable
     // when their readonly base namespace is recreated by a newer host.
-    this.walk('/dev', '/', true).node.children.set('null', this.allocate('character-device', '/', 0o666));
+    this.attach(this.walk('/dev', '/', true).node, 'null', this.allocate('character-device', '/', 0o666));
   }
 
   get generation(): number { return this.revision; }
@@ -167,19 +170,23 @@ export class MemoryFileSystem {
   }
 
   private nodePath(target: Inode): string | undefined {
-    // Live path syscalls resolve directory descriptors through this walk. Only
-    // directories are descended or named; other entries need an identity check.
-    const visit = (node: Inode, path: string): string | undefined => {
-      for (const [name, child] of node.children) {
-        if (child !== target && child.type !== 'directory') continue;
-        const childPath = `${path === '/' ? '' : path}/${name}`;
-        if (child === target) return childPath;
-        const found = visit(child, childPath);
-        if (found !== undefined) return found;
-      }
-      return undefined;
-    };
-    return target === this.root ? '/' : visit(this.root, '/');
+    // Reconstruct current names without scanning unrelated directory entries.
+    // Renaming an ancestor updates one link and is visible to all descendants.
+    if (target === this.root) return '/';
+    const names: string[] = [];
+    let node = target;
+    while (node !== this.root) {
+      if (!node.linked || !node.parent) return undefined;
+      names.push(node.name);
+      node = node.parent;
+    }
+    return absolute(names.reverse());
+  }
+
+  private attach(parent: Inode, name: string, node: Inode): void {
+    parent.children.set(name, node);
+    node.parent = parent;
+    node.name = name;
   }
 
   private notifyFile(node: Inode): void {
@@ -197,7 +204,7 @@ export class MemoryFileSystem {
     const inode = type === 'character-device' ? 0 : this.nextInode++;
     const node: Inode = {
       inode, type, mode, mount, data: new Uint8Array(), target: '',
-      children: new Map(), references: 0, linked: true, atimeMs: now, mtimeMs: now, ctimeMs: now,
+      children: new Map(), name: '', references: 0, linked: true, atimeMs: now, mtimeMs: now, ctimeMs: now,
       version: Object.freeze({ inode, revision: ++this.versionSequence }),
     };
     this.versions.set(node.version, node);
@@ -463,7 +470,7 @@ export class MemoryFileSystem {
       node = this.allocate('file', parent.node.mount, options.mode ?? 0o644);
       node.data = copied;
       this.usedBytes += copied.length;
-      parent.node.children.set(parent.name, node);
+      this.attach(parent.node, parent.name, node);
       this.changed(parent.node, node);
       this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
       return;
@@ -509,7 +516,7 @@ export class MemoryFileSystem {
     this.writable(parent.node);
     this.checkPlacement(childPath(parent.path, parent.name));
     const node = this.allocate('directory', parent.node.mount, options.mode ?? 0o755);
-    parent.node.children.set(parent.name, node);
+    this.attach(parent.node, parent.name, node);
     this.changed(parent.node);
     this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
@@ -526,7 +533,7 @@ export class MemoryFileSystem {
     const node = this.allocate('symlink', parent.node.mount, 0o777);
     node.target = target;
     this.usedBytes += size;
-    parent.node.children.set(parent.name, node);
+    this.attach(parent.node, parent.name, node);
     this.changed(parent.node);
     this.notify({ kind: 'create', path: `${parent.path === '/' ? '' : parent.path}/${parent.name}`, inode: node.inode });
   }
@@ -540,6 +547,7 @@ export class MemoryFileSystem {
     if (path.endsWith('/')) throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     parent.node.children.delete(parent.name);
     node.linked = false;
+    node.parent = undefined;
     this.invalidateVersion(node);
     this.release(node);
     this.changed(parent.node);
@@ -556,6 +564,7 @@ export class MemoryFileSystem {
     if (node.children.size) throw new FsError('ENOTEMPTY', 'Directory is not empty');
     parent.node.children.delete(parent.name);
     node.linked = false;
+    node.parent = undefined;
     this.invalidateVersion(node);
     this.release(node);
     this.changed(parent.node);
@@ -588,11 +597,12 @@ export class MemoryFileSystem {
       if (old.type !== 'directory' && node.type === 'directory') throw new FsError('ENOTDIR', 'Destination is not a directory');
       if (old.children.size) throw new FsError('ENOTEMPTY', 'Destination directory is not empty');
       old.linked = false;
+      old.parent = undefined;
       this.invalidateVersion(old, true);
       this.release(old);
     }
     source.node.children.delete(source.name);
-    destination.node.children.set(destination.name, node);
+    this.attach(destination.node, destination.name, node);
     this.changed(source.node, destination.node, node);
     // Moving a directory away and back must invalidate captured descendant paths too.
     for (const child of node.children.values()) this.invalidateVersion(child, true);
@@ -805,6 +815,8 @@ export class MemoryFileSystem {
     // Every check and allocation above precedes publication. Rebinding retains
     // shared offsets/flags for dup(), and existing unlinked handles stay private.
     for (const node of candidate.nodes) this.invalidateVersion(node);
+    // An obsolete file-version token must not retain the retired tree via parents.
+    for (const node of this.nodes) node.parent = undefined;
     for (const { description, node } of rebound) description.node = node;
     this.root = candidate.root;
     this.nodes = nodes;
@@ -896,7 +908,7 @@ export class MemoryFileSystem {
       if (path === '/') fs.root = node;
       else {
         const end = path.lastIndexOf('/');
-        built.get(path.slice(0, end) || '/')!.children.set(path.slice(end + 1), node);
+        fs.attach(built.get(path.slice(0, end) || '/')!, path.slice(end + 1), node);
       }
     }
     fs.usedBytes = bytes;
@@ -1052,11 +1064,15 @@ export class MemoryFileSystem {
     for (const node of adopted.values()) if (!previous.has(node.inode)) this.invalidateVersion(node);
     const staged = [...candidate.nodes].map(node => ({
       node: adopted.get(node.inode)!, mount: node.mount,
+      parent: node.parent === undefined ? undefined : adopted.get(node.parent.inode)!, name: node.name,
       children: new Map([...node.children].map(([name, child]) => [name, adopted.get(child.inode)!]))
     }));
     const nodes = new Set([...adopted.values(), ...retained]);
     // No allocation, await, or validation after publication begins.
-    for (const entry of staged) { entry.node.children = entry.children; entry.node.mount = entry.mount; }
+    for (const entry of staged) {
+      entry.node.children = entry.children; entry.node.mount = entry.mount;
+      entry.node.parent = entry.parent; entry.node.name = entry.name;
+    }
     this.root = adopted.get(candidate.root.inode)!;
     this.nodes = nodes; this.mounts = candidate.mounts;
     this.usedBytes = candidate.usedBytes + retainedBytes; this.nextInode = candidate.nextInode;
