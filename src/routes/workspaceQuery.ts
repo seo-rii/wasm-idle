@@ -5,6 +5,7 @@ const workspaceInputParameters = [
 	'args',
 	'args64',
 	'rustTargetTriple',
+	'rustOptimizationProfile',
 	'goTarget',
 	'ocamlBackend',
 	'ocamlWasmBinaryenMode'

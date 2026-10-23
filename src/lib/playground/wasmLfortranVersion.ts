@@ -23,7 +23,7 @@ export const WASM_LFORTRAN_PROFILE = {
 		}
 	},
 	workerReceipt: {
-		bytes: 13875,
-		sha256: '6443226c53cdadbbfdc25d43d1c07c4f13d8855cfe5cfd609f45ca9b29a96cdf'
+		bytes: 14002,
+		sha256: 'c6de6d9cabadc5f5ad40a688d97b64239db8594e7723cadd9ed533fb6c6e0de5'
 	}
 } as const;

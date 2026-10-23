@@ -131,6 +131,7 @@ export class Container {
     const adapter = this.#adapters.get(adapterId)!;
     if (stdio && adapter.filesystem !== 'live') throw new ContainerError('UNSUPPORTED_PROFILE', 'Delegated stdio requires a live adapter');
     const pid = this.#nextPid++, lifecycle = new ProcessLifecycle(), controller = new AbortController();
+    const mutationSource = Object.freeze({});
     let runtime: PreparedRuntime | PreparedLiveRuntime | undefined, lease: FileSystemLease | undefined, finishing: Promise<void> | undefined;
     let liveLease: { release(): void } | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -196,7 +197,7 @@ export class Container {
           }
           return { path: pkg.mount, entries: [...entries.values()] };
         });
-        if (mounts.length) this.fs.mountReadonlyPackages(mounts);
+        if (mounts.length) this.fs.withMutationSource(mutationSource, () => this.fs.mountReadonlyPackages(mounts));
         for (const pkg of missing) this.#mountedPackages.add(`${prepared.distributionSha256}:${pkg.identity}:${pkg.mount}`);
         // Every package in this verified closure includes all of its dependencies.
         // Publish readiness for its other commands only after the atomic mount succeeds.
@@ -210,7 +211,7 @@ export class Container {
       }
       controller.signal.throwIfAborted();
       lifecycle.transition('starting');
-      const start = { command: definition!, invocation: { command, args: executionArgs, cwd: invocation.cwd, env: invocation.env }, limits: this.#limits, generation: pid, signal: controller.signal };
+      const start = { command: definition!, invocation: { command, args: executionArgs, cwd: invocation.cwd, env: invocation.env }, limits: this.#limits, generation: pid, mutationSource, signal: controller.signal };
       let liveRuntime: PreparedLiveRuntime | undefined;
       if (adapter.filesystem === 'live') {
         liveLease = this.fs.acquireLive();
@@ -257,7 +258,7 @@ export class Container {
           await cleanup({ code: null, reason: controller.signal.aborted ? reason : 'runtime-error' });
         }
       })();
-      return Object.freeze({ pid, stdin, stdout: liveRuntime?.stdout ?? stdout, stderr: liveRuntime?.stderr ?? stderr, exited: lifecycle.exited, terminate: stop });
+      return Object.freeze({ pid, mutationSource, stdin, stdout: liveRuntime?.stdout ?? stdout, stderr: liveRuntime?.stderr ?? stderr, exited: lifecycle.exited, terminate: stop });
     } catch (error) {
       await cleanup({ code: null, reason: controller.signal.aborted ? reason : 'runtime-error' });
       if (controller.signal.aborted) throw new ContainerError('ABORTED', 'Command cancelled during startup', { cause: error });

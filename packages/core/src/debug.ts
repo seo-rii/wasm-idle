@@ -2,10 +2,48 @@ export type DebugCommand = 'continue' | 'stepInto' | 'nextLine' | 'stepOut';
 export type DebugPauseReason =
 	'breakpoint' | 'dataBreakpoint' | 'entry' | 'pause' | 'step' | 'nextLine' | 'stepOut';
 
+/** DAP presentation metadata; values are kept extensible for adapter-specific hints. */
+export interface DebugVariablePresentationHint {
+	kind?: string;
+	attributes?: string[];
+	visibility?: string;
+	lazy?: boolean;
+}
+
+export interface DebugEvaluateOptions {
+	frameId?: number;
+	context?: 'watch' | 'hover';
+}
+
+export interface DebugEvaluateResult {
+	result: string;
+	type?: string;
+	variablesReference: number;
+	namedVariables?: number;
+	indexedVariables?: number;
+	memoryReference?: string;
+	presentationHint?: DebugVariablePresentationHint;
+}
+
+export interface DebugSourceBreakpoint {
+	line: number;
+	enabled?: boolean;
+	condition?: string;
+	/** Positive decimal N stops on the Nth and every subsequent hit; empty clears. */
+	hitCondition?: string;
+	logMessage?: string;
+}
+
+/** Fixed debugger policy, never a user-supplied LLDB command. */
+export interface DebugSteppingOptions {
+	skipLibraryCode: boolean;
+}
+
 export interface DebugVariable {
 	name: string;
 	value: string;
 	type?: string;
+	presentationHint?: DebugVariablePresentationHint;
 	evaluateName?: string;
 	variablesReference?: number;
 	memoryReference?: string;
@@ -109,22 +147,35 @@ export interface DebugSessionCapabilities {
 	readMemory: boolean;
 	writeMemory: boolean;
 	dataBreakpoints: boolean;
+	/** Optional additions default to unsupported for older runtimes. */
+	evaluateValues?: boolean;
+	evaluateForHovers?: boolean;
+	conditionalBreakpoints?: boolean;
+	hitConditionalBreakpoints?: boolean;
+	logPoints?: boolean;
+	skipLibraryCode?: boolean;
+	returnValues?: boolean;
 }
 
 export interface DebugSourceBreakpoints {
 	sourcePath: string;
 	lines: number[];
+	/** When supplied, this specification is authoritative over the legacy lines. */
+	breakpoints?: DebugSourceBreakpoint[];
 }
 
 export type DebugSessionEvent =
 	| {
 			type: 'pause';
-			/** Identifies a stop whose stack/scopes may arrive incrementally. */
+			/** IDs are scoped to one runtime session and one real stop. */
+			sessionId?: string;
 			stopId?: number;
 			line: number;
 			reason: DebugPauseReason;
 			locals: DebugVariable[];
 			callStack: DebugFrame[];
+			/** False while retained caller pages are still arriving; omitted means complete. */
+			callStackComplete?: boolean;
 			threadId?: number;
 			frameId?: number;
 			scopes?: DebugScope[];
@@ -136,8 +187,10 @@ export type DebugSessionEvent =
 	  }
 	| {
 			type: 'pauseDetails';
+			sessionId?: string;
 			stopId: number;
 			callStack?: DebugFrame[];
+			callStackComplete?: boolean;
 			frameId?: number;
 			scopes?: DebugScope[];
 	  }

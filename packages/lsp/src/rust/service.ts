@@ -42,7 +42,7 @@ interface RustCompilerResult {
 }
 
 interface RustCompiler {
-	compile: (request: {
+	check: (request: {
 		assetCache?: RuntimeAssetCacheBackend;
 		code: string;
 		edition: string;
@@ -302,7 +302,11 @@ async function loadRustCompiler(
 	if (!factory) {
 		throw new Error('wasm-rust module must export createRustCompiler or a default factory');
 	}
-	return await factory({ dependencies: { runtimeProfile: pinnedRuntimeProfile } });
+	const compiler = await factory({ dependencies: { runtimeProfile: pinnedRuntimeProfile } });
+	if (typeof compiler.check !== 'function') {
+		throw new Error('wasm-rust module must provide metadata-only compiler.check');
+	}
+	return compiler;
 }
 
 export function createRustWorkerService(
@@ -320,6 +324,7 @@ export function createRustWorkerService(
 	return {
 		name: 'wasm-idle-rust-lsp',
 		diagnosticDelay: 800,
+		diagnosticScheduling: 'latest-only',
 		capabilities: {},
 		async initialize(options, context) {
 			const cache = resolveLanguageToolPersistentOptions().persistentCache;
@@ -343,7 +348,7 @@ export function createRustWorkerService(
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress('rustc-diagnostics');
 			const assetDeliveryBudget = createRuntimeAssetDeliveryBudget(maxAssetDeliveryBytes);
-			const result = await compiler.compile({
+			const result = await compiler.check({
 				...(assetCache ? { assetCache } : {}),
 				code: document.text,
 				edition,

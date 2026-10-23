@@ -2,7 +2,7 @@ import { ContainerError } from '../errors.js';
 import type { SnapshotCommandAdapter, RuntimeCompletion } from './types.js';
 
 export interface CommandWorker {
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent) => void) | null;
   onerror: ((event: ErrorEvent) => void) | null;
   onmessageerror: ((event: MessageEvent) => void) | null;

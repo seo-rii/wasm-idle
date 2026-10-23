@@ -1,9 +1,10 @@
-import { compileRust, createBrowserRustCompileRequestIdentity, preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal, resolveBrowserRustDebugMode } from './compiler.js';
-import { executeBrowserRustArtifact as executeBrowserRustArtifactInternal } from './browser-execution.js';
+import { compileRust, checkRust, createBrowserRustCompileRequestIdentity, preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal, resolveBrowserRustDebugMode } from './compiler.js';
+import { executeBrowserRustArtifact as executeBrowserRustArtifactInternal, clearBrowserRustExecutionCache } from './browser-execution.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { configureVerifiedRuntimeExecutableModuleUrls, hasVerifiedRuntimeExecutableModuleUrls, parseWasmRustRuntimeProfileFromModuleUrl } from './runtime-manifest.js';
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { configureVerifiedRuntimeExecutableModuleUrls };
+export { clearBrowserRustExecutionCache };
 const bundledRuntimeProfile = parseWasmRustRuntimeProfileFromModuleUrl(import.meta.url);
 function requireVerifiedExecutableGraph() {
     if (bundledRuntimeProfile && !hasVerifiedRuntimeExecutableModuleUrls()) {
@@ -60,6 +61,9 @@ export async function executeBrowserRustArtifact(artifact, runtimeBaseUrlOrOptio
 export async function createRustCompiler(options) {
     requireVerifiedExecutableGraph();
     return {
+        check: async (request) => checkRust(request, bundledRuntimeProfile
+            ? sealCompileDependencies(options?.dependencies, bundledRuntimeProfile)
+            : options?.dependencies),
         compile: async (request) => compileRust(request, bundledRuntimeProfile
             ? sealCompileDependencies(options?.dependencies, bundledRuntimeProfile)
             : options?.dependencies)

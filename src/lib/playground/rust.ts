@@ -909,6 +909,10 @@ class Rust implements Sandbox {
 						stdin: options.stdin,
 						args: programArgs,
 						targetTriple,
+						optimizationProfile:
+							debugMode === 'none'
+								? options.rustOptimizationProfile || 'interactive'
+								: 'interactive',
 						log: _log,
 						debugMode,
 						debug: debugMode === 'trace',

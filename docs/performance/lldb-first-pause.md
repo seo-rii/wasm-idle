@@ -2,11 +2,14 @@
 
 The product session requests one frame when the target stops. It publishes the navigable
 source location, frame ID, source digest and stop reason before asking for scopes or deeper
-frames. `pauseDetails` events carry the same `stopId` and fill in scope metadata and stack
+frames. `pauseDetails` events carry the same `sessionId`/`stopId` and fill in scope metadata and stack
 pages of at most 20 frames, retaining the previous 100-frame limit. Continue, disconnect and
 new stops invalidate pending results. The debug controller merges details without resetting
 the selected frame, formatted argument summaries or in-flight variable requests. Variable
 values and non-selected-frame scopes still use the existing demand-driven APIs.
+The `callStackComplete` flag becomes true when the retained stack is complete. Variable
+comparison waits for complete caller identities, preserving the previous stop's values
+and saved expansion paths while pages arrive. Partial stacks never seed the next baseline.
 
 Preflight downloads at most three runtime assets concurrently. Every retained network chunk
 and cache hit is charged to the same 55,000,000-byte budget before hashing or allocation of

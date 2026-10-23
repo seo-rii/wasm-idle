@@ -137,7 +137,9 @@ describe('bundled wasm-rust compiler', () => {
 		expect(compilerSource).toContain("sourceRoot: '/workspace'");
 		expect(compilerSource).toContain("path: '/workspace/main.rs'");
 		expect(compilerWorkerSource).toContain("'-Cdebuginfo=2'");
-		expect(compilerWorkerSource).toContain("'-Copt-level=0'");
+		// The profile resolver pins every debug mode to O0; runtime profile tests execute it.
+		expect(compilerWorkerSource).toContain('`-Copt-level=${optLevel}`');
+		expect(compilerWorkerSource).toMatch(/request\.checkOnly \|\| debugMode !== 'none'\s*\? '0'/u);
 		expect(compilerWorkerSource).toContain("'--remap-path-prefix=/work=/workspace'");
 
 		const runtimeManifest = JSON.parse(runtimeManifestSource) as {

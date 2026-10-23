@@ -2592,4 +2592,86 @@ describe('BrowserLldbSession', () => {
 		expect(second).toBe(first);
 		await expect(first).resolves.toBeUndefined();
 	});
+	it('carries only enabled qualified breakpoint specifications through initialization', async () => {
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest: {
+				...manifest,
+				debugger: {
+					...manifest.debugger,
+					capabilities: {
+						...manifest.debugger.capabilities,
+						hitConditionalBreakpoints: true,
+						skipLibraryCode: true
+					}
+				}
+			},
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: [],
+					breakpoints: [
+						{ line: 5, enabled: false },
+						{ line: 7, hitCondition: '3' }
+					]
+				}
+			],
+			steppingOptions: { skipLibraryCode: false },
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, [], false, false, new Set(), {
+					supportsHitConditionalBreakpoints: true
+				});
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 1000,
+			readyTimeoutMs: 1000
+		});
+		await session.initialize();
+		const requests = workers.find((worker) => worker.kind === 'lldb')!.requests;
+		expect(requests.find((request) => request.command === 'attach')?.arguments).toMatchObject({
+			initCommands: ['settings set target.process.thread.step-avoid-regexp ^$']
+		});
+		expect(
+			requests.find((request) => request.command === 'setBreakpoints')?.arguments
+		).toMatchObject({ breakpoints: [{ line: 7, hitCondition: '3' }], lines: [7] });
+		await session.setSteppingOptions({ skipLibraryCode: true });
+		expect(requests.at(-1)).toMatchObject({
+			command: 'evaluate',
+			arguments: {
+				expression: '`settings set target.process.thread.step-avoid-regexp ^std::',
+				context: 'repl'
+			}
+		});
+		await session.dispose();
+	});
+
+	it('rejects advanced source conditions before creating workers when the producer is unqualified', async () => {
+		let workers = 0;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: [],
+					breakpoints: [{ line: 1, condition: 'ready' }]
+				}
+			],
+			workerFactory: (kind) => {
+				workers++;
+				return new FakeWorker(kind, []);
+			},
+			fetchImpl: async () => new Response('debug-asset')
+		});
+		await expect(session.initialize()).rejects.toThrow('condition');
+		expect(workers).toBe(0);
+		await session.dispose();
+	});
 });

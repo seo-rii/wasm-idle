@@ -1,0 +1,415 @@
+{
+	"chromium": "153.0.8010.12",
+	"node": "v24.21.0",
+	"baseline": "f34e21990fa79dddd218de76fe8da97c2e5cdef9",
+	"repeats": 4,
+	"assets": {
+		"/clang/runtime-manifest.v1.json": {
+			"bytes": 967,
+			"sha256": "0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad",
+			"uncompressedBytes": 967,
+			"uncompressedSha256": "0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad"
+		},
+		"/clang/bin/clang.wasm.gz": {
+			"bytes": 13124999,
+			"sha256": "cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982",
+			"uncompressedBytes": 35597829,
+			"uncompressedSha256": "fe7c40c2369d4a1b91d87cd2a38b1a5be11cd7f381373b7888be0b5f209e2d5b"
+		},
+		"/clang/bin/lld.wasm.gz": {
+			"bytes": 6421841,
+			"sha256": "798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20",
+			"uncompressedBytes": 16136490,
+			"uncompressedSha256": "77949fed32d5481979b8ebe6081009e3ec69c7219cb355e3f388a316746ea9b7"
+		},
+		"/clang/bin/memfs.wasm.gz": {
+			"bytes": 16111,
+			"sha256": "a3e43451bc15ae69a7f113009e2ee82ab4db711625c1782cd45d0d3c4d38175a",
+			"uncompressedBytes": 38071,
+			"uncompressedSha256": "5b741e03dd3502bcfd80e4e5055232b5d633604e1461752efed0189f93407dc3"
+		},
+		"/clang/bin/c-sysroot.tar.gz": {
+			"bytes": 2006388,
+			"sha256": "da7a29250b2fe2d928fa8818069ff67e1dcb26c529bbf01f40bbeb251535ecaa",
+			"uncompressedBytes": 12213760,
+			"uncompressedSha256": "517b32208f4e556b22eb5ac775411c39fb75239dfaf81f206e6052e168425b62"
+		},
+		"/clang/bin/cpp-addon.tar.gz": {
+			"bytes": 4776509,
+			"sha256": "6e243c219561b1f5aad64db4a9ff8bbeb85a97b5e3b5df3ed71d8340d35a8cd7",
+			"uncompressedBytes": 23382528,
+			"uncompressedSha256": "feaf2aa538623ec8c543ccb49e9a833d2a1aa6dee7a9ad502c277deba24ef642"
+		},
+		"/clang/libc-printscan-long-double.a.gz": {
+			"bytes": 52723,
+			"sha256": "b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b",
+			"uncompressedBytes": 111062,
+			"uncompressedSha256": "33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148"
+		}
+	},
+	"results": [
+		{
+			"variant": "candidate",
+			"cache": false,
+			"samples": [
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 0,
+					"compileLinkMs": 3461.139999985695,
+					"fileReadBytes": 3945394,
+					"emittedBytes": 260452
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 1,
+					"compileLinkMs": 609.0950000286102,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 2,
+					"compileLinkMs": 391.4050000309944,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 3,
+					"compileLinkMs": 380.31999999284744,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 4,
+					"compileLinkMs": 464.36500000953674,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 0,
+					"compileLinkMs": 485.23499995470047,
+					"fileReadBytes": 3946391,
+					"emittedBytes": 260473
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 1,
+					"compileLinkMs": 536.6000000238419,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 2,
+					"compileLinkMs": 482.0349999666214,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 3,
+					"compileLinkMs": 374.66000002622604,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 4,
+					"compileLinkMs": 519.4500000476837,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 0,
+					"compileLinkMs": 1258.9950000047684,
+					"fileReadBytes": 13609097,
+					"emittedBytes": 260452
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 1,
+					"compileLinkMs": 472.7249999642372,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 2,
+					"compileLinkMs": 424.0450000166893,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 3,
+					"compileLinkMs": 580.6000000238419,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 4,
+					"compileLinkMs": 445.6100000143051,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 0,
+					"compileLinkMs": 9424.625,
+					"fileReadBytes": 18323096,
+					"emittedBytes": 783372
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 1,
+					"compileLinkMs": 6531.709999978542,
+					"fileReadBytes": 18323105,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 2,
+					"compileLinkMs": 5391.060000002384,
+					"fileReadBytes": 18323105,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 3,
+					"compileLinkMs": 5228.284999966621,
+					"fileReadBytes": 18323105,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 4,
+					"compileLinkMs": 4475.424999952316,
+					"fileReadBytes": 18323105,
+					"emittedBytes": 783375
+				}
+			],
+			"validations": [],
+			"stats": {
+				"hits": 0,
+				"misses": 0,
+				"bypasses": 0,
+				"preprocesses": 0,
+				"entries": 0,
+				"accountedBytes": 0
+			},
+			"temporaryFiles": 0
+		},
+		{
+			"variant": "candidate",
+			"cache": "auto",
+			"samples": [
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 0,
+					"compileLinkMs": 2222.270000040531,
+					"fileReadBytes": 3945394,
+					"emittedBytes": 260452
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 1,
+					"compileLinkMs": 528.25,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 2,
+					"compileLinkMs": 342.63499999046326,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 3,
+					"compileLinkMs": 231.9650000333786,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": false,
+					"iteration": 4,
+					"compileLinkMs": 381.0450000166893,
+					"fileReadBytes": 3945403,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 0,
+					"compileLinkMs": 502.15499997138977,
+					"fileReadBytes": 3946391,
+					"emittedBytes": 260473
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 1,
+					"compileLinkMs": 440.58999997377396,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 2,
+					"compileLinkMs": 257.8899999856949,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 3,
+					"compileLinkMs": 281.7549999952316,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "C",
+					"multi": true,
+					"iteration": 4,
+					"compileLinkMs": 386.125,
+					"fileReadBytes": 3946400,
+					"emittedBytes": 260476
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 0,
+					"compileLinkMs": 690.8499999642372,
+					"fileReadBytes": 13609097,
+					"emittedBytes": 260452
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 1,
+					"compileLinkMs": 270.3899999856949,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 2,
+					"compileLinkMs": 172.9450000524521,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 3,
+					"compileLinkMs": 214,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": false,
+					"iteration": 4,
+					"compileLinkMs": 236.21499997377396,
+					"fileReadBytes": 13565077,
+					"emittedBytes": 260455
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 0,
+					"compileLinkMs": 8705.759999990463,
+					"fileReadBytes": 35537610,
+					"emittedBytes": 783372
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 1,
+					"compileLinkMs": 1059.8100000023842,
+					"fileReadBytes": 31302600,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 2,
+					"compileLinkMs": 934.3000000119209,
+					"fileReadBytes": 31302600,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 3,
+					"compileLinkMs": 940.0349999666214,
+					"fileReadBytes": 31302600,
+					"emittedBytes": 783375
+				},
+				{
+					"language": "CPP",
+					"multi": true,
+					"iteration": 4,
+					"compileLinkMs": 1064.2549999952316,
+					"fileReadBytes": 31302600,
+					"emittedBytes": 783375
+				}
+			],
+			"validations": [
+				"optional-header addition and removal",
+				"compile flag invalidation",
+				"failed rebuild and recovery",
+				"LLDB bypass and byte-only descriptor",
+				"compiler temporary-file cleanup"
+			],
+			"stats": {
+				"hits": 4,
+				"misses": 6,
+				"bypasses": 0,
+				"preprocesses": 10,
+				"entries": 6,
+				"accountedBytes": 6064
+			},
+			"temporaryFiles": 0
+		}
+	],
+	"measurementNotes": [
+		"Final auto policy check: one warmup and four measured edits, sequential off/auto workers on one shared host.",
+		"The cache is enabled only for eligible C++ units in multi-file builds; C and single-file paths perform no extra preprocessing.",
+		"Uncached single-file timings also changed substantially between variants; timing ratios are not controlled speedup claims. Read-byte counts, cache statistics and correctness assertions verify the mechanism."
+	]
+}

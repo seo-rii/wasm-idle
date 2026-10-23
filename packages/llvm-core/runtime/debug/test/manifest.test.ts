@@ -90,6 +90,24 @@ describe('debug runtime manifest', () => {
 		).toBeUndefined();
 	});
 
+	it('keeps old manifests compatible and validates optional debugger qualification flags', () => {
+		const old = parseDebugRuntimeManifest(manifest());
+		expect(old.debugger.capabilities.hitConditionalBreakpoints).toBeUndefined();
+		const value = manifest();
+		Object.assign(value.debugger.capabilities, {
+			hitConditionalBreakpoints: true,
+			skipLibraryCode: true,
+			returnValues: false
+		});
+		expect(parseDebugRuntimeManifest(value).debugger.capabilities).toMatchObject({
+			hitConditionalBreakpoints: true,
+			skipLibraryCode: true,
+			returnValues: false
+		});
+		Object.assign(value.debugger.capabilities, { skipLibraryCode: 'yes' });
+		expect(() => parseDebugRuntimeManifest(value)).toThrow('skipLibraryCode');
+	});
+
 	it('parses pinned LLDB/WAMR assets and resolves their URLs', () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		expect(parsed.debugger.lldb.llvmVersion).toBe('22.1.8');
