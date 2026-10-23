@@ -380,7 +380,7 @@ export const supportMatrixRows = [
 		runtime: 'TeaVM',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: 'CDP (source)',
+		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -731,7 +731,7 @@ export const supportMatrixRows = [
 		runtime: 'wasm-typescript / TypeScript service',
 		stdin: 'Yes',
 		editorSupport: 'TypeScript LSP',
-		debug: 'CDP',
+		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -744,7 +744,7 @@ export const supportMatrixRows = [
 		runtime: 'wasm-typescript / TypeScript service',
 		stdin: 'Yes',
 		editorSupport: 'TypeScript LSP',
-		debug: 'CDP',
+		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -2067,11 +2067,10 @@ export function renderSupportMatrixSection(rows = supportMatrixRows) {
 All execution entries run in the browser through real runtime, compiler, or interpreter
 implementations. \`Editor support\` lists browser LSP/compiler diagnostics when wired; \`syntax\`
 means Monaco syntax highlighting only. C, C++, Objective-C, Objective-C++, V, and
-\`wasm32-wasip1\` Rust use LLDB/WAMR. JavaScript, TypeScript, and Java use Chromium's native
-debugger through the [Native Debugger extension](extensions/debugger/README.md). Java currently
-supports source stops and mapped stacks without Java locals or expression evaluation. Lua uses
-the pinned MobDebug engine in its real VM; Ruby uses CRuby TracePoint and Binding without
-rewriting user source. See [language debugger details](docs/debugger-language-support.md)
+\`wasm32-wasip1\` Rust use LLDB/WAMR. Lua uses the pinned MobDebug engine in its real VM;
+Ruby uses CRuby TracePoint and Binding without rewriting user source. Enabled debugger backends
+run in the page and its Workers without browser extensions. Java, JavaScript, and TypeScript
+debugging stays disabled. See [language debugger details](docs/debugger-language-support.md)
 for verified operations and remaining producer requirements.
 
 ${renderSupportMatrixTable(rows)}

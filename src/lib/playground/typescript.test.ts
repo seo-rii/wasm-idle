@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlaygroundRuntimeAssets } from './assets';
+import type { SandboxExecutionOptions } from './options';
 
 const TEST_RUNTIME_ASSETS = {
 	typescript: { moduleUrl: '/wasm-typescript/index.js' }
@@ -163,6 +164,56 @@ console.log(value);`;
 			})
 		);
 	});
+
+	it.each(['JAVASCRIPT', 'TYPESCRIPT'] as const)(
+		'rejects unsupported %s debug requests before dispatch and remains usable',
+		async (language) => {
+			const sandbox = new TypeScriptSandbox(language);
+			try {
+				await sandbox.load(TEST_RUNTIME_ASSETS);
+				const worker = workerInstances[0];
+				worker.postMessage.mockClear();
+				const debugRequests: SandboxExecutionOptions[] = [
+					{ debug: true },
+					{ debugMode: 'trace' },
+					{ debugMode: 'lldb' },
+					{ debugMode: 'mobdebug' },
+					{ debugMode: 'tracepoint' },
+					{ debug: false, debugMode: 'trace' }
+				];
+				for (const options of debugRequests) {
+					for (const prepare of [true, false]) {
+						await expect(
+							sandbox.run('console.log(7)', prepare, false, undefined, [], options)
+						).rejects.toMatchObject({
+							name: 'RuntimeConfigurationError',
+							code: 'runtime-configuration',
+							runtimeId: language,
+							message: expect.stringContaining('source debugging is unavailable')
+						});
+					}
+				}
+				expect(worker.postMessage).not.toHaveBeenCalled();
+				expect(worker.terminate).not.toHaveBeenCalled();
+				for (const debug of [false, true]) {
+					for (const prepare of [true, false]) {
+						await expect(
+							sandbox.run('console.log(7)', prepare, false, undefined, [], {
+								debug,
+								debugMode: 'none'
+							})
+						).resolves.toBe(true);
+						expect(worker.postMessage).toHaveBeenLastCalledWith(
+							expect.objectContaining({ prepare, code: 'console.log(7)' })
+						);
+					}
+				}
+				expect(worker.postMessage).toHaveBeenCalledTimes(4);
+			} finally {
+				await sandbox.dispose();
+			}
+		}
+	);
 
 	describe.each([
 		{ language: 'TYPESCRIPT' as const, extension: 'ts' },

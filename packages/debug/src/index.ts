@@ -1,15 +1,4 @@
 export { evaluateDebugExpression } from './expression.js';
-export {
-	CdpDebugAdapter,
-	createBrowserCdpTransport,
-	isBrowserCdpDebuggerAvailable
-} from './adapter/index.js';
-export type {
-	CdpDebugAdapterOptions,
-	CdpWasmLocation,
-	CdpTransport,
-	CdpEvent
-} from './adapter/index.js';
 export { selectInlineDebugLocals } from './locals.js';
 export {
 	createLldbDapAdapter,
@@ -25,8 +14,6 @@ export {
 	cppDebugLanguageAdapter,
 	goDebugLanguageAdapter,
 	javaDebugLanguageAdapter,
-	javascriptDebugLanguageAdapter,
-	typescriptDebugLanguageAdapter,
 	luaDebugLanguageAdapter,
 	pythonDebugLanguageAdapter,
 	rubyDebugLanguageAdapter,
@@ -74,4 +61,3 @@ export type {
 	DebugWatchValue
 } from './controller.js';
 export type { MonacoDebugActionsOptions } from './editor/index.js';
-export { readTeaVmDebugLocations } from './adapter/teavm.js';

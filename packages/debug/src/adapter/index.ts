@@ -1,9 +1,5 @@
 export { createLldbDapAdapter, LldbDapAdapter } from './lldb-dap.js';
 export { createTraceDebugAdapter, TraceDebugAdapter } from './trace.js';
-export { CdpDebugAdapter } from './cdp.js';
-export { createBrowserCdpTransport, isBrowserCdpDebuggerAvailable } from './cdp-transport.js';
-export type { CdpDebugAdapterOptions, CdpWasmLocation } from './cdp.js';
-export type { CdpTransport, CdpEvent } from './cdp-transport.js';
 export type {
 	DapCapabilities,
 	DapEvent,
@@ -40,4 +36,3 @@ export type {
 	ResolvedDataBreakpoint,
 	ResolvedBreakpoint
 } from './types.js';
-export { readTeaVmDebugLocations } from './teavm.js';

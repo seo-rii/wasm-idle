@@ -4,13 +4,16 @@ These results refer to the compiler and runtime bundles pinned by this repositor
 2026-10-23. Debugger support is enabled after running the real browser runtime; a successful
 compile or a debugger transport connection alone is insufficient.
 
+Enabled debugger backends run in the page and its Workers. They require no browser extension,
+remote debugging port or external debugger service.
+
 | Language                   | Backend and verified behavior                                                                                                                                 | Limitations or next step                                                                                                                                                                                                                                          |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C, C++, Rust               | Existing LLDB/WAMR integration                                                                                                                                | Rust uses `wasm32-wasip1`.                                                                                                                                                                                                                                        |
 | Objective-C, Objective-C++ | Real Clang DWARF → LLDB/WAMR; original source breakpoints, integer locals, stepping, stdin/stdout                                                             | Foundation needs host libffi imports unavailable in the current WAMR target. Object layout and Objective-C expression evaluation are not qualified.                                                                                                               |
 | V                          | Real V `-g` line directives → Clang DWARF → LLDB/WAMR; original `.v` breakpoints, integer locals, stepping, stdin/stdout                                      | V-specific expression evaluation and rich type inspection are not qualified.                                                                                                                                                                                      |
-| JavaScript, TypeScript     | Real Chromium CDP; source breakpoints, locals, expression evaluation, next line, stdin/stdout                                                                 | Install and enable the Chromium extension for the current tab. TypeScript uses the existing line-preserving strip compiler.                                                                                                                                       |
-| Java                       | Real TeaVM compilation and Chromium CDP; Java source breakpoints, mapped `Main.main` frames, next line, stdin/stdout                                          | Current TeaVM GC metadata has no Java locals/field layout. Locals and expression evaluation remain unavailable.                                                                                                                                                   |
+| JavaScript, TypeScript     | Ordinary execution remains available; source debugging is disabled                                                                                            | The extension-dependent CDP integration has been removed. No extension-free backend is qualified for the current runtime.                                                                                                                                         |
+| Java                       | Source debugging is disabled                                                                                                                                  | No extension-free backend is qualified in this revision.                                                                                                                                                                                                          |
 | Lua                        | Pinned, unmodified MobDebug engine in the actual Lua VM; breakpoints, stack/locals, evaluation, step into/over/out, stdin/stdout, restart                     | Its socket transport is replaced by a Worker mailbox. Evaluation currently supports the top frame. Fennel is not enabled.                                                                                                                                         |
 | D                          | Genuine LDC debug profile and source artifact handoff implemented; full-runtime rejection verified                                                            | The full D runtime emits Wasm exception-handling tags unsupported by the pinned WAMR debugger. The UI stays disabled. No `-betterC` subset substitution.                                                                                                          |
 | C#, VB.NET, F#             | Portable PDB generation/loading, virtual source paths and native Mono agent bridge prerequisites implemented                                                  | Actual compilers passed PDB/sequence-point/local metadata and stdin/stdout checks. The shipped native debugger exports are stubs; a real native debugger component, repackaged compiler and managed debugger proxy are still required. No debugger UI is enabled. |
@@ -21,10 +24,8 @@ compile or a debugger transport connection alone is insufficient.
 | PHP                        | Actual shipped PHP 8.4.25 extension/INI probe and stdin/stdout                                                                                                | Xdebug is absent. Package a real Xdebug-enabled engine and connect its DBGp transport before exposing source debugging.                                                                                                                                           |
 | Ruby                       | Real CRuby TracePoint fallback; source breakpoints, Binding locals/evaluation, stack, step into/over/out, dynamic breakpoints, stdin/stdout, stop and restart | `rdbg`/socket are absent and native threads are unimplemented. User source is evaluated unchanged with its original filename.                                                                                                                                     |
 
-JavaScript and TypeScript were also tested through the actual website binding: document →
-container owner Worker → nested execution Worker. The document retains extension permissions;
-scoped requests and native events cross the owner relay and are cleaned up on retirement.
-Ruby was qualified through the same container binding, including ordinary execution after
+Ruby was qualified through the actual website binding: document → container owner Worker →
+nested execution Worker, including ordinary execution after
 stopping and restarting a debug session.
 
 For LLDB languages the compiler Worker is retired before the separate WAMR debug execution
@@ -48,15 +49,7 @@ WASM_IDLE_RUN_LUA_DEBUG=1 WASM_IDLE_BROWSER_URL=http://127.0.0.1:5173/wasm-idle/
 WASM_IDLE_RUN_RUBY_DEBUG=1 WASM_IDLE_BROWSER_URL=http://127.0.0.1:5173/wasm-idle/ \
   pnpm exec vitest run src/lib/playground/ruby-debug.playwright.test.ts --maxWorkers=1
 
-node --test extensions/debugger/debugger.test.mjs
-WASM_IDLE_RUN_CDP_JAVA=1 node --test extensions/debugger/java.test.mjs
-WASM_IDLE_RUN_CDP_CONTAINER=1 WASM_IDLE_BROWSER_URL=http://127.0.0.1:5173/wasm-idle/ \
-  node --test extensions/debugger/container.test.mjs
 ```
-
-The CDP fixtures load the unpacked extension in their own temporary Chromium profile.
-Normal users follow the [extension setup](../extensions/debugger/README.md). No remote debug
-server or infrastructure deployment is part of this integration.
 
 Native compiler attempts and exact receipts are documented in
 [Go/Zig/TinyGo probes](native-debug-compiler-probes.md),

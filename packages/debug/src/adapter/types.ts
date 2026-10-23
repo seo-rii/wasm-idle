@@ -1,6 +1,6 @@
 import type { DebugMemory as CoreDebugMemory } from '@wasm-idle/core';
 
-export type DebugAdapterKind = 'trace' | 'lldb' | 'cdp';
+export type DebugAdapterKind = 'trace' | 'lldb';
 
 export interface DebugCapabilities {
 	readonly supportsConfigurationDone: boolean;

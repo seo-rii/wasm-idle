@@ -40,7 +40,6 @@ let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
 let currentSourcePaths = new Set<string>();
 const decoder = new TextDecoder();
-let debugStart: { token: string; resolve: () => void } | undefined;
 
 const toInt8Array = (bytes: Uint8Array) =>
 	new Int8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
@@ -69,21 +68,12 @@ const pushStderr = (charCode: number) => {
 
 self.addEventListener('message', async (event) => {
 	if (handleWorkerAssetMessage(event.data)) return;
-	if (event.data?.cdpRun) {
-		const pending = debugStart;
-		if (pending && event.data.cdpRun === pending.token) {
-			debugStart = undefined;
-			pending.resolve();
-		}
-		return;
-	}
 	const {
 		load,
 		assets,
 		buffer,
 		code,
 		prepare,
-		debugMode,
 		args = [],
 		stdin = '',
 		hasExplicitStdin = false,
@@ -406,15 +396,6 @@ self.addEventListener('message', async (event) => {
 					infoLocation: 'embedded'
 				}
 			});
-			if (debugMode === 'cdp') {
-				// The native VM has compiled the module; wait for source breakpoints
-				// before calling main. The compiled Java bytecode is left unchanged.
-				await new Promise<void>((resolve) => {
-					const token = crypto.randomUUID();
-					debugStart = { token, resolve };
-					self.postMessage({ cdpReady: { token, bytes: compiledWasm } });
-				});
-			}
 			self.postMessage({
 				progress: {
 					kind: 'ready',
