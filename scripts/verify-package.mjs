@@ -118,6 +118,17 @@ import { createContainerPlaygroundBinding, serveContainerWorker, mergeContainerW
 declare const worker: ContainerOwnerWorker;
 declare const createBinding: (assets: SandboxRuntimeAssets) => PlaygroundBinding;
 declare const configuration: ContainerWorkerOptions['createBashConfiguration'];
+// Runtime assets remain usable without installing the optional editor package.
+const javaAssets: SandboxRuntimeAssets = {
+  javaLsp: {
+    baseUrl: 'https://example.invalid/wasm-java-lsp/',
+    assets: [
+      { path: 'javacs-runtime.mjs', bytes: 1, sha256: '0'.repeat(64) },
+      { path: 'javacs.wasm', bytes: 1, sha256: '1'.repeat(64) },
+      { path: 'jdk-platform.zip', bytes: 1, sha256: '2'.repeat(64) }
+    ]
+  }
+};
 const binding = createContainerPlaygroundBinding('', {
   applicationRootURL: 'https://example.invalid/', workspaceId: 'type-smoke', workerFactory: () => worker
 });
@@ -125,7 +136,7 @@ const shell: ContainerShellBinding = binding.shell;
 const options: ContainerWorkerOptions = { languages: ['CPP'], createBinding, createBashConfiguration: configuration };
 const serve: typeof serveContainerWorker = serveContainerWorker;
 const result = mergeContainerWorkspace([{ path: 'main.cpp', content: '' }], [], []);
-void [shell, options, serve, result, binding.dispose()];
+void [shell, options, serve, result, javaAssets, binding.dispose()];
 `
 	},
 	{

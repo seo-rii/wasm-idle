@@ -100,7 +100,6 @@ import type {
 	ObjectiveCAssetIntegrityMap,
 	ObjectiveCAssetName
 } from '@wasm-idle/llvm-core/objective-c';
-import type { EditorLanguageServerRuntimeOptions } from '@wasm-idle/lsp';
 
 export type RuntimeAssetRuntime = 'python' | 'java' | 'clang' | 'clangd';
 
@@ -654,7 +653,14 @@ export interface PhpRuntimeAssetConfig {
 }
 
 export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
-	javaLsp?: Pick<NonNullable<EditorLanguageServerRuntimeOptions['java']>, 'baseUrl' | 'assets'>;
+	javaLsp?: {
+		baseUrl?: string;
+		assets?: readonly {
+			readonly path: 'javacs-runtime.mjs' | 'javacs.wasm' | 'jdk-platform.zip';
+			readonly bytes: number;
+			readonly sha256: string;
+		}[];
+	};
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	clang?: RuntimeAssetConfig;
