@@ -135,6 +135,22 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 		]);
 	});
 
+	it.each([
+		['driver', clangSimdDriverArgs, '-isystem'],
+		['frontend', clangSimdFrontendArgs, '-internal-isystem']
+	] as const)(
+		'keeps %s target macros guarded when builtin header search is disabled',
+		(_, argsFor, searchFlag) => {
+			const args = argsFor('/usr', false);
+			expect(args).not.toContain(searchFlag);
+			expect(args).not.toContain(`/usr/${CLANG_SIMD_INCLUDE_PATH}`);
+			expect(args).toEqual(expect.arrayContaining(expectedDefines));
+			expect(args[args.indexOf('-include') + 1]).toBe(
+				`/usr/${CLANG_SIMD_INCLUDE_PATH}/__wasm_idle_simd_target.h`
+			);
+		}
+	);
+
 	it.each(['', '/', '/sysroot', '/sysroot/'])(
 		'installs sources in the same dedicated directory used by both compiler entry points: %j',
 		(mountRoot) => {

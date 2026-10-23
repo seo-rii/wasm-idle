@@ -50,7 +50,7 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
 		// Includes the pinned Emscripten SIMD compatibility headers and upstream notices
-		// in llvm-core (+5 files). Measured 7,146,870 bytes / 741 files / 5 packages.
+		// in llvm-core (+5 files). Before merging compiler options: 7,146,870 bytes / 741 files.
 		budget: { maxBytes: 7 * MiB, maxFiles: 741, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
@@ -166,7 +166,8 @@ void [shell, options, serve, result, binding.dispose()];
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		// Includes llvm-core's SIMD headers for clangd; measured 5,093,249 bytes / 769 files.
+		// Includes llvm-core's SIMD headers for clangd. Before merging compiler options:
+		// 5,093,249 bytes / 769 files.
 		budget: { maxBytes: 5 * MiB, maxFiles: 1_050, maxPackages: 7 },
 		absentPackageNames: [
 			'@lezer/rust',
@@ -187,10 +188,11 @@ void [shell, options, serve, result, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes the public container package, all reviewed LSP providers, and SIMD headers.
-		// Measured 41,484,544 bytes / 3,262 files / 62 packages; 65,280 bytes headroom.
-		// Keep the aggregate file and production-package limits unchanged.
-		budget: { maxBytes: 39 * MiB + 640 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		// Includes the public container package, reviewed LSP providers, SIMD, and compiler options.
+		// Before merging, SIMD measured 41,484,544 bytes / 3,262 files / 62 packages;
+		// main's compiler-option changes added 10,510 bytes to their prior install.
+		// Reserve 16 KiB above the SIMD budget pending measurement of the merged install.
+		budget: { maxBytes: 39 * MiB + 656 * 1024, maxFiles: 3_300, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

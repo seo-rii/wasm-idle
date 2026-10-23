@@ -30,20 +30,19 @@ function simdIncludeDirectory(root: string) {
 }
 
 /** Driver flags for the pinned SSE through AVX2 compatibility headers. */
-export function clangSimdDriverArgs(root = '') {
+export function clangSimdDriverArgs(root = '', includeHeaders = true) {
 	const directory = simdIncludeDirectory(root);
 	return [
 		'-msimd128',
 		...CLANG_SIMD_DEFINES,
 		'-include',
 		`${directory}/${simdTargetHeaderName}`,
-		'-isystem',
-		directory
+		...(includeHeaders ? ['-isystem', directory] : [])
 	];
 }
 
 /** Clang's -cc1 entry point accepts target features instead of driver -m flags. */
-export function clangSimdFrontendArgs(root = '') {
+export function clangSimdFrontendArgs(root = '', includeHeaders = true) {
 	const directory = simdIncludeDirectory(root);
 	return [
 		'-target-feature',
@@ -51,8 +50,7 @@ export function clangSimdFrontendArgs(root = '') {
 		...CLANG_SIMD_DEFINES,
 		'-include',
 		`${directory}/${simdTargetHeaderName}`,
-		'-internal-isystem',
-		directory
+		...(includeHeaders ? ['-internal-isystem', directory] : [])
 	];
 }
 

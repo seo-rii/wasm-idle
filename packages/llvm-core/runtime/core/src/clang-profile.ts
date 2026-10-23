@@ -1,4 +1,5 @@
 export const CLANG_WASI_TARGET = 'wasm32-wasi';
+export const CLANG_WASI_DRIVER_TARGET = 'wasm32-wasip1';
 export const OBJECTIVE_C_RUNTIME_FLAGS = ['-fobjc-runtime=gnustep-2.0', '-fblocks'] as const;
 export const OBJECTIVE_C_LSP_DEFINES = ['-DOBJC2RUNTIME=1'] as const;
 const defaultCppStandardArg = '-std=gnu++20';
@@ -12,6 +13,12 @@ function normalizeStandardCode(value?: string) {
 
 function resolveCppStandardArg(version?: string) {
 	switch (normalizeStandardCode(version)) {
+		case '98':
+		case 'CPP98':
+		case 'C++98':
+		case 'GNU++98':
+		case 'GNUC++98':
+			return '-std=gnu++98';
 		case '03':
 		case 'CPP03':
 		case 'C++03':
@@ -61,6 +68,15 @@ function resolveCppStandardArg(version?: string) {
 
 function resolveCStandardArg(version?: string) {
 	switch (normalizeStandardCode(version)) {
+		case '89':
+		case '90':
+		case 'C89':
+		case 'C90':
+		case 'GNU89':
+		case 'GNU90':
+		case 'GNUC89':
+		case 'GNUC90':
+			return '-std=gnu89';
 		case '99':
 		case 'C99':
 		case 'GNU99':
@@ -80,6 +96,20 @@ function resolveCStandardArg(version?: string) {
 		case 'GNUC17':
 		case 'GNUC18':
 			return '-std=gnu17';
+		case '23':
+		case '2X':
+		case 'C23':
+		case 'C2X':
+		case 'GNU23':
+		case 'GNU2X':
+		case 'GNUC23':
+		case 'GNUC2X':
+			return '-std=gnu23';
+		case '2Y':
+		case 'C2Y':
+		case 'GNU2Y':
+		case 'GNUC2Y':
+			return '-std=gnu2y';
 		default:
 			return defaultCStandardArg;
 	}

@@ -1,4 +1,5 @@
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import type { ClangdCompileProfile } from './config.js';
 import type { ClangdHeaderAsset } from './headers.js';
 
 export interface ClangdPreloadedAssets {
@@ -18,7 +19,7 @@ export interface ClangdWorkerInitMessage {
 	baseUrl: string;
 	assets: ClangdPreloadedAssets;
 	debug?: boolean;
-	compileProfile?: { cppVersion?: string; cVersion?: string };
+	compileProfile?: ClangdCompileProfile;
 }
 
 export interface ClangdWorkerSyncFileMessage {
