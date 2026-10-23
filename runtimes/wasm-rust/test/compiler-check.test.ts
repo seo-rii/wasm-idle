@@ -83,6 +83,33 @@ describe('metadata-only Rust checking', () => {
 		expect(worker.terminated).toBe(true);
 	});
 
+	it('preserves diagnostics when rustc traps after emitting a located error', async () => {
+		const diagnostics = [
+			{ lineNumber: 1, columnNumber: 26, severity: 'error' as const, message: 'mismatched types' }
+		];
+		const worker = new FakeWorker((_request, current) =>
+			current.emitMessage({
+				type: 'error',
+				failureKind: 'runtime-trap',
+				message: 'rustc emitted a diagnostic before unreachable',
+				stderr: 'rustc emitted a diagnostic before unreachable',
+				stdout: '',
+				exitCode: null,
+				diagnostics
+			})
+		);
+		const result = await checkRust(
+			{ code: 'fn main() { let n: u32 = "wrong"; }' },
+			{
+				loadManifest: async () => createIntegratedRuntimeManifestV3(),
+				createWorker: () => worker
+			}
+		);
+		expect(result).toMatchObject({ success: false, diagnostics, stdout: '' });
+		expect(result).not.toHaveProperty('artifact');
+		expect(worker.terminated).toBe(true);
+	});
+
 	it.each([
 		{ type: 'error', message: 'worker failed' },
 		{ type: 'result', exitCode: null, stdout: '', stderr: 'rustc trapped' },

@@ -345,12 +345,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 24012,
-            "sha256": "c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604"
+            "bytes": 24122,
+            "sha256": "fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa"
           },
           "logical": {
-            "bytes": 24012,
-            "sha256": "c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604"
+            "bytes": 24122,
+            "sha256": "fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa"
           },
           "imports": [
             {
@@ -444,12 +444,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 37627,
-            "sha256": "2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd"
+            "bytes": 37956,
+            "sha256": "d948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52"
           },
           "logical": {
-            "bytes": 37627,
-            "sha256": "2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd"
+            "bytes": 37956,
+            "sha256": "d948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52"
           },
           "imports": [
             {
@@ -1884,12 +1884,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 24012,
-            "sha256": "c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604"
+            "bytes": 24122,
+            "sha256": "fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa"
           },
           "logical": {
-            "bytes": 24012,
-            "sha256": "c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604"
+            "bytes": 24122,
+            "sha256": "fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa"
           },
           "imports": [
             {
@@ -1983,12 +1983,12 @@
             "encoding": "identity"
           },
           "storage": {
-            "bytes": 37627,
-            "sha256": "2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd"
+            "bytes": 37956,
+            "sha256": "d948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52"
           },
           "logical": {
-            "bytes": 37627,
-            "sha256": "2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd"
+            "bytes": 37956,
+            "sha256": "d948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52"
           },
           "imports": [
             {

@@ -590,7 +590,8 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 						failureKind,
 						exitCode,
 						stdout: stdout.getText(),
-						stderr: combinedStderr
+						stderr: combinedStderr,
+						...(diagnostics ? { diagnostics } : {})
 					} satisfies CompileWorkerMessage)
 				: ({
 						type: 'result',
@@ -626,7 +627,8 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 					failureKind,
 					exitCode,
 					stdout: stdoutText,
-					stderr: stderrText
+					stderr: stderrText,
+					...(diagnostics ? { diagnostics } : {})
 				} satisfies CompileWorkerMessage)
 			: ({
 					type: 'result',

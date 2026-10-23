@@ -464,6 +464,12 @@ async function runRustCompiler(request, dependencies = {}, checkOnly = false) {
                     }
                     : {
                         success: false,
+                        ...(settledMessage?.stdout !== undefined
+                            ? { stdout: settledMessage.stdout }
+                            : {}),
+                        ...(settledMessage?.diagnostics
+                            ? { diagnostics: settledMessage.diagnostics }
+                            : {}),
                         stderr: attemptResult?.stderr ||
                             workerBootstrapError?.message ||
                             (settledMessage?.type === 'error'
