@@ -4200,18 +4200,21 @@ describe('native-source browser debugging in Chromium', () => {
 							if (!(
 								'expectScopesAtStop' in testCase && !testCase.expectScopesAtStop
 							)) {
+								const stoppedFrameId = await page.evaluate(
+									() => (window as any).__wasmIdleDebug.getDebugState().frameId
+								);
 								await page.waitForFunction(
-									(reason) => {
+									(frameId) => {
 										const state = (
 											window as any
 										).__wasmIdleDebug.getDebugState();
 										return (
 											state.paused &&
-											state.stoppedReason === reason &&
+											state.frameId === frameId &&
 											state.scopes.length > 0
 										);
 									},
-									testCase.expectedStoppedReason,
+									stoppedFrameId,
 									{ timeout: 10_000 }
 								);
 							}
