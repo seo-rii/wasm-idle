@@ -405,6 +405,18 @@
 				}
 			: undefined
 	);
+	const javaLspWorkspaceFiles = $derived(
+		javaLspEnabled
+			? files
+					.filter(
+						(file) =>
+							file.path !== activePath &&
+							file.path.endsWith('.java') &&
+							!isBinaryWorkspaceFile(file)
+					)
+					.map((file) => ({ path: file.path, content: file.content }))
+			: []
+	);
 	const clangdLspEnabled = $derived(
 		lspEnabled && (clangdRequested || clangdLspLanguages.has(language))
 	);
@@ -4620,6 +4632,7 @@
 							{rescriptLspWorkspaceFiles}
 							{javaLspEnabled}
 							{javaLspRuntime}
+							{javaLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}

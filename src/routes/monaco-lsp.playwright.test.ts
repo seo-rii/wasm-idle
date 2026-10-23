@@ -127,12 +127,18 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 	`/wasm-rust/${modulePath}.gz`
 ]);
 
+const javaHelperSource = 'public class Helper {\n  public static int VALUE = 42;\n}\n';
+const javaValidSource =
+	'public class Main {\n  public static void main(String[] args) {\n    int answer = 42;\n    System.out.println(answer + args.length);\n    int shared = Helper.VALUE;\n    System.out.println(shared);\n  }\n}\n';
+
 const lspBrowserCases: LspBrowserCase[] = [
 	{
 		language: 'JAVA',
 		label: 'Java',
 		fileName: 'Main.java',
-		source: 'public class Main {\n  public static void main(String[] args) {\n    String answer = 42;\n    System.out.println(answer + args.length);\n  }\n}\n',
+		source: 'public class Main {\n  public static void main(String[] args) {\n    String answer = 42;\n    System.out.println(answer + args.length);\n    int shared = Helper.VALUE;\n    System.out.println(shared);\n  }\n}\n',
+		validSource: javaValidSource,
+		workspaceFiles: [{ path: 'Helper.java', content: javaHelperSource }],
 		statusKey: 'java',
 		assertNoPreEnableRequests: ['/wasm-java-lsp/'],
 		expectedRequestPathnames: JAVA_LANGUAGE_SERVER_ASSETS.map(
@@ -1244,8 +1250,7 @@ async function waitForClangdDiagnosticsForCurrentVersion(page: Page) {
 }
 
 async function checkJavaEditorFeatures(page: Page) {
-	const source =
-		'public class Main {\n  public static void main(String[] args) {\n    int answer = 42;\n    System.out.println(answer + args.length);\n  }\n}\n';
+	const source = javaValidSource;
 	await replaceEditorSource(page, source);
 	await page.waitForFunction(() => {
 		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
@@ -1303,6 +1308,100 @@ async function checkJavaEditorFeatures(page: Page) {
 	});
 	await page.locator('.monaco-hover').filter({ hasText: 'int answer' }).first().waitFor();
 	await page.keyboard.press('Escape');
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		const column = editor.getValue().split('\n')[4].indexOf('VALUE') + 1;
+		editor.pushUndoStop();
+		editor.setSelection({
+			startLineNumber: 5,
+			startColumn: column,
+			endLineNumber: 5,
+			endColumn: column + 'VALUE'.length
+		});
+		editor.focus();
+	});
+	await page.keyboard.insertText('VA');
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		editor.trigger('browser-regression', 'editor.action.triggerSuggest', {});
+	});
+	await page
+		.locator('.suggest-widget.visible')
+		.filter({ hasText: 'VALUE' })
+		.waitFor({ timeout: 10_000 });
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('Control+z');
+	await page.waitForFunction(
+		(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+		source,
+		{ timeout: 10_000 }
+	);
+
+	const showFiles = page.getByRole('button', { name: 'Show files', exact: true });
+	if (await showFiles.isVisible()) await showFiles.click();
+	const selectFile = async (path: string) => {
+		await page.locator(`.workspace-files button[title="${path}"]`).click();
+		await waitForSelectedEditorModel(page, 'JAVA', path);
+	};
+	await selectFile('Helper.java');
+	await replaceEditorSource(
+		page,
+		'public class Helper {\n  public static String VALUE = "changed";\n}\n'
+	);
+	await selectFile('Main.java');
+	await page.waitForFunction(() => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		return hooks
+			.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			})
+			.some(
+				(marker) =>
+					marker.startLineNumber === 5 &&
+					/\bString\b.*\bint\b/u.test(marker.message || '')
+			);
+	});
+	await selectFile('Helper.java');
+	await replaceEditorSource(page, javaHelperSource);
+	await selectFile('Main.java');
+	await page.waitForFunction(() => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		return (
+			hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			}).length === 0
+		);
+	});
+
+	// Replacing sibling files while Main stays open must also restart its source snapshot.
+	await page.evaluate(async () => {
+		await Reflect.get(globalThis, '__wasmIdleDebug').setWorkspaceFiles([], 'Main.java');
+	});
+	await page.waitForFunction(() => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		return hooks
+			.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			})
+			.some((marker) => /cannot find symbol[\s\S]*Helper/u.test(marker.message || ''));
+	});
+	expect(
+		await page.evaluate(() => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue())
+	).toBe(source);
+	await page.evaluate(async (content) => {
+		await Reflect.get(globalThis, '__wasmIdleDebug').setWorkspaceFiles(
+			[{ path: 'Helper.java', content }],
+			'Main.java'
+		);
+	}, javaHelperSource);
+	await page.waitForFunction(() => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		return (
+			hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			}).length === 0
+		);
+	});
 	expect(page.frames()).toHaveLength(1);
 	await page.locator('#lsp-toggle').uncheck();
 	await page.waitForFunction(() => {

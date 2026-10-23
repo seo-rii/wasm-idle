@@ -2386,6 +2386,7 @@
 		lspEnabled?: boolean;
 		javaLspEnabled?: boolean;
 		javaLspRuntime?: JavaLspRuntimeConfig;
+		javaLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
 		clangdRuntimeAssets?: PlaygroundRuntimeAssets;
@@ -2516,6 +2517,7 @@
 		lspEnabled = false,
 		javaLspEnabled = false,
 		javaLspRuntime,
+		javaLspWorkspaceFiles = [],
 		clangdEnabled = false,
 		clangdBaseUrl,
 		clangdRuntimeAssets,
@@ -2726,6 +2728,7 @@
 			language,
 			normalizedFilePath,
 			javaLspEnabled ? JSON.stringify(javaLspRuntime) : '',
+			javaLspEnabled ? JSON.stringify(javaLspWorkspaceFiles) : '',
 			clangdEnabled ? clangdBaseUrl || '' : '',
 			clangdCppVersion || '',
 			clangdCVersion || '',
@@ -3078,15 +3081,24 @@
 			setStatus: (status) => (javaLspStatus = status),
 			load: async (currentUrl, signal) => {
 				const { getJavaLanguageServer } = await import('@wasm-idle/lsp/java');
+				const monacoApi = Monaco;
+				if (!monacoApi) throw new Error('Java LSP requires the Monaco URI factory');
+				const currentModel = model && !model.isDisposed() ? model : undefined;
+				const activeUri =
+					currentModel?.uri ?? createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
+				const initialFiles = Object.fromEntries([
+					...javaLspWorkspaceFiles.map((file) => [
+						createWorkspaceModelUri(monacoApi.Uri, file.path).toString(true),
+						file.content
+					]),
+					[activeUri.toString(true), currentModel?.getValue() ?? value ?? '']
+				]);
 				return await getJavaLanguageServer({
 					currentUrl,
 					signal,
 					java: {
 						...javaLspRuntime,
-						initialFiles:
-							model && !model.isDisposed()
-								? { [model.uri.toString(true)]: model.getValue() }
-								: {}
+						initialFiles
 					},
 					onStatus: (status) => (javaLspStatus = status)
 				});
