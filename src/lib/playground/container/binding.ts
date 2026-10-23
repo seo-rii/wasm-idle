@@ -3,7 +3,11 @@ import type { SandboxExecutionOptions } from '../options';
 import type { TerminalShellBinding } from '@wasm-idle/terminal';
 import type { WorkspaceFile as ContainerWorkspaceFile } from '@wasm-idle/core';
 import { createContainerWorkerClient, type ContainerWorkerClient } from './client';
-import type { ContainerWorkerEvent, ContainerWorkspaceEntry } from './protocol';
+import type {
+	ContainerWorkerEvent,
+	ContainerWorkspaceDelta,
+	ContainerWorkspaceEntry
+} from './protocol';
 
 type BindingOptions = {
 	applicationRootURL: string;
@@ -20,23 +24,11 @@ const copyFiles = (files: readonly ContainerWorkspaceFile[]) =>
 const bytes = (content: string | Uint8Array) =>
 	typeof content === 'string' ? new TextEncoder().encode(content) : content;
 const equal = (left: string | Uint8Array, right: string | Uint8Array) => {
+	if (left === right) return true;
 	const a = bytes(left),
 		b = bytes(right);
 	return a.length === b.length && a.every((byte, index) => byte === b[index]);
 };
-function sameFiles(
-	left: readonly ContainerWorkspaceFile[],
-	right: readonly ContainerWorkspaceFile[]
-) {
-	return (
-		left.length === right.length &&
-		left.every((file) => {
-			const other = right.find((candidate) => candidate.path === file.path);
-			return other && equal(file.content, other.content);
-		})
-	);
-}
-
 export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	readonly shell: TerminalShellBinding;
 	inspect(): Promise<unknown>;
@@ -60,6 +52,11 @@ export function createContainerPlaygroundBinding(
 	const published = new Map<string, ContainerWorkspaceFile[]>();
 	const changes = new Set<(event: ContainerWorkerEvent) => void>();
 	const queues = new Map<string, Promise<void>>();
+	const reads = new Map<
+		string,
+		{ revision: number; files: Map<string, ContainerWorkspaceFile> }
+	>();
+	const readQueues = new Map<string, Promise<ContainerWorkspaceFile[]>>();
 	let shellOutput: ((text: string) => void) | undefined;
 	let shellError: ((error: unknown) => void) | undefined;
 	let shellConnection: Promise<void> | undefined;
@@ -117,13 +114,31 @@ export function createContainerPlaygroundBinding(
 			.catch(() => {})
 			.then(async () => {
 				const baseline = published.get(language);
-				if (baseline && sameFiles(baseline, snapshot)) return;
-				await connection().call('syncWorkspace', [
-					language,
-					snapshot,
-					baseline && copyFiles(baseline)
-				]);
-				published.set(language, copyFiles(snapshot));
+				if (baseline) {
+					const before = new Map(baseline.map((file) => [file.path, file]));
+					const changed: ContainerWorkspaceFile[] = [];
+					const expected: ContainerWorkspaceFile[] = [];
+					for (const file of snapshot) {
+						const previous = before.get(file.path);
+						before.delete(file.path);
+						if (previous && equal(previous.content, file.content)) continue;
+						changed.push(file);
+						if (previous) expected.push(previous);
+					}
+					expected.push(...before.values());
+					if (!changed.length && !expected.length) return;
+					await connection().call('syncWorkspaceDelta', [
+						language,
+						changed,
+						expected,
+						snapshot.map((file) => ({
+							path: file.path,
+							bytes: bytes(file.content).byteLength
+						}))
+					]);
+				} else await connection().call('syncWorkspace', [language, snapshot, undefined]);
+				// snapshot already owns its bytes, including while queued behind another write.
+				published.set(language, snapshot);
 			});
 		queues.set(language, next);
 		return next;
@@ -272,8 +287,34 @@ export function createContainerPlaygroundBinding(
 		async cancelPrewarm() {},
 		syncWorkspace,
 		async readWorkspace(language) {
-			await queues.get(language)?.catch(() => {});
-			return await connection().call<ContainerWorkspaceFile[]>('readWorkspace', [language]);
+			const previous = readQueues.get(language);
+			const next = (async () => {
+				await previous?.catch(() => {});
+				await queues.get(language)?.catch(() => {});
+				const baseline = reads.get(language);
+				const delta = await connection().call<ContainerWorkspaceDelta>(
+					'readWorkspaceDelta',
+					[language, baseline?.revision]
+				);
+				if (disposed) throw new Error('Container playground has been disposed');
+				const files = new Map(delta.reset ? [] : baseline?.files);
+				for (const path of delta.deleted) files.delete(path);
+				for (const file of delta.files) files.set(file.path, file);
+				reads.set(language, { revision: delta.revision, files });
+				// Match the owner's sorted directory traversal after incremental additions.
+				return copyFiles(
+					[...files.values()].sort((left, right) => {
+						const a = left.path.split('/'),
+							b = right.path.split('/');
+						for (let index = 0; index < Math.min(a.length, b.length); index++) {
+							if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+						}
+						return a.length - b.length;
+					})
+				);
+			})();
+			readQueues.set(language, next);
+			return await next;
 		},
 		async listWorkspaceFiles() {
 			return await connection().call<ContainerWorkspaceEntry[]>('listWorkspaceFiles');
@@ -295,6 +336,8 @@ export function createContainerPlaygroundBinding(
 			if (disposed) return;
 			disposed = true;
 			changes.clear();
+			reads.clear();
+			readQueues.clear();
 			await client?.dispose();
 		}
 	};
