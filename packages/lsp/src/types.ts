@@ -69,6 +69,11 @@ export interface EditorLanguageServerRuntimeOptions {
 		baseUrl?: string;
 		integrity?: VLspAssetReceipts;
 	};
+	lean4?: {
+		baseUrl?: string;
+		/** Per-document shared Wasm memory ceiling; defaults to 1 GiB. */
+		maxMemoryBytes?: number;
+	};
 	python?: {
 		baseUrl?: string;
 	};

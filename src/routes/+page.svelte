@@ -422,6 +422,12 @@
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
 	const dLspManifestUrl = $derived(dLspEnabled ? runtimeAssets.d?.manifestUrl : undefined);
 	const dLspIntegrity = $derived(dLspEnabled ? runtimeAssets.d?.integrity : undefined);
+	const lean4LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lean4');
+	const lean4LspBaseUrl = $derived(
+		lean4LspEnabled
+			? runtimeAssets.lean4?.baseUrl || resolveApplicationAsset('wasm-lean4/')
+			: undefined
+	);
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
@@ -4575,6 +4581,8 @@
 							{dLspModuleUrl}
 							{dLspManifestUrl}
 							{dLspIntegrity}
+							{lean4LspEnabled}
+							{lean4LspBaseUrl}
 							{tclLspEnabled}
 							{tclLspBaseUrl}
 							{tclLspWorkerUrl}

@@ -269,6 +269,11 @@
 			"types": "./dist/v/index.d.ts",
 			"import": "./dist/v/index.js",
 			"default": "./dist/v/index.js"
+		},
+		"./lean4": {
+			"types": "./dist/lean4/index.d.ts",
+			"import": "./dist/lean4/index.js",
+			"default": "./dist/lean4/index.js"
 		}
 	},
 	"files": [

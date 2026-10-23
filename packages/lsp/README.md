@@ -48,7 +48,7 @@ const python = await getEditorLanguageServer('python', {
 Missing Clangd or Python asset configuration fails with
 `LanguageServerAssetConfigurationError` before a worker starts or an asset request is issued.
 
-No WASM modules, compressed standard libraries, compiler archives, or worker assets are included in
+No WASM modules, compressed standard libraries, compiler archives, or runtime-engine worker assets are included in
 the package tarball.
 
 Pure JavaScript provider engines are optional peer dependencies. Install only the providers used by
@@ -172,3 +172,17 @@ Pass `rescript.workspaceFiles` with the initial `.res`/`.resi` files; use root U
 `file:///workspace`. The verified browser profile supports plain projects and the standard
 library. Run `pnpm run sync:rescript-lsp` and deploy `wasm-rescript-lsp/` separately.
 See [the source pins, project limits and reproduction steps](../../docs/performance/rescript-lsp.md).
+
+## Lean 4
+
+`getLean4LanguageServer` from `@wasm-idle/lsp/lean4` hosts the unchanged upstream Lean 4.34.1 server.
+The original watchdog supplies initialize capabilities; browser workers run its original
+FileWorker handlers because native subprocess spawning is unavailable. The `Init` profile supports
+one active document per handle, completion, hover, local definitions, semantic features and type
+error diagnostics. Lake/package builds and watchdog project-wide operations are unavailable.
+
+Provide `rootUrl` (assets under `wasm-lean4/`) or `lean4.baseUrl` pointing to the pinned distribution
+prepared by `sync:wasm-lean4`. The first payload is about 143 MB and shares the execution asset
+cache. This provider requires cross-origin isolation, SharedArrayBuffer, nested module workers,
+and WebAssembly exceptions; Chromium is tested. It preallocates a bounded 64-thread pthread pool
+and defaults to a 1 GiB Wasm ceiling per document. See [the host and profile details](../../docs/lean4.md#original-language-server).

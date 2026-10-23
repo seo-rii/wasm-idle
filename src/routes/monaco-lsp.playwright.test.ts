@@ -25,6 +25,8 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
+// Collection precedes the browser build that creates the SDK output.
+import { WASM_LEAN4_PROFILE } from '../../packages/lsp/src/bundledLean4Runtime';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
 
 interface LspBrowserCase {
@@ -181,6 +183,30 @@ const lspBrowserCases: LspBrowserCase[] = [
 		],
 		assertNoPreEnableRequests: ['/wasm-v-lsp/'],
 		timeoutMs: 180_000
+	},
+	{
+		language: 'LEAN4',
+		label: 'Lean 4',
+		fileName: 'Main.lean',
+		aliases: ['lean'],
+		statusKey: 'lean4',
+		source: 'def answer : Nat := "bad"\n',
+		validSource: 'def answer : Nat := 42\n',
+		errorLine: 1,
+		timeoutMs: 240000,
+		assertNoPreEnableRequests: ['/wasm-lean4/'],
+		expectedResponses: ['/wasm-lean4/lean.mjs?', '/wasm-lean4/lean.wasm.gz.bin?'],
+		expectedRequestPathnames: Object.keys(WASM_LEAN4_PROFILE.assets).map(
+			(name) => '/wasm-lean4/' + name
+		),
+		requestPathMarker: '/wasm-lean4/',
+		requireSha256RequestPins: true,
+		expectedRequestSha256Pins: Object.fromEntries(
+			Object.entries(WASM_LEAN4_PROFILE.assets).map(([name, receipt]) => [
+				'/wasm-lean4/' + name,
+				receipt.sha256
+			])
+		)
 	},
 	{
 		language: 'CPP',
@@ -686,7 +712,7 @@ const lspBrowserMatrixGroups = {
 		'PROLOG',
 		'RUBY'
 	],
-	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
+	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN', 'LEAN4'],
 	'runtime-extra': [
 		'V',
 		'OBJC',
@@ -727,11 +753,12 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:lean4|v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
 const lspStatusKeyByLanguage: Record<string, string> = {
+	LEAN4: 'lean4',
 	TYPESCRIPT: 'typescript',
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
@@ -1359,7 +1386,9 @@ async function runLspCase(
 		if (requestLooksLspRelated(url)) lspRequests.push(`< ${response.status()} ${url}`);
 		if (
 			process.env.WASM_IDLE_STRICT_CSP === '1' &&
-			/\/_app\/immutable\/workers\/[^/]+\.js$/u.test(new URL(url).pathname)
+			/\/_app\/immutable\/(?:workers|assets)\/(?:assets\/)?[^/]+\.js$/u.test(
+				new URL(url).pathname
+			)
 		) {
 			strictWorkerResponsePolicies.set(
 				url,
@@ -1419,9 +1448,14 @@ async function runLspCase(
 			.filter((url) => !workersBeforeLsp.has(url) && !backgroundWorkerUrls.has(url));
 		expect(lspWorkerUrls.length).toBeGreaterThan(0);
 		for (const workerUrl of lspWorkerUrls) {
+			if (testCase.language === 'LEAN4' && workerUrl.startsWith('blob:')) {
+				// These pthread modules are the verified original glue with the documented platform patch.
+				expect(new URL(workerUrl).origin).toBe(new URL(browserUrl).origin);
+				continue;
+			}
 			const workerPolicy = strictWorkerResponsePolicies.get(workerUrl) || '';
 			expect(workerUrl, `Unexpected LSP worker URL: ${workerUrl}`).toMatch(
-				/\/_app\/immutable\/workers\/[^/]+\.js$/u
+				/\/_app\/immutable\/(?:workers|assets)\/(?:assets\/)?[^/]+\.js$/u
 			);
 			expect(workerPolicy).toContain(
 				"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
@@ -1443,7 +1477,7 @@ async function runLspCase(
 		expect(entry.progressValue).toBeGreaterThanOrEqual(0);
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
-	if (testCase.validSource) {
+	if (testCase.validSource && testCase.language !== 'LEAN4') {
 		if (lspStatusKeyFor(testCase) === 'clangd')
 			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
@@ -1512,17 +1546,23 @@ async function runLspCase(
 		await replaceEditorSource(page, testCase.validSource);
 		if (lspStatusKeyFor(testCase) === 'clangd')
 			await waitForClangdDiagnosticsForCurrentVersion(page);
-		else {
-			await page.waitForFunction(() => {
-				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
-				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
-				return (
-					model &&
-					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
-						.length === 0
-				);
-			});
-		}
+		else
+			await page.waitForFunction(
+				() => {
+					const api = (globalThis as typeof globalThis & MonacoTestGlobal)
+						.__wasmIdleMonacoApi;
+					const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+						.__wasmIdleMonacoEditor;
+					const model = editor?.getModel?.();
+					return (
+						api &&
+						model &&
+						api.editor.getModelMarkers({ resource: model.uri }).length === 0
+					);
+				},
+				undefined,
+				{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
+			);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'POSTGRESQL')
@@ -1916,6 +1956,7 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-heavy';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'LEAN4',
 				'DUCKDB',
 				'RUST',
 				'ZIG',

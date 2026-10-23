@@ -483,3 +483,8 @@ export {
 	V_LSP_ASSET_RECEIPTS,
 	type VLspAssetReceipts
 } from './v/index.js';
+
+export {
+	getLean4LanguageServer,
+	type Lean4LanguageServerOptions
+} from './lean4/language-server.js';

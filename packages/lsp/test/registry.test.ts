@@ -11,6 +11,7 @@ const expectedLanguagesByProvider = {
 	c3: ['c3'],
 	rescript: ['rescript'],
 	v: ['v', 'vlang'],
+	lean4: ['lean4', 'lean'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

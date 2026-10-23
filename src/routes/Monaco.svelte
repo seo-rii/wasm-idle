@@ -2332,6 +2332,7 @@
 	let c3LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let vLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let lean4LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2408,6 +2409,8 @@
 		dLspModuleUrl?: string;
 		dLspManifestUrl?: string;
 		dLspIntegrity?: DOuterAssetReceipts;
+		lean4LspEnabled?: boolean;
+		lean4LspBaseUrl?: string;
 		tclLspEnabled?: boolean;
 		tclLspBaseUrl?: string;
 		tclLspWorkerUrl?: string;
@@ -2531,6 +2534,8 @@
 		dLspModuleUrl,
 		dLspManifestUrl,
 		dLspIntegrity = WASM_D_OUTER_ASSET_RECEIPTS,
+		lean4LspEnabled = false,
+		lean4LspBaseUrl,
 		tclLspEnabled = false,
 		tclLspBaseUrl,
 		tclLspWorkerUrl,
@@ -2645,6 +2650,7 @@
 				| 'forth'
 				| 'j'
 				| 'bqn'
+				| 'lean4'
 				| 'janet'
 				| 'ocaml'
 				| 'javascript'
@@ -2724,6 +2730,7 @@
 			dLspEnabled ? dLspManifestUrl || '' : '',
 			dLspEnabled ? dLspIntegrity['index.js'].sha256 : '',
 			dLspEnabled ? dLspIntegrity['runtime/runtime-manifest.v1.json'].sha256 : '',
+			lean4LspEnabled ? lean4LspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
 			pascalLspEnabled ? JSON.stringify(pascalLspRuntime) : '',
@@ -2838,6 +2845,10 @@
 			case 'd':
 				label = 'D LSP';
 				status = dLspStatus;
+				break;
+			case 'lean4':
+				label = 'Lean 4 LSP';
+				status = lean4LspStatus;
 				break;
 			case 'tcl':
 				label = 'Tcl LSP';
@@ -3135,6 +3146,20 @@
 					signal,
 					v: { baseUrl: vLspBaseUrl },
 					onStatus: (status) => (vLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['lean4'],
+			isEnabled: () => lean4LspEnabled,
+			setStatus: (status) => (lean4LspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getLean4LanguageServer } = await import('@wasm-idle/lsp/lean4');
+				return getLean4LanguageServer({
+					currentUrl,
+					signal,
+					lean4: { baseUrl: lean4LspBaseUrl },
+					onStatus: (status) => (lean4LspStatus = status)
 				});
 			}
 		},
@@ -3888,6 +3913,7 @@
 			c3: c3LspStatus,
 			v: vLspStatus,
 			d: dLspStatus,
+			lean4: lean4LspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,
 			go: goLspStatus,
@@ -4093,6 +4119,13 @@
 					'scrollbarSlider.hoverBackground': '#5c6169aa'
 				}
 			});
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lean4')) {
+				monacoApi.languages.register({
+					id: 'lean4',
+					aliases: ['Lean 4', 'lean4'],
+					extensions: ['.lean']
+				});
+			}
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
 				monacoApi.languages.register({
 					id: 'ocaml',

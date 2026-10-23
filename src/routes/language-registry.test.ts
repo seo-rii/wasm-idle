@@ -170,6 +170,8 @@ describe('language registry', () => {
 	});
 
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
+		expect(runtimeLspCapabilities.LEAN4).toBe('lean4');
+		expect(editorLanguages.LEAN4).toBe('lean4');
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(runtimeLspCapabilities.D).toBe('d');
