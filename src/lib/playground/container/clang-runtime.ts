@@ -212,12 +212,23 @@ export class WebsiteClangRuntime {
 					phase: 'starting',
 					label: 'Reusing the compiled program'
 				});
-				for (const event of cached.diagnostics)
+				const current = () => {
+					signal.throwIfAborted();
+					if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
+					return this.currentProgram(cached, key, artifact);
+				};
+				// Progress/output callbacks may synchronously edit the workspace. Replay
+				// outputs first so an invalidation cannot leave old editor diagnostics
+				// alongside the rebuild's diagnostics. Delivered output cannot be retracted.
+				const replay = [
+					...cached.diagnostics.filter((event) => event.name !== 'diagnostic'),
+					...cached.diagnostics.filter((event) => event.name === 'diagnostic')
+				];
+				for (const event of replay) {
+					if (!current()) break;
 					this.emit({ ...structuredClone(event), requestId });
-				signal.throwIfAborted();
-				if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
-				// Event callbacks may synchronously edit the shared workspace.
-				if (this.currentProgram(cached, key, artifact)) {
+				}
+				if (current()) {
 					this.#prepared.set(language, cached);
 					return true;
 				}

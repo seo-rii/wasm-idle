@@ -231,6 +231,57 @@ describe('website container Clang compilation', () => {
 			['diagnostic', 42]
 		]);
 	});
+	it('checks cache validity after progress callbacks before replaying old compiler events', async () => {
+		const messages = ['/workspace/C/main.c:1:2: warning: old warning\n'],
+			f = fixture(messages),
+			code = 'int main() {}';
+		await f.prepare(code, {}, 'C');
+		f.emit.mockClear();
+		messages.splice(0, messages.length, '/workspace/C/main.c:1:2: warning: fresh warning\n');
+		f.progress.report.mockImplementation((event) => {
+			if (event.label === 'Reusing the compiled program')
+				f.fs.writeFile('/workspace/C/changed.h', new TextEncoder().encode('changed'));
+		});
+		expect(await f.prepare(code, {}, 'C', new AbortController().signal, 42)).toBe(true);
+		expect(f.spawn).toHaveBeenCalledTimes(2);
+		expect(
+			f.emit.mock.calls.map(([event]) => [event.name, event.data, event.requestId])
+		).toEqual([
+			['output', messages[0], 42],
+			['diagnostic', expect.objectContaining({ message: 'fresh warning' }), 42]
+		]);
+	});
+	it('holds cached diagnostics until every output callback has preserved the compiled inputs', async () => {
+		const messages = [
+				'/workspace/C/main.c:1:2: warning: old first warning\n',
+				'/workspace/C/main.c:2:3: warning: old second warning\n'
+			],
+			f = fixture(messages),
+			code = 'int main() {}';
+		await f.prepare(code, {}, 'C');
+		f.emit.mockClear();
+		let outputs = 0;
+		f.emit.mockImplementation((event) => {
+			if (event.name === 'output' && ++outputs === 2) {
+				f.fs.writeFile('/workspace/C/changed.h', new TextEncoder().encode('changed'));
+				messages.splice(
+					0,
+					messages.length,
+					'/workspace/C/main.c:1:2: warning: fresh warning\n'
+				);
+			}
+		});
+		expect(await f.prepare(code, {}, 'C', new AbortController().signal, 42)).toBe(true);
+		expect(f.spawn).toHaveBeenCalledTimes(2);
+		expect(
+			f.emit.mock.calls.map(([event]) => event).filter((event) => event.name === 'diagnostic')
+		).toEqual([
+			expect.objectContaining({
+				requestId: 42,
+				data: expect.objectContaining({ message: 'fresh warning' })
+			})
+		]);
+	});
 	it('rebuilds after an editor source change or an unchanged editor buffer with a newer shell source', async () => {
 		const f = fixture();
 		await f.prepare('int main() {}', {}, 'C');

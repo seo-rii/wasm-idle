@@ -24,6 +24,13 @@ once. Successful compiler output and editor diagnostics are retained within a
 identifier; exceeding the budget disables reuse. Failure or cancellation cannot
 publish a cache entry or revive an older executable.
 
+Cached replay rechecks cancellation and filesystem validity after the progress
+callback and before each event. It sends retained terminal output before editor
+diagnostics, so an output callback that edits the workspace stops replay before
+old diagnostics can mix with the rebuild's diagnostics. An invalidation rebuilds
+the program; terminal output already delivered before the edit cannot be retracted.
+Diagnostic callbacks also stop further replay if they invalidate the build.
+
 A build also must qualify for reuse while it is running. The filesystem's bounded,
 synchronous mutation observer records trusted owner sources independently of lossy
 editor watches. The live adapter attributes filesystem syscalls to its bound
