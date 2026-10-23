@@ -1,5 +1,5 @@
-import path from 'path-browserify';
-import { Buffer } from 'buffer/';
+import path from 'node:path';
+import { Buffer } from 'node:buffer';
 
 const files = new Map();
 const directories = new Set(['/', '/workspace', '/bin', '/upstream', '/upstream/out']);

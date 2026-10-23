@@ -664,7 +664,7 @@ export const supportMatrixRows = [
 		ids: ['BASH'],
 		runtime: 'GNU Bash WASIX / Wasmer SDK',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Bash LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/bash.playwright.test.ts',
