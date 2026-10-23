@@ -2312,6 +2312,7 @@ describe('TeaVM Java snapshot evaluator worker', { timeout: 20_000 }, () => {
 			prepare: false,
 			debugMode: 'none',
 			javaDebug: undefined,
+			cacheEvaluationArtifacts: true,
 			workspaceFiles: [],
 			args: ['7'],
 			stdin: '',

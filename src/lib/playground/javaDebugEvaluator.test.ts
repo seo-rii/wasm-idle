@@ -21,6 +21,38 @@ const bindings: JavaDebugEvaluationBinding[] = [
 ];
 
 describe('Java compiler-backed evaluation program', () => {
+	it('keeps source identity stable when only snapshot values change', () => {
+		const first = buildJavaDebugEvaluationProgram({ expression: 'number + 1', bindings });
+		const second = buildJavaDebugEvaluationProgram({
+			expression: 'number + 1',
+			bindings: bindings.map((binding) =>
+				binding.name === 'number' ? { ...binding, value: '12' } : binding
+			)
+		});
+		expect(second.code).toBe(first.code);
+		expect(second.args).toEqual(['12']);
+		expect(first.args).toEqual(['7']);
+		const differentType = buildJavaDebugEvaluationProgram({
+			expression: 'number + 1',
+			bindings: [{ name: 'number', type: 'long', value: '7' }]
+		});
+		expect(differentType.code).not.toBe(first.code);
+	});
+
+	it('chooses a stable helper name that does not shadow expression identifiers', () => {
+		const request = {
+			expression: 'WasmIdleEval + WasmIdleEval_1',
+			bindings: [
+				{ name: 'WasmIdleEval', type: 'int', value: '1' },
+				{ name: 'WasmIdleEval_1', type: 'int', value: '2' }
+			]
+		};
+		const first = buildJavaDebugEvaluationProgram(request);
+		expect(buildJavaDebugEvaluationProgram(request).code).toBe(first.code);
+		expect(() => parse(first.code)).not.toThrow();
+		expect(first.code).toContain('class WasmIdleEval_2');
+	});
+
 	it.each([
 		'number * 2 + 1',
 		'java.lang.Integer.MAX_VALUE + 1',

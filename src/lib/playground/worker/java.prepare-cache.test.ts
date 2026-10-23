@@ -21,6 +21,7 @@ const compiled = ts.transpileModule(source, {
 function worker(
 	options: {
 		now?: () => number;
+		wasmBytes?: number;
 		program?: (
 			write: (charCode: number) => void,
 			debug: ReturnType<typeof javaDebugRuntime.createJavaDebugRuntime>
@@ -29,6 +30,7 @@ function worker(
 	} = {}
 ) {
 	const messages: any[] = [];
+	const runs: Array<{ args: string[]; local: number }> = [];
 	const counts = {
 		compile: 0,
 		bridgeCompile: 0,
@@ -97,7 +99,9 @@ function worker(
 		},
 		getWebAssemblyOutputFile() {
 			if (failure.output) throw new Error('output failed');
-			return new Uint8Array([9]);
+			const bytes = new Uint8Array(options.wasmBytes ?? 1);
+			bytes[0] = 9;
+			return bytes;
 		}
 	};
 	const runtime = {
@@ -105,10 +109,12 @@ function worker(
 			if (bytes[0] === 9 || (bytes as any).app) {
 				const imports = { teavmConsole: { putcharStdout: (_charCode: number) => {} } };
 				settings?.installImports?.(imports);
+				let local = 0;
 				return {
 					exports: {
-						main: () => {
+						main: (args: string[]) => {
 							counts.run++;
+							runs.push({ args: [...args], local: ++local });
 							options.program?.(
 								imports.teavmConsole.putcharStdout,
 								context.wasmIdleJavaDebug
@@ -204,6 +210,7 @@ function worker(
 	vm.runInContext(compiled, context);
 	return {
 		counts,
+		runs,
 		hasDiagnosticListener: () => onDiagnostic !== undefined,
 		failure,
 		messages,
@@ -463,4 +470,112 @@ test('container UTF-8 auxiliary files share cache identity with source strings',
 	await w.run({ workspaceFiles: [{ path: 'Helper.java', content: new Uint8Array([255]) }] });
 	assert.ok(w.messages.at(-1)?.error);
 	assert.equal(w.counts.compile, 1);
+});
+
+test('isolated evaluation reuses alternating compiled expressions with fresh instances and arguments', async () => {
+	const w = worker();
+	await w.load();
+	const run = (code: string, args: string[]) =>
+		w.run({ code, args, prepare: false, cacheEvaluationArtifacts: true });
+	await run('class Main { int a; }', ['7']);
+	const diagnostics = JSON.stringify(w.messages.filter((message) => message.diagnostic));
+	await run('class Main { int b; }', ['8']);
+	await run('class Main { int a; }', ['9']);
+	assert.equal(w.counts.compile, 2);
+	assert.equal(w.counts.generate, 2);
+	assert.equal(w.counts.engineCompile, 2);
+	assert.equal(w.counts.run, 3);
+	assert.deepEqual(w.runs, [
+		{ args: ['7'], local: 1 },
+		{ args: ['8'], local: 1 },
+		{ args: ['9'], local: 1 }
+	]);
+	assert.equal(JSON.stringify(w.messages.filter((message) => message.diagnostic)), diagnostics);
+});
+
+test('ordinary programs and custom byte-only loaders do not retain multiple evaluation artifacts', async () => {
+	for (const custom of [false, true]) {
+		const w = worker();
+		await w.load('/teavm/', !custom);
+		for (const name of ['a', 'b', 'a']) {
+			await w.run({ code: `class Main { int ${name}; }`, cacheEvaluationArtifacts: custom });
+		}
+		assert.equal(w.counts.compile, 3);
+		assert.equal(w.counts.engineCompile, custom ? 0 : 3);
+	}
+});
+
+test('evaluation artifacts evict the least recently used expression after eight entries', async () => {
+	const w = worker();
+	await w.load();
+	const run = (index: number) =>
+		w.run({ code: `class Main { int value${index}; }`, cacheEvaluationArtifacts: true });
+	for (let index = 0; index < 8; index++) await run(index);
+	await run(0);
+	await run(8);
+	await run(0);
+	assert.equal(w.counts.compile, 9);
+	await run(1);
+	assert.equal(w.counts.compile, 10);
+});
+
+test('evaluation artifact retention respects the byte budget and does not retain oversized entries', async () => {
+	for (const wasmBytes of [9 * 1024 * 1024, 17 * 1024 * 1024]) {
+		const w = worker({ wasmBytes });
+		await w.load();
+		for (const name of ['a', 'b', 'a']) {
+			await w.run({ code: `class Main { int ${name}; }`, cacheEvaluationArtifacts: true });
+		}
+		assert.equal(w.counts.compile, 3);
+		assert.equal(w.messages.at(-1)?.results, true);
+	}
+});
+
+test('evaluation caches include source path and clear when the compiler runtime changes', async () => {
+	const w = worker();
+	await w.load();
+	const run = (activePath: string) => w.run({ activePath, cacheEvaluationArtifacts: true });
+	await run('one/Main.java');
+	await run('two/Main.java');
+	await run('one/Main.java');
+	assert.equal(w.counts.compile, 2);
+	await w.load('/another-teavm/');
+	await run('one/Main.java');
+	assert.equal(w.counts.compile, 3);
+});
+
+test('a failed expression is retried without invalidating other successful evaluation artifacts', async () => {
+	const w = worker();
+	await w.load();
+	const run = (name: string) =>
+		w.run({ code: `class Main { int ${name}; }`, cacheEvaluationArtifacts: true });
+	await run('a');
+	w.failure.generate = true;
+	await run('b');
+	assert.equal(typeof w.messages.at(-1)?.error, 'string');
+	w.failure.generate = false;
+	await run('a');
+	assert.equal(w.counts.compile, 2);
+	await run('b');
+	assert.equal(w.counts.compile, 3);
+	assert.equal(w.messages.at(-1)?.results, true);
+});
+
+test('workspace and debug compilations remain ineligible for the evaluation cache', async () => {
+	const w = worker();
+	await w.load();
+	for (const extra of [
+		{ workspaceFiles: [{ path: 'Helper.java', content: 'class Helper {}' }] },
+		{ debugMode: 'trace' }
+	]) {
+		const before = w.counts.compile;
+		for (const name of ['a', 'b', 'a'])
+			await w.run({
+				code: `class Main { int ${name}; }`,
+				cacheEvaluationArtifacts: true,
+				...extra
+			});
+		assert.equal(w.counts.compile - before, 3);
+		assert.equal(w.messages.at(-1)?.results, true);
+	}
 });
