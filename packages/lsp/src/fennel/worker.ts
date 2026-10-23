@@ -53,7 +53,12 @@ self.addEventListener('message', (event: MessageEvent) => {
 			if (message.method === '$/cancelRequest') {
 				const index = beforeOpen.findIndex((request) => request.id === message.params?.id);
 				if (index >= 0) {
-					beforeOpen.splice(index, 1);
+					const [request] = beforeOpen.splice(index, 1);
+					self.postMessage({
+						jsonrpc: '2.0',
+						id: request.id,
+						error: { code: -32800, message: 'Request cancelled' }
+					});
 					return;
 				}
 			}
