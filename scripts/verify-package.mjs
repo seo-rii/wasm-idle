@@ -187,9 +187,10 @@ void [shell, options, serve, result, binding.dispose()];
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
 		// Includes the public container package and all reviewed LSP providers.
-		// Measured 41,115,703 bytes / 3,257 files / 62 packages; 8,137 bytes headroom.
+		// Compiler-option API, worker, and config changes add 10,510 bytes to the prior install.
+		// Measured 41,126,213 bytes / 3,257 files / 62 packages; 5,819 bytes headroom.
 		// Separate plugin budgets and the production-package limit stay unchanged.
-		budget: { maxBytes: 39 * MiB + 224 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		budget: { maxBytes: 39 * MiB + 232 * 1024, maxFiles: 3_300, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
