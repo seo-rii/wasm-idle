@@ -267,6 +267,20 @@ const lspBrowserCases: LspBrowserCase[] = [
 		expectedRequestSha256Pins: rustExecutableStoragePins
 	},
 	{
+		language: 'POSTGRESQL',
+		label: 'PostgreSQL',
+		fileName: 'main.sql',
+		source: '-- Preserve this prefix while editing.\nselect from;\n',
+		validSource: '-- Preserve this prefix while editing.\nselect 1;\n',
+		errorLine: 2,
+		aliases: ['postgres', 'pgsql'],
+		assertNoPreEnableRequests: ['/wasm-postgresql-lsp/'],
+		expectedResponses: [
+			'/wasm-postgresql-lsp/dist/lsp.js',
+			'/wasm-postgresql-lsp/dist/pgls.wasm'
+		]
+	},
+	{
 		language: 'GO',
 		label: 'Go',
 		fileName: 'main.go',
@@ -563,7 +577,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -597,6 +611,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	HASKELL: 'haskell',
 	FORTRAN: 'fortran',
 	SQLITE: 'sql',
+	POSTGRESQL: 'postgresql',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
 };
@@ -1109,6 +1124,40 @@ async function checkClangLanguageSwitches(page: Page) {
 	}
 }
 
+async function checkPostgresqlKeyboardSync(page: Page, validSource: string) {
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		editor.setPosition({ lineNumber: 2, column: 1 });
+		editor.getModel().pushStackElement();
+		editor.focus();
+	});
+	await page.keyboard.type('x');
+	await page.waitForFunction((source) => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		const editor = hooks.__wasmIdleMonacoEditor!;
+		return (
+			editor.getValue() === source.replace('select', 'xselect') &&
+			hooks
+				.__wasmIdleMonacoApi!.editor.getModelMarkers({ resource: editor.getModel!()!.uri })
+				.some((marker) => marker.startLineNumber === 2 && (marker.severity || 0) >= 4)
+		);
+	}, validSource);
+	// The diagnostic must remain on line 2: forwarding only the inserted "x"
+	// makes the original Full-sync server diagnose a one-line replacement instead.
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('Control+z');
+	await page.waitForFunction((source) => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		const editor = hooks.__wasmIdleMonacoEditor!;
+		return (
+			editor.getValue() === source &&
+			hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: editor.getModel!()!.uri
+			}).length === 0
+		);
+	}, validSource);
+}
+
 async function pinnedContainerWorkerUrls(browserUrl: string): Promise<Set<string>> {
 	const source = ts.createSourceFile(
 		'release.ts',
@@ -1227,7 +1276,8 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
@@ -1271,7 +1321,8 @@ async function runLspCase(
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		const markers = await page.evaluate(() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
 			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
@@ -1290,9 +1341,23 @@ async function runLspCase(
 			)
 		).toBe(false);
 		await replaceEditorSource(page, testCase.validSource);
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
+		else {
+			await page.waitForFunction(() => {
+				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+				return (
+					model &&
+					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+						.length === 0
+				);
+			});
+		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
+	if (testCase.language === 'POSTGRESQL')
+		await checkPostgresqlKeyboardSync(page, testCase.validSource!);
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1536,6 +1601,12 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'POSTGRESQL')
+				) {
+					await runBrowserPreparationScripts(['sync:postgresql-lsp']);
+				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

@@ -311,6 +311,13 @@ export {
 	type HaskellWorkerOptions
 } from './haskell/index.js';
 export {
+	getPostgresqlLanguageServer,
+	resolvePostgresqlLanguageServerModuleUrl,
+	type PostgresqlLanguageServerConfig,
+	type PostgresqlLanguageServerOptions,
+	type PostgresqlLanguageServerHandle
+} from './postgresql/index.js';
+export {
 	createSqlWorkerService,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,
