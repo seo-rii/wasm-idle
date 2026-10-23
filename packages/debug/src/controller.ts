@@ -30,7 +30,9 @@ import {
 	createDebugVariableState,
 	createDebugStopSnapshot,
 	debugFramePathKey,
+	isArgumentScope,
 	isLocalScope,
+	orderDebugScopes,
 	type DebugVariableNode,
 	type DebugStopSnapshot
 } from './variable-state.js';
@@ -50,12 +52,6 @@ const VARIABLE_PAGE_SIZE = 50;
 const MAX_AUTO_LOADED_SCOPES = 2;
 const MAX_AUTO_ARGUMENT_FRAMES = 8;
 const MAX_FRAME_ARGUMENTS = 6;
-
-function isArgumentScope(scope: DebugScope) {
-	return scope.presentationHint
-		? scope.presentationHint === 'arguments'
-		: /^arguments$/iu.test(scope.name);
-}
 
 type WatchVariablePathSegment = { name: string } | { index: number };
 type WatchVariablePathParseResult =
@@ -677,33 +673,45 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		}
 		if (variablePath.kind !== 'path') return { expression, value: '?' };
 		const { root, segments } = variablePath;
-		let resolvedVariables = [...get(localsStore)];
 		const resolvedReferences = new Map(get(variablesByReferenceStore));
-		if (resolvedVariables.filter((candidate) => candidate.name === root).length > 1)
-			return { expression, value: '?' };
-		let variable = resolvedVariables.find((candidate) => candidate.name === root);
-		if (!variable && terminal?.debugVariables) {
-			for (const scope of get(scopesStore)) {
-				if (scope.variablesReference <= 0) continue;
-				let scopeVariables = resolvedReferences.get(scope.variablesReference);
-				if (!scopeVariables) {
+		// Flattened locals also contain expanded globals. Resolve within scopes so an outer
+		// name cannot make a visible local ambiguous; preserve adapter order among local scopes.
+		const scopes = orderDebugScopes(get(scopesStore));
+		let variable: DebugVariable | undefined;
+		if (scopes.length) {
+			for (const scope of scopes) {
+				let scopeVariables =
+					resolvedReferences.get(scope.variablesReference) ?? scope.variables;
+				if (
+					!scopeVariables.length &&
+					!resolvedReferences.has(scope.variablesReference) &&
+					scope.variablesReference > 0 &&
+					terminal?.debugVariables
+				) {
 					scopeVariables = await requestVariableChildren(scope.variablesReference);
 					if (!isCurrent()) return null;
 					resolvedReferences.set(scope.variablesReference, scopeVariables);
 					variablesByReferenceStore.update((current) =>
 						new Map(current).set(scope.variablesReference, [...scopeVariables!])
 					);
+					const variablesByReference = get(variablesByReferenceStore);
+					localsStore.set(
+						get(scopesStore).flatMap(
+							(scope) =>
+								variablesByReference.get(scope.variablesReference) ??
+								scope.variables
+						)
+					);
 				}
-				resolvedVariables = [
-					...resolvedVariables,
-					...scopeVariables.filter((value) => !resolvedVariables.includes(value))
-				];
-				if (resolvedVariables.filter((candidate) => candidate.name === root).length > 1)
-					return { expression, value: '?' };
-				variable = resolvedVariables.find((candidate) => candidate.name === root);
+				const matches = scopeVariables.filter((candidate) => candidate.name === root);
+				if (matches.length > 1) return { expression, value: '?' };
+				variable = matches[0];
 				if (variable) break;
 			}
-			localsStore.set(resolvedVariables);
+		} else {
+			const matches = get(localsStore).filter((candidate) => candidate.name === root);
+			if (matches.length > 1) return { expression, value: '?' };
+			variable = matches[0];
 		}
 		for (const segment of segments) {
 			const reference = variable?.variablesReference ?? 0;

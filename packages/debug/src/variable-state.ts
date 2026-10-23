@@ -54,6 +54,21 @@ export function isLocalScope(scope: DebugScope) {
 		: /^(locals|arguments)$/iu.test(scope.name);
 }
 
+export function isArgumentScope(scope: DebugScope) {
+	return scope.presentationHint
+		? scope.presentationHint === 'arguments'
+		: /^arguments$/iu.test(scope.name);
+}
+
+/** Stable adapter ordering retains innermost precedence among local scopes. */
+export function orderDebugScopes(scopes: readonly DebugScope[]) {
+	return [...scopes].sort(
+		(left, right) =>
+			(isLocalScope(left) ? Number(isArgumentScope(left)) : 2) -
+			(isLocalScope(right) ? Number(isArgumentScope(right)) : 2)
+	);
+}
+
 /** Caller locations distinguish recursive activations; the selected location may advance. */
 export function debugFramePathKey(
 	frames: DebugFrame[],
@@ -75,6 +90,7 @@ export function debugFramePathKey(
 }
 
 function childExpression(parent: string | undefined, variable: DebugVariable) {
+	if (parent === undefined) return undefined;
 	if (
 		variable.evaluateName &&
 		/^[A-Za-z_][A-Za-z0-9_]*(?:(?:\.[A-Za-z_][A-Za-z0-9_]*)|(?:\[(?:0|[1-9][0-9]*)\]))*$/u.test(
@@ -82,7 +98,6 @@ function childExpression(parent: string | undefined, variable: DebugVariable) {
 		)
 	)
 		return variable.evaluateName;
-	if (parent === undefined) return undefined;
 	if (/^\[(?:0|[1-9][0-9]*)\]$/u.test(variable.name)) return `${parent}${variable.name}`;
 	if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(variable.name))
 		return parent ? `${parent}.${variable.name}` : variable.name;
@@ -145,7 +160,8 @@ export function createDebugVariableState() {
 				parentExpression: string | undefined,
 				parentReference: number | undefined,
 				ancestors: Set<number>,
-				depth: number
+				depth: number,
+				shadowedNames?: ReadonlySet<string>
 			): DebugVariableNode[] => {
 				const occurrences = new Map<string, number>();
 				const counts = new Map<string, number>();
@@ -170,9 +186,10 @@ export function createDebugVariableState() {
 					current.set(path, variable.value);
 					if (current.size > MAX_TREE_NODES) current.delete(current.keys().next().value!);
 					const count = (variable.namedVariables ?? 0) + (variable.indexedVariables ?? 0);
-					const expression = duplicates.has(variable.name)
-						? undefined
-						: childExpression(parentExpression, variable);
+					const expression =
+						duplicates.has(variable.name) || shadowedNames?.has(variable.name)
+							? undefined
+							: childExpression(parentExpression, variable);
 					const node: DebugVariableNode = {
 						path,
 						variable,
@@ -209,20 +226,28 @@ export function createDebugVariableState() {
 			const scopes = new Map<number, DebugVariableNode[]>();
 			const locals: DebugVariableNode[] = [];
 			const seenScopes = new Map<string, number>();
-			for (const scope of [...options.scopes].sort(
-				(left, right) => Number(!isLocalScope(left)) - Number(!isLocalScope(right))
-			)) {
+			const shadowedNames = new Set<string>();
+			let unresolvedHigherScope = false;
+			for (const scope of orderDebugScopes(options.scopes)) {
 				const key = JSON.stringify([scope.name, scope.presentationHint ?? '']);
 				const occurrence = seenScopes.get(key) ?? 0;
 				seenScopes.set(key, occurrence + 1);
 				const nodes = buildList(
 					options.variablesByReference.get(scope.variablesReference) ?? scope.variables,
 					`${options.frameKey}/scope:${key}:${occurrence}`,
-					'',
+					unresolvedHigherScope ? undefined : '',
 					scope.variablesReference,
 					new Set([scope.variablesReference]),
-					0
+					0,
+					shadowedNames
 				);
+				for (const node of nodes) shadowedNames.add(node.variable.name);
+				if (
+					scope.variablesReference > 0 &&
+					!options.variablesByReference.has(scope.variablesReference) &&
+					!scope.variables.length
+				)
+					unresolvedHigherScope = true;
 				scopes.set(scope.variablesReference, nodes);
 				if (isLocalScope(scope)) locals.push(...nodes);
 			}

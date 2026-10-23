@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DebugFrame, DebugSessionCapabilities, DebugVariable } from '@wasm-idle/core';
+import type {
+	DebugFrame,
+	DebugScope,
+	DebugSessionCapabilities,
+	DebugVariable
+} from '@wasm-idle/core';
 import {
 	createDebugSessionController,
 	type DebugSessionController,
@@ -29,6 +34,7 @@ function pause(
 		reference?: number;
 		frames?: DebugFrame[];
 		variables?: DebugVariable[];
+		scopes?: DebugScope[];
 		capabilities?: DebugSessionCapabilities;
 		sessionId?: string;
 	} = {}
@@ -53,7 +59,9 @@ function pause(
 		callStack: options.frames ?? [
 			{ id, functionName: 'solve', sourcePath: '/workspace/main.cpp', line: 7 }
 		],
-		scopes: [{ name: 'Locals', variablesReference: 10, expensive: false, variables }],
+		scopes: options.scopes ?? [
+			{ name: 'Locals', variablesReference: 10, expensive: false, variables }
+		],
 		capabilities: options.capabilities ?? capabilities
 	});
 }
@@ -129,6 +137,243 @@ describe('shared debugger variable state', () => {
 		);
 		await expect(controller.resolveHover('n')).resolves.toBeNull();
 		await expect(controller.resolveHover('items[0]')).resolves.toBeNull();
+	});
+
+	it('keeps local and argument Watch and hover values when a shadowed global scope is expanded', async () => {
+		const local = { name: 'value', value: '1' };
+		const argument = { name: 'argument', value: '2' };
+		const debugVariables = vi.fn(async (reference: number) =>
+			reference === 10
+				? [local]
+				: reference === 11
+					? [argument]
+					: [
+							{ name: 'value', value: '99' },
+							{ name: 'argument', value: '100' }
+						]
+		);
+		const controller = controllerWith({ debugEvaluate: async () => '?', debugVariables });
+		pause(controller, {
+			variables: [],
+			scopes: [
+				{ name: 'Locals', variablesReference: 10, expensive: false, variables: [] },
+				{ name: 'Arguments', variablesReference: 11, expensive: false, variables: [] },
+				{ name: 'Globals', variablesReference: 20, expensive: true, variables: [] }
+			]
+		});
+		controller.addWatchExpression('value');
+		controller.addWatchExpression('argument');
+		const expected = [
+			{ expression: 'value', value: '1' },
+			{ expression: 'argument', value: '2' }
+		];
+		await vi.waitFor(() => expect(controller.watchValues).toEqual(expected));
+		expect(debugVariables).not.toHaveBeenCalledWith(20);
+		await controller.loadVariableChildren(20);
+		await vi.waitFor(() => expect(controller.watchValues).toEqual(expected));
+		await expect(controller.resolveHover('value')).resolves.toMatchObject({ value: '1' });
+		await expect(controller.resolveHover('argument')).resolves.toMatchObject({ value: '2' });
+	});
+
+	it('uses the first local scope before arguments and outer scopes for safe variable paths', async () => {
+		const debugVariables = vi.fn(async (reference: number) => [
+			{ name: 'answer', value: reference === 50 ? '42' : '99' }
+		]);
+		const controller = controllerWith({ debugEvaluate: async () => '?', debugVariables });
+		const scopes: DebugScope[] = [
+			{
+				name: 'Globals',
+				variablesReference: 20,
+				expensive: true,
+				variables: [{ name: 'item', value: 'global', variablesReference: 60 }]
+			},
+			{
+				name: 'Arguments',
+				variablesReference: 11,
+				expensive: false,
+				variables: [{ name: 'item', value: 'argument', variablesReference: 60 }]
+			},
+			{
+				name: 'Block',
+				presentationHint: 'locals',
+				variablesReference: 10,
+				expensive: false,
+				variables: [{ name: 'item', value: 'inner', variablesReference: 50 }]
+			},
+			{
+				name: 'Function',
+				presentationHint: 'locals',
+				variablesReference: 12,
+				expensive: false,
+				variables: [{ name: 'item', value: 'outer', variablesReference: 60 }]
+			}
+		];
+		pause(controller, { variables: scopes.flatMap((scope) => scope.variables), scopes });
+		controller.addWatchExpression('item.answer');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'item.answer', value: '42' }])
+		);
+		await expect(controller.resolveHover('item.answer')).resolves.toMatchObject({
+			value: '42'
+		});
+		expect(debugVariables).toHaveBeenCalledWith(50);
+		expect(debugVariables).not.toHaveBeenCalledWith(60);
+	});
+
+	it('does not resolve an ambiguous local name from an unambiguous outer scope', async () => {
+		const controller = controllerWith({ debugEvaluate: async () => '?' });
+		const scopes: DebugScope[] = [
+			{
+				name: 'Locals',
+				variablesReference: 10,
+				expensive: false,
+				variables: [
+					{ name: 'value', value: '1' },
+					{ name: 'value', value: '2' }
+				]
+			},
+			{
+				name: 'Globals',
+				variablesReference: 20,
+				expensive: true,
+				variables: [{ name: 'value', value: '99' }]
+			}
+		];
+		pause(controller, { variables: scopes.flatMap((scope) => scope.variables), scopes });
+		controller.addWatchExpression('value');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'value', value: '?' }])
+		);
+		await expect(controller.resolveHover('value')).resolves.toBeNull();
+	});
+
+	it.each(['Globals', 'Outer block'])(
+		'suppresses shadowed %s Watch shortcuts while retaining inspection and scoped watchpoints',
+		async (scopeName) => {
+			const debugVariables = vi.fn(async (reference: number) => [
+				{
+					name: 'answer',
+					value: reference === 50 ? '42' : '99',
+					evaluateName: 'item.answer'
+				}
+			]);
+			const debugDataBreakpointInfo = vi.fn(async () => ({
+				dataId: 'outer-answer',
+				description: 'outer answer'
+			}));
+			const debugSetDataBreakpoints = vi.fn(async () => [{ verified: true }]);
+			const controller = controllerWith({
+				debugEvaluate: async () => '?',
+				debugVariables,
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			});
+			const scopes: DebugScope[] = [
+				{
+					name: 'Locals',
+					variablesReference: 10,
+					expensive: false,
+					variables: [{ name: 'item', value: 'inner', variablesReference: 50 }]
+				},
+				{
+					name: scopeName,
+					...(scopeName === 'Outer block' ? { presentationHint: 'locals' } : {}),
+					variablesReference: 20,
+					expensive: scopeName === 'Globals',
+					variables: [
+						{
+							name: 'item',
+							value: 'outer',
+							variablesReference: 60,
+							evaluateName: 'item'
+						}
+					]
+				}
+			];
+			pause(controller, {
+				variables: scopes.flatMap((scope) => scope.variables),
+				scopes,
+				capabilities: { ...capabilities, dataBreakpoints: true }
+			});
+			const outerPath = controller.scopeNodes(scopes[1])[0].path;
+			expect(controller.scopeNodes(scopes[1])[0].expression).toBeUndefined();
+			expect(controller.addWatchFromVariable(outerPath)).toBe(false);
+			await controller.expandVariable(outerPath);
+			const outer = controller.scopeNodes(scopes[1])[0];
+			expect(outer.children[0].variable.value).toBe('99');
+			expect(outer.children[0].expression).toBeUndefined();
+			expect(controller.addWatchFromVariable(outer.children[0].path)).toBe(false);
+			await expect(controller.watchVariable(outer.children[0].path)).resolves.toEqual([
+				{ verified: true }
+			]);
+			expect(debugDataBreakpointInfo).toHaveBeenCalledWith({
+				name: 'answer',
+				variablesReference: 60,
+				frameId: 1
+			});
+			await controller.expandVariable(controller.scopeNodes(scopes[0])[0].path);
+			const inner = controller.scopeNodes(scopes[0])[0];
+			expect(inner.children[0].expression).toBe('item.answer');
+			expect(controller.addWatchFromVariable(inner.children[0].path)).toBe(true);
+			await vi.waitFor(() =>
+				expect(controller.watchValues[0]).toMatchObject({
+					expression: 'item.answer',
+					value: '42'
+				})
+			);
+		}
+	);
+
+	it('waits for unresolved higher scopes before offering an outer Watch shortcut and recovers after hydration', () => {
+		const state = createDebugVariableState();
+		const outer = {
+			name: 'item',
+			value: 'outer',
+			variablesReference: 60,
+			evaluateName: 'item'
+		};
+		const inner = { name: 'item', value: 'inner' };
+		const scopes: DebugScope[] = [
+			{ name: 'Globals', variablesReference: 20, expensive: true, variables: [outer] },
+			{ name: 'Locals', variablesReference: 10, expensive: false, variables: [] }
+		];
+		const variablesByReference = new Map<number, DebugVariable[]>([
+			[20, [outer]],
+			[60, [{ name: 'answer', value: '99', evaluateName: 'item.answer' }]]
+		]);
+		const options = {
+			frameKey: 'frame',
+			scopes,
+			locals: [],
+			variablesByReference,
+			loadingReferences: new Set<number>()
+		};
+		let node = state.build(options).scopes.get(20)![0];
+		expect(node.expression).toBeUndefined();
+		expect(node.children[0].expression).toBeUndefined();
+		expect(node.children[0].variable.value).toBe('99');
+		expect(state.entry(node.path)?.parentReference).toBe(20);
+		expect(state.entry(node.children[0].path)?.parentReference).toBe(60);
+
+		variablesByReference.set(10, []);
+		node = state.build(options).scopes.get(20)![0];
+		expect(node.expression).toBe('item');
+		expect(node.children[0].expression).toBe('item.answer');
+
+		variablesByReference.set(10, [inner]);
+		node = state.build(options).scopes.get(20)![0];
+		expect(node.expression).toBeUndefined();
+		expect(node.children[0].expression).toBeUndefined();
+
+		variablesByReference.delete(10);
+		scopes[1].variables = [inner];
+		node = state.build(options).scopes.get(20)![0];
+		expect(node.expression).toBeUndefined();
+
+		variablesByReference.set(10, []);
+		const hydrated = state.build(options);
+		expect(hydrated.scopes.get(10)).toEqual([]);
+		expect(hydrated.scopes.get(20)![0].expression).toBe('item');
 	});
 	it('bounds expansion preferences across sessions while allowing new paths after eviction', () => {
 		const state = createDebugVariableState();
