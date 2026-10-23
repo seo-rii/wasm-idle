@@ -169,6 +169,7 @@ export type DebugSessionEvent =
 			type: 'pause';
 			/** IDs are scoped to one runtime session and one real stop. */
 			sessionId?: string;
+			/** Identifies a stop whose stack/scopes may arrive incrementally. */
 			stopId?: number;
 			line: number;
 			reason: DebugPauseReason;
@@ -182,6 +183,13 @@ export type DebugSessionEvent =
 			sourceContentSha256?: string;
 			sourceRevisionStale?: boolean;
 			capabilities?: DebugSessionCapabilities;
+	  }
+	| {
+			type: 'pauseDetails';
+			stopId: number;
+			callStack?: DebugFrame[];
+			frameId?: number;
+			scopes?: DebugScope[];
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {

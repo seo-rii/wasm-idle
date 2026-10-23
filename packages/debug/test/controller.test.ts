@@ -32,6 +32,54 @@ function createPausedVariableController(
 }
 
 describe('createDebugSessionController', () => {
+	it('updates only the matching stop without resetting frame selection or resolved arguments', async () => {
+		const controller = createDebugSessionController({
+			terminal: {
+				debugScopes: async () => [],
+				debugFrameName: async () => 'main(argc = 1)'
+			} as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			stopId: 9,
+			line: 3,
+			reason: 'breakpoint',
+			frameId: 1,
+			locals: [],
+			scopes: [],
+			callStack: [{ id: 1, functionName: 'main', line: 3 }]
+		});
+		await controller.loadFrameArguments([1]);
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 9,
+			callStack: [
+				{ id: 1, functionName: 'main', line: 3 },
+				{ id: 2, functionName: 'caller', line: 7 }
+			]
+		});
+		expect(controller.callStack[0].displayName).toBe('main(argc = 1)');
+		await controller.selectFrame(2);
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 9,
+			frameId: 1,
+			scopes: [
+				{ name: 'Old selection', variablesReference: 4, expensive: false, variables: [] }
+			]
+		});
+		expect(controller.frameId).toBe(2);
+		expect(controller.scopes).toEqual([]);
+		controller.handleEvent({ type: 'pauseDetails', stopId: 8, callStack: [] });
+		expect(controller.callStack).toHaveLength(2);
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 9,
+			callStack: [{ id: 1, functionName: 'stale', line: 3 }]
+		});
+		expect(controller.callStack).toEqual([]);
+	});
 	it('uses the adapter-formatted frame name without adding another argument summary', async () => {
 		const debugFrameName = vi.fn(async (frameId: number) => `recurse(n = ${frameId})`);
 		const debugFrameScopes = vi.fn(async () => []);
