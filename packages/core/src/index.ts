@@ -1,5 +1,6 @@
 export { WorkerSession, type WorkerOperation } from './worker-session.js';
 export { RuntimeAssetCache, type RuntimeAssetCacheConsumer } from './session-asset-cache.js';
+export { compilePythonRuntimeModule } from './python-runtime-module.js';
 export {
 	createRuntimeWasmModuleService,
 	serveRuntimeWasmModule,

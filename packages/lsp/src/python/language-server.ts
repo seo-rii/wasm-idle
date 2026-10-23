@@ -8,7 +8,9 @@ import type {
 } from '../types.js';
 import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { PythonLspStatus, PythonLspWorkerOutboundMessage } from './protocol.js';
-import { resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { compilePythonRuntimeModule, resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { resolveLanguageToolPersistentReceipt } from '../persistent-assets.js';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 
 export interface PythonLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -40,6 +42,14 @@ async function createServer(
 	status.loading();
 	let worker: Worker | undefined;
 	let cleanup = () => {};
+	const controller = new AbortController();
+	const abort = () => controller.abort(lifecycle.signal?.reason);
+	lifecycle.signal?.addEventListener('abort', abort, { once: true });
+	const assetRoot = lifecycle.rootUrl
+		? new URL(lifecycle.rootUrl, lifecycle.currentUrl || globalThis.location?.href).href
+		: undefined;
+	const moduleUrl = new URL('pyodide.asm.wasm', pyodideBaseUrl).href;
+	const moduleReceipt = resolveLanguageToolPersistentReceipt(moduleUrl, { assetRoot });
 	try {
 		await waitForLanguageServerStartup(
 			() =>
@@ -48,6 +58,34 @@ async function createServer(
 					worker = activeWorker;
 					const readyListener = (event: MessageEvent<PythonLspWorkerOutboundMessage>) => {
 						switch (event.data?.type) {
+							case 'runtime-module-request': {
+								if (!moduleReceipt?.sha256) return;
+								void fetchBoundedExternalAsset({
+									url: moduleUrl,
+									assetRoot,
+									integrity: moduleReceipt,
+									persistentCache: lifecycle.persistentCache,
+									signal: controller.signal,
+									maxBytes: moduleReceipt.bytes,
+									label: 'Python LSP runtime module'
+								})
+									.then((bytes) => compilePythonRuntimeModule(bytes))
+									.then((module) => {
+										if (!controller.signal.aborted)
+											activeWorker.postMessage({
+												type: 'runtime-module',
+												module
+											});
+									})
+									.catch((error) => {
+										if (!controller.signal.aborted)
+											activeWorker.postMessage({
+												type: 'runtime-module',
+												error: String(error)
+											});
+									});
+								break;
+							}
 							case 'progress': {
 								status.progress({ stage: event.data.stage });
 								break;
@@ -84,6 +122,7 @@ async function createServer(
 					activeWorker.postMessage({
 						type: 'init',
 						pyodideBaseUrl,
+						...(moduleReceipt?.sha256 ? { runtimeModuleBridge: true } : {}),
 						persistentAssets: {
 							persistentCache: resolveRuntimeAssetCacheOptions(
 								lifecycle.persistentCache
@@ -100,10 +139,12 @@ async function createServer(
 			{ signal: lifecycle.signal, timeoutMs: lifecycle.startupTimeoutMs }
 		);
 	} catch (error) {
+		controller.abort(error);
 		worker?.terminate();
 		status.error(error instanceof Error ? error.message : String(error));
 		throw error;
 	} finally {
+		lifecycle.signal?.removeEventListener('abort', abort);
 		cleanup();
 	}
 	if (!worker) throw new Error('Python LSP worker did not start');
