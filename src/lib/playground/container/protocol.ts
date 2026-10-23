@@ -10,6 +10,17 @@ export interface ContainerWorkerInitialization {
 	workspaceId: string;
 }
 export type ContainerWorkspaceFile = WorkspaceFile;
+export interface ContainerWorkspaceFileMetadata {
+	path: string;
+	bytes: number;
+}
+export interface ContainerWorkspaceDelta {
+	/** A cursor belongs to one owner's most recent read of this language project. */
+	revision: number;
+	reset: boolean;
+	files: ContainerWorkspaceFile[];
+	deleted: string[];
+}
 export interface ContainerWorkspaceEntry {
 	/** Path relative to /workspace, independent of the selected language. */
 	path: string;

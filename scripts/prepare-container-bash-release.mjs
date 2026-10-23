@@ -36,7 +36,8 @@ export async function prepareBashRelease({ configuration, provenance, baseURL, o
     sdkAsset: { packageId: 'shell', assetId: 'sdk' }, shellAsset: { packageId: 'shell', assetId: 'bash' },
     bashWasmSha256: BASH_WASM_SHA256, memory: MEMORY,
     clangSha256: inputs.clang.assets.clang.metadata.logical.sha256, linkerSha256: inputs.clang.assets.lld.metadata.logical.sha256,
-    cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS, clangFilesystem: clangProfile.filesystem
+    cacheNamespace: 'container-workbench-bash', commandTimeoutMs: COMMAND_TIMEOUT_MS, clangFilesystem: clangProfile.filesystem,
+    clangModuleServices: clangProfile.filesystem === 'live'
   };
   const bundled = await buildWorkbenchModules({
     ownerEntry: join(root, 'examples/container/bash-owner.mjs'),

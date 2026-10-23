@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
 	createLlvmToolHost, type LlvmToolBindingContext, type LlvmToolBindings,
-	type LlvmToolInvocation
+	type LlvmToolInvocation, createLlvmToolHostFromServices, type LlvmToolModuleService
 } from '../src/tool-host.js';
+import { createPreparedRuntimeWasmModuleService, RuntimeAssetCache } from '@wasm-idle/core';
 
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const encoder = new TextEncoder();
@@ -67,6 +68,31 @@ function bindings(onContext?: (context: LlvmToolBindingContext) => void, onDispo
 }
 
 describe('LLVM low-level tool host', () => {
+	it('owner module endpoints preserve fresh instances and repeat profile admission on cache hits', async () => {
+		const pins = fixtures(), cache = new RuntimeAssetCache();
+		const endpoints: ReturnType<typeof createPreparedRuntimeWasmModuleService>[] = [];
+		const source = () => Object.fromEntries(Object.entries(pins).map(([executable, pin]) => {
+			const profile = { identity: `llvm-test:${executable}`, compileKey: 'native-default-v1', maxAssetBytes: 65536 };
+			const endpoint = createPreparedRuntimeWasmModuleService({ ...profile, cache, bytes: pin.bytes, receipt: { bytes: pin.bytes.length, sha256: pin.sha256 } });
+			endpoints.push(endpoint);
+			return [executable, { ...profile, port: endpoint.port, bytes: pin.bytes.length, sha256: pin.sha256 }];
+		})) as Record<'clang' | 'wasm-ld', LlvmToolModuleService>;
+		let admitted = 0, runs = 0;
+		try {
+			for (let index = 0; index < 2; index++) {
+				const host = await createLlvmToolHostFromServices({ services: source(), validateModule() { admitted++; }, createBindings: () => ({ imports: {}, run(instance) {
+					const memory = new Uint8Array((instance.exports.memory as WebAssembly.Memory).buffer);
+					expect(memory[0]).toBe(0); memory[0] = 99; runs++;
+					return { code: (instance.exports._start as () => number)() };
+				}, dispose() {} }) });
+				host.run(invocation()); host.run(invocation()); host.dispose();
+			}
+			expect(runs).toBe(4); expect(admitted).toBe(4); expect(cache.stats()).toMatchObject({ entries: 2, hits: 2 });
+			await expect(createLlvmToolHostFromServices({ services: source(), validateModule() { throw new Error('policy changed'); }, createBindings: bindings() })).rejects.toMatchObject({ code: 'COMPILE_FAILED' });
+			await expect(createLlvmToolHostFromServices({ services: { clang: { module: new WebAssembly.Module(pins.clang.bytes), sha256: pins.clang.sha256 } } as never, createBindings: bindings() })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+		} finally { for (const endpoint of endpoints) endpoint.close(); cache.dispose(); }
+	});
+
 	it('admits exact trusted package linker paths and rejects a failed host module profile', async () => {
 		const pins = fixtures(moduleBytes({ packet: packet({ program: '/opt/toolchains/pinned/bin/wasm-ld' }) }));
 		const validated: string[] = [];

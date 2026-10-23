@@ -3,7 +3,7 @@ import { isProcessCommand } from '../clang/artifacts.js';
 import { checkMemoryProfile } from '../wasi/profile.js';
 
 /** Exact synchronous mutation observations, independent of lossy editor watchers. */
-export function createCompilerOutputs(fs: MemoryFileSystem, maxTrackedFiles = fs.maxInodes) {
+export function createCompilerOutputs(fs: MemoryFileSystem, maxTrackedFiles = fs.maxInodes, mutationSource?: unknown) {
   if (!Number.isSafeInteger(maxTrackedFiles) || maxTrackedFiles < 1) throw new RangeError('Invalid compiler output tracking limit');
   const writes = new Map<number, { version: FileVersion; conflicted: boolean }>();
   let disposed = false, exhausted = false;
@@ -27,7 +27,7 @@ export function createCompilerOutputs(fs: MemoryFileSystem, maxTrackedFiles = fs
           // Compilation is asynchronous, and no guest code executes on this owner.
           const module = await WebAssembly.compile(file.bytes as Uint8Array<ArrayBuffer>);
           if (disposed || signal.aborted) return;
-          if (isProcessCommand(module, imports)) fs.grantExecutable(version);
+          if (isProcessCommand(module, imports)) fs.withMutationSource(mutationSource, () => fs.grantExecutable(version));
         } catch {
           // Objects, unsupported modules and concurrently edited outputs remain data.
         }

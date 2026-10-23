@@ -4,7 +4,9 @@ import { MessageChannel } from 'node:worker_threads';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	createRuntimeWasmModuleService,
+	createPreparedRuntimeWasmModuleService,
 	requestRuntimeWasmModule,
+	requestPreparedRuntimeWasmModule,
 	serveRuntimeWasmModule,
 	RuntimeAssetCache,
 	type RuntimeWasmModuleService,
@@ -51,6 +53,70 @@ afterEach(() => {
 });
 
 describe('host runtime Wasm module service', () => {
+	it('prepared endpoints snapshot owner bytes and reuse modules without receiving executable bytes', async () => {
+		const cache = new RuntimeAssetCache(), compile = vi.fn(async () => module);
+		const expected = options({ cache, compile });
+		for (let index = 0; index < 2; index++) {
+			const source = Buffer.from(wasm);
+			const current = createPreparedRuntimeWasmModuleService({ ...expected, bytes: source });
+			services.push(current); source.fill(255);
+			await expect(requestPreparedRuntimeWasmModule(current.port, expected)).resolves.toBeInstanceOf(WebAssembly.Module);
+		}
+		expect(compile).toHaveBeenCalledOnce();
+		const corrupt = Uint8Array.from(wasm); corrupt[7] = 1;
+		const denied = createPreparedRuntimeWasmModuleService({ ...expected, bytes: corrupt }); services.push(denied);
+		await expect(requestPreparedRuntimeWasmModule(denied.port, expected)).rejects.toThrow('integrity mismatch');
+		expect(compile).toHaveBeenCalledOnce();
+	});
+
+	it.each(['receipt', 'identity', 'compileKey', 'maxAssetBytes'] as const)('prepared clients reject a mismatched %s', async field => {
+		const expected = options();
+		const current = createPreparedRuntimeWasmModuleService({ ...expected, bytes: wasm }); services.push(current);
+		const wrong = { ...expected, [field]: field === 'receipt' ? { ...receipt, sha256: '0'.repeat(64) } : field === 'maxAssetBytes' ? 16 : 'other-profile' };
+		await expect(requestPreparedRuntimeWasmModule(current.port, wrong)).rejects.toThrow('receipt or profile mismatch');
+	});
+
+	it('prepared cancellation drops in-flight compilation without publishing a late native result', async () => {
+		const cache = new RuntimeAssetCache(), controller = new AbortController();
+		let resume!: (value: WebAssembly.Module) => void;
+		const compile = vi.fn(() => new Promise<WebAssembly.Module>(resolve => { resume = resolve; }));
+		const expected = options({ cache, compile, signal: controller.signal });
+		const current = createPreparedRuntimeWasmModuleService({ ...expected, bytes: wasm }); services.push(current);
+		const pending = requestPreparedRuntimeWasmModule(current.port, expected), rejected = expect(pending).rejects.toThrow('retired');
+		await vi.waitFor(() => expect(compile).toHaveBeenCalledOnce());
+		controller.abort(new Error('retired')); await rejected; resume(module);
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(cache.stats()).toMatchObject({ entries: 0, inFlight: 0 });
+	});
+
+	it('cancellation holds a verification slot until the native digest settles', async () => {
+		const controller = new AbortController(), release = vi.fn();
+		let entered!: () => void, resume!: () => void;
+		const started = new Promise<void>(resolve => { entered = resolve; });
+		const gate = new Promise<void>(resolve => { resume = resolve; });
+		const digest = crypto.subtle.digest.bind(crypto.subtle);
+		vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (...args) => { entered(); await gate; return digest(...args); });
+		const expected = options({ signal: controller.signal, acquireVerificationSlot: async () => release });
+		const current = createPreparedRuntimeWasmModuleService({ ...expected, bytes: wasm }); services.push(current);
+		const pending = requestPreparedRuntimeWasmModule(current.port, expected), rejected = expect(pending).rejects.toThrow('retired');
+		try {
+			await started; controller.abort(new Error('retired')); await rejected;
+			expect(release).not.toHaveBeenCalled(); resume();
+			await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+		} finally { resume(); }
+	});
+
+	it('prepared endpoints reject peer-supplied modules and pins', async () => {
+		const compile = vi.fn(async () => module);
+		for (const message of [{ type: 'prepare', module, sha256: receipt.sha256 }, { type: 'compile', bytes: wasm.buffer }]) {
+			const current = createPreparedRuntimeWasmModuleService({ ...options({ compile }), bytes: wasm }); services.push(current);
+			const reply = new Promise(resolve => { current.port.onmessage = event => resolve(event.data); });
+			current.port.postMessage(message);
+			await expect(reply).resolves.toMatchObject({ type: 'error', message: 'Invalid runtime Wasm module request' });
+		}
+		expect(compile).not.toHaveBeenCalled();
+	});
+
 	it('reuses a verified immutable module while rechecking bytes on every cache hit', async () => {
 		const cache = new RuntimeAssetCache();
 		const compile = vi.fn(async () => module);

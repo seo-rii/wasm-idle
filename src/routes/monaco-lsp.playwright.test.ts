@@ -7,6 +7,8 @@ import {
 	waitForSelectedEditorModel
 } from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -1156,6 +1158,33 @@ async function checkPostgresqlKeyboardSync(page: Page, validSource: string) {
 	}, validSource);
 }
 
+async function pinnedContainerWorkerUrls(browserUrl: string): Promise<Set<string>> {
+	const source = ts.createSourceFile(
+		'release.ts',
+		await readFile(new URL('../lib/playground/container/release.ts', import.meta.url), 'utf8'),
+		ts.ScriptTarget.Latest,
+		true
+	);
+	const declaration = source.statements
+		.flatMap((statement) =>
+			ts.isVariableStatement(statement) ? [...statement.declarationList.declarations] : []
+		)
+		.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === 'release');
+	if (!declaration?.initializer) throw new Error('Missing fixed Container release');
+	const release = JSON.parse(declaration.initializer.getText(source));
+	if (!/^[a-f0-9]{64}$/u.test(release.hostHash))
+		throw new Error('Invalid fixed Container host identity');
+	const host = new URL(`container-app/host/${release.hostHash}/`, browserUrl);
+	return new Set(
+		(['sdkWorkerUrl', 'liveWorkerUrl', 'clangWorkerUrl'] as const).map((key) => {
+			const url = new URL(release.config[key], host);
+			if (url.origin !== host.origin || !url.href.startsWith(host.href))
+				throw new Error('Container worker escaped its fixed same-origin host');
+			return url.href;
+		})
+	);
+}
+
 async function runLspCase(
 	page: Page,
 	browserUrl: string,
@@ -1163,6 +1192,10 @@ async function runLspCase(
 	lspRequests: string[]
 ) {
 	const strictWorkerResponsePolicies = new Map<string, string>();
+	const backgroundWorkerUrls =
+		process.env.WASM_IDLE_STRICT_CSP === '1'
+			? await pinnedContainerWorkerUrls(browserUrl)
+			: new Set<string>();
 	page.setDefaultTimeout(testCase.timeoutMs ?? browserTimeoutMs);
 	page.on('request', (request) => {
 		const url = request.url();
@@ -1214,11 +1247,14 @@ async function runLspCase(
 		const lspWorkerUrls = page
 			.workers()
 			.map((worker) => worker.url())
-			.filter((url) => !workersBeforeLsp.has(url));
+			// The terminal can finish starting a fixed Container worker while LSP loads.
+			.filter((url) => !workersBeforeLsp.has(url) && !backgroundWorkerUrls.has(url));
 		expect(lspWorkerUrls.length).toBeGreaterThan(0);
 		for (const workerUrl of lspWorkerUrls) {
 			const workerPolicy = strictWorkerResponsePolicies.get(workerUrl) || '';
-			expect(workerUrl).toMatch(/\/_app\/immutable\/workers\/[^/]+\.js$/u);
+			expect(workerUrl, `Unexpected LSP worker URL: ${workerUrl}`).toMatch(
+				/\/_app\/immutable\/workers\/[^/]+\.js$/u
+			);
 			expect(workerPolicy).toContain(
 				"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
 			);
@@ -1412,6 +1448,29 @@ async function collectPageDebugInfo(page: Page) {
 }
 
 describe('Monaco LSP browser integration', () => {
+	it('recognizes only exact same-origin release-pinned Container background workers', async () => {
+		const root = 'https://preview.example/wasm-idle/';
+		const workers = await pinnedContainerWorkerUrls(root);
+		expect(workers.size).toBe(3);
+		for (const worker of workers) {
+			const url = new URL(worker);
+			expect(url.origin).toBe(new URL(root).origin);
+			expect(url.pathname).toMatch(
+				/^\/wasm-idle\/container-app\/host\/[a-f0-9]{64}\/(?:sdk\/worker|live-worker|clang-worker)\.mjs$/u
+			);
+			expect(workers.has(worker.replace('preview.example', 'other.example'))).toBe(false);
+			expect(workers.has(`${worker}?untrusted=1`)).toBe(false);
+			expect(
+				workers.has(worker.replace(/\/host\/[^/]+\//u, `/host/${'0'.repeat(64)}/`))
+			).toBe(false);
+		}
+		const host = new URL('.', [...workers][0]);
+		expect(workers.has(new URL('untrusted-worker.mjs', host).href)).toBe(false);
+		expect(workers.has(new URL('_app/immutable/workers/gleam-worker.js', root).href)).toBe(
+			false
+		);
+	});
+
 	it('binds the Rust case to all inert executable graph deliveries', () => {
 		expect(rustExecutableGraphModules).toHaveLength(47);
 		for (const modulePath of ['runtime-asset-cache.js', 'runtime-asset-cache-service.js']) {

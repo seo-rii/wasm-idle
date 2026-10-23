@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { attachMonacoDebugActions, MonacoDebugView } from '@wasm-idle/debug/editor';
+	import {
+		attachMonacoDebugActions,
+		attachMonacoDebugHover,
+		MonacoDebugView,
+		type MonacoDebugHoverOptions
+	} from '@wasm-idle/debug/editor';
 	import type { DebugLanguageAdapter } from '@wasm-idle/debug/language';
 	import type {
 		CompilerDiagnostic,
@@ -2447,6 +2452,11 @@
 		lspStatus?: MonacoLspStatusView | null;
 		onCursorLineChange?: (line: number | null) => void;
 		onRunToCursor?: (line: number | null) => void;
+		onAddWatch?: (expression: string) => void;
+		onEditBreakpoint?: (line: number) => void;
+		debugHoverOptions?: MonacoDebugHoverOptions;
+		debugHoverEnabled?: boolean;
+		debugStopKey?: string | number | null;
 		onBreakpointsChange?: (lines: number[]) => void;
 	}
 
@@ -2546,12 +2556,18 @@
 		lspStatus = $bindable<MonacoLspStatusView | null>(null),
 		onCursorLineChange,
 		onRunToCursor,
+		onAddWatch,
+		onEditBreakpoint,
+		debugHoverOptions,
+		debugHoverEnabled = false,
+		debugStopKey = null,
 		onBreakpointsChange
 	}: Props = $props();
 	let Monaco = $state<typeof monaco | null>(null);
 	let MonacoEditor = $state<typeof MonacoEditorComponent | null>(null);
 	let applyingValue = false;
 	let debugActionBindings: { dispose(): void } | null = null;
+	let debugHoverBinding = $state<ReturnType<typeof attachMonacoDebugHover> | null>(null);
 	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
 		dotnetMonacoLspLanguages[language] ?? null
 	);
@@ -3698,7 +3714,9 @@
 		debugView = nextDebugView;
 		debugActionBindings = attachMonacoDebugActions(activeEditor, {
 			onCursorLineChange,
-			onRunToCursor
+			onRunToCursor,
+			onAddWatch,
+			onEditBreakpoint
 		});
 		return () => {
 			debugActionBindings?.dispose();
@@ -3706,6 +3724,22 @@
 			nextDebugView.dispose();
 			if (debugView === nextDebugView) debugView = null;
 		};
+	});
+
+	$effect(() => {
+		if (!Monaco || !editor || !debugHoverOptions) return;
+		const binding = attachMonacoDebugHover(Monaco, editor, debugHoverOptions);
+		debugHoverBinding = binding;
+		return () => {
+			binding.dispose();
+			if (debugHoverBinding === binding) debugHoverBinding = null;
+		};
+	});
+
+	$effect(() => {
+		// A new stop invalidates hover handles even when it stops on the same source line.
+		void debugStopKey;
+		debugHoverBinding?.setEnabled(debugHoverEnabled);
 	});
 
 	$effect(() => {
