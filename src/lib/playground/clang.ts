@@ -274,6 +274,11 @@ class Clang implements Sandbox {
 	): Promise<boolean | string> {
 		if (this.disposed) return Promise.reject(new Error('Clang runtime has been disposed'));
 		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
+		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
+			return Promise.reject(
+				new Error(`${this.language} does not support ${debugMode} debugging.`)
+			);
+		}
 		this.debugMode = debugMode;
 		if (debugMode !== 'none') requireSharedArrayBuffer(`${this.language} debugging`);
 		this.exit = false;

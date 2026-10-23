@@ -456,6 +456,9 @@ class Rust implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
+		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
+			return Promise.reject(new Error(`Rust does not support ${debugMode} debugging.`));
+		}
 		this.debugMode = debugMode;
 		if (debugMode !== 'none') requireSharedArrayBuffer('Rust debugging');
 		return new Promise<boolean | string>((resolve, reject) => {
