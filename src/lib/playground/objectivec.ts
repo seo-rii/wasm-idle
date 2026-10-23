@@ -24,8 +24,11 @@ import {
 import {
 	AssetTooLargeError,
 	RuntimeConfigurationError,
+	assertDebugBreakpointSupport,
 	createRuntimeAssetsKey,
-	resolveExecutionLimits
+	normalizeDebugSourceBreakpoints,
+	resolveExecutionLimits,
+	type DebugSourceBreakpoint
 } from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
@@ -373,6 +376,16 @@ class ObjectiveC extends CompiledLldbSandbox implements Sandbox {
 		}
 		Atomics.store(control, 3, next.length);
 		Atomics.add(control, 2, 1);
+	}
+
+	async setSourceBreakpoints(breakpoints: DebugSourceBreakpoint[], sourcePath?: string) {
+		if (this.lldbPending) return super.setSourceBreakpoints(breakpoints, sourcePath);
+		const values = normalizeDebugSourceBreakpoints(breakpoints);
+		assertDebugBreakpointSupport(values, {});
+		this.setBreakpoints(
+			values.filter((value) => value.enabled !== false).map((value) => value.line),
+			sourcePath
+		);
 	}
 
 	async debugEvaluate(expression: string) {

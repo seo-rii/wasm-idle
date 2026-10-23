@@ -108,6 +108,9 @@ vi.mock('$lib/playground/lldbSession', () => ({
 		}
 
 		debugCommand() {}
+		setSourceBreakpoints = vi.fn(async () => undefined);
+		setSteppingOptions = vi.fn(async () => undefined);
+		evaluateValue = vi.fn(async () => ({ result: '42', variablesReference: 19, type: 'i32' }));
 		pause() {}
 		write() {}
 		eof() {}
@@ -147,6 +150,133 @@ describe('Rust sandbox', () => {
 			},
 			dispose: vi.fn()
 		}));
+	});
+
+	it('keeps the loaded compiler reusable after invalid structured breakpoint metadata', async () => {
+		const sandbox = new Rust();
+		sandbox.output = vi.fn();
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		const worker = workerInstances[0];
+		const signal = new AbortController();
+		const addAbortListener = vi.spyOn(signal.signal, 'addEventListener');
+		vi.useFakeTimers();
+		try {
+			await expect(
+				sandbox.run('fn main() {}', false, true, undefined, [], {
+					debugMode: 'lldb',
+					signal: signal.signal,
+					sourceBreakpoints: [
+						{
+							sourcePath: '/workspace/main.rs',
+							lines: [3],
+							breakpoints: [{ line: 3, hitCondition: '0' }]
+						}
+					]
+				})
+			).rejects.toThrow('hitCondition must be a positive decimal count');
+			const timersAfterValidation = vi.getTimerCount();
+			await expect(sandbox.run('fn main() {}', false)).resolves.toBe(true);
+			expect(timersAfterValidation).toBe(0);
+			expect(vi.getTimerCount()).toBe(0);
+			expect(addAbortListener).not.toHaveBeenCalled();
+			signal.abort();
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(sandbox.worker).toBe(worker);
+		} finally {
+			await sandbox.terminate();
+			vi.useRealTimers();
+		}
+	});
+
+	it.each([false, true])(
+		'forwards structured LLDB breakpoints, stepping and evaluation for a renamed file (edited=%s)',
+		async (edited) => {
+			const sandbox = new Rust();
+			sandbox.output = vi.fn();
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
+			const worker = workerInstances[0];
+			worker.postMessage.mockImplementationOnce(() => {});
+			const initial = [
+				{ line: 7, condition: 'n > 2', hitCondition: '3', logMessage: 'n={n}' },
+				{ line: 8, enabled: false }
+			];
+			const run = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debugMode: 'lldb',
+				debugPath: 'src/renamed.rs',
+				breakpoints: [7, 8],
+				sourceBreakpoints: [
+					{ sourcePath: 'src/renamed.rs', lines: [7, 8], breakpoints: initial }
+				],
+				debugSteppingOptions: { skipLibraryCode: true }
+			});
+			if (edited) await sandbox.setBreakpoints([7, 9], '/workspace/src/renamed.rs');
+			initial[0].condition = 'mutated after starting';
+			worker.onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0),
+						sources: [{ path: '/workspace/main.rs', content: 'fn main() {}' }]
+					}
+				}
+			} as MessageEvent<any>);
+			const session = lldbSessions[0];
+			expect(session.options.sourceBreakpoints).toEqual([
+				{
+					sourcePath: '/workspace/main.rs',
+					lines: edited ? [7, 9] : [7],
+					breakpoints: [
+						{
+							line: 7,
+							condition: 'n > 2',
+							hitCondition: '3',
+							logMessage: 'n={n}',
+							...(edited ? { enabled: true } : {})
+						},
+						edited ? { line: 9 } : { line: 8, enabled: false }
+					]
+				}
+			]);
+			expect(session.options.debugSteppingOptions).toEqual({ skipLibraryCode: true });
+			await sandbox.setSourceBreakpoints(
+				[{ line: 10, condition: 'n == 4' }],
+				'src/renamed.rs'
+			);
+			expect(session.setSourceBreakpoints).toHaveBeenCalledWith(
+				[{ line: 10, condition: 'n == 4' }],
+				'/workspace/main.rs'
+			);
+			await sandbox.setSourceBreakpoints([{ line: 12 }], 'other.rs');
+			expect(session.setSourceBreakpoints).toHaveBeenCalledTimes(1);
+			await sandbox.debugSetSteppingOptions({ skipLibraryCode: false });
+			expect(session.setSteppingOptions).toHaveBeenCalledWith({ skipLibraryCode: false });
+			await expect(
+				sandbox.debugEvaluateValue('n', { frameId: 23, context: 'hover' })
+			).resolves.toEqual({ result: '42', variablesReference: 19, type: 'i32' });
+			expect(session.evaluateValue).toHaveBeenCalledWith('n', {
+				frameId: 23,
+				context: 'hover'
+			});
+			session.setSourceBreakpoints.mockRejectedValueOnce(
+				new Error('Conditional breakpoints unsupported')
+			);
+			await expect(
+				sandbox.setSourceBreakpoints([{ line: 10, condition: 'n == 4' }])
+			).rejects.toThrow('Conditional breakpoints unsupported');
+			session.finish();
+			await run;
+		}
+	);
+
+	it('rejects advanced breakpoint and stepping options without a qualified LLDB session', async () => {
+		const sandbox = new Rust();
+		await expect(sandbox.setSourceBreakpoints([{ line: 3, condition: 'x' }])).rejects.toThrow();
+		await expect(sandbox.debugSetSteppingOptions({ skipLibraryCode: true })).rejects.toThrow(
+			'LLDB session'
+		);
+		await expect(sandbox.debugEvaluateValue('n', { context: 'hover' })).resolves.toEqual({
+			result: '?',
+			variablesReference: 0
+		});
 	});
 
 	it('resolves the executable graph against the owner Worker location without a window', async () => {

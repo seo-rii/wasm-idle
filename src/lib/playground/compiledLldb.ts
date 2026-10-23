@@ -8,6 +8,13 @@ import type {
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import { normalizeLldbWorkspacePath } from '$lib/playground/lldbSourcePath';
+import {
+	mergeDebugBreakpointLines,
+	normalizeDebugSourceBreakpoints,
+	type DebugEvaluateOptions,
+	type DebugSourceBreakpoint,
+	type DebugSteppingOptions
+} from '@wasm-idle/core';
 
 /** The common LLDB controls for compilers that hand a real DWARF module to WAMR. */
 export class CompiledLldbSandbox {
@@ -19,6 +26,10 @@ export class CompiledLldbSandbox {
 	private lldbRuntime?: ReturnType<typeof resolveDebugRuntimeUrls>;
 	private lldbSourcePath: `/workspace/${string}` = '/workspace/main';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
+	private readonly lldbBreakpointSpecifications = new Map<
+		`/workspace/${string}`,
+		DebugSourceBreakpoint[]
+	>();
 	private lldbPersistentCache?: SandboxExecutionOptions['persistentCache'];
 
 	protected configureLldb(
@@ -40,8 +51,17 @@ export class CompiledLldbSandbox {
 			options.debugPath || options.activePath || defaultPath
 		);
 		this.lldbBreakpoints.clear();
+		this.lldbBreakpointSpecifications.clear();
 		for (const entry of options.sourceBreakpoints || []) {
-			this.lldbBreakpoints.set(this.sourcePath(entry.sourcePath), [...entry.lines]);
+			const path = this.sourcePath(entry.sourcePath);
+			if (entry.breakpoints) {
+				const values = normalizeDebugSourceBreakpoints(entry.breakpoints);
+				this.lldbBreakpointSpecifications.set(path, values);
+				this.lldbBreakpoints.set(
+					path,
+					values.filter((value) => value.enabled !== false).map((value) => value.line)
+				);
+			} else this.lldbBreakpoints.set(path, [...entry.lines]);
 		}
 		if (!this.lldbBreakpoints.has(this.lldbSourcePath)) {
 			this.lldbBreakpoints.set(this.lldbSourcePath, [...(options.breakpoints || [])]);
@@ -80,8 +100,16 @@ export class CompiledLldbSandbox {
 			breakpoints: [...(this.lldbBreakpoints.get(this.lldbSourcePath) || [])],
 			sourceBreakpoints: [...this.lldbBreakpoints].map(([sourcePath, lines]) => ({
 				sourcePath,
-				lines: [...lines]
+				lines: [...lines],
+				...(this.lldbBreakpointSpecifications.has(sourcePath)
+					? {
+							breakpoints: normalizeDebugSourceBreakpoints(
+								this.lldbBreakpointSpecifications.get(sourcePath)!
+							)
+						}
+					: {})
 			})),
+			debugSteppingOptions: options.debugSteppingOptions,
 			pauseOnEntry: !!options.pauseOnEntry,
 			pauseAtMain: true,
 			entryFunctionName: this.lldbEntryFunction,
@@ -124,8 +152,36 @@ export class CompiledLldbSandbox {
 
 	setBreakpoints(lines: number[], sourcePath?: string) {
 		const path = sourcePath ? this.sourcePath(sourcePath) : this.lldbSourcePath;
+		if (this.lldbSession) return this.lldbSession.setBreakpoints(lines, path);
+		if (this.lldbBreakpointSpecifications.has(path))
+			return this.setSourceBreakpoints(
+				mergeDebugBreakpointLines(this.lldbBreakpointSpecifications.get(path)!, lines),
+				path
+			);
 		this.lldbBreakpoints.set(path, [...lines]);
-		return this.lldbSession?.setBreakpoints(lines, path);
+	}
+
+	async setSourceBreakpoints(breakpoints: DebugSourceBreakpoint[], sourcePath?: string) {
+		const values = normalizeDebugSourceBreakpoints(breakpoints);
+		const path = sourcePath ? this.sourcePath(sourcePath) : this.lldbSourcePath;
+		if (this.lldbSession) return this.lldbSession.setSourceBreakpoints(values, path);
+		this.lldbBreakpointSpecifications.set(path, values);
+		this.lldbBreakpoints.set(
+			path,
+			values.filter((value) => value.enabled !== false).map((value) => value.line)
+		);
+	}
+
+	async debugSetSteppingOptions(options: DebugSteppingOptions) {
+		if (!this.lldbSession) throw new Error('Stepping options require an LLDB session.');
+		await this.lldbSession.setSteppingOptions(options);
+	}
+
+	debugEvaluateValue(expression: string, options?: DebugEvaluateOptions) {
+		return (
+			this.lldbSession?.evaluateValue(expression, options) ??
+			Promise.reject(new Error('LLDB is not running.'))
+		);
 	}
 
 	debugEvaluate(expression: string) {
