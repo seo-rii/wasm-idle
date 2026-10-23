@@ -8,6 +8,22 @@ It does not fetch a URL, load a remote manifest, patch a binary, or change the
 existing high-level compiler API. Producer receipts still require their existing
 producer-specific verification before the host receives these pins.
 
+`createLlvmToolHostFromServices({ services, createBindings, ... })` is the optional
+owner-cache path. Each `clang`/`wasm-ld` service is a single-use endpoint created
+with Core's `createPreparedRuntimeWasmModuleService`, together with its pinned
+byte length/digest, authorization identity, compile key and asset limit. The
+endpoint owns a snapshot of the actual source and verifies it even on a cache hit.
+The client compares the returned receipt/profile before accepting the module.
+These ports are trusted owner capabilities; this API does not accept a raw
+`WebAssembly.Module` accompanied by a caller-claimed digest.
+
+The owner must validate memory sections in the bytes before compilation and use
+a distinct authorization/compile key for every different admission or transform
+profile. The worker's `validateModule` callback still runs for every prepared host,
+including cache hits. Only immutable modules are shared; every `run()` creates
+fresh instances and bindings. Endpoint cancellation and timeouts release the
+client ports. Hosts must close their owner endpoints when the invocation ends.
+
 After preparation, `host.run({ executable, argv, cwd, env })` is synchronous.
 `executable` is exactly `clang` or `wasm-ld`; `argv` is the complete original native
 argument vector, including `argv[0]`. Later empty arguments are preserved. Cwd is

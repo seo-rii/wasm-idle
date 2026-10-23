@@ -1,6 +1,12 @@
 import type {
 	CompilerDiagnostic,
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugVariable,
+	DebugScope,
 	DebugDataBreakpoint,
 	DebugDataBreakpointInfo,
 	DebugDataBreakpointInfoArguments,
@@ -49,6 +55,23 @@ export interface Sandbox {
 	debugPause?: () => void | Promise<void>;
 	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugEvaluateValue?: (
+		expression: string,
+		options?: DebugEvaluateOptions
+	) => Promise<DebugEvaluateResult>;
+	setSourceBreakpoints?: (
+		breakpoints: DebugSourceBreakpoint[],
+		sourcePath?: string
+	) => Promise<void>;
+	debugSetSteppingOptions?: (options: DebugSteppingOptions) => Promise<void>;
+	debugVariables?: (
+		variablesReference: number,
+		start?: number,
+		count?: number
+	) => Promise<DebugVariable[]>;
+	debugScopes?: (frameId: number) => Promise<DebugScope[]>;
+	debugFrameScopes?: (frameId: number) => Promise<DebugScope[]>;
+	debugFrameName?: (frameId: number) => Promise<string | null>;
 	debugReadMemory?: (
 		memoryReference: string,
 		offset: number,

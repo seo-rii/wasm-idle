@@ -65,10 +65,10 @@ describe('Terminal source', () => {
 			/async debugPause\(\) \{\s+await wait\(\);\s+await sandbox\.debugPause\?\.\(\);\s+\}/s
 		);
 		expect(source).toMatch(
-			/async setBreakpoints\(lines: number\[\], sourcePath\?: string\) \{\s+pendingDebugBreakpoints\.set\(sourcePath \|\| '', \[\.\.\.lines\]\);\s+await wait\(\);\s+await sandbox\?\.setBreakpoints\?\.\(lines, sourcePath\);\s+\}/s
+			/async setBreakpoints\(lines: number\[\], sourcePath\?: string\) \{[\s\S]*?pendingDebugBreakpoints\.set\(sourcePath \|\| '', \[\.\.\.lines\]\);\s+pendingDebugSpecifications\.delete\(sourcePath \|\| ''\);\s+await wait\(\);\s+await sandbox\?\.setBreakpoints\?\.\(lines, sourcePath\);\s+\}/s
 		);
 		expect(source).toMatch(
-			/sourceBreakpoints: Array\.from\(\s*pendingDebugBreakpoints,\s*\(\[sourcePath, lines\]\) => \(\{\s*sourcePath,\s*lines: \[\.\.\.lines\]\s*\}\)\s*\)/s
+			/sourceBreakpoints: Array\.from\(\s*pendingDebugBreakpoints,\s*\(\[sourcePath, lines\]\) => \(\{\s*sourcePath,\s*lines: \[\.\.\.lines\],[\s\S]*?\}\)\s*\)/s
 		);
 		expect(source).toMatch(
 			/async debugReadMemory\(memoryReference: string, offset: number, count: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugReadMemory\?\.\(memoryReference, offset, count\)\) \?\? null;\s+\}/s

@@ -30,10 +30,13 @@ Worker for another session. After acknowledged owner disposal, the application
 should terminate that owner Worker to release SDK globals and linear memory.
 No disposal operation deletes workspace files or implicitly saves them.
 
-`createWasixShellSession` loads the SDK Wasm and Bash WEBc through the supplied
-verified loader, compiles those verified SDK bytes, and separately checks the
-actual Bash executable digest before running it. The loader and container stay
-owned by the injecting application. Initialization receives only static
+`createWasixShellSession` loads the SDK Wasm and Bash WEBc concurrently through the
+supplied verified loader. Once the SDK bytes are verified it compiles and initializes
+the SDK while Bash can still be downloading. It waits for both before loading the
+WEBc and separately checks the actual Bash executable digest before running it. When the
+loader has fewer than two available pending-request or consumer slots, startup loads
+the two assets serially. The loader and container stay owned by the injecting
+application. Initialization receives only static
 application SDK/worker URLs and a bounded shared memory. Registry resolution is
 disabled. Isolation, SharedArrayBuffer, and this pinned SDK profile are required.
 

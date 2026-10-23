@@ -34,6 +34,8 @@ interface StartRequest {
   invocation: CommandInvocation;
   limits: RuntimeLimits;
   generation: number;
+  /** Owner-only filesystem attribution, never serialized into a guest Worker. */
+  mutationSource?: object;
   signal: AbortSignal;
 }
 export interface SnapshotCommandAdapter {

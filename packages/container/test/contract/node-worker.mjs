@@ -5,7 +5,7 @@ export function workerFactory(module) {
   const worker = new Worker(new URL('./node-worker-entry.mjs', import.meta.url), { workerData: { module } });
   const wrapper = {
     onmessage: null, onerror: null, onmessageerror: null,
-    postMessage: (data) => worker.postMessage(data),
+    postMessage: (data, transfer) => worker.postMessage(data, transfer),
     terminate: () => worker.terminate()
   };
   worker.on('message', (data) => wrapper.onmessage?.({ data }));

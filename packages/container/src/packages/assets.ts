@@ -18,6 +18,9 @@ export interface VerifiedAssetLoaderOptions {
 }
 
 export interface AssetLoaderInspection {
+  /** Reported by the built-in loader; optional for custom loader implementations. */
+  readonly maxPendingAssets?: number;
+  readonly maxConsumers?: number;
   readonly pendingRequests: number;
   readonly consumers: number;
   readonly cachedEntries: number;
@@ -95,6 +98,11 @@ async function decodeGzip(bytes: Uint8Array, asset: DistributionAsset, signal: A
 
 /** Per-loader policy is fixed. Only identical receipts/encoding share a fetch and decoded bytes. */
 export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): VerifiedAssetLoader {
+  return createManagedAssetLoader(options, () => {});
+}
+
+/** Internal scheduler hook; consumer cancellation can precede active request settlement. */
+export function createManagedAssetLoader(options: VerifiedAssetLoaderOptions, onRequestSettled: () => void): VerifiedAssetLoader {
   assertValidatedDistribution(options.distribution);
   const distribution = options.distribution;
   const persistentCache = Object.freeze(resolveRuntimeAssetCacheOptions(options.persistentCache));
@@ -190,6 +198,7 @@ export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): 
           created.settled = true;
           active.delete(created);
           if (pending.get(key) === created) pending.delete(key);
+          onRequestSettled();
         });
         pending.set(key, created);
         active.add(created);
@@ -225,7 +234,7 @@ export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): 
       });
     },
     inspect() {
-      return Object.freeze({ pendingRequests: active.size, consumers, cachedEntries: cached.size, cachedBytes: cacheBytes, memoryCacheHits });
+      return Object.freeze({ maxPendingAssets, maxConsumers, pendingRequests: active.size, consumers, cachedEntries: cached.size, cachedBytes: cacheBytes, memoryCacheHits });
     },
     clearMemoryCache() { cached.clear(); cacheBytes = 0; },
     dispose() {

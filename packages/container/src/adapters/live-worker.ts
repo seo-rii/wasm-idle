@@ -15,6 +15,11 @@ export interface LiveWorkerOptions {
 export type LiveStartRequest = Parameters<LiveCommandAdapter['start']>[0];
 export interface LiveWorkerSetup {
   readonly configuration?: unknown;
+  /** An owner service can supply code without cloning raw command bytes. */
+  readonly command?: Omit<LiveStartRequest['command'], 'bytes'>;
+  readonly transfer?: Transferable[];
+  /** Preserve older host Worker proxies that cannot transfer endpoint capabilities. */
+  fallback?(): { command: LiveStartRequest['command']; configuration: unknown };
   readonly onFileChange?: Parameters<typeof createLiveIo>[5];
   complete?(code: number, signal: AbortSignal): Promise<void> | void;
   dispose?(): void;
@@ -67,7 +72,10 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
       try {
         setup = configure?.(request);
         io = createLiveIo(request.fs, request.limits, pipeBytes, (error) => fail(error), request.stdio, setup?.onFileChange);
-        server = createRpcServer(buffer, request.generation, io.dispatch);
+        // Filesystem syscalls finish synchronously before dispatch can await stdio.
+        // The source is bound by this owner, never supplied by guest RPC metadata.
+        server = createRpcServer(buffer, request.generation, (...args) =>
+          request.fs.withMutationSource(request.mutationSource ?? request.generation, () => io!.dispatch(...args)));
         worker = workerFactory();
         worker.onmessage = ({ data }) => {
           if (dead) return;
@@ -88,7 +96,14 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
         worker.onmessageerror = () => fail(new ContainerError('STARTUP_FAILED', 'Live worker message could not be decoded'));
         request.signal.addEventListener('abort', abort, { once: true });
         if (request.signal.aborted) abort();
-        if (!dead) worker.postMessage({ type: 'prepare', version: 1, generation: request.generation, command: request.command, invocation: request.invocation, limits: request.limits, buffer, maxBlockedIoMs, openStdio: io.openStdio, configuration: setup?.configuration });
+        if (!dead) {
+          const message = { type: 'prepare', version: 1, generation: request.generation, command: setup?.command ?? request.command, invocation: request.invocation, limits: request.limits, buffer, maxBlockedIoMs, openStdio: io.openStdio, configuration: setup?.configuration };
+          try { worker.postMessage(message, setup?.transfer ?? []); }
+          catch (error) {
+            if (!(error && typeof error === 'object' && 'name' in error && error.name === 'DataCloneError') || !setup?.fallback) throw error;
+            worker.postMessage({ ...message, ...setup.fallback() });
+          }
+        }
         await ready;
         return {
           stdin: io.stdin, stdout: io.stdout, stderr: io.stderr,
