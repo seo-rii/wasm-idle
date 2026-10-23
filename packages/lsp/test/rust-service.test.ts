@@ -10,7 +10,7 @@ const compilerMocks = vi.hoisted(() => {
 		requests,
 		configure: vi.fn(),
 		create: vi.fn(async () => ({
-			async compile(request: any) {
+			async check(request: any) {
 				requests.push(request);
 				(globalThis as any).__lastRustLspCompile = request;
 				request.onProgress?.({
@@ -113,7 +113,7 @@ describe('createRustWorkerService', () => {
 		}
 	);
 
-	it('uses the real wasm-rust compiler API for diagnostics', async () => {
+	it('uses metadata-only checking for diagnostics', async () => {
 		const service = createRustWorkerService(async () => ({
 			configureVerifiedRuntimeExecutableModuleUrls: compilerMocks.configure,
 			createRustCompiler: compilerMocks.create
@@ -272,7 +272,7 @@ describe('createRustWorkerService', () => {
 		});
 		const service = createRustWorkerService(async () => ({
 			configureVerifiedRuntimeExecutableModuleUrls: vi.fn(),
-			createRustCompiler: vi.fn(async () => ({ compile }))
+			createRustCompiler: vi.fn(async () => ({ check: compile }))
 		}));
 		const reportProgress = vi.fn();
 		const context = { documents: new Map(), publishDiagnostics: vi.fn(), reportProgress };

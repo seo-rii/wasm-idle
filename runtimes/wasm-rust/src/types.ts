@@ -149,7 +149,18 @@ export interface BrowserRustCompilerResult {
 
 export interface BrowserRustCompiler {
 	compile: (request: BrowserRustCompileRequest) => Promise<BrowserRustCompilerResult>;
+	/** Type-checks without code generation, linking or a runnable artifact. */
+	check: (request: BrowserRustCheckRequest) => Promise<BrowserRustCheckResult>;
 }
+
+export type BrowserRustCheckRequest = Omit<
+	BrowserRustCompileRequest,
+	'debugMode' | 'optimizationProfile'
+>;
+
+export type BrowserRustCheckResult = Omit<BrowserRustCompilerResult, 'artifact'> & {
+	artifact?: never;
+};
 
 export type BrowserRustCompilerFactory = (
 	options?: import('./compiler.js').CreateRustCompilerOptions
@@ -157,4 +168,4 @@ export type BrowserRustCompilerFactory = (
 export type BrowserRustCompileWorkerRequest = Omit<
 	BrowserRustCompileRequest,
 	'onProgress' | 'assetCache'
->;
+> & { checkOnly?: boolean };

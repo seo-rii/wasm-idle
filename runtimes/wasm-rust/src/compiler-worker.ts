@@ -1,6 +1,7 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { compileRustcThroughPort } from './rustc-module-service.js';
 import { compileOwnedRustcModule } from './rustc-module.js';
+import type { CompilerDiagnostic } from './types.js';
 import type {
 	CompileWorkerMessage,
 	CompileWorkerRequest,
@@ -66,7 +67,7 @@ export function buildRustcArguments(
 	const target = resolveTargetManifest(manifest, request.targetTriple);
 	const integratedOutput = isIntegratedCompilerOutput(target.compile);
 	const optLevel =
-		debugMode !== 'none'
+		request.checkOnly || debugMode !== 'none'
 			? '0'
 			: { interactive: '0', speed: '2', size: 's' }[
 					request.optimizationProfile || 'interactive'
@@ -93,12 +94,48 @@ export function buildRustcArguments(
 		...(debugMode === 'lldb'
 			? ['-Cdebuginfo=2', '-Cstrip=none', '--remap-path-prefix=/work=/workspace']
 			: []),
-		...(integratedOutput
-			? ['--emit=link']
-			: ['-Cno-prepopulate-passes', '-Csave-temps', '--emit=obj']),
+		...(request.checkOnly
+			? ['--emit=metadata', '--error-format=json']
+			: integratedOutput
+				? ['--emit=link']
+				: ['-Cno-prepopulate-passes', '-Csave-temps', '--emit=obj']),
 		'-o',
-		integratedOutput ? '/work/main.wasm' : '/work/main.o'
+		request.checkOnly
+			? '/work/check.rmeta'
+			: integratedOutput
+				? '/work/main.wasm'
+				: '/work/main.o'
 	];
+}
+
+/** Decode rustc's own JSON diagnostics; non-diagnostic stderr remains available to the host. */
+export function parseRustcCheckDiagnostics(stderr: string): CompilerDiagnostic[] {
+	const diagnostics: CompilerDiagnostic[] = [];
+	for (const line of stderr.split('\n')) {
+		let record;
+		try {
+			record = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		if (
+			record?.$message_type !== 'diagnostic' ||
+			typeof record.message !== 'string' ||
+			!['error', 'warning'].includes(record.level)
+		)
+			continue;
+		const spans = Array.isArray(record.spans) ? record.spans : [];
+		const span = spans.find((candidate: any) => candidate?.is_primary) || spans[0];
+		// rustc's final "aborting due to ..." summary has no location and duplicates the errors.
+		if (!span && /^aborting due to \d+ previous error/u.test(record.message)) continue;
+		diagnostics.push({
+			lineNumber: Math.max(1, Number(span?.line_start) || 1),
+			columnNumber: Math.max(1, Number(span?.column_start) || 1),
+			severity: record.level,
+			message: record.message
+		});
+	}
+	return diagnostics;
 }
 
 function emitCompileWorkerLog(request: CompileWorkerRequest, message: string) {
@@ -540,6 +577,9 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 		const combinedStderr =
 			stderrText +
 			(error instanceof Error ? `${stderrText ? '\n' : ''}${error.message}` : '');
+		const diagnostics = request.request.checkOnly
+			? parseRustcCheckDiagnostics(stderrText)
+			: undefined;
 		const failureKind = classifyRetryableFailureKind(combinedStderr);
 		postMessage(
 			failureKind
@@ -556,7 +596,8 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 						type: 'result',
 						exitCode,
 						stdout: stdout.getText(),
-						stderr: combinedStderr
+						stderr: combinedStderr,
+						...(diagnostics ? { diagnostics } : {})
 					} satisfies CompileWorkerMessage)
 		);
 		return;
@@ -573,6 +614,9 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 	});
 	const stdoutText = stdout.getText();
 	const stderrText = stderr.getText();
+	const diagnostics = request.request.checkOnly
+		? parseRustcCheckDiagnostics(stderrText)
+		: undefined;
 	const failureKind = exitCode === 0 ? null : classifyRetryableFailureKind(stderrText);
 	postMessage(
 		failureKind
@@ -588,7 +632,8 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 					type: 'result',
 					exitCode,
 					stdout: stdoutText,
-					stderr: stderrText
+					stderr: stderrText,
+					...(diagnostics ? { diagnostics } : {})
 				} satisfies CompileWorkerMessage)
 	);
 }

@@ -1,9 +1,12 @@
 import {
 	compileRust,
+	checkRust,
 	createBrowserRustCompileRequestIdentity,
 	preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal,
 	resolveBrowserRustDebugMode,
 	type BrowserRustArtifact,
+	type BrowserRustCheckRequest,
+	type BrowserRustCheckResult,
 	type BrowserRustOptimizationProfile,
 	type BrowserRustCompileProgress,
 	type BrowserRustCompiler,
@@ -40,6 +43,8 @@ import {
 
 export type {
 	BrowserRustArtifact,
+	BrowserRustCheckRequest,
+	BrowserRustCheckResult,
 	BrowserRustOptimizationProfile,
 	BrowserRustCompiler,
 	BrowserRustCompilerFactory,
@@ -162,6 +167,13 @@ export async function createRustCompiler(
 ): Promise<BrowserRustCompiler> {
 	requireVerifiedExecutableGraph();
 	return {
+		check: async (request) =>
+			checkRust(
+				request,
+				bundledRuntimeProfile
+					? sealCompileDependencies(options?.dependencies, bundledRuntimeProfile)
+					: options?.dependencies
+			),
 		compile: async (request) =>
 			compileRust(
 				request,

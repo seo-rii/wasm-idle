@@ -37,6 +37,8 @@ import {
 import type { CompileWorkerMessage, CompileWorkerRequest } from './worker-protocol.js';
 import type {
 	BrowserRustArtifact,
+	BrowserRustCheckRequest,
+	BrowserRustCheckResult,
 	BrowserRustCompileProgress,
 	BrowserRustCompileRequest,
 	BrowserRustCompileStage,
@@ -53,6 +55,8 @@ import type {
 
 export type {
 	BrowserRustArtifact,
+	BrowserRustCheckRequest,
+	BrowserRustCheckResult,
 	BrowserRustOptimizationProfile,
 	BrowserRustCompileProgress,
 	BrowserRustCompileRequest,
@@ -119,9 +123,10 @@ const PROGRESS_STAGE_RANGES: Record<BrowserRustCompileStage, readonly [number, n
 	retry: [0, 99],
 	done: [100, 100]
 };
-export async function compileRust(
+async function runRustCompiler(
 	request: BrowserRustCompileRequest,
-	dependencies: CompileRustDependencies = {}
+	dependencies: CompileRustDependencies = {},
+	checkOnly = false
 ): Promise<BrowserRustCompilerResult> {
 	const validationError = validateCompileRequest(request);
 	if (validationError) {
@@ -340,6 +345,7 @@ export async function compileRust(
 		const workerRequest = {
 			...workerRequestBase,
 			optimizationProfile,
+			...(checkOnly ? { checkOnly: true } : {}),
 			...(workerLimits ? { workerLimits } : {}),
 			...(deliveryBudget ? { assetDeliveryBudget: deliveryBudget } : {})
 		};
@@ -387,7 +393,7 @@ export async function compileRust(
 			};
 			activeWorkerCleanup = stopWorker;
 			const sharedBitcodeBuffer = new SharedArrayBuffer(
-				16 + manifest.compiler.workerSharedOutputBytes
+				16 + (checkOnly ? 0 : manifest.compiler.workerSharedOutputBytes)
 			);
 			const sharedWorkspaceBuffer = new SharedArrayBuffer(
 				manifest.compiler.workerSharedWorkspaceBytes
@@ -484,6 +490,10 @@ export async function compileRust(
 				]);
 				if (raced.type === 'message') {
 					workerResultConsumed = true;
+					if (checkOnly) {
+						settledMessage = raced.message;
+						break;
+					}
 					const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
 					if (raced.message.type === 'error') {
 						const workerFailureKind = classifyRetryableFailureKind(
@@ -535,6 +545,14 @@ export async function compileRust(
 						stopWorker();
 						attemptResult = makeFailure(pendingHelperThreadFailure);
 						break;
+					}
+					if (checkOnly) {
+						const failure = readWorkerFailure(sharedStatusBuffer);
+						if (failure) {
+							attemptResult = makeFailure(failure);
+							break;
+						}
+						continue;
 					}
 				} else if (mirrored.length > 0) {
 					pendingHelperThreadFailure = null;
@@ -631,6 +649,36 @@ export async function compileRust(
 						readCompileLogRecords()
 					);
 				}
+			}
+
+			if (checkOnly) {
+				stopWorker();
+				flushAttemptCompileLogs(attemptCompileLogs);
+				const result: BrowserRustCheckResult =
+					settledMessage?.type === 'result'
+						? {
+								success: settledMessage.exitCode === 0,
+								stdout: settledMessage.stdout,
+								stderr: settledMessage.stderr,
+								...(settledMessage.diagnostics
+									? { diagnostics: settledMessage.diagnostics }
+									: {})
+							}
+						: {
+								success: false,
+								stderr:
+									attemptResult?.stderr ||
+									workerBootstrapError?.message ||
+									(settledMessage?.type === 'error'
+										? settledMessage.stderr || settledMessage.message
+										: 'browser rustc metadata check timed out')
+							};
+				emitCompileProgress('done', attempt, {
+					completed: 1,
+					total: 1,
+					message: 'metadata check finished'
+				});
+				return attachCompileLogs(result, readCompileLogs(), readCompileLogRecords());
 			}
 
 			if (!attemptResult && workerBootstrapError) {
@@ -943,4 +991,24 @@ export async function compileRust(
 	} finally {
 		activeWorkerCleanup?.();
 	}
+}
+
+export function compileRust(
+	request: BrowserRustCompileRequest,
+	dependencies: CompileRustDependencies = {}
+) {
+	return runRustCompiler(request, dependencies);
+}
+
+export async function checkRust(
+	request: BrowserRustCheckRequest,
+	dependencies: CompileRustDependencies = {}
+): Promise<BrowserRustCheckResult> {
+	// No debug artifact or code-generation profile can turn this into a link operation.
+	const { artifact: _artifact, ...result } = await runRustCompiler(
+		{ ...request, debugMode: 'none', optimizationProfile: 'interactive' },
+		dependencies,
+		true
+	);
+	return result;
 }
