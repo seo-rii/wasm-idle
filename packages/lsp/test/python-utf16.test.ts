@@ -75,6 +75,44 @@ notify("textDocument/didChange", {"textDocument": {"uri": uri, "version": 3}, "c
     "range": {"start": position('"'), "end": position('"😀')}, "text": "한"
 }]})
 result["replacedEmojiSource"] = server.documents[uri].source
+
+# These characters can occur inside a string without ending an LSP/Jedi line.
+result["unicodeLineSeparators"] = []
+for separator in ['\u0085', '\u2028', '\u2029', '\v', '\f']:
+    prefix = '"a' + separator + '😀"; '
+    open_document(prefix + 'pri')
+    completion = at_end("textDocument/completion", prefix + 'pri')
+    text = prefix + 'target = 42; target'
+    open_document(text)
+    definitions = at_end("textDocument/definition", text)
+    symbols = request("textDocument/documentSymbol", {"textDocument": {"uri": uri}})
+    open_document(prefix + 'value = )')
+    diagnostics = [message["params"]["diagnostics"] for message in messages if message.get("method") == "textDocument/publishDiagnostics"][-1]
+    open_document(prefix + 'count = 1\r\nresult = count')
+    notify("textDocument/didChange", {"textDocument": {"uri": uri, "version": 2}, "contentChanges": [{
+        "range": {"start": position(prefix), "end": position(prefix + 'count')}, "text": "total"
+    }, {
+        "range": {"start": position('result = ', 1), "end": position('result = count', 1)}, "text": "total"
+    }]})
+    result["unicodeLineSeparators"].append({
+        "prefix": prefix,
+        "hasPrintCompletion": any(item["label"] == "print" for item in completion["items"]),
+        "definitions": definitions,
+        "symbols": symbols,
+        "diagnostics": diagnostics,
+        "editedSource": server.documents[uri].source,
+    })
+
+result["lineEndings"] = []
+for ending in ['\n', '\r\n', '\r']:
+    document = server_module.Document(uri, '"😀"; one = 1' + ending + 'two = one' + ending)
+    document.apply_change({
+        "range": {"start": position('two = ', 1), "end": position('two = one', 1)}, "text": "total"
+    })
+    document.apply_change({
+        "range": {"start": position('', 2), "end": position('', 2)}, "text": "three = 3"
+    })
+    result["lineEndings"].append({"ending": ending, "source": document.source})
 json.dumps(result)
 `;
 
@@ -144,5 +182,33 @@ process.stdout.write(runtime.runPython(${JSON.stringify(fixture)}));
 	it('applies incremental edits after and across surrogate pairs without changing CRLF', () => {
 		expect(result.editedSource).toBe('"😀"; total = 1\r\nresult = count');
 		expect(result.replacedEmojiSource).toBe('"한"; total = 1\r\nresult = count');
+	});
+
+	it('keeps Unicode separators inside strings on the same protocol line', () => {
+		for (const entry of result.unicodeLineSeparators) {
+			const location = {
+				uri: 'file:///workspace/main.py',
+				range: {
+					start: { line: 0, character: entry.prefix.length },
+					end: { line: 0, character: entry.prefix.length + 'target'.length }
+				}
+			};
+			expect(entry.hasPrintCompletion).toBe(true);
+			expect(entry.definitions).toEqual([location]);
+			expect(entry.symbols.find((symbol: any) => symbol.name === 'target').location).toEqual(
+				location
+			);
+			expect(entry.diagnostics[0].range).toEqual({
+				start: { line: 0, character: entry.prefix.length + 'value = '.length },
+				end: { line: 0, character: entry.prefix.length + 'value = )'.length }
+			});
+			expect(entry.editedSource).toBe(entry.prefix + 'total = 1\r\nresult = total');
+		}
+	});
+
+	it('preserves LF, CRLF and CR offsets through edits and trailing empty lines', () => {
+		for (const { ending, source } of result.lineEndings) {
+			expect(source).toBe(`"😀"; one = 1${ending}two = total${ending}three = 3`);
+		}
 	});
 });

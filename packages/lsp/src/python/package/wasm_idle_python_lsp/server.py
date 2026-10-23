@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -131,8 +132,9 @@ class Document:
 
     @property
     def lines(self) -> list[str]:
-        lines = self.source.splitlines(True)
-        return lines or [""]
+        # LSP and Jedi only recognize CR/LF boundaries. str.splitlines also splits
+        # valid string contents such as U+2028 and form feed, shifting all positions.
+        return re.split(r"(?<=\n)|(?<=\r)(?!\n)", self.source)
 
     def python_column(self, position: dict) -> int:
         line = max(int(position.get("line", 0)), 0)
