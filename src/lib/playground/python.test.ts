@@ -96,16 +96,18 @@ describe('Python sandbox', () => {
 				{ args: [], options: { env: {} } }
 			];
 			for (const { args, options } of requests) {
-				await expect(sandbox.run('print(42)', prepare, true, undefined, args, options))
-					.rejects.toMatchObject({
-						name: 'RuntimeConfigurationError',
-						code: 'runtime-configuration',
-						runtimeId: 'PYTHON3'
-					});
+				await expect(
+					sandbox.run('print(42)', prepare, true, undefined, args, options)
+				).rejects.toMatchObject({
+					name: 'RuntimeConfigurationError',
+					code: 'runtime-configuration',
+					runtimeId: 'PYTHON3'
+				});
 				expect(worker.postMessage).toHaveBeenCalledTimes(1);
 			}
-			await expect(sandbox.run('print(42)', false, true, undefined, [], { programArgs: [] }))
-				.resolves.toBe(true);
+			await expect(
+				sandbox.run('print(42)', false, true, undefined, [], { programArgs: [] })
+			).resolves.toBe(true);
 			expect(workerInstances).toHaveLength(1);
 			expect(worker.postMessage).toHaveBeenCalledTimes(2);
 			await sandbox.dispose();
@@ -659,13 +661,52 @@ print((left + right) // (left - left))`,
 
 	it('evaluates watch expressions through the worker debug buffers', async () => {
 		const sandbox = new Python();
-		sandbox.worker = {} as Worker;
+		const worker = new MockWorker();
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('value = 3', false, true, undefined, [], { debug: true });
+		worker.emit({
+			debugEvent: {
+				type: 'pause',
+				line: 1,
+				scopes: [{ name: 'Locals', variablesReference: 1 }]
+			}
+		});
 
 		setTimeout(() => {
 			flushQueuedStdin(['3'], sandbox.watchResultBuffer);
 		}, 0);
 
 		await expect(sandbox.debugEvaluate?.('1 + 2')).resolves.toBe('3');
+		worker.emit({ results: true });
+		await running;
+	});
+
+	it('cancels in-flight and queued inspections before another pause reuses a reference', async () => {
+		const sandbox = new Python();
+		const worker = new MockWorker();
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('value = 3', false, true, undefined, [], { debug: true });
+		const pause = {
+			debugEvent: {
+				type: 'pause',
+				line: 1,
+				scopes: [{ name: 'Locals', variablesReference: 1 }]
+			}
+		};
+		worker.emit(pause);
+		const page = sandbox.debugVariables(1);
+		const watch = sandbox.debugEvaluate('old');
+		await Promise.resolve();
+		sandbox.debugCommand('continue');
+		worker.emit(pause);
+		await expect(page).resolves.toEqual([]);
+		await expect(watch).resolves.toBe('?');
+		setTimeout(() => flushQueuedStdin(['3'], sandbox.watchResultBuffer), 0);
+		await expect(sandbox.debugEvaluate('value')).resolves.toBe('3');
+		worker.emit({ results: true });
+		await running;
 	});
 
 	it('publishes live breakpoint updates through the Python debug buffer', async () => {
