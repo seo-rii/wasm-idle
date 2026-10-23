@@ -279,6 +279,10 @@ is preserved as
 `browser-evidence-stale-diagnostics-20261023T145436Z.json` in the same
 directory. The focused source snapshot, dynamic URI and diagnostic metadata unit
 tests pass 88 cases, including 31 metadata restoration and invalidation cases.
+The additional `Foo$Bar.java` browser fixture confirms that native `$` and
+editor `%24` URI spellings produce the same UUID import edit. Closing the
+document invalidates both spellings. The actual SDK rerun preserves all three
+native comparison sessions and terminates all seven Workers without page errors.
 
 Native platform controls additionally pass 30 path/URI, directory and
 stream-transfer checks against JDK APIs. The bounded source-I/O comparison passes
@@ -418,5 +422,12 @@ After merging main's compiler-option support at `27996430`, all six scenarios
 pass again. The LSP and aggregate installs measure 5,422,320 bytes / 820 files /
 9 packages and 41,818,799 bytes / 3,313 files / 65 packages, respectively.
 All eleven tarballs pass the code-only checks, and the package verifier's
-36 unit tests pass. The Java aggregate budget remains 40 MiB / 3,350 files /
-70 packages, including the compiler-option changes.
+36 unit tests pass. That baseline used an aggregate budget of 40 MiB /
+3,350 files / 70 packages, including the compiler-option changes.
+
+Integration with main's SIMD headers and workspace fixes at `2c88566c` adds
+384 KiB to the Java LSP and aggregate byte budgets, yielding 5.625 MiB and
+40.375 MiB. This accounts for the pinned Emscripten compatibility headers in
+the shared llvm-core package; the existing file and dependency-count limits
+remain 1,050 / 10 and 3,350 / 70, respectively. Java's source and runtime
+receipts are unchanged by that integration.

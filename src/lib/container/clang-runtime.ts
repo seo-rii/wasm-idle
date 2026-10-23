@@ -14,6 +14,7 @@ import {
 	CLANG_WASI_DRIVER_TARGET,
 	resolveClangLanguageArgs
 } from '@wasm-idle/llvm-core/core/clang-profile';
+import { CLANG_SIMD_INCLUDE_PATH } from '@wasm-idle/llvm-core/core/clang-simd';
 import type { ContainerWorkerEvent } from './protocol.js';
 import type { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 
@@ -329,6 +330,7 @@ export class ContainerClangRuntime {
 			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(input.options.activePath ?? '');
 			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
 			let sourceLanguage: 'C' | 'CPP' | undefined = filenameLanguage;
+			let omitBuiltinIncludes = false;
 			for (let index = 0; index < compileArgs.length; index++) {
 				const argument = compileArgs[index];
 				// Paths and forwarded arguments can themselves start with -x or @.
@@ -365,6 +367,8 @@ export class ContainerClangRuntime {
 					index++;
 					continue;
 				}
+				if (argument === '-nostdinc' || argument === '-nobuiltininc')
+					omitBuiltinIncludes = true;
 				if (argument.startsWith('@')) sourceLanguage = undefined;
 				else if (argument.startsWith('-x')) {
 					const value = argument === '-x' ? compileArgs[++index] : argument.slice(2);
@@ -389,8 +393,22 @@ export class ContainerClangRuntime {
 			// An opaque response file or -x override can select C++ for a C editor.
 			// Keep its default source mode C while enabling the C++ driver's link libraries.
 			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
+			const profileArgs: string[] = [];
+			for (let index = 0; index < sysrootArgs.length; index++) {
+				// The compatibility headers follow the driver's builtin-header policy.
+				// Keep target flags and the macro guard when builtin lookup is disabled.
+				if (
+					omitBuiltinIncludes &&
+					sysrootArgs[index] === '-isystem' &&
+					sysrootArgs[index + 1]?.endsWith(`/${CLANG_SIMD_INCLUDE_PATH}`)
+				) {
+					index++;
+					continue;
+				}
+				profileArgs.push(sysrootArgs[index]);
+			}
 			const common = [
-				...sysrootArgs,
+				...profileArgs,
 				`--target=${CLANG_WASI_DRIVER_TARGET}`,
 				...(sourceLanguage !== 'C' ? ['--driver-mode=g++'] : []),
 				...(language === 'C' && override && !filenameCpp ? ['-x', 'c'] : []),

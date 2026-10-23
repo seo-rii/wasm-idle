@@ -49,9 +49,9 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
-		// The archive has 464 root files + 271 dependency files + npm metadata;
-		// the measured install is 6,778,749 bytes without parser dependency packages.
-		budget: { maxBytes: 6 * MiB + 512 * 1024, maxFiles: 736, maxPackages: 6 },
+		// Includes the pinned Emscripten SIMD compatibility headers and upstream notices
+		// in llvm-core (+5 files). Before merging compiler options: 7,146,870 bytes / 741 files.
+		budget: { maxBytes: 7 * MiB, maxFiles: 741, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -177,9 +177,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		// Java's XML platform adapter adds 662,982 bytes in three production dependencies.
-		// Measured 5,411,573 bytes / 814 files / 9 packages; retain the existing file limit.
-		budget: { maxBytes: 5.25 * MiB, maxFiles: 1_050, maxPackages: 10 },
+		// Java's XML platform adapter and llvm-core's pinned SIMD compatibility headers.
+		// Add 384 KiB for the reviewed SIMD integration to the Java install limit.
+		budget: { maxBytes: 5.25 * MiB + 384 * 1024, maxFiles: 1_050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -203,10 +203,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes compiler options, the public container, reviewed LSP providers and Java's XML adapter.
-		// The Java aggregate limit also covers the reviewed compiler-option API growth.
-		// Separate plugin budgets and the production-package limit stay unchanged.
-		budget: { maxBytes: 40 * MiB, maxFiles: 3_350, maxPackages: 70 },
+		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
+		// Preserve the Java aggregate headroom while adding the reviewed SIMD payload.
+		budget: { maxBytes: 40 * MiB + 384 * 1024, maxFiles: 3_350, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

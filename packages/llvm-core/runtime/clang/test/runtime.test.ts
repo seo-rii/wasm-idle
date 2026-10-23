@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Clang, { resolveBuildArtifactNames } from '../src/runtime.js';
 
-function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean } = {}) {
+function createClangHarness(
+	compilerConfig?: any,
+	options: { mockLink?: boolean; simdCompatibility?: boolean } = {}
+) {
 	const stdout = vi.fn();
 	const clang = Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(),
@@ -21,6 +24,7 @@ function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean 
 			lld: 'https://cdn.test/lld.zip'
 		},
 		compilerConfig,
+		simdCompatibility: options.simdCompatibility ?? true,
 		memfs: {
 			addDirectory: vi.fn(),
 			addFile: vi.fn(),
@@ -199,6 +203,48 @@ describe('Clang compile/debug flow', () => {
 		expect(compileArgs).toContain('/lib/clang/22.1.8');
 		expect(compileArgs).toContain('/lib/clang/22.1.8/include');
 		expect(compileArgs).not.toContain('/lib/clang/8.0.1/include');
+	});
+
+	it.each(['C', 'CPP'] as const)(
+		'enables Wasm SIMD and finds compatible x86 headers for %s',
+		async (language) => {
+			const { clang } = createClangHarness();
+			await clang.compile({
+				input: language === 'C' ? 'main.c' : 'main.cpp',
+				code: '#include <immintrin.h>\nint main() {}',
+				obj: 'main.o',
+				language
+			});
+			const args = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+			expect(args[args.indexOf('-target-feature') + 1]).toBe('+simd128');
+			expect(args).toContain('-D__AVX2__=1');
+			expect(args.indexOf('/include/wasm-idle/simd')).toBeLessThan(
+				args.indexOf('/lib/clang/8.0.1/include')
+			);
+		}
+	);
+
+	it('keeps automatic SIMD features out of the qualified LLDB profile', async () => {
+		const { clang } = createClangHarness();
+		await clang.compile({
+			input: 'main.cpp',
+			code: 'int main() {}',
+			obj: 'main.o',
+			debugMode: 'lldb'
+		});
+		const args = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(args).not.toContain('+simd128');
+		expect(args).not.toContain('-D__AVX2__=1');
+		expect(args).not.toContain('/include/wasm-idle/simd');
+	});
+
+	it('preserves legacy and unknown compiler target profiles', async () => {
+		const { clang } = createClangHarness(undefined, { simdCompatibility: false });
+		await clang.compile({ input: 'main.cpp', code: 'int main() {}', obj: 'main.o' });
+		const args = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(args).not.toContain('+simd128');
+		expect(args).not.toContain('-D__AVX2__=1');
+		expect(args).not.toContain('/include/wasm-idle/simd');
 	});
 
 	it('uses the manifest compiler-rt library directory while linking', async () => {
