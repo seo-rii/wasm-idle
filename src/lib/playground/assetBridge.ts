@@ -7,6 +7,7 @@ import {
 } from '$lib/playground/assets';
 import {
 	ProtocolError,
+	compilePythonRuntimeModule,
 	verifyRuntimeAssetIntegrity,
 	verifyRuntimeAssetPair,
 	readPersistentRuntimeAsset,
@@ -839,7 +840,10 @@ export class WorkerAssetBridge {
 								report(event, `${event.kind}:${event.asset}`)
 							);
 							bytes = loaded.bytes.byteLength;
-							module = await WebAssembly.compile(Uint8Array.from(loaded.bytes));
+							module =
+								this.runtime === 'python' && request.asset === 'pyodide.asm.wasm'
+									? await compilePythonRuntimeModule(loaded.bytes)
+									: await WebAssembly.compile(Uint8Array.from(loaded.bytes));
 						}
 						if (signal.aborted) throw runtimeAssetAbortReason(signal);
 						this.cache?.set(moduleKey, module, bytes);

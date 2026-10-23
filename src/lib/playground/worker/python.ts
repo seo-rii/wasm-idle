@@ -57,6 +57,7 @@ let installedApecodeVersion: string | undefined;
 let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
 let invalidateWorkspaceImports: ReturnType<typeof createPythonWorkspaceImports> | undefined;
 let syncWorkspaceFiles: ReturnType<typeof createPythonWorkspaceFiles> | undefined;
+let debugPauseSequence = 0;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
@@ -418,7 +419,9 @@ async function loadPackages(code: string, files: { path: string; content: string
 	const helpers = getExecutionHelpers();
 	// Cache analysis only. Package availability is still checked for each unprepared run.
 	// Parse files separately so one file's syntax or a data file cannot corrupt its neighbors.
-	const imports = new Set([code, ...files.map((file) => file.content)].map((source) => helpers.importSource(source)));
+	const imports = new Set(
+		[code, ...files.map((file) => file.content)].map((source) => helpers.importSource(source))
+	);
 	const stub = [...imports].filter(Boolean).join('\n');
 	if (stub) await pyodide.loadPackagesFromImports(stub);
 }
@@ -444,10 +447,15 @@ function normalizeWorkspacePath(path: string) {
 		.join('/');
 }
 
-function writeWorkspaceFiles(files: { path: string; content: string }[] = [], syncPythonWorkspace = false) {
+function writeWorkspaceFiles(
+	files: { path: string; content: string }[] = [],
+	syncPythonWorkspace = false
+) {
 	const fs = (pyodide as any).FS;
 	if (syncPythonWorkspace) {
-		const normalized = files.map((file) => ({ ...file, path: normalizeWorkspacePath(file.path) })).filter((file) => file.path);
+		const normalized = files
+			.map((file) => ({ ...file, path: normalizeWorkspacePath(file.path) }))
+			.filter((file) => file.path);
 		invalidateWorkspaceImports ??= createPythonWorkspaceImports(pyodide);
 		invalidateWorkspaceImports(normalized.map((file) => file.path));
 		syncWorkspaceFiles ??= createPythonWorkspaceFiles(fs);
@@ -712,7 +720,8 @@ self.onmessage = async (event: any) => {
 		}
 		const stdio = createPythonStdio(pyodide, {
 			initialInput: typeof stdin === 'string' ? stdin : undefined,
-			readInput: () => waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true })),
+			readInput: () =>
+				waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true })),
 			emit: (output) => postMessage({ output })
 		});
 		self.prompt = stdio.prompt;
@@ -724,8 +733,12 @@ self.onmessage = async (event: any) => {
 			try {
 				restoreStdio?.();
 			} finally {
-				try { restoreStdio?.destroy(); }
-				finally { stdio.close(); delete self.prompt; }
+				try {
+					restoreStdio?.destroy();
+				} finally {
+					stdio.close();
+					delete self.prompt;
+				}
 			}
 		};
 		const debugPauseName = `__wasm_idle_python_debug_pause_${ts}`;
@@ -733,6 +746,7 @@ self.onmessage = async (event: any) => {
 		const debugReadWatchName = `__wasm_idle_python_debug_watch_read_${ts}`;
 		const debugWriteWatchName = `__wasm_idle_python_debug_watch_write_${ts}`;
 		const debugReadBreakpointsName = `__wasm_idle_python_debug_breakpoints_${ts}`;
+		const debugBreakpointStateName = `__wasm_idle_python_debug_breakpoint_state_${ts}`;
 		const executionReadyName = `__wasm_idle_python_execution_ready_${ts}`;
 		let executionReadyReported = false;
 		self[executionReadyName] = () => {
@@ -773,9 +787,19 @@ self.onmessage = async (event: any) => {
 					line: Number(line),
 					reason,
 					locals,
-					callStack
+					callStack,
+					scopes: [
+						{
+							name: 'Locals',
+							presentationHint: 'locals',
+							variablesReference: ++debugPauseSequence,
+							expensive: false,
+							variables: locals
+						}
+					]
 				}
 			});
+			return debugPauseSequence;
 		};
 		self[debugWaitName] = () => {
 			const sequence = Atomics.load(debugBufferPyodide, 0);
@@ -805,6 +829,13 @@ self.onmessage = async (event: any) => {
 			}
 			return JSON.stringify({ version, lines });
 		};
+		// Preserve an atomic check on every traced line, but avoid a Python-to-JS
+		// function call/null conversion unless a new breakpoint snapshot exists.
+		self[debugBreakpointStateName] = {
+			get version() {
+				return Atomics.load(debugBufferPyodide, 2);
+			}
+		};
 		const executionFilename =
 			normalizeWorkspacePath(activePath || '') ||
 			(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
@@ -828,7 +859,7 @@ self.onmessage = async (event: any) => {
 			if (isPython && !debug) {
 				await getExecutionHelpers().run(code, executionFilename, self[executionReadyName]);
 			} else {
-			await pyodide.runPythonAsync(`import ast
+				await pyodide.runPythonAsync(`import ast
 import builtins
 import inspect
 import json
@@ -839,6 +870,7 @@ from js import ${executionReadyName} as __wasm_idle_execution_ready
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
 ${debug ? `from js import ${debugReadBreakpointsName}` : ''}
+${debug ? `from js import ${debugBreakpointStateName} as __wasm_idle_debug_breakpoint_state` : ''}
 
 ${imageHook}
 
@@ -865,6 +897,8 @@ __wasm_idle_debug_step_out_depth = None
 def __wasm_idle_debug_refresh_breakpoints():
     global __wasm_idle_debug_breakpoints
     global __wasm_idle_debug_breakpoint_version
+    if __wasm_idle_debug_breakpoint_state.version == __wasm_idle_debug_breakpoint_version:
+        return
     payload = ${debugReadBreakpointsName}(__wasm_idle_debug_breakpoint_version)
     # JavaScript null crosses Pyodide as JsNull rather than Python None.
     if not isinstance(payload, str):
@@ -887,13 +921,22 @@ def __wasm_idle_debug_depth(frame):
 
 ${PYTHON_DEBUG_PREVIEW}
 
-def __wasm_idle_debug_locals(frame):
+def __wasm_idle_debug_locals(frame, start=0, count=50):
     locals_preview = []
+    index = 0
     for name, value in frame.f_locals.items():
         if name == "__builtins__" or name.startswith("__wasm_idle_") or name.startswith("."):
             continue
-        locals_preview.append({"name": name, "value": __wasm_idle_debug_preview(value)})
-    locals_preview.sort(key = lambda item: item["name"])
+        if index >= start:
+            preview = __wasm_idle_debug_preview(value)
+            if len(preview) > 200:
+                preview = preview[:197] + "..."
+            suffix = "… [" + str(index) + "]"
+            display_name = name if len(name) <= 256 else name[:256-len(suffix)] + suffix
+            locals_preview.append({"name": display_name, "value": preview})
+            if len(locals_preview) >= count:
+                break
+        index += 1
     return locals_preview
 
 def __wasm_idle_debug_stack(frame):
@@ -952,11 +995,21 @@ def __wasm_idle_debug_trace(frame, event, arg):
 
     sys.stdout.flush()
     sys.stderr.flush()
-    ${debugPauseName}(line, reason, json.dumps(__wasm_idle_debug_locals(frame)), json.dumps(__wasm_idle_debug_stack(frame)))
+    pause_reference = ${debugPauseName}(line, reason, json.dumps(__wasm_idle_debug_locals(frame)), json.dumps(__wasm_idle_debug_stack(frame)))
     while True:
         command = ${debugWaitName}()
         if command < 0:
             raise KeyboardInterrupt()
+        if command == 6:
+            try:
+                request = json.loads(${debugReadWatchName}())
+                start = max(0, int(request.get("start", 0)))
+                count = max(1, min(50, int(request.get("count", 50))))
+                page = __wasm_idle_debug_locals(frame, start, count) if request.get("reference") == pause_reference else []
+                ${debugWriteWatchName}(json.dumps(page))
+            except Exception:
+                ${debugWriteWatchName}("[]")
+            continue
         if command != 5:
             break
         try:
@@ -1064,7 +1117,11 @@ finally:
 			finishStdio();
 			self.postMessage({ results: true });
 		} catch (e: any) {
-			try { finishStdio(); } catch { /* Preserve the execution error. */ }
+			try {
+				finishStdio();
+			} catch {
+				/* Preserve the execution error. */
+			}
 			self.postMessage({ error: e.message || 'Unknown error' });
 		} finally {
 			delete self['__pyodide__input_' + ts];
@@ -1076,6 +1133,7 @@ finally:
 			delete self[debugReadWatchName];
 			delete self[debugWriteWatchName];
 			delete self[debugReadBreakpointsName];
+			delete self[debugBreakpointStateName];
 		}
 	}
 };

@@ -81,6 +81,7 @@ describe('getPythonLanguageServer', () => {
 
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
+			runtimeModuleBridge: true,
 			persistentAssets: expect.objectContaining({
 				persistentCache: expect.objectContaining({ enabled: true })
 			}),

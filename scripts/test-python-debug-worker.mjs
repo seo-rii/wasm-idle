@@ -50,7 +50,7 @@ async function run(check) {
 		FS: { mkdirTree() {}, writeFile() {}, cwd: () => '/home/pyodide', analyzePath: () => ({ exists: false }), unlink() {} }, async loadPackagesFromImports() {}, setInterruptBuffer() {},
 		async runPythonAsync(python) {
 			calls++;
-			execFileSync('python', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: python });
+			execFileSync(process.env.PYTHON ?? 'python3', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: python });
 			const name = Object.keys(self).find((name) => name.startsWith('__wasm_idle_python_debug_breakpoints_'));
 			check(self[name], control);
 		}
@@ -59,7 +59,7 @@ async function run(check) {
 		buffer: new SharedArrayBuffer(64), watchBuffer: new SharedArrayBuffer(64),
 		watchResultBuffer: new SharedArrayBuffer(64), interrupt: new SharedArrayBuffer(4) } });
 	assert.equal(calls, 1);
-	assert.equal(messages.at(-1).results, true);
+	assert.equal(messages.at(-1).results, true, JSON.stringify(messages));
 }
 test('unchanged breakpoint version returns null before touching the payload', () => run((read, view) => {
 	Atomics.store(view, 2, 7);

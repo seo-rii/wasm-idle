@@ -28,15 +28,18 @@ class DebugTests(unittest.TestCase):
         self.version = 0
         self.lines = []
         self.snapshots = 0
+        self.callback_calls = 0
         self.ns = {'sys': sys, 'json': json,
                    'pause': lambda line, reason, *_: self.events.append((line, reason)),
                    'wait': lambda: next(self.commands),
                    'read_watch': lambda: 'value', 'write_watch': lambda _: None,
-                   'read_breakpoints': self.read_breakpoints}
+                   'read_breakpoints': self.read_breakpoints,
+                   '__wasm_idle_debug_breakpoint_state': self}
         exec(compile(trace, '<trace-helper>', 'exec'), self.ns)
         self.preview = self.ns['__wasm_idle_debug_preview']
 
     def read_breakpoints(self, known):
+        self.callback_calls += 1
         if known == self.version:
             return None
         self.snapshots += 1
@@ -51,10 +54,30 @@ class DebugTests(unittest.TestCase):
         for _ in range(1000):
             refresh()
         self.assertEqual(self.snapshots, 1)
+        self.assertEqual(self.callback_calls, 1)
         self.version, self.lines = 1, [3, 7]
         refresh()
         self.assertEqual(self.snapshots, 2)
         self.assertEqual(self.ns['__wasm_idle_debug_breakpoints'], {3, 7})
+
+    def test_large_locals_only_preview_the_requested_page(self):
+        frame = self.frame()
+        frame.f_locals = {f'value_{index}': index for index in range(10000)}
+        calls = []
+        self.ns['__wasm_idle_debug_preview'] = lambda value: (calls.append(value), str(value))[1]
+        first = self.ns['__wasm_idle_debug_locals'](frame)
+        second = self.ns['__wasm_idle_debug_locals'](frame, 50, 50)
+        self.assertEqual(len(first), 50)
+        self.assertEqual(first[0], {'name': 'value_0', 'value': '0'})
+        self.assertEqual(second[0], {'name': 'value_50', 'value': '50'})
+        self.assertEqual(calls, list(range(100)))
+
+    def test_clipped_local_names_keep_distinct_display_labels(self):
+        frame = self.frame()
+        frame.f_locals = {'name_' + 'x' * 300 + suffix: 1 for suffix in ['a', 'b']}
+        page = self.ns['__wasm_idle_debug_locals'](frame)
+        self.assertNotEqual(page[0]['name'], page[1]['name'])
+        self.assertTrue(all(len(value['name']) <= 256 for value in page))
 
     def test_continue_does_not_walk_call_stack(self):
         self.ns['__wasm_idle_debug_depth'] = lambda _: self.fail('unnecessary stack walk')
