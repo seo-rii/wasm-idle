@@ -66,7 +66,8 @@ All execution entries run in the browser through real runtime, compiler, or inte
 implementations. `Editor support` lists browser LSP/compiler diagnostics when wired; `syntax`
 means Monaco syntax highlighting only. C, C++, Objective-C, Objective-C++, V, and
 `wasm32-wasip1` Rust use LLDB/WAMR. Java uses parser-based source hooks compiled by the real
-javac/TeaVM pipeline, with current-frame local values and array inspection. Lua uses the pinned
+javac/TeaVM pipeline, with current-frame local values, array inspection and read-only
+primitive/String snapshot expressions. Lua uses the pinned
 MobDebug engine in its real VM; Ruby uses CRuby TracePoint and Binding without rewriting user
 source. Enabled debugger backends run in the page and its Workers without browser extensions.
 JavaScript and TypeScript debugging stays disabled. See

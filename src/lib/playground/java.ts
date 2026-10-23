@@ -36,7 +36,7 @@ import {
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { JavaDebugSession } from './javaDebug';
+import { JavaDebugSession, type JavaDebugEvaluationContext } from './javaDebug';
 import { DebugDeadline } from './debugDeadline';
 
 type JavaOperation = {
@@ -72,6 +72,10 @@ class Java implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
 	private debugSession?: JavaDebugSession;
+	private evaluationAssets?: PlaygroundRuntimeAssets;
+	private evaluationLimits?: ReturnType<typeof resolveExecutionLimits>;
+	private evaluationSandbox?: Java;
+	private evaluationQueue: Promise<void> = Promise.resolve();
 	waitingForInput = false;
 	pendingEof = false;
 	assetBridge: WorkerAssetBridge | null = null;
@@ -429,6 +433,16 @@ class Java implements Sandbox {
 					}
 				}
 				this.baseUrl = assetConfig.baseUrl;
+				this.evaluationAssets = {
+					java: {
+						baseUrl: assetConfig.baseUrl,
+						loader: assetConfig.loader,
+						integrity: assetConfig.integrity,
+						allowedBaseUrls: assetConfig.allowedBaseUrls,
+						persistentCache: assetConfig.persistentCache
+					}
+				};
+				this.evaluationLimits = limits;
 				const needsWorkerReset =
 					!this.worker ||
 					!this.assetBridge ||
@@ -681,11 +695,16 @@ class Java implements Sandbox {
 							(this.isOperationActive(activeOperation) || event.type === 'stop')
 						)
 							this.ondebug?.(event);
+					},
+					{
+						evaluate: (expression, context, signal) =>
+							this.evaluateSnapshot(expression, context, signal, activeOperation)
 					}
 				);
 				this.debugSession = runDebugSession = session;
 				activeOperation.cleanups.push(() => {
 					session.dispose();
+					this.disposeEvaluationSandbox();
 					if (this.debugSession === session) this.debugSession = undefined;
 				});
 			} else this.bindOperationTimeout(activeOperation, timeoutMs);
@@ -863,8 +882,10 @@ class Java implements Sandbox {
 	setBreakpoints(lines: number[], sourcePath?: string) {
 		return this.debugSession?.setBreakpoints(lines, sourcePath);
 	}
-	async debugEvaluate(_expression: string): Promise<string> {
-		throw new Error('Java expression evaluation is unavailable in the hook debugger');
+	async debugEvaluate(expression: string): Promise<string> {
+		if (!this.debugSession)
+			throw new Error('Java expression evaluation is unavailable without a paused debugger');
+		return this.debugSession.evaluate(expression);
 	}
 	async debugVariables(reference: number, start?: number, count?: number) {
 		return this.debugSession?.variables(reference, start, count) ?? [];
@@ -874,6 +895,72 @@ class Java implements Sandbox {
 	}
 	async debugFrameScopes(frameId: number) {
 		return this.debugSession?.scopes(frameId, false) ?? [];
+	}
+
+	private evaluateSnapshot(
+		expression: string,
+		context: JavaDebugEvaluationContext,
+		signal: AbortSignal,
+		operation: JavaOperation
+	): Promise<string> {
+		const evaluate = async () => {
+			signal.throwIfAborted();
+			if (
+				!this.isOperationActive(operation) ||
+				!this.evaluationAssets ||
+				!this.evaluationLimits
+			)
+				throw new Error('Java evaluation requires an active paused debugger');
+			const { buildJavaDebugEvaluationProgram } = await import('./worker/javaDebugEvaluator');
+			signal.throwIfAborted();
+			const program = buildJavaDebugEvaluationProgram({
+				expression,
+				bindings: context.bindings
+			});
+			const sandbox = (this.evaluationSandbox ??= new Java());
+			const abort = () => {
+				if (this.evaluationSandbox === sandbox) this.evaluationSandbox = undefined;
+				void sandbox.dispose();
+			};
+			signal.addEventListener('abort', abort, { once: true });
+			let output = '';
+			sandbox.output = (chunk: string) => {
+				output += chunk;
+			};
+			const limits = {
+				...this.evaluationLimits,
+				compileTimeoutMs: Math.min(this.evaluationLimits.compileTimeoutMs, 30_000),
+				runTimeoutMs: Math.min(this.evaluationLimits.runTimeoutMs, 10_000),
+				maxOutputBytes: Math.min(this.evaluationLimits.maxOutputBytes, 65_536)
+			};
+			try {
+				await sandbox.load(this.evaluationAssets, '', false, [], { signal, limits });
+				signal.throwIfAborted();
+				await sandbox.run(program.code, false, false, undefined, program.args, {
+					signal,
+					limits,
+					stdin: '',
+					debugMode: 'none'
+				});
+				signal.throwIfAborted();
+				return output;
+			} finally {
+				signal.removeEventListener('abort', abort);
+				sandbox.output = undefined;
+			}
+		};
+		const result = this.evaluationQueue.then(evaluate);
+		this.evaluationQueue = result.then(
+			() => {},
+			() => {}
+		);
+		return result;
+	}
+
+	private disposeEvaluationSandbox() {
+		const sandbox = this.evaluationSandbox;
+		this.evaluationSandbox = undefined;
+		if (sandbox) void sandbox.dispose();
 	}
 
 	kill() {
@@ -910,6 +997,7 @@ class Java implements Sandbox {
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
 		this.disposed = true;
+		this.disposeEvaluationSandbox();
 		this.disposePromise = Promise.resolve();
 
 		const activeOperation = this.activeOperation;

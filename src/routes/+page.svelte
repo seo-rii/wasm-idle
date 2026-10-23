@@ -3354,6 +3354,12 @@
 						</header>
 						{#if debugPanelOpen.watch}
 							<div class="debug-panel__body" id="debug-panel-watch">
+								{#if language === 'JAVA'}
+									<p>
+										Java watches use a read-only snapshot of primitive and
+										String values.
+									</p>
+								{/if}
 								<div class="watch-row">
 									<input
 										bind:value={debug.watchInput}
