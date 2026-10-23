@@ -35,24 +35,25 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
   const assetOptions = { distribution, fetch: fetcher, persistentCache: cache, maxCachedBytes: 192 * 1024 * 1024 };
   const manager = createContainerPackageManager({ ...assetOptions, capabilities: ['wasi-preview1', 'llvm-tool-host-exec-v1'] });
   const shellAssets = createVerifiedAssetLoader({ ...assetOptions, maxCachedBytes: 64 * 1024 * 1024 });
-  let workers, container;
+  let workers, container, compiler;
   try {
     workers = workerGroup ?? installWasixWorkerGroup({ maxWorkers: config.maxWorkers ?? 32 });
+    compiler = (clangProfile.filesystem === 'live' ? createLiveClangAdapter : createClangAdapter)({
+      clangSha256: config.clangSha256, linkerSha256: config.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
+      compilerPaths: [`${TOOLCHAIN}/bin/llvm`],
+      executableOutputProfile: 'wasi-preview1-process', workerFactory: () => new Worker(config.clangWorkerUrl, { type: 'module' })
+    });
     container = createContainer({
       workspace, packages: manager, commands, maxBytes: workspace?.fs.maxBytes ?? 256 * 1024 * 1024,
       adapters: [
       ...adapters,
         createLiveWasiAdapter({ maxBlockedIoMs: 120000, workerFactory: () => new Worker(config.liveWorkerUrl, { type: 'module' }) }),
-        (clangProfile.filesystem === 'live' ? createLiveClangAdapter : createClangAdapter)({
-          clangSha256: config.clangSha256, linkerSha256: config.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
-          compilerPaths: [`${TOOLCHAIN}/bin/llvm`],
-          executableOutputProfile: 'wasi-preview1-process', workerFactory: () => new Worker(config.clangWorkerUrl, { type: 'module' })
-        })
+        compiler
       ],
       artifactAdapter: 'wasi-preview1-live', maxMemoryBytes: 2 ** 32, maxProcesses: 8
     });
   } catch (error) {
-    await workers?.dispose(); await manager.dispose(); await shellAssets.dispose(); throw error;
+    compiler?.clearModuleCache?.(); await workers?.dispose(); await manager.dispose(); await shellAssets.dispose(); throw error;
   }
   const routes = {
     ...Object.fromEntries(BASH_APPLETS.map(name => [`${BASH_BIN}/${name}`, { command: name }])),
@@ -98,7 +99,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
       return disposal ??= (async () => {
         stop.abort();
         const errors = [];
-        for (const cleanup of [() => workers.dispose(), () => session?.dispose(), () => container.dispose(), () => manager.dispose(), () => shellAssets.dispose()]) {
+        for (const cleanup of [() => workers.dispose(), () => session?.dispose(), () => container.dispose(), () => compiler.clearModuleCache?.(), () => manager.dispose(), () => shellAssets.dispose()]) {
           try { await cleanup(); } catch (error) { errors.push(error); }
         }
         await starting?.catch(() => {});
