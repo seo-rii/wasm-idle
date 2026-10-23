@@ -37,6 +37,8 @@ function pause(
 		scopes?: DebugScope[];
 		capabilities?: DebugSessionCapabilities;
 		sessionId?: string;
+		stopId?: number;
+		callStackComplete?: boolean;
 	} = {}
 ) {
 	const id = options.id ?? 1;
@@ -55,6 +57,8 @@ function pause(
 		sourcePath: '/workspace/main.cpp',
 		frameId: id,
 		sessionId: options.sessionId,
+		stopId: options.stopId,
+		callStackComplete: options.callStackComplete,
 		locals: variables,
 		callStack: options.frames ?? [
 			{ id, functionName: 'solve', sourcePath: '/workspace/main.cpp', line: 7 }
@@ -534,6 +538,189 @@ describe('shared debugger variable state', () => {
 		await Promise.resolve();
 		expect(controller.variableNodes[0].expanded).toBe(false);
 		expect(debugVariables).not.toHaveBeenCalled();
+	});
+
+	it('restores expansion and compares a stepped frame after its caller pages arrive', async () => {
+		let value = 'old';
+		const debugVariables = vi.fn(async (reference: number) =>
+			reference === 20
+				? [{ name: 'items', value: 'after', variablesReference: 60 }]
+				: [{ name: '[0]', value }]
+		);
+		const controller = controllerWith({ debugVariables });
+		const frames = [
+			{ id: 1, functionName: 'solve', line: 7, sourcePath: '/workspace/main.cpp' },
+			{ id: 2, functionName: 'main', line: 4, sourcePath: '/workspace/main.cpp' }
+		];
+		pause(controller, { frames, sessionId: 'lldb', stopId: 1, value: 'before' });
+		const path = controller.variableNodes[0].path;
+		await controller.expandVariable(path);
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		value = 'new';
+		const nextFrames = frames.map((frame) => ({ ...frame, id: frame.id + 90 }));
+		pause(controller, {
+			id: 91,
+			frames: nextFrames.slice(0, 1),
+			sessionId: 'lldb',
+			stopId: 2,
+			callStackComplete: false,
+			variables: [],
+			scopes: []
+		});
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 2,
+			frameId: 91,
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 20,
+					expensive: false,
+					variables: [{ name: 'items', value: 'after', variablesReference: 60 }]
+				}
+			]
+		});
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 2,
+			callStack: nextFrames,
+			callStackComplete: true
+		});
+		await vi.waitFor(() => expect(controller.variableNodes[0].children[0]?.changed).toBe(true));
+		expect(controller.variableNodes[0]).toMatchObject({
+			path,
+			expanded: true,
+			changed: true,
+			previousValue: 'before'
+		});
+		expect(controller.variableNodes[0].children[0].previousValue).toBe('old');
+		expect(debugVariables).toHaveBeenCalledWith(60, undefined, undefined);
+	});
+
+	it('retains nested expansion from a partial stop while caller pages arrive', async () => {
+		const debugVariables = vi.fn(async (reference: number) =>
+			reference === 50
+				? [{ name: '[0]', value: '{...}', variablesReference: 51 }]
+				: [{ name: 'answer', value: '42' }]
+		);
+		const controller = controllerWith({ debugVariables });
+		const frames = [
+			{ id: 1, functionName: 'solve', line: 7, sourcePath: '/workspace/main.cpp' },
+			{ id: 2, functionName: 'run', line: 4, sourcePath: '/workspace/main.cpp' },
+			{ id: 3, functionName: 'main', line: 2, sourcePath: '/workspace/main.cpp' }
+		];
+		pause(controller, {
+			frames: frames.slice(0, 1),
+			sessionId: 'lldb',
+			stopId: 1,
+			callStackComplete: false
+		});
+		const partialPath = controller.variableNodes[0].path;
+		await controller.expandVariable(partialPath);
+		await controller.expandVariable(controller.variableNodes[0].children[0].path);
+		expect(debugVariables).toHaveBeenCalledTimes(2);
+		for (const complete of [false, true]) {
+			controller.handleEvent({
+				type: 'pauseDetails',
+				sessionId: 'lldb',
+				stopId: 1,
+				callStack: complete ? frames : frames.slice(0, 2),
+				callStackComplete: complete
+			});
+			expect(controller.variableNodes[0]).toMatchObject({
+				expanded: true,
+				changed: false,
+				children: [
+					{ expanded: true, children: [{ variable: { name: 'answer', value: '42' } }] }
+				]
+			});
+			if (!complete) expect(controller.variableNodes[0].path).toBe(partialPath);
+		}
+		await Promise.resolve();
+		expect(debugVariables).toHaveBeenCalledTimes(2);
+	});
+
+	it('keeps an explicit partial-stop collapse instead of restoring a previous expansion', async () => {
+		const debugVariables = vi.fn(async () => [{ name: '[0]', value: '42' }]);
+		const controller = controllerWith({ debugVariables });
+		const frames = [
+			{ id: 1, functionName: 'solve', line: 7, sourcePath: '/workspace/main.cpp' },
+			{ id: 2, functionName: 'main', line: 4, sourcePath: '/workspace/main.cpp' }
+		];
+		pause(controller, { frames, sessionId: 'lldb', stopId: 1 });
+		const stablePath = controller.variableNodes[0].path;
+		await controller.expandVariable(stablePath);
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		const nextFrames = frames.map((frame) => ({ ...frame, id: frame.id + 90 }));
+		pause(controller, {
+			id: 91,
+			reference: 60,
+			frames: nextFrames.slice(0, 1),
+			sessionId: 'lldb',
+			stopId: 2,
+			callStackComplete: false
+		});
+		const partialPath = controller.variableNodes[0].path;
+		await controller.expandVariable(partialPath);
+		await controller.expandVariable(partialPath, false);
+		expect(controller.variableNodes[0].expanded).toBe(false);
+		controller.handleEvent({
+			type: 'pauseDetails',
+			sessionId: 'lldb',
+			stopId: 2,
+			callStack: nextFrames,
+			callStackComplete: true
+		});
+		expect(controller.variableNodes[0]).toMatchObject({ path: stablePath, expanded: false });
+		await Promise.resolve();
+		expect(debugVariables).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not compare an incomplete caller suffix with a previous complete frame', () => {
+		const controller = controllerWith();
+		pause(controller, { sessionId: 'lldb', stopId: 1, variables: [{ name: 'n', value: '1' }] });
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		pause(controller, {
+			sessionId: 'lldb',
+			stopId: 2,
+			callStackComplete: false,
+			variables: [{ name: 'n', value: '2' }]
+		});
+		expect(controller.variableNodes[0].changed).toBe(false);
+		controller.handleEvent({
+			type: 'pauseDetails',
+			stopId: 2,
+			callStackComplete: true,
+			callStack: [
+				{ id: 1, functionName: 'solve', sourcePath: '/workspace/main.cpp', line: 8 }
+			]
+		});
+		expect(controller.variableNodes[0]).toMatchObject({ changed: true, previousValue: '1' });
+	});
+
+	it('does not retain a partial stack as the next stop comparison baseline', () => {
+		const controller = controllerWith();
+		pause(controller, {
+			sessionId: 'lldb',
+			stopId: 1,
+			callStackComplete: false,
+			variables: [{ name: 'n', value: '1' }]
+		});
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		pause(controller, { sessionId: 'lldb', stopId: 2, variables: [{ name: 'n', value: '2' }] });
+		expect(controller.variableNodes[0].changed).toBe(false);
+	});
+
+	it('ignores delayed details from another runtime session with the same stop number', () => {
+		const controller = controllerWith();
+		pause(controller, { sessionId: 'new-session', stopId: 1 });
+		controller.handleEvent({
+			type: 'pauseDetails',
+			sessionId: 'old-session',
+			stopId: 1,
+			callStack: []
+		});
+		expect(controller.callStack).toHaveLength(1);
 	});
 
 	it('compares only pages loaded in both adjacent controlled steps', async () => {

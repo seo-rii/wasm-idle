@@ -1306,6 +1306,23 @@ describe('Rust sandbox', () => {
 			]
 		});
 
+		session.emit({
+			type: 'pauseDetails',
+			stopId: 7,
+			callStack: [
+				{ id: 1, functionName: 'main', line: 2, sourcePath: '/workspace/main.rs' },
+				{ id: 2, functionName: 'foreign', line: 9, sourcePath: '/workspace/lib.rs' }
+			]
+		});
+		expect(events).toContainEqual({
+			type: 'pauseDetails',
+			stopId: 7,
+			callStack: [
+				{ id: 1, functionName: 'main', line: 2, sourcePath: '/workspace/solution.rs' },
+				{ id: 2, functionName: 'foreign', line: 9, sourcePath: '/workspace/lib.rs' }
+			]
+		});
+
 		session.finish();
 		await expect(run).resolves.toBe(true);
 	});

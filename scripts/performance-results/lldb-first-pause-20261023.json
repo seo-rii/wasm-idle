@@ -1,0 +1,84 @@
+{
+	"chromium": "153.0.8010.12",
+	"crossOriginIsolated": true,
+	"violations": [],
+	"immutableModuleReuse": false,
+	"moduleReuseLimitation": "Pinned LLDB/WAMR glue does not support instantiateWasm",
+	"results": [
+		{
+			"iteration": 0,
+			"firstPauseMs": 3208.770000040531,
+			"fullStackMs": 3360.5699999928474,
+			"scopesMs": 3226.064999997616,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkbezde-1\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\nProcess 1 exited with status = 0 (0x00000000) \n"
+		},
+		{
+			"iteration": 1,
+			"firstPauseMs": 4343.75,
+			"fullStackMs": 4707.540000021458,
+			"scopesMs": 4544.930000007153,
+			"pageLengths": [21, 41, 61, 81, 100],
+			"topFrame": {
+				"id": 524288,
+				"functionName": "recurse",
+				"line": 4,
+				"column": 3,
+				"sourcePath": "/workspace/main.c"
+			},
+			"variables": [
+				{
+					"name": "n",
+					"value": "0",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF868"
+				}
+			],
+			"callerVariables": [
+				{
+					"name": "n",
+					"value": "1",
+					"type": "int",
+					"evaluateName": "n",
+					"variablesReference": 0,
+					"memoryReference": "0xFF878"
+				}
+			],
+			"output": "To get started with the debug console try \"<variable>\" or \"`help [<lldb-cmd>]\".\r\nFor more information visit https://lldb.llvm.org/use/lldbdap.html#debug-console.\r\nthe module name is /workspace/program.wasm\nRunning attachCommands:\n(lldb) process connect --plugin wasm wasm-messageport://wasm-debug-mvkbf261-2\nProcess 1 stopped\n* thread #1, name = 'nobody', stop reason = trace\n    frame #0: 0x4000000000000192 program.wasm`_start at crt1-command.c:42:7\nExecutable binary set to '/workspace/program.wasm' (wasm32-wamr-wasi-wasm).\r\nAttached to process 1.\r\ndone\nProcess 1 exited with status = 0 (0x00000000) \n"
+		}
+	],
+	"measurementNotes": [
+		"Two sequential fresh sessions on one shared host with real pinned Clang DWARF, LLDB/WAMR, Chromium and strict CSP.",
+		"First-pause versus full-stack deltas measure progressive delivery within the new implementation, not a baseline speedup.",
+		"Producer pin lacks the Module instantiation hook, so this change intentionally does not inject or reuse precompiled Modules."
+	]
+}

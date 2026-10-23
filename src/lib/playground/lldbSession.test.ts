@@ -83,7 +83,24 @@ class FakeRuntimeSession {
 			return (await runtimeState.breakpointResponseGates.shift()) as T;
 		}
 		if (runtimeState.responseOverrides.has(command)) {
-			return runtimeState.responseOverrides.get(command) as T;
+			const override = runtimeState.responseOverrides.get(command) as any;
+			const paging = args as
+				{ startFrame?: number; levels?: number; format?: unknown } | undefined;
+			if (
+				command === 'stackTrace' &&
+				!paging?.format &&
+				Array.isArray(override?.stackFrames)
+			) {
+				return {
+					...override,
+					totalFrames: override.totalFrames ?? override.stackFrames.length,
+					stackFrames: override.stackFrames.slice(
+						paging?.startFrame ?? 0,
+						(paging?.startFrame ?? 0) + (paging?.levels ?? 100)
+					)
+				} as T;
+			}
+			return override as T;
 		}
 		if (command === 'threads') return { threads: [{ id: 7, name: 'wasm' }] } as T;
 		if (command === 'setFunctionBreakpoints')
@@ -94,7 +111,12 @@ class FakeRuntimeSession {
 				}))
 			} as T;
 		if (command === 'stackTrace') {
+			const { startFrame = 0, levels = 100 } = (args || {}) as {
+				startFrame?: number;
+				levels?: number;
+			};
 			return {
+				totalFrames: 2,
 				stackFrames: [
 					{
 						id: 41,
@@ -110,7 +132,7 @@ class FakeRuntimeSession {
 						line: 1,
 						column: 1
 					}
-				]
+				].slice(startFrame, startFrame + levels)
 			} as T;
 		}
 		if (command === 'scopes') {
@@ -259,9 +281,9 @@ async function emitStoppedAndWait(
 	).length;
 	session.emit({ event: 'stopped', body: { reason, threadId } });
 	await vi.waitFor(() =>
-		expect(session.requests.filter((request) => request.command === 'stackTrace')).toHaveLength(
-			previousStackTraceRequests + 1
-		)
+		expect(
+			session.requests.filter((request) => request.command === 'stackTrace').length
+		).toBeGreaterThan(previousStackTraceRequests)
 	);
 	await vi.waitFor(() =>
 		expect(session.requests.filter((request) => request.command === 'scopes')).toHaveLength(
@@ -295,6 +317,173 @@ vi.mock('@wasm-idle/llvm-core/debug', () => ({
 import { LldbSandboxSession } from './lldbSession';
 
 describe('LldbSandboxSession', () => {
+	it.each([false, true])(
+		'publishes the top frame before delayed details and discards them after resume=%s',
+		async (resume) => {
+			const events: any[] = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [
+						{
+							path: '/workspace/main.cpp',
+							content: 'int main() {}',
+							contentSha256: 'source-hash'
+						}
+					]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: (async () =>
+					new Response(JSON.stringify({ manifestVersion: 2 }))) as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const session = runtimeState.session!;
+			let release!: () => void;
+			const gate = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const request = session.request.bind(session);
+			vi.spyOn(session, 'request').mockImplementation(async (command, args: any) => {
+				if (command === 'scopes' || (command === 'stackTrace' && args.startFrame > 0))
+					await gate;
+				return request(command, args);
+			});
+			session.emit({ event: 'stopped', body: { reason: 'breakpoint', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(events.some((event) => event.type === 'pause')).toBe(true)
+			);
+			const pause = events.find((event) => event.type === 'pause');
+			expect(pause).toMatchObject({
+				frameId: 41,
+				sourcePath: '/workspace/main.cpp',
+				sourceContentSha256: 'source-hash',
+				callStackComplete: false,
+				scopes: [],
+				callStack: [{ id: 41 }]
+			});
+			expect(session.requests.find((entry) => entry.command === 'stackTrace')?.args).toEqual({
+				threadId: 7,
+				startFrame: 0,
+				levels: 1
+			});
+			expect(events.some((event) => event.type === 'pauseDetails')).toBe(false);
+			if (resume) await controller.debugCommand('continue');
+			release();
+			await vi.waitFor(() =>
+				expect(session.requests.some((entry) => entry.command === 'scopes')).toBe(true)
+			);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const details = events.filter((event) => event.type === 'pauseDetails');
+			if (resume) expect(details).toEqual([]);
+			else {
+				expect(details).toHaveLength(2);
+				expect(details.every((event) => event.stopId === pause.stopId)).toBe(true);
+				expect(
+					details
+						.find((event) => event.callStack)
+						?.callStack.map((frame: any) => frame.id)
+				).toEqual([41, 42]);
+				expect(details.find((event) => event.scopes)?.scopes).toHaveLength(3);
+				expect(details.find((event) => event.callStack)?.callStackComplete).toBe(true);
+			}
+			await controller.disconnect();
+			await completion;
+		}
+	);
+
+	it.each([
+		{ totalFrames: 125, actualFrames: 125, expectedFrames: 100, complete: false },
+		{ totalFrames: undefined, actualFrames: 125, expectedFrames: 100, complete: false },
+		{ totalFrames: 100, actualFrames: 100, expectedFrames: 100, complete: true },
+		{ totalFrames: undefined, actualFrames: 2, expectedFrames: 2, complete: true },
+		{ totalFrames: 5, actualFrames: 2, expectedFrames: 2, complete: false }
+	])(
+		'bounds caller stack completion with total=$totalFrames actual=$actualFrames',
+		async ({ totalFrames, actualFrames, expectedFrames, complete }) => {
+			const events: any[] = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: (async () =>
+					new Response(JSON.stringify({ manifestVersion: 2 }))) as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const session = runtimeState.session!;
+			const request = session.request.bind(session);
+			const pages: Array<{ startFrame: number; levels: number }> = [];
+			vi.spyOn(session, 'request').mockImplementation(async (command, args: any) => {
+				if (command !== 'stackTrace') return request(command, args);
+				pages.push(args);
+				return {
+					totalFrames,
+					stackFrames: Array.from(
+						{ length: Math.min(args.levels, actualFrames - args.startFrame) },
+						(_, index) => ({
+							id: args.startFrame + index + 1,
+							name: 'recursive',
+							line: 3,
+							column: 1,
+							source: { path: '/workspace/main.cpp' }
+						})
+					)
+				};
+			});
+			session.emit({ event: 'stopped', body: { reason: 'breakpoint', threadId: 7 } });
+			const expectedPages =
+				expectedFrames === 100
+					? [
+							[0, 1],
+							[1, 20],
+							[21, 20],
+							[41, 20],
+							[61, 20],
+							[81, 19]
+						]
+					: totalFrames === undefined
+						? [
+								[0, 1],
+								[1, 20],
+								[2, 20]
+							]
+						: [
+								[0, 1],
+								[1, 4],
+								[2, 3]
+							];
+			await vi.waitFor(() =>
+				expect(
+					events.filter((event) => event.type === 'pauseDetails' && event.callStack)
+				).toHaveLength(expectedPages.length - 1)
+			);
+			const lastStack = events
+				.filter((event) => event.type === 'pauseDetails' && event.callStack)
+				.at(-1);
+			expect(lastStack.callStack).toHaveLength(expectedFrames);
+			expect(lastStack.callStackComplete).toBe(complete);
+			expect(pages.map(({ startFrame, levels }) => [startFrame, levels])).toEqual(
+				expectedPages
+			);
+			await controller.disconnect();
+			await completion;
+		}
+	);
 	it.each([false, true])(
 		'requests one formatted frame only when the adapter supports value formatting (%s)',
 		async (supported) => {
@@ -1379,16 +1568,9 @@ describe('LldbSandboxSession', () => {
 							functionName: 'main',
 							sourcePath: '/workspace/main.cpp',
 							sourceContentSha256: 'main-source-sha'
-						}),
-						expect.objectContaining({ functionName: '_start' })
-					],
-					scopes: expect.arrayContaining([
-						expect.objectContaining({
-							name: 'Globals',
-							variablesReference: 12,
-							variables: []
 						})
-					])
+					],
+					scopes: []
 				})
 			)
 		);
@@ -1876,7 +2058,7 @@ describe('LldbSandboxSession', () => {
 
 			expect(disposeCountBeforeExit).toBe(0);
 			expect(stopCountBeforeExit).toBe(0);
-			expect(pauseCount).toBe(0);
+			expect(pauseCount).toBe(command === 'scopes' ? 1 : 0);
 			expect(outcome).toBeNull();
 		}
 	);
@@ -4149,6 +4331,23 @@ describe('LldbSandboxSession', () => {
 			const last = events.filter((event) => event.type === 'pause').at(-1);
 			expect(last.sessionId).toBe(first.sessionId);
 			expect(last.stopId).toBeGreaterThan(first.stopId);
+			const lastPauseIndex = events.lastIndexOf(last);
+			await vi.waitFor(() =>
+				expect(
+					events
+						.slice(lastPauseIndex + 1)
+						.filter((event) => event.type === 'pauseDetails')
+				).toHaveLength(2)
+			);
+			expect(
+				events
+					.slice(lastPauseIndex + 1)
+					.filter((event) => event.type === 'pauseDetails')
+					.every(
+						(event) =>
+							event.stopId === last.stopId && event.sessionId === last.sessionId
+					)
+			).toBe(true);
 			await controller.disconnect();
 			await completion;
 		});

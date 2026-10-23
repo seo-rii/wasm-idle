@@ -294,6 +294,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	let watchRequestVersion = 0;
 	let frameRequestVersion = 0;
+	let activeStopId: number | undefined;
+	let callStackComplete = true;
 	let commandInFlight = false;
 	let commandRequestVersion = 0;
 	const variableRequests = new Map<
@@ -370,6 +372,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			selectedHistoryIdStore.set(null);
 	}
 
+	function pendingFrameKey(frameId: number | null) {
+		return JSON.stringify(['pending', currentStopId, frameId]);
+	}
+
 	function updateVariableView() {
 		if (variableViewSuspended) return;
 		if (!get(pausedStore) || terminalChangedSinceStop) {
@@ -379,9 +385,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			watchNodesStore.set(new Map());
 			return;
 		}
-		const frameKey =
-			debugFramePathKey(get(callStackStore), get(frameIdStore), get(sourcePathStore)) ??
-			JSON.stringify(['unknown', get(pausedSourcePathStore)]);
+		const frameKey = callStackComplete
+			? (debugFramePathKey(get(callStackStore), get(frameIdStore), get(sourcePathStore)) ??
+				JSON.stringify(['unknown', get(pausedSourcePathStore)]))
+			: pendingFrameKey(get(frameIdStore) ?? get(callStackStore)[0]?.id ?? null);
 		const nodes = variableState.build({
 			frameKey,
 			scopes: get(scopesStore),
@@ -985,6 +992,55 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function handleEvent(event: DebugSessionEvent) {
+		if (event.type === 'pauseDetails') {
+			if (
+				!get(pausedStore) ||
+				event.stopId !== activeStopId ||
+				(event.sessionId !== undefined && event.sessionId !== observedSessionId)
+			)
+				return;
+			if (event.callStack) {
+				const current = new Map(get(callStackStore).map((frame) => [frame.id, frame]));
+				const complete = event.callStackComplete !== false;
+				if (!callStackComplete && complete) {
+					for (const frame of event.callStack) {
+						if (frame.id === undefined) continue;
+						const frameKey = debugFramePathKey(
+							event.callStack,
+							frame.id,
+							get(sourcePathStore)
+						);
+						if (frameKey)
+							variableState.migrateFrameExpansions(
+								pendingFrameKey(frame.id),
+								frameKey
+							);
+					}
+				}
+				callStackComplete = complete;
+				variableState.setFrameKeys(
+					!complete
+						? []
+						: event.callStack
+								.map((frame) =>
+									debugFramePathKey(
+										event.callStack!,
+										frame.id ?? null,
+										get(sourcePathStore)
+									)
+								)
+								.filter((key): key is string => key !== null)
+				);
+				callStackStore.set(
+					event.callStack.map((frame) => ({ ...frame, ...current.get(frame.id) }))
+				);
+			}
+			if (event.scopes && event.frameId === get(frameIdStore)) {
+				scopesStore.set(event.scopes);
+				loadTopLevelVariables();
+			}
+			return;
+		}
 		if (event.type === 'breakpoints') {
 			resolvedBreakpointsBySourceStore.update((current) => {
 				const next = new Map(current);
@@ -997,6 +1053,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'pause') {
+			activeStopId = event.stopId;
+			callStackComplete = event.callStackComplete !== false;
 			variableViewSuspended = true;
 			releaseCommandRequest();
 			invalidateVariableRequests();
@@ -1017,7 +1075,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 				event.sourceRevisionStale ||
 				get(staleSourcePathsStore).has(event.sourcePath || get(sourcePathStore));
 			variableState.beginStop(
-				frameKeys,
+				event.callStackComplete === false ? [] : frameKeys,
 				sameSession &&
 					sameThread &&
 					!terminalChangedSinceStop &&

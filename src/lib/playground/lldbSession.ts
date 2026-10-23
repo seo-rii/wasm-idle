@@ -28,6 +28,7 @@ import {
 	createBrowserLldbSession,
 	DapProtocolError,
 	type BrowserLldbSession,
+	type BrowserLldbSessionOptions,
 	type DapEvent
 } from '@wasm-idle/llvm-core/debug';
 import { loadVerifiedDebugRuntimeManifest } from '$lib/playground/lldbManifest';
@@ -56,6 +57,9 @@ export interface LldbArtifactPayload {
 }
 
 export interface LldbSandboxSessionOptions {
+	/** Opt in to producer-gated immutable module reuse; disabled by default. */
+	compiledModuleCache?: boolean;
+	workerFactory?: BrowserLldbSessionOptions['workerFactory'];
 	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	manifestUrl: string;
 	manifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
@@ -408,6 +412,8 @@ export class LldbSandboxSession {
 		const configuredBreakpointVersion = this.breakpointVersion;
 		session = createBrowserLldbSession({
 			persistentCache: this.options.persistentCache,
+			compiledModuleCache: this.options.compiledModuleCache,
+			workerFactory: this.options.workerFactory,
 			manifest,
 			runtimeBaseUrl: this.options.runtimeBaseUrl,
 			module: this.options.artifact.bytes,
@@ -1459,31 +1465,16 @@ export class LldbSandboxSession {
 		if (event.event === 'terminated') return;
 	}
 
-	private async resolveStoppedState(
-		requestedThreadId: number | undefined,
-		reason: string,
-		version: number
+	private async requestStackPage(
+		session: BrowserLldbSession,
+		threadId: number,
+		startFrame: number,
+		levels: number
 	) {
-		const session = this.requireSession();
-		let threadId = requestedThreadId;
-		if (threadId === undefined) {
-			const response = await session.request<unknown>('threads');
-			const threads = dapResponseCollection(response, 'threads', 'threads').map<DapThread>(
-				(thread, index) => {
-					const path = `threads[${index}]`;
-					assertDapRecord(thread, 'threads', path);
-					assertDapPositiveSafeInteger(thread.id, 'threads response', `${path}.id`);
-					assertDapString(thread.name, 'threads', `${path}.name`);
-					return { id: thread.id, name: thread.name };
-				}
-			);
-			threadId = threads[0]?.id;
-		}
-		if (!threadId) throw new Error('LLDB stopped without a WebAssembly thread.');
 		const response = await session.request<unknown>('stackTrace', {
 			threadId,
-			startFrame: 0,
-			levels: 100
+			startFrame,
+			levels
 		});
 		const frames = dapResponseCollection(
 			response,
@@ -1513,6 +1504,54 @@ export class LldbSandboxSession {
 				column: frame.column
 			};
 		});
+		if (frames.length > levels)
+			invalidDapResponse('stackTrace', 'stackFrames', 'page exceeds requested levels');
+		const totalFrames = dapOptionalNonNegativeSafeInteger(
+			response as Record<string, unknown>,
+			'totalFrames',
+			'stackTrace',
+			'body'
+		);
+		return { frames, totalFrames };
+	}
+
+	private debugFrames(frames: DapStackFrame[]): DebugFrame[] {
+		return frames.map((frame) => {
+			const sourcePath = frame.source?.path;
+			const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath || '');
+			return {
+				id: frame.id,
+				functionName: frame.name,
+				line: frame.line,
+				column: frame.column,
+				sourcePath,
+				...(sourceContentSha256 ? { sourceContentSha256 } : {})
+			};
+		});
+	}
+
+	private async resolveStoppedState(
+		requestedThreadId: number | undefined,
+		reason: string,
+		version: number
+	) {
+		const session = this.requireSession();
+		let threadId = requestedThreadId;
+		if (threadId === undefined) {
+			const response = await session.request<unknown>('threads');
+			const threads = dapResponseCollection(response, 'threads', 'threads').map<DapThread>(
+				(thread, index) => {
+					const path = `threads[${index}]`;
+					assertDapRecord(thread, 'threads', path);
+					assertDapPositiveSafeInteger(thread.id, 'threads response', `${path}.id`);
+					assertDapString(thread.name, 'threads', `${path}.name`);
+					return { id: thread.id, name: thread.name };
+				}
+			);
+			threadId = threads[0]?.id;
+		}
+		if (!threadId) throw new Error('LLDB stopped without a WebAssembly thread.');
+		const { frames, totalFrames } = await this.requestStackPage(session, threadId, 0, 1);
 		const selectedFrame = frames[0];
 		if (!selectedFrame) throw new Error('LLDB stopped without a stack frame.');
 		const isWorkspaceFrame = this.options.artifact.sources.some(
@@ -1556,31 +1595,21 @@ export class LldbSandboxSession {
 				reason = 'entry';
 			}
 		}
-		const scopes = isWorkspaceFrame ? await this.requestScopes(session, selectedFrame.id) : [];
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
 		this.stoppedFrames = frames;
 		this.targetStopped = true;
-		const callStack = frames.map<DebugFrame>((frame) => {
-			const sourcePath = frame.source?.path;
-			const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath || '');
-			return {
-				id: frame.id,
-				functionName: frame.name,
-				line: frame.line,
-				column: frame.column,
-				sourcePath,
-				...(sourceContentSha256 ? { sourceContentSha256 } : {})
-			};
-		});
+
 		const sourceContentSha256 = this.sourceContentSha256ByPath.get(
 			selectedFrame.source?.path || ''
 		);
+		const stopId = ++this.stopId;
+		const sessionId = `${this.sessionIdentity}-${this.lifecycleVersion}`;
 		this.options.onDebugEvent({
 			type: 'pause',
-			sessionId: `${this.sessionIdentity}-${this.lifecycleVersion}`,
-			stopId: ++this.stopId,
+			sessionId,
+			stopId,
 			capabilities: {
 				readMemory: this.supportsReadMemory,
 				writeMemory: this.supportsWriteMemory,
@@ -1602,10 +1631,74 @@ export class LldbSandboxSession {
 			threadId,
 			frameId: selectedFrame.id,
 			locals: [],
-			callStack,
-			scopes
+			callStack: this.debugFrames(frames),
+			callStackComplete: totalFrames !== undefined && frames.length >= totalFrames,
+			scopes: []
 		});
 		this.command = null;
+		// Publish the navigable top frame before requesting any scope metadata or
+		// unwinding deeper frames. Each subsequent result belongs to this exact stop.
+		await Promise.all([
+			(async () => {
+				if (!isWorkspaceFrame || !this.isCurrentValueRequest(session, version)) return;
+				const scopes = await this.requestScopes(session, selectedFrame.id);
+				if (!this.isCurrentValueRequest(session, version)) return;
+				this.options.onDebugEvent({
+					type: 'pauseDetails',
+					sessionId,
+					stopId,
+					frameId: selectedFrame.id,
+					scopes
+				});
+			})(),
+			(async () => {
+				let knownTotalFrames = totalFrames;
+				let end = totalFrames === undefined ? 100 : Math.min(totalFrames, 100);
+				while (frames.length < end && this.isCurrentValueRequest(session, version)) {
+					const { frames: page, totalFrames: total } = await this.requestStackPage(
+						session,
+						threadId,
+						frames.length,
+						Math.min(20, end - frames.length)
+					);
+					if (!this.isCurrentValueRequest(session, version)) return;
+					if (total !== undefined) {
+						knownTotalFrames = total;
+						end = Math.min(total, 100);
+					}
+					if (!page.length) {
+						this.options.onDebugEvent({
+							type: 'pauseDetails',
+							sessionId,
+							stopId,
+							callStack: this.debugFrames(frames),
+							callStackComplete:
+								knownTotalFrames === undefined || frames.length >= knownTotalFrames
+						});
+						break;
+					}
+					const ids = new Set(frames.map((frame) => frame.id));
+					for (const frame of page) {
+						if (ids.has(frame.id))
+							invalidDapResponse(
+								'stackTrace',
+								'stackFrames',
+								'duplicate frame id across pages'
+							);
+						ids.add(frame.id);
+					}
+					frames.push(...page);
+					this.options.onDebugEvent({
+						type: 'pauseDetails',
+						sessionId,
+						stopId,
+						callStack: this.debugFrames(frames),
+						callStackComplete:
+							knownTotalFrames !== undefined && frames.length >= knownTotalFrames
+					});
+				}
+			})()
+		]);
 	}
 
 	private async setMainEntryBreakpoint(session: BrowserLldbSession, enabled: boolean) {

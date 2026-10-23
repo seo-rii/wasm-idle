@@ -174,6 +174,8 @@ export type DebugSessionEvent =
 			reason: DebugPauseReason;
 			locals: DebugVariable[];
 			callStack: DebugFrame[];
+			/** False for pending or capped caller stacks; omitted means complete. */
+			callStackComplete?: boolean;
 			threadId?: number;
 			frameId?: number;
 			scopes?: DebugScope[];
@@ -182,6 +184,15 @@ export type DebugSessionEvent =
 			sourceContentSha256?: string;
 			sourceRevisionStale?: boolean;
 			capabilities?: DebugSessionCapabilities;
+	  }
+	| {
+			type: 'pauseDetails';
+			sessionId?: string;
+			stopId: number;
+			callStack?: DebugFrame[];
+			callStackComplete?: boolean;
+			frameId?: number;
+			scopes?: DebugScope[];
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {
