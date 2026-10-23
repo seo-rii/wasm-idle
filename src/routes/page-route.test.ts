@@ -4,7 +4,7 @@ import { createApplicationRuntimeAssets } from '$lib/playground/applicationAsset
 import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
 import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';
-import { compile } from 'svelte/compiler';
+import { compile, parse } from 'svelte/compiler';
 import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
@@ -276,8 +276,34 @@ describe('example route debug actions', () => {
 			/import Terminal, \{ type TerminalControl \} from '@wasm-idle\/terminal';/
 		);
 		expect(source).toMatch(/import \{ isSharedArrayBufferAvailable \} from '\$lib';/);
-		expect(source).toMatch(
-			/import \{\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+goDebugLanguageAdapter,\s+pythonDebugLanguageAdapter,\s+rustDebugLanguageAdapter,\s+type DebugLanguageAdapter\s+\} from '@wasm-idle\/debug';/s
+		const debugImports =
+			parse(source, { modern: true }).instance?.content.body.flatMap((statement) => {
+				if (
+					statement.type !== 'ImportDeclaration' ||
+					statement.source.value !== '@wasm-idle/debug'
+				)
+					return [];
+				return statement.specifiers.flatMap((specifier) =>
+					specifier.type === 'ImportSpecifier'
+						? [
+								specifier.imported.type === 'Identifier'
+									? specifier.imported.name
+									: specifier.imported.value
+							]
+						: []
+				);
+			}) ?? [];
+		expect(debugImports).toEqual(
+			expect.arrayContaining([
+				'createDebugSessionController',
+				'cppDebugLanguageAdapter',
+				'goDebugLanguageAdapter',
+				'pythonDebugLanguageAdapter',
+				'rustDebugLanguageAdapter',
+				'DebugLanguageAdapter',
+				'DebugVariableNode',
+				'DebugSnapshotVariable'
+			])
 		);
 		expect(source).toMatch(
 			/const debugLanguageAdapters(?:: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>>)? = \{/
@@ -1412,7 +1438,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="full">Binaryen full<\/option>/);
 	});
 
-	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {
+	it('keeps the workspace resizable and shows debug panels for active sessions or retained history', () => {
 		expect(() =>
 			compile(layoutSource, {
 				filename: 'src/routes/+layout.svelte',
@@ -1424,7 +1450,42 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/const desktopExampleLayout = \$derived\(examplePaneWidth > 960\);/);
 		expect(source).toMatch(/const terminalPanePixelWidth = \$derived\.by\(\(\) => \{/);
-		expect(source).toMatch(/\{#if debugLanguage && debug\.active\}/);
+		const debugShellCondition = source.match(
+			/\{#if\s+([^}]+)\}\s*<section\s+class=\{\[\s*'debug-shell'/s
+		)?.[1];
+		expect(debugShellCondition).toBeDefined();
+		for (const debugLanguage of [null, { id: 'cpp' }]) {
+			for (const active of [false, true]) {
+				for (const history of [[], [{ id: 1 }]]) {
+					expect(
+						runInNewContext(`Boolean(${debugShellCondition})`, {
+							debugLanguage,
+							debug: { active, history }
+						})
+					).toBe(Boolean(debugLanguage && (active || history.length > 0)));
+				}
+			}
+		}
+		const historyStart = source.indexOf('<summary>Recent stops (');
+		expect(historyStart).toBeGreaterThan(0);
+		const historyPanel = source.slice(historyStart, source.indexOf('</details>', historyStart));
+		expect(historyPanel).toContain('debug.selectedHistory.variables');
+		expect(historyPanel).toContain('debug.selectedHistory.watches');
+		expect(historyPanel).toContain('debug.selectHistory(stop.id)');
+		expect(historyPanel).toContain('debug.selectHistory(null)');
+		expect(historyPanel).toContain('Execution controls apply to the current stop.');
+		const snapshotStart = source.indexOf('{#snippet debugSnapshotRows(');
+		expect(snapshotStart).toBeGreaterThan(0);
+		const snapshotRows = source.slice(
+			snapshotStart,
+			source.indexOf('{/snippet}', snapshotStart)
+		);
+		expect(snapshotRows).toContain('node.value');
+		for (const recordedView of [historyPanel, snapshotRows]) {
+			expect(recordedView).not.toMatch(
+				/debug\.(?:loadVariableChildren|loadMoreVariablePath|expandVariable|readMemory|writeMemory|selectFrame|sendCommand)\s*\(/
+			);
+		}
 		expect(source).toMatch(/class="panel-resizer"/);
 		expect(source).toMatch(/role="separator"/);
 		expect(source).toMatch(/onpointerdown=\{\(event\) => \{/);

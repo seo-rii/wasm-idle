@@ -2867,21 +2867,57 @@ describe('native-source browser debugging in Chromium', () => {
 									{ functionName: 'main', line: 8, sourcePath },
 									10_000
 								);
+								// Expansion persists, but each stop reloads only the first page
+								// through the current frame's references.
+								await expect
+									.poll(() => rows.count(), { timeout: 10_000 })
+									.toBe(testCase.expectedArrayPageSize);
+								expect(await rows.locator('.debug-key').allTextContents()).toEqual(
+									Array.from({ length: 50 }, (_, i) => `[${i}]`)
+								);
+								expect(
+									await rows.locator('.debug-value').allTextContents()
+								).toEqual(Array.from({ length: 50 }, (_, i) => String(i)));
+								expect(
+									await page
+										.getByRole('button', {
+											name: 'Collapse values',
+											exact: true
+										})
+										.getAttribute('aria-expanded')
+								).toBe('true');
 								const resumedState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
+								const resumedLocals = resumedState.scopes.flatMap(
+									(scope: { variables: any[] }) => scope.variables
+								);
+								const resumedArray = resumedLocals.find(
+									(variable: any) => variable.name === 'values'
+								);
+								expect(resumedArray).toMatchObject({ indexedVariables: 1000 });
 								expect(
-									resumedState.variablesByReference.every(
-										([, variables]: [number, any[]]) =>
-											variables.every(
-												(variable: any) => !/^\[\d+\]$/u.test(variable.name)
-											)
+									resumedLocals.find((variable: any) => variable.name === 'ready')
+								).toMatchObject({ value: '1' });
+								const resumedChildren = new Map<number, any[]>(
+									resumedState.variablesByReference
+								).get(resumedArray.variablesReference);
+								expect(
+									resumedChildren?.map(
+										({ name, value }: { name: string; value: string }) => ({
+											name,
+											value
+										})
 									)
-								).toBe(true);
-								expect(await rows.count()).toBe(0);
+								).toEqual(
+									Array.from({ length: 50 }, (_, i) => ({
+										name: `[${i}]`,
+										value: String(i)
+									}))
+								);
 								await page
 									.getByRole('button', {
-										name: 'Load children for values',
+										name: 'Load more children for values',
 										exact: true
 									})
 									.waitFor({ state: 'visible', timeout: 10_000 });
