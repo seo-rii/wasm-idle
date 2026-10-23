@@ -25,6 +25,46 @@ function fixture() {
 	return { binding, call, client, event: (event: ContainerWorkerEvent) => listener(event) };
 }
 describe('existing playground container binding', () => {
+	it('forwards structured debugger requests through the owner without flattening metadata', async () => {
+		const { binding, call } = fixture();
+		const value = {
+			result: 'size=3',
+			variablesReference: 42,
+			indexedVariables: 3,
+			type: 'std::vector<int>'
+		};
+		call.mockImplementation(async (method: string) =>
+			method === 'debugEvaluateValue' ? value : undefined
+		);
+		const sandbox = await binding.load('CPP');
+		expect(
+			await sandbox.debugEvaluateValue?.('items', { context: 'hover', frameId: 7 })
+		).toEqual(value);
+		await sandbox.setSourceBreakpoints?.(
+			[{ line: 9, hitCondition: '3' }],
+			'/workspace/main.cpp'
+		);
+		await sandbox.debugSetSteppingOptions?.({ skipLibraryCode: true });
+		expect(call.mock.calls).toEqual([
+			[
+				'debugEvaluateValue',
+				['CPP', 'items', { context: 'hover', frameId: 7 }],
+				{ signal: undefined, progress: undefined }
+			],
+			[
+				'setSourceBreakpoints',
+				['CPP', [{ line: 9, hitCondition: '3' }], '/workspace/main.cpp'],
+				{ signal: undefined, progress: undefined }
+			],
+			[
+				'debugSetSteppingOptions',
+				['CPP', { skipLibraryCode: true }],
+				{ signal: undefined, progress: undefined }
+			]
+		]);
+		await binding.dispose?.();
+	});
+
 	it('keeps prepare, execute, stdin and debugger commands on one owner connection', async () => {
 		const { binding, call, client } = fixture();
 		await binding.syncWorkspace('C', [{ path: 'main.c', content: 'int main(){}' }]);

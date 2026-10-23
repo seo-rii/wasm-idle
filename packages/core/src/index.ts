@@ -173,6 +173,11 @@ export type {
 	DebugDataBreakpointInfo,
 	DebugDataBreakpointInfoArguments,
 	DebugFrame,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugVariablePresentationHint,
 	DebugMemory,
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
@@ -522,3 +527,10 @@ export {
 	type RubySplitPayload,
 	type RubyStdlibEntry
 } from './ruby-split.js';
+
+export {
+	normalizeDebugSourceBreakpoints,
+	mergeDebugBreakpointLines,
+	normalizeDebugSteppingOptions,
+	assertDebugBreakpointSupport
+} from './debug-configuration.js';

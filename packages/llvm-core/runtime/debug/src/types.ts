@@ -4,7 +4,12 @@ import type {
 	RuntimeManifestTarget,
 	SupportedClangTarget
 } from '../../clang/src/types.js';
-import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
+import type {
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugVariablePresentationHint,
+	RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 
 export type DebugSessionGeneration = string;
 
@@ -56,6 +61,7 @@ export interface DebugVariable {
 	name: string;
 	value: string;
 	type?: string;
+	presentationHint?: DebugVariablePresentationHint;
 	evaluateName?: string;
 	variablesReference: number;
 	memoryReference?: string;
@@ -74,6 +80,9 @@ export interface DebugEvaluateResult {
 	type?: string;
 	variablesReference: number;
 	memoryReference?: string;
+	namedVariables?: number;
+	indexedVariables?: number;
+	presentationHint?: DebugVariablePresentationHint;
 }
 
 export interface DebugCapabilities {
@@ -83,6 +92,7 @@ export interface DebugCapabilities {
 	supportsWriteMemoryRequest?: boolean;
 	supportsEvaluateForHovers?: boolean;
 	supportsConditionalBreakpoints?: boolean;
+	supportsHitConditionalBreakpoints?: boolean;
 	supportsLogPoints?: boolean;
 	supportsDataBreakpoints?: boolean;
 	supportsTerminateRequest?: boolean;
@@ -161,6 +171,11 @@ export interface RuntimeDebugCapabilities {
 	evaluateExpressions: boolean;
 	dataBreakpoints: boolean;
 	wasmThreads: boolean;
+	conditionalBreakpoints?: boolean;
+	hitConditionalBreakpoints?: boolean;
+	logPoints?: boolean;
+	skipLibraryCode?: boolean;
+	returnValues?: boolean;
 }
 
 export interface RuntimeDebuggerConfig {
@@ -216,6 +231,7 @@ export interface DebugLaunchConfig {
 export interface DebugBreakpointConfiguration {
 	source: DebugSource;
 	lines: number[];
+	breakpoints?: DebugSourceBreakpoint[];
 }
 
 export type DebugWorkerKind = 'lldb' | 'target';
@@ -332,6 +348,7 @@ export interface BrowserLldbSessionOptions {
 	moduleSha256?: string;
 	sources: DebugSourceFile[];
 	breakpoints?: DebugBreakpointConfiguration[];
+	steppingOptions?: DebugSteppingOptions;
 	launch?: Partial<DebugLaunchConfig>;
 	/** Test/embedding hook. Production callers should normally use the bundled worker factory. */
 	workerFactory?: (kind: DebugWorkerKind) => WorkerLike;

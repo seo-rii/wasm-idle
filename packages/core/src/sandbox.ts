@@ -6,6 +6,10 @@ import {
 import { createRuntimeAssetsKey } from './runtime-assets.js';
 import type {
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
 	DebugDataBreakpoint,
 	DebugDataBreakpointInfo,
 	DebugDataBreakpointInfoArguments,
@@ -69,6 +73,7 @@ export interface SandboxExecutionOptions {
 	runtimeRequirements?: ExecutionRuntimeRequirements;
 	signal?: AbortSignal;
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	debugSteppingOptions?: DebugSteppingOptions;
 	stdin?: string | AsyncIterable<Uint8Array>;
 	workspaceFiles?: WorkspaceFile[];
 	workspaceLimits?: Partial<WorkspaceLimits>;
@@ -141,6 +146,15 @@ export interface Sandbox {
 	debugPause?: () => void | Promise<void>;
 	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugEvaluateValue?: (
+		expression: string,
+		options?: DebugEvaluateOptions
+	) => Promise<DebugEvaluateResult>;
+	setSourceBreakpoints?: (
+		breakpoints: DebugSourceBreakpoint[],
+		sourcePath?: string
+	) => Promise<void>;
+	debugSetSteppingOptions?: (options: DebugSteppingOptions) => Promise<void>;
 	debugVariables?: (
 		variablesReference: number,
 		start?: number,
@@ -224,22 +238,31 @@ function snapshotExecutionInputs<T extends SandboxExecutionOptions | ExecutionRe
 		const value = values[name];
 		if (Array.isArray(value)) values[name] = value.slice();
 	}
+	if (values.debugSteppingOptions)
+		values.debugSteppingOptions = { ...values.debugSteppingOptions };
 	if (values.env && typeof values.env === 'object' && !Array.isArray(values.env)) {
 		values.env = { ...values.env };
 	}
 	if (values.sourceBreakpoints) {
 		values.sourceBreakpoints = values.sourceBreakpoints.map((source) => ({
 			...source,
-			lines: source.lines.slice()
+			lines: source.lines.slice(),
+			...(source.breakpoints
+				? { breakpoints: source.breakpoints.map((value) => ({ ...value })) }
+				: {})
 		}));
 	}
 	if (values.debug && typeof values.debug === 'object' && !Array.isArray(values.debug)) {
 		const debug = values.debug as ExecutionDebugOptions;
 		values.debug = {
 			...debug,
+			...(debug.steppingOptions ? { steppingOptions: { ...debug.steppingOptions } } : {}),
 			sourceBreakpoints: debug.sourceBreakpoints?.map((source) => ({
 				...source,
-				lines: source.lines.slice()
+				lines: source.lines.slice(),
+				...(source.breakpoints
+					? { breakpoints: source.breakpoints.map((value) => ({ ...value })) }
+					: {})
 			}))
 		};
 	}
