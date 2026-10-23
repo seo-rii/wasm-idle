@@ -1,6 +1,7 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import { snapshotJavaLanguageServerAssets, type JavaLanguageServerAsset } from './assets.js';
+import { normalizeJavaFileUri } from './source-uri.js';
 
 export interface JavaLanguageServerConfig {
 	/** Directory containing the three verified TeaVM producer assets. */
@@ -45,32 +46,20 @@ export async function getJavaLanguageServer(
 	const sourcePaths = new Set<string>();
 	let sourceBytes = 0;
 	for (const [value, text] of Object.entries(settings.java?.initialFiles || {})) {
-		const uri = new URL(value);
-		if (
-			uri.protocol !== 'file:' ||
-			uri.host ||
-			uri.search ||
-			uri.hash ||
-			typeof text !== 'string'
-		) {
+		if (typeof text !== 'string') {
 			throw new Error('Java initialFiles requires local file URIs and source strings');
 		}
-		const pathname = decodeURIComponent(uri.pathname);
-		if (
-			!pathname.startsWith('/workspace/') ||
-			pathname.includes('\0') ||
-			pathname.includes('\\') ||
-			pathname.split('/').some((part) => part === '.' || part === '..')
-		) {
+		const { uri, pathname } = normalizeJavaFileUri(value);
+		if (!pathname.startsWith('/workspace/')) {
 			throw new Error('Java source files must be inside file:///workspace/');
 		}
-		const key = uri.href.toLowerCase();
-		if (canonicalUris[key] && canonicalUris[key] !== uri.href)
+		const key = uri.toLowerCase();
+		if (canonicalUris[key] && canonicalUris[key] !== uri)
 			throw new Error('Ambiguous case in Java initial file URIs');
 		if (sourcePaths.has(pathname.toLowerCase()))
 			throw new Error('Ambiguous or duplicate Java source path');
 		sourcePaths.add(pathname.toLowerCase());
-		canonicalUris[key] = uri.href;
+		canonicalUris[key] = uri;
 		files[pathname.slice('/workspace/'.length)] = text;
 		sourceBytes += new TextEncoder().encode(text).byteLength;
 		if (sourceBytes > 16 * 1024 * 1024)

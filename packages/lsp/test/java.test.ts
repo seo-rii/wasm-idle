@@ -161,12 +161,17 @@ describe('original javacs TeaVM public SDK boundaries', () => {
 		'file://example.test/workspace/Main.java',
 		'file:///workspace/Main.java?query=1',
 		'file:///workspace/Main.java#fragment',
+		'file:///workspace/Main.java?',
+		'file:///workspace/Main.java#',
 		'file:///elsewhere/Main.java',
 		'file:///workspace/%2e%2e/Elsewhere.java',
 		'file:///workspace/%2e%2e%2fElsewhere.java',
 		'file:///workspace/src%5cMain.java',
 		'file:///workspace/%00Main.java',
-		'file:///workspace/%zzMain.java'
+		'file:///workspace/%zzMain.java',
+		'file:///workspace/',
+		'file:///workspace//',
+		'file:///workspace/src/%2f..%2fOutside.java'
 	])('rejects a source URI that cannot name a workspace file: %s', async (uri) => {
 		const options = launchOptions(new FakeWorker());
 		await expect(
@@ -196,7 +201,12 @@ describe('original javacs TeaVM public SDK boundaries', () => {
 		expect(options.createWorker).not.toHaveBeenCalled();
 	});
 
-	it('rejects two URI encodings that name the same physical Java source', async () => {
+	it.each([
+		'file:///workspace/%4dain.java',
+		'file:///workspace//Main.java',
+		'file:///workspace/%2fMain.java',
+		'file:///workspace/Main.java/'
+	])('rejects aliases for the same physical Java source: %s', async (alias) => {
 		const options = launchOptions(new FakeWorker());
 		await expect(
 			getJavaLanguageServer({
@@ -205,12 +215,32 @@ describe('original javacs TeaVM public SDK boundaries', () => {
 					...options.java,
 					initialFiles: {
 						'file:///workspace/Main.java': 'public class Main {}',
-						'file:///workspace/%4dain.java': 'class Main { int changed; }'
+						[alias]: 'class Main { int changed; }'
 					}
 				}
 			})
 		).rejects.toThrow(/Ambiguous|Duplicate|same|encoding/i);
 		expect(options.createWorker).not.toHaveBeenCalled();
+	});
+
+	it('normalizes repeated and encoded slashes before creating the Java source snapshot', async () => {
+		const worker = new FakeWorker();
+		const handle = await getJavaLanguageServer({
+			...launchOptions(worker),
+			java: {
+				baseUrl: 'https://assets.example.test/java/',
+				initialFiles: {
+					'file:///workspace/src//nested%2fMain.java': 'public class Main {}'
+				}
+			}
+		});
+		expect(initOptions(worker)).toMatchObject({
+			files: { 'src/nested/Main.java': 'public class Main {}' },
+			canonicalUris: {
+				'file:///workspace/src/nested/main.java': 'file:///workspace/src/nested/Main.java'
+			}
+		});
+		handle.dispose();
 	});
 
 	it('limits source UTF-8 bytes rather than JavaScript UTF-16 length', async () => {
