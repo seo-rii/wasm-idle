@@ -2,7 +2,36 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { c3LspLock, verifyC3LspAsset } from './build-c3-lsp.mjs';
+import * as producer from './build-c3-lsp.mjs';
+
+const { c3LspLock, verifyC3LspAsset } = producer;
+
+test('the producer reuses identical locks but invalidates every source and toolchain pin', () => {
+	assert.equal(typeof producer.c3LspBuildCacheKey, 'function');
+	const original = producer.c3LspBuildCacheKey(c3LspLock);
+	assert.equal(producer.c3LspBuildCacheKey(structuredClone(c3LspLock)), original);
+	for (const components of [
+		['sources', 'server'],
+		['sources', 'lexer'],
+		['sources', 'argparse'],
+		['compiler'],
+		['emscripten']
+	]) {
+		for (const field of ['sha256', 'bytes', 'url']) {
+			const changed = structuredClone(c3LspLock);
+			const pin = components.reduce((value, component) => value[component], changed);
+			pin[field] = field === 'bytes' ? pin[field] + 1 : `${pin[field]}-changed`;
+			assert.notEqual(
+				producer.c3LspBuildCacheKey(changed),
+				original,
+				`${components.join('.')}.${field} must invalidate extracted sources and tools`
+			);
+		}
+	}
+	const changedPatch = structuredClone(c3LspLock);
+	changedPatch.patchSha256 = '0'.repeat(64);
+	assert.notEqual(producer.c3LspBuildCacheKey(changedPatch), original);
+});
 
 test('the C3 reactor patch keeps semantic handlers and lexer sources upstream', async () => {
 	const patch = await readFile(new URL('./patches/c3-lsp-reactor.patch', import.meta.url));
