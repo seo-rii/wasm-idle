@@ -141,4 +141,36 @@ describe('Lean process lifecycle', () => {
 		expect(messages[1].params.textDocument).toEqual(document);
 	});
 
+	it.each(['runtime', 'pthread'])(
+		'settles pending and future requests after a terminal %s failure',
+		async (kind) => {
+			const process = await open();
+			send({
+				jsonrpc: '2.0',
+				id: 41,
+				method: 'textDocument/hover',
+				params: { textDocument: { uri } }
+			});
+			await tick();
+			if (kind === 'runtime') event(process, { error: 'runtime crashed' });
+			else {
+				event(process, { thread: { type: 'create', id: 7, url: latest().data.glueUrl } });
+				const thread = posted
+					.filter((message) => message.leanWorker?.type === 'create')
+					.at(-1).leanWorker;
+				send({ type: 'lean-worker-event', id: thread.id, error: 'pthread crashed' });
+			}
+			await tick();
+			expect(posted.find((message) => message.id === 41)?.error).toBeDefined();
+			send({
+				jsonrpc: '2.0',
+				id: 42,
+				method: 'textDocument/hover',
+				params: { textDocument: { uri } }
+			});
+			await tick();
+			expect(posted.find((message) => message.id === 42)?.error).toBeDefined();
+			expect(posted.filter((message) => message.type === 'error')).toHaveLength(1);
+		}
+	);
 });
