@@ -116,7 +116,7 @@ function followsLiteralType(tokens: string[], braceIndex: number, closedFrame?: 
 	return open === index - 1 || tokens[open - 1] === 'map';
 }
 
-function lineTokens(line: string, state: LexState) {
+function lineTokens(line: string, state: LexState, onWord?: (word: string, end: number) => void) {
 	const tokens: string[] = [];
 	const wordPattern = /[\p{L}_][\p{L}\p{N}_]*|\.?\d[\p{L}\p{N}_.]*/uy;
 	let index = 0;
@@ -160,6 +160,7 @@ function lineTokens(line: string, state: LexState) {
 		if (word) {
 			tokens.push(/^[\p{L}_]/u.test(word) ? word : '0');
 			index += word.length;
+			onWord?.(word, index);
 			continue;
 		}
 		const operator =
@@ -191,64 +192,31 @@ function shouldInstrumentLine(line: string) {
 
 function insertDebugImports(source: string) {
 	const lines = source.split('\n');
-	const packageIndex = lines.findIndex((line) => /^\s*package\s+\w+/.test(line));
-	if (packageIndex === -1) return source;
-	const importStart = lines.findIndex(
-		(line, index) => index > packageIndex && /^\s*import\b/.test(line)
-	);
-	if (importStart === -1) {
+	const state: LexState = { rawString: false, blockComment: false };
+	let packageKeyword = false;
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index]!;
+		let packageNameEnd: number | undefined;
+		lineTokens(line, state, (word, end) => {
+			if (packageNameEnd !== undefined) return;
+			if (packageKeyword) packageNameEnd = end;
+			else if (word === 'package') packageKeyword = true;
+		});
+		if (packageNameEnd === undefined) continue;
+		// Insert before trailing comments, which may span lines or end beside an import.
+		// Keep the suffix on ')' so an explicit package semicolon still terminates a declaration.
 		lines.splice(
-			packageIndex + 1,
-			0,
+			index,
+			1,
+			line.slice(0, packageNameEnd),
 			'',
 			'import (',
 			...debugImports.map((entry) => `\t${entry}`),
-			')'
+			')' + line.slice(packageNameEnd)
 		);
 		return lines.join('\n');
 	}
-
-	const importLine = lines[importStart] || '';
-	if (/^\s*import\s*\(/.test(importLine)) {
-		let importEnd = importStart + 1;
-		for (; importEnd < lines.length; importEnd += 1) {
-			if (/^\s*\)/.test(lines[importEnd] || '')) break;
-		}
-		lines.splice(importEnd, 0, ...debugImports.map((entry) => `\t${entry}`));
-		return lines.join('\n');
-	}
-
-	const singleImport = importLine.replace(/^\s*import\s+/, '').trim();
-	lines.splice(
-		importStart,
-		1,
-		'import (',
-		`\t${singleImport}`,
-		...debugImports.map((entry) => `\t${entry}`),
-		')'
-	);
-	return lines.join('\n');
-}
-
-function insertDebugSupport(source: string) {
-	const lines = source.split('\n');
-	let insertIndex = lines.findIndex((line) => /^\s*import\b/.test(line));
-	if (insertIndex === -1) {
-		insertIndex = lines.findIndex((line) => /^\s*package\s+\w+/.test(line));
-		if (insertIndex === -1) return source;
-		insertIndex += 1;
-	} else if (/^\s*import\s*\(/.test(lines[insertIndex] || '')) {
-		for (; insertIndex < lines.length; insertIndex += 1) {
-			if (/^\s*\)/.test(lines[insertIndex] || '')) {
-				insertIndex += 1;
-				break;
-			}
-		}
-	} else {
-		insertIndex += 1;
-	}
-	lines.splice(insertIndex, 0, debugSupportSource.trim());
-	return lines.join('\n');
+	return source;
 }
 
 function instrumentFunctionLines(source: string) {
@@ -380,5 +348,7 @@ function instrumentFunctionLines(source: string) {
 
 export function instrumentGoDebugSource(source: string) {
 	if (source.includes('__wasmIdleDebugLine')) return source;
-	return insertDebugSupport(insertDebugImports(instrumentFunctionLines(source)));
+	// Declarations may follow user code; placing them here keeps every user import
+	// ahead of declarations, including a second import block.
+	return `${insertDebugImports(instrumentFunctionLines(source))}\n\n${debugSupportSource.trim()}\n`;
 }
