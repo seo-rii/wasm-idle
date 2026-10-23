@@ -48,6 +48,15 @@ workspace saving/export remains responsible for the editor workspace; the
 container owner itself has page lifetime, and asset-cache eviction never deletes
 user workspace storage.
 
+Editor publication sends changed file bodies and only their touched baseline bodies;
+unchanged files contribute path/size metadata for whole-project admission. The owner
+still validates every touched conflict before publishing a batch and preserves unknown
+shell files. Worker reads use a per-project cursor and exact VFS file revisions, returning
+changed bodies and deletions. A missing or stale cursor receives a full reset, so bounded
+watch-queue rescans recover without trusting missed events. The facade continues to return
+owned complete file arrays to the existing editor API. Metadata enumeration and the private
+source snapshots passed to language engines remain complete project operations.
+
 Initial language and files resolve before the editor, terminal or runtime starts.
 A valid shared snapshot takes precedence, followed by explicit URL inputs, the
 current workspace snapshot, legacy preferences in the base workspace, and the
