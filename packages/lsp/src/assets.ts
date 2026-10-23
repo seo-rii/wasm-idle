@@ -23,6 +23,7 @@ export type LanguageToolAssetRuntime =
 	| 'janet'
 	| 'pascal'
 	| 'perl'
+	| 'php'
 	| 'prolog'
 	| 'ruby'
 	| 'tcl';

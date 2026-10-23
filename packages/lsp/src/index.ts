@@ -436,3 +436,10 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+export {
+	getPhpLanguageServer,
+	type PhpLanguageServerOptions,
+	PHPANTOM_VERSION,
+	PHPANTOM_WASM_ASSET,
+	PHPANTOM_WASM_RECEIPT
+} from './php/index.js';

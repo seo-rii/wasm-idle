@@ -397,6 +397,10 @@
 		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
 	);
 	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
+	const phpLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'php');
+	const phpLspWasmUrl = $derived(
+		phpLspEnabled ? resolveApplicationAsset('wasm-phpantom-lsp/phpantom_lsp.wasm') : undefined
+	);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -4499,6 +4503,8 @@
 							erlangLspWorkerUrl={beamLspWorkerUrl}
 							{erlangLspIntegrity}
 							{gleamLspEnabled}
+							{phpLspEnabled}
+							{phpLspWasmUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}

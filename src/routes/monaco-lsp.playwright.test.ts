@@ -119,6 +119,15 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 
 const lspBrowserCases: LspBrowserCase[] = [
 	{
+		language: 'PHP',
+		label: 'PHP',
+		fileName: 'main.php',
+		source: '<?php\nclass Greeter { public function hello(string $name): string { return $name; } }\n$g = new Greeter();\n$g->hello("world");\n',
+		expectDiagnostics: false,
+		expectedResponses: ['/wasm-phpantom-lsp/phpantom_lsp.wasm'],
+		assertNoPreEnableRequests: ['/wasm-phpantom-lsp/']
+	},
+	{
 		language: 'CPP',
 		label: 'C++',
 		fileName: 'main.cpp',
@@ -538,7 +547,17 @@ const lspBrowserCases: LspBrowserCase[] = [
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
-	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
+	'runtime-small': [
+		'PHP',
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'GO',
+		'GLEAM',
+		'PASCAL',
+		'LUA',
+		'PROLOG',
+		'RUBY'
+	],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
 		'OBJC',
@@ -577,7 +596,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1358,6 +1377,42 @@ async function runLspCase(
 	}
 	if (testCase.language === 'POSTGRESQL')
 		await checkPostgresqlKeyboardSync(page, testCase.validSource!);
+	if (testCase.language === 'PHP') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const line = editor.getModel().getLineContent(2);
+			editor.setPosition({ lineNumber: 2, column: line.indexOf('): string') + 4 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('?');
+		await page.waitForFunction(() =>
+			Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue().includes('): ?string')
+		);
+		const showReturnType = async (nullable: boolean) => {
+			await page.evaluate(() => {
+				const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+				editor.setPosition({ lineNumber: 4, column: 7 });
+				editor.focus();
+				editor.trigger('browser-regression', 'editor.action.showHover', {});
+			});
+			await page
+				.locator('.monaco-hover')
+				.filter({
+					hasText: nullable ? /\): \?string/u : /\): string/u
+				})
+				.first()
+				.waitFor();
+			await page.keyboard.press('Escape');
+		};
+		await showReturnType(true);
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(
+			(source) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === source,
+			testCase.source
+		);
+		await showReturnType(false);
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1606,6 +1661,12 @@ describe('Monaco LSP browser integration', () => {
 					cases.some((testCase) => testCase.language === 'POSTGRESQL')
 				) {
 					await runBrowserPreparationScripts(['sync:postgresql-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'PHP')
+				) {
+					await runBrowserPreparationScripts(['sync:phpantom-lsp']);
 				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([

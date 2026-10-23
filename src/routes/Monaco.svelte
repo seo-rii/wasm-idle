@@ -2327,6 +2327,7 @@
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2384,6 +2385,8 @@
 		erlangLspWorkerUrl?: string;
 		erlangLspIntegrity?: ElixirRuntimeAssetReceipts;
 		gleamLspEnabled?: boolean;
+		phpLspEnabled?: boolean;
+		phpLspWasmUrl?: string;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
 		gleamLspManifestFingerprint?: string;
@@ -2488,6 +2491,8 @@
 		erlangLspWorkerUrl,
 		erlangLspIntegrity = WASM_ELIXIR_ASSET_RECEIPTS,
 		gleamLspEnabled = false,
+		phpLspEnabled = false,
+		phpLspWasmUrl,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
 		gleamLspManifestFingerprint,
@@ -2666,6 +2671,7 @@
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			erlangLspEnabled ? JSON.stringify(erlangLspIntegrity) : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
+			phpLspEnabled ? phpLspWasmUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
@@ -2757,6 +2763,10 @@
 			case 'gleam':
 				label = 'Gleam LSP';
 				status = gleamLspStatus;
+				break;
+			case 'php':
+				label = 'PHP LSP';
+				status = phpLspStatus;
 				break;
 			case 'd':
 				label = 'D LSP';
@@ -2937,6 +2947,20 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['php'],
+			isEnabled: () => phpLspEnabled && !!phpLspWasmUrl,
+			setStatus: (status) => (phpLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getPhpLanguageServer } = await import('@wasm-idle/lsp/php');
+				return await getPhpLanguageServer({
+					currentUrl,
+					signal,
+					php: { wasmUrl: phpLspWasmUrl },
+					onStatus: (status) => (phpLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3651,6 +3675,7 @@
 			elixir: elixirLspStatus,
 			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
+			php: phpLspStatus,
 			d: dLspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,

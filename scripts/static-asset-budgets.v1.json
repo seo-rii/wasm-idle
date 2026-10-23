@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1110000000,
-		"maxFiles": 1951
+		"maxBytes": 1128000000,
+		"maxFiles": 1954
 	},
 	"directories": {
 		"clang": { "maxBytes": 36000000, "maxFiles": 17 },
@@ -58,6 +58,7 @@
 		},
 		"wasm-pascal": { "maxBytes": 1300000, "maxFiles": 10 },
 		"wasm-perl": { "maxBytes": 8000000, "maxFiles": 12 },
+		"wasm-phpantom-lsp": { "maxBytes": 18000000, "maxFiles": 3, "optional": true },
 		"wasm-php": { "maxBytes": 24000000, "maxFiles": 15 },
 		"wasm-postgresql": { "maxBytes": 6500000, "maxFiles": 16 },
 		"wasm-postgresql-lsp": { "maxBytes": 15000000, "maxFiles": 6, "optional": true },

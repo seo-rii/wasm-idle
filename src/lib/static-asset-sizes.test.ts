@@ -86,6 +86,24 @@ describe('static asset size budgets', () => {
 		).toContain('wasm-removed has an asset budget but no directory');
 	});
 
+	it('includes the PHPantom server in per-directory runtime budgets', async () => {
+		const rootDir = await makeTestRoot('phpantom-asset-budget');
+		await writeAsset(rootDir, 'wasm-rust/rustc.wasm.gz', 10);
+		await writeAsset(rootDir, 'wasm-phpantom-lsp/phpantom_lsp.wasm', 30);
+		const measurement = await measureStaticAssets(rootDir);
+		expect(checkStaticAssetBudgets(measurement, budgets())).toContain(
+			'wasm-phpantom-lsp has runtime assets but no directory budget'
+		);
+		expect(
+			checkStaticAssetBudgets(
+				measurement,
+				budgets({
+					'wasm-phpantom-lsp': { maxBytes: 20, maxFiles: 3, optional: true }
+				})
+			)
+		).toContain('wasm-phpantom-lsp uses 30 bytes; budget is 20');
+	});
+
 	it('allows explicitly optional generated runtime directories to be absent', async () => {
 		const rootDir = await makeTestRoot('static-asset-optional-budget');
 		await writeAsset(rootDir, 'wasm-rust/rustc.wasm.gz', 10);
