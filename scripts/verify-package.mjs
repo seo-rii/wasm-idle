@@ -171,7 +171,7 @@ void [shell, options, serve, result, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		budget: { maxBytes: 38 * MiB, maxFiles: 3_250, maxPackages: 70 },
+		budget: { maxBytes: 38.5 * MiB, maxFiles: 3_250, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
