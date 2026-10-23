@@ -116,7 +116,7 @@ function followsLiteralType(tokens: string[], braceIndex: number, closedFrame?: 
 	return open === index - 1 || tokens[open - 1] === 'map';
 }
 
-function lineTokens(line: string, state: LexState) {
+function lineTokens(line: string, state: LexState, onWord?: (word: string, end: number) => void) {
 	const tokens: string[] = [];
 	const wordPattern = /[\p{L}_][\p{L}\p{N}_]*|\.?\d[\p{L}\p{N}_.]*/uy;
 	let index = 0;
@@ -160,6 +160,7 @@ function lineTokens(line: string, state: LexState) {
 		if (word) {
 			tokens.push(/^[\p{L}_]/u.test(word) ? word : '0');
 			index += word.length;
+			onWord?.(word, index);
 			continue;
 		}
 		const operator =
@@ -191,19 +192,31 @@ function shouldInstrumentLine(line: string) {
 
 function insertDebugImports(source: string) {
 	const lines = source.split('\n');
-	const packageIndex = lines.findIndex((line) => /^\s*package\s+\w+/.test(line));
-	if (packageIndex === -1) return source;
-	// A separate declaration preserves grouped imports, aliases, comments and multiple
-	// import declarations without guessing where their closing delimiters are.
-	lines.splice(
-		packageIndex + 1,
-		0,
-		'',
-		'import (',
-		...debugImports.map((entry) => `\t${entry}`),
-		')'
-	);
-	return lines.join('\n');
+	const state: LexState = { rawString: false, blockComment: false };
+	let packageKeyword = false;
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index]!;
+		let packageNameEnd: number | undefined;
+		lineTokens(line, state, (word, end) => {
+			if (packageNameEnd !== undefined) return;
+			if (packageKeyword) packageNameEnd = end;
+			else if (word === 'package') packageKeyword = true;
+		});
+		if (packageNameEnd === undefined) continue;
+		// Insert before trailing comments, which may span lines or end beside an import.
+		// Keep the suffix on ')' so an explicit package semicolon still terminates a declaration.
+		lines.splice(
+			index,
+			1,
+			line.slice(0, packageNameEnd),
+			'',
+			'import (',
+			...debugImports.map((entry) => `\t${entry}`),
+			')' + line.slice(packageNameEnd)
+		);
+		return lines.join('\n');
+	}
+	return source;
 }
 
 function instrumentFunctionLines(source: string) {

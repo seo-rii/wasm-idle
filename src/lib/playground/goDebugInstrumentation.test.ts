@@ -44,6 +44,37 @@ func add(left int, right int) int {
 		);
 	});
 
+	it.each([
+		[' /*\npackage documentation\n*/\n', 'import "fmt"'],
+		[' /* documentation\r\ncontinued\r\n*/\r\n', 'import ("fmt")'],
+		[' /* documentation\n*/ ', 'import (\n\t"fmt"\n)'],
+		[' /* first\n*/ /* second\n*/\n', 'import "fmt"\nimport "strings"'],
+		[' // package documentation\n', 'import "fmt"'],
+		[' // package documentation\r\n', 'import ("fmt"; "strings")'],
+		['; ', 'import "fmt"'],
+		[' /* package note */; ', 'import ("fmt")']
+	])('preserves package trivia %j before imports %j', (trivia, imports) => {
+		const output = instrumentGoDebugSource(
+			`package main${trivia}${imports}\nfunc main() {\n\tprintln("hello")\n}`
+		);
+
+		expect(output).toContain(trivia);
+		expect(output).toContain(imports);
+	});
+
+	it('finds the actual package clause after a comment containing a package line', () => {
+		const comment = '/*\npackage documentation\n*/\n';
+		const output = instrumentGoDebugSource(
+			`${comment}package main /* package note\n*/\nimport "fmt"\nfunc main() {}`
+		);
+
+		expect(output).toContain(comment);
+		expect(output.indexOf('__wasm_idle_debug_json "encoding/json"')).toBeGreaterThan(
+			output.indexOf('package main')
+		);
+		expect(output).toContain(' /* package note\n*/\nimport "fmt"');
+	});
+
 	it('creates an import block when the original file has no imports', () => {
 		const output = instrumentGoDebugSource(`package main
 
