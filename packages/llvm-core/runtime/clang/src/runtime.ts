@@ -121,7 +121,7 @@ export type { ClangSourceLanguage } from '../../core/src/clang-profile.js';
 const toUtf8 = (text: string) => {
 	const surrogate = encodeURIComponent(text);
 	let result = '';
-	for (let i = 0; i < surrogate.length; ) {
+	for (let i = 0; i < surrogate.length;) {
 		const character = surrogate[i];
 		i += 1;
 		if (character == '%') {
@@ -262,7 +262,8 @@ class Clang {
 			signal: options.signal,
 			fetchImpl: options.fetchImpl,
 			maxAssetBytes,
-			trace: (message) => this.trace(message)
+			trace: (message) => this.trace(message),
+			isTraceEnabled: () => this.debug && this.log
 		});
 
 		const clangReady = this.getModule(
@@ -1344,9 +1345,7 @@ class Clang {
 						if (containerParameterMatch) {
 							const slot = nextVariableSlot++;
 							const container = containerParameterMatch[1] as
-								| 'vector'
-								| 'set'
-								| 'map';
+								'vector' | 'set' | 'map';
 							const name = containerParameterMatch[2];
 							currentFunctionContainers.set(name, {
 								slot,
@@ -1725,6 +1724,7 @@ class Clang {
 		});
 		app.environ = { ...app.environ, ...environ };
 		app.trace = (message) => this.trace(message);
+		app.isTraceEnabled = () => this.debug && this.log;
 		app.debugSession = {
 			buffer: this.debugBuffer,
 			interruptBuffer: this.debugInterruptBuffer,
