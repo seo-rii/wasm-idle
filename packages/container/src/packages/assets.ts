@@ -98,6 +98,11 @@ async function decodeGzip(bytes: Uint8Array, asset: DistributionAsset, signal: A
 
 /** Per-loader policy is fixed. Only identical receipts/encoding share a fetch and decoded bytes. */
 export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): VerifiedAssetLoader {
+  return createManagedAssetLoader(options, () => {});
+}
+
+/** Internal scheduler hook; consumer cancellation can precede active request settlement. */
+export function createManagedAssetLoader(options: VerifiedAssetLoaderOptions, onRequestSettled: () => void): VerifiedAssetLoader {
   assertValidatedDistribution(options.distribution);
   const distribution = options.distribution;
   const persistentCache = Object.freeze(resolveRuntimeAssetCacheOptions(options.persistentCache));
@@ -193,6 +198,7 @@ export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): 
           created.settled = true;
           active.delete(created);
           if (pending.get(key) === created) pending.delete(key);
+          onRequestSettled();
         });
         pending.set(key, created);
         active.add(created);

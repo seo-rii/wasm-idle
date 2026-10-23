@@ -231,6 +231,50 @@ test('cancelling a queued preparation never starts its assets or cancels another
   } finally { release.resolve(); await manager.dispose(); await Promise.allSettled([first, second]); }
 });
 
+test('cancelling an active preparation retains loader admission until its old generation settles', { timeout: 5000 }, async () => {
+  const f = await multiAssetDistribution(), hashing = deferred(), release = deferred(), nextStarted = deferred(), nextRelease = deferred(), abort = new AbortController();
+  const requested = [], originalDigest = crypto.subtle.digest;
+  let held = false;
+  crypto.subtle.digest = async function (algorithm, bytes) {
+    // Delivery verification cannot interrupt a native digest that has already started.
+    if (!held && hash(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes) === f.distribution.packages[0].assets[0].delivery.sha256) {
+      held = true; hashing.resolve(); await release.promise;
+    }
+    return originalDigest.call(this, algorithm, bytes);
+  };
+  const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, maxPendingAssets: 1, fetch: async url => {
+    requested.push(url);
+    if (url.includes('/tools-b/')) { nextStarted.resolve({ started: true }); await nextRelease.promise; }
+    return f.response(url);
+  } });
+  const first = manager.prepare('tools-a', { signal: abort.signal });
+  const second = manager.prepare('tools-b');
+  const failure = assert.rejects(first, { code: 'ABORTED' });
+  // Observe rejection immediately even if a regression admits the queued load too early.
+  const completed = second.then(value => ({ value }), error => ({ error }));
+  try {
+    await hashing.promise;
+    assert.equal(manager.inspect().assets.pendingRequests, 1);
+    abort.abort();
+    assert.equal(manager.inspect().assets.pendingRequests, 1, 'consumer cancellation precedes underlying request settlement');
+    await failure;
+    const admitted = await Promise.race([nextStarted.promise, completed]);
+    assert.equal(admitted.error, undefined, 'cancellation must not turn queued admission into RESOURCE_LIMIT');
+    assert.equal(admitted.started, true);
+    assert.equal(manager.inspect().assets.pendingRequests, 1, 'only the new generation owns a loader slot');
+    nextRelease.resolve();
+    const result = await completed;
+    assert.equal(result.error, undefined, 'cancellation must not turn queued admission into RESOURCE_LIMIT');
+    f.check(result.value, 'tools-b');
+    assert.equal(requested.length, 6);
+    assert.equal(manager.inspect().assets.pendingRequests, 0);
+    assert.equal(manager.inspect().preparingBytes, 0);
+  } finally {
+    release.resolve(); nextRelease.resolve(); crypto.subtle.digest = originalDigest;
+    await manager.dispose(); await Promise.allSettled([first, second]);
+  }
+});
+
 test('dispose settles both active and queued parallel preparations', { timeout: 5000 }, async () => {
   const f = await multiAssetDistribution(), started = deferred(), signals = [];
   const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, maxConcurrentAssets: 2, fetch: async (_url, { signal }) => {

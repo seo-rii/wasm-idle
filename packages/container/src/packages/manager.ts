@@ -1,6 +1,6 @@
 import { ContainerError } from '../errors.js';
 import {
-  createVerifiedAssetLoader, type AssetLoaderInspection, type VerifiedAssetLoaderOptions
+  createManagedAssetLoader, type AssetLoaderInspection, type VerifiedAssetLoaderOptions
 } from './assets.js';
 import {
   assertValidatedDistribution, type DistributionCommand, type DistributionPackage
@@ -88,12 +88,15 @@ export function createContainerPackageManager(options: ContainerPackageManagerOp
   const capabilities = new Set(options.capabilities ?? []);
   const packages = new Map(distribution.packages.map((pkg) => [pkg.id, pkg]));
   const commands = new Map(distribution.commands.map((command) => [command.name, command]));
-  const loader = createVerifiedAssetLoader(options);
-  const maxConcurrentAssets = Math.min(requestedConcurrentAssets, options.maxPendingAssets ?? 8, options.maxConsumers ?? 128);
+  const loader = createManagedAssetLoader(options, () => drainAssets());
+  const maxPendingAssets = options.maxPendingAssets ?? 8;
+  const maxConcurrentAssets = Math.min(requestedConcurrentAssets, maxPendingAssets, options.maxConsumers ?? 128);
   const queuedAssets = new Set<() => void>();
   let loadingAssets = 0;
   const drainAssets = () => {
-    while (loadingAssets < maxConcurrentAssets && queuedAssets.size > 0) {
+    // A canceled consumer releases its semaphore slot before the loader has
+    // removed the old request. Wait for the loader's settlement notification.
+    while (loadingAssets < maxConcurrentAssets && loader.inspect().pendingRequests < maxPendingAssets && queuedAssets.size > 0) {
       const next = queuedAssets.values().next().value!;
       queuedAssets.delete(next);
       next();
