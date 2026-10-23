@@ -1652,6 +1652,7 @@ export class LldbSandboxSession {
 				});
 			})(),
 			(async () => {
+				let knownTotalFrames = totalFrames;
 				let end = totalFrames === undefined ? 100 : Math.min(totalFrames, 100);
 				while (frames.length < end && this.isCurrentValueRequest(session, version)) {
 					const { frames: page, totalFrames: total } = await this.requestStackPage(
@@ -1661,13 +1662,18 @@ export class LldbSandboxSession {
 						Math.min(20, end - frames.length)
 					);
 					if (!this.isCurrentValueRequest(session, version)) return;
+					if (total !== undefined) {
+						knownTotalFrames = total;
+						end = Math.min(total, 100);
+					}
 					if (!page.length) {
 						this.options.onDebugEvent({
 							type: 'pauseDetails',
 							sessionId,
 							stopId,
 							callStack: this.debugFrames(frames),
-							callStackComplete: true
+							callStackComplete:
+								knownTotalFrames === undefined || frames.length >= knownTotalFrames
 						});
 						break;
 					}
@@ -1682,13 +1688,13 @@ export class LldbSandboxSession {
 						ids.add(frame.id);
 					}
 					frames.push(...page);
-					if (total !== undefined) end = Math.min(total, 100);
 					this.options.onDebugEvent({
 						type: 'pauseDetails',
 						sessionId,
 						stopId,
 						callStack: this.debugFrames(frames),
-						callStackComplete: frames.length >= end
+						callStackComplete:
+							knownTotalFrames !== undefined && frames.length >= knownTotalFrames
 					});
 				}
 			})()

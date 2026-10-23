@@ -174,7 +174,7 @@ export type DebugSessionEvent =
 			reason: DebugPauseReason;
 			locals: DebugVariable[];
 			callStack: DebugFrame[];
-			/** False while retained caller pages are still arriving; omitted means complete. */
+			/** False for pending or capped caller stacks; omitted means complete. */
 			callStackComplete?: boolean;
 			threadId?: number;
 			frameId?: number;

@@ -7,7 +7,8 @@ pages of at most 20 frames, retaining the previous 100-frame limit. Continue, di
 new stops invalidate pending results. The debug controller merges details without resetting
 the selected frame, formatted argument summaries or in-flight variable requests. Variable
 values and non-selected-frame scopes still use the existing demand-driven APIs.
-The `callStackComplete` flag becomes true when the retained stack is complete. Variable
+The `callStackComplete` flag becomes true only when the full caller stack is known; a
+100-frame cap never establishes completeness. Variable
 comparison waits for complete caller identities, preserving the previous stop's values
 and saved expansion paths while pages arrive. Partial stacks never seed the next baseline.
 
