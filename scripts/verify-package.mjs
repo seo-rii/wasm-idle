@@ -166,7 +166,9 @@ void [shell, options, serve, result, binding.dispose()];
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		budget: { maxBytes: 4.75 * MiB, maxFiles: 1_050, maxPackages: 7 },
+		// Java's XML platform adapter adds 662,982 bytes in three production dependencies.
+		// Measured 5,411,573 bytes / 814 files / 9 packages; retain the existing file limit.
+		budget: { maxBytes: 5.25 * MiB, maxFiles: 1_050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -176,6 +178,10 @@ void [shell, options, serve, result, binding.dispose()];
 			'svelte'
 		],
 		imports: [
+			'const savedFetch = globalThis.fetch;',
+			"globalThis.fetch = () => { throw new Error('Java LSP fetched assets during SSR import'); };",
+			"if (typeof (await import('@wasm-idle/lsp/java')).getJavaLanguageServer !== 'function') throw new Error('Missing Java LSP API');",
+			'globalThis.fetch = savedFetch;',
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/lsp');",
 			"await import('@wasm-idle/lsp/clangd');"
@@ -186,10 +192,10 @@ void [shell, options, serve, result, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes the public container package and all reviewed LSP providers.
-		// Measured 41,115,703 bytes / 3,257 files / 62 packages; 8,137 bytes headroom.
-		// Separate plugin budgets and the production-package limit stay unchanged.
-		budget: { maxBytes: 39 * MiB + 224 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		// Includes the public container, reviewed LSP providers and Java's XML adapter.
+		// Measured 41,801,934 bytes / 3,307 files / 65 packages; 141,106 bytes headroom.
+		// Root, container, terminal, debug and aggregate package-count limits stay unchanged.
+		budget: { maxBytes: 40 * MiB, maxFiles: 3_350, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
