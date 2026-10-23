@@ -11,7 +11,19 @@ import type {
 	DebugResolvedDataBreakpoint,
 	DebugVariable
 } from '$lib/playground/options';
-import { ProtocolError, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	ProtocolError,
+	normalizeDebugSourceBreakpoints,
+	mergeDebugBreakpointLines,
+	assertDebugBreakpointSupport,
+	normalizeDebugSteppingOptions,
+	type DebugSourceBreakpoint,
+	type DebugSteppingOptions,
+	type DebugEvaluateOptions,
+	type DebugEvaluateResult,
+	type DebugVariablePresentationHint,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 import {
 	createBrowserLldbSession,
 	DapProtocolError,
@@ -54,7 +66,9 @@ export interface LldbSandboxSessionOptions {
 	sourceBreakpoints?: Array<{
 		sourcePath: `/workspace/${string}`;
 		lines: number[];
+		breakpoints?: DebugSourceBreakpoint[];
 	}>;
+	debugSteppingOptions?: DebugSteppingOptions;
 	pauseOnEntry: boolean;
 	/** Source entry; the low-level runtime still stops safely before _start executes. */
 	pauseAtMain?: boolean;
@@ -154,6 +168,38 @@ function dapOptionalNonNegativeSafeInteger(
 	return value;
 }
 
+function normalizePresentationHint(
+	value: unknown,
+	command: string,
+	path: string
+): DebugVariablePresentationHint {
+	assertDapRecord(value, command, path);
+	const result: DebugVariablePresentationHint = {};
+	for (const key of ['kind', 'visibility'] as const) {
+		if (value[key] !== undefined) {
+			assertDapString(value[key], command, `${path}.${key}`);
+			result[key] = value[key];
+		}
+	}
+	if (value.lazy !== undefined) {
+		assertDapBoolean(value.lazy, command, `${path}.lazy`);
+		result.lazy = value.lazy;
+	}
+	if (value.attributes !== undefined) {
+		if (!Array.isArray(value.attributes) || value.attributes.length > 64)
+			invalidDapResponse(
+				command,
+				`${path}.attributes`,
+				'expected an array of at most 64 strings'
+			);
+		result.attributes = value.attributes.map((attribute, index) => {
+			assertDapString(attribute, command, `${path}.attributes[${index}]`);
+			return attribute;
+		});
+	}
+	return result;
+}
+
 function snapshotBreakpointLines(lines: readonly number[]) {
 	if (lines.some((line) => !Number.isSafeInteger(line) || line < 1)) {
 		throw new RangeError('LLDB breakpoint lines must be positive safe integers.');
@@ -193,7 +239,17 @@ function assertOptionalBooleanArgument(value: unknown, name: string) {
 	}
 }
 
+let nextSandboxSessionId = 1;
+
 export class LldbSandboxSession {
+	private readonly sessionIdentity = `lldb-sandbox-${nextSandboxSessionId++}`;
+	private stopId = 0;
+	private supportsConditionalBreakpoints = false;
+	private supportsHitConditionalBreakpoints = false;
+	private supportsLogPoints = false;
+	private supportsSkipLibraryCode = false;
+	private supportsEvaluateForHovers = false;
+	private readonly breakpointSpecificationsBySource = new Map<string, DebugSourceBreakpoint[]>();
 	private session?: BrowserLldbSession;
 	private startupAbortController?: AbortController;
 	private activeThreadId = 1;
@@ -231,8 +287,15 @@ export class LldbSandboxSession {
 		const sourceBreakpoints = options.sourceBreakpoints?.length
 			? options.sourceBreakpoints
 			: [{ sourcePath: options.sourcePath, lines: options.breakpoints }];
-		for (const { sourcePath, lines } of sourceBreakpoints) {
-			this.breakpointsBySource.set(sourcePath, snapshotBreakpointLines(lines));
+		for (const { sourcePath, lines, breakpoints } of sourceBreakpoints) {
+			const values = breakpoints ? normalizeDebugSourceBreakpoints(breakpoints) : undefined;
+			if (values) this.breakpointSpecificationsBySource.set(sourcePath, values);
+			this.breakpointsBySource.set(
+				sourcePath,
+				values
+					? values.filter((value) => value.enabled !== false).map((value) => value.line)
+					: snapshotBreakpointLines(lines)
+			);
 		}
 		for (const source of options.artifact.sources) {
 			if (source.contentSha256) {
@@ -334,7 +397,14 @@ export class LldbSandboxSession {
 		let session!: BrowserLldbSession;
 		const sourceBreakpoints = Array.from(this.breakpointsBySource, ([sourcePath, lines]) => ({
 			sourcePath,
-			lines: [...lines]
+			lines: [...lines],
+			...(this.breakpointSpecificationsBySource.has(sourcePath)
+				? {
+						breakpoints: normalizeDebugSourceBreakpoints(
+							this.breakpointSpecificationsBySource.get(sourcePath)!
+						)
+					}
+				: {})
 		}));
 		const configuredBreakpointVersion = this.breakpointVersion;
 		session = createBrowserLldbSession({
@@ -344,10 +414,18 @@ export class LldbSandboxSession {
 			module: this.options.artifact.bytes,
 			moduleSha256: this.options.artifact.descriptor?.moduleSha256,
 			sources: this.options.artifact.sources,
-			breakpoints: sourceBreakpoints.map(({ sourcePath, lines }) => ({
+			breakpoints: sourceBreakpoints.map(({ sourcePath, lines, breakpoints }) => ({
 				source: { path: sourcePath },
-				lines
+				lines,
+				...(breakpoints ? { breakpoints } : {})
 			})),
+			...(this.options.debugSteppingOptions
+				? {
+						steppingOptions: normalizeDebugSteppingOptions(
+							this.options.debugSteppingOptions
+						)
+					}
+				: {}),
 			launch: {
 				program: '/workspace/program.wasm',
 				stopOnEntry: this.options.pauseOnEntry,
@@ -401,6 +479,19 @@ export class LldbSandboxSession {
 			this.supportsDataBreakpoints =
 				manifestSupportsDataBreakpoints && capabilities.supportsDataBreakpoints === true;
 			this.supportsValueFormatting = capabilities.supportsValueFormattingOptions === true;
+			this.supportsConditionalBreakpoints =
+				manifest.debugger?.capabilities?.conditionalBreakpoints === true &&
+				capabilities.supportsConditionalBreakpoints === true;
+			this.supportsHitConditionalBreakpoints =
+				manifest.debugger?.capabilities?.hitConditionalBreakpoints === true &&
+				capabilities.supportsHitConditionalBreakpoints === true;
+			this.supportsLogPoints =
+				manifest.debugger?.capabilities?.logPoints === true &&
+				capabilities.supportsLogPoints === true;
+			this.supportsSkipLibraryCode =
+				manifest.debugger?.capabilities?.skipLibraryCode === true;
+			this.supportsEvaluateForHovers =
+				this.supportsEvaluateExpressions && capabilities.supportsEvaluateForHovers === true;
 			this.initialized = true;
 			if (configuredBreakpointVersion === this.breakpointVersion) {
 				for (const { sourcePath, lines } of sourceBreakpoints) {
@@ -412,7 +503,9 @@ export class LldbSandboxSession {
 				}
 			} else {
 				for (const [sourcePath, lines] of this.breakpointsBySource) {
-					await this.setBreakpoints(lines, sourcePath);
+					const values = this.breakpointSpecificationsBySource.get(sourcePath);
+					if (values) await this.setSourceBreakpoints(values, sourcePath);
+					else await this.setBreakpoints(lines, sourcePath);
 				}
 			}
 			// Startup breakpoint edits must reach LLDB before automatic source entry. Do not
@@ -528,7 +621,52 @@ export class LldbSandboxSession {
 	}
 
 	async setBreakpoints(lines: number[], sourcePath = this.options.sourcePath) {
-		const requestedLines = snapshotBreakpointLines(lines);
+		if (this.breakpointSpecificationsBySource.has(sourcePath))
+			return this.setSourceBreakpoints(
+				mergeDebugBreakpointLines(
+					this.breakpointSpecificationsBySource.get(sourcePath)!,
+					snapshotBreakpointLines(lines)
+				),
+				sourcePath
+			);
+		return this.updateSourceBreakpoints(
+			snapshotBreakpointLines(lines).map((line) => ({ line })),
+			sourcePath,
+			false
+		);
+	}
+
+	async setSourceBreakpoints(
+		breakpoints: DebugSourceBreakpoint[],
+		sourcePath = this.options.sourcePath
+	) {
+		const values = normalizeDebugSourceBreakpoints(breakpoints);
+		if (this.initialized)
+			assertDebugBreakpointSupport(values, {
+				conditionalBreakpoints: this.supportsConditionalBreakpoints,
+				hitConditionalBreakpoints: this.supportsHitConditionalBreakpoints,
+				logPoints: this.supportsLogPoints
+			});
+		return this.updateSourceBreakpoints(values, sourcePath, true);
+	}
+
+	async setSteppingOptions(options: DebugSteppingOptions) {
+		const value = normalizeDebugSteppingOptions(options);
+		if (!this.supportsSkipLibraryCode || !this.targetStopped)
+			throw new Error('Pause a qualified LLDB session before changing stepping options.');
+		await this.requireSession().setSteppingOptions(value);
+	}
+
+	private async updateSourceBreakpoints(
+		values: DebugSourceBreakpoint[],
+		sourcePath: `/workspace/${string}`,
+		structured: boolean
+	) {
+		const requestedLines = values
+			.filter((value) => value.enabled !== false)
+			.map((value) => value.line);
+		if (structured) this.breakpointSpecificationsBySource.set(sourcePath, values);
+		else this.breakpointSpecificationsBySource.delete(sourcePath);
 		this.breakpointsBySource.set(sourcePath, requestedLines);
 		this.breakpointVersion += 1;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
@@ -537,7 +675,9 @@ export class LldbSandboxSession {
 		const session = this.requireSession();
 		let breakpoints: Array<{ verified?: boolean; line?: number; message?: string }>;
 		try {
-			breakpoints = await session.setBreakpoints({ path: sourcePath }, requestedLines);
+			breakpoints = structured
+				? await session.setSourceBreakpoints({ path: sourcePath }, values)
+				: await session.setBreakpoints({ path: sourcePath }, requestedLines);
 		} catch (error) {
 			if (
 				this.session !== session ||
@@ -559,19 +699,48 @@ export class LldbSandboxSession {
 
 	async evaluate(expression: string) {
 		if (!this.supportsEvaluateExpressions || !this.activeFrameId) return '?';
+		return (await this.evaluateValue(expression)).result;
+	}
+
+	async evaluateValue(
+		expression: string,
+		options: DebugEvaluateOptions = {}
+	): Promise<DebugEvaluateResult> {
+		assertBoundedNonEmptyStringArgument(expression, 'expression');
+		if (
+			!options ||
+			typeof options !== 'object' ||
+			Array.isArray(options) ||
+			Object.keys(options).some((key) => key !== 'frameId' && key !== 'context')
+		)
+			throw new TypeError('Invalid evaluate options.');
+		if (options.frameId !== undefined)
+			assertPositiveSafeIntegerArgument(options.frameId, 'frameId');
+		if (
+			options.context !== undefined &&
+			options.context !== 'watch' &&
+			options.context !== 'hover'
+		)
+			throw new TypeError('evaluate context must be watch or hover.');
+		const unavailable: DebugEvaluateResult = { result: '?', variablesReference: 0 };
+		if (
+			!this.supportsEvaluateExpressions ||
+			!this.activeFrameId ||
+			(options.context === 'hover' && !this.supportsEvaluateForHovers)
+		)
+			return unavailable;
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		const scopeRequestVersion = this.scopeRequestVersion;
-		const frameId = this.activeFrameId;
+		const frameId = options.frameId ?? this.activeFrameId;
 		try {
 			const response = await session.request<unknown>('evaluate', {
 				expression,
 				frameId,
-				context: 'watch'
+				context: options.context ?? 'watch'
 			});
-			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
-				return '?';
-			}
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion))
+				return unavailable;
 			assertDapRecord(response, 'evaluate', 'body');
 			assertDapString(response.result, 'evaluate', 'result');
 			assertDapNonNegativeSafeInteger(
@@ -579,13 +748,44 @@ export class LldbSandboxSession {
 				'evaluate',
 				'variablesReference'
 			);
-			return response.result;
+			for (const key of ['type', 'memoryReference'] as const)
+				if (response[key] !== undefined) assertDapString(response[key], 'evaluate', key);
+			const namedVariables = dapOptionalNonNegativeSafeInteger(
+				response,
+				'namedVariables',
+				'evaluate',
+				'body'
+			);
+			const indexedVariables = dapOptionalNonNegativeSafeInteger(
+				response,
+				'indexedVariables',
+				'evaluate',
+				'body'
+			);
+			const presentationHint =
+				response.presentationHint === undefined
+					? undefined
+					: normalizePresentationHint(
+							response.presentationHint,
+							'evaluate',
+							'presentationHint'
+						);
+			return {
+				result: response.result,
+				variablesReference: response.variablesReference,
+				...(response.type === undefined ? {} : { type: response.type as string }),
+				...(response.memoryReference === undefined
+					? {}
+					: { memoryReference: response.memoryReference as string }),
+				...(namedVariables === undefined ? {} : { namedVariables }),
+				...(indexedVariables === undefined ? {} : { indexedVariables }),
+				...(presentationHint === undefined ? {} : { presentationHint })
+			};
 		} catch (error) {
-			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
-				return '?';
-			}
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion))
+				return unavailable;
 			this.rethrowProtocolError(error);
-			return '?';
+			return unavailable;
 		}
 	}
 
@@ -616,6 +816,14 @@ export class LldbSandboxSession {
 						'variables',
 						`${path}.variablesReference`
 					);
+					const presentationHint =
+						variable.presentationHint === undefined
+							? undefined
+							: normalizePresentationHint(
+									variable.presentationHint,
+									'variables',
+									`${path}.presentationHint`
+								);
 					const type = variable.type;
 					if (type !== undefined) assertDapString(type, 'variables', `${path}.type`);
 					const evaluateName = variable.evaluateName;
@@ -640,6 +848,7 @@ export class LldbSandboxSession {
 					);
 					return {
 						name: variable.name,
+						...(presentationHint === undefined ? {} : { presentationHint }),
 						value: variable.value,
 						type,
 						...(evaluateName === undefined ? {} : { evaluateName }),
@@ -1381,10 +1590,20 @@ export class LldbSandboxSession {
 		);
 		this.options.onDebugEvent({
 			type: 'pause',
+			sessionId: `${this.sessionIdentity}-${this.lifecycleVersion}`,
+			stopId: ++this.stopId,
 			capabilities: {
 				readMemory: this.supportsReadMemory,
 				writeMemory: this.supportsWriteMemory,
-				dataBreakpoints: this.supportsDataBreakpoints
+				dataBreakpoints: this.supportsDataBreakpoints,
+				...(this.supportsEvaluateExpressions ? { evaluateValues: true } : {}),
+				...(this.supportsEvaluateForHovers ? { evaluateForHovers: true } : {}),
+				...(this.supportsConditionalBreakpoints ? { conditionalBreakpoints: true } : {}),
+				...(this.supportsHitConditionalBreakpoints
+					? { hitConditionalBreakpoints: true }
+					: {}),
+				...(this.supportsLogPoints ? { logPoints: true } : {}),
+				...(this.supportsSkipLibraryCode ? { skipLibraryCode: true } : {})
 			},
 			line: selectedFrame.line,
 			sourcePath: selectedFrame.source?.path,

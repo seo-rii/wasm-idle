@@ -18,7 +18,9 @@ export interface RuntimeWasmModuleServiceOptions {
 	 */
 	compileKey: string;
 	maxAssetBytes: number;
-	compile?: (ownedBytes: Uint8Array<ArrayBuffer>) => Promise<WebAssembly.Module>;
+	compile?: (ownedBytes: Uint8Array<ArrayBuffer>, signal?: AbortSignal) => Promise<WebAssembly.Module>;
+	/** Optional owner admission for native hashing; release runs only after hashing settles. */
+	acquireVerificationSlot?: (signal: AbortSignal) => Promise<() => void>;
 	signal?: AbortSignal;
 }
 
@@ -27,9 +29,20 @@ export interface RuntimeWasmModuleService {
 	close(): void;
 }
 
+export interface PreparedRuntimeWasmModuleServiceOptions extends RuntimeWasmModuleServiceOptions {
+	/** Owner-selected source, snapshotted before the service can receive a request. */
+	bytes: Uint8Array;
+}
+
 export interface RuntimeWasmModuleRequestOptions {
 	signal?: AbortSignal;
 	timeoutMs?: number;
+}
+export interface PreparedRuntimeWasmModuleRequestOptions extends RuntimeWasmModuleRequestOptions {
+	receipt: RuntimeWasmModuleReceipt;
+	identity: string;
+	compileKey: string;
+	maxAssetBytes: number;
 }
 
 const abortReason = (signal: AbortSignal) =>
@@ -64,9 +77,18 @@ export function serveRuntimeWasmModule(
 	port: MessagePort,
 	options: RuntimeWasmModuleServiceOptions
 ): Pick<RuntimeWasmModuleService, 'close'> {
+	return serveModule(port, options);
+}
+
+function serveModule(
+	port: MessagePort,
+	options: RuntimeWasmModuleServiceOptions,
+	ownerBytes?: Uint8Array
+): Pick<RuntimeWasmModuleService, 'close'> {
 	const receipt = { bytes: options.receipt.bytes, sha256: options.receipt.sha256 };
 	const { cache, maxAssetBytes, identity, compileKey } = options;
 	const compile = options.compile ?? nativeCompile;
+	const acquireVerificationSlot = options.acquireVerificationSlot;
 	const parent = options.signal;
 	if (
 		!Number.isSafeInteger(maxAssetBytes) ||
@@ -92,6 +114,11 @@ export function serveRuntimeWasmModule(
 	if (!globalThis.crypto?.subtle) {
 		throw new Error('Runtime Wasm module verification requires Web Crypto');
 	}
+	if (ownerBytes !== undefined && (!(ownerBytes instanceof Uint8Array) || ownerBytes.byteLength !== receipt.bytes)) {
+		throw new TypeError('Prepared runtime Wasm source must match its pinned receipt length');
+	}
+	const prepared = ownerBytes !== undefined;
+	let source = prepared ? Uint8Array.from(ownerBytes!) : undefined;
 	const key = JSON.stringify([
 		'runtime-wasm-module-v1',
 		identity,
@@ -106,10 +133,12 @@ export function serveRuntimeWasmModule(
 	const finish = () => {
 		if (closed) return;
 		closed = true;
+		source = undefined;
 		parent?.removeEventListener('abort', abort);
 		closePort(port);
 	};
 	const close = () => {
+		source = undefined;
 		controller.abort(
 			parent?.aborted
 				? abortReason(parent)
@@ -129,27 +158,29 @@ export function serveRuntimeWasmModule(
 		if (received) return;
 		received = true;
 		void (async () => {
-			if (
-				message?.type !== 'compile' ||
-				!(message.bytes instanceof ArrayBuffer) ||
-				message.bytes.byteLength !== receipt.bytes
-			) {
+			if (prepared ? message?.type !== 'prepare' || Object.keys(message).length !== 1 :
+				message?.type !== 'compile' || !(message.bytes instanceof ArrayBuffer) || message.bytes.byteLength !== receipt.bytes) {
 				throw new Error('Invalid runtime Wasm module request');
 			}
-			const bytes = new Uint8Array(message.bytes);
+			const bytes = source ?? new Uint8Array(message!.bytes as ArrayBuffer);
+			source = undefined;
 			// MessagePort cloning/transfer gives this realm ownership. Recheck the pinned
 			// receipt even on a cache hit, before permitting reuse of a compiled module.
-			const digest = await crypto.subtle.digest('SHA-256', bytes);
-			const hash = Array.from(new Uint8Array(digest), (byte) =>
-				byte.toString(16).padStart(2, '0')
-			).join('');
-			if (hash !== receipt.sha256) throw new Error('Runtime Wasm module integrity mismatch');
+			const release = await acquireVerificationSlot?.(controller.signal);
+			try {
+				controller.signal.throwIfAborted();
+				const digest = await crypto.subtle.digest('SHA-256', bytes);
+				const hash = Array.from(new Uint8Array(digest), (byte) =>
+					byte.toString(16).padStart(2, '0')
+				).join('');
+				if (hash !== receipt.sha256) throw new Error('Runtime Wasm module integrity mismatch');
+			} finally { release?.(); }
 			controller.signal.throwIfAborted();
 			let module = cache?.get<WebAssembly.Module>(key);
 			if (!module) {
 				const start = async (signal: AbortSignal) => {
 					signal.throwIfAborted();
-					const module = await compile(bytes);
+					const module = await compile(bytes, signal);
 					signal.throwIfAborted();
 					if (!(module instanceof WebAssembly.Module)) {
 						throw new Error('Runtime Wasm compiler did not return a module');
@@ -163,7 +194,8 @@ export function serveRuntimeWasmModule(
 					? await cache.share(key, controller.signal, start)
 					: await start(controller.signal);
 			}
-			if (!closed) port.postMessage({ type: 'module', module });
+			if (!closed) port.postMessage({ type: 'module', module,
+				...(prepared ? { receipt, identity, compileKey, maxAssetBytes } : {}) });
 		})()
 			.catch((error: unknown) => {
 				try {
@@ -189,10 +221,22 @@ export function serveRuntimeWasmModule(
 export function createRuntimeWasmModuleService(
 	options: RuntimeWasmModuleServiceOptions
 ): RuntimeWasmModuleService {
+	return createModuleService(options);
+}
+
+/** Serve owner-owned bytes without sending executable byte buffers through a worker. */
+export function createPreparedRuntimeWasmModuleService(
+	options: PreparedRuntimeWasmModuleServiceOptions
+): RuntimeWasmModuleService {
+	if (!(options.bytes instanceof Uint8Array)) throw new TypeError('Prepared runtime Wasm source requires bytes');
+	return createModuleService(options, options.bytes);
+}
+
+function createModuleService(options: RuntimeWasmModuleServiceOptions, source?: Uint8Array): RuntimeWasmModuleService {
 	const channel = new MessageChannel();
 	let service: Pick<RuntimeWasmModuleService, 'close'>;
 	try {
-		service = serveRuntimeWasmModule(channel.port1, options);
+		service = serveModule(channel.port1, options, source);
 	} catch (error) {
 		closePort(channel.port1);
 		closePort(channel.port2);
@@ -212,6 +256,40 @@ export function requestRuntimeWasmModule(
 	bytes: Uint8Array,
 	port: MessagePort,
 	options: RuntimeWasmModuleRequestOptions = {}
+): Promise<WebAssembly.Module> {
+	return requestModule(port, options, () => {
+		const buffer = bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+			? bytes.buffer : Uint8Array.from(bytes).buffer;
+		port.postMessage({ type: 'compile', bytes: buffer }, [buffer]);
+	});
+}
+
+/** The endpoint is a trusted owner capability; peers cannot supply a module or claimed pin. */
+export function requestPreparedRuntimeWasmModule(
+	port: MessagePort,
+	options: PreparedRuntimeWasmModuleRequestOptions
+): Promise<WebAssembly.Module> {
+	if (!options || !options.receipt || !Number.isSafeInteger(options.maxAssetBytes) || options.maxAssetBytes < 8 ||
+		!Number.isSafeInteger(options.receipt.bytes) || options.receipt.bytes < 8 || options.receipt.bytes > options.maxAssetBytes ||
+		!/^[a-f0-9]{64}$/u.test(options.receipt.sha256) || typeof options.identity !== 'string' || !options.identity ||
+		typeof options.compileKey !== 'string' || !options.compileKey) {
+		closePort(port);
+		return Promise.reject(new TypeError('Prepared runtime Wasm request requires a pinned receipt and profile'));
+	}
+	const { identity, compileKey, maxAssetBytes } = options;
+	const { sha256, bytes } = options.receipt;
+	return requestModule(port, options, () => port.postMessage({ type: 'prepare' }), message => {
+		const value = message as Record<string, unknown>, receipt = value.receipt as RuntimeWasmModuleReceipt | undefined;
+		return receipt?.sha256 === sha256 && receipt.bytes === bytes && value.identity === identity &&
+			value.compileKey === compileKey && value.maxAssetBytes === maxAssetBytes;
+	});
+}
+
+function requestModule(
+	port: MessagePort,
+	options: RuntimeWasmModuleRequestOptions,
+	send: () => void,
+	accept?: (message: unknown) => boolean
 ): Promise<WebAssembly.Module> {
 	const timeoutMs = options.timeoutMs ?? 120_000;
 	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
@@ -253,7 +331,8 @@ export function requestRuntimeWasmModule(
 				message?: unknown;
 			} | null;
 			if (message?.type === 'module' && message.module instanceof WebAssembly.Module) {
-				finish(undefined, message.module);
+				if (accept && !accept(message)) finish(new Error('Runtime Wasm module receipt or profile mismatch'), undefined, true);
+				else finish(undefined, message.module);
 			} else {
 				finish(
 					new Error(
@@ -272,13 +351,7 @@ export function requestRuntimeWasmModule(
 			return;
 		}
 		try {
-			const buffer =
-				bytes.buffer instanceof ArrayBuffer &&
-				bytes.byteOffset === 0 &&
-				bytes.byteLength === bytes.buffer.byteLength
-					? bytes.buffer
-					: Uint8Array.from(bytes).buffer;
-			port.postMessage({ type: 'compile', bytes: buffer }, [buffer]);
+			send();
 			port.start();
 		} catch (error) {
 			finish(error instanceof Error ? error : new Error(String(error)), undefined, true);

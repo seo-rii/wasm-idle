@@ -2,6 +2,7 @@ import type {
 	BoundSandbox as CoreBoundSandbox,
 	DebugCommand,
 	DebugSourceBreakpoints,
+	DebugSteppingOptions,
 	PlaygroundBinding as CorePlaygroundBinding,
 	ProgressLike,
 	SandboxExecutionOptions as CoreSandboxExecutionOptions,
@@ -40,6 +41,7 @@ export interface SandboxExecutionOptions {
 	interactive?: boolean;
 	breakpoints?: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	debugSteppingOptions?: DebugSteppingOptions;
 	pauseOnEntry?: boolean;
 	stdin?: string;
 	signal?: AbortSignal;

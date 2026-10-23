@@ -34,6 +34,7 @@ export interface DapInitializeRequestArguments {
 export interface DapCapabilities {
 	supportsConfigurationDoneRequest?: boolean;
 	supportsConditionalBreakpoints?: boolean;
+	supportsHitConditionalBreakpoints?: boolean;
 	supportsLogPoints?: boolean;
 	supportsEvaluateForHovers?: boolean;
 	supportsReadMemoryRequest?: boolean;

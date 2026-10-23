@@ -1,5 +1,8 @@
 import type {
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
 	DebugDataBreakpoint,
 	DebugDataBreakpointInfoArguments,
 	DebugSessionEvent,
@@ -19,7 +22,12 @@ import {
 	normalizeDwarfWorkspacePath,
 	type BrowserClangPrecompiledHeader
 } from '@wasm-idle/llvm-core/clang';
-import { resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	resolveExecutionLimits,
+	normalizeDebugSourceBreakpoints,
+	mergeDebugBreakpointLines,
+	assertDebugBreakpointSupport
+} from '@wasm-idle/core';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -82,6 +90,10 @@ class Clang implements Sandbox {
 	private disposal?: Promise<void>;
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
+	private readonly lldbBreakpointSpecifications = new Map<
+		`/workspace/${string}`,
+		DebugSourceBreakpoint[]
+	>();
 	private debugEvaluationQueue: Promise<void> = Promise.resolve();
 	// A helper worker builds the precompiled <bits/stdc++.h> so the warm worker stays free for
 	// runs. The header is sent once to each warm worker, which keeps it for later compiles.
@@ -299,13 +311,51 @@ class Clang implements Sandbox {
 				this.language === 'C' ? 'main.c' : 'main.cc'
 			);
 			this.lldbBreakpoints.clear();
+			this.lldbBreakpointSpecifications.clear();
 			if (debugMode === 'lldb') {
 				for (const sourceBreakpoints of options.sourceBreakpoints || []) {
-					this.setBreakpoints(sourceBreakpoints.lines, sourceBreakpoints.sourcePath);
+					if (sourceBreakpoints.breakpoints) {
+						const values = normalizeDebugSourceBreakpoints(
+							sourceBreakpoints.breakpoints
+						);
+						const path = normalizeLldbSourcePath(
+							sourceBreakpoints.sourcePath,
+							sourcePath.replace(/^\/workspace\//u, '')
+						);
+						this.lldbBreakpointSpecifications.set(path, values);
+						this.lldbBreakpoints.set(
+							path,
+							values
+								.filter((value) => value.enabled !== false)
+								.map((value) => value.line)
+						);
+					} else
+						this.setBreakpoints(sourceBreakpoints.lines, sourceBreakpoints.sourcePath);
 				}
-				this.setBreakpoints([...(options.breakpoints || [])], sourcePath);
+				if (!this.lldbBreakpointSpecifications.has(sourcePath))
+					this.setBreakpoints([...(options.breakpoints || [])], sourcePath);
 			} else {
-				this.setBreakpoints([...(options.breakpoints || [])], sourcePath);
+				for (const source of options.sourceBreakpoints || [])
+					if (source.breakpoints)
+						assertDebugBreakpointSupport(
+							normalizeDebugSourceBreakpoints(source.breakpoints),
+							{}
+						);
+				const source = options.sourceBreakpoints?.find(
+					(entry) =>
+						normalizeLldbSourcePath(
+							entry.sourcePath,
+							sourcePath.replace(/^\/workspace\//u, '')
+						) === sourcePath
+				);
+				this.setBreakpoints(
+					source?.breakpoints
+						? source.breakpoints
+								.filter((value) => value.enabled !== false)
+								.map((value) => value.line)
+						: [...(options.breakpoints || [])],
+					sourcePath
+				);
 			}
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
@@ -348,10 +398,18 @@ class Clang implements Sandbox {
 							this.lldbBreakpoints,
 							([sourcePath, lines]) => ({
 								sourcePath,
-								lines: [...lines]
+								lines: [...lines],
+								...(this.lldbBreakpointSpecifications.has(sourcePath)
+									? {
+											breakpoints: normalizeDebugSourceBreakpoints(
+												this.lldbBreakpointSpecifications.get(sourcePath)!
+											)
+										}
+									: {})
 							})
 						),
 						pauseOnEntry: !!options.pauseOnEntry,
+						debugSteppingOptions: options.debugSteppingOptions,
 						pauseAtMain: true,
 						programArgs,
 						stdin: options.stdin,
@@ -485,6 +543,14 @@ class Clang implements Sandbox {
 			return this.lldbSession.setBreakpoints(lines, resolvedSourcePath);
 		}
 		if (this.debugMode === 'lldb') {
+			if (this.lldbBreakpointSpecifications.has(resolvedSourcePath))
+				return this.setSourceBreakpoints(
+					mergeDebugBreakpointLines(
+						this.lldbBreakpointSpecifications.get(resolvedSourcePath)!,
+						lines
+					),
+					resolvedSourcePath
+				);
 			this.lldbBreakpoints.set(resolvedSourcePath, [...lines]);
 			return;
 		}
@@ -497,6 +563,40 @@ class Clang implements Sandbox {
 		}
 		Atomics.store(control, 3, next.length);
 		Atomics.add(control, 2, 1);
+	}
+
+	async setSourceBreakpoints(breakpoints: DebugSourceBreakpoint[], sourcePath?: string) {
+		const values = normalizeDebugSourceBreakpoints(breakpoints);
+		const path = normalizeLldbSourcePath(
+			sourcePath,
+			this.language === 'C' ? 'main.c' : 'main.cc'
+		);
+		if (this.lldbSession) return this.lldbSession.setSourceBreakpoints(values, path);
+		if (this.debugMode === 'lldb') {
+			this.lldbBreakpointSpecifications.set(path, values);
+			this.lldbBreakpoints.set(
+				path,
+				values.filter((value) => value.enabled !== false).map((value) => value.line)
+			);
+			return;
+		}
+		assertDebugBreakpointSupport(values, {});
+		this.setBreakpoints(
+			values.filter((value) => value.enabled !== false).map((value) => value.line),
+			sourcePath
+		);
+	}
+
+	async debugSetSteppingOptions(options: DebugSteppingOptions) {
+		if (!this.lldbSession) throw new Error('Stepping options require an LLDB session.');
+		await this.lldbSession.setSteppingOptions(options);
+	}
+
+	async debugEvaluateValue(expression: string, options?: DebugEvaluateOptions) {
+		if (this.lldbSession) return this.lldbSession.evaluateValue(expression, options);
+		if (options?.frameId !== undefined || options?.context === 'hover')
+			return { result: '?', variablesReference: 0 };
+		return { result: await this.debugEvaluate(expression), variablesReference: 0 };
 	}
 
 	debugEvaluate(expression: string) {

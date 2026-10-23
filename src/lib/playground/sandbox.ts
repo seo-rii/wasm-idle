@@ -1,14 +1,18 @@
 import type {
 	CompilerDiagnostic,
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugVariable,
+	DebugScope,
 	DebugDataBreakpoint,
 	DebugDataBreakpointInfo,
 	DebugDataBreakpointInfoArguments,
 	DebugMemory,
 	DebugResolvedDataBreakpoint,
-	DebugScope,
 	DebugSessionEvent,
-	DebugVariable,
 	DebugWriteMemoryResult,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -51,6 +55,15 @@ export interface Sandbox {
 	debugPause?: () => void | Promise<void>;
 	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugEvaluateValue?: (
+		expression: string,
+		options?: DebugEvaluateOptions
+	) => Promise<DebugEvaluateResult>;
+	setSourceBreakpoints?: (
+		breakpoints: DebugSourceBreakpoint[],
+		sourcePath?: string
+	) => Promise<void>;
+	debugSetSteppingOptions?: (options: DebugSteppingOptions) => Promise<void>;
 	debugVariables?: (
 		variablesReference: number,
 		start?: number,

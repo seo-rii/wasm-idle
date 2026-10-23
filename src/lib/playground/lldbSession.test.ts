@@ -184,6 +184,34 @@ class FakeRuntimeSession {
 		}));
 	}
 
+	async setSourceBreakpoints(
+		source: { path: string },
+		values: Array<{ line: number; enabled?: boolean; hitCondition?: string }>
+	) {
+		const enabled = values.filter((value) => value.enabled !== false);
+		const response = await this.request<{
+			breakpoints?: Array<{ verified?: boolean; line?: number }>;
+		}>('setBreakpoints', {
+			source,
+			breakpoints: enabled.map(({ enabled: _enabled, ...value }) => value),
+			lines: enabled.map((value) => value.line)
+		});
+		return enabled.map((value, index) => ({
+			verified: response.breakpoints?.[index]?.verified === true,
+			line: response.breakpoints?.[index]?.line ?? value.line,
+			source
+		}));
+	}
+
+	async setSteppingOptions(options: { skipLibraryCode: boolean }) {
+		await this.request('evaluate', {
+			context: 'repl',
+			expression: options.skipLibraryCode
+				? '`settings set target.process.thread.step-avoid-regexp ^std::'
+				: '`settings set target.process.thread.step-avoid-regexp ^$'
+		});
+	}
+
 	async disconnect() {
 		this.disconnectCount += 1;
 	}
@@ -1460,11 +1488,11 @@ describe('LldbSandboxSession', () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: 'pause',
-					capabilities: {
+					capabilities: expect.objectContaining({
 						readMemory: true,
 						writeMemory: true,
 						dataBreakpoints: false
-					},
+					}),
 					line: 6,
 					sourcePath: '/workspace/main.cpp',
 					sourceContentSha256: 'main-source-sha',
@@ -4146,5 +4174,129 @@ describe('LldbSandboxSession', () => {
 
 		await expect(completion).resolves.toBe(true);
 		expect(runtimeState.session!.disposeCount).toBe(1);
+	});
+	describe('structured debugger APIs', () => {
+		async function startFeatures(capabilities: Record<string, boolean> = {}) {
+			const events: any[] = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/runtime.json',
+				runtimeBaseUrl: 'https://example.com/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2, debugger: { capabilities } })
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
+			return { controller, completion, events, session: runtimeState.session! };
+		}
+
+		it('keeps expandable evaluate metadata and honors explicit hover context and frame', async () => {
+			runtimeState.initializeCapabilities.supportsEvaluateForHovers = true;
+			const { controller, completion, session } = await startFeatures({
+				evaluateExpressions: true
+			});
+			const result = {
+				result: 'size=2',
+				type: 'std::vector<int>',
+				variablesReference: 70,
+				indexedVariables: 2,
+				namedVariables: 0,
+				memoryReference: '0x20',
+				presentationHint: { kind: 'data', attributes: ['readOnly'] }
+			};
+			runtimeState.responseOverrides.set('evaluate', result);
+			await expect(
+				controller.evaluateValue('values', { frameId: 42, context: 'hover' })
+			).resolves.toEqual(result);
+			expect(session.requests.at(-1)).toEqual({
+				command: 'evaluate',
+				args: { expression: 'values', frameId: 42, context: 'hover' }
+			});
+			await expect(controller.evaluate('values')).resolves.toBe('size=2');
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('does not send evaluate or unsupported breakpoint options for an unqualified runtime', async () => {
+			runtimeState.initializeCapabilities.supportsConditionalBreakpoints = true;
+			runtimeState.initializeCapabilities.supportsLogPoints = true;
+			const { controller, completion, session, events } = await startFeatures();
+			await expect(controller.evaluateValue('values')).resolves.toEqual({
+				result: '?',
+				variablesReference: 0
+			});
+			await expect(
+				controller.setSourceBreakpoints([{ line: 6, condition: 'ready' }])
+			).rejects.toThrow('condition');
+			await expect(
+				controller.setSourceBreakpoints([{ line: 6, logMessage: '{ready}' }])
+			).rejects.toThrow('logMessage');
+			expect(
+				session.requests.some(
+					(request) =>
+						request.command === 'evaluate' || request.command === 'setBreakpoints'
+				)
+			).toBe(false);
+			expect(
+				events.find((event) => event.type === 'pause').capabilities.returnValues ?? false
+			).toBe(false);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('discards a structured value resolved after resume and increments real stop identity', async () => {
+			const { controller, completion, session, events } = await startFeatures({
+				evaluateExpressions: true
+			});
+			let resolve!: (value: unknown) => void;
+			runtimeState.responseOverrides.set(
+				'evaluate',
+				new Promise((yes) => {
+					resolve = yes;
+				})
+			);
+			const value = controller.evaluateValue('values');
+			const first = events.find((event) => event.type === 'pause');
+			session.emit({ event: 'continued', body: { threadId: 7 } });
+			resolve({ result: 'old', variablesReference: 70 });
+			await expect(value).resolves.toEqual({ result: '?', variablesReference: 0 });
+			await emitStoppedAndWait(session, 'step');
+			const last = events.filter((event) => event.type === 'pause').at(-1);
+			expect(last.sessionId).toBe(first.sessionId);
+			expect(last.stopId).toBeGreaterThan(first.stopId);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('transmits qualified hit counts without enabling C++ expression evaluation', async () => {
+			runtimeState.initializeCapabilities.supportsHitConditionalBreakpoints = true;
+			const { controller, completion, session, events } = await startFeatures({
+				hitConditionalBreakpoints: true
+			});
+			await controller.setSourceBreakpoints([
+				{ line: 5, enabled: false },
+				{ line: 7, hitCondition: '3' }
+			]);
+			expect(session.requests.at(-1)).toMatchObject({
+				command: 'setBreakpoints',
+				args: { breakpoints: [{ line: 7, hitCondition: '3' }] }
+			});
+			expect(events.find((event) => event.type === 'pause').capabilities).toMatchObject({
+				hitConditionalBreakpoints: true
+			});
+			await controller.disconnect();
+			await completion;
+		});
 	});
 });
