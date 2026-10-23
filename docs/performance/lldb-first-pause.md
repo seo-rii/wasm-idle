@@ -33,3 +33,16 @@ one-frame initial pause and subsequent 100-frame stack, continues to successful 
 repeats with fresh workers. It enforces strict CSP and cross-origin isolation, and verifies
 correct top/caller locals on two fresh launches. Cold versus warm timing is
 descriptive evidence; browser tiering, network/cache state and host load also affect it.
+
+## Pinned Chromium evidence (2026-10-23)
+
+[Raw results](../../scripts/performance-results/lldb-first-pause-20261023.json) passed under Chromium 153.0.8010.12 with cross-origin isolation and no CSP violations. Both fresh sessions stopped at the correct `main.c:4` location with one frame, then published cumulative stack lengths 21/41/61/81/100. All 100 frame IDs were unique. Demand-loaded locals were `n = 0` for the top frame and `n = 1` for its caller, and both sessions continued to `done` and exit zero.
+
+| Fresh session | First pause (ms) | Scope metadata (ms) | Complete 100-frame stack (ms) |
+| ------------- | ---------------: | ------------------: | ----------------------------: |
+| 1             |          3,208.8 |             3,226.1 |                       3,360.6 |
+| 2             |          4,343.8 |             4,544.9 |                       4,707.5 |
+
+These clocks start before session startup and include preflight/runtime preparation. The first pause precedes complete stack details by 151.8 and 363.8 ms in these runs. This demonstrates progressive delivery in the new path, not a measured baseline speedup; additional paging requests and shared-host scheduling affect the later completion time. No cold/warm Module-cache claim is made. Gated unit tests separately verify that pending scopes/deep-stack responses cannot delay the initial pause or update a resumed/newer stop.
+
+The targeted pinned probe passed; the broader playground UI Playwright suite was updated to wait for progressive stack completion where appropriate but was not executed for this change.
