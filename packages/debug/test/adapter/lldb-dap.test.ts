@@ -50,7 +50,16 @@ describe('LldbDapAdapter', () => {
 		type FeatureSupport = NonNullable<LldbDapAdapterOptions['featureSupport']>;
 
 		expectTypeOf<
-			Exclude<keyof FeatureSupport, 'dataBreakpoints' | 'evaluate' | 'writeMemory'>
+			Exclude<
+				keyof FeatureSupport,
+				| 'dataBreakpoints'
+				| 'evaluate'
+				| 'writeMemory'
+				| 'conditionalBreakpoints'
+				| 'hitConditionalBreakpoints'
+				| 'logPoints'
+				| 'skipLibraryCode'
+			>
 		>().toEqualTypeOf<never>();
 	});
 
@@ -1388,5 +1397,113 @@ describe('LldbDapAdapter', () => {
 		session.emit({ event, body });
 
 		expect(events).toEqual([{ type: 'dap', event, body }]);
+	});
+	it('requires producer-qualified advanced breakpoint capabilities and keeps disabled locations off DAP', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {
+			supportsConditionalBreakpoints: true,
+			supportsHitConditionalBreakpoints: true,
+			supportsLogPoints: true
+		});
+		session.setResponse('setBreakpoints', { breakpoints: [{ verified: true, line: 7 }] });
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+		await expect(
+			adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+				{ line: 7, condition: 'ready' }
+			])
+		).rejects.toThrow('condition');
+		await expect(
+			adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+				{ line: 7, hitCondition: '3' }
+			])
+		).rejects.toThrow('hitCondition');
+		expect(
+			session.requests.filter((request) => request.command === 'setBreakpoints')
+		).toHaveLength(0);
+		await adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+			{ line: 5, enabled: false },
+			{ line: 7 }
+		]);
+		expect(session.requests.at(-1)).toMatchObject({
+			command: 'setBreakpoints',
+			requestArguments: { breakpoints: [{ line: 7 }], lines: [7] }
+		});
+	});
+
+	it('forwards only the qualified decimal hit-count subset without enabling expression evaluation', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsHitConditionalBreakpoints: true });
+		session.setResponse('setBreakpoints', { breakpoints: [{ verified: true, line: 7 }] });
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { hitConditionalBreakpoints: true }
+		});
+		await adapter.initialize();
+		expect(adapter.capabilities?.supportsEvaluate).toBe(false);
+		await adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+			{ line: 7, hitCondition: '3' }
+		]);
+		expect(session.requests.at(-1)).toMatchObject({
+			requestArguments: { breakpoints: [{ line: 7, hitCondition: '3' }] }
+		});
+		await expect(
+			adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+				{ line: 7, hitCondition: '>=3' }
+			])
+		).rejects.toThrow('positive decimal');
+	});
+
+	it('uses fixed settings for explicit standard-library stepping control', async () => {
+		const session = new FakeDapSession();
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { skipLibraryCode: true }
+		});
+		await adapter.initialize();
+		await adapter.setSteppingOptions({ skipLibraryCode: false });
+		expect(session.requests.at(-1)).toEqual({
+			command: 'evaluate',
+			requestArguments: {
+				context: 'repl',
+				expression: '`settings set target.process.thread.step-avoid-regexp ^$'
+			}
+		});
+		const count = session.requests.length;
+		await expect(
+			adapter.setSteppingOptions({ skipLibraryCode: true, command: 'process kill' } as never)
+		).rejects.toThrow('only');
+		expect(session.requests).toHaveLength(count);
+	});
+	it('retains disabled options only when explicitly retained by legacy replacement', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('setBreakpoints', { breakpoints: [{ verified: true, line: 7 }] });
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+		await adapter.setSourceBreakpoints({ path: '/workspace/main.cpp' }, [
+			{ line: 7, enabled: false, condition: 'ready' }
+		]);
+		expect(session.requests.at(-1)).toMatchObject({ requestArguments: { breakpoints: [] } });
+		await expect(adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [7])).rejects.toThrow(
+			'condition'
+		);
+		await adapter.setBreakpoints({ path: '/workspace/main.cpp' }, []);
+		await adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [7]);
+		expect(session.requests.at(-1)).toMatchObject({
+			requestArguments: { breakpoints: [{ line: 7 }] }
+		});
+	});
+
+	it('forwards explicit structured hover context only for qualified evaluators', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsEvaluateForHovers: true });
+		const result = { result: 'size=2', variablesReference: 12, indexedVariables: 2 };
+		session.setResponse('evaluate', result);
+		const adapter = createLldbDapAdapter(session, { featureSupport: { evaluate: true } });
+		await adapter.initialize();
+		await expect(
+			adapter.evaluateValue('values', { frameId: 7, context: 'hover' })
+		).resolves.toEqual(result);
+		expect(session.requests.at(-1)).toMatchObject({
+			requestArguments: { expression: 'values', frameId: 7, context: 'hover' }
+		});
 	});
 });

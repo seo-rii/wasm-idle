@@ -3,6 +3,13 @@
 		RuntimeProgressController,
 		TimeoutError,
 		createRuntimeAssetsKey,
+		normalizeDebugSourceBreakpoints,
+		mergeDebugBreakpointLines,
+		assertDebugBreakpointSupport,
+		normalizeDebugSteppingOptions,
+		type DebugEvaluateOptions,
+		type DebugSourceBreakpoint,
+		type DebugSteppingOptions,
 		type DebugCommand,
 		type DebugDataBreakpoint,
 		type DebugDataBreakpointInfoArguments,
@@ -67,6 +74,7 @@
 		inputCursor = 0,
 		pendingSandboxInput: string[] = [],
 		pendingDebugBreakpoints = new SvelteMap<string, number[]>(),
+		pendingDebugSpecifications = new Map<string, DebugSourceBreakpoint[]>(),
 		pendingSandboxEof = false,
 		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,
@@ -574,8 +582,20 @@
 				const preparedCandidate = preparedExecution;
 				const executionGeneration = invalidatePreparedExecution();
 				pendingDebugBreakpoints.clear();
-				for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
-					pendingDebugBreakpoints.set(sourcePath, [...lines]);
+				pendingDebugSpecifications.clear();
+				for (const { sourcePath, lines, breakpoints } of options.sourceBreakpoints || []) {
+					const values = breakpoints
+						? normalizeDebugSourceBreakpoints(breakpoints)
+						: undefined;
+					pendingDebugBreakpoints.set(
+						sourcePath,
+						values
+							? values
+									.filter((value) => value.enabled !== false)
+									.map((value) => value.line)
+							: [...lines]
+					);
+					if (values) pendingDebugSpecifications.set(sourcePath, values);
 				}
 				const [sandboxWasReset] = await Promise.all([
 					initSandbox(language).then(async (wasReset) => {
@@ -590,13 +610,23 @@
 					}),
 					initTerm()
 				]);
+				if (!sandbox.setSourceBreakpoints)
+					for (const values of pendingDebugSpecifications.values())
+						assertDebugBreakpointSupport(values, {});
 				const executionOptions = {
 					...options,
 					sourceBreakpoints: Array.from(
 						pendingDebugBreakpoints,
 						([sourcePath, lines]) => ({
 							sourcePath,
-							lines: [...lines]
+							lines: [...lines],
+							...(pendingDebugSpecifications.has(sourcePath)
+								? {
+										breakpoints: normalizeDebugSourceBreakpoints(
+											pendingDebugSpecifications.get(sourcePath)!
+										)
+									}
+								: {})
 						})
 					)
 				};
@@ -716,9 +746,52 @@
 			await sandbox.debugPause?.();
 		},
 		async setBreakpoints(lines: number[], sourcePath?: string) {
+			const existing = pendingDebugSpecifications.get(sourcePath || '');
+			if (existing)
+				return terminalControl.setSourceBreakpoints!(
+					mergeDebugBreakpointLines(existing, lines),
+					sourcePath
+				);
 			pendingDebugBreakpoints.set(sourcePath || '', [...lines]);
+			pendingDebugSpecifications.delete(sourcePath || '');
 			await wait();
 			await sandbox?.setBreakpoints?.(lines, sourcePath);
+		},
+		async setSourceBreakpoints(breakpoints: DebugSourceBreakpoint[], sourcePath?: string) {
+			const values = normalizeDebugSourceBreakpoints(breakpoints);
+			pendingDebugSpecifications.set(sourcePath || '', values);
+			pendingDebugBreakpoints.set(
+				sourcePath || '',
+				values.filter((value) => value.enabled !== false).map((value) => value.line)
+			);
+			await wait();
+			if (sandbox?.setSourceBreakpoints)
+				await sandbox.setSourceBreakpoints(values, sourcePath);
+			else {
+				assertDebugBreakpointSupport(values, {});
+				await sandbox?.setBreakpoints?.(
+					values.filter((value) => value.enabled !== false).map((value) => value.line),
+					sourcePath
+				);
+			}
+		},
+		async debugSetSteppingOptions(options: DebugSteppingOptions) {
+			const value = normalizeDebugSteppingOptions(options);
+			await wait();
+			if (!sandbox.debugSetSteppingOptions)
+				throw new Error('Debugger does not support stepping options.');
+			await sandbox.debugSetSteppingOptions(value);
+		},
+		async debugEvaluateValue(expression: string, options?: DebugEvaluateOptions) {
+			await wait();
+			if (sandbox?.debugEvaluateValue)
+				return await sandbox.debugEvaluateValue(expression, options);
+			if (options?.frameId !== undefined || options?.context === 'hover')
+				return { result: '?', variablesReference: 0 };
+			return {
+				result: (await sandbox.debugEvaluate?.(expression)) ?? '?',
+				variablesReference: 0
+			};
 		},
 		async debugEvaluate(expression: string) {
 			await wait();
