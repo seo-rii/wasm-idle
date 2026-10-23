@@ -56,8 +56,9 @@ export interface LldbSandboxSessionOptions {
 		lines: number[];
 	}>;
 	pauseOnEntry: boolean;
-	/** C/C++ source entry; the low-level runtime still stops safely before _start executes. */
+	/** Source entry; the low-level runtime still stops safely before _start executes. */
 	pauseAtMain?: boolean;
+	entryFunctionName?: string;
 	programArgs?: string[];
 	stdin?: string;
 	onDebugEvent: (event: DebugSessionEvent) => void;
@@ -1333,7 +1334,7 @@ export class LldbSandboxSession {
 					reason = 'pause';
 				} else {
 					this.options.onOutput(
-						'LLDB could not resolve main; paused at runtime entry.\n'
+						`LLDB could not resolve ${this.options.entryFunctionName ?? 'main'}; paused at runtime entry.\n`
 					);
 				}
 			}
@@ -1343,7 +1344,11 @@ export class LldbSandboxSession {
 			this.entryPhase = 'done';
 			await this.setMainEntryBreakpoint(session, false);
 			if (!this.isCurrentValueRequest(session, version)) return;
-			if (reason === 'breakpoint' && selectedFrame.name === 'main' && isWorkspaceFrame) {
+			if (
+				reason === 'breakpoint' &&
+				selectedFrame.name === (this.options.entryFunctionName ?? 'main') &&
+				isWorkspaceFrame
+			) {
 				reason = 'entry';
 			}
 		}
@@ -1391,7 +1396,7 @@ export class LldbSandboxSession {
 
 	private async setMainEntryBreakpoint(session: BrowserLldbSession, enabled: boolean) {
 		const response = await session.request<unknown>('setFunctionBreakpoints', {
-			breakpoints: enabled ? [{ name: 'main' }] : []
+			breakpoints: enabled ? [{ name: this.options.entryFunctionName ?? 'main' }] : []
 		});
 		const breakpoints = dapResponseCollection(
 			response,

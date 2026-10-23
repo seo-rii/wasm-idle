@@ -445,7 +445,11 @@ describe('LldbSandboxSession', () => {
 	});
 
 	describe('C/C++ source entry', () => {
-		async function startEntry(pauseAtMain = true, pauseOnEntry = true) {
+		async function startEntry(
+			pauseAtMain = true,
+			pauseOnEntry = true,
+			entryFunctionName?: string
+		) {
 			const events: any[] = [];
 			const output: string[] = [];
 			loadManifest.mockResolvedValue({ manifestVersion: 2, debugger: { capabilities: {} } });
@@ -460,6 +464,7 @@ describe('LldbSandboxSession', () => {
 				breakpoints: [6],
 				pauseOnEntry,
 				pauseAtMain,
+				entryFunctionName,
 				onDebugEvent: (event) => events.push(event),
 				onOutput: (text) => output.push(text)
 			});
@@ -480,6 +485,50 @@ describe('LldbSandboxSession', () => {
 			});
 			return { controller, completion, runtime, events, output };
 		}
+
+		it('uses a language entry symbol and removes it before reporting source entry', async () => {
+			const { controller, completion, runtime, events } = await startEntry(
+				true,
+				true,
+				'main__main'
+			);
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(runtime.requests).toContainEqual({
+					command: 'continue',
+					args: { threadId: 7 }
+				})
+			);
+			expect(runtime.requests).toContainEqual({
+				command: 'setFunctionBreakpoints',
+				args: { breakpoints: [{ name: 'main__main' }] }
+			});
+			runtime.emit({ event: 'continued', body: { threadId: 7 } });
+			runtimeState.responseOverrides.set('stackTrace', {
+				stackFrames: [
+					{
+						id: 41,
+						name: 'main__main',
+						line: 6,
+						column: 1,
+						source: { path: '/workspace/main.cpp' }
+					}
+				]
+			});
+			await emitStoppedAndWait(runtime);
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', reason: 'entry' })
+				)
+			);
+			expect(
+				runtime.requests
+					.filter((request) => request.command === 'setFunctionBreakpoints')
+					.at(-1)?.args
+			).toEqual({ breakpoints: [] });
+			await controller.disconnect();
+			await completion;
+		});
 
 		it('hides runtime entry and removes the private main breakpoint before publishing source entry', async () => {
 			const { controller, completion, runtime, events } = await startEntry();

@@ -117,6 +117,7 @@ vi.mock('../../clang/src/index.js', () => {
 			lld: 'mock-lld.wasm'
 		};
 		compilerConfig = {
+			provenance: { name: 'clang', version: '22.1.8', revision: 'a'.repeat(40) },
 			resourceDir: '/lib/clang/22',
 			compilerRuntimeLibDir: 'lib/clang/22/lib/wasi'
 		};
@@ -241,6 +242,86 @@ describe('Objective-C worker', () => {
 					new Response(responseBytesForObjectiveCAsset(String(url)))
 			)
 		);
+	});
+
+	it.each(['main.m', 'src/main.mm'])(
+		'emits a DWARF artifact for %s without trace execution',
+		async (activePath) => {
+			await installWorker();
+			await (globalThis as any).self.onmessage({
+				data: {
+					load: true,
+					log: false,
+					clangAssets: { baseUrl: 'https://cdn.test/clang/', useAssetBridge: false },
+					objectivecAssets: objectiveCAssets()
+				}
+			});
+			const code = 'int main(void) { int value = 73; return value; }';
+			await (globalThis as any).self.onmessage({
+				data: {
+					code,
+					activePath,
+					debugMode: 'lldb',
+					buffer: new SharedArrayBuffer(1024),
+					workspaceFiles: [
+						{ path: 'helper.c', content: 'int helper(void) { return 1; }' }
+					]
+				}
+			});
+			const artifact = (globalThis as any).postMessage.mock.calls.find(
+				([message]: any[]) => message.lldbArtifact
+			)?.[0].lldbArtifact;
+			expect(artifact).toBeDefined();
+			expect(artifact.descriptor.moduleSha256).toBe(sha256(validEmptyWasm));
+			expect(artifact.sources).toContainEqual({
+				path: `/workspace/${activePath}`,
+				content: code,
+				contentSha256: sha256(bytes(code))
+			});
+			const sourceCompile = runCalls.find((args) =>
+				args.includes(`workspace/${activePath}`)
+			)!;
+			expect(sourceCompile).toEqual(
+				expect.arrayContaining([
+					'-O0',
+					'-debug-info-kind=standalone',
+					'-dwarf-version=4',
+					'-fdebug-compilation-dir=/'
+				])
+			);
+			expect(sourceCompile[sourceCompile.indexOf('-x') + 1]).toBe(
+				activePath.endsWith('.mm') ? 'objective-c++' : 'objective-c'
+			);
+			expect(runCalls.find((args) => args.includes('workspace/helper.c'))).toContain(
+				'-debug-info-kind=standalone'
+			);
+			expect(compileCalls).toEqual([]);
+			expect(debugRunCalls).toEqual([]);
+			expect(executedArtifacts).toEqual([]);
+		}
+	);
+
+	it('rejects Foundation LLDB until WAMR supports its libffi imports', async () => {
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'https://cdn.test/clang/', useAssetBridge: false },
+				objectivecAssets: objectiveCAssets()
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '#import <Foundation/Foundation.h>\nint main(void) { return 0; }',
+				debugMode: 'lldb',
+				buffer: new SharedArrayBuffer(1024)
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: expect.stringContaining('libffi host imports')
+		});
+		expect(runCalls).toEqual([]);
 	});
 
 	it('rejects inline and filesystem runtime assets before loading', async () => {
