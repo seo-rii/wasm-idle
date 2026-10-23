@@ -486,6 +486,78 @@ export class MemoryFileSystem {
     this.notifyFile(node);
   }
 
+  /** Apply editor file replacements and removals together, preserving live open descriptions. */
+  applyFileChanges(changes: {
+    readonly write: readonly { readonly path: string; readonly bytes: Uint8Array }[];
+    readonly remove: readonly string[];
+  }, options: PathOptions & { createRoot?: boolean } = {}): void {
+    if (!changes || !Array.isArray(changes.write) || !Array.isArray(changes.remove)) throw new FsError('EINVAL', 'Invalid file changes');
+    for (const entry of changes.write) {
+      if (!entry || !(entry.bytes instanceof Uint8Array)) throw new FsError('EINVAL', 'File content must be Uint8Array');
+      checkPath(entry.path);
+    }
+    for (const path of changes.remove) checkPath(path);
+    if (options.createRoot !== undefined && typeof options.createRoot !== 'boolean') throw new FsError('EINVAL', 'Invalid root creation option');
+    if (options.createRoot) {
+      if (typeof options.root !== 'string' || !options.root.startsWith('/')) throw new FsError('EINVAL', 'Root creation requires an explicit absolute capability root');
+      checkPath(options.root);
+    }
+    if (!changes.write.length && !changes.remove.length && !options.createRoot) return;
+
+    // Stage namespace/metadata only. These operations replace file buffers rather than
+    // writing into them, so unchanged bodies (including large toolchains) remain shared.
+    // Retained unlinked inodes and reference counts must participate in quota admission.
+    const staged = new MemoryFileSystem({ maxBytes: this.maxBytes, maxInodes: this.maxInodes });
+    const copies = new Map([...this.nodes].map(node => [node, { ...node, children: new Map<string, Inode>() }]));
+    for (const [node, copy] of copies) {
+      copy.parent = node.parent && copies.get(node.parent);
+      for (const [name, child] of node.children) copy.children.set(name, copies.get(child)!);
+    }
+    staged.root = copies.get(this.root)!;
+    staged.nodes = new Set(copies.values());
+    staged.mounts = this.mounts;
+    staged.usedBytes = this.usedBytes;
+    staged.nextInode = this.nextInode;
+    staged.revision = this.revision;
+    staged.versionSequence = this.versionSequence;
+    staged.lease = this.lease;
+    if (options.createRoot) staged.mkdir(options.root!, { root: '/', cwd: '/', recursive: true });
+    for (const path of changes.remove) {
+      try { staged.unlink(path, options); }
+      catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
+    }
+    for (const { path, bytes } of changes.write) {
+      const parent = path.split('/').slice(0, -1).join('/');
+      if (parent) staged.mkdir(parent, { ...options, recursive: true });
+      try {
+        const node = staged.resolve(path, options).node;
+        if (node.type === 'file' && sameBytes(node.data, bytes)) continue;
+      } catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
+      staged.writeFile(path, bytes, options);
+    }
+    if (staged.revision === this.revision) return;
+
+    // Preserve the objects held by live descriptors and unchanged version tokens.
+    // Build all maps before publication; failed staging emits no watch/mutation event.
+    const previous = new Map([...this.nodes].map(node => [node.inode, node]));
+    const adopted = new Map([...staged.nodes].map(node => [node, previous.get(node.inode) ?? node]));
+    const publication = [...staged.nodes].map(node => ({
+      node: adopted.get(node)!,
+      state: { ...node, parent: node.parent && adopted.get(node.parent),
+        children: new Map([...node.children].map(([name, child]) => [name, adopted.get(child)!])) }
+    }));
+    const nodes = new Set(adopted.values());
+    for (const { node, state } of publication) this.versions.set(state.version, node);
+    for (const node of this.nodes) if (!nodes.has(node)) { node.parent = undefined; node.linked = false; }
+    for (const { node, state } of publication) Object.assign(node, state);
+    this.nodes = nodes;
+    this.usedBytes = staged.usedBytes;
+    this.nextInode = staged.nextInode;
+    this.versionSequence = staged.versionSequence;
+    this.advanceGeneration();
+    this.notify({ kind: 'rescan', path: '/' });
+  }
+
   mkdir(path: string, options: PathOptions & { recursive?: boolean; mode?: number } = {}): void {
     if (options.mode !== undefined) checkMode(options.mode);
     if (options.recursive) {

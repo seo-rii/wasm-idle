@@ -87,6 +87,20 @@ Workspace backups exclude `/dev` and never import device nodes. WASI reports the
 character-device type; the optional WASIX SDK retains its own `/dev` implementation
 unless the host explicitly mounts a supported common device filesystem there.
 
+`applyFileChanges({ remove, write }, { cwd, root, createRoot })` publishes an editor batch
+atomically. `write` entries contain `{ path, bytes }`; missing parent directories are
+created, missing removals are ignored, and identical file contents are left alone.
+Removals precede writes. Any path, mount, byte or inode quota error preserves the
+original namespace, contents, metadata, version tokens and generation. Quotas include
+open unlinked files. A successful changed batch emits one rescan and advances one
+generation; an unchanged batch emits nothing. Snapshot writer leases still apply.
+Staging copies inode/directory metadata, shares untouched file bodies, and copies
+replacement bytes only. Optional `createRoot: true` creates the explicitly supplied
+absolute capability root and its parents within the same transaction, including for
+an empty project. Validation or write failures leave no newly created root behind.
+Publication retains live descriptors and shared offsets; open files removed by the
+batch remain available until their final descriptor closes.
+
 `mountReadonly(path, entries)` accepts an explicit directory/file/symlink tree with
 relative canonical entry paths. Directories must be present. It rejects duplicate
 paths, file/directory conflicts, quota overflow, symlink loops and capability

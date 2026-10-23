@@ -49,9 +49,9 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
-		// Ruby safe previews add a JS/declaration pair: 466 root files + 271 dependency
-		// files + npm metadata. The combined debugger install measures 6,798,650 bytes.
-		budget: { maxBytes: 6 * MiB + 512 * 1024, maxFiles: 738, maxPackages: 6 },
+		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
+		// The preview adds its JavaScript and declaration to main's 741-file install.
+		budget: { maxBytes: 7 * MiB, maxFiles: 743, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -166,7 +166,9 @@ void [shell, options, serve, result, binding.dispose()];
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		budget: { maxBytes: 4.75 * MiB, maxFiles: 1_050, maxPackages: 7 },
+		// Includes llvm-core's SIMD headers for clangd. Before merging compiler options:
+		// 5,093,249 bytes / 769 files.
+		budget: { maxBytes: 5 * MiB, maxFiles: 1_050, maxPackages: 7 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -186,11 +188,11 @@ void [shell, options, serve, result, binding.dispose()];
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Includes the public container package and all reviewed LSP providers.
-		// Combined debugger fixes and evaluation caching add 19,007 bytes to the prior install.
-		// Measured 41,145,220 bytes / 3,259 files / 62 packages; 3,196 bytes headroom.
-		// Separate plugin budgets and the production-package limit stay unchanged.
-		budget: { maxBytes: 39 * MiB + 248 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		// Includes the public container package, reviewed LSP providers, SIMD, and compiler options.
+		// Before merging, SIMD measured 41,484,544 bytes / 3,262 files / 62 packages;
+		// main's compiler-option changes added 10,510 bytes to their prior install.
+		// Reserve 16 KiB above the SIMD budget pending measurement of the merged install.
+		budget: { maxBytes: 39 * MiB + 656 * 1024, maxFiles: 3_300, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

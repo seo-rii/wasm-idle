@@ -5291,6 +5291,141 @@ describe('static worker backed language sandboxes', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
+	it.each(['completed', 'failed'] as const)(
+		'rejects run reentry from %s settled progress and permits a promise continuation retry',
+		async (outcome) => {
+			onPostMessage = () => {};
+			const sandbox = createPrologLifecycleTestSandbox();
+			let overlapError: unknown;
+			const progress = {
+				report: vi.fn((event: { kind: string }) => {
+					if (event.kind !== 'settled') return;
+					void sandbox
+						.run('writeln(overlap).', false, true, undefined, [], { stdin: '' })
+						.catch((error) => {
+							overlapError = error;
+						});
+				})
+			};
+			await sandbox.load('/absproxy/5173');
+			const first = sandbox.run('writeln(first).', false, true, progress, [], { stdin: '' });
+			const retry = () => sandbox.run('writeln(retry).', false, true, {}, [], { stdin: '' });
+			const continuation = outcome === 'completed' ? first.then(retry) : first.catch(retry);
+			void continuation.catch(() => undefined);
+			try {
+				await vi.waitFor(() =>
+					expect(workerInstances[0].postMessage).toHaveBeenCalledOnce()
+				);
+				const worker = workerInstances[0];
+				worker.onmessage?.({
+					data: {
+						runId: worker.lastRunId,
+						...(outcome === 'completed' ? { results: true } : { error: 'first failed' })
+					}
+				} as MessageEvent<any>);
+
+				await vi.waitFor(() => expect(overlapError).toMatchObject({ code: 'busy' }));
+				await vi.waitFor(() =>
+					expect(workerInstances.at(-1)?.lastMessage?.code).toBe('writeln(retry).')
+				);
+				const retryWorker = workerInstances.at(-1)!;
+				expect(retryWorker.terminate).not.toHaveBeenCalled();
+				expect(
+					workerInstances.flatMap((entry) =>
+						entry.messages.map((message) => message.code)
+					)
+				).toEqual(['writeln(first).', 'writeln(retry).']);
+				retryWorker.onmessage?.({
+					data: { runId: retryWorker.lastRunId, results: true }
+				} as MessageEvent<any>);
+				await expect(continuation).resolves.toBe(true);
+			} finally {
+				await sandbox.dispose();
+			}
+		}
+	);
+
+	it('preserves the run failure when failed settled progress throws and permits retry', async () => {
+		onPostMessage = () => {};
+		const sandbox = createPrologLifecycleTestSandbox();
+		const progress = {
+			report: vi.fn((event: { kind: string }) => {
+				if (event.kind === 'settled') throw new Error('failure observer failed');
+			})
+		};
+		await sandbox.load('/absproxy/5173');
+		const firstOutcome = sandbox
+			.run('writeln(first).', false, true, progress, [], { stdin: '' })
+			.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		const worker = workerInstances[0];
+		worker.onmessage?.({
+			data: { runId: worker.lastRunId, error: 'first failed' }
+		} as MessageEvent<any>);
+
+		await expect(firstOutcome).resolves.toBe('first failed');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		onPostMessage = null;
+		await expect(
+			sandbox.run('writeln(retry).', false, true, {}, [], { stdin: '' })
+		).resolves.toBe(true);
+		await sandbox.dispose();
+	});
+
+	it.each(['completed', 'failed'] as const)(
+		'preserves a replacement when %s settled progress terminates and then throws',
+		async (outcome) => {
+			onPostMessage = () => {};
+			const sandbox = createPrologLifecycleTestSandbox();
+			let replacement: Promise<boolean | string> | undefined;
+			const progress = {
+				report: vi.fn((event: { kind: string }) => {
+					if (event.kind !== 'settled') return;
+					sandbox.terminate();
+					replacement = sandbox.run('writeln(replacement).', false, true, {}, [], {
+						stdin: ''
+					});
+					void replacement.catch(() => undefined);
+					throw new Error('stale settled observer failed');
+				})
+			};
+			await sandbox.load('/absproxy/5173');
+			const firstOutcome = sandbox
+				.run('writeln(first).', false, true, progress, [], { stdin: '' })
+				.catch((error) => error);
+			try {
+				await vi.waitFor(() =>
+					expect(workerInstances[0].postMessage).toHaveBeenCalledOnce()
+				);
+				const retiredWorker = workerInstances[0];
+				const staleHandler = retiredWorker.onmessage;
+				const message = {
+					data: {
+						runId: retiredWorker.lastRunId,
+						...(outcome === 'completed' ? { results: true } : { error: 'first failed' })
+					}
+				} as MessageEvent<any>;
+				staleHandler?.(message);
+
+				await expect(firstOutcome).resolves.toMatchObject({ code: 'cancelled' });
+				await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+				const replacementWorker = workerInstances[1];
+				await vi.waitFor(() =>
+					expect(replacementWorker.postMessage).toHaveBeenCalledOnce()
+				);
+				expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+				staleHandler?.(message);
+				expect(replacementWorker.terminate).not.toHaveBeenCalled();
+				replacementWorker.onmessage?.({
+					data: { runId: replacementWorker.lastRunId, results: true }
+				} as MessageEvent<any>);
+				await expect(replacement).resolves.toBe(true);
+			} finally {
+				await sandbox.dispose();
+			}
+		}
+	);
+
 	it('preserves a replacement run when completion progress terminates and then throws', async () => {
 		onPostMessage = () => {};
 		const callbackError = new Error('stale completion callback failed');

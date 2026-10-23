@@ -1,13 +1,20 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import {
+	createHostCommandHandler,
+	MemoryFileSystem,
+	type ContainerProcess,
+	type SnapshotEntry
+} from '@wasm-idle/container';
+import { clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
+import {
 	createWasixShellSession,
 	type WasixSdk,
 	type WasixShellSession,
 	type WasixWorkerGroup
 } from '@wasm-idle/container/adapters/wasix';
-import { MemoryFileSystem, type SnapshotEntry } from '@wasm-idle/container';
 import {
+	BASH_SYSROOT,
 	createBashProfile,
 	withCanonicalWasiPaths,
 	type BashProfileConfiguration
@@ -157,6 +164,7 @@ describe('shared Bash profile configuration', () => {
 					'/usr/local/bin/pwd': { command: 'pwd' },
 					'/usr/local/bin/clang': {
 						command: 'clang',
+						args: clangSimdDriverArgs(BASH_SYSROOT),
 						stdio: filesystem === 'live' ? 'delegated' : 'forwarded'
 					},
 					'/usr/local/bin/wasm-run': { command: 'wasm-run' },
@@ -168,6 +176,55 @@ describe('shared Bash profile configuration', () => {
 			}
 			expect(workerGroup.dispose).toHaveBeenCalledOnce();
 			expect(session.dispose).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each(['snapshot', 'live'] as const)(
+		'adds SIMD defaults to %s shell dispatch without requiring manifest compiler flags',
+		async (filesystem) => {
+			const { config, workerGroup, fetcher } = await fixture(filesystem);
+			const profile = await createBashProfile({
+				config,
+				sdk: {} as WasixSdk,
+				workerGroup,
+				fetch: fetcher
+			});
+			try {
+				await profile.startShell();
+				const settings = vi.mocked(createWasixShellSession).mock.lastCall![0];
+				const closed = () =>
+					new ReadableStream<Uint8Array>({ start: (controller) => controller.close() });
+				const spawn = vi.spyOn(profile.container, 'spawn').mockResolvedValue({
+					pid: 1,
+					stdin: new WritableStream<Uint8Array>(),
+					stdout: closed(),
+					stderr: closed(),
+					exited: Promise.resolve({ reason: 'exited', code: 0 })
+				} as ContainerProcess);
+				const handler = createHostCommandHandler(profile.container, {
+					routes: settings.routes
+				});
+				const userArgs = ['-mno-simd128', 'main.c', '-o', 'program.wasm'];
+				await expect(
+					handler({
+						path: '/usr/local/bin/clang',
+						argv: ['clang', ...userArgs],
+						env: [],
+						cwd: '/workspace',
+						stdin: null,
+						stdout: null,
+						stderr: null
+					})
+				).resolves.toBe(0);
+				expect(spawn).toHaveBeenCalledWith(
+					'clang',
+					[...clangSimdDriverArgs(BASH_SYSROOT), ...userArgs],
+					expect.objectContaining({ cwd: '/workspace' })
+				);
+				expect(fetcher).not.toHaveBeenCalled();
+			} finally {
+				await profile.dispose();
+			}
 		}
 	);
 
