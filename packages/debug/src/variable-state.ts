@@ -60,6 +60,22 @@ export function isArgumentScope(scope: DebugScope) {
 		: /^arguments$/iu.test(scope.name);
 }
 
+/** A cached prefix cannot rule out a name shadowed by an unloaded variable. */
+export function isDebugScopeComplete(
+	scope: DebugScope,
+	variables: readonly DebugVariable[] | undefined,
+	incompleteReferences?: ReadonlySet<number>
+) {
+	if (scope.variablesReference <= 0) return true;
+	if (variables === undefined || incompleteReferences?.has(scope.variablesReference))
+		return false;
+	const total =
+		scope.namedVariables === undefined && scope.indexedVariables === undefined
+			? undefined
+			: (scope.namedVariables ?? 0) + (scope.indexedVariables ?? 0);
+	return total === undefined || variables.length >= total;
+}
+
 /** Stable adapter ordering retains innermost precedence among local scopes. */
 export function orderDebugScopes(scopes: readonly DebugScope[]) {
 	return [...scopes].sort(
@@ -176,6 +192,7 @@ export function createDebugVariableState() {
 			locals: DebugVariable[];
 			variablesByReference: ReadonlyMap<number, DebugVariable[]>;
 			loadingReferences: ReadonlySet<number>;
+			incompleteScopeReferences?: ReadonlySet<number>;
 			watches?: { expression: string; variable?: DebugVariable }[];
 		}) {
 			entries.clear();
@@ -273,9 +290,12 @@ export function createDebugVariableState() {
 				);
 				for (const node of nodes) shadowedNames.add(node.variable.name);
 				if (
-					scope.variablesReference > 0 &&
-					!options.variablesByReference.has(scope.variablesReference) &&
-					!scope.variables.length
+					!isDebugScopeComplete(
+						scope,
+						options.variablesByReference.get(scope.variablesReference) ??
+							(scope.variables.length ? scope.variables : undefined),
+						options.incompleteScopeReferences
+					)
 				)
 					unresolvedHigherScope = true;
 				scopes.set(scope.variablesReference, nodes);
