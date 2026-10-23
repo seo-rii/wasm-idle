@@ -12,9 +12,11 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { transform } from 'esbuild';
 import { selectPageContainerSource } from './lib/page-container-source.mjs';
-import { prepareWebsiteAssetDelivery } from './prepare-page-container.mjs';
+import { prepareWebsiteAssetDelivery, websiteReleaseModule } from './prepare-page-container.mjs';
 
 const packageTemplate = JSON.parse(
 	await readFile(new URL('../packages/container/package.json', import.meta.url), 'utf8')
@@ -45,6 +47,50 @@ test('sysroot archives retain pinned bytes when using a portable delivery MIME',
 	assert.deepEqual(prepared.logical, prepared.delivery);
 	assert.equal(asset.delivery.mediaType, 'application/x-tar');
 });
+
+for (const capability of [true, false, undefined]) {
+	test(`generated page configuration preserves the pinned Worker module-service capability: ${capability}`, async (t) => {
+		const root = await mkdtemp(join(tmpdir(), 'page-container-capability-'));
+		t.after(() => rm(root, { recursive: true, force: true }));
+		const application = pathToFileURL(root + '/');
+		const location = Object.getOwnPropertyDescriptor(globalThis, 'location');
+		Object.defineProperty(globalThis, 'location', {
+			configurable: true,
+			value: { href: application.href, origin: application.origin }
+		});
+		t.after(() => {
+			if (location) Object.defineProperty(globalThis, 'location', location);
+			else delete globalThis.location;
+		});
+		const hostHash = 'a'.repeat(64);
+		const sdkDirectory = join(root, 'container-app/host', hostHash, 'sdk');
+		await mkdir(sdkDirectory, { recursive: true });
+		await writeFile(join(sdkDirectory, 'index.mjs'), 'export const pinned = true;\n');
+		const { code } = await transform(
+			websiteReleaseModule({
+				baseURL: 'https://old.invalid/container-app/',
+				hostHash,
+				distribution: { packages: [] },
+				config: {
+					clangFilesystem: 'live',
+					...(capability === undefined ? {} : { clangModuleServices: capability })
+				}
+			}),
+			{ loader: 'ts', format: 'esm' }
+		);
+		const module = await import(
+			`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
+		);
+		const { config, sdk } = await module.createWebsiteBashConfiguration(application.href);
+		assert.equal(config.clangModuleServices, capability);
+		assert.equal(Object.hasOwn(config, 'clangModuleServices'), capability !== undefined);
+		assert.equal(
+			config.clangWorkerUrl,
+			new URL(`container-app/host/${hostHash}/clang-worker.mjs`, application).href
+		);
+		assert.equal(sdk.pinned, true);
+	});
+}
 
 async function fixture(t) {
 	const root = await mkdtemp(join(tmpdir(), 'page-container-source-'));
@@ -92,6 +138,7 @@ test('explicit workspace selection ignores an older installed SDK and records th
 	assert.equal(selected.identity.version, '0.1.0-alpha.0');
 	assert.equal(selected.identity.source, 'workspace');
 	assert.equal(selected.identity.profile, 'virtual-metadata-v1');
+	assert.equal(selected.clangModuleServices, true);
 	assert.equal(
 		selected.identity.packageJsonSha256,
 		createHash('sha256')
@@ -150,6 +197,7 @@ test('legacy published 0.1.0 preparation remains an explicit option', async (t) 
 	assert.equal(selected.identity.source, 'published');
 	assert.equal(selected.identity.version, '0.1.0');
 	assert.equal(selected.identity.profile, 'published-0.1.0');
+	assert.equal(selected.clangModuleServices, false);
 	await assert.rejects(
 		selectPageContainerSource({
 			workspaceRoot: paths.workspaceRoot,

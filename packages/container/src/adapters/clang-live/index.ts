@@ -11,6 +11,8 @@ import type { LiveCommandAdapter } from '../types.js';
 export interface LiveClangAdapterOptions extends ClangAdapterOptions, Omit<LiveWorkerOptions, 'workerFactory'> {
   /** Retained compiled modules charged by logical source bytes; default 256 MiB, 0 disables retention. */
   readonly moduleCacheBytes?: number;
+  /** Owner module services require a matching Worker. Defaults on only for the built-in Worker. */
+  readonly moduleServices?: boolean;
 }
 export interface LiveClangAdapter extends LiveCommandAdapter {
   clearModuleCache(): void;
@@ -19,6 +21,8 @@ export interface LiveClangAdapter extends LiveCommandAdapter {
 /** Optional isolated LLVM profile; writes are live and are never rolled back on cancellation. */
 export function createLiveClangAdapter(options: LiveClangAdapterOptions): LiveClangAdapter {
   const configuration = validateClangOptions(options);
+  const moduleServices = options.moduleServices ?? options.workerFactory === undefined;
+  if (typeof moduleServices !== 'boolean') throw new ContainerError('INVALID_ARGUMENT', 'moduleServices must be boolean');
   const cacheBytes = options.moduleCacheBytes ?? 256 * 1024 * 1024;
   let moduleCache = new RuntimeAssetCache(cacheBytes, 2);
   let preparing = 0;
@@ -69,6 +73,7 @@ export function createLiveClangAdapter(options: LiveClangAdapterOptions): LiveCl
           ['wasm-ld', linker, configuration.linkerSha256]
         ] as const) {
           checkMemoryProfile(bytes, request.limits.maxMemoryBytes);
+          if (!moduleServices) continue;
           const endpoint = createPreparedRuntimeWasmModuleService({ bytes, receipt: { bytes: bytes.length, sha256 },
             cache: moduleCache, identity: `${profile}:${executable}`, compileKey, maxAssetBytes, signal: request.signal,
             acquireVerificationSlot: acquire,
@@ -87,13 +92,15 @@ export function createLiveClangAdapter(options: LiveClangAdapterOptions): LiveCl
       } catch (error) { for (const endpoint of endpoints) endpoint.close(); outputs.dispose(); throw error; }
       active = true;
       return {
-        configuration: { ...configuration, services },
-        command: { adapter: request.command.adapter, argv0: request.command.argv0 },
-        transfer: endpoints.map(endpoint => endpoint.port),
-        fallback() {
-          for (const endpoint of endpoints) endpoint.close();
-          return { command: request.command, configuration: { ...configuration, linker } };
-        },
+        configuration: moduleServices ? { ...configuration, services } : { ...configuration, linker },
+        ...(moduleServices ? {
+          command: { adapter: request.command.adapter, argv0: request.command.argv0 },
+          transfer: endpoints.map(endpoint => endpoint.port),
+          fallback() {
+            for (const endpoint of endpoints) endpoint.close();
+            return { command: request.command, configuration: { ...configuration, linker } };
+          }
+        } : {}),
         onFileChange: outputs.record,
         complete: (code, signal) => configuration.executableOutputProfile === 'wasi-preview1-process'
           ? outputs.qualify(code, imports, request.limits.maxMemoryBytes, signal) : undefined,

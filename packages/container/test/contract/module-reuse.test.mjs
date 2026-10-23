@@ -30,6 +30,7 @@ function fixture(overrides = {}) {
   const workers = [], frames = [];
   const adapter = overrides.adapter ?? createLiveClangAdapter({
     clangSha256: sha256(overrides.clang ?? clang), linkerSha256: sha256(linker), linkerPath: `${toolchain}/bin/wasm-ld`, compilerPaths: [`${toolchain}/bin/clang`],
+    moduleServices: true,
     workerFactory() {
       const worker = nodeWorker('../../dist/adapters/clang-live/worker.js'), post = worker.postMessage;
       workers.push(worker);
@@ -60,6 +61,38 @@ test('live Clang reuses verified modules across fresh Workers without command/li
     }
     f.adapter.clearModuleCache();
     assert.equal((await f.run()).code, 0); assert.equal(toolCompiles(compile), 4);
+  } finally { await f.container.dispose(); f.adapter.clearModuleCache(); }
+});
+
+test('the built-in matching Worker enables module reuse by default', { timeout: 30000 }, async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'Worker'), frames = [];
+  Object.defineProperty(globalThis, 'Worker', { configurable: true, value: function(url) {
+    assert.equal(url.pathname.endsWith('/adapters/clang-live/worker.js'), true);
+    const worker = nodeWorker('../../dist/adapters/clang-live/worker.js'), post = worker.postMessage;
+    worker.postMessage = (data, transfer) => { if (data.type === 'prepare') frames.push(data); post(data, transfer); };
+    return worker;
+  } });
+  const compile = t.mock.method(WebAssembly, 'compile'), f = fixture({ options: { workerFactory: undefined, moduleServices: undefined } });
+  try {
+    assert.equal((await f.run()).code, 0); assert.equal((await f.run()).code, 0);
+    assert.equal(toolCompiles(compile), 2);
+    for (const frame of frames) { assert.equal(Object.hasOwn(frame.command, 'bytes'), false); assert.ok(frame.configuration.services); }
+  } finally {
+    await f.container.dispose(); f.adapter.clearModuleCache();
+    if (original) Object.defineProperty(globalThis, 'Worker', original); else delete globalThis.Worker;
+  }
+});
+
+for (const moduleServices of [undefined, false]) test(`custom Worker uses legacy bytes when module services are ${moduleServices === undefined ? 'unspecified' : 'disabled'}`, { timeout: 30000 }, async t => {
+  const compile = t.mock.method(WebAssembly, 'compile'), f = fixture({ options: { moduleServices } });
+  try {
+    assert.equal((await f.run()).code, 0); assert.equal((await f.run()).code, 0);
+    assert.equal(f.frames.length, 2); assert.equal(toolCompiles(compile), 0);
+    for (const frame of f.frames) {
+      assert.ok(frame.command.bytes instanceof Uint8Array);
+      assert.ok(frame.configuration.linker instanceof Uint8Array);
+      assert.equal(Object.hasOwn(frame.configuration, 'services'), false);
+    }
   } finally { await f.container.dispose(); f.adapter.clearModuleCache(); }
 });
 

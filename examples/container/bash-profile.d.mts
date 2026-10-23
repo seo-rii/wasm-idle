@@ -35,6 +35,8 @@ export interface BashProfileConfiguration {
 	commandTimeoutMs?: number;
 	maxWorkers?: number;
 	clangFilesystem?: string;
+	/** Only true when the trusted builder bundles a matching module-service Worker. */
+	clangModuleServices?: boolean;
 }
 export interface BashProfile {
 	readonly container: Container;

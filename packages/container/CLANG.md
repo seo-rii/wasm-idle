@@ -155,7 +155,17 @@ configured pinned compiler module, rather than loading code from the alias file.
 
 The live owner retains up to two immutable compiler/linker modules, bounded by
 `moduleCacheBytes` (256 MiB by default, charged by logical source bytes plus cache
-keys; zero disables retention). Each command still snapshots and hashes its actual
+keys; zero disables retention). This module-service path is enabled by default for
+the built-in matching Worker. A custom `workerFactory` uses the legacy verified-byte
+path unless the trusted caller explicitly sets `moduleServices: true`; set it to
+`false` to force byte preparation. An older pinned Worker cannot consume service
+ports, even when its `postMessage` supports transfers. The Bash profile therefore
+requires `config.clangModuleServices === true`, emitted by builders that bundle a
+matching live Worker. Existing release configurations without that flag retain
+their byte preparation behavior. Newly bundled workspace page releases and live
+Bash releases enable module services together with their Worker.
+
+With module services, each command still snapshots and hashes its actual
 owner-side input bytes, including cache hits. The key includes the pinned digest,
 logical length, native compilation key, memory/cwd admission profile and asset
 limit. Workers receive single-use owner service ports instead of compiler/linker

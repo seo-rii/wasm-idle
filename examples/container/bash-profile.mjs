@@ -23,6 +23,7 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
  * clangWorkerUrl; sdkAsset/shellAsset; bashWasmSha256; memory; clangSha256/
  * linkerSha256; cacheNamespace; and an optional commandTimeoutMs/maxWorkers.
  * clangFilesystem is snapshot by default, or an explicit live application profile.
+ * clangModuleServices is enabled only by a builder that bundles a matching Worker.
  * The injecting host retains the lifetime of an optional persistence workspace.
  */
 export async function createBashProfile({ config, sdk, workspace, fetch: fetcher, onRecord, onInvocation, adapters = [], commands = {}, workerGroup, shellRoutes = {} }) {
@@ -41,6 +42,7 @@ export async function createBashProfile({ config, sdk, workspace, fetch: fetcher
     compiler = (clangProfile.filesystem === 'live' ? createLiveClangAdapter : createClangAdapter)({
       clangSha256: config.clangSha256, linkerSha256: config.linkerSha256, linkerPath: `${TOOLCHAIN}/bin/wasm-ld`,
       compilerPaths: [`${TOOLCHAIN}/bin/llvm`],
+      ...(clangProfile.filesystem === 'live' ? { moduleServices: config.clangModuleServices === true } : {}),
       executableOutputProfile: 'wasi-preview1-process', workerFactory: () => new Worker(config.clangWorkerUrl, { type: 'module' })
     });
     container = createContainer({
