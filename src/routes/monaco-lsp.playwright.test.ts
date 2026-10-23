@@ -1288,6 +1288,56 @@ async function runLspCase(
 		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
+	if (testCase.language === 'GRAIN') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 21 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = x42\nprint(value)\n' &&
+				hooks
+					.__wasmIdleMonacoApi!.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+					})
+					.some(
+						(marker) =>
+							marker.startLineNumber === 2 &&
+							(marker.severity || 0) >= 4 &&
+							(marker.message || '').includes('x42')
+					)
+			);
+		});
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = 42\nprint(value)\n' &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 8 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page
+			.locator('.monaco-hover')
+			.filter({ hasText: 'Number' })
+			.first()
+			.waitFor({ timeout: 10_000 });
+		await page.keyboard.press('Escape');
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
