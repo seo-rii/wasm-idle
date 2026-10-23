@@ -46,12 +46,16 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		// The root install includes container execution modules and release metadata.
-		// Keep the bounded byte/package limits; shipped module/declaration pairs now
-		// total 436 root files + 267 dependency files + npm's installation metadata,
-		// including the debug-configuration module's JS and declaration files.
-		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 704, maxPackages: 6 },
+		// Java debugger modules share a bundled upstream parser and complete notices.
+		// The archive has 462 root files + 267 dependency files + npm metadata;
+		// the measured install is 6.46 MiB without parser dependency packages.
+		budget: { maxBytes: 6 * MiB + 512 * 1024, maxFiles: 730, maxPackages: 6 },
 		absentPackageNames: [
+			'java-parser',
+			'chevrotain',
+			'chevrotain-allstar',
+			'lodash',
+			'lodash-es',
 			'@lezer/rust',
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -64,7 +68,17 @@ export const scenarios = [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/llvm-core/debug');",
-			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
+			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');",
+			"const { instrumentJavaDebugSource } = await import(new URL('./playground/javaDebugSource.js', import.meta.resolve('wasm-idle')));",
+			"const captured = instrumentJavaDebugSource('class Main { void run() { int value = 7; value++; } }', 'Main.java', 'debug.Bridge');",
+			"if (!captured.locations.length || !captured.code.includes('debug.Bridge.capture(value)')) throw new Error('Packaged Java source hooks failed');",
+			"const { buildJavaDebugEvaluationProgram } = await import(new URL('./playground/worker/javaDebugEvaluator.js', import.meta.resolve('wasm-idle')));",
+			"const evaluation = buildJavaDebugEvaluationProgram({ expression: 'value + 5', bindings: [{ name: 'value', type: 'int', value: '7' }] });",
+			"if (evaluation.args[0] !== '7' || !evaluation.code.includes('value + 5')) throw new Error('Packaged Java expression generation failed');",
+			"let rejectedMutation = false; try { buildJavaDebugEvaluationProgram({ expression: 'value++', bindings: [{ name: 'value', type: 'int', value: '7' }] }); } catch { rejectedMutation = true; }",
+			"if (!rejectedMutation) throw new Error('Packaged Java mutation guard failed');",
+			"const javaNotices = await (await import('node:fs/promises')).readFile(new URL('./playground/java-debug-notices.txt', import.meta.resolve('wasm-idle')), 'utf8');",
+			"if (!javaNotices.includes('java-parser@3.0.1') || !javaNotices.includes('Apache License')) throw new Error('Packaged Java parser notices are missing');"
 		]
 	},
 	{
@@ -126,8 +140,9 @@ export const scenarios = [
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
 		// Bounded allowance for the shared debugger trees, hover and breakpoint API.
-		// Full install measurement is 38.07 MiB; plugin and root byte limits stay fixed.
-		budget: { maxBytes: 38 * MiB + 128 * 1024, maxFiles: 3_250, maxPackages: 70 },
+		// Full install measurement is 38.49 MiB including the shared Java parser.
+		// Optional-plugin budgets and the production-package limit stay unchanged.
+		budget: { maxBytes: 38 * MiB + 512 * 1024, maxFiles: 3_250, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

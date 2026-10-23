@@ -182,9 +182,6 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
-      java-parser:
-        specifier: 3.0.1
-        version: 3.0.1
     devDependencies:
       '@assemblyscript/loader':
         specifier: 0.28.20
@@ -288,6 +285,9 @@ importers:
       globals:
         specifier: ^17.13.0
         version: 17.13.0
+      java-parser:
+        specifier: 3.0.1
+        version: 3.0.1
       jsdom:
         specifier: ^30.1.2
         version: 30.1.2
