@@ -42,6 +42,24 @@ it('checks elapsed time during writes when the event loop cannot run timers', ()
 	output.close();
 });
 
+it('polls pending output deadlines without flushing early or checking the clock when empty', () => {
+	vi.useFakeTimers();
+	let time = 0;
+	const now = vi.fn(() => time);
+	const messages: string[] = [];
+	const output = createJavaOutput((text) => messages.push(text), { now });
+	for (const char of 'loop-ready\n') output.write(char.charCodeAt(0));
+	for (time = 1; time < 16; time++) output.flushIfDue();
+	expect(messages).toEqual(['l']);
+	output.flushIfDue();
+	expect(messages).toEqual(['l', 'oop-ready\n']);
+	expect(vi.getTimerCount()).toBe(0);
+	now.mockClear();
+	for (let i = 0; i < 1000; i++) output.flushIfDue();
+	expect(now).not.toHaveBeenCalled();
+	output.close();
+});
+
 it('retains surrogate pairs across chunk boundaries and drains timers on close', () => {
 	vi.useFakeTimers();
 	const messages: string[] = [];

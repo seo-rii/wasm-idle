@@ -504,13 +504,17 @@ self.addEventListener('message', async (event) => {
 						}
 						self.postMessage({ javaDebug: { event, stopId } });
 					},
-					(blocking) =>
-						readDebugCommand(
+					(blocking) => {
+						// Synchronous Java loops prevent output timers from running. Keep
+						// elapsed batches visible while hooks poll, without flushing every hook.
+						if (!blocking) output?.flushIfDue();
+						return readDebugCommand(
 							javaDebug.buffer,
 							blocking,
 							() => self.postMessage({ javaDebug: { consumed: true } }),
 							'Java'
-						),
+						);
+					},
 					(response) => self.postMessage({ javaDebug: { response } })
 				);
 			}

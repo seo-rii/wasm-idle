@@ -18,7 +18,16 @@ const compiled = ts.transpileModule(source, {
 	compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 
-function worker() {
+function worker(
+	options: {
+		now?: () => number;
+		program?: (
+			write: (charCode: number) => void,
+			debug: ReturnType<typeof javaDebugRuntime.createJavaDebugRuntime>
+		) => void;
+		onMessage?: (message: any) => void;
+	} = {}
+) {
 	const messages: any[] = [];
 	const counts = {
 		compile: 0,
@@ -92,20 +101,27 @@ function worker() {
 		}
 	};
 	const runtime = {
-		load: async (bytes: Uint8Array) => {
-			if (bytes[0] === 9 || (bytes as any).app)
+		load: async (bytes: Uint8Array, settings?: { installImports?: (imports: any) => void }) => {
+			if (bytes[0] === 9 || (bytes as any).app) {
+				const imports = { teavmConsole: { putcharStdout: (_charCode: number) => {} } };
+				settings?.installImports?.(imports);
 				return {
 					exports: {
 						main: () => {
 							counts.run++;
+							options.program?.(
+								imports.teavmConsole.putcharStdout,
+								context.wasmIdleJavaDebug
+							);
 						}
 					}
 				};
+			}
 			counts.initialize++;
 			return { exports: { createCompiler: () => compiler } };
 		}
 	};
-	vm.runInNewContext(compiled, {
+	const context = vm.createContext({
 		exports: {},
 		performance,
 		setTimeout,
@@ -133,7 +149,10 @@ function worker() {
 			addEventListener: (_: string, listener: typeof handler) => {
 				handler = listener;
 			},
-			postMessage: (message: any) => messages.push(message)
+			postMessage: (message: any) => {
+				messages.push(message);
+				options.onMessage?.(message);
+			}
 		},
 		require: (id: string) => {
 			if (id === '../javaDebugBridge') return javaDebugBridge;
@@ -141,7 +160,11 @@ function worker() {
 			if (id === '../debugMailbox') return debugMailbox;
 			if (id === './javaDebugRuntime') return javaDebugRuntime;
 			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
-			if (id === './javaOutput') return javaOutput;
+			if (id === './javaOutput')
+				return {
+					createJavaOutput: (emit: (text: string) => void) =>
+						javaOutput.createJavaOutput(emit, { now: options.now })
+				};
 			if (id === './javaStreaming')
 				return {
 					acceptCompiledTeaVmModule: (source: string) => source,
@@ -178,6 +201,7 @@ function worker() {
 			throw new Error(`Unexpected dependency: ${id}`);
 		}
 	});
+	vm.runInContext(compiled, context);
 	return {
 		counts,
 		hasDiagnosticListener: () => onDiagnostic !== undefined,
@@ -199,6 +223,72 @@ function worker() {
 		}
 	};
 }
+
+test('debug polling publishes elapsed output batches before an output-triggered pause', async () => {
+	const mailbox = new debugMailbox.DebugCommandMailbox('Java');
+	const pauses: Array<{ reason: string; line: number }> = [];
+	let time = 0;
+	let output = '';
+	let outputDuringLoop = '';
+	let outputBeforeDeadline = '';
+	let runningLoop = false;
+	let pauseRequests = 0;
+	const w = worker({
+		now: () => time,
+		onMessage(message) {
+			if (message.javaDebug?.consumed) mailbox.flush();
+			const event = message.javaDebug?.event;
+			if (event?.type === 'pause') {
+				pauses.push({ reason: event.reason, line: event.line });
+				mailbox.send(JSON.stringify({ op: 'control', command: 'continue' }));
+			}
+			if (message.output) {
+				output += message.output;
+				if (runningLoop && output.includes('loop-ready') && pauseRequests === 0) {
+					pauseRequests++;
+					mailbox.send(JSON.stringify({ op: 'pause' }));
+				}
+			}
+		},
+		program(write, debug) {
+			debug.poll('Main.java', 2, 3);
+			debug.pause('Main.java', 2, 3, '[["Main","main","Main.java",2]]', 1);
+			runningLoop = true;
+			for (const char of 'loop-ready\n') write(char.charCodeAt(0));
+			// No await or timer advancement: Wasm retains the worker until it pauses.
+			for (time = 1; time <= 17; time++) {
+				if (debug.poll('Main.java', 4, 18))
+					debug.pause('Main.java', 4, 18, '[["Main","main","Main.java",4]]', 1);
+				if (time === 15) outputBeforeDeadline = output;
+			}
+			outputDuringLoop = output;
+			runningLoop = false;
+		}
+	});
+	try {
+		await w.load();
+		await w.run({
+			code: 'public class Main {\n  public static void main(String[] args) {\n    System.out.println("loop-ready");\n    while (true) {}\n  }\n}',
+			prepare: false,
+			debugMode: 'trace',
+			javaDebug: {
+				buffer: mailbox.buffer,
+				sourcePath: '/workspace/Main.java',
+				pauseOnEntry: true
+			}
+		});
+		assert.equal(w.messages.find((message) => message.error)?.error, undefined);
+		assert.equal(outputBeforeDeadline, 'l');
+		assert.equal(outputDuringLoop, 'loop-ready\n');
+		assert.equal(pauseRequests, 1);
+		assert.deepEqual(pauses, [
+			{ reason: 'entry', line: 2 },
+			{ reason: 'pause', line: 4 }
+		]);
+	} finally {
+		mailbox.close();
+	}
+});
 
 test('unchanged prepare requests compile only once and never execute the program', async () => {
 	const w = worker();

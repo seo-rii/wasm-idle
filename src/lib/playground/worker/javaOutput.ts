@@ -40,6 +40,9 @@ export function createJavaOutput(
 			else if (timer === undefined) timer = setTimeout(flush, maxDelayMs);
 		},
 		flush,
+		flushIfDue() {
+			if (text && now() - lastFlush >= maxDelayMs) flush();
+		},
 		close() {
 			flush();
 			closed = true;
