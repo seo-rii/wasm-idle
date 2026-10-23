@@ -220,6 +220,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	let watchRequestVersion = 0;
 	let frameRequestVersion = 0;
+	let activeStopId: number | undefined;
 	let commandInFlight = false;
 	let commandRequestVersion = 0;
 	const variableRequests = new Map<
@@ -534,6 +535,20 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function handleEvent(event: DebugSessionEvent) {
+		if (event.type === 'pauseDetails') {
+			if (!get(pausedStore) || event.stopId !== activeStopId) return;
+			if (event.callStack) {
+				const current = new Map(get(callStackStore).map((frame) => [frame.id, frame]));
+				callStackStore.set(
+					event.callStack.map((frame) => ({ ...frame, ...current.get(frame.id) }))
+				);
+			}
+			if (event.scopes && event.frameId === get(frameIdStore)) {
+				scopesStore.set(event.scopes);
+				loadTopLevelVariables();
+			}
+			return;
+		}
 		if (event.type === 'breakpoints') {
 			resolvedBreakpointsBySourceStore.update((current) => {
 				const next = new Map(current);
@@ -546,6 +561,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'pause') {
+			activeStopId = event.stopId;
 			releaseCommandRequest();
 			invalidateVariableRequests();
 			activeStore.set(true);

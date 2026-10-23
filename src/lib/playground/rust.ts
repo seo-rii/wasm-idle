@@ -755,6 +755,21 @@ class Rust implements Sandbox {
 								});
 								return;
 							}
+							if (
+								editorSourcePath !== rustLldbSourcePath &&
+								debugEvent.type === 'pauseDetails' &&
+								debugEvent.callStack
+							) {
+								forwardDebugEvent({
+									...debugEvent,
+									callStack: debugEvent.callStack.map((frame) =>
+										frame.sourcePath === rustLldbSourcePath
+											? { ...frame, sourcePath: editorSourcePath }
+											: frame
+									)
+								});
+								return;
+							}
 							forwardDebugEvent(debugEvent);
 						},
 						onOutput: (debugOutput) => this.output(debugOutput)
