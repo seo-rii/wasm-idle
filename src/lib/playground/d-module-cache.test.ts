@@ -31,6 +31,19 @@ class ModuleWorker {
 			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent));
 			return;
 		}
+		if (message.debugMode === 'lldb') {
+			queueMicrotask(() =>
+				this.onmessage?.({
+					data: {
+						lldbArtifact: {
+							bytes: this.bytes.slice(),
+							sources: [{ path: '/workspace/main.d', content: message.code }]
+						}
+					}
+				} as MessageEvent)
+			);
+			return;
+		}
 		this.controller = new AbortController();
 		this.usedHostService = !!message.compilerModulePorts;
 		void Promise.all(
@@ -117,6 +130,69 @@ afterEach(async () => {
 });
 
 describe('D compiler modules across isolated worker sessions', () => {
+	it('defers invalid debugger URLs until an explicit LLDB run and leaves ordinary execution reusable', async () => {
+		const first = await sandbox(undefined, {
+			...assets,
+			debug: { baseUrl: 'http://[' }
+		});
+		await expect(first.run('void main() {}', false)).resolves.toBe(true);
+		await expect(
+			first.run('void main() {}', false, false, undefined, [], { debugMode: 'lldb' })
+		).rejects.toThrow('Invalid URL');
+		expect(workers).toHaveLength(2);
+		expect(workers[1].modules).toHaveLength(0);
+		await expect(
+			first.run('void main() {}', false, false, undefined, [], { debug: true })
+		).rejects.toThrow('D debugging requires debugMode: lldb.');
+		await expect(first.run('void main() {}', false)).resolves.toBe(true);
+		expect(workers[1].usedHostService).toBe(true);
+	});
+
+	it('preserves custom debugger settings after normal workers retire and propagates native startup failures', async () => {
+		const fetch = vi.fn(async () => {
+			throw new Error('debug manifest unavailable');
+		});
+		vi.stubGlobal('fetch', fetch);
+		const debug = {
+			baseUrl: 'https://debug.example.test/custom/',
+			manifestUrl: 'https://debug.example.test/custom/manifest.json',
+			manifestSha256: 'a'.repeat(64)
+		};
+		const first = await sandbox(undefined, {
+			...assets,
+			rootUrl: 'https://example.test/app/',
+			debug
+		});
+		debug.baseUrl = 'http://[';
+		debug.manifestUrl = 'http://[';
+		await expect(first.run('void main() {}', false)).resolves.toBe(true);
+		expect(fetch).not.toHaveBeenCalled();
+		await expect(
+			first.run('void main() {}', false, false, undefined, [], { debugMode: 'lldb' })
+		).rejects.toThrow('debug manifest unavailable');
+		expect(fetch).toHaveBeenCalledExactlyOnceWith(
+			'https://debug.example.test/custom/manifest.json',
+			expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) })
+		);
+		expect(workers[1].stopped).toBe(true);
+		await expect(first.run('void main() {}', false)).resolves.toBe(true);
+	});
+
+	it('keeps explicit native debugging subject to manifest trust without blocking standalone D', async () => {
+		const fetch = vi.fn();
+		vi.stubGlobal('fetch', fetch);
+		const first = await sandbox(undefined, {
+			...assets,
+			rootUrl: 'https://example.test/app/',
+			debug: { baseUrl: 'https://debug.example.test/untrusted/' }
+		});
+		await expect(
+			first.run('void main() {}', false, false, undefined, [], { debugMode: 'lldb' })
+		).rejects.toThrow('LLDB runtime requires an expected manifest SHA-256 receipt.');
+		expect(fetch).not.toHaveBeenCalled();
+		await expect(first.run('void main() {}', false)).resolves.toBe(true);
+	});
+
 	it('reuses both native modules while retiring workers and keeping memories and files private', async () => {
 		const owner = cache();
 		const compile = vi.spyOn(WebAssembly, 'compile');

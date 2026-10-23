@@ -73,6 +73,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: DOperation | null = null;
+	private lldbAssets: Pick<PlaygroundRuntimeAssets, 'rootUrl' | 'debug' | 'persistentCache'> = {};
 	private disposed = false;
 	private runtimeAssetCache = new RuntimeAssetCache();
 	private ownsRuntimeAssetCache = true;
@@ -280,7 +281,15 @@ class D extends CompiledLldbSandbox implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
-			this.configureLldb(runtimeAssets, options);
+			// Ordinary D execution only needs its compiler bundle. Keep debugger settings
+			// across worker retirement, but resolve their URLs only for an LLDB run.
+			const assets: PlaygroundRuntimeAssets =
+				typeof runtimeAssets === 'string' ? { rootUrl: runtimeAssets } : runtimeAssets;
+			this.lldbAssets = {
+				rootUrl: assets.rootUrl,
+				debug: assets.debug ? { ...assets.debug } : undefined,
+				persistentCache: options.persistentCache ?? assets.persistentCache
+			};
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
@@ -440,7 +449,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 		if (!this.worker && this.moduleUrl && this.outerIntegrity && !this.disposed) {
 			await this.load(
 				{
-					...this.lldbReloadAssets(),
+					...this.lldbAssets,
 					d: {
 						moduleUrl: this.moduleUrl,
 						manifestUrl: this.manifestUrl,
@@ -493,6 +502,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 						'The packaged D compiler supports one source file per LLDB session.'
 					);
 				}
+				this.configureLldb(this.lldbAssets, options);
 				this.prepareLldb(options, 'main.d');
 			}
 			signal = options.signal;
@@ -841,6 +851,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 		this.manifestUrl = '';
 		this.outerIntegrity = undefined;
 		this.activeDAssetsKey = '';
+		this.lldbAssets = {};
 		this.output = null;
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();
