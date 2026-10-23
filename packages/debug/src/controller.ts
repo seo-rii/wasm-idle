@@ -31,6 +31,7 @@ import {
 	createDebugStopSnapshot,
 	debugFramePathKey,
 	isArgumentScope,
+	isDebugScopeComplete,
 	isLocalScope,
 	orderDebugScopes,
 	type DebugVariableNode,
@@ -302,6 +303,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		string,
 		{ variablesReference: number; promise: Promise<DebugVariable[]> }
 	>();
+	const incompleteScopeReferences = new Set<number>();
 	let argumentQueue: Promise<void> = Promise.resolve();
 	const argumentRequests = new Map<number, Promise<void>>();
 	let currentStopId = 0;
@@ -324,6 +326,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		hoverRequestVersion += 1;
 		restoredPaths.clear();
 		variableRequests.clear();
+		incompleteScopeReferences.clear();
 		argumentRequests.clear();
 		argumentQueue = Promise.resolve();
 		loadingVariableReferencesStore.set(new Set());
@@ -395,6 +398,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			locals: get(localsStore),
 			variablesByReference: get(variablesByReferenceStore),
 			loadingReferences: get(loadingVariableReferencesStore),
+			incompleteScopeReferences,
 			watches: get(watchValuesStore)
 		});
 		variableNodesStore.set(nodes.locals);
@@ -573,6 +577,29 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		request.promise = (async () => {
 			try {
 				const variables = await terminal.debugVariables!(variablesReference, ...paging);
+				if (version === frameRequestVersion && get(pausedStore)) {
+					const scope = get(scopesStore).find(
+						(entry) => entry.variablesReference === variablesReference
+					);
+					if (scope) {
+						const loaded =
+							get(variablesByReferenceStore).get(variablesReference)?.length ??
+							scope.variables.length;
+						const start = paging[0] ?? 0;
+						const total =
+							scope.namedVariables === undefined &&
+							scope.indexedVariables === undefined
+								? undefined
+								: (scope.namedVariables ?? 0) + (scope.indexedVariables ?? 0);
+						const incomplete =
+							start > loaded ||
+							(total === undefined
+								? paging[1] !== undefined && variables.length >= paging[1]
+								: Math.max(loaded, start + variables.length) < total);
+						if (incomplete) incompleteScopeReferences.add(variablesReference);
+						else incompleteScopeReferences.delete(variablesReference);
+					}
+				}
 				return version === frameRequestVersion && get(pausedStore)
 					? paging[1] === undefined
 						? variables
@@ -714,6 +741,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 				if (matches.length > 1) return { expression, value: '?' };
 				variable = matches[0];
 				if (variable) break;
+				if (!isDebugScopeComplete(scope, scopeVariables, incompleteScopeReferences))
+					return { expression, value: '?' };
 			}
 		} else {
 			const matches = get(localsStore).filter((candidate) => candidate.name === root);
@@ -1521,6 +1550,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		const terminal = get(terminalStore);
 		if (!get(pausedStore) || !frame || !terminal?.debugScopes) return false;
 		variableViewSuspended = true;
+		const previousIncompleteScopes = new Set(incompleteScopeReferences);
 		invalidateVariableRequests();
 		const version = frameRequestVersion;
 		const previousLocals = get(localsStore);
@@ -1531,6 +1561,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			scopes = await terminal.debugScopes(frameId);
 		} catch {
 			if (version === frameRequestVersion && get(pausedStore)) {
+				for (const reference of previousIncompleteScopes)
+					incompleteScopeReferences.add(reference);
 				localsStore.set(previousLocals);
 				variableViewSuspended = false;
 				updateVariableView();
