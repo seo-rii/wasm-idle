@@ -1276,6 +1276,42 @@ async function runLspCase(
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
+	if (testCase.language === 'PHP') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const line = editor.getModel().getLineContent(2);
+			editor.setPosition({ lineNumber: 2, column: line.indexOf('): string') + 4 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('?');
+		await page.waitForFunction(() =>
+			Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue().includes('): ?string')
+		);
+		const showReturnType = async (nullable: boolean) => {
+			await page.evaluate(() => {
+				const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+				editor.setPosition({ lineNumber: 4, column: 7 });
+				editor.focus();
+				editor.trigger('browser-regression', 'editor.action.showHover', {});
+			});
+			await page
+				.locator('.monaco-hover')
+				.filter({
+					hasText: nullable ? /\): \?string/u : /\): string/u
+				})
+				.first()
+				.waitFor();
+			await page.keyboard.press('Escape');
+		};
+		await showReturnType(true);
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(
+			(source) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === source,
+			testCase.source
+		);
+		await showReturnType(false);
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
