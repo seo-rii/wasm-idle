@@ -17,6 +17,8 @@ import {
 } from './protocol';
 import type { SandboxExecutionOptions } from '../options';
 import type { SandboxRuntimeAssets } from '../sandbox';
+import { setCdpTransportFactory } from '../cdpSession';
+import { createContainerCdpTransportFactory } from './cdp-bridge';
 
 const scope = globalThis as unknown as {
 	postMessage(message: ContainerWorkerResponse): void;
@@ -35,6 +37,7 @@ let shellWriter: WritableStreamDefaultWriter<Uint8Array> | undefined;
 let shellWrites = Promise.resolve();
 let watcher: ReadableStreamDefaultReader | undefined;
 const lifetime = new AbortController();
+let cdpBridge: ReturnType<typeof createContainerCdpTransportFactory> | undefined;
 const requests = new Map<number, AbortController>();
 const executionMode = new Map<string, 'clang' | 'engine'>();
 const NativeWorker = globalThis.Worker,
@@ -71,6 +74,8 @@ function absoluteAssets(value: unknown, root: string, key = ''): unknown {
 	return value;
 }
 async function initialize(settings: ContainerWorkerInitialization) {
+	cdpBridge = createContainerCdpTransportFactory(globalThis, channel);
+	setCdpTransportFactory(cdpBridge.connect);
 	if (typeof settings.workspaceId !== 'string' || settings.workspaceId.length > 4096)
 		throw new Error('Invalid workspace identifier');
 	const root = new URL(settings.applicationRootURL);
@@ -263,6 +268,7 @@ async function dispose() {
 	await container?.dispose();
 	childrenClosed = true;
 	for (const child of [...children]) child.terminate();
+	cdpBridge?.dispose();
 }
 const debugMethods = new Set([
 	'debugCommand',

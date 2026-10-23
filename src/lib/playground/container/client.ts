@@ -8,6 +8,7 @@ import {
 	type ContainerWorkerRequest,
 	type ContainerWorkerResponse
 } from './protocol';
+import { installContainerCdpRelay } from './cdp-bridge';
 
 export interface ContainerWorkerClient {
 	call<T = unknown>(
@@ -37,6 +38,7 @@ export function createContainerWorkerClient(options: ClientOptions): ContainerWo
 			type: 'module',
 			name: 'wasm-idle-container-owner'
 		});
+	const disposeCdpRelay = installContainerCdpRelay(worker, channel);
 	const listeners = new Set<(event: ContainerWorkerEvent) => void>();
 	const pending = new Map<
 		number,
@@ -59,6 +61,7 @@ export function createContainerWorkerClient(options: ClientOptions): ContainerWo
 		if (disposed) return;
 		retirementError = error;
 		disposed = true;
+		disposeCdpRelay();
 		worker.removeEventListener('message', message);
 		worker.removeEventListener('error', crash);
 		worker.removeEventListener('messageerror', crash);
