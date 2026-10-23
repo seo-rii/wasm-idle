@@ -143,12 +143,14 @@ self.onmessage = async (event: { data: any }) => {
 		code,
 		prepare,
 		args = [],
+		compileArgs: requestedCompileArgs = [],
 		stdin,
 		fileName = 'main.d',
 		log,
 		debugMode
 	} = event.data;
 	try {
+		const compileArgs = [...requestedCompileArgs];
 		if (load) {
 			runtimeConfig = snapshotDOuterAssetConfig({
 				moduleUrl: nextModuleUrl,
@@ -168,7 +170,19 @@ self.onmessage = async (event: { data: any }) => {
 		const lldb = debugMode === 'lldb';
 		const sourcePath = normalizeLldbWorkspacePath(fileName);
 		const compilerFileName = sourcePath.split('/').at(-1) || 'main.d';
-		const compileCacheKey = `${debugMode || 'none'}\n${fileName}\n${code}`;
+		// Debugger requirements take precedence over user optimization and DWARF flags.
+		const compilerArgs = [
+			...compileArgs,
+			...(lldb
+				? [
+						'-g',
+						'-O0',
+						'-dwarf-version=4',
+						`--fdebug-prefix-map=/work/${compilerFileName}=/workspace/${sourcePath}`
+					]
+				: [])
+		];
+		const compileCacheKey = JSON.stringify([debugMode || 'none', fileName, code, compilerArgs]);
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
@@ -180,16 +194,7 @@ self.onmessage = async (event: { data: any }) => {
 				fileName,
 				target: 'wasm32-wasi',
 				log,
-				...(lldb
-					? {
-							compileArgs: [
-								'-g',
-								'-O0',
-								'-dwarf-version=4',
-								`--fdebug-prefix-map=/work/${compilerFileName}=/workspace/${sourcePath}`
-							]
-						}
-					: {}),
+				compileArgs: compilerArgs,
 				onProgress(progress: unknown) {
 					postMessage({ progress });
 				}

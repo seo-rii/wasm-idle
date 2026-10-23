@@ -6,6 +6,7 @@ import {
 	extractTarPackage,
 	type Container,
 	type ContainerOptions,
+	type SnapshotEntry,
 	type HostCommandInvocation,
 	type HostCommandRecord,
 	type HostCommandRoute
@@ -13,6 +14,7 @@ import {
 import { createClangAdapter } from '@wasm-idle/container/adapters/clang';
 import { createLiveClangAdapter } from '@wasm-idle/container/adapters/clang-live';
 import { createLiveWasiAdapter } from '@wasm-idle/container/adapters/wasi-live';
+import { clangSimdDriverArgs, installClangSimdHeaders } from '@wasm-idle/llvm-core/core/clang-simd';
 import {
 	createWasixShellSession,
 	installWasixWorkerGroup,
@@ -27,6 +29,45 @@ export const BASH_BIN = '/usr/local/bin';
 export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
 export const C_SYSROOT = '/usr/share/wasm-sysroot-c';
 const TOOLCHAIN = '/opt/toolchains/llvm';
+
+/** Expose the verified legacy sysroot through the canonical driver's automatic search paths. */
+export function withCanonicalWasiPaths(entries: readonly Omit<SnapshotEntry, 'inode'>[]) {
+	const additions: Omit<SnapshotEntry, 'inode'>[] = [];
+	for (const parent of ['include', 'lib']) {
+		if (
+			entries.some(
+				(entry) => entry.path === `${parent}/wasm32-wasi` && entry.type === 'directory'
+			) &&
+			!entries.some((entry) => entry.path === `${parent}/wasm32-wasip1`)
+		)
+			additions.push({
+				path: `${parent}/wasm32-wasip1`,
+				type: 'symlink',
+				mode: 0o777,
+				target: 'wasm32-wasi'
+			});
+	}
+	const directory = 'lib/clang/22/lib/wasm32-unknown-wasip1';
+	const path = `${directory}/libclang_rt.builtins.a`;
+	if (
+		!entries.some((entry) => entry.path === path) &&
+		entries.some(
+			(entry) =>
+				entry.path === 'lib/clang/22/lib/wasi/libclang_rt.builtins-wasm32.a' &&
+				entry.type === 'file'
+		)
+	) {
+		if (!entries.some((entry) => entry.path === directory))
+			additions.push({ path: directory, type: 'directory', mode: 0o755 });
+		additions.push({
+			path,
+			type: 'symlink' as const,
+			mode: 0o777,
+			target: '../wasi/libclang_rt.builtins-wasm32.a'
+		});
+	}
+	return additions.length ? [...entries, ...additions] : entries;
+}
 
 /** Pinned assets and worker URLs selected by trusted application code. */
 export interface BashProfileConfiguration {
@@ -210,6 +251,8 @@ export async function createBashProfile({
 		),
 		[`${BASH_BIN}/clang`]: {
 			command: 'clang',
+			// Prepared release manifests may predate the current SIMD defaults.
+			args: clangSimdDriverArgs(BASH_SYSROOT),
 			stdio: filesystem === 'live' ? 'delegated' : 'forwarded'
 		},
 		[`${BASH_BIN}/wasm-run`]: { command: 'wasm-run' },
@@ -226,10 +269,12 @@ export async function createBashProfile({
 		const profile =
 			!layers || requestedProfile === 'full' || sysroots.has('full') ? 'full' : 'c';
 		const root = profile === 'c' ? C_SYSROOT : BASH_SYSROOT;
-		const args =
-			profile === 'c'
+		const args = [
+			...(profile === 'c'
 				? [`--sysroot=${C_SYSROOT}`, `-resource-dir=${C_SYSROOT}/lib/clang/22`]
-				: [];
+				: []),
+			...clangSimdDriverArgs(root)
+		];
 		if (sysroots.has(profile)) return args;
 		// Each consumer owns its signal; the verified asset loader shares only fetches.
 		const prepared = await manager.prepare('llvm', { signal });
@@ -269,7 +314,31 @@ export async function createBashProfile({
 		};
 		signal.throwIfAborted();
 		if (!sysroots.has(profile)) {
-			container.fs.mountReadonly(root, entries);
+			// The archive identity describes upstream bytes. Add the trusted application's
+			// SIMD headers only after verification, leaving its Clang resource headers intact.
+			const mounted = new Map(entries.map((entry) => [entry.path, entry]));
+			installClangSimdHeaders({
+				mkdirTree(path) {
+					let parent = '';
+					for (const part of path.slice(1).split('/')) {
+						parent = parent ? `${parent}/${part}` : part;
+						const existing = mounted.get(parent);
+						if (existing && existing.type !== 'directory')
+							throw new Error(
+								'SIMD header directory conflicts with the pinned sysroot'
+							);
+						if (!existing)
+							mounted.set(parent, { path: parent, type: 'directory', mode: 0o555 });
+					}
+				},
+				writeFile(path, data) {
+					const relative = path.slice(1);
+					if (mounted.has(relative))
+						throw new Error('SIMD header conflicts with the pinned sysroot');
+					mounted.set(relative, { path: relative, type: 'file', mode: 0o444, data });
+				}
+			});
+			container.fs.mountReadonly(root, withCanonicalWasiPaths([...mounted.values()]));
 			sysroots.set(profile, metadata);
 		}
 		return args;

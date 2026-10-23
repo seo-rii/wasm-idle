@@ -331,12 +331,15 @@ export async function runStdinBrowserProbe(options) {
 	await addBrowserTestCookies(context, browserUrl);
 	await disableBrowserPrewarm(context);
 	// These probes measure execution assets, independently of the default editor LSP.
-	await context.addInitScript((argsInput) => {
-		localStorage.setItem(
-			'wasm-idle:example-workspace:v3',
-			JSON.stringify({ version: 6, files: [], lspEnabled: false, argsInput })
-		);
-	}, argsInput);
+	await context.addInitScript(
+		({ argsInput, language }) => {
+			localStorage.setItem(
+				'wasm-idle:example-workspace:v3',
+				JSON.stringify({ version: 6, files: [], lspEnabled: false, argsInput, language })
+			);
+		},
+		{ argsInput, language }
+	);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 

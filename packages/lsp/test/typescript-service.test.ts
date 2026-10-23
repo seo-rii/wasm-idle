@@ -1,12 +1,82 @@
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LspDocument, LspDocumentContext } from '../src/lsp';
+import {
+	applyContentChanges,
+	positionAt,
+	type LspDocument,
+	type LspDocumentContext,
+	type LspTextEdit
+} from '../src/lsp';
 import { createTypeScriptWorkerService } from '../src/typescript/service';
 
 describe('TypeScript worker service', () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});
+
+	it.each(['typescript', 'javascript'] as const)(
+		'replaces the completion prefix and suffix in %s documents',
+		async (language) => {
+			const document: LspDocument = {
+				uri: `file:///workspace/main.${language === 'typescript' ? 'ts' : 'js'}`,
+				languageId: language,
+				version: 0,
+				text: ''
+			};
+			const context: LspDocumentContext = {
+				documents: new Map([[document.uri, document]]),
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			const service = createTypeScriptWorkerService(language, async () => ({}));
+			await service.initialize?.({ compilerOptions: { noLib: true } }, context);
+			try {
+				for (const [source, label, expected] of [
+					[
+						'const alpha = 1;\nconst beta = al|',
+						'alpha',
+						'const alpha = 1;\nconst beta = alpha'
+					],
+					[
+						'const alpha = 1;\nconst beta = al|pha',
+						'alpha',
+						'const alpha = 1;\nconst beta = alpha'
+					],
+					[
+						'const item = { value: 1 };\n"😀"; item.va|',
+						'value',
+						'const item = { value: 1 };\n"😀"; item.value'
+					],
+					[
+						'const item = { "not-valid": 1 };\nitem.|',
+						'not-valid',
+						'const item = { "not-valid": 1 };\nitem["not-valid"]'
+					]
+				]) {
+					const cursor = source.indexOf('|');
+					document.text = source.replace('|', '');
+					document.version += 1;
+					const completions = (await service.completion?.(
+						document,
+						positionAt(document.text, cursor),
+						context
+					)) as {
+						items: Array<{ label: string; textEdit: LspTextEdit }>;
+					};
+					const completion = completions.items.find((item) => item.label === label);
+					expect(completion?.textEdit, source).toBeDefined();
+					expect(
+						applyContentChanges(document.text, [
+							{ ...completion!.textEdit, text: completion!.textEdit.newText }
+						]),
+						source
+					).toBe(expected);
+				}
+			} finally {
+				await service.dispose?.();
+			}
+		}
+	);
 
 	it('requires externally hosted standard libraries by default', async () => {
 		const reportProgress = vi.fn();

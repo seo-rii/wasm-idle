@@ -1,4 +1,5 @@
 import { playgroundLanguages } from './language-registry';
+import { readCompilerOptions } from './compilerOptions';
 import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
 import { normalizeWorkspacePath } from './workspacePath';
 
@@ -77,7 +78,7 @@ export function validateWorkspaceSnapshot(
 		if (value[field] !== undefined && typeof value[field] !== 'boolean') invalid(field);
 	}
 	const selections: Record<string, readonly string[]> = {
-		cppVersion: ['CPP03', 'CPP11', 'CPP14', 'CPP17', 'CPP20', 'CPP23', 'CPP26'],
+		cppVersion: ['CPP98', 'CPP03', 'CPP11', 'CPP14', 'CPP17', 'CPP20', 'CPP23', 'CPP26'],
 		goTarget: ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'],
 		rustTargetTriple: ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'],
 		rustOptimizationProfile: ['interactive', 'speed', 'size'],
@@ -91,6 +92,7 @@ export function validateWorkspaceSnapshot(
 		)
 			invalid(field);
 	}
+	readCompilerOptions(value.compilerOptions);
 	validateWorkspace(value, 'workspace');
 	if (value.workspaces === undefined) return;
 	assertRecord(value.workspaces, 'workspaces');

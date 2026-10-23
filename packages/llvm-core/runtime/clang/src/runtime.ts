@@ -30,6 +30,7 @@ import {
 } from '../../core/src/clang-profile.js';
 import { installGccCompatibilityHeaders } from '../../core/src/gcc-compat.js';
 import { installClangResourceHeaders } from '../../core/src/clang-resource-headers.js';
+import { clangSimdFrontendArgs, installClangSimdHeaders } from '../../core/src/clang-simd.js';
 import { installClangCppHeaders } from '../../core/src/clang-cpp-headers.js';
 import MemFS from '../../core/src/memfs.js';
 import untar from '../../core/src/tar.js';
@@ -233,6 +234,7 @@ class Clang {
 		{ compiler: string; sysroot: string[]; runtimeHeaders: string } | undefined
 	>;
 	private workspaceOverridesSystemHeaders = false;
+	private simdCompatibility = false;
 
 	constructor(options: BrowserClangRuntimeOptions) {
 		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
@@ -296,7 +298,7 @@ class Clang {
 				})
 			);
 			options.signal?.throwIfAborted();
-			installClangResourceHeaders(
+			const pinnedResourceHeaders = installClangResourceHeaders(
 				{
 					readFile: (path) =>
 						this.memfs.hasFile(path)
@@ -308,6 +310,13 @@ class Clang {
 				this.compilerConfig?.provenance,
 				this.compilerConfig?.resourceDir
 			);
+			if (pinnedResourceHeaders) {
+				installClangSimdHeaders({
+					mkdirTree: (path) => this.memfs.addDirectory(path.replace(/^\/+/, '')),
+					writeFile: (path, contents) => this.installRuntimeHeader(path, contents)
+				});
+				this.simdCompatibility = true;
+			}
 			if (!this.assetUrls.cppAddon) await this.installCppHeaders();
 		});
 		this.ready = Promise.all([clangReady, fileSystemReady]).then(() => undefined);
@@ -1515,6 +1524,9 @@ class Clang {
 			'/',
 			'-resource-dir',
 			clangResourceDir,
+			// WAMR's qualified LLDB profile excludes SIMD. Normal and trace runs
+			// execute through the browser's native WebAssembly SIMD implementation.
+			...(this.simdCompatibility && !lldbDebug ? clangSimdFrontendArgs() : []),
 			...includeArgs,
 			...(language === 'OBJC' ? ['-I.'] : []),
 			'-ferror-limit',

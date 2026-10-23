@@ -7,7 +7,7 @@ const owned: Container[] = [];
 afterEach(async () => {
 	await Promise.all(owned.splice(0).map((container) => container.dispose()));
 });
-function fixture() {
+function fixture(limits: { maxBytes?: number; maxInodes?: number } = {}) {
 	const adapter = new WebsiteRuntimeAdapter({
 		runtimeAssets: '/wasm-idle/',
 		emit: vi.fn(),
@@ -16,7 +16,8 @@ function fixture() {
 	const container = createContainer({
 		adapters: [adapter.adapter],
 		commands: adapter.commands,
-		maxBytes: 16 * 1024 * 1024
+		maxBytes: 16 * 1024 * 1024,
+		...limits
 	});
 	adapter.attach(container);
 	owned.push(container);
@@ -26,6 +27,56 @@ const f = (path: string, content: string) => ({ path, content });
 const read = (container: Container, path: string) =>
 	new TextDecoder().decode(container.fs.readFile(path));
 describe('container shared editor input boundary', () => {
+	it.each([{ maxBytes: 4 }, { maxInodes: 13 }])(
+		'preserves the complete namespace when the first publication exceeds %j',
+		(limits) => {
+			const { adapter, container } = fixture(limits);
+			const snapshot = container.fs.exportSnapshot();
+			expect(() =>
+				adapter.syncWorkspace('C', [f('first', 'a'), f('second', '12345')])
+			).toThrow(/quota/);
+			expect(container.fs.exportSnapshot()).toEqual(snapshot);
+			adapter.syncWorkspace('C', [f('first', 'ok')]);
+			expect(read(container, '/workspace/C/first')).toBe('ok');
+		}
+	);
+	it('does not create a language directory before validating the first publication', () => {
+		const { adapter, container } = fixture();
+		const snapshot = container.fs.exportSnapshot();
+		expect(() => adapter.syncWorkspace('C', [f('../escape', 'invalid')])).toThrow();
+		expect(container.fs.exportSnapshot()).toEqual(snapshot);
+		adapter.syncWorkspace('C', []);
+		expect(container.fs.stat('/workspace/C').type).toBe('directory');
+	});
+	it('preserves every file and published baseline when a batch exceeds the shared byte quota', () => {
+		const { adapter, container } = fixture({ maxBytes: 12 });
+		const before = [f('old.txt', 'old'), f('first.txt', 'a')];
+		adapter.syncWorkspace('C', before);
+		const snapshot = container.fs.exportSnapshot();
+		expect(() =>
+			adapter.syncWorkspace('C', [f('first.txt', 'changed'), f('new.txt', '123456')], before)
+		).toThrow(/quota/);
+		expect(container.fs.exportSnapshot()).toEqual(snapshot);
+		// A retry still compares against the unchanged editor publication.
+		adapter.syncWorkspace('C', [f('first.txt', 'changed'), f('new.txt', '12345')], before);
+		expect(read(container, '/workspace/C/first.txt')).toBe('changed');
+		expect(read(container, '/workspace/C/new.txt')).toBe('12345');
+		expect(() => container.fs.stat('/workspace/C/old.txt')).toThrow();
+	});
+	it('keeps an editor delta intact when another language consumes the shared quota', () => {
+		const { adapter, container } = fixture({ maxBytes: 12 });
+		const before = [f('main.c', 'a')];
+		adapter.syncWorkspace('C', before);
+		adapter.syncWorkspace('CPP', [f('other.cpp', '12345678')]);
+		const snapshot = container.fs.exportSnapshot();
+		expect(() =>
+			adapter.syncWorkspace('C', [f('main.c', 'bb'), f('nested/new', 'ccc')], before, [
+				{ path: 'main.c', bytes: 2 },
+				{ path: 'nested/new', bytes: 3 }
+			])
+		).toThrow(/quota/);
+		expect(container.fs.exportSnapshot()).toEqual(snapshot);
+	});
 	it('rejects a conflicting editor batch before writing any of its files', () => {
 		const { adapter, container } = fixture();
 		const before = [f('main.c', 'base')];

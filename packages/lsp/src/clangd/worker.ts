@@ -6,6 +6,7 @@ import {
 import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
 import { writeGccCompatibilityHeaders } from '@wasm-idle/llvm-core/core/gcc-compat';
+import { installClangSimdHeaders } from '@wasm-idle/llvm-core/core/clang-simd';
 import {
 	CLANG_RESOURCE_HEADER_DIRECTORY,
 	CLANG_RESOURCE_HEADER_PROVENANCE,
@@ -217,13 +218,14 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 			).join('');
 		// These builds use the same pinned LLVM 22 sources. Other clangd builds
 		// keep their own resource headers instead of receiving this overlay.
+		const isPinnedClangd = [
+			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
+			'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3',
+			'f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c'
+		].includes(wasmDigest);
 		const resourceDir = event.data.assets.clangdHeaders
 			? mountClangdHeaders(clangdRuntime.FS, event.data.assets.clangdHeaders)
-			: [
-						'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
-						'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3',
-						'f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c'
-				  ].includes(wasmDigest)
+			: isPinnedClangd
 				? CLANG_RESOURCE_HEADER_DIRECTORY
 				: undefined;
 		if (resourceDir && !event.data.assets.clangdHeaders) {
@@ -240,10 +242,14 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 				resourceDir
 			);
 		}
+		// This pack includes LLVM 22's wasm_simd128.h and must match clangd's
+		// builtins. Leave custom compiler builds and header profiles unchanged.
+		const simd = isPinnedClangd && resourceDir === CLANG_RESOURCE_HEADER_DIRECTORY;
+		if (simd) installClangSimdHeaders(clangdRuntime.FS, '/usr');
 		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
 		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,
-			createClangdConfiguration({ ...event.data.compileProfile, resourceDir })
+			createClangdConfiguration({ ...event.data.compileProfile, resourceDir, simd })
 		);
 		for (const [path, source] of Object.entries(event.data.assets.objectiveCHeaders || {})) {
 			if (

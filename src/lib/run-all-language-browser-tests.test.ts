@@ -172,6 +172,7 @@ describe('all-language browser test runner', () => {
 		expect(Object.keys(plan.env).sort()).toEqual(
 			[
 				...expectedEnvironments,
+				'WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS',
 				'WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS',
 				'WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE',
 				'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE',
@@ -227,6 +228,7 @@ describe('all-language browser test runner', () => {
 		expect(createAllLanguageBrowserTestPlan({ family: 'clang' })).toEqual({
 			env: {
 				WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1',
@@ -240,7 +242,8 @@ describe('all-language browser test runner', () => {
 				'src/lib/playground/stdin.playwright.test.ts',
 				'src/lib/playground/objectivecxx.playwright.test.ts',
 				'src/lib/playground/cpp-standards.playwright.test.ts',
-				'src/lib/playground/long-double.playwright.test.ts'
+				'src/lib/playground/long-double.playwright.test.ts',
+				'src/routes/compiler-options.playwright.test.ts'
 			]
 		});
 	});
@@ -284,6 +287,8 @@ describe('all-language browser test runner', () => {
 				expectedFiles.add('src/lib/playground/debug.playwright.test.ts');
 				expectedFiles.add('src/lib/playground/cpp-standards.playwright.test.ts');
 				expectedFiles.add('src/lib/playground/long-double.playwright.test.ts');
+				expectedFiles.add('src/routes/compiler-options.playwright.test.ts');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE');
