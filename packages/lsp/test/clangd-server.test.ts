@@ -131,21 +131,28 @@ describe('getCppLanguageServer', () => {
 		expect(prepare).not.toHaveBeenCalled();
 		handle.dispose();
 	});
-	it('starts clangd with a resolved base URL and sync hook', async () => {
+	it('starts clangd with a resolved base URL, compile profile and sync hook', async () => {
 		const status = vi.fn();
+		const compileProfile = {
+			cppVersion: 'CPP98',
+			cVersion: 'C2x',
+			compileArgs: ['-DNAME="hello world"', '-I', '/workspace/include path', '-Wall']
+		};
 		const handle = await getCppLanguageServer({
 			cpp: {
 				baseUrl: 'https://static.example.com/repl_20240807/clangd/'
 			},
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker,
-			onStatus: status
+			onStatus: status,
+			compileProfile
 		});
 		const worker = mockState.workers[0];
 
 		expect(worker?.messages[0]).toMatchObject({
 			type: 'init',
 			baseUrl: 'https://static.example.com/repl_20240807/clangd/',
+			compileProfile,
 			assets: {
 				clangdJs: expect.any(ArrayBuffer),
 				clangdModule: expect.any(WebAssembly.Module)

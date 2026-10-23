@@ -13,7 +13,7 @@ import type {
 	EditorLanguageServerRuntimeOptions
 } from '../types.js';
 import { createLanguageServerProgressReporter } from '../worker-client.js';
-import type { ClangdStatus } from './config.js';
+import type { ClangdCompileProfile, ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
 import { createClangdRequestPolicy, type ClangdRequestTrace } from './request-policy.js';
 import { ClangdWorkspaceFileRegistry } from './workspace.js';
@@ -26,7 +26,7 @@ export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntime
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	onStatus?: (status: ClangdStatus) => void;
-	compileProfile?: { cppVersion?: string; cVersion?: string };
+	compileProfile?: ClangdCompileProfile;
 	objectiveC?: {
 		baseUrl: string;
 		headersUrl: string;

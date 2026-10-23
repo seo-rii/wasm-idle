@@ -2384,6 +2384,8 @@
 		clangdRuntimeAssets?: PlaygroundRuntimeAssets;
 		clangdCppVersion?: string;
 		clangdCVersion?: string;
+		clangdCompileArgs?: string[];
+		clangdSourceLanguage?: 'C' | 'CPP' | 'OBJC' | 'OBJCXX';
 		dotnetLspEnabled?: boolean;
 		dotnetLspModuleUrl?: string;
 		elixirLspEnabled?: boolean;
@@ -2512,6 +2514,8 @@
 		clangdRuntimeAssets,
 		clangdCppVersion,
 		clangdCVersion,
+		clangdCompileArgs = [],
+		clangdSourceLanguage,
 		dotnetLspEnabled = false,
 		dotnetLspModuleUrl,
 		elixirLspEnabled = false,
@@ -2712,6 +2716,12 @@
 		},
 		wordWrap: compact ? 'on' : 'off'
 	});
+	let settledClangdCompileArgs = $state<string[]>(untrack(() => [...clangdCompileArgs]));
+	$effect(() => {
+		const next = [...clangdCompileArgs];
+		const timeout = setTimeout(() => (settledClangdCompileArgs = next), 300);
+		return () => clearTimeout(timeout);
+	});
 	const lspConnectionKey = $derived(
 		[
 			language,
@@ -2719,6 +2729,8 @@
 			clangdEnabled ? clangdBaseUrl || '' : '',
 			clangdCppVersion || '',
 			clangdCVersion || '',
+			clangdSourceLanguage || '',
+			clangdEnabled ? JSON.stringify(settledClangdCompileArgs) : '',
 			dotnetLspEnabled ? dotnetLspModuleUrl || '' : '',
 			elixirLspEnabled ? elixirLspBundleUrl || '' : '',
 			elixirLspEnabled ? elixirLspWorkerUrl || '' : '',
@@ -3186,7 +3198,12 @@
 					cpp: { baseUrl: clangdBaseUrl || '' },
 					currentUrl,
 					signal,
-					compileProfile: { cppVersion: clangdCppVersion, cVersion: clangdCVersion },
+					compileProfile: {
+						cppVersion: clangdCppVersion,
+						cVersion: clangdCVersion,
+						compileArgs: settledClangdCompileArgs,
+						sourceLanguage: clangdSourceLanguage
+					},
 					...(activeLspLanguage === 'objective-c'
 						? {
 								objectiveC: resolveObjectiveCRuntimeAssetConfig(

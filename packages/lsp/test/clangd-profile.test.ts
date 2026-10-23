@@ -23,7 +23,7 @@ describe('clangd compile profiles', () => {
 			resolveClangLanguageArgs(language, {}).standardArg
 		);
 		expect(matching[0].CompileFlags.Add).toContain(mode);
-		expect(matching[0].CompileFlags.Add).toContain('--target=wasm32-wasi');
+		expect(matching[0].CompileFlags.Add).toContain('--target=wasm32-wasip1');
 		if (language !== 'CPP')
 			expect(matching[0].CompileFlags.Add.join(' ')).not.toContain('c++/v1');
 	});
@@ -33,6 +33,119 @@ describe('clangd compile profiles', () => {
 		expect(createClangdCompileFlags('OBJC')).toEqual(
 			expect.arrayContaining([...OBJECTIVE_C_RUNTIME_FLAGS, '-I/objc'])
 		);
+	});
+	it.each([
+		['C', { cVersion: 'C90' }, '-std=gnu89'],
+		['C', { cVersion: 'C23' }, '-std=gnu23'],
+		['OBJC', { cVersion: 'C2X' }, '-std=gnu23'],
+		['C', { cVersion: 'C2Y' }, '-std=gnu2y'],
+		['CPP', { cppVersion: 'CPP98' }, '-std=gnu++98'],
+		['OBJCXX', { cppVersion: 'CPP98' }, '-std=gnu++98']
+	] as const)('uses the selected %s standard %j', (language, options, standard) => {
+		expect(createClangdCompileFlags(language, options)).toContain(standard);
+	});
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'appends user arguments after generated %s flags without splitting or quoting them',
+		(language) => {
+			const compileArgs = [
+				'-DNAME="hello world"',
+				'-I',
+				'/workspace/include path',
+				'-Wall',
+				'-Wextra',
+				language === 'C' || language === 'OBJC' ? '-std=c11' : '-std=c++20'
+			];
+			const defaults = createClangdCompileFlags(language);
+			const flags = createClangdCompileFlags(language, { compileArgs });
+			expect(flags).toEqual([...defaults, ...compileArgs]);
+			expect(flags.at(-1)).toBe(compileArgs.at(-1));
+		}
+	);
+	it('preserves argument tokens through configuration serialization for every source language', () => {
+		const compileArgs = ['-DMESSAGE="a b"', '-I/workspace/header path', '-Werror'];
+		const configurations = createClangdConfiguration({ compileArgs })
+			.split('\n---\n')
+			.map((entry) => JSON.parse(entry));
+		expect(configurations).toHaveLength(4);
+		for (const entry of configurations) {
+			expect(entry.CompileFlags.Add.slice(-compileArgs.length)).toEqual(compileArgs);
+		}
+	});
+	it.each([
+		['C', 'c', '-std=c23'],
+		['CPP', 'c++', '-std=c++23'],
+		['OBJC', 'objective-c', '-std=c23'],
+		['OBJCXX', 'objective-c++', '-std=c++23']
+	] as const)(
+		'analyzes .h files as the active %s source language',
+		(sourceLanguage, mode, standard) => {
+			const configurations = createClangdConfiguration({
+				sourceLanguage,
+				compileArgs: ['-DVALUE=42', standard]
+			})
+				.split('\n---\n')
+				.map((entry) => JSON.parse(entry));
+			const matching = configurations.filter((entry) =>
+				new RegExp(`^(?:${entry.If.PathMatch})$`).test('include/header.h')
+			);
+			expect(matching).toHaveLength(1);
+			const flags: string[] = matching[0].CompileFlags.Add;
+			expect(flags[flags.indexOf('-x') + 1]).toBe(mode);
+			expect(flags.slice(-2)).toEqual(['-DVALUE=42', standard]);
+			for (const extension of ['hh', 'hpp', 'hxx']) {
+				const cppHeaders = configurations.filter((entry) =>
+					new RegExp(`^(?:${entry.If.PathMatch})$`).test(`include/header.${extension}`)
+				);
+				expect(cppHeaders).toHaveLength(1);
+				const cppFlags: string[] = cppHeaders[0].CompileFlags.Add;
+				expect(cppFlags[cppFlags.indexOf('-x') + 1]).toBe('c++');
+				if (sourceLanguage === 'C' || sourceLanguage === 'OBJC') {
+					expect(cppFlags).not.toContain(standard);
+					expect(cppFlags).toContain('-std=gnu++20');
+				} else expect(cppFlags).toContain(standard);
+			}
+		}
+	);
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'keeps all %s arguments and removes opposite-family standards only from sibling profiles',
+		(sourceLanguage) => {
+			const common = ['-DNAME="hello world"', '-I', '/workspace/include path', '-Wall'];
+			const cStandards = ['-std=c11', '-std=gnu23', '-std=iso9899:1999'];
+			const cppStandards = ['-std=c++20', '-std=gnu++23'];
+			const compileArgs = [...common, ...cStandards, ...cppStandards, '-std=invalid'];
+			for (const language of ['C', 'CPP', 'OBJC', 'OBJCXX'] as const) {
+				const sameFamily =
+					['CPP', 'OBJCXX'].includes(language) ===
+					['CPP', 'OBJCXX'].includes(sourceLanguage);
+				const expected = sameFamily
+					? compileArgs
+					: [
+							...common,
+							...(language === 'CPP' || language === 'OBJCXX'
+								? cppStandards
+								: cStandards),
+							'-std=invalid'
+						];
+				expect(createClangdCompileFlags(language, { sourceLanguage, compileArgs })).toEqual(
+					[...createClangdCompileFlags(language), ...expected]
+				);
+			}
+		}
+	);
+	it('preserves legacy .h selection and all argument tokens without source context', () => {
+		const compileArgs = ['-std=c11', '-std=c++20'];
+		const configurations = createClangdConfiguration({ compileArgs })
+			.split('\n---\n')
+			.map((entry) => JSON.parse(entry));
+		const matching = configurations.filter((entry) =>
+			new RegExp(`^(?:${entry.If.PathMatch})$`).test('header.h')
+		);
+		expect(matching).toHaveLength(1);
+		const flags: string[] = matching[0].CompileFlags.Add;
+		expect(flags[flags.indexOf('-x') + 1]).toBe('c++');
+		for (const entry of configurations) {
+			expect(entry.CompileFlags.Add.slice(-2)).toEqual(compileArgs);
+		}
 	});
 	it('finds the target-specific bundled libc++ headers', () => {
 		expect(createClangdCompileFlags('CPP')).toContain(

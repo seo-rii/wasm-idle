@@ -6,6 +6,7 @@ import {
 	extractTarPackage,
 	type Container,
 	type ContainerOptions,
+	type SnapshotEntry,
 	type HostCommandInvocation,
 	type HostCommandRecord,
 	type HostCommandRoute
@@ -27,6 +28,33 @@ export const BASH_BIN = '/usr/local/bin';
 export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
 export const C_SYSROOT = '/usr/share/wasm-sysroot-c';
 const TOOLCHAIN = '/opt/toolchains/llvm';
+
+/** Keep the verified runtime bytes while exposing Clang's canonical per-target filename. */
+export function withCanonicalWasiBuiltins(entries: readonly Omit<SnapshotEntry, 'inode'>[]) {
+	const directory = 'lib/clang/22/lib/wasm32-unknown-wasip1';
+	const path = `${directory}/libclang_rt.builtins.a`;
+	if (
+		entries.some((entry) => entry.path === path) ||
+		!entries.some(
+			(entry) =>
+				entry.path === 'lib/clang/22/lib/wasi/libclang_rt.builtins-wasm32.a' &&
+				entry.type === 'file'
+		)
+	)
+		return entries;
+	return [
+		...entries,
+		...(!entries.some((entry) => entry.path === directory)
+			? [{ path: directory, type: 'directory' as const, mode: 0o755 }]
+			: []),
+		{
+			path,
+			type: 'symlink' as const,
+			mode: 0o777,
+			target: '../wasi/libclang_rt.builtins-wasm32.a'
+		}
+	];
+}
 
 /** Pinned assets and worker URLs selected by trusted application code. */
 export interface BashProfileConfiguration {
@@ -269,7 +297,7 @@ export async function createBashProfile({
 		};
 		signal.throwIfAborted();
 		if (!sysroots.has(profile)) {
-			container.fs.mountReadonly(root, entries);
+			container.fs.mountReadonly(root, withCanonicalWasiBuiltins(entries));
 			sysroots.set(profile, metadata);
 		}
 		return args;

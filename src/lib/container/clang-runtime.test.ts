@@ -126,6 +126,34 @@ function fixture(
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
 describe('website container Clang compilation', () => {
+	it.each([
+		['C', { cVersion: 'C23' }, '-std=gnu23'],
+		['CPP', { cppVersion: 'CPP98' }, '-std=gnu++98']
+	] as const)(
+		'passes %s compiler flags separately from quoted program argv',
+		async (language, standard, expected) => {
+			const f = fixture();
+			const code = 'int main(void) { return 0; }';
+			const options = {
+				...standard,
+				compileArgs: ['-O2', '-Wall', '-Iheaders with spaces', '-DVALUE=42'],
+				programArgs: ['hello world', '']
+			};
+			expect(await f.prepare(code, options, language)).toBe(true);
+			const compilerArgs = f.spawn.mock.calls[0][1];
+			expect(compilerArgs).toContain('--target=wasm32-wasip1');
+			expect(compilerArgs).toContain(expected);
+			expect(compilerArgs).toEqual(expect.arrayContaining(options.compileArgs));
+			expect(compilerArgs).not.toContain('hello world');
+			expect(compilerArgs.indexOf('-O2')).toBeGreaterThan(compilerArgs.indexOf(expected));
+			expect(await f.run(code, options, language)).toBe(true);
+			expect(f.spawn.mock.calls[1][1]).toEqual([
+				`/workspace/${language}/program.wasm`,
+				'hello world',
+				''
+			]);
+		}
+	);
 	it('uses the explicitly selected C delivery profile for stock C and preserves compiler arguments', async () => {
 		const { prepare, profile, spawn } = fixture([], true);
 		expect(await prepare('int main(void) { return 0; }', { activePath: 'main.c' }, 'C')).toBe(
@@ -134,6 +162,9 @@ describe('website container Clang compilation', () => {
 		expect(profile.prepareClang).toHaveBeenCalledWith('c', expect.any(AbortSignal));
 		expect(profile.prepareCommand).not.toHaveBeenCalled();
 		expect(spawn.mock.calls[0][1]).toContain('--sysroot=/usr/share/wasm-sysroot-c');
+		expect(spawn.mock.calls[0][1]).toContain('/usr/share/wasm-sysroot-c/include/wasm32-wasi');
+		expect(spawn.mock.calls[0][1]).toContain('-L/usr/share/wasm-sysroot-c/lib/wasm32-wasi');
+		expect(spawn.mock.calls[0][1]).toContain('-B/usr/share/wasm-sysroot-c/lib/wasm32-wasi/');
 		expect(spawn.mock.calls[0][1]).toContain(
 			'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
 		);

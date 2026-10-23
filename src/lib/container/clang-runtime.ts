@@ -10,6 +10,11 @@ import {
 	type SandboxExecutionOptions
 } from '../playground/options.js';
 import type { ProgressLike } from '@wasm-idle/core';
+import {
+	CLANG_WASI_DRIVER_TARGET,
+	clangSystemIncludePaths,
+	resolveClangLanguageArgs
+} from '@wasm-idle/llvm-core/core/clang-profile';
 import type { ContainerWorkerEvent } from './protocol.js';
 import type { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 
@@ -322,15 +327,28 @@ export class ContainerClangRuntime {
 			} catch {
 				/* No previous output. */
 			}
-			const standard =
-				language === 'CPP'
-					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
-					: options.cVersion?.toLowerCase();
+			const standard = resolveClangLanguageArgs(
+				language === 'CPP' ? 'CPP' : 'C',
+				options
+			).standardArg.slice('-std='.length);
 			// An opaque response file or -x override can select C++ for a C editor.
 			// Keep its default source mode C while enabling the C++ driver's link libraries.
 			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
+			// The pinned sysroot uses legacy multiarch directory names with the canonical target.
+			const sysroot =
+				sysrootArgs
+					.find((arg) => arg.startsWith('--sysroot='))
+					?.slice('--sysroot='.length) ?? '/usr/share/wasm-sysroot';
+			const libraries = `${sysroot}/lib/wasm32-wasi`;
 			const common = [
 				...sysrootArgs,
+				`--target=${CLANG_WASI_DRIVER_TARGET}`,
+				...clangSystemIncludePaths(
+					language === 'CPP' || override ? 'CPP' : 'C',
+					sysroot
+				).flatMap((path) => ['-isystem', path]),
+				`-L${libraries}`,
+				`-B${libraries}/`,
 				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
 				...(language === 'C' && override ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
