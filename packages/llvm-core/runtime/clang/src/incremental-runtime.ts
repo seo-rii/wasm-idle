@@ -1,5 +1,9 @@
 import Runtime from './runtime.js';
-import { resolveDebugMode, type BrowserClangRuntimeOptions, type BrowserClangRuntimeRunOptions } from './types.js';
+import {
+	resolveDebugMode,
+	type BrowserClangRuntimeOptions,
+	type BrowserClangRuntimeRunOptions
+} from './types.js';
 import { normalizeWorkspacePath } from './workspace.js';
 import {
 	IncrementalCompilationCache,
@@ -12,11 +16,14 @@ export interface ExperimentalIncrementalClangRuntimeOptions extends BrowserClang
 }
 
 /**
- * Explicit opt-in runtime for browser experiments; the default runtime is unchanged.
+ * Object-cache interception shared by the explicit experimental runtime and the
+ * public artifact runtime's guarded multi-file path.
  * The compiler, linker, asset-integrity, existing PCH and debugging implementations
  * remain the real inherited implementations. Only eligible object invocations are intercepted.
  */
 export default class ExperimentalIncrementalClangRuntime extends Runtime {
+	/** Artifact orchestration enables this only for supported multi-file builds. */
+	protected objectCacheEnabled = true;
 	private readonly objects: IncrementalCompilationCache;
 	private readonly cacheSignal?: AbortSignal;
 	private readonly compilerIds = new WeakMap<WebAssembly.Module, string>();
@@ -54,12 +61,28 @@ export default class ExperimentalIncrementalClangRuntime extends Runtime {
 		if (this.compilation) throw new Error('Concurrent Clang compilations are unsupported');
 		const input = normalizeWorkspacePath(options.input || 'main.cc') || 'main.cc';
 		const args = options.compileArgs ?? options.args ?? [];
-		const safePaths = [input, options.obj, ...(options.workspaceFiles ?? []).map((file: { path: string }) => normalizeWorkspacePath(file.path))]
-			.every((path) => typeof path === 'string' && !path.replace(/^\/+/, '').startsWith('__wasm_idle_build/incremental'));
-		const eligible = resolveDebugMode(options) === 'none' &&
-			(options.language === undefined || options.language === 'C' || options.language === 'CPP') &&
-			typeof options.transformSource !== 'function' && !options.planPrecompiledHeaderOnly &&
-			Array.isArray(args) && incrementalArgumentsEligible(args) && safePaths;
+		const safePaths = [
+			input,
+			options.obj,
+			...(options.workspaceFiles ?? []).map((file: { path: string }) =>
+				normalizeWorkspacePath(file.path)
+			)
+		].every(
+			(path) =>
+				typeof path === 'string' &&
+				!path.replace(/^\/+/, '').startsWith('__wasm_idle_build/incremental')
+		);
+		const eligible =
+			this.objectCacheEnabled &&
+			resolveDebugMode(options) === 'none' &&
+			(options.language === undefined ||
+				options.language === 'C' ||
+				options.language === 'CPP') &&
+			typeof options.transformSource !== 'function' &&
+			!options.planPrecompiledHeaderOnly &&
+			Array.isArray(args) &&
+			incrementalArgumentsEligible(args) &&
+			safePaths;
 		if (!eligible) return super.compile(options);
 		this.compilation = { input, object: options.obj };
 		try {
@@ -71,42 +94,58 @@ export default class ExperimentalIncrementalClangRuntime extends Runtime {
 
 	override async run(module: WebAssembly.Module, out: boolean, ...args: string[]) {
 		const context = this.compilation;
-		if (!context || !out || args[0] !== 'clang' || !args.includes('-emit-obj') ||
-			args.includes('-include-pch') || module !== this.moduleCache[this.assetUrls.clang]) {
+		if (
+			!context ||
+			!out ||
+			args[0] !== 'clang' ||
+			!args.includes('-emit-obj') ||
+			args.includes('-include-pch')
+		) {
 			return super.run(module, out, ...args);
 		}
+		// Streaming/host-bridge adapters may own their Module cache. The actual
+		// Module passed by this compile invocation, rather than a private cache slot,
+		// is the compiler identity (and changes safely on a loader replacement).
 		let compilerIdentity = this.compilerIds.get(module);
 		if (!compilerIdentity) {
 			compilerIdentity = `runtime-module-${++this.nextCompilerId}`;
 			this.compilerIds.set(module, compilerIdentity);
 		}
-		return this.objects.compile({
-			signal: this.cacheSignal,
-			read: (path) => this.memfs.getFileContents(path.replace(/^\/+/, '')),
-			write: (path, bytes) => {
-				this.addWorkspaceDirectories(path);
-				this.memfs.addFile(path, bytes);
-			},
-			replay: (diagnostics) => {
-				this.memfs.out = out;
-				if (out && diagnostics) this.memfs.stdout(diagnostics);
-			},
-			execute: async (invocation, emit) => {
-				const stdout = this.memfs.stdout;
-				let diagnostics = '';
-				let complete = true;
-				this.memfs.stdout = (chunk) => {
-					if (diagnostics.length + chunk.length <= 128 * 1024) diagnostics += chunk;
-					else complete = false;
-					if (emit) stdout(chunk);
-				};
-				try {
-					const value = await super.run(module, true, ...invocation);
-					return { value, diagnostics, cacheable: complete && value === null };
-				} finally {
-					this.memfs.stdout = stdout;
+		return this.objects.compile(
+			{
+				signal: this.cacheSignal,
+				read: (path) => this.memfs.getFileContents(path.replace(/^\/+/, '')),
+				write: (path, bytes) => {
+					this.addWorkspaceDirectories(path);
+					// Cache outputs and scratch files follow the same owned overlay lifecycle
+					// as compiler writes; repeated hits must not allocate native file nodes.
+					this.memfs.setFile(path, bytes);
+				},
+				replay: (diagnostics) => {
+					this.memfs.out = out;
+					if (out && diagnostics) this.memfs.stdout(diagnostics);
+				},
+				execute: async (invocation, emit) => {
+					const stdout = this.memfs.stdout;
+					let diagnostics = '';
+					let complete = true;
+					this.memfs.stdout = (chunk) => {
+						if (diagnostics.length + chunk.length <= 128 * 1024) diagnostics += chunk;
+						else complete = false;
+						if (emit) stdout(chunk);
+					};
+					try {
+						const value = await super.run(module, true, ...invocation);
+						return { value, diagnostics, cacheable: complete && value === null };
+					} finally {
+						this.memfs.stdout = stdout;
+					}
 				}
-			}
-		}, args, context.input, context.object, compilerIdentity);
+			},
+			args,
+			context.input,
+			context.object,
+			compilerIdentity
+		);
 	}
 }

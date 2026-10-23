@@ -1,12 +1,25 @@
-import Runtime from './runtime.js';
+import Runtime from './incremental-runtime.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
-import { normalizeDwarfWorkspacePath, normalizeWorkspacePath, resolveBuildArtifactNames } from './workspace.js';
-import { resolveDebugMode, type BrowserClangArtifact, type BrowserClangDebugMode, type BrowserClangRuntimeRunOptions } from './types.js';
+import {
+	normalizeDwarfWorkspacePath,
+	normalizeWorkspacePath,
+	resolveBuildArtifactNames
+} from './workspace.js';
+import {
+	resolveDebugMode,
+	type BrowserClangArtifact,
+	type BrowserClangDebugMode,
+	type BrowserClangRuntimeRunOptions
+} from './types.js';
 import type { ClangSourceLanguage } from './runtime.js';
 import { resolveWasmMemoryLimit } from './memory-limit.js';
 
 const buildRoot = '__wasm_idle_build';
-interface LinkedArtifact { key: string; bytes: Uint8Array; module?: WebAssembly.Module }
+interface LinkedArtifact {
+	key: string;
+	bytes: Uint8Array;
+	module?: WebAssembly.Module;
+}
 const translationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
 /**
@@ -15,11 +28,15 @@ const translationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
  * It deliberately does not reuse mutable Clang instances or modify WebAssembly globals.
  */
 export default class ArtifactRuntime extends Runtime {
+	protected override objectCacheEnabled = false;
+	/** Auto caches C++ units in multi-file builds; C needs explicit opt-in. */
+	cacheTranslationUnits: boolean | 'auto' = 'auto';
 	/** Compatibility escape hatch for callers that intentionally consume dynamic exports. */
 	exportDynamic = false;
 	private minimalLink = false;
 	private memoryLimit?: number;
 	private linked?: LinkedArtifact;
+	private readonly mountedWorkspace = new Map<string, Uint8Array | undefined>();
 
 	private invalidateArtifact() {
 		this.linked = undefined;
@@ -32,17 +49,24 @@ export default class ArtifactRuntime extends Runtime {
 		return super.compile(options);
 	}
 
-	override async link(obj: string | readonly string[], wasm: string,
+	override async link(
+		obj: string | readonly string[],
+		wasm: string,
 		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none',
-		language: ClangSourceLanguage = 'CPP') {
+		language: ClangSourceLanguage = 'CPP'
+	) {
 		this.invalidateArtifact();
-		const mode = typeof debugModeOrLegacyDebug === 'boolean'
-			? resolveDebugMode({ debug: debugModeOrLegacyDebug })
-			: resolveDebugMode({ debugMode: debugModeOrLegacyDebug });
+		const mode =
+			typeof debugModeOrLegacyDebug === 'boolean'
+				? resolveDebugMode({ debug: debugModeOrLegacyDebug })
+				: resolveDebugMode({ debugMode: debugModeOrLegacyDebug });
 		const previous = this.minimalLink;
 		this.minimalLink = mode === 'none' && !this.exportDynamic;
-		try { return await super.link(obj, wasm, mode, language); }
-		finally { this.minimalLink = previous; }
+		try {
+			return await super.link(obj, wasm, mode, language);
+		} finally {
+			this.minimalLink = previous;
+		}
 	}
 
 	override async run(module: WebAssembly.Module, out: boolean, ...args: string[]) {
@@ -56,7 +80,10 @@ export default class ArtifactRuntime extends Runtime {
 		return super.run(module, out, ...args);
 	}
 
-	private async buildBytes(code: string, options: BrowserClangRuntimeRunOptions): Promise<LinkedArtifact> {
+	private async buildBytes(
+		code: string,
+		options: BrowserClangRuntimeRunOptions
+	): Promise<LinkedArtifact> {
 		try {
 			return await this.buildLinkedBytes(code, options);
 		} catch (error) {
@@ -66,31 +93,61 @@ export default class ArtifactRuntime extends Runtime {
 		}
 	}
 
-	private async buildLinkedBytes(code: string, options: BrowserClangRuntimeRunOptions): Promise<LinkedArtifact> {
-		const { language = 'CPP', fileName, activePath, workspaceFiles = [], args = [],
-			compileArgs = args, cppVersion, cVersion, breakpoints = [], pauseOnEntry = false,
-			debugBuffer, interruptBuffer, watchBuffer, watchResultBuffer, precompiledHeader } = options;
+	private async buildLinkedBytes(
+		code: string,
+		options: BrowserClangRuntimeRunOptions
+	): Promise<LinkedArtifact> {
+		const {
+			language = 'CPP',
+			fileName,
+			activePath,
+			workspaceFiles = [],
+			args = [],
+			compileArgs = args,
+			cppVersion,
+			cVersion,
+			breakpoints = [],
+			pauseOnEntry = false,
+			debugBuffer,
+			interruptBuffer,
+			watchBuffer,
+			watchResultBuffer,
+			precompiledHeader
+		} = options;
 		const debugMode = resolveDebugMode(options);
 		const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
-		const normalize = debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
+		const normalize =
+			debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
 		const files = workspaceFiles.map((file) => ({ ...file, path: normalize(file.path) }));
-		const { input, obj, wasm } = resolveBuildArtifactNames(language,
-			normalize(activePath || '') || normalize(fileName || '') || undefined);
+		const { input, obj, wasm } = resolveBuildArtifactNames(
+			language,
+			normalize(activePath || '') || normalize(fileName || '') || undefined
+		);
 		const byPath = new Map<string, { path: string; content: string }>();
 		for (const file of [...files, { path: input, content: code }]) {
 			if (!file.path) continue;
 			if (file.path === buildRoot || file.path.startsWith(`${buildRoot}/`)) {
-				throw new Error(`Workspace path uses reserved build namespace ${JSON.stringify(buildRoot)}`);
+				throw new Error(
+					`Workspace path uses reserved build namespace ${JSON.stringify(buildRoot)}`
+				);
 			}
 			byPath.set(file.path, file);
 		}
-		const snapshot = [...byPath.values()].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-		const units = snapshot.filter((file) => file.path === input || translationUnitPattern.test(file.path));
+		const snapshot = [...byPath.values()].sort((a, b) =>
+			a.path < b.path ? -1 : a.path > b.path ? 1 : 0
+		);
+		const units = snapshot.filter(
+			(file) => file.path === input || translationUnitPattern.test(file.path)
+		);
 		if (debugMode === 'trace' && units.length > 1) {
 			throw new Error('Trace debug mode does not support multiple C/C++ translation units');
 		}
-		const cOnly = language === 'C' && units.every((unit) => unit.path === input || unit.path.endsWith('.c'))
-			&& !compileArgs.some((arg) => typeof arg !== 'string' || arg.startsWith('-x') || arg.startsWith('@'));
+		const cOnly =
+			language === 'C' &&
+			units.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
+			!compileArgs.some(
+				(arg) => typeof arg !== 'string' || arg.startsWith('-x') || arg.startsWith('@')
+			);
 		this.beginTrace(debugMode === 'trace');
 		this.debugBreakpoints = new Set(debugMode === 'trace' ? breakpoints : []);
 		this.debugPauseOnEntry = debugMode === 'trace' && pauseOnEntry;
@@ -98,8 +155,19 @@ export default class ArtifactRuntime extends Runtime {
 		this.debugInterruptBuffer = interruptBuffer;
 		this.debugWatchBuffer = watchBuffer;
 		this.debugWatchResultBuffer = watchResultBuffer;
-		const key = JSON.stringify({ code, input, wasm, language, compileArgs, workspaceFiles: snapshot,
-			cppVersion, cVersion, debugMode, memoryLimit, exportDynamic: this.exportDynamic });
+		const key = JSON.stringify({
+			code,
+			input,
+			wasm,
+			language,
+			compileArgs,
+			workspaceFiles: snapshot,
+			cppVersion,
+			cVersion,
+			debugMode,
+			memoryLimit,
+			exportDynamic: this.exportDynamic
+		});
 		if (this.linked?.key === key) {
 			this.lastArtifactPath = wasm;
 			this.trace(`reuse ${wasm}`);
@@ -110,23 +178,67 @@ export default class ArtifactRuntime extends Runtime {
 		this.precompiledHeaderPlan = undefined;
 		this.usedPrecompiledHeader = false;
 		void this.getModule(this.assetUrls.lld).catch(() => undefined);
-		const common = { compileArgs, cppVersion, cVersion, debugMode, precompiledHeader,
-			persistentCache: options.persistentCache, onBufferedOutput: options.onBufferedOutput };
+		const common = {
+			compileArgs,
+			cppVersion,
+			cVersion,
+			debugMode,
+			precompiledHeader,
+			persistentCache: options.persistentCache,
+			onBufferedOutput: options.onBufferedOutput
+		};
 		const objects: string[] = [];
+		await this.ready;
+		// Each build supplies a complete workspace snapshot. In particular, deleting
+		// an optional header must change __has_include on the next preprocessing pass.
+		for (const [path, previous] of this.mountedWorkspace) {
+			if (byPath.has(path)) continue;
+			if (previous) this.memfs.setFile(path, previous);
+			else this.memfs.removeFile(path);
+			this.mountedWorkspace.delete(path);
+		}
+		for (const { path } of snapshot) {
+			if (!this.mountedWorkspace.has(path)) {
+				this.mountedWorkspace.set(
+					path,
+					this.memfs.hasFile(path)
+						? Uint8Array.from(this.memfs.getFileContents(path))
+						: undefined
+				);
+			}
+		}
 		if (units.length === 1) {
 			await this.compile({ ...common, input, code, obj, language, workspaceFiles: files });
 			objects.push(obj);
 		} else {
-			await this.ready;
 			this.addWorkspaceFiles(snapshot);
 			this.memfs.addDirectory(buildRoot);
 			this.memfs.addDirectory(`${buildRoot}/objects`);
-			for (const [index, unit] of units.entries()) {
-				const object = `${buildRoot}/objects/${index.toString().padStart(4, '0')}.o`;
-				await this.compile({ ...common, input: unit.path, code: unit.content, obj: object,
-					language: unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP',
-					workspaceFiles: [], sourceAlreadyMounted: true });
-				objects.push(object);
+			// Single-file edit-on-every-run workloads pay no extra preprocessing pass.
+			// PCH, debugging, transformations and unknown arguments retain the base path.
+			try {
+				for (const [index, unit] of units.entries()) {
+					const unitLanguage =
+						unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP';
+					// The pinned browser corpus showed a preprocessing penalty for tiny C units.
+					this.objectCacheEnabled =
+						debugMode === 'none' &&
+						(this.cacheTranslationUnits === true ||
+							(this.cacheTranslationUnits === 'auto' && unitLanguage === 'CPP'));
+					const object = `${buildRoot}/objects/${index.toString().padStart(4, '0')}.o`;
+					await this.compile({
+						...common,
+						input: unit.path,
+						code: unit.content,
+						obj: object,
+						language: unitLanguage,
+						workspaceFiles: [],
+						sourceAlreadyMounted: true
+					});
+					objects.push(object);
+				}
+			} finally {
+				this.objectCacheEnabled = false;
 			}
 		}
 		// Clear the previous output so close-time/link failures cannot expose stale bytes.
@@ -149,8 +261,10 @@ export default class ArtifactRuntime extends Runtime {
 		const linked = await this.buildBytes(code, options);
 		try {
 			if (!linked.module) {
-				linked.module = await this.hostLogAsync(`Compiling ${this.lastArtifactPath}`,
-					WebAssembly.compile(Uint8Array.from(linked.bytes)));
+				linked.module = await this.hostLogAsync(
+					`Compiling ${this.lastArtifactPath}`,
+					WebAssembly.compile(Uint8Array.from(linked.bytes))
+				);
 			}
 			this.wasm = linked.module;
 			return linked.module;
@@ -160,7 +274,10 @@ export default class ArtifactRuntime extends Runtime {
 		}
 	}
 
-	override async compileArtifact(code: string, options: BrowserClangRuntimeRunOptions = {}): Promise<BrowserClangArtifact> {
+	override async compileArtifact(
+		code: string,
+		options: BrowserClangRuntimeRunOptions = {}
+	): Promise<BrowserClangArtifact> {
 		// WAMR consumes linked bytes, not a browser-compiled Module. Normal/trace callers retain
 		// the existing ready-to-execute Module contract and can reuse its compilation.
 		const linked = await this.buildBytes(code, options);
@@ -168,14 +285,41 @@ export default class ArtifactRuntime extends Runtime {
 		const wasm = debugMode === 'lldb' ? undefined : await this.compileLink(code, options);
 		const bytes = Uint8Array.from(linked.bytes);
 		const language = options.language || 'CPP';
-		return { bytes, ...(wasm ? { wasm } : {}), target: 'wasm32-wasi', format: 'wasi-core-wasm',
-			fileName: this.lastArtifactPath, language,
-			...(debugMode === 'trace' ? { debugMetadata: {
-				variableMetadata: this.debugVariableMetadata, globalVariableMetadata: this.debugGlobalMetadata,
-				functionMetadata: this.debugFunctionMetadata } } : {}),
-			...(debugMode === 'lldb' ? { debug: await createDwarfDebugDescriptor({ code, language,
-				fileName: options.fileName, activePath: options.activePath, workspaceFiles: options.workspaceFiles,
-				compileArgs: options.compileArgs ?? options.args, cppVersion: options.cppVersion,
-				cVersion: options.cVersion, debugMode }, bytes, this.compilerConfig?.provenance) } : {}) };
+		return {
+			bytes,
+			...(wasm ? { wasm } : {}),
+			target: 'wasm32-wasi',
+			format: 'wasi-core-wasm',
+			fileName: this.lastArtifactPath,
+			language,
+			...(debugMode === 'trace'
+				? {
+						debugMetadata: {
+							variableMetadata: this.debugVariableMetadata,
+							globalVariableMetadata: this.debugGlobalMetadata,
+							functionMetadata: this.debugFunctionMetadata
+						}
+					}
+				: {}),
+			...(debugMode === 'lldb'
+				? {
+						debug: await createDwarfDebugDescriptor(
+							{
+								code,
+								language,
+								fileName: options.fileName,
+								activePath: options.activePath,
+								workspaceFiles: options.workspaceFiles,
+								compileArgs: options.compileArgs ?? options.args,
+								cppVersion: options.cppVersion,
+								cVersion: options.cVersion,
+								debugMode
+							},
+							bytes,
+							this.compilerConfig?.provenance
+						)
+					}
+				: {})
+		};
 	}
 }
