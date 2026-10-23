@@ -13,7 +13,8 @@ import {
 	type ContainerWorkerRequest,
 	type ContainerWorkerResponse,
 	type ContainerWorkerEvent,
-	type ContainerWorkerInitialization
+	type ContainerWorkerInitialization,
+	type ContainerWorkspaceFileMetadata
 } from './protocol';
 import type { SandboxExecutionOptions } from '../options';
 import type { SandboxRuntimeAssets } from '../sandbox';
@@ -362,7 +363,19 @@ async function call(
 			args[1] as WorkspaceFile[],
 			args[2] as WorkspaceFile[] | undefined
 		);
+	if (method === 'syncWorkspaceDelta') {
+		if (!Array.isArray(args[2]) || !Array.isArray(args[3]))
+			throw new TypeError('Workspace delta requires a baseline and project metadata');
+		return engines.syncWorkspace(
+			language,
+			args[1] as WorkspaceFile[],
+			args[2] as WorkspaceFile[],
+			args[3] as ContainerWorkspaceFileMetadata[]
+		);
+	}
 	if (method === 'readWorkspace') return engines.readWorkspace(language);
+	if (method === 'readWorkspaceDelta')
+		return engines.readWorkspaceDelta(language, args[1] as number | undefined);
 	if (method === 'listWorkspaceFiles') return engines.listWorkspaceFiles();
 	if (method === 'inspect')
 		return {

@@ -4,8 +4,9 @@ import type { ContainerWorkerClient } from './client';
 import type { ContainerWorkerEvent } from './protocol';
 function fixture() {
 	let listener: (event: ContainerWorkerEvent) => void = () => {};
-	const call = vi.fn(async (method: string): Promise<unknown> =>
-		method === 'prepare' || method === 'run' ? true : undefined
+	const call = vi.fn(
+		async (method: string, _args?: unknown[], _options?: unknown): Promise<unknown> =>
+			method === 'prepare' || method === 'run' ? true : undefined
 	);
 	const client = {
 		call,
@@ -43,7 +44,7 @@ describe('existing playground container binding', () => {
 		await binding.dispose?.();
 		expect(client.dispose).toHaveBeenCalledTimes(1);
 	});
-	it('clones queued file bytes and sends previous published bytes as conflict precondition', async () => {
+	it('clones queued bytes and sends only changed files with their conflict precondition', async () => {
 		const { binding, call } = fixture();
 		const content = Uint8Array.of(0, 255, 1);
 		const first = binding.syncWorkspace('C', [{ path: 'binary.bin', content }]);
@@ -58,6 +59,120 @@ describe('existing playground container binding', () => {
 		expect(((call.mock.calls[1] as unknown[])[1] as unknown[])[2]).toEqual([
 			{ path: 'binary.bin', content: Uint8Array.of(0, 255, 1) }
 		]);
+		expect(call.mock.calls[1][0]).toBe('syncWorkspaceDelta');
+	});
+	it('omits unchanged binary bodies from an edit and an explicit deletion', async () => {
+		const { binding, call } = fixture();
+		const large = { path: 'data.bin', content: new Uint8Array(1024 * 1024) };
+		await binding.syncWorkspace('C', [
+			large,
+			{ path: 'main.c', content: 'before' },
+			{ path: 'old', content: 'delete' }
+		]);
+		await binding.syncWorkspace('C', [large, { path: 'main.c', content: 'after' }]);
+		expect(call.mock.calls[1]).toEqual([
+			'syncWorkspaceDelta',
+			[
+				'C',
+				[{ path: 'main.c', content: 'after' }],
+				[
+					{ path: 'main.c', content: 'before' },
+					{ path: 'old', content: 'delete' }
+				],
+				[
+					{ path: 'data.bin', bytes: 1024 * 1024 },
+					{ path: 'main.c', bytes: 5 }
+				]
+			]
+		]);
+		await binding.syncWorkspace('C', [large, { path: 'main.c', content: 'after' }]);
+		expect(call).toHaveBeenCalledTimes(2);
+	});
+	it('keeps the published baseline after a failed delta', async () => {
+		const { binding, call } = fixture();
+		await binding.syncWorkspace('C', [{ path: 'main.c', content: 'base' }]);
+		call.mockRejectedValueOnce(new Error('conflict'));
+		await expect(
+			binding.syncWorkspace('C', [{ path: 'main.c', content: 'edit' }])
+		).rejects.toThrow('conflict');
+		await binding.syncWorkspace('C', [{ path: 'main.c', content: 'edit' }]);
+		expect(((call.mock.calls[2] as unknown[])[1] as unknown[])[2]).toEqual([
+			{ path: 'main.c', content: 'base' }
+		]);
+	});
+	it('rebuilds read results from deltas without exposing cached byte ownership', async () => {
+		const { binding, call } = fixture();
+		call.mockResolvedValueOnce({
+			revision: 1,
+			reset: true,
+			files: [{ path: 'data', content: Uint8Array.of(1, 2) }],
+			deleted: []
+		});
+		const first = await binding.readWorkspace('C');
+		(first[0].content as Uint8Array)[0] = 9;
+		call.mockResolvedValueOnce({
+			revision: 2,
+			reset: false,
+			files: [{ path: 'added', content: Uint8Array.of(3) }],
+			deleted: []
+		});
+		expect(await binding.readWorkspace('C')).toEqual([
+			{ path: 'added', content: Uint8Array.of(3) },
+			{ path: 'data', content: Uint8Array.of(1, 2) }
+		]);
+		call.mockResolvedValueOnce({ revision: 3, reset: false, files: [], deleted: ['data'] });
+		expect(await binding.readWorkspace('C')).toEqual([
+			{ path: 'added', content: Uint8Array.of(3) }
+		]);
+		expect(call.mock.calls.map((row) => row[1])).toEqual([
+			['C', undefined],
+			['C', 1],
+			['C', 2]
+		]);
+	});
+	it('rejects a pending read completed after disposal instead of repopulating its mirror', async () => {
+		const { binding, call } = fixture();
+		let complete!: (value: unknown) => void;
+		call.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					complete = resolve;
+				})
+		);
+		const reading = binding.readWorkspace('C');
+		const failure = expect(reading).rejects.toThrow('disposed');
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+		await binding.dispose?.();
+		complete({
+			revision: 1,
+			reset: true,
+			files: [{ path: 'data', content: Uint8Array.of(1) }],
+			deleted: []
+		});
+		await failure;
+	});
+	it('serializes overlapping reads so each delta follows the acknowledged cursor', async () => {
+		const { binding, call } = fixture();
+		let complete!: (value: unknown) => void;
+		call.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					complete = resolve;
+				})
+		);
+		const first = binding.readWorkspace('C');
+		const second = binding.readWorkspace('C');
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+		call.mockResolvedValueOnce({ revision: 2, reset: false, files: [], deleted: ['first'] });
+		complete({
+			revision: 1,
+			reset: true,
+			files: [{ path: 'first', content: Uint8Array.of(1) }],
+			deleted: []
+		});
+		expect(await first).toEqual([{ path: 'first', content: Uint8Array.of(1) }]);
+		expect(await second).toEqual([]);
+		expect(call.mock.calls[1]).toEqual(['readWorkspaceDelta', ['C', 1]]);
 	});
 	it('routes program bytes/debug events separately from shell and watcher events', async () => {
 		const { binding, event } = fixture();
