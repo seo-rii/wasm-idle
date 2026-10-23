@@ -41,6 +41,98 @@ describe('container shared editor input boundary', () => {
 		expect(read(container, '/workspace/C/main.c')).toBe('shell');
 		expect(read(container, '/workspace/C/added.txt')).toBe('editor');
 	});
+	it('applies a partial publication without reading or deleting untouched file bodies', () => {
+		const { adapter, container } = fixture();
+		const before = [f('main.c', 'base'), f('large.dat', 'large'), f('old', 'remove')];
+		adapter.syncWorkspace('C', before);
+		container.fs.writeFile('/workspace/C/large.dat', new TextEncoder().encode('shell'));
+		container.fs.writeFile('/workspace/C/extra', Uint8Array.of(255));
+		const reads = vi.spyOn(container.fs, 'readFile');
+		adapter.syncWorkspace(
+			'C',
+			[f('main.c', 'edit')],
+			[before[0], before[2]],
+			[
+				{ path: 'main.c', bytes: 4 },
+				{ path: 'large.dat', bytes: 5 }
+			]
+		);
+		expect(reads.mock.calls.every(([path]) => path !== 'large.dat')).toBe(true);
+		expect(read(container, '/workspace/C/main.c')).toBe('edit');
+		expect(read(container, '/workspace/C/large.dat')).toBe('shell');
+		expect(container.fs.readFile('/workspace/C/extra')).toEqual(Uint8Array.of(255));
+		expect(() => container.fs.stat('/workspace/C/old')).toThrow();
+		// A later legacy publication still owns all editor paths, not only the last patch.
+		adapter.syncWorkspace('C', [f('main.c', 'next')]);
+		expect(() => container.fs.stat('/workspace/C/large.dat')).toThrow();
+		expect(container.fs.readFile('/workspace/C/extra')).toEqual(Uint8Array.of(255));
+	});
+	it('rejects a conflicting partial batch before publishing additions or deletions', () => {
+		const { adapter, container } = fixture();
+		const before = [f('main.c', 'base'), f('old', 'remove')];
+		adapter.syncWorkspace('C', before);
+		container.fs.writeFile('/workspace/C/main.c', new TextEncoder().encode('shell'));
+		expect(() =>
+			adapter.syncWorkspace('C', [f('new', 'x'), f('main.c', 'edit')], before, [
+				{ path: 'main.c', bytes: 4 },
+				{ path: 'new', bytes: 1 }
+			])
+		).toThrow(/changed while editing/);
+		expect(() => container.fs.stat('/workspace/C/new')).toThrow();
+		expect(read(container, '/workspace/C/old')).toBe('remove');
+	});
+	it('retains whole-project admission limits and checks delta metadata before writing', () => {
+		const { adapter, container } = fixture();
+		adapter.syncWorkspace('C', [f('main.c', 'base')]);
+		expect(() =>
+			adapter.syncWorkspace(
+				'C',
+				[f('main.c', 'edit')],
+				[f('main.c', 'base')],
+				[
+					{ path: 'main.c', bytes: 4 },
+					...Array.from({ length: 4 }, (_, i) => ({
+						path: `big${i}`,
+						bytes: 16 * 1024 * 1024
+					}))
+				]
+			)
+		).toThrow(/total size limit/);
+		expect(() =>
+			adapter.syncWorkspace(
+				'C',
+				[f('main.c', 'edit')],
+				[f('main.c', 'base')],
+				[{ path: 'main.c', bytes: 3 }]
+			)
+		).toThrow(/size mismatch/);
+		expect(() =>
+			adapter.syncWorkspace('C', [], [f('main.c', 'base')], [{ path: 'main.c', bytes: 4 }])
+		).toThrow(/remains in project/);
+		expect(read(container, '/workspace/C/main.c')).toBe('base');
+	});
+	it('reads only changed file bodies and resets an unknown read cursor', () => {
+		const { adapter, container } = fixture();
+		adapter.syncWorkspace('C', [f('main.c', 'base'), f('data.bin', 'data')]);
+		const first = adapter.readWorkspaceDelta('C');
+		expect(first.reset).toBe(true);
+		const reads = vi.spyOn(container.fs, 'readFile');
+		const unchanged = adapter.readWorkspaceDelta('C', first.revision);
+		expect(unchanged).toMatchObject({ reset: false, files: [], deleted: [] });
+		expect(reads).not.toHaveBeenCalled();
+		container.fs.writeFile('/workspace/C/main.c', new TextEncoder().encode('shell'));
+		container.fs.rename('/workspace/C/data.bin', '/workspace/C/renamed.bin');
+		container.fs.symlink('/workspace', '/workspace/C/loop');
+		const changed = adapter.readWorkspaceDelta('C', unchanged.revision);
+		expect(changed.files.map(({ path }) => path)).toEqual(['main.c', 'renamed.bin']);
+		expect(changed.deleted).toEqual(['data.bin']);
+		expect(reads).toHaveBeenCalledTimes(2);
+		reads.mockClear();
+		const reset = adapter.readWorkspaceDelta('C', first.revision);
+		expect(reset.reset).toBe(true);
+		expect(reset.files).toHaveLength(2);
+		expect(reads).toHaveBeenCalledTimes(2);
+	});
 	it('preserves unknown shell files while applying an explicit editor deletion', () => {
 		const { adapter, container } = fixture();
 		const before = [f('main.c', 'base'), f('old.txt', 'remove')];
