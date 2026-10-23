@@ -25,7 +25,7 @@ export function createLiveClangAdapter(options: LiveClangAdapterOptions) {
       const linker = fs.readFile(configuration.linkerPath);
       const probe = createWasiHost({ ...request.invocation, args: [], fs, stdin: new Uint8Array(), maxOutputBytes: 0 });
       const imports = new Set(Object.keys(probe.imports)); probe.dispose();
-      const outputs = createCompilerOutputs(fs, request.limits.maxWorkspaceInodes);
+      const outputs = createCompilerOutputs(fs, request.limits.maxWorkspaceInodes, request.mutationSource ?? request.generation);
       active = true;
       return {
         configuration: { ...configuration, linker },
