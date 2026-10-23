@@ -381,7 +381,7 @@ test(
 				}
 				const first = await connect(),
 					results = {};
-				let beforeOpen;
+				let beforeOpen, cancelledResponse;
 				for (const message of messages) {
 					const response = await first.send(message);
 					if (response) results[message.id] = response;
@@ -392,7 +392,7 @@ test(
 							method: 'textDocument/codeAction',
 							params: messages.find((item) => item.id === 19).params
 						});
-						await first.handle.transport.writer.write({
+						const cancelled = first.send({
 							jsonrpc: '2.0',
 							id: 39,
 							method: 'textDocument/hover',
@@ -403,6 +403,7 @@ test(
 							method: '$/cancelRequest',
 							params: { id: 39 }
 						});
+						cancelledResponse = await cancelled;
 					}
 				}
 				const beforeOpenResult = await beforeOpen;
@@ -504,7 +505,7 @@ test(
 					integrityError,
 					aborted,
 					notifications: first.notifications,
-					cancelledResponse: first.incoming.some((message) => message.id === 39)
+					cancelledResponse
 				};
 			},
 			{ messages, uri, crossSource, libraryUri }
@@ -545,7 +546,11 @@ test(
 				`original native semantic parity request ${id}`
 			);
 		assert.deepEqual(canonical(actual.beforeOpenResult.result), canonical(results[19].result));
-		assert.equal(actual.cancelledResponse, false);
+		assert.deepEqual(actual.cancelledResponse, {
+			jsonrpc: '2.0',
+			id: 39,
+			error: { code: -32800, message: 'Request cancelled' }
+		});
 		assert.deepEqual(actual.afterEdits.result, results[12].result);
 		assert.deepEqual(actual.isolated.result, []);
 		assert.ok(

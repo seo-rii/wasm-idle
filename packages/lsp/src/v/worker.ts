@@ -47,7 +47,12 @@ async function handle(message: any) {
 		if (message.method === '$/cancelRequest') {
 			const index = beforeOpen.findIndex((request) => request.id === message.params?.id);
 			if (index >= 0) {
-				beforeOpen.splice(index, 1);
+				const request = beforeOpen.splice(index, 1)[0];
+				scope.postMessage({
+					jsonrpc: '2.0',
+					id: request.id,
+					error: { code: -32800, message: 'Request cancelled' }
+				});
 				return;
 			}
 		}
