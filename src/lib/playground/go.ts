@@ -266,7 +266,16 @@ class Go implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (options.debug) requireSharedArrayBuffer('Go debugging');
+		const debugMode = options.debugMode ?? (options.debug ? 'trace' : 'none');
+		if (debugMode !== 'none' && debugMode !== 'trace') {
+			return Promise.reject(
+				new Error(
+					'Go native debugging is unavailable: the current Wasm linker does not emit DWARF. Use trace mode.'
+				)
+			);
+		}
+		const debugEnabled = debugMode === 'trace';
+		if (debugEnabled) requireSharedArrayBuffer('Go debugging');
 		if (!this.exit) {
 			const error = new BusyError('Go runtime already has an active execution', {
 				runtimeId: 'GO',
@@ -294,8 +303,8 @@ class Go implements Sandbox {
 			const { programArgs } = resolveSandboxExecutionArgs('GO', args, options);
 			const target = options.goTarget || 'wasip1/wasm';
 			const _uid = ++this.uid;
-			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
-			const hasExplicitStdin = !options.debug && options.stdin !== undefined;
+			this.setBreakpoints(debugEnabled ? [...(options.breakpoints || [])] : []);
+			const hasExplicitStdin = !debugEnabled && options.stdin !== undefined;
 			this.activeExplicitStdinCleanup?.();
 			let explicitStdinCleaned = false;
 			const cleanupExplicitStdin = () => {
@@ -462,7 +471,7 @@ class Go implements Sandbox {
 					args: programArgs,
 					target,
 					log: _log,
-					debug: !!options.debug,
+					debug: debugEnabled,
 					breakpoints: [...(options.breakpoints || [])],
 					pauseOnEntry: !!options.pauseOnEntry,
 					runtimeLimits: limits
