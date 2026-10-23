@@ -49,9 +49,9 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
-		// Includes the pinned Emscripten SIMD compatibility headers and upstream notices
-		// in llvm-core (+5 files). Before merging compiler options: 7,146,870 bytes / 741 files.
-		budget: { maxBytes: 7 * MiB, maxFiles: 741, maxPackages: 6 },
+		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
+		// The preview adds its JavaScript and declaration to main's 741-file install.
+		budget: { maxBytes: 7 * MiB, maxFiles: 743, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',

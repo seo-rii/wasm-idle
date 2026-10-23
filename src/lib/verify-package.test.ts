@@ -187,7 +187,7 @@ describe('package install budgets', () => {
 		).toEqual({
 			'wasm-idle root install': {
 				maxBytes: 7 * MiB,
-				maxFiles: 741,
+				maxFiles: 743,
 				maxPackages: 6
 			},
 			'wasm-idle/container install': {
