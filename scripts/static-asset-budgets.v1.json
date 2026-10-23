@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1140750000,
-		"maxFiles": 1972
+		"maxBytes": 1148750000,
+		"maxFiles": 1977
 	},
 	"directories": {
 		"clang": {
@@ -306,6 +306,11 @@
 		},
 		"wasm-rescript-lsp": {
 			"maxBytes": 12000000,
+			"maxFiles": 5,
+			"optional": true
+		},
+		"wasm-v-lsp": {
+			"maxBytes": 8000000,
 			"maxFiles": 5,
 			"optional": true
 		}

@@ -19,6 +19,7 @@ export type RuntimeLspCapability =
 	| 'forth'
 	| 'c3'
 	| 'rescript'
+	| 'v'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -421,6 +422,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	V: {
 		label: 'V',
 		editorLanguage: 'go',
+		runtimeLspCapability: 'v',
+		lspLanguageOverride: 'v',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},

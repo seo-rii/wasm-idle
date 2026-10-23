@@ -264,6 +264,11 @@
 			"types": "./dist/rescript/index.d.ts",
 			"import": "./dist/rescript/index.js",
 			"default": "./dist/rescript/index.js"
+		},
+		"./v": {
+			"types": "./dist/v/index.d.ts",
+			"import": "./dist/v/index.js",
+			"default": "./dist/v/index.js"
 		}
 	},
 	"files": [

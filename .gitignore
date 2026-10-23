@@ -61,3 +61,5 @@ static/wasm-lfortran/
 /static/wasm-cobol-lsp/
 /static/wasm-rescript-lsp/
 /producers/rescript-language-server/node_modules/
+# Original v-analyzer browser LSP assets are produced from pinned sources.
+/static/wasm-v-lsp/

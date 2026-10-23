@@ -135,6 +135,7 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { C3LspAssetReceipts } from '../src/c3/assets.js';
+import type { VLspAssetReceipts } from '../src/v/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
 import { createAwkTestAssetResponse } from './awk-fixture.js';
@@ -158,6 +159,18 @@ const c3AssetReceipts = Object.fromEntries(
 		{ bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
 	])
 ) as C3LspAssetReceipts;
+// These verified fixtures cover the fake Worker's lifecycle; real semantics have a browser suite.
+const vAssetFixtures = {
+	'v_analyzer.mjs': new TextEncoder().encode('export default async () => ({});'),
+	'v_analyzer.wasm': Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0),
+	'stdlib.json.gz.bin': Uint8Array.from(gzipSync('{}'))
+};
+const vAssetReceipts = Object.fromEntries(
+	Object.entries(vAssetFixtures).map(([name, bytes]) => [
+		name,
+		{ bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+	])
+) as VLspAssetReceipts;
 const applicationOrigin = 'https://app.example.com';
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -224,6 +237,7 @@ const createProviderOptions = (
 		}
 	},
 	c3: { integrity: c3AssetReceipts },
+	v: { integrity: vAssetReceipts },
 	cpp: {
 		loader: async ({ asset }) =>
 			asset === 'clangd.wasm.gz'
@@ -332,6 +346,18 @@ describe('registered LSP provider lifecycle contract', () => {
 							path.basename(requestUrl.pathname) as keyof typeof c3AssetFixtures
 						];
 					if (!bytes) throw new Error('Unexpected C3 lifecycle asset');
+					const response = new Response(bytes, {
+						headers: { 'content-length': String(bytes.length) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
+				if (requestUrl.pathname.includes('/wasm-v-lsp/')) {
+					const bytes =
+						vAssetFixtures[
+							path.basename(requestUrl.pathname) as keyof typeof vAssetFixtures
+						];
+					if (!bytes) throw new Error('Unexpected V lifecycle asset');
 					const response = new Response(bytes, {
 						headers: { 'content-length': String(bytes.length) }
 					});

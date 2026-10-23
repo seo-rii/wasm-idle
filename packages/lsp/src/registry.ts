@@ -18,6 +18,7 @@ import {
 import { getElixirLanguageServer } from './elixir/language-server.js';
 import { getErlangLanguageServer } from './erlang/language-server.js';
 import { getC3LanguageServer } from './c3/language-server.js';
+import { getVLanguageServer } from './v/language-server.js';
 import { getFortranLanguageServer } from './fortran/language-server.js';
 import { getForthLanguageServer } from './forth/language-server.js';
 import { getGleamLanguageServer } from './gleam/language-server.js';
@@ -81,6 +82,7 @@ const providerDefinitions = [
 		languages: ['rescript'],
 		create: (options) => getReScriptLanguageServer(options)
 	},
+	{ id: 'v', languages: ['v', 'vlang'], create: (options) => getVLanguageServer(options) },
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

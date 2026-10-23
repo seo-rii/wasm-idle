@@ -2330,6 +2330,7 @@
 	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let forthLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let c3LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let vLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2398,6 +2399,8 @@
 		forthLspWasmUrl?: string;
 		c3LspEnabled?: boolean;
 		c3LspBaseUrl?: string;
+		vLspEnabled?: boolean;
+		vLspBaseUrl?: string;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
 		gleamLspManifestFingerprint?: string;
@@ -2519,6 +2522,8 @@
 		forthLspWasmUrl,
 		c3LspEnabled = false,
 		c3LspBaseUrl,
+		vLspEnabled = false,
+		vLspBaseUrl,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
 		gleamLspManifestFingerprint,
@@ -2712,6 +2717,7 @@
 			phpLspEnabled ? phpLspWasmUrl || '' : '',
 			forthLspEnabled ? forthLspWasmUrl || '' : '',
 			c3LspEnabled ? c3LspBaseUrl || '' : '',
+			vLspEnabled ? vLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
@@ -2824,6 +2830,10 @@
 			case 'c3':
 				label = 'C3 LSP';
 				status = c3LspStatus;
+				break;
+			case 'v':
+				label = 'V LSP';
+				status = vLspStatus;
 				break;
 			case 'd':
 				label = 'D LSP';
@@ -3111,6 +3121,20 @@
 						]
 					},
 					onStatus: (status) => (rescriptLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['v'],
+			isEnabled: () => vLspEnabled && !!vLspBaseUrl,
+			setStatus: (status) => (vLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getVLanguageServer } = await import('@wasm-idle/lsp/v');
+				return await getVLanguageServer({
+					currentUrl,
+					signal,
+					v: { baseUrl: vLspBaseUrl },
+					onStatus: (status) => (vLspStatus = status)
 				});
 			}
 		},
@@ -3862,6 +3886,7 @@
 			php: phpLspStatus,
 			forth: forthLspStatus,
 			c3: c3LspStatus,
+			v: vLspStatus,
 			d: dLspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,

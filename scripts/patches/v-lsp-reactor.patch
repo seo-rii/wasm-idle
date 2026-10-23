@@ -1,0 +1,183 @@
+--- a/src/analyzer/index/IndexingRoot.v
++++ b/src/analyzer/index/IndexingRoot.v
+@@ -136,0 +137,16 @@
++	$if browser_lsp ? {
++		if _ := i.load_index() { return .from_cache }
++		mut p := parser.Parser.new()
++		defer { p.free() }
++		mut paths := os.walk_ext(i.root, '.v')
++        paths << os.walk_ext(i.root, '.vsh')
++        for filepath in paths {
++			if !i.need_index(filepath) { continue }
++			content := os.read_file(filepath) or { continue }
++			cache := i.index_file(filepath, content, mut p) or { continue }
++			i.index.per_file.data[cache.path()] = cache
++		}
++		i.updated_at = time.now()
++		i.need_save = true
++		return .from_scratch
++	} $else {
+@@ -178,0 +195,2 @@
++
++	}
+@@ -253,0 +272,13 @@
++	$if browser_lsp ? {
++		mut p := parser.Parser.new()
++		defer { p.free() }
++		for filepath, datum in i.index.per_file.data.clone() {
++			if os.file_last_mod_unix(filepath) <= datum.file_last_modified { continue }
++			i.index.per_file.data.delete(filepath)
++			content := os.read_file(filepath) or { continue }
++			cache := i.index_file(filepath, content, mut p) or { continue }
++			i.index.per_file.data[cache.path()] = cache
++			i.index.updated_at = time.now()
++			i.need_save = true
++		}
++	} $else {
+@@ -295,0 +327,2 @@
++
++	}
+--- a/src/analyzer/parser/batch.v
++++ b/src/analyzer/parser/batch.v
+@@ -5,0 +6,11 @@
++	$if browser_lsp ? {
++		mut results := []ParseResult{cap: files.len}
++		mut p := Parser.new()
++		defer { p.free() }
++		for filepath in files {
++			mut result := p.parse_file(filepath) or { continue }
++			result.path = filepath
++			results << result
++		}
++		return results
++	} $else {
+@@ -29,0 +41,2 @@
++
++	}
+--- /dev/null
++++ b/src/browser/gc-roots.c
+@@ -0,0 +1,6 @@
++#include <gc/gc.h>
++extern char __global_base, __data_end;
++void lsp_gc_init(void) {
++    GC_INIT();
++    GC_add_roots(&__global_base, &__data_end);
++}
+--- /dev/null
++++ b/src/browser/main.v
+@@ -0,0 +1,49 @@
++module main
++import os
++import io
++import analyzer
++import server
++import jsonrpc
++import loglib as _
++__global (
++ memory_stream = unsafe { &MemoryStream(nil) }
++ reactor = unsafe { &jsonrpc.Server(nil) }
++)
++@[heap]
++struct MemoryStream { mut:
++ request []u8
++ response []u8
++}
++fn (mut m MemoryStream) read(mut b []u8) !int {
++ if m.request.len == 0 { return IError(io.Eof{}) }
++ n := m.request.len
++ b << m.request
++ m.request = []
++ return n
++}
++fn (mut m MemoryStream) write(b []u8) !int {
++ m.response << b
++ return b.len
++}
++fn main() {}
++@[export: 'lsp_init']
++fn lsp_init() {
++ os.setenv('VROOT','/v',true)
++ os.setenv('VMODULES','/v/modules',true)
++ os.mkdir_all('/v/modules') or {}
++ os.mkdir_all('/workspace') or {}
++ memory_stream = &MemoryStream{}
++ mut ls := server.LanguageServer.new(analyzer.IndexingManager.new())
++ reactor = &jsonrpc.Server{stream: memory_stream, handler: ls}
++}
++@[export: 'lsp_handle']
++fn lsp_handle(p &u8, n int) {
++ memory_stream.response.clear()
++ text := unsafe { p.vstring_with_len(n) }
++ memory_stream.request = ('Content-Length: ${n}\r\n\r\n'+text).bytes()
++ reactor.respond() or { eprintln(err) }
++}
++@[export: 'lsp_response_ptr']
++fn lsp_response_ptr() &u8 { return memory_stream.response.data }
++@[export: 'lsp_response_len']
++fn lsp_response_len() int { return memory_stream.response.len }
+--- a/src/server/BackgroundThread.v
++++ b/src/server/BackgroundThread.v
+@@ -26,0 +27,3 @@
++	$if browser_lsp ? {
++		b.state = .running
++	} $else {
+@@ -42,0 +46,2 @@
++
++	}
+@@ -46,0 +52,3 @@
++	$if browser_lsp ? {
++		return
++	} $else {
+@@ -52,0 +61,2 @@
++
++	}
+@@ -57,0 +68,3 @@
++	$if browser_lsp ? {
++		cb()
++	} $else {
+@@ -63,0 +77,2 @@
++
++	}
+--- a/src/server/diagnostics.v
++++ b/src/server/diagnostics.v
+@@ -10,0 +11 @@
++	$if !browser_lsp ? {
+@@ -13,0 +15 @@
++	}
+--- a/src/server/general.v
++++ b/src/server/general.v
+@@ -57 +57 @@
+-			document_formatting_provider: true
++			document_formatting_provider: $if browser_lsp ? { false } $else { true }
+@@ -103 +103 @@
+-	if ls.paths.vexe == '' || ls.paths.vlib_root == '' {
++	if ($if browser_lsp ? { false } $else { ls.paths.vexe == '' }) || ls.paths.vlib_root == '' {
+@@ -134 +134,4 @@
+-	status := ls.indexing_mng.indexer.index(fn [mut work, mut ls] (root index.IndexingRoot, i int) {
++	status := $if browser_lsp ? {
++        ls.indexing_mng.indexer.index(fn (_ index.IndexingRoot, _ int) {})
++    } $else {
++        ls.indexing_mng.indexer.index(fn [mut work, mut ls] (root index.IndexingRoot, i int) {
+@@ -139,0 +143 @@
++    }
+@@ -281,0 +286,4 @@
++    $if browser_lsp ? {
++        ls.paths.vroot = '/v'
++        return
++    }
+@@ -312,0 +321 @@
++	$if !browser_lsp ? {
+@@ -320,0 +330,2 @@
++	}
++
+@@ -428 +438,0 @@
+-@[noreturn]
+@@ -437 +446,0 @@
+-@[noreturn]
+@@ -444 +453 @@
+-	exit(ecode)
++	$if !browser_lsp ? { exit(ecode) }
+--- a/src/server/language_server.v
++++ b/src/server/language_server.v
+@@ -361,0 +362 @@
++    $if browser_lsp ? { return error('External V compiler processes are unavailable in the browser profile') }

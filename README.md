@@ -128,7 +128,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Lean 4         | Lean 4.34.1 lean --run (Emscripten)          | Yes   | compiler diagnostics | -     |
 | Fortran        | f2c + @wasm-idle/llvm-core                   | Yes   | Fortran LSP          | -     |
 | COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core          | Yes   | SuperBOL OSS LSP     | -     |
-| V              | V 0.5.2 + @wasm-idle/llvm-core               | Yes   | syntax               | -     |
+| V              | V 0.5.2 + @wasm-idle/llvm-core               | Yes   | v-analyzer LSP       | -     |
 | R              | WebR                                         | Yes   | syntax               | -     |
 | Octave         | wasm-octave                                  | Yes   | syntax               | -     |
 | DuckDB         | DuckDB-Wasm                                  | Files | DuckDB LSP           | -     |

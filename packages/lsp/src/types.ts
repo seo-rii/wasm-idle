@@ -1,4 +1,5 @@
 import type { C3LspAssetReceipts } from './c3/assets.js';
+import type { VLspAssetReceipts } from './v/assets.js';
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
 import type { LanguageToolAssetConfig } from './assets.js';
@@ -63,6 +64,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		baseUrl?: string;
 		/** Text snapshots relative to /workspace; plain ReScript projects, up to 64 source files. */
 		workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+	};
+	v?: {
+		baseUrl?: string;
+		integrity?: VLspAssetReceipts;
 	};
 	python?: {
 		baseUrl?: string;

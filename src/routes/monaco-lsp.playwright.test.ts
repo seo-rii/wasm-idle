@@ -74,6 +74,8 @@ interface MonacoTestStatus {
 interface MonacoTestEditor {
 	focus(): void;
 	getModel?(): { uri: unknown } | null;
+	setPosition(position: { lineNumber: number; column: number }): void;
+	trigger(source: string, action: string, args: unknown): void;
 	getValue(): string;
 	setValue(value: string): void;
 }
@@ -164,6 +166,21 @@ const lspBrowserCases: LspBrowserCase[] = [
 		],
 		assertNoPreEnableRequests: ['/wasm-rescript-lsp/'],
 		timeoutMs: 120_000
+	},
+	{
+		language: 'V',
+		label: 'V',
+		fileName: 'main.v',
+		statusKey: 'v',
+		source: 'module main\n// Squares an integer.\nfn square(value int) int {\n return value * value\n}\nfn main() {\n n := square(5)\n println(n)\n}\n',
+		expectDiagnostics: false,
+		expectedResponses: [
+			'/wasm-v-lsp/v_analyzer.mjs',
+			'/wasm-v-lsp/v_analyzer.wasm',
+			'/wasm-v-lsp/stdlib.json.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-v-lsp/'],
+		timeoutMs: 180_000
 	},
 	{
 		language: 'CPP',
@@ -671,6 +688,7 @@ const lspBrowserMatrixGroups = {
 	],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
+		'V',
 		'OBJC',
 		'D',
 		'ELIXIR',
@@ -709,7 +727,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1678,6 +1696,68 @@ async function runLspCase(
 			.waitFor({ timeout: 10000 });
 		await page.keyboard.press('Escape');
 	}
+	if (testCase.language === 'V') {
+		// The upstream initial index runs after initialize. Wait for an editor feature
+		// from the opened document before triggering a hover at a fixed position.
+		await expect
+			.poll(
+				async () =>
+					(await page.locator('.view-lines').innerText()).replaceAll('\u00a0', ' '),
+				{
+					timeout: 120_000
+				}
+			)
+			.toContain('n: int');
+		async function expectVHover(signature: string) {
+			await page.keyboard.press('Escape');
+			await page.evaluate(() => {
+				const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+					.__wasmIdleMonacoEditor!;
+				editor.setPosition({ lineNumber: 7, column: 8 });
+				editor.focus();
+				editor.trigger('browser-test', 'editor.action.showHover', {});
+			});
+			await expect
+				.poll(
+					async () =>
+						await page
+							.locator('.monaco-hover')
+							.innerText()
+							.catch(() => ''),
+					{
+						timeout: 30_000
+					}
+				)
+				.toContain(signature);
+			expect(await page.locator('.monaco-hover').innerText()).toContain(
+				'Squares an integer.'
+			);
+		}
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 22 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		// One real keystroke changes the original analyzer's inferred return type.
+		await page.keyboard.type('?');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source.replace(') int {', ') ?int {')
+		);
+		await expectVHover('fn square(value int) ?int');
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source
+		);
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
+	}
+
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1846,6 +1926,7 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-extra';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'V',
 				'OBJC',
 				'D',
 				'ELIXIR',
@@ -1966,6 +2047,8 @@ describe('Monaco LSP browser integration', () => {
 				) {
 					await runBrowserPreparationScripts(['sync:cobol-lsp']);
 				}
+				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'V'))
+					await runBrowserPreparationScripts(['sync:v-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						...(cases.some((testCase) => testCase.language === 'RESCRIPT')

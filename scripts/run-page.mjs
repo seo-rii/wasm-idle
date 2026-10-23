@@ -11,6 +11,7 @@ const ASSET_PREPARATION = new Set([
 	'sync:phpantom-lsp',
 	'sync:forth-lsp',
 	'sync:c3-lsp',
+	'sync:v-lsp',
 	'sync:wasm-lean4',
 	'prepare:test-assets',
 	'build:page-runtimes',

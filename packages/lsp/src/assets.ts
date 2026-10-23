@@ -17,6 +17,7 @@ import {
 
 export type LanguageToolAssetRuntime =
 	| 'c3'
+	| 'v'
 	| 'awk'
 	| 'clangd'
 	| 'objectivec'

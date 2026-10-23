@@ -10,6 +10,7 @@ const expectedLanguagesByProvider = {
 	forth: ['forth', 'fth', '4th'],
 	c3: ['c3'],
 	rescript: ['rescript'],
+	v: ['v', 'vlang'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

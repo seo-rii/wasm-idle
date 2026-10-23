@@ -32,6 +32,7 @@ test('skipping deployment checks retains asset preparation and the website build
 		'sync:phpantom-lsp',
 		'sync:forth-lsp',
 		'sync:c3-lsp',
+		'sync:v-lsp',
 		'prepare:test-assets',
 		'build:page-runtimes',
 		'layer:static-runtimes',
@@ -68,6 +69,7 @@ test('asset reuse alone preserves verification and the full browser audit', () =
 	assert(!names.includes('sync:phpantom-lsp'));
 	assert(!names.includes('sync:forth-lsp'));
 	assert(!names.includes('sync:c3-lsp'));
+	assert(!names.includes('sync:v-lsp'));
 });
 
 test('only explicit 1 flags opt out, and unknown build command forms fail closed', () => {
