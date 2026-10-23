@@ -11,7 +11,6 @@
 	import type {
 		IMonacoInputEvent,
 		IMonacoLspProvider,
-		IMonacoLspClientOptions,
 		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
@@ -2561,16 +2560,6 @@
 		lspLanguage === 'duckdb' ? 'duckdb' : (defaultLanguageAliases[language] ?? language)
 	);
 	const activeLspLanguage = $derived(lspLanguage || language);
-	const nimTestLspOptions = $derived.by<IMonacoLspClientOptions | undefined>(() => {
-		if (activeLspLanguage !== 'nim' || !monacoTestHooksEnabled()) return undefined;
-		return {
-			trace(event) {
-				const trace = Reflect.get(globalThis, '__wasmIdleNimLspTrace') || [];
-				trace.push(event);
-				Reflect.set(globalThis, '__wasmIdleNimLspTrace', trace.slice(-80));
-			}
-		};
-	});
 	const defaultValue = $derived(
 		resolveEditorDefaultSource(
 			defaultLanguage as
@@ -4086,7 +4075,6 @@
 				{model}
 				setting={editorSetting}
 				lsp={resolveLspConnection}
-				lspOptions={nimTestLspOptions}
 				onload={handleEditorLoad}
 				oninput={handleEditorInput}
 			/>

@@ -1430,7 +1430,6 @@ async function collectPageDebugInfo(page: Page) {
 			`lspStatus=${JSON.stringify(testGlobal.__wasmIdleMonacoLspStatus || null)}`,
 			`lspTraffic=${JSON.stringify(testGlobal.__wasmIdleMonacoLspTraffic || null)}`,
 			`clangdTrace=${JSON.stringify(Reflect.get(globalThis, '__wasmIdleClangdTrace')?.() || [])}`,
-			`nimTrace=${JSON.stringify(Reflect.get(globalThis, '__wasmIdleNimLspTrace') || [])}`,
 			`markers=${JSON.stringify(markers)}`,
 			`viewText=${JSON.stringify(viewText)}`,
 			`squiggles=${JSON.stringify(squiggles)}`,
