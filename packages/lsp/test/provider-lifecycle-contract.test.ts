@@ -132,6 +132,8 @@ import { createPerlTestAssetResponse } from './perl-fixture.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createTclTestAssetResponse } from './tcl-fixture.js';
 
+// The fake Worker exercises host lifecycle only; real upstream semantics have a browser suite.
+const phpWasmFixture = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 const applicationOrigin = 'https://app.example.com';
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -185,6 +187,12 @@ const createProviderOptions = (
 	rootUrl: deployment.rootUrl,
 	currentUrl: deployment.currentUrl,
 	createWorker: () => new mockState.FakeWorker() as unknown as Worker,
+	php: {
+		wasmReceipt: {
+			bytes: phpWasmFixture.byteLength,
+			sha256: createHash('sha256').update(phpWasmFixture).digest('hex')
+		}
+	},
 	cpp: {
 		loader: async ({ asset }) =>
 			asset === 'clangd.wasm.gz'
@@ -273,6 +281,13 @@ describe('registered LSP provider lifecycle contract', () => {
 				const requestUrl = new URL(
 					typeof input === 'string' || input instanceof URL ? input : input.url
 				);
+				if (requestUrl.pathname.endsWith('/wasm-phpantom-lsp/phpantom_lsp.wasm')) {
+					const response = new Response(phpWasmFixture, {
+						headers: { 'content-length': String(phpWasmFixture.byteLength) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
 				if (requestUrl.pathname.includes('/wasm-prolog/')) {
 					const response = createPrologTestAssetResponse(requestUrl);
 					if (response) return response;
