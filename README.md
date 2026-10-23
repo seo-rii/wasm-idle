@@ -65,6 +65,18 @@ parsers, translators, emulators, or "subset" executors as language support. A la
 listed only after normal user code runs on that actual runtime and stdin/stdout behavior, or a
 documented stdin limitation, is covered by tests.
 
+## C/C++ SIMD
+
+Normal C/C++ runs support `<wasm_simd128.h>` and the SSE through AVX2 intrinsics exposed by
+`<immintrin.h>`, using pinned Emscripten 6.0.0 compatibility headers. The SDK compiler, web
+playground, Bash `clang` command, and bundled LLVM 22 clangd use the same Wasm SIMD profile.
+AVX's 256-bit operations are implemented with pairs of 128-bit Wasm vectors; this does not
+enable native x86 assembly. FMA, AVX-512 and other x86-only intrinsics are outside this profile.
+
+The LLDB/WAMR debugger does not support SIMD, so LLDB builds retain their existing scalar target.
+Use normal runs for SIMD programs. The compatibility sources, licenses, and immutable source
+receipts are maintained by `scripts/sync-clang-simd-headers.mjs`.
+
 ## Support matrix
 
 All execution entries run in the browser through real runtime, compiler, or interpreter
@@ -147,18 +159,6 @@ remaining producer requirements.
 | SQLite           | sql.js                                       | n/a   | syntax               | -              |
 | PostgreSQL       | PostgreSQL 18 / PGlite                       | Files | syntax               | -              |
 | PHP              | PHP 8.4 / php-wasm                           | Yes   | PHPantom LSP         | -              |
-
-## C/C++ SIMD
-
-Normal C/C++ runs support `<wasm_simd128.h>` and the SSE through AVX2 intrinsics exposed by
-`<immintrin.h>`, using pinned Emscripten 6.0.0 compatibility headers. The SDK compiler, web
-playground, Bash `clang` command, and bundled LLVM 22 clangd use the same Wasm SIMD profile.
-AVX's 256-bit operations are implemented with pairs of 128-bit Wasm vectors; this does not
-enable native x86 assembly. FMA, AVX-512 and other x86-only intrinsics are outside this profile.
-
-The LLDB/WAMR debugger does not support SIMD, so LLDB builds retain their existing scalar target.
-Use normal runs for SIMD programs. The compatibility sources, licenses, and immutable source
-receipts are maintained by `scripts/sync-clang-simd-headers.mjs`.
 
 ## Browser LLDB debug runtime
 
