@@ -119,6 +119,7 @@ describe('language registry', () => {
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
 		expect(lspLanguageOverrides.POSTGRESQL).toBe('postgresql');
 		expect(lspLanguageOverrides.BASH).toBe('bash');
+		expect(lspLanguageOverrides.GRAIN).toBe('grain');
 	});
 
 	it('registers Bash with shell syntax and CLI args', () => {

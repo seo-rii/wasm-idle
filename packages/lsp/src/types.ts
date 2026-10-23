@@ -80,6 +80,11 @@ export interface EditorLanguageServerRuntimeOptions {
 		compilerUrl?: string;
 		target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 	};
+	grain?: {
+		baseUrl?: string;
+		/** Read-only project snapshot mounted below file:///workspace/. */
+		workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+	};
 	d?: {
 		moduleUrl?: string;
 		manifestUrl?: string;

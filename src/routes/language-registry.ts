@@ -205,6 +205,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	},
 	GRAIN: {
 		label: 'Grain',
+		lspLanguageOverride: 'grain',
 		editorLanguage: 'rust',
 		supportsArgs: true,
 		compilerDiagnostics: true,

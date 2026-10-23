@@ -244,6 +244,11 @@
 			"types": "./dist/bash/index.d.ts",
 			"import": "./dist/bash/index.js",
 			"default": "./dist/bash/index.js"
+		},
+		"./grain": {
+			"types": "./dist/grain/index.d.ts",
+			"import": "./dist/grain/index.js",
+			"default": "./dist/grain/index.js"
 		}
 	},
 	"files": [

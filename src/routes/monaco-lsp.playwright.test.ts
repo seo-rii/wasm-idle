@@ -503,6 +503,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		timeoutMs: 240_000
 	},
 	{
+		language: 'GRAIN',
+		label: 'Grain',
+		fileName: 'main.gr',
+		aliases: ['gr'],
+		source: 'module Main\nlet value: Number = "text"\nprint(value)\n',
+		validSource: 'module Main\nlet value: Number = 42\nprint(value)\n',
+		errorLine: 2,
+		expectedResponses: [
+			'/wasm-grain-lsp/host.mjs',
+			'/wasm-grain-lsp/grainlsp.js.gz.bin',
+			'/wasm-grain-lsp/stdlib.pack.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-grain-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'TCL',
 		label: 'Tcl',
 		fileName: 'main.tcl',
@@ -608,6 +624,7 @@ const lspBrowserMatrixGroups = {
 		'D',
 		'ELIXIR',
 		'ERLANG',
+		'GRAIN',
 		'TCL',
 		'JANET',
 		'FENNEL',
@@ -641,7 +658,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1460,6 +1477,56 @@ async function runLspCase(
 		);
 		await showReturnType(false);
 	}
+	if (testCase.language === 'GRAIN') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 21 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = x42\nprint(value)\n' &&
+				hooks
+					.__wasmIdleMonacoApi!.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+					})
+					.some(
+						(marker) =>
+							marker.startLineNumber === 2 &&
+							(marker.severity || 0) >= 4 &&
+							(marker.message || '').includes('x42')
+					)
+			);
+		});
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = 42\nprint(value)\n' &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 8 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page
+			.locator('.monaco-hover')
+			.filter({ hasText: 'Number' })
+			.first()
+			.waitFor({ timeout: 10_000 });
+		await page.keyboard.press('Escape');
+	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
@@ -1632,6 +1699,7 @@ describe('Monaco LSP browser integration', () => {
 				'D',
 				'ELIXIR',
 				'ERLANG',
+				'GRAIN',
 				'TCL',
 				'JANET',
 				'FENNEL',
@@ -1734,6 +1802,11 @@ describe('Monaco LSP browser integration', () => {
 				) {
 					await runBrowserPreparationScripts(['sync:bash-lsp']);
 				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'GRAIN')
+				)
+					await runBrowserPreparationScripts(['sync:grain-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

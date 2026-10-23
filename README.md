@@ -96,7 +96,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Erlang         | AtomVM / Popcorn                             | Yes   | syntax               | -     |
 | Prolog         | SWI-Prolog WASM worker                       | Yes   | syntax               | -     |
 | Gleam          | Gleam precompiled browser runtime            | Yes   | compiler diagnostics | -     |
-| Grain          | Grain 0.7.2 js_of_ocaml compiler + WASI      | Yes   | compiler diagnostics | -     |
+| Grain          | Grain 0.7.2 js_of_ocaml compiler + WASI      | Yes   | Grain LSP            | -     |
 | Perl           | Perl WASM worker                             | Yes   | syntax               | -     |
 | Tcl            | Wacl Tcl WASM worker                         | Yes   | syntax               | -     |
 | AWK            | GoAWK WASM worker                            | Yes   | syntax               | -     |

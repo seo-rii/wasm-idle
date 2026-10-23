@@ -29,6 +29,7 @@ const expectedLanguagesByProvider = {
 	zig: ['zig'],
 	lua: ['lua'],
 	fennel: ['fennel', 'fnl'],
+	grain: ['grain', 'gr'],
 	janet: ['janet'],
 	lisp: ['lisp', 'scheme', 'scm'],
 	octave: ['octave', 'matlab', 'm'],

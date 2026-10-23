@@ -1,0 +1,44 @@
+{
+	"format": "wasm-idle-grain-lsp-v1",
+	"release": {
+		"url": "https://github.com/grain-lang/grain/releases/download/grain-v0.7.2/grain-linux-x64",
+		"revision": "49829d7966b38b177291f7e91f5eb81c65ec07aa",
+		"bytes": 79185888,
+		"sha256": "82658891d33f5431e7bd260f0c00b8e86c43eb9182c5327f41db25d60b54dadd"
+	},
+	"snapshotPath": "/snapshot/grain/cli/bin/grainlsp.bc.js",
+	"server": {
+		"bytes": 20985243,
+		"sha256": "23549331e12fcd82f0671976c48d18f10e10cc0562a00d18c412c379828f36bc"
+	},
+	"stdlibStorage": {
+		"bytes": 1653344,
+		"sha256": "7180475667a3129821be12aa787f449e58de62b0bb5c0e5472077b73b9e5cafa"
+	},
+	"stdlib": {
+		"bytes": 5066092,
+		"sha256": "c56e83cbea649be5dd94ce98ae648b8f98e40203761ef7b1ad0a799048ee08eb"
+	},
+	"assets": {
+		"grainlsp.js.gz.bin": {
+			"bytes": 3443179,
+			"sha256": "ef67629f97e9ae846a34285f158312bb98d0d676817ffb491c47f0d44d0246ca"
+		},
+		"stdlib.pack.gz.bin": {
+			"bytes": 1653344,
+			"sha256": "7180475667a3129821be12aa787f449e58de62b0bb5c0e5472077b73b9e5cafa"
+		},
+		"host.mjs": {
+			"bytes": 5520,
+			"sha256": "dced0899a605e8e78df4320e4b463c923863c9d1a8f2883b06cbe7a2b98fde61"
+		},
+		"LICENSE-grain-compiler.txt": {
+			"bytes": 7651,
+			"sha256": "8224a89fea46649b1ec4338c71a736d4a358e799ef239dfbe592a10bfb4df7ec"
+		},
+		"LICENSE-grain-stdlib.txt": {
+			"bytes": 1139,
+			"sha256": "7a7e23ff2b9f4a275793b20ef057195e11f4637d4e5cedaa0c64387eeb7ab30c"
+		}
+	}
+}

@@ -2341,6 +2341,7 @@
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let fennelLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let grainLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2456,6 +2457,8 @@
 		perlLspRuntime?: PerlLspRuntimeConfig;
 		fennelLspBaseUrl?: string;
 		pythonLspBaseUrl?: string;
+		grainLspBaseUrl?: string;
+		grainLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -2568,6 +2571,8 @@
 		perlLspRuntime,
 		fennelLspBaseUrl,
 		pythonLspBaseUrl,
+		grainLspBaseUrl,
+		grainLspWorkspaceFiles = [],
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -2733,6 +2738,8 @@
 			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
 			fennelLspBaseUrl || '',
+			grainLspBaseUrl || '',
+			activeLspLanguage === 'grain' ? JSON.stringify(grainLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2834,6 +2841,10 @@
 			case 'zig':
 				label = 'Zig LSP';
 				status = zigLspStatus;
+				break;
+			case 'grain':
+				label = 'Grain LSP';
+				status = grainLspStatus;
 				break;
 			case 'lua':
 				label = 'Lua LSP';
@@ -3017,6 +3028,20 @@
 					signal,
 					forth: { wasmUrl: forthLspWasmUrl },
 					onStatus: (status) => (forthLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['grain'],
+			isEnabled: () => !!grainLspBaseUrl,
+			setStatus: (status) => (grainLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getGrainLanguageServer } = await import('@wasm-idle/lsp/grain');
+				return getGrainLanguageServer({
+					currentUrl,
+					signal,
+					grain: { baseUrl: grainLspBaseUrl, workspaceFiles: grainLspWorkspaceFiles },
+					onStatus: (status) => (grainLspStatus = status)
 				});
 			}
 		},
@@ -3762,6 +3787,7 @@
 			zig: zigLspStatus,
 			lua: luaLspStatus,
 			fennel: fennelLspStatus,
+			grain: grainLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,

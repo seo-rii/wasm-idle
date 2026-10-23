@@ -54,3 +54,5 @@ static/wasm-lfortran/
 
 # Original Fennel LSP assets are produced from pinned source.
 /static/wasm-fennel-lsp/
+# Original Grain LSP and its verified runtime host are prepared locally.
+/static/wasm-grain-lsp/

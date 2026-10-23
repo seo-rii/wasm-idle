@@ -458,3 +458,5 @@ export {
 	FORTH_LSP_WASM_ASSET,
 	FORTH_LSP_WASM_RECEIPT
 } from './forth/index.js';
+
+export { getGrainLanguageServer, type GrainLanguageServerOptions } from './grain/index.js';
