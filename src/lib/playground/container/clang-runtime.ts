@@ -6,7 +6,9 @@ import type { WebsiteRuntimeAdapter } from './runtime-adapter';
 
 type Profile = {
 	container: Container;
+	sysrootProfile?: 'full' | 'c-base-v1';
 	prepareCommand(invocation: unknown, signal: AbortSignal): Promise<void>;
+	prepareClang?(profile: 'c' | 'full', signal: AbortSignal): Promise<readonly string[]>;
 };
 interface Execution {
 	language: string;
@@ -184,8 +186,19 @@ export class WebsiteClangRuntime {
 				phase: 'initializing',
 				label: 'Preparing the Clang toolchain'
 			});
-			await this.profile.prepareCommand({ path: '/usr/local/bin/clang' }, signal);
 			const { compileArgs } = resolveSandboxExecutionArgs(language, args, options);
+			const sysrootProfile =
+				this.profile.sysrootProfile === 'c-base-v1' &&
+				language === 'C' &&
+				input.options.activePath?.endsWith('.c') &&
+				!compileArgs.length &&
+				!Object.keys(options.env ?? {}).length
+					? 'c'
+					: 'full';
+			let sysrootArgs: readonly string[] = [];
+			if (this.profile.prepareClang)
+				sysrootArgs = await this.profile.prepareClang(sysrootProfile, signal);
+			else await this.profile.prepareCommand({ path: '/usr/local/bin/clang' }, signal);
 			const standard =
 				language === 'CPP'
 					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
@@ -194,6 +207,7 @@ export class WebsiteClangRuntime {
 			// Keep its default source mode C while enabling the C++ driver's link libraries.
 			const override = compileArgs.some((arg) => arg.startsWith('@') || arg.startsWith('-x'));
 			const common = [
+				...sysrootArgs,
 				...(language === 'CPP' || override ? ['--driver-mode=g++'] : []),
 				...(language === 'C' && override ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),

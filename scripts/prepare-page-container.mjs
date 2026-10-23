@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { selectPageContainerSource } from './lib/page-container-source.mjs';
+import { prepareContainerSysrootLayers } from './lib/container-sysroot-layers.mjs';
 import { manifest } from './probe-container-shell-acceptance.mjs';
 import {
 	BASH_WASM_SHA256,
@@ -23,15 +24,16 @@ const readJSON = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
 /** Keep opaque archive delivery portable while preserving the pinned bytes and package path. */
 export function prepareWebsiteAssetDelivery(asset, base) {
-	const sysroot = asset.id === 'sysroot';
-	const extension =
-		asset.encoding === 'gzip'
+	const sysroot = asset.id === 'sysroot' || asset.id.startsWith('sysroot-');
+	const extension = sysroot
+		? asset.encoding === 'gzip'
+			? 'tar.gz.bin'
+			: 'tar.bin'
+		: asset.encoding === 'gzip'
 			? 'wasm.gz.bin'
 			: asset.id === 'bash'
 				? 'webc.bin'
-				: sysroot
-					? 'tar.bin'
-					: 'wasm';
+				: 'wasm';
 	return {
 		...asset,
 		// Identity encoding authenticates the same MIME for delivery and logical bytes.
@@ -85,6 +87,11 @@ export async function createWebsiteBashConfiguration(applicationRootURL: string)
 
 /** Build-time application configuration only; runtime manifests never supply host imports. */
 export async function preparePageContainer(configuration, options = {}) {
+	const sysrootProfile = configuration.sysrootProfile ?? 'full';
+	assert(
+		['full', 'c-base-v1'].includes(sysrootProfile),
+		'sysrootProfile must be full or c-base-v1'
+	);
 	const base = new URL(configuration.baseURL);
 	assert(
 		['https:', 'http:'].includes(base.protocol) &&
@@ -118,12 +125,19 @@ export async function preparePageContainer(configuration, options = {}) {
 		assert.deepEqual(identity(bytes), receipt.entries[name], `Pinned SDK ${name}`);
 		entries.set(name, bytes);
 	}
-	const [bash, busybox, producer, processReceipt] = await Promise.all([
+	const [bash, busybox, producer, processReceiptBytes] = await Promise.all([
 		readFile(configuration.bashWebc),
 		readFile(configuration.busyboxWasm),
 		readJSON(configuration.clangProducerReceipt),
-		readJSON(configuration.processSysrootReceipt)
+		readFile(configuration.processSysrootReceipt)
 	]);
+	if (sysrootProfile === 'c-base-v1')
+		assert.equal(
+			hash(processReceiptBytes),
+			configuration.processSysrootReceiptSha256,
+			'Explicit process sysroot receipt pin required'
+		);
+	const processReceipt = JSON.parse(processReceiptBytes);
 	let bashProducer = null;
 	if (configuration.bashProducerReceipt || configuration.bashProducerReceiptSha256) {
 		const receiptBytes = await readFile(configuration.bashProducerReceipt);
@@ -192,7 +206,16 @@ export async function preparePageContainer(configuration, options = {}) {
 			producerSha256: configuration.clangProducerReceiptSha256
 		}
 	};
-	const distribution = JSON.parse(manifest(base.origin, inputs, 'busybox', 'live'));
+	const originalDistribution = JSON.parse(manifest(base.origin, inputs, 'busybox', 'live'));
+	const layers =
+		sysrootProfile === 'c-base-v1'
+			? prepareContainerSysrootLayers(
+					clangAssets.sysroot.delivery,
+					originalDistribution,
+					processReceipt.outputs['sysroot.tar']
+				)
+			: undefined;
+	const distribution = layers?.distribution ?? originalDistribution;
 	distribution.packages.find((pkg) => pkg.id === 'shell').producer.receiptSha256 =
 		configuration.bashProducerReceiptSha256 ?? configuration.packageReceiptSha256;
 	if (bashProducer) {
@@ -247,7 +270,9 @@ export async function preparePageContainer(configuration, options = {}) {
 		linkerSha256: clangAssets.lld.metadata.logical.sha256,
 		cacheNamespace: 'container-website',
 		commandTimeoutMs: COMMAND_TIMEOUT_MS,
-		clangFilesystem: 'live'
+		clangFilesystem: 'live',
+		sysrootProfile,
+		...(layers ? { sysrootLayers: layers.config } : {})
 	};
 	const compiled = await build({
 		absWorkingDir: root,
@@ -310,7 +335,9 @@ export async function preparePageContainer(configuration, options = {}) {
 					new URL(asset.url).pathname.slice(base.pathname.length)
 				);
 				await mkdir(dirname(destination), { recursive: true });
-				await copyFile(sources.get(asset.id), destination);
+				if (layers?.deliveries.has(asset.id))
+					await writeFile(destination, layers.deliveries.get(asset.id));
+				else await copyFile(sources.get(asset.id), destination);
 			}
 		const sourceFiles = [];
 		await mkdir(join(stage, 'sources'), { recursive: true });
@@ -360,6 +387,22 @@ export async function preparePageContainer(configuration, options = {}) {
 			bash: bashProducer,
 			clang: producer,
 			processSysroot: processReceipt,
+			...(layers
+				? {
+						sysrootLayers: layers.receipt,
+						sysrootLayerSources: Object.fromEntries(
+							await Promise.all(
+								[
+									'scripts/lib/container-sysroot-layers.mjs',
+									'examples/container/sysroot-layers.mjs'
+								].map(async (path) => [
+									path,
+									hash(await readFile(join(root, path)))
+								])
+							)
+						)
+					}
+				: {}),
 			busybox: await readJSON(configuration.busyboxReceipt),
 			container: container.identity,
 			hostSources: sourceHashes,
@@ -375,6 +418,7 @@ export async function preparePageContainer(configuration, options = {}) {
 				schemaVersion: 1,
 				hostHash,
 				profile: 'live',
+				sysrootProfile,
 				containerVersion: container.identity.version,
 				containerSource: container.identity.source,
 				containerProfile: container.identity.profile,
@@ -384,7 +428,8 @@ export async function preparePageContainer(configuration, options = {}) {
 		);
 		await rm(output, { recursive: true, force: true });
 		await rename(stage, output);
-		const releasePath = join(root, 'src/lib/playground/container/release.ts');
+		const releasePath =
+			options.releasePath ?? join(root, 'src/lib/playground/container/release.ts');
 		await mkdir(dirname(releasePath), { recursive: true });
 		await writeFile(
 			releasePath,
@@ -406,6 +451,7 @@ export async function preparePageContainer(configuration, options = {}) {
 		containerVersion: container.identity.version,
 		containerSource: container.identity.source,
 		containerProfile: container.identity.profile,
+		sysrootProfile,
 		assetBytes: distribution.packages
 			.flatMap((pkg) => pkg.assets)
 			.reduce((total, asset) => total + asset.delivery.bytes, 0)
