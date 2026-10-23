@@ -232,7 +232,7 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'main.cpp',
 		source: '#include <bits/stdc++.h>\n\nint main() {\n    int n = "nope";\n    std::cout << n << "\\n";\n}\n',
 		validSource:
-			'#include <bits/stdc++.h>\nint square(int value) { return value * value; }\nint main() { auto result = square(4); std::cout << result; }\n',
+			'#include <bits/stdc++.h>\n#include <immintrin.h>\nint square(int value) { return value * value; }\nint main() { auto result = square(4); __m256i lanes = _mm256_set1_epi32(result); std::cout << _mm256_extract_epi32(lanes, 7); }\n',
 		errorLine: 4,
 		aliases: ['c++', 'cpp', 'clangd'],
 		statusKey: 'clangd',
@@ -243,7 +243,8 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'C',
 		fileName: 'main.c',
 		source: 'int main(void) {\n    int n = "nope";\n    return n;\n}\n',
-		validSource: 'int main(void) {\n    int class = 42;\n    return class;\n}\n',
+		validSource:
+			'#include <immintrin.h>\nint main(void) {\n    int class = 42;\n    __m256i lanes = _mm256_set1_epi32(class);\n    return _mm256_extract_epi32(lanes, 7);\n}\n',
 		errorLine: 2,
 		aliases: ['clang'],
 		statusKey: 'clangd',

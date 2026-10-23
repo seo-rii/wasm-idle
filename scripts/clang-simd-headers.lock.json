@@ -1,0 +1,95 @@
+{
+	"format": "wasm-idle-clang-simd-headers-v1",
+	"version": "6.0.0",
+	"revision": "afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3",
+	"baseUrl": "https://raw.githubusercontent.com/emscripten-core/emscripten/afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3/",
+	"selection": "Emscripten WebAssembly SIMD compatibility headers for SSE through AVX2, with the matching LLVM WebAssembly intrinsic dependency; excludes native x86 headers, MMX, FMA and AVX-512",
+	"compilerFlags": {
+		"source": "tools/compile.py",
+		"bytes": 5183,
+		"sha256": "a382c5c273d2eea2a4ac951c72ae585d96d91362e6b20a2ec2d1ae8d47a6da70"
+	},
+	"defines": [
+		"-D__SSE__=1",
+		"-D__SSE2__=1",
+		"-D__SSE3__=1",
+		"-D__SSSE3__=1",
+		"-D__SSE4_1__=1",
+		"-D__SSE4_2__=1",
+		"-D__AVX__=1",
+		"-D__AVX2__=1"
+	],
+	"license": {
+		"source": "LICENSE",
+		"bytes": 5093,
+		"sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+	},
+	"headers": [
+		{
+			"path": "immintrin.h",
+			"source": "system/include/compat/immintrin.h",
+			"bytes": 752,
+			"sha256": "bc3e199d420918b4f2f4a632907594a0a47b704e3592c95bdda84482fffe1590"
+		},
+		{
+			"path": "xmmintrin.h",
+			"source": "system/include/compat/xmmintrin.h",
+			"bytes": 21978,
+			"sha256": "9d3ebd5ec58e07bc97a788cd0ef21559adcbbc5f11bb779eb1864f45f8d167b9"
+		},
+		{
+			"path": "emmintrin.h",
+			"source": "system/include/compat/emmintrin.h",
+			"bytes": 47545,
+			"sha256": "ca357b61aa173bd5e617bc0b149c0165b57d21210787eeff5367175dfe63c947"
+		},
+		{
+			"path": "pmmintrin.h",
+			"source": "system/include/compat/pmmintrin.h",
+			"bytes": 2944,
+			"sha256": "a516eeb25fb87467c9758fcd7fecc3fc4f6c2acdb05284dd9a5e819b3d36fd60"
+		},
+		{
+			"path": "tmmintrin.h",
+			"source": "system/include/compat/tmmintrin.h",
+			"bytes": 5569,
+			"sha256": "dee25e8b78bc72d0151dc2465c4ce0bc2961a0c8c1bf360bab7c6ef8d448a35d"
+		},
+		{
+			"path": "smmintrin.h",
+			"source": "system/include/compat/smmintrin.h",
+			"bytes": 17586,
+			"sha256": "7b7b7f1d0754c2366903b2cf224e56f409ff70d7e73a3921042b0fcbb0d53ac3"
+		},
+		{
+			"path": "nmmintrin.h",
+			"source": "system/include/compat/nmmintrin.h",
+			"bytes": 940,
+			"sha256": "a4af1cdcf40486f96abb7107ae9c14f1cb734e55af2141cc84f081806453f98b"
+		},
+		{
+			"path": "avxintrin.h",
+			"source": "system/include/compat/avxintrin.h",
+			"bytes": 88211,
+			"sha256": "b1b1096f0bca3ab3aee0df8900af75f65b6705f14d5e846e339deabc759c1637"
+		},
+		{
+			"path": "avx2intrin.h",
+			"source": "system/include/compat/avx2intrin.h",
+			"bytes": 72304,
+			"sha256": "ac704abbc60147b9bdad6487752ed87c590b447bb759591d517abc4abd81a4ff"
+		}
+	],
+	"llvmDependency": {
+		"name": "clang",
+		"version": "22.1.8",
+		"revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+		"baseUrl": "https://raw.githubusercontent.com/llvm/llvm-project/ca7933e47d3a3451d81e72ac174dcb5aa28b59d1/",
+		"header": {
+			"path": "wasm_simd128.h",
+			"source": "clang/lib/Headers/wasm_simd128.h",
+			"bytes": 83675,
+			"sha256": "93a4905ac462809f5a5d970286e0ef7cca11b27726c2e8461304e7bc701f9db7"
+		}
+	}
+}

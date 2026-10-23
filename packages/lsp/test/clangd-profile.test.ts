@@ -47,6 +47,31 @@ describe('clangd compile profiles', () => {
 			flags.indexOf('-isystem/usr/include/wasm32-wasi')
 		);
 	});
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'finds Wasm SIMD intrinsic implementations ahead of native headers for %s',
+		(language) => {
+			const flags = createClangdCompileFlags(language, { resourceDir: '/lib/clang/22' });
+			expect(flags).toContain('-msimd128');
+			expect(flags.join(' ')).toContain('-D__SSE__');
+			expect(flags.join(' ')).toContain('-D__AVX2__');
+			const compatibilityPath = flags.findIndex((flag) =>
+				flag.endsWith('/usr/include/wasm-idle/simd')
+			);
+			expect(compatibilityPath).toBeGreaterThanOrEqual(0);
+			expect(compatibilityPath).toBeLessThan(flags.indexOf('-isystem/lib/clang/22/include'));
+		}
+	);
+	it('retains the original target profile for custom clangd builds without compatible headers', () => {
+		const flags = createClangdCompileFlags('CPP', {
+			resourceDir: '/lib/clang/17',
+			simd: false
+		});
+		expect(flags).toContain('--target=wasm32-wasi');
+		expect(flags).toContain('-isystem/lib/clang/17/include');
+		expect(flags).not.toContain('-msimd128');
+		expect(flags.join(' ')).not.toContain('/wasm-idle/simd');
+		expect(flags.join(' ')).not.toContain('-D__AVX2__');
+	});
 	it('maps .mm sources to an Objective-C++ profile with libc++ and the libobjc2 ABI', () => {
 		const configurations = createClangdConfiguration()
 			.split('\n---\n')

@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { expectPinnedContainerClangAssets } from '../../../scripts/container-clang-browser-assertions.mjs';
 
 import {
@@ -462,6 +463,16 @@ const sharedStdinBrowserCases = [
 // These runtimes pass stdin to the program in one batch, so the program starts at EOF.
 const batchStdinBrowserLanguages = new Set<string>(['R', 'PHP']);
 const clangStdinBrowserCases = [
+	...(['C', 'CPP'] as const).map((language) => ({
+		name: `${language} Wasm SIMD`,
+		language,
+		source: readFileSync(
+			new URL('../../../scripts/fixtures/clang-simd.c', import.meta.url),
+			'utf8'
+		),
+		stdinText: '17\n',
+		expectedOutput: 'simd=17 sse=22 avx2=96 wasm=20'
+	})),
 	{
 		name: 'C',
 		language: 'C',

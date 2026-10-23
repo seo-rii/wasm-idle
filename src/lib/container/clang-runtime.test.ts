@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryFileSystem, type Container, type ContainerProcess } from '@wasm-idle/container';
+import { clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
 import { WebsiteClangRuntime } from './clang-runtime.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
@@ -59,14 +60,19 @@ function fixture(
 		...(layered
 			? {
 					sysrootProfile,
-					prepareClang: vi.fn(async (profile: 'c' | 'full') =>
-						profile === 'c'
+					prepareClang: vi.fn(async (profile: 'c' | 'full') => [
+						...(profile === 'c'
 							? [
 									'--sysroot=/usr/share/wasm-sysroot-c',
 									'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
 								]
-							: []
-					)
+							: []),
+						...clangSimdDriverArgs(
+							profile === 'c'
+								? '/usr/share/wasm-sysroot-c'
+								: '/usr/share/wasm-sysroot'
+						)
+					])
 				}
 			: {})
 	};
@@ -126,6 +132,21 @@ function fixture(
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
 describe('website container Clang compilation', () => {
+	it.each(['C', 'CPP'])(
+		'forwards the shared SIMD profile to %s compilation before user overrides',
+		async (language) => {
+			const { prepare, spawn } = fixture([], true);
+			await prepare(
+				'#include <immintrin.h>\nint main() {}',
+				{ compileArgs: ['-mno-simd128'] },
+				language
+			);
+			const args = spawn.mock.calls[0][1];
+			for (const flag of clangSimdDriverArgs('/usr/share/wasm-sysroot'))
+				expect(args).toContain(flag);
+			expect(args.indexOf('-msimd128')).toBeLessThan(args.indexOf('-mno-simd128'));
+		}
+	);
 	it('uses the explicitly selected C delivery profile for stock C and preserves compiler arguments', async () => {
 		const { prepare, profile, spawn } = fixture([], true);
 		expect(await prepare('int main(void) { return 0; }', { activePath: 'main.c' }, 'C')).toBe(

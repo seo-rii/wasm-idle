@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { extractTarPackage, validateDistribution } from '@wasm-idle/container';
+import {
+	CLANG_SIMD_INCLUDE_PATH,
+	clangSimdDriverArgs
+} from '@wasm-idle/llvm-core/core/clang-simd';
 import { preparePageContainer } from './prepare-page-container.mjs';
 import { prepareContainerSysrootLayers } from './lib/container-sysroot-layers.mjs';
 import { composeSysrootLayers } from '../examples/container/sysroot-layers.mjs';
@@ -30,7 +34,9 @@ const files = [
 	['lib/wasm32-wasi/libc++.a', 'C++ archive contents\n'.repeat(200), 0o640],
 	['lib/wasm32-wasi/libc++abi.a', 'C++ ABI archive\n'.repeat(100), 0o600],
 	['lib/wasm32-wasi/libc++unknown.a', 'unreviewed archive stays in the base\n', 0o644],
-	['lib/clang/22/include/stddef.h', '#define SIZE 1\n', 0o644]
+	['lib/clang/22/include/stddef.h', '#define SIZE 1\n', 0o644],
+	['lib/clang/22/include/immintrin.h', '/* original x86-only header */\n', 0o644],
+	['lib/clang/22/include/wasm_simd128.h', '/* original Wasm SIMD header */\n', 0o644]
 ];
 
 function tar(entries) {
@@ -88,8 +94,8 @@ function recordMap(archive) {
 	return records;
 }
 
-function fixture() {
-	const archive = tar(files),
+function fixture(extraFiles = []) {
+	const archive = tar([...files, ...extraFiles]),
 		receipt = identity(archive);
 	const tool = (id) => ({
 		id,
@@ -210,11 +216,17 @@ test('derivation rejects changed pins and invalid USTAR before producing any lay
 async function profileFixture({
 	legacy = false,
 	corruptDelta = false,
-	wrongComposition = false
+	wrongComposition = false,
+	clangFilesystem = 'live',
+	extraFiles = []
 } = {}) {
-	const f = fixture(),
+	const f = fixture(extraFiles),
 		layers = prepareContainerSysrootLayers(f.archive, f.distribution, f.receipt);
 	const distribution = legacy ? f.distribution : layers.distribution;
+	distribution.commands[0].adapter =
+		clangFilesystem === 'live'
+			? 'llvm-clang-tool-host-live-v1'
+			: 'llvm-clang-tool-host-v1';
 	const bodies = new Map([
 		['clang', wasm],
 		['lld', wasm],
@@ -238,7 +250,7 @@ async function profileFixture({
 		linkerSha256: identity(wasm).sha256,
 		memory: { initial: 1, maximum: 2 },
 		cacheNamespace: 'sysroot-layer-unit-fixture',
-		clangFilesystem: 'live',
+		clangFilesystem,
 		...(legacy ? {} : { sysrootProfile: 'c-base-v1', sysrootLayers: layers.config })
 	};
 	if (wrongComposition)
@@ -279,7 +291,8 @@ test('explicit C profile consumer downloads only base, then adds the delta once 
 		assert.equal(f.profile.sysrootProfile, 'c-base-v1');
 		assert.deepEqual(await f.profile.prepareClang('c', signal), [
 			`--sysroot=${C_SYSROOT}`,
-			`-resource-dir=${C_SYSROOT}/lib/clang/22`
+			`-resource-dir=${C_SYSROOT}/lib/clang/22`,
+			...clangSimdDriverArgs(C_SYSROOT)
 		]);
 		assert.deepEqual(f.requested, ['clang', 'lld', 'sysroot-c']);
 		assert.equal(f.delivered, wasm.length * 2 + f.layers.receipt.c.delivery.bytes);
@@ -291,6 +304,20 @@ test('explicit C profile consumer downloads only base, then adds the delta once 
 			code: 'ENOENT'
 		});
 		assert.throws(() => f.profile.container.fs.stat(BASH_SYSROOT), { code: 'ENOENT' });
+		const simdHeader = `${C_SYSROOT}/${CLANG_SIMD_INCLUDE_PATH}/immintrin.h`;
+		assert.match(
+			new TextDecoder().decode(f.profile.container.fs.readFile(simdHeader)),
+			/__AVX2__/
+		);
+		assert.throws(() => f.profile.container.fs.writeFile(simdHeader, new Uint8Array()), {
+			code: 'EROFS'
+		});
+		assert.equal(
+			f.profile.inspectSysroot('c').files,
+			extractTarPackage(gunzipSync(f.layers.deliveries.get('sysroot-c'))).filter(
+				(entry) => entry.type === 'file'
+			).length
+		);
 		await f.profile.prepareCommand({ path: '/usr/local/bin/clang' }, signal);
 		assert.deepEqual(f.requested, ['clang', 'lld', 'sysroot-c', 'sysroot-cxx']);
 		assert.equal(
@@ -308,8 +335,12 @@ test('explicit C profile consumer downloads only base, then adds the delta once 
 				);
 		assert.deepEqual(
 			await f.profile.prepareClang('c', signal),
-			[],
+			clangSimdDriverArgs(BASH_SYSROOT),
 			'an already available full tree can serve C without another mount'
+		);
+		assert.deepEqual(
+			f.profile.container.fs.readFile(`${BASH_SYSROOT}/${CLANG_SIMD_INCLUDE_PATH}/immintrin.h`),
+			f.profile.container.fs.readFile(simdHeader)
 		);
 		assert.equal(f.requested.length, 4);
 	} finally {
@@ -321,13 +352,76 @@ test('legacy generated configuration retains the original full sysroot for a C r
 	const f = await profileFixture({ legacy: true });
 	try {
 		assert.equal(f.profile.sysrootProfile, 'full');
-		assert.deepEqual(await f.profile.prepareClang('c', new AbortController().signal), []);
+		assert.deepEqual(
+			await f.profile.prepareClang('c', new AbortController().signal),
+			clangSimdDriverArgs(BASH_SYSROOT)
+		);
 		assert.deepEqual(f.requested, ['clang', 'lld', 'sysroot']);
 		assert.equal(f.profile.inspectSysroot().sha256, f.receipt.sha256);
 		assert(f.profile.container.fs.readFile(`${BASH_SYSROOT}/include/c++/v1/vector`).length > 0);
 		assert.throws(() => f.profile.container.fs.stat(C_SYSROOT), { code: 'ENOENT' });
 	} finally {
 		await f.profile.dispose();
+	}
+});
+
+for (const clangFilesystem of ['snapshot', 'live']) {
+	test(`${clangFilesystem} compiler keeps native headers and mounts a complete readonly SIMD overlay`, async () => {
+		const f = await profileFixture({ clangFilesystem });
+		try {
+			const signal = new AbortController().signal;
+			for (const requested of ['c', 'full']) {
+				const root = requested === 'c' ? C_SYSROOT : BASH_SYSROOT;
+				const args = await f.profile.prepareClang(requested, signal);
+				assert(args.includes('-msimd128'));
+				assert(args.includes('-D__SSE2__=1'));
+				assert(args.includes('-D__AVX2__=1'));
+				assert.deepEqual(args.slice(-2), ['-isystem', `${root}/${CLANG_SIMD_INCLUDE_PATH}`]);
+				const directory = `${root}/${CLANG_SIMD_INCLUDE_PATH}`;
+				assert.deepEqual(f.profile.container.fs.readdir(directory).sort(), [
+					'avx2intrin.h',
+					'avxintrin.h',
+					'emmintrin.h',
+					'immintrin.h',
+					'nmmintrin.h',
+					'pmmintrin.h',
+					'smmintrin.h',
+					'tmmintrin.h',
+					'wasm_simd128.h',
+					'xmmintrin.h'
+				]);
+				for (const header of ['immintrin.h', 'wasm_simd128.h']) {
+					const native = `lib/clang/22/include/${header}`;
+					assert.deepEqual(
+						f.profile.container.fs.readFile(`${root}/${native}`),
+						new TextEncoder().encode(files.find(([path]) => path === native)[1])
+					);
+					const overlay = `${directory}/${header}`;
+					assert(f.profile.container.fs.readFile(overlay).length > 100);
+					assert.throws(() => f.profile.container.fs.unlink(overlay), { code: 'EROFS' });
+				}
+			}
+			assert.equal(f.profile.inspectSysroot().sha256, f.layers.config.full.sha256);
+			assert.equal(f.profile.inspectSysroot().entries, extractTarPackage(f.archive).length);
+		} finally {
+			await f.profile.dispose();
+		}
+	});
+}
+
+test('SIMD overlay collisions reject the unpublished mount without replacing pinned files', async () => {
+	for (const path of ['include/wasm-idle', `${CLANG_SIMD_INCLUDE_PATH}/immintrin.h`]) {
+		const f = await profileFixture({ extraFiles: [[path, 'existing pinned file\n', 0o444]] });
+		try {
+			await assert.rejects(
+				f.profile.prepareClang('c', new AbortController().signal),
+				/SIMD header.*conflicts/
+			);
+			assert.equal(f.profile.inspectSysroot('c'), null);
+			assert.throws(() => f.profile.container.fs.stat(C_SYSROOT), { code: 'ENOENT' });
+		} finally {
+			await f.profile.dispose();
+		}
 	}
 });
 
