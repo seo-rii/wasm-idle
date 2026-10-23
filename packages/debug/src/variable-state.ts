@@ -107,11 +107,21 @@ function childExpression(parent: string | undefined, variable: DebugVariable) {
 /** Live handles and diff baselines are kept outside the persisted expansion paths. */
 export function createDebugVariableState() {
 	const expanded = new Set<string>();
+	const stopExpansionChoices = new Map<string, boolean>();
 	const entries = new Map<string, { node: DebugVariableNode; parentReference?: number }>();
 	let previous = new Map<string, string>();
 	let current = new Map<string, string>();
 	let knownFrameKeys = new Set<string>();
 	let comparable = false;
+
+	function rememberExpansion(path: string, value: boolean) {
+		if (value) {
+			expanded.delete(path);
+			expanded.add(path);
+			if (expanded.size > MAX_EXPANDED_PATHS)
+				expanded.delete(expanded.values().next().value!);
+		} else expanded.delete(path);
+	}
 
 	return {
 		beginStop(frameKeys: string[], compare: boolean) {
@@ -120,16 +130,29 @@ export function createDebugVariableState() {
 			knownFrameKeys = new Set(frameKeys);
 			comparable = compare;
 			entries.clear();
+			stopExpansionChoices.clear();
 		},
 		/** Caller pages can complete a stop without replacing its comparison baseline. */
 		setFrameKeys(frameKeys: string[]) {
 			knownFrameKeys = new Set(frameKeys);
+		},
+		/** Only this stop's live choices move from a pending to a complete frame identity. */
+		migrateFrameExpansions(pendingFrameKey: string, frameKey: string) {
+			for (const [path, value] of [...stopExpansionChoices]) {
+				if (!path.startsWith(`${pendingFrameKey}/`)) continue;
+				const nextPath = frameKey + path.slice(pendingFrameKey.length);
+				stopExpansionChoices.delete(path);
+				stopExpansionChoices.set(nextPath, value);
+				expanded.delete(path);
+				rememberExpansion(nextPath, value);
+			}
 		},
 		reset() {
 			previous.clear();
 			current.clear();
 			knownFrameKeys.clear();
 			entries.clear();
+			stopExpansionChoices.clear();
 			comparable = false;
 		},
 		clearLive() {
@@ -137,12 +160,11 @@ export function createDebugVariableState() {
 		},
 		setExpanded(path: string, value: boolean) {
 			if (!entries.has(path)) return false;
-			if (value) {
-				expanded.delete(path);
-				expanded.add(path);
-				if (expanded.size > MAX_EXPANDED_PATHS)
-					expanded.delete(expanded.values().next().value!);
-			} else expanded.delete(path);
+			rememberExpansion(path, value);
+			stopExpansionChoices.delete(path);
+			stopExpansionChoices.set(path, value);
+			if (stopExpansionChoices.size > MAX_EXPANDED_PATHS)
+				stopExpansionChoices.delete(stopExpansionChoices.keys().next().value!);
 			return true;
 		},
 		entry(path: string) {

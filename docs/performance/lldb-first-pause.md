@@ -11,6 +11,9 @@ The `callStackComplete` flag becomes true only when the full caller stack is kno
 100-frame cap never establishes completeness. Variable
 comparison waits for complete caller identities, preserving the previous stop's values
 and saved expansion paths while pages arrive. Partial stacks never seed the next baseline.
+Live expand/collapse choices use the same stop and frame ID while pages arrive, then move
+to the complete caller identity. This preserves manual choices, including an explicit
+collapse overriding a previously saved expansion, without migrating prior-stop values.
 
 Preflight downloads at most three runtime assets concurrently. Every retained network chunk
 and cache hit is charged to the same 55,000,000-byte budget before hashing or allocation of
