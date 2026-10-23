@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { gunzipSync } from 'node:zlib';
 import ts from 'typescript';
+import * as javaOutput from './javaOutput';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as javaRuntimeErrors from '../javaRuntimeErrors';
 import * as javaRuntimeStdin from '../javaRuntimeStdin';
@@ -92,6 +93,10 @@ async function createRealWorker() {
 	// Wasm runtime, deobfuscator, and source/exception helpers are the real implementations.
 	vm.runInNewContext(compiledWorker, {
 		exports: {},
+		globalThis,
+		performance,
+		setTimeout,
+		clearTimeout,
 		TextDecoder,
 		TextEncoder,
 		Blob,
@@ -111,6 +116,7 @@ async function createRealWorker() {
 		},
 		require(id: string) {
 			if (id === 'blob:local-teavm') return runtimeBridge;
+			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming') return javaStreaming;
 			if (id === '$lib/playground/javaRuntimeErrors') return javaRuntimeErrors;
 			if (id === '$lib/playground/javaRuntimeStdin') return javaRuntimeStdin;

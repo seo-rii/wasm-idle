@@ -50,9 +50,14 @@ export function prepareJavaExceptionBridge(
 import java.lang.Throwable;
 import java.io.StringWriter;
 import java.io.PrintWriter;
+import java.io.PrintStream;
 import org.teavm.jso.JSExport;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.JSExceptions;
+import org.teavm.jso.browser.Window;
+import org.teavm.jso.core.JSFunction;
+import org.teavm.jso.core.JSMapLike;
+import org.teavm.jso.core.JSObjects;
 
 final class ${formatterClass} {
     interface Program {
@@ -60,7 +65,35 @@ final class ${formatterClass} {
     }
 
     public static void main(String[] args) throws Throwable {
-        ${className}.program().run(args);
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        System.setOut(new Output(out));
+        System.setErr(new Output(err));
+        try {
+            ${className}.program().run(args);
+        } finally {
+            System.out.flush();
+            System.err.flush();
+        }
+    }
+
+    // A real PrintStream keeps Java formatting/encoding semantics. Only an
+    // explicit flush crosses the host batch boundary; println is not auto-flushed.
+    private static final class Output extends PrintStream {
+        Output(PrintStream delegate) { super(delegate, false); }
+
+        @Override
+        public void flush() {
+            super.flush();
+            Window current = Window.current();
+            if (current == null || !JSObjects.hasProperty(current, "wasmIdleJavaOutput")) return;
+            JSMapLike<JSObject> globals = current.cast();
+            JSObject output = globals.get("wasmIdleJavaOutput");
+            if (output == null) return;
+            JSMapLike<JSObject> bridge = output.cast();
+            JSFunction flush = bridge.get("flush").cast();
+            flush.call(output);
+        }
     }
 
     @JSExport
