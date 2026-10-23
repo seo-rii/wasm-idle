@@ -1,4 +1,5 @@
 import type { DebugSourceBreakpoints } from '../options';
+import { RUBY_DEBUG_PREVIEW } from './rubyDebugPreview';
 
 export interface RubyTracepointOptions {
 	path: string;
@@ -92,10 +93,11 @@ format_value = ->(value) do
     '<' + error.class.to_s + ' while inspecting>'
   end
 end
+${RUBY_DEBUG_PREVIEW}
 local_values = ->(binding) do
   binding.local_variables.first(50).map do |name|
     value = binding.local_variable_get(name)
-    {name:name.to_s,value:format_value.call(value),type:value.class.to_s,variablesReference:0}
+    {name:name.to_s,value:preview_value.call(value),type:preview_type.call(value),variablesReference:0}
   end
 end
 frames = []

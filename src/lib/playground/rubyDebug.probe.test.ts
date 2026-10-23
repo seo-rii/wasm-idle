@@ -206,4 +206,64 @@ puts JSON.generate(result)
 		])
 	);
 	expect(output).toBe('22\n');
+	output = '';
+	const safePreviewSource = `
+$preview_calls = 0
+class DebugPreviewProbe
+  def inspect
+    $preview_calls += 1
+    'explicit inspection'
+  end
+  def class
+    raise 'automatic class override called'
+  end
+end
+value = DebugPreviewProbe.new
+puts $preview_calls
+`;
+	const safePreviewEvents: any[] = [];
+	const safePreviewResponses = new Map<number, string>();
+	await executeRubyTracepoint(
+		vm,
+		safePreviewSource,
+		{
+			path: 'preview.rb',
+			breakpoints: [safePreviewSource.split('\n').indexOf('puts $preview_calls') + 1],
+			pauseOnEntry: false,
+			files: []
+		},
+		(message) => {
+			if (message.response)
+				safePreviewResponses.set(message.response.id, message.response.value);
+			if (message.event?.type !== 'pause') return;
+			safePreviewEvents.push(message.event);
+			for (const [id, expression] of [
+				[201, '$preview_calls'],
+				[202, 'value.inspect']
+			])
+				commands.push(
+					JSON.stringify({
+						op: 'evaluate',
+						id,
+						expression,
+						frameId: message.event.frameId
+					})
+				);
+			commands.push(JSON.stringify({ op: 'control', command: 'continue' }));
+		},
+		(blocking) => commands.shift() ?? (blocking ? null : '')
+	);
+	expect(safePreviewEvents).toHaveLength(1);
+	expect(safePreviewEvents[0].locals).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				name: 'value',
+				value: '<DebugPreviewProbe object>',
+				type: 'DebugPreviewProbe'
+			})
+		])
+	);
+	expect(safePreviewResponses.get(201)).toBe('0');
+	expect(safePreviewResponses.get(202)).toBe('"explicit inspection"');
+	expect(output).toBe('1\n');
 }, 30_000);
