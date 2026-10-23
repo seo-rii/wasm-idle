@@ -25,6 +25,7 @@ import {
 } from './compiler.js';
 import {
 	executeBrowserRustArtifact as executeBrowserRustArtifactInternal,
+	clearBrowserRustExecutionCache,
 	type BrowserExecutionOptions,
 	type BrowserExecutionResult
 } from './browser-execution.js';
@@ -60,6 +61,7 @@ export type {
 };
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { configureVerifiedRuntimeExecutableModuleUrls };
+export { clearBrowserRustExecutionCache };
 export type {
 	RuntimeAssetPersistentCache,
 	RuntimeAssetPersistentCacheIdentity
