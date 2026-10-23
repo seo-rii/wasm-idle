@@ -53,6 +53,7 @@ import type {
 
 export type {
 	BrowserRustArtifact,
+	BrowserRustOptimizationProfile,
 	BrowserRustCompileProgress,
 	BrowserRustCompileRequest,
 	BrowserRustCompileStage,
@@ -127,6 +128,7 @@ export async function compileRust(
 		return makeFailure(validationError);
 	}
 	const debugMode = resolveBrowserRustDebugMode(request);
+	const optimizationProfile = request.optimizationProfile || 'interactive';
 	if (debugMode !== 'none' && request.assetDeliveryBudget !== undefined) {
 		return makeFailure('wasm-rust debug compilation does not accept an asset delivery budget');
 	}
@@ -337,6 +339,7 @@ export async function compileRust(
 		} = request;
 		const workerRequest = {
 			...workerRequestBase,
+			optimizationProfile,
 			...(workerLimits ? { workerLimits } : {}),
 			...(deliveryBudget ? { assetDeliveryBudget: deliveryBudget } : {})
 		};

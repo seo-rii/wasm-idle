@@ -564,6 +564,7 @@ self.onmessage = async (event: { data: any }) => {
 		args = [],
 		stdin,
 		targetTriple = 'wasm32-wasip1',
+		optimizationProfile: requestedOptimizationProfile = 'interactive',
 		log,
 		debug = false,
 		debugMode: requestedDebugMode,
@@ -628,6 +629,8 @@ self.onmessage = async (event: { data: any }) => {
 		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
 			throw new Error(`Unsupported Rust debug mode: ${String(debugMode)}`);
 		}
+		const optimizationProfile =
+			debugMode === 'none' ? requestedOptimizationProfile : 'interactive';
 		const nonDebugResourceLimits =
 			debugMode === 'none' ? snapshotRustNonDebugResourceLimits(executionLimits) : undefined;
 		stdinBufferRust = new Int32Array(buffer);
@@ -664,6 +667,7 @@ self.onmessage = async (event: { data: any }) => {
 		const compileCacheKey = [
 			executableGraphFingerprint,
 			debugMode,
+			optimizationProfile,
 			targetTriple,
 			...(nonDebugResourceLimits
 				? [String(nonDebugResourceLimits.maxAssetDeliveryBytes)]
@@ -701,6 +705,7 @@ self.onmessage = async (event: { data: any }) => {
 				...(assetCache ? { assetCache } : {}),
 				code: compileCode,
 				debugMode,
+				optimizationProfile,
 				...(nonDebugResourceLimits
 					? {
 							workerLimits: nonDebugResourceLimits.compilerLimits,

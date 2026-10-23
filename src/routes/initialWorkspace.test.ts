@@ -99,10 +99,11 @@ describe('initial workspace selection before the editor and container mount', ()
 
 	it('retains existing query settings and consumes only workspace import parameters', () => {
 		const { selection } = initial(
-			'?lang=rust&rustTargetTriple=wasm32-wasip2&goTarget=js/wasm&ocamlBackend=js&ocamlWasmBinaryenMode=full&theme=dark'
+			'?lang=rust&rustTargetTriple=wasm32-wasip2&rustOptimizationProfile=speed&goTarget=js/wasm&ocamlBackend=js&ocamlWasmBinaryenMode=full&theme=dark'
 		);
 		expect(selection.overrides).toMatchObject({
 			rustTargetTriple: 'wasm32-wasip2',
+			rustOptimizationProfile: 'speed',
 			goTarget: 'js/wasm',
 			ocamlBackend: 'js',
 			ocamlWasmBinaryenMode: 'full'

@@ -643,7 +643,7 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('CSS', 'css');
 		expectEditorLanguage('MARKDOWN', 'markdown');
 		expect(source).toMatch(
-			/RUST: \(\) => \(\{\s+rustTargetTriple,\s+limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS\s+\}\)/s
+			/RUST: \(\) => \(\{\s+rustTargetTriple,\s+rustOptimizationProfile,\s+limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS\s+\}\)/s
 		);
 		expect(source).toContain("from '$lib/playground/rustWorkerLimits';");
 		expect(source).toMatch(/\.\.\.languageExecutionOptions/);

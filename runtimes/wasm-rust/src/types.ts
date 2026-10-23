@@ -1,6 +1,8 @@
 export type SupportedTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 export type BrowserRustArtifactFormat = 'core-wasm' | 'component';
 export type BrowserRustDebugMode = 'none' | 'trace' | 'lldb';
+/** Interactive favors compilation latency; speed/size optimize the user program. */
+export type BrowserRustOptimizationProfile = 'interactive' | 'speed' | 'size';
 export type BrowserRustCompileStage =
 	| 'manifest'
 	| 'fetch-rustc'
@@ -79,6 +81,8 @@ export interface BrowserRustCompileRequest {
 	 * `lldb` emits unoptimized embedded DWARF for the wasm32-wasip1 target.
 	 */
 	debugMode?: BrowserRustDebugMode;
+	/** Keeps overflow checks and debug assertions enabled in every profile. */
+	optimizationProfile?: BrowserRustOptimizationProfile;
 	edition?: string;
 	crateType?: string;
 	targetTriple?: SupportedTargetTriple;

@@ -34,6 +34,7 @@ export interface CompilerDiagnostic {
 	message: string;
 }
 
+export type RustOptimizationProfile = 'interactive' | 'speed' | 'size';
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 export type BrowserDebugMode = 'none' | 'trace' | 'lldb';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
@@ -72,6 +73,8 @@ export interface SandboxExecutionOptions {
 	cppVersion?: string;
 	cVersion?: string;
 	rustTargetTriple?: RustTargetTriple;
+	/** Optimizes the Rust user program while retaining overflow checks and debug assertions. */
+	rustOptimizationProfile?: RustOptimizationProfile;
 	goTarget?: GoTarget;
 	tinygoTarget?: TinyGoTarget;
 	ocamlBackend?: OcamlBackend;

@@ -4,6 +4,7 @@ import {
 	preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal,
 	resolveBrowserRustDebugMode,
 	type BrowserRustArtifact,
+	type BrowserRustOptimizationProfile,
 	type BrowserRustCompileProgress,
 	type BrowserRustCompiler,
 	type BrowserRustCompilerFactory,
@@ -39,6 +40,7 @@ import {
 
 export type {
 	BrowserRustArtifact,
+	BrowserRustOptimizationProfile,
 	BrowserRustCompiler,
 	BrowserRustCompilerFactory,
 	BrowserRustCompilerResult,

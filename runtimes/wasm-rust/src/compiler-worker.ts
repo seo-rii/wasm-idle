@@ -65,6 +65,12 @@ export function buildRustcArguments(
 	const debugMode = resolveBrowserRustDebugMode(request);
 	const target = resolveTargetManifest(manifest, request.targetTriple);
 	const integratedOutput = isIntegratedCompilerOutput(target.compile);
+	const optLevel =
+		debugMode !== 'none'
+			? '0'
+			: { interactive: '0', speed: '2', size: 's' }[
+					request.optimizationProfile || 'interactive'
+				];
 	return [
 		'rustc',
 		'-Zthreads=1',
@@ -81,13 +87,11 @@ export function buildRustcArguments(
 		edition,
 		'-Cpanic=abort',
 		'-Ccodegen-units=1',
+		`-Copt-level=${optLevel}`,
+		'-Coverflow-checks=yes',
+		'-Cdebug-assertions=yes',
 		...(debugMode === 'lldb'
-			? [
-					'-Cdebuginfo=2',
-					'-Copt-level=0',
-					'-Cstrip=none',
-					'--remap-path-prefix=/work=/workspace'
-				]
+			? ['-Cdebuginfo=2', '-Cstrip=none', '--remap-path-prefix=/work=/workspace']
 			: []),
 		...(integratedOutput
 			? ['--emit=link']
