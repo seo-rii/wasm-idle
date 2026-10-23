@@ -486,6 +486,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 		}
 		let signal: AbortSignal | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
+		let compileArgs: string[];
 		let programArgs: string[];
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
@@ -512,7 +513,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 					this.releaseBeforeSession(activeOperation, 'D execution cancelled')
 				);
 			}
-			programArgs = resolveSandboxExecutionArgs('D', args, options).programArgs;
+			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('D', args, options));
 			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.d';
@@ -756,6 +757,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 					code,
 					prepare,
 					buffer: this.buffer,
+					compileArgs,
 					args: programArgs,
 					stdin,
 					fileName: workspace.activePath,

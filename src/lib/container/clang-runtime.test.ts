@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryFileSystem, type Container, type ContainerProcess } from '@wasm-idle/container';
+import { clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
 import { WebsiteClangRuntime } from './clang-runtime.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
@@ -59,14 +60,19 @@ function fixture(
 		...(layered
 			? {
 					sysrootProfile,
-					prepareClang: vi.fn(async (profile: 'c' | 'full') =>
-						profile === 'c'
+					prepareClang: vi.fn(async (profile: 'c' | 'full') => [
+						...(profile === 'c'
 							? [
 									'--sysroot=/usr/share/wasm-sysroot-c',
 									'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
 								]
-							: []
-					)
+							: []),
+						...clangSimdDriverArgs(
+							profile === 'c'
+								? '/usr/share/wasm-sysroot-c'
+								: '/usr/share/wasm-sysroot'
+						)
+					])
 				}
 			: {})
 	};
@@ -126,6 +132,97 @@ function fixture(
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
 describe('website container Clang compilation', () => {
+	it.each(['C', 'CPP'])(
+		'forwards the shared SIMD profile to %s compilation before user overrides',
+		async (language) => {
+			const { prepare, spawn } = fixture([], true);
+			await prepare(
+				'#include <immintrin.h>\nint main() {}',
+				{ compileArgs: ['-mno-simd128'] },
+				language
+			);
+			const args = spawn.mock.calls[0][1];
+			for (const flag of clangSimdDriverArgs('/usr/share/wasm-sysroot'))
+				expect(args).toContain(flag);
+			expect(args.indexOf('-msimd128')).toBeLessThan(args.indexOf('-mno-simd128'));
+		}
+	);
+	it.each([
+		['main.cpp', [], '-std=gnu++20'],
+		['main.C', [], '-std=gnu++20'],
+		['main.c', ['-x', 'c++'], '-std=gnu++20'],
+		['main.c', ['-xc++'], '-std=gnu++20'],
+		['main.cpp', ['-x', 'c'], '-std=gnu11'],
+		['main.cpp', ['-x', 'none'], '-std=gnu++20'],
+		['main.c', ['-x', 'none'], '-std=gnu11'],
+		['main.c', ['-I', '-xc++'], '-std=gnu11'],
+		['main.c', ['-include', '@header.h'], '-std=gnu11'],
+		['main.c', ['@flags.rsp'], undefined]
+	] as const)(
+		'uses the effective source mode for C-selected %s with %j',
+		async (activePath, flags, expected) => {
+			const f = fixture();
+			await f.prepare('int main() {}', { activePath, compileArgs: [...flags] }, 'C');
+			const standards = f.spawn.mock.calls[0][1].filter((arg) => arg.startsWith('-std='));
+			expect(standards).toEqual(expected ? [expected] : []);
+			if (expected === '-std=gnu11')
+				expect(f.spawn.mock.calls[0][1]).not.toContain('--driver-mode=g++');
+		}
+	);
+	it.each([
+		{ compileArgs: ['-nostdinc'], builtinHeaders: false },
+		{ compileArgs: ['-nobuiltininc'], builtinHeaders: false },
+		{ compileArgs: ['-nostdinc++'], builtinHeaders: true },
+		{ compileArgs: ['-nostdlibinc'], builtinHeaders: true },
+		{ compileArgs: ['--sysroot=/workspace/custom'], builtinHeaders: true },
+		{ compileArgs: ['-I', '-nostdinc'], builtinHeaders: true },
+		{ compileArgs: ['-include', '-nobuiltininc'], builtinHeaders: true }
+	])(
+		'preserves driver header and library search policy for $compileArgs',
+		async ({ compileArgs, builtinHeaders }) => {
+			const f = fixture([], true);
+			await f.prepare('int main() {}', { compileArgs }, 'CPP');
+			const args = f.spawn.mock.calls[0][1];
+			expect(args).toEqual(expect.arrayContaining(compileArgs));
+			expect(
+				args.flatMap((arg, index) => (arg === '-isystem' ? [args[index + 1]] : []))
+			).toEqual(builtinHeaders ? ['/usr/share/wasm-sysroot/include/wasm-idle/simd'] : []);
+			expect(args).toContain('-msimd128');
+			expect(args).toContain('-D__AVX2__=1');
+			expect(args).toContain(
+				'/usr/share/wasm-sysroot/include/wasm-idle/simd/__wasm_idle_simd_target.h'
+			);
+			expect(args.some((arg) => arg.startsWith('-L') || arg.startsWith('-B'))).toBe(false);
+		}
+	);
+	it.each([
+		['C', { cVersion: 'C23' }, '-std=gnu23'],
+		['CPP', { cppVersion: 'CPP98' }, '-std=gnu++98']
+	] as const)(
+		'passes %s compiler flags separately from quoted program argv',
+		async (language, standard, expected) => {
+			const f = fixture();
+			const code = 'int main(void) { return 0; }';
+			const options = {
+				...standard,
+				compileArgs: ['-O2', '-Wall', '-Iheaders with spaces', '-DVALUE=42'],
+				programArgs: ['hello world', '']
+			};
+			expect(await f.prepare(code, options, language)).toBe(true);
+			const compilerArgs = f.spawn.mock.calls[0][1];
+			expect(compilerArgs).toContain('--target=wasm32-wasip1');
+			expect(compilerArgs).toContain(expected);
+			expect(compilerArgs).toEqual(expect.arrayContaining(options.compileArgs));
+			expect(compilerArgs).not.toContain('hello world');
+			expect(compilerArgs.indexOf('-O2')).toBeGreaterThan(compilerArgs.indexOf(expected));
+			expect(await f.run(code, options, language)).toBe(true);
+			expect(f.spawn.mock.calls[1][1]).toEqual([
+				`/workspace/${language}/program.wasm`,
+				'hello world',
+				''
+			]);
+		}
+	);
 	it('uses the explicitly selected C delivery profile for stock C and preserves compiler arguments', async () => {
 		const { prepare, profile, spawn } = fixture([], true);
 		expect(await prepare('int main(void) { return 0; }', { activePath: 'main.c' }, 'C')).toBe(
@@ -134,6 +231,14 @@ describe('website container Clang compilation', () => {
 		expect(profile.prepareClang).toHaveBeenCalledWith('c', expect.any(AbortSignal));
 		expect(profile.prepareCommand).not.toHaveBeenCalled();
 		expect(spawn.mock.calls[0][1]).toContain('--sysroot=/usr/share/wasm-sysroot-c');
+		expect(
+			spawn.mock.calls[0][1].flatMap((arg, index, args) =>
+				arg === '-isystem' ? [args[index + 1]] : []
+			)
+		).toEqual(['/usr/share/wasm-sysroot-c/include/wasm-idle/simd']);
+		expect(
+			spawn.mock.calls[0][1].some((arg) => arg.startsWith('-L') || arg.startsWith('-B'))
+		).toBe(false);
 		expect(spawn.mock.calls[0][1]).toContain(
 			'-resource-dir=/usr/share/wasm-sysroot-c/lib/clang/22'
 		);

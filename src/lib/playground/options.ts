@@ -83,6 +83,8 @@ export interface SandboxExecutionOptions {
 	env?: Record<string, string>;
 	cppVersion?: string;
 	cVersion?: string;
+	/** Select GNU dialects for each C/C++ source unit in the Objective-C worker. */
+	objectivecGnuExtensions?: boolean;
 	rustTargetTriple?: RustTargetTriple;
 	/** Optimizes the Rust user program while retaining overflow checks and debug assertions. */
 	rustOptimizationProfile?: RustOptimizationProfile;

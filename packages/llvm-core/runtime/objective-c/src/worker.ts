@@ -107,6 +107,12 @@ export interface ObjectiveCWorkerAssetConfig {
 type ObjectiveCSourceLanguage = 'c' | 'objective-c' | 'objective-c++';
 type ObjectiveCBrowserClangArtifact = BrowserClangArtifact & { needsLibffi: boolean };
 
+interface ObjectiveCCompilerOptions {
+	cVersion?: string;
+	cppVersion?: string;
+	gnuExtensions?: boolean;
+}
+
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 const textEncoder = new TextEncoder();
 const MAX_OBJECTIVEC_HEADER_ENTRIES = 4096;
@@ -857,9 +863,18 @@ async function compileObjectiveCObject(
 	compileArgs: string[] = [],
 	debug = false,
 	transformSource?: (source: string) => string,
-	lldb = false
+	lldb = false,
+	compilerOptions: ObjectiveCCompilerOptions = {}
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
+	const gnuStandard = resolveClangLanguageArgs(
+		language === 'objective-c++' ? 'CPP' : 'C',
+		compilerOptions
+	).standardArg;
+	const standardArg =
+		compilerOptions.gnuExtensions === false
+			? gnuStandard.replace(/^-std=gnu/u, '-std=c')
+			: gnuStandard;
 	if (debug) {
 		if (language === 'objective-c++') {
 			throw new Error('Objective-C++ trace debugging is not supported.');
@@ -872,7 +887,7 @@ async function compileObjectiveCObject(
 			code,
 			obj,
 			language: language === 'objective-c' ? 'OBJC' : 'C',
-			compileArgs,
+			compileArgs: [standardArg, ...compileArgs],
 			debug: true,
 			transformSource
 		});
@@ -906,7 +921,7 @@ async function compileObjectiveCObject(
 		'-O2',
 		'-o',
 		obj,
-		resolveClangLanguageArgs(language === 'objective-c++' ? 'CPP' : 'C', {}).standardArg,
+		standardArg,
 		'-x',
 		language,
 		...(usesObjectiveCRuntime(language) ? OBJECTIVE_C_RUNTIME_FLAGS : []),
@@ -941,7 +956,8 @@ async function compileAndLinkObjectiveC(
 	workspaceFiles: ObjectiveCWorkspaceFile[],
 	compileArgs: string[] = [],
 	debug = false,
-	lldb = false
+	lldb = false,
+	compilerOptions: ObjectiveCCompilerOptions = {}
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
 	const trace = (message: string) => console.log(`[wasm-idle:objectivec-worker] ${message}`);
@@ -1032,7 +1048,8 @@ async function compileAndLinkObjectiveC(
 		debug && needsFoundation
 			? (source) => inlineFoundationImportsForSource(inputPath, source)
 			: undefined,
-		lldb
+		lldb,
+		compilerOptions
 	);
 	for (const source of auxiliarySources) {
 		const objectName = source.path.replace(/[^A-Za-z0-9_.-]/g, '_').replace(/\.[^.]+$/, '');
@@ -1046,7 +1063,8 @@ async function compileAndLinkObjectiveC(
 			['-I', prefix, ...foundationCompileArgs, ...compileArgs],
 			false,
 			undefined,
-			lldb
+			lldb,
+			compilerOptions
 		);
 		auxiliaryObjects.push(objectPath);
 	}
@@ -1132,13 +1150,15 @@ function artifactCacheKey(
 	workspaceFiles: ObjectiveCWorkspaceFile[],
 	compileArgs: string[],
 	debug: boolean,
-	lldb: boolean
+	lldb: boolean,
+	compilerOptions: ObjectiveCCompilerOptions
 ) {
 	return JSON.stringify({
 		code,
 		activePath: activePath || '',
 		workspaceFiles,
 		compileArgs,
+		compilerOptions,
 		debug,
 		lldb
 	});
@@ -1154,6 +1174,9 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		prepare,
 		compileArgs,
 		programArgs,
+		cVersion,
+		cppVersion,
+		gnuExtensions,
 		activePath,
 		workspaceFiles,
 		stdin,
@@ -1192,6 +1215,11 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		try {
 			const normalizedWorkspaceFiles = workspaceFiles || [];
 			const normalizedCompileArgs = compileArgs || [];
+			const compilerOptions: ObjectiveCCompilerOptions = {
+				cVersion,
+				cppVersion,
+				gnuExtensions
+			};
 			const lldb = debugMode === 'lldb';
 			const debugEnabled = !lldb && !!debug;
 			clang.beginTrace(debugEnabled);
@@ -1209,7 +1237,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 				normalizedWorkspaceFiles,
 				normalizedCompileArgs,
 				debugEnabled,
-				lldb
+				lldb,
+				compilerOptions
 			);
 			let artifact: ObjectiveCBrowserClangArtifact;
 			if (prepare) {
@@ -1219,7 +1248,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					normalizedWorkspaceFiles,
 					normalizedCompileArgs,
 					debugEnabled,
-					lldb
+					lldb,
+					compilerOptions
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
@@ -1235,7 +1265,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					normalizedWorkspaceFiles,
 					normalizedCompileArgs,
 					debugEnabled,
-					lldb
+					lldb,
+					compilerOptions
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
