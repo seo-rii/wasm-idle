@@ -1,4 +1,6 @@
 import { Directory, File } from '@bjorn3/browser_wasi_shim';
+import { createDwarfDebugDescriptor } from '../../clang/src/dwarf.js';
+import { normalizeDwarfWorkspacePath } from '../../clang/src/workspace.js';
 import {
 	BrowserClangRuntime,
 	executeBrowserClangArtifact,
@@ -102,6 +104,7 @@ export interface BrowserVCompileProgress {
 
 export interface BrowserVCompileRequest {
 	code: string;
+	debugMode?: 'none' | 'lldb';
 	fileName?: string;
 	compileArgs?: string[];
 	cCompileArgs?: string[];
@@ -451,6 +454,7 @@ class VCompiler implements BrowserVCompiler {
 				args: [
 					...V_TRANSLATE_ARGS,
 					...(request.compileArgs || []),
+					...(request.debugMode === 'lldb' ? ['-g'] : []),
 					'-o',
 					'/work/__wasm_v_main.c',
 					`/work/${requestedInput}`
@@ -487,12 +491,15 @@ class VCompiler implements BrowserVCompiler {
 		runtime.stdout = (chunk) => compilerOutput.push(chunk);
 		runtime.memfs.stdout = (chunk) => compilerOutput.push(chunk);
 		runtime.log = request.log ?? runtime.log;
-		runtime.beginTrace(!!request.log);
+		runtime.beginTrace(request.debugMode !== 'lldb' && !!request.log);
 
 		try {
 			emitProgress(request, 'bootstrap', 5, 'preparing V workspace');
 			const stem = `__wasm_v_${++buildCounter}`;
-			const requestedInput = inputName(request.fileName);
+			const lldb = request.debugMode === 'lldb';
+			const requestedInput = inputName(
+				lldb ? normalizeDwarfWorkspacePath(request.fileName || '') : request.fileName
+			);
 
 			emitProgress(request, 'translate', 20, 'translating V to C with the V compiler');
 			const { cSource, diagnostics } = await this.translate(request, requestedInput);
@@ -511,8 +518,13 @@ class VCompiler implements BrowserVCompiler {
 					obj: objPath,
 					language: 'C',
 					cVersion: '11',
-					opt: '1',
-					compileArgs: [...V_C_FLAGS, ...(request.cCompileArgs || [])]
+					opt: lldb ? '0' : '1',
+					debugMode: lldb ? 'lldb' : 'none',
+					compileArgs: [
+						...V_C_FLAGS,
+						...(request.cCompileArgs || []),
+						...(lldb ? ['-fdebug-prefix-map=/work=/workspace'] : [])
+					]
 				});
 			} catch (error) {
 				cCompileError = error;
@@ -558,12 +570,24 @@ class VCompiler implements BrowserVCompiler {
 			const bytes = Uint8Array.from(runtime.memfs.getFileContents(wasmPath));
 			const artifact: BrowserVArtifact = {
 				bytes,
-				wasm: await WebAssembly.compile(bytes),
+				wasm: lldb ? undefined : await WebAssembly.compile(bytes),
 				target: 'wasm32-wasi',
 				format: 'wasi-core-wasm',
 				fileName: wasmPath,
 				language: 'C',
-				sourceLanguage: 'V'
+				sourceLanguage: 'V',
+				debug: lldb
+					? await createDwarfDebugDescriptor(
+							{
+								code: request.code,
+								activePath: requestedInput,
+								language: 'C',
+								workspaceFiles: request.workspaceFiles
+							},
+							bytes,
+							runtime.compilerConfig?.provenance
+						)
+					: undefined
 			};
 			emitProgress(request, 'done', 100, 'done');
 			return { success: true, artifact, stdout: compilerOutput.join('') };
