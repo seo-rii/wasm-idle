@@ -34,6 +34,7 @@ export type RuntimeLspCapability =
 	| 'fortran'
 	| 'sql'
 	| 'postgresql'
+	| 'bash'
 	| 'prolog'
 	| 'ruby'
 	| 'r'
@@ -257,7 +258,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		diagnosticMarkers: true
 	},
 	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
-	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
+	BASH: {
+		label: 'Bash',
+		editorLanguage: 'shell',
+		lspLanguageOverride: 'bash',
+		runtimeLspCapability: 'bash',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
 	RESCRIPT: {
 		label: 'ReScript',

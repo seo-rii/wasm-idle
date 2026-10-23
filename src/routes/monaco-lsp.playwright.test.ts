@@ -37,6 +37,7 @@ interface LspBrowserCase {
 	expectDiagnostics?: boolean;
 	validSource?: string;
 	errorLine?: number;
+	minimumMarkerSeverity?: number;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	expectedRequestPathnames?: string[];
@@ -295,6 +296,24 @@ const lspBrowserCases: LspBrowserCase[] = [
 		expectedResponses: [
 			'/wasm-postgresql-lsp/dist/lsp.js',
 			'/wasm-postgresql-lsp/dist/pgls.wasm'
+		]
+	},
+	{
+		language: 'BASH',
+		label: 'Bash',
+		fileName: 'main.sh',
+		source: 'source ./missing.sh\n',
+		validSource: "printf 'hello\\n'\n",
+		errorLine: 1,
+		minimumMarkerSeverity: 2,
+		aliases: ['shell', 'sh'],
+		statusKey: 'bash',
+		assertNoPreEnableRequests: ['/wasm-bash-lsp/'],
+		expectedResponses: [
+			'/wasm-bash-lsp/runtime.mjs',
+			'/wasm-bash-lsp/tree-sitter-bash.wasm',
+			'/wasm-bash-lsp/web-tree-sitter.wasm',
+			'/wasm-bash-lsp/one_ini_bg.wasm'
 		]
 	},
 	{
@@ -622,7 +641,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -657,6 +676,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	FORTRAN: 'fortran',
 	SQLITE: 'sql',
 	POSTGRESQL: 'postgresql',
+	BASH: 'bash',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
 };
@@ -1377,7 +1397,8 @@ async function runLspCase(
 		expect(
 			markers.some(
 				(marker) =>
-					marker.startLineNumber === testCase.errorLine && (marker.severity || 0) >= 4
+					marker.startLineNumber === testCase.errorLine &&
+					(marker.severity || 0) >= (testCase.minimumMarkerSeverity ?? 4)
 			)
 		).toBe(true);
 		expect(
@@ -1706,6 +1727,12 @@ describe('Monaco LSP browser integration', () => {
 					cases.some((testCase) => testCase.language === 'FORTH')
 				) {
 					await runBrowserPreparationScripts(['sync:forth-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'BASH')
+				) {
+					await runBrowserPreparationScripts(['sync:bash-lsp']);
 				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([

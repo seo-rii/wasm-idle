@@ -283,6 +283,11 @@
 			"maxBytes": 2000000,
 			"maxFiles": 3,
 			"optional": true
+		},
+		"wasm-bash-lsp": {
+			"maxBytes": 4000000,
+			"maxFiles": 6,
+			"optional": true
 		}
 	}
 }

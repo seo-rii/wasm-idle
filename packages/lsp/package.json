@@ -239,6 +239,11 @@
 			"types": "./dist/forth/index.d.ts",
 			"import": "./dist/forth/index.js",
 			"default": "./dist/forth/index.js"
+		},
+		"./bash": {
+			"types": "./dist/bash/index.d.ts",
+			"import": "./dist/bash/index.js",
+			"default": "./dist/bash/index.js"
 		}
 	},
 	"files": [

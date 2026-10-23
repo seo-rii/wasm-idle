@@ -468,6 +468,21 @@
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
+	const bashLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'bash');
+	const bashLspModuleUrl = $derived(
+		bashLspEnabled
+			? resolveApplicationAsset('wasm-bash-lsp/runtime.mjs', '5.8.1-browser-v1')
+			: undefined
+	);
+	const bashLspFiles = $derived.by(() =>
+		bashLspEnabled
+			? Object.fromEntries(
+					files
+						.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+						.map((file) => [file.path, file.content])
+				)
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const postgresqlLspEnabled = $derived(
@@ -4554,6 +4569,9 @@
 							{sqlLspModuleUrl}
 							{postgresqlLspEnabled}
 							{postgresqlLspModuleUrl}
+							{bashLspEnabled}
+							{bashLspModuleUrl}
+							{bashLspFiles}
 							{prologLspEnabled}
 							{prologLspBaseUrl}
 							{prologLspWorkerUrl}

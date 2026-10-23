@@ -98,3 +98,38 @@ The Pages build runs that preparation through `sync:page-runtimes` before its ex
 compression and asset-lock steps. The playground starts the provider only when PostgreSQL is
 selected and LSP is enabled. Schema snapshots are available through the SDK; the playground does
 not infer a database schema by executing the editor's SQL.
+
+## Bash (original language server)
+
+The Bash provider runs the original `bash-language-server@5.8.1` analyzer and LSP handlers with
+its bundled Tree-sitter Bash grammar. Browser adapters supply JSON-RPC transport and a virtual
+filesystem; the provider does not implement a second Bash analyzer.
+
+```ts
+import { getBashLanguageServer } from '@wasm-idle/lsp/bash';
+
+const bash = await getBashLanguageServer({
+	bash: {
+		moduleUrl: 'https://cdn.example.com/wasm-bash-lsp/runtime.mjs',
+		files: { 'lib.sh': 'greet() { printf "hello\\n"; }\n' }
+	}
+});
+// Connect bash.transport to an LSP client, using file:///workspace as its root URI.
+// Dispose when switching languages or closing the editor.
+bash.dispose();
+```
+
+`getEditorLanguageServer('bash' | 'shell' | 'sh', options)` uses the same provider. An explicit
+`rootUrl` resolves `wasm-bash-lsp/runtime.mjs` beneath that root. `bash.files` is a snapshot of
+UTF-8 workspace text files, with paths relative to `/workspace`; recreate the server to update
+closed files. Open documents are synchronized through the original LSP document manager.
+
+Run `pnpm run sync:bash-lsp` to reproduce the external bundle from the frozen, isolated producer
+lockfile. `pnpm run test:lsp:assets:bash` prepares that producer and checks reproducibility.
+Deploy the whole `static/wasm-bash-lsp/` directory together, including all three Wasm
+binaries and `THIRD_PARTY_NOTICES.txt`. These assets are excluded from Git and the SDK tarball.
+
+Completion, hover, definitions, references, rename, document/workspace symbols and unresolved
+`source` information diagnostics use upstream behavior. ShellCheck, shfmt and explainshell are
+disabled: this browser profile provides no ShellCheck syntax/lint diagnostics, formatting or
+external-command metadata. See [the build and validation notes](../../docs/performance/bash-lsp.md).

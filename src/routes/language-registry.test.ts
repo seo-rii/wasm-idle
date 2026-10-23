@@ -118,6 +118,7 @@ describe('language registry', () => {
 		expect(lspLanguageOverrides.FENNEL).toBe('fennel');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
 		expect(lspLanguageOverrides.POSTGRESQL).toBe('postgresql');
+		expect(lspLanguageOverrides.BASH).toBe('bash');
 	});
 
 	it('registers Bash with shell syntax and CLI args', () => {
@@ -172,6 +173,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
 		expect(runtimeLspCapabilities.POSTGRESQL).toBe('postgresql');
+		expect(runtimeLspCapabilities.BASH).toBe('bash');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');

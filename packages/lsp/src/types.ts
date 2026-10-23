@@ -189,6 +189,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** JSON exported by postgres-language-server schema-export. */
 		schema?: string;
 	};
+	bash?: {
+		moduleUrl?: string;
+		files?: Readonly<Record<string, string>>;
+	};
 	fortran?: {
 		analyzerUrl?: string;
 	};

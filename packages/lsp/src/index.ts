@@ -318,6 +318,12 @@ export {
 	type PostgresqlLanguageServerHandle
 } from './postgresql/index.js';
 export {
+	getBashLanguageServer,
+	resolveBashLanguageServerModuleUrl,
+	type BashLanguageServerConfig,
+	type BashLanguageServerOptions
+} from './bash/index.js';
+export {
 	createSqlWorkerService,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,

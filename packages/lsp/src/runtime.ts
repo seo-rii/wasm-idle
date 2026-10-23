@@ -1963,3 +1963,15 @@ export function resolvePascalLanguageServerAssetConfig(
 }
 
 export type { EditorLanguageServerRuntimeOptions };
+
+export function resolveBashLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.bash?.moduleUrl : undefined,
+		'/wasm-bash-lsp/runtime.mjs',
+		currentUrl
+	);
+}
