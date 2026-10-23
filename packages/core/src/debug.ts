@@ -1,12 +1,6 @@
 export type DebugCommand = 'continue' | 'stepInto' | 'nextLine' | 'stepOut';
 export type DebugPauseReason =
-	| 'breakpoint'
-	| 'dataBreakpoint'
-	| 'entry'
-	| 'pause'
-	| 'step'
-	| 'nextLine'
-	| 'stepOut';
+	'breakpoint' | 'dataBreakpoint' | 'entry' | 'pause' | 'step' | 'nextLine' | 'stepOut';
 
 export interface DebugVariable {
 	name: string;
@@ -125,6 +119,8 @@ export interface DebugSourceBreakpoints {
 export type DebugSessionEvent =
 	| {
 			type: 'pause';
+			/** Identifies a stop whose stack/scopes may arrive incrementally. */
+			stopId?: number;
 			line: number;
 			reason: DebugPauseReason;
 			locals: DebugVariable[];
@@ -137,6 +133,13 @@ export type DebugSessionEvent =
 			sourceContentSha256?: string;
 			sourceRevisionStale?: boolean;
 			capabilities?: DebugSessionCapabilities;
+	  }
+	| {
+			type: 'pauseDetails';
+			stopId: number;
+			callStack?: DebugFrame[];
+			frameId?: number;
+			scopes?: DebugScope[];
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {

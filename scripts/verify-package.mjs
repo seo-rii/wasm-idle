@@ -47,9 +47,8 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// The root install includes container execution modules and release metadata.
-		// Keep the bounded byte/package limits; shipped module/declaration pairs now
 		// Each performance dependency individually permits 704 files. The combined
-		// Java/Python installation is measured and adjusted in the follow-up PR.
+		// installation is measured and adjusted in the dependent follow-up PR.
 		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 704, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',

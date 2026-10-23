@@ -1,4 +1,5 @@
 import { DapClient, resolveDapTimeout } from './dap-client.js';
+import { CompiledDebugModuleCache } from './compiled-module-cache.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
 import {
@@ -22,6 +23,7 @@ import type {
 } from './types.js';
 
 const DEFAULT_QUEUE_CAPACITY = 256 * 1024;
+const compiledRuntimeModules = new CompiledDebugModuleCache();
 const WORKER_SHUTDOWN_GRACE_MS = 25;
 const MAX_DEBUG_SOURCE_COUNT = 256;
 const MAX_INITIAL_BREAKPOINT_SOURCE_COUNT = 256;
@@ -541,6 +543,17 @@ export class BrowserLldbSession {
 		);
 		this.assertActive();
 		try {
+			const compileRuntime = (kind: 'lldb' | 'targetRuntime') => {
+				const asset = manifest.debugger[kind];
+				return this.options.compiledModuleCache === true &&
+					asset.moduleInstantiation === 'emscripten-instantiate-wasm-v1'
+					? compiledRuntimeModules.compile(asset.wasmSha256, assets[kind].wasm)
+					: undefined;
+			};
+			const [lldbModule, targetModule] = await this.awaitWhileActive(
+				Promise.all([compileRuntime('lldb'), compileRuntime('targetRuntime')])
+			);
+			this.assertActive();
 			this.dapQueues.push(new SharedByteQueue(dapInput), new SharedByteQueue(dapOutput));
 			this.rspQueues.push(
 				new SharedByteQueue(lldbToTarget),
@@ -620,6 +633,7 @@ export class BrowserLldbSession {
 			targetWorker.postMessage(
 				{
 					type: 'initialize-target',
+					...(targetModule ? { compiledModule: targetModule } : {}),
 					generation: this.generation,
 					module,
 					args: launch?.args ?? [],
@@ -639,6 +653,7 @@ export class BrowserLldbSession {
 			lldbWorker.postMessage(
 				{
 					type: 'initialize-lldb',
+					...(lldbModule ? { compiledModule: lldbModule } : {}),
 					generation: this.generation,
 					module,
 					sources,

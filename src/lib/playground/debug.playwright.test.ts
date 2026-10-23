@@ -2395,6 +2395,14 @@ describe('native-source browser debugging in Chromium', () => {
 										.textContent()
 								)?.trim()
 							).toBe('0');
+							await page.waitForFunction(() =>
+								(window as any).__wasmIdleDebug
+									.getDebugState()
+									.callStack.some(
+										(frame: { functionName: string }) =>
+											frame.functionName === '_start'
+									)
+							);
 							const entryFrames = await page
 								.locator('.debug-frame-select')
 								.allTextContents();
@@ -2417,6 +2425,11 @@ describe('native-source browser debugging in Chromium', () => {
 								line: testCase.expectedSourceEntry.stepInLine,
 								sourcePath
 							});
+							await page.waitForFunction(
+								() =>
+									(window as any).__wasmIdleDebug.getDebugState().callStack
+										.length === 3
+							);
 							const steppedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
@@ -2603,6 +2616,11 @@ describe('native-source browser debugging in Chromium', () => {
 										initialLocals.locator('.debug-key').allTextContents()
 									)
 									.toEqual(expect.arrayContaining(['depth', 'value']));
+								await page.waitForFunction(
+									() =>
+										(window as any).__wasmIdleDebug.getDebugState().callStack
+											.length === 100
+								);
 								const initialState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
@@ -2692,6 +2710,11 @@ describe('native-source browser debugging in Chromium', () => {
 									{ functionName: 'descend', line: 7, sourcePath },
 									10_000
 								);
+								await page.waitForFunction(
+									() =>
+										(window as any).__wasmIdleDebug.getDebugState().callStack
+											.length === 100
+								);
 								const sample = await readTransportCapture();
 								expect(sample.rspInput.overrun).toBe(false);
 								expect(sample.dapOutput.overrun).toBe(false);
@@ -2723,10 +2746,19 @@ describe('native-source browser debugging in Chromium', () => {
 									(response) =>
 										response.type === 'response' &&
 										response.command === 'stackTrace' &&
-										response.body?.stackFrames?.length === 100
+										Array.isArray(response.body?.stackFrames) &&
+										response.body.stackFrames.every(
+											(frame: { name: string }) => frame.name === 'descend'
+										)
 								);
-								expect(stackResponses).toHaveLength(1);
-								const frames = stackResponses[0].body.stackFrames;
+								expect(
+									stackResponses.map(
+										(response) => response.body.stackFrames.length
+									)
+								).toEqual([1, 20, 20, 20, 20, 19]);
+								const frames = stackResponses.flatMap(
+									(response) => response.body.stackFrames
+								);
 								expect(frames).toHaveLength(100);
 								for (const [index, frame] of frames.entries()) {
 									expect(frame).toMatchObject({
@@ -3091,6 +3123,16 @@ describe('native-source browser debugging in Chromium', () => {
 							}, stepStartLine);
 						}
 						if (requireLldbDebug && testCase.backend === 'lldb') {
+							// The navigable pause precedes scope metadata. Wait for the details
+							// before snapshotting references used by the variable assertions below.
+							await page.waitForFunction(
+								() => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									return state.paused && state.scopes.length > 0;
+								},
+								undefined,
+								{ timeout: 10_000 }
+							);
 							const debugState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
@@ -3480,7 +3522,22 @@ describe('native-source browser debugging in Chromium', () => {
 									'expectedFrameFunction' in testCase
 										? testCase.expectedFrameFunction
 										: 'recurse';
-								const recursiveFrames = debugState.callStack.filter(
+								await page.waitForFunction(
+									({ functionName, count }) =>
+										(window as any).__wasmIdleDebug
+											.getDebugState()
+											.callStack.filter((frame: { functionName?: string }) =>
+												frame.functionName?.includes(functionName)
+											).length === count,
+									{
+										functionName: expectedFrameFunction,
+										count: testCase.expectedFrameLocals.length
+									}
+								);
+								const frameState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								const recursiveFrames = frameState.callStack.filter(
 									(frame: { id?: number; functionName?: string }) =>
 										frame.functionName?.includes(expectedFrameFunction)
 								);
@@ -3588,6 +3645,16 @@ describe('native-source browser debugging in Chromium', () => {
 									(source) =>
 										(window as any).__wasmIdleDebug.getEditorValue() === source,
 									helperSource
+								);
+								await page.waitForFunction(
+									(sourcePath) =>
+										(window as any).__wasmIdleDebug
+											.getDebugState()
+											.callStack.some(
+												(frame: { sourcePath?: string }) =>
+													frame.sourcePath === sourcePath
+											),
+									`/workspace/${testCase.activePath}`
 								);
 								const multiSourceState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
@@ -4128,6 +4195,27 @@ describe('native-source browser debugging in Chromium', () => {
 										null,
 										2
 									)}`
+								);
+							}
+							if (!(
+								'expectScopesAtStop' in testCase && !testCase.expectScopesAtStop
+							)) {
+								const stoppedFrameId = await page.evaluate(
+									() => (window as any).__wasmIdleDebug.getDebugState().frameId
+								);
+								await page.waitForFunction(
+									(frameId) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.frameId === frameId &&
+											state.scopes.length > 0
+										);
+									},
+									stoppedFrameId,
+									{ timeout: 10_000 }
 								);
 							}
 							const stoppedState = await page.evaluate(() =>

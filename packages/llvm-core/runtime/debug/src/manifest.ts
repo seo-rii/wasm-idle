@@ -49,6 +49,12 @@ function expectBoolean(value: unknown, label: string) {
 
 function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 	const asset = expectObject(value, label);
+	if (
+		asset.moduleInstantiation !== undefined &&
+		asset.moduleInstantiation !== 'emscripten-instantiate-wasm-v1'
+	) {
+		throw new Error(`invalid ${label}.moduleInstantiation in wasm debug runtime manifest`);
+	}
 	const paths = {
 		js: expectString(asset.js, `${label}.js`),
 		wasm: expectString(asset.wasm, `${label}.wasm`),
@@ -87,6 +93,9 @@ function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 	}
 	return {
 		...paths,
+		...(asset.moduleInstantiation === 'emscripten-instantiate-wasm-v1'
+			? { moduleInstantiation: asset.moduleInstantiation }
+			: {}),
 		jsSha256: expectSha256(asset.jsSha256, `${label}.jsSha256`),
 		wasmSha256: expectSha256(asset.wasmSha256, `${label}.wasmSha256`),
 		workerSha256: expectSha256(asset.workerSha256, `${label}.workerSha256`)
@@ -251,8 +260,14 @@ export async function preflightDebugRuntimeAssets(
 		[verified.targetRuntime, 'worker']
 	] as const;
 	let totalBytes = 0;
-	let index = 0;
-	for (const [url, expectedSha256, label] of checks) {
+	const parentSignal = signal;
+	const controller = new AbortController();
+	const forwardAbort = () => controller.abort(parentSignal?.reason);
+	parentSignal?.addEventListener('abort', forwardAbort, { once: true });
+	if (parentSignal?.aborted) forwardAbort();
+	signal = controller.signal;
+	const checkAsset = async (index: number) => {
+		const [url, expectedSha256, label] = checks[index]!;
 		if (signal?.aborted) {
 			throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
 		}
@@ -268,13 +283,13 @@ export async function preflightDebugRuntimeAssets(
 					`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
 				);
 			}
+			totalBytes += cached.byteLength;
 			await verifyAssetSha256(cached, expectedSha256, label);
 			if (signal?.aborted)
 				throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
-			totalBytes += cached.byteLength;
-			const [destination, key] = destinations[index++]!;
+			const [destination, key] = destinations[index]!;
 			destination[key] = Uint8Array.from(cached).buffer;
-			continue;
+			return;
 		}
 		const response = await fetchImpl(url, { signal });
 		if (!response.ok) {
@@ -371,7 +386,7 @@ export async function preflightDebugRuntimeAssets(
 						}
 						throw error;
 					}
-					if (result.value.byteLength > remainingBytes - length) {
+					if (result.value.byteLength > MAX_DEBUG_RUNTIME_ASSET_BYTES - totalBytes) {
 						const error = new Error(
 							`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
 						);
@@ -382,6 +397,8 @@ export async function preflightDebugRuntimeAssets(
 						}
 						throw error;
 					}
+					// Charge before retaining each chunk, across every concurrent response.
+					totalBytes += result.value.byteLength;
 					const owned = new Uint8Array(result.value.byteLength);
 					owned.set(result.value);
 					chunks.push(owned);
@@ -399,7 +416,6 @@ export async function preflightDebugRuntimeAssets(
 			}
 			bytes = combined.buffer;
 		}
-		totalBytes += bytes.byteLength;
 		await verifyAssetSha256(bytes, expectedSha256, label);
 		await writePersistentRuntimeAsset({
 			identity,
@@ -407,8 +423,29 @@ export async function preflightDebugRuntimeAssets(
 			signal,
 			bytes: new Uint8Array(bytes)
 		});
-		const [destination, key] = destinations[index++]!;
+		const [destination, key] = destinations[index]!;
 		destination[key] = bytes;
+	};
+	let next = 0;
+	const workers = Array.from({ length: 3 }, async () => {
+		while (next < checks.length) {
+			const index = next++;
+			try {
+				await checkAsset(index);
+			} catch (error) {
+				controller.abort(error);
+				throw error;
+			}
+		}
+	});
+	try {
+		await Promise.all(workers);
+	} catch (error) {
+		// Abort remaining downloads and settle their readers before releasing buffers.
+		await Promise.allSettled(workers);
+		throw error;
+	} finally {
+		parentSignal?.removeEventListener('abort', forwardAbort);
 	}
 	return verified;
 }

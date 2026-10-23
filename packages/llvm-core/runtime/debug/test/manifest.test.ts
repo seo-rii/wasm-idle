@@ -74,6 +74,22 @@ function manifest() {
 }
 
 describe('debug runtime manifest', () => {
+	it('preserves only the supported producer module-instantiation contract', () => {
+		const candidate = manifest();
+		for (const asset of [candidate.debugger.lldb, candidate.debugger.targetRuntime])
+			Object.assign(asset, { moduleInstantiation: 'emscripten-instantiate-wasm-v1' });
+		const parsed = parseDebugRuntimeManifest(candidate);
+		expect(parsed.debugger.lldb.moduleInstantiation).toBe('emscripten-instantiate-wasm-v1');
+		expect(parsed.debugger.targetRuntime.moduleInstantiation).toBe(
+			'emscripten-instantiate-wasm-v1'
+		);
+		Object.assign(candidate.debugger.targetRuntime, { moduleInstantiation: 'unsupported' });
+		expect(() => parseDebugRuntimeManifest(candidate)).toThrow('moduleInstantiation');
+		expect(
+			parseDebugRuntimeManifest(manifest()).debugger.lldb.moduleInstantiation
+		).toBeUndefined();
+	});
+
 	it('parses pinned LLDB/WAMR assets and resolves their URLs', () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		expect(parsed.debugger.lldb.llvmVersion).toBe('22.1.8');
@@ -151,7 +167,7 @@ describe('debug runtime manifest', () => {
 		await expect(verifyAssetSha256(bytes, hash, 'lldb')).rejects.toThrow(/mismatch/u);
 	});
 
-	it('preflights every LLDB/WAMR asset in order before workers are created', async () => {
+	it('preflights every LLDB/WAMR asset before workers are created', async () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		for (const asset of [parsed.debugger.lldb, parsed.debugger.targetRuntime]) {
 			asset.jsSha256 = debugAssetHash;
@@ -181,6 +197,43 @@ describe('debug runtime manifest', () => {
 			'https://cdn.example/runtime/debug/wamr.wasm',
 			'https://cdn.example/runtime/debug/wamr.worker.mjs'
 		]);
+	});
+
+	it('limits concurrent downloads to three and charges chunks against one total budget', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		let active = 0;
+		let maximum = 0;
+		let retainedChunks = 0;
+		const result = preflightDebugRuntimeAssets(
+			parsed,
+			'https://cdn.example/runtime/',
+			async () => {
+				active++;
+				maximum = Math.max(maximum, active);
+				let count = 0;
+				return new Response(
+					new ReadableStream<Uint8Array>({
+						async pull(controller) {
+							await new Promise((resolve) => setTimeout(resolve, 0));
+							if (++count > 4) {
+								controller.close();
+								active--;
+								return;
+							}
+							retainedChunks++;
+							controller.enqueue(new Uint8Array(5_000_000));
+						},
+						cancel() {
+							active--;
+						}
+					})
+				);
+			}
+		);
+		await expect(result).rejects.toThrow(/55,000,000 byte budget/u);
+		expect(maximum).toBe(3);
+		expect(active).toBe(0);
+		expect(retainedChunks).toBeGreaterThanOrEqual(12);
 	});
 
 	it('rejects a missing or corrupt asset during preflight', async () => {
@@ -249,7 +302,16 @@ describe('debug runtime manifest', () => {
 			preflightDebugRuntimeAssets(
 				parsed,
 				'https://cdn.example/runtime/',
-				async () => response
+				async (url, options) =>
+					String(url).endsWith('lldb.js')
+						? response
+						: new Promise<Response>((_resolve, reject) => {
+								options?.signal?.addEventListener(
+									'abort',
+									() => reject(options.signal?.reason),
+									{ once: true }
+								);
+							})
 			)
 		).rejects.toThrow(/55,000,000 byte budget/u);
 		expect(emitted).toBeGreaterThanOrEqual(12);
@@ -356,6 +418,6 @@ describe('debug runtime manifest', () => {
 				abortController.signal
 			)
 		).rejects.toThrow('asset preflight stopped');
-		expect(cancel).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledTimes(3);
 	});
 });
