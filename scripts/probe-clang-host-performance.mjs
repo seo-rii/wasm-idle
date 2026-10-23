@@ -16,7 +16,10 @@ const root = path.resolve(import.meta.dirname, '..');
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
 const baselineRef = args.get('--baseline-ref') || 'origin/main';
-const baselineSha = execFileSync('git', ['rev-parse', baselineRef], { cwd: root, encoding: 'utf8' }).trim();
+const baselineSha = execFileSync('git', ['rev-parse', baselineRef], {
+	cwd: root,
+	encoding: 'utf8'
+}).trim();
 const repeats = Number(args.get('--repeats') || 4);
 if (!Number.isSafeInteger(repeats) || repeats < 1) throw new Error('Invalid --repeats');
 const temp = await mkdtemp(path.join(tmpdir(), 'clang-host-probe-'));
@@ -65,11 +68,10 @@ try {
 	const baseline = path.join(temp, 'baseline');
 	await mkdir(baseline);
 	execFileSync('tar', ['-xf', '-', '-C', baseline], {
-		input: execFileSync(
-			'git',
-			['archive', baselineSha, 'packages/llvm-core/runtime'],
-			{ cwd: root, maxBuffer: 32 * 1024 * 1024 }
-		)
+		input: execFileSync('git', ['archive', baselineSha, 'packages/llvm-core/runtime'], {
+			cwd: root,
+			maxBuffer: 32 * 1024 * 1024
+		})
 	});
 	for (const [name, source] of [
 		['baseline', baseline],
@@ -131,11 +133,15 @@ try {
 		assets: receipts,
 		results: []
 	};
-	for (const [variant, cache, checks] of [
-		['baseline', false, false],
-		['candidate', false, false],
-		['candidate', true, true]
-	]) {
+	const variants = {
+		baseline: ['baseline', false, false],
+		off: ['candidate', false, false],
+		on: ['candidate', true, true],
+		auto: ['candidate', 'auto', true]
+	};
+	for (const mode of (args.get('--variants') || 'baseline,off,on,auto').split(',')) {
+		if (!Object.hasOwn(variants, mode)) throw new Error(`Unknown variant: ${mode}`);
+		const [variant, cache, checks] = variants[mode];
 		const result = await page.evaluate(
 			({ variant, cache, checks, repeats, manifest, receipts, origin }) =>
 				new Promise((resolve, reject) => {

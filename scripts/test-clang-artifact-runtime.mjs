@@ -56,6 +56,7 @@ class LegacyRuntime {
 		this.ready = Promise.resolve();
 		this.assetUrls = { lld: 'lld' };
 		this.compiles = [];
+		this.cachePolicies = [];
 		this.links = [];
 		this.runs = [];
 		this.files = new Map();
@@ -70,6 +71,7 @@ class LegacyRuntime {
 	}
 	async compile(options) {
 		this.compiles.push(options);
+		this.cachePolicies.push(this.objectCacheEnabled);
 		if (this.failCompile) throw new Error('compile failure');
 		this.files.set(options.obj, wasmBytes);
 	}
@@ -209,6 +211,43 @@ test('multi-file compilation keeps per-unit languages and selects C++ linking co
 	const overridden = new Runtime();
 	await overridden.compileArtifact('A', { language: 'C', compileArgs: ['-xc++'] });
 	assert.equal(overridden.links[0].language, 'CPP');
+});
+test('public auto policy caches only multi-file C++ units and restores the policy after failure', async () => {
+	for (const [language, policy, expected] of [
+		['C', 'auto', [false, false]],
+		['CPP', 'auto', [true, true]],
+		['C', true, [true, true]],
+		['CPP', false, [false, false]]
+	]) {
+		const runtime = new Runtime();
+		assert.equal(runtime.cacheTranslationUnits, 'auto');
+		runtime.cacheTranslationUnits = policy;
+		const extension = language === 'C' ? 'c' : 'cpp';
+		const options = {
+			language,
+			activePath: `main.${extension}`,
+			workspaceFiles: [{ path: `helper.${extension}`, content: 'helper' }]
+		};
+		await runtime.compileArtifact('main', options);
+		assert.deepEqual(runtime.cachePolicies, expected);
+		assert.equal(runtime.objectCacheEnabled, false);
+		runtime.cachePolicies = [];
+		await runtime.compileArtifact('debug', { ...options, debugMode: 'lldb' });
+		assert.deepEqual(runtime.cachePolicies, [false, false]);
+		runtime.failCompile = true;
+		await assert.rejects(runtime.compileArtifact('failure', options), /compile failure/);
+		assert.equal(runtime.objectCacheEnabled, false);
+	}
+	const single = new Runtime();
+	await single.compileArtifact('single', { language: 'CPP' });
+	assert.deepEqual(single.cachePolicies, [false]);
+	const mixed = new Runtime();
+	await mixed.compileArtifact('main', {
+		language: 'C',
+		activePath: 'main.c',
+		workspaceFiles: [{ path: 'helper.cpp', content: 'helper' }]
+	});
+	assert.deepEqual(mixed.cachePolicies, [true, false]);
 });
 test('a new workspace snapshot removes omitted headers and restores overridden mounted files', async () => {
 	const r = new Runtime();

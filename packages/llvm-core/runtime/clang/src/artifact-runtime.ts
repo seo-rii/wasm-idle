@@ -29,8 +29,8 @@ const translationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
  */
 export default class ArtifactRuntime extends Runtime {
 	protected override objectCacheEnabled = false;
-	/** Disable if a workload's preprocessing cost exceeds reusable frontend work. */
-	cacheTranslationUnits = true;
+	/** Auto caches C++ units in multi-file builds; C needs explicit opt-in. */
+	cacheTranslationUnits: boolean | 'auto' = 'auto';
 	/** Compatibility escape hatch for callers that intentionally consume dynamic exports. */
 	exportDynamic = false;
 	private minimalLink = false;
@@ -216,17 +216,22 @@ export default class ArtifactRuntime extends Runtime {
 			this.memfs.addDirectory(`${buildRoot}/objects`);
 			// Single-file edit-on-every-run workloads pay no extra preprocessing pass.
 			// PCH, debugging, transformations and unknown arguments retain the base path.
-			this.objectCacheEnabled = this.cacheTranslationUnits && debugMode === 'none';
 			try {
 				for (const [index, unit] of units.entries()) {
+					const unitLanguage =
+						unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP';
+					// The pinned browser corpus showed a preprocessing penalty for tiny C units.
+					this.objectCacheEnabled =
+						debugMode === 'none' &&
+						(this.cacheTranslationUnits === true ||
+							(this.cacheTranslationUnits === 'auto' && unitLanguage === 'CPP'));
 					const object = `${buildRoot}/objects/${index.toString().padStart(4, '0')}.o`;
 					await this.compile({
 						...common,
 						input: unit.path,
 						code: unit.content,
 						obj: object,
-						language:
-							unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP',
+						language: unitLanguage,
 						workspaceFiles: [],
 						sourceAlreadyMounted: true
 					});
