@@ -100,6 +100,14 @@ describe('language registry', () => {
 		expect(compilerDiagnosticLanguages.has('OBJECTIVECXX')).toBe(true);
 	});
 
+	it('routes Java editor requests to its own language server', () => {
+		expect(editorLanguages.JAVA).toBe('java');
+		expect(runtimeLspCapabilities.JAVA).toBe('java');
+		expect(clangdLspLanguages.has('JAVA')).toBe(false);
+		expect(dotnetLspLanguages.has('JAVA')).toBe(false);
+		expect(diagnosticMarkerLanguages.has('java')).toBe(true);
+	});
+
 	it('registers receipt-verified upstream TinyGo with Go syntax and diagnostics', () => {
 		expect(supportedLanguageIds).toContain('TINYGO');
 		expect(playgroundLanguages).toContain('TINYGO');

@@ -423,9 +423,15 @@ importers:
       '@wasm-idle/llvm-core':
         specifier: workspace:*
         version: link:../llvm-core
+      '@xmldom/xmldom':
+        specifier: 0.9.12
+        version: 0.9.12
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      saxes:
+        specifier: 6.0.0
+        version: 6.0.0
       vscode-jsonrpc:
         specifier: ^9.0.3
         version: 9.0.3
@@ -2513,6 +2519,10 @@ packages:
 
   '@wasmer/sdk@0.10.0':
     resolution: {integrity: sha512-YQ+s5tGag6P/I8kp9BTH+XhjoS9UFvWiZJvnWEEovClHffhYToKhprWr4UJG7wLP7c/2HQpGkF7ZrjoUvKjdmA==}
+
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
 
   '@xterm/addon-fit@0.10.0':
     resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
@@ -5698,6 +5708,8 @@ snapshots:
   '@wasmer/sdk@0.10.0':
     dependencies:
       web-worker: 1.5.0
+
+  '@xmldom/xmldom@0.9.12': {}
 
   '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
     dependencies:

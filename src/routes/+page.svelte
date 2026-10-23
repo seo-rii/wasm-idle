@@ -395,6 +395,16 @@
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
+	const javaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'java');
+	const javaLspRuntime = $derived(
+		javaLspEnabled
+			? {
+					...runtimeAssets.javaLsp,
+					baseUrl:
+						runtimeAssets.javaLsp?.baseUrl || resolveApplicationAsset('wasm-java-lsp/')
+				}
+			: undefined
+	);
 	const clangdLspEnabled = $derived(
 		lspEnabled && (clangdRequested || clangdLspLanguages.has(language))
 	);
@@ -4608,6 +4618,8 @@
 							{grainLspWorkspaceFiles}
 							{rescriptLspBaseUrl}
 							{rescriptLspWorkspaceFiles}
+							{javaLspEnabled}
+							{javaLspRuntime}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}

@@ -15,6 +15,7 @@ const expectedLanguagesByProvider = {
 	nim: ['nim'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
+	java: ['java'],
 	rust: ['rust', 'rs'],
 	go: ['go', 'golang'],
 	d: ['d'],

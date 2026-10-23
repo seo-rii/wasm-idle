@@ -25,6 +25,11 @@
 			"import": "./dist/python/index.js",
 			"default": "./dist/python/index.js"
 		},
+		"./java": {
+			"types": "./dist/java/index.d.ts",
+			"import": "./dist/java/index.js",
+			"default": "./dist/java/index.js"
+		},
 		"./rust": {
 			"types": "./dist/rust/index.d.ts",
 			"import": "./dist/rust/index.js",
@@ -298,7 +303,9 @@
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@wasm-idle/core": "workspace:*",
 		"@wasm-idle/llvm-core": "workspace:*",
+		"@xmldom/xmldom": "0.9.12",
 		"fflate": "0.8.3",
+		"saxes": "6.0.0",
 		"vscode-jsonrpc": "^9.0.3"
 	},
 	"devDependencies": {

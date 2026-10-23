@@ -437,6 +437,13 @@ export {
 	type LanguageServerStatus,
 	type WorkerLanguageServerClientOptions
 } from './worker-client.js';
+export {
+	getJavaLanguageServer,
+	JAVA_LANGUAGE_SERVER_ASSETS,
+	type JavaLanguageServerAsset,
+	type JavaLanguageServerConfig,
+	type JavaLanguageServerOptions
+} from './java/index.js';
 export type {
 	EditorLanguageServerHandle,
 	EditorLanguageServerOptions,
