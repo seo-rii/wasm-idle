@@ -46,7 +46,7 @@
 		"test:ci:browser:clean-room": "pnpm run build:js && pnpm run probe:browser-harness && pnpm run test:browser:vitest && pnpm run test:browser:playwright",
 		"test:browser": "pnpm build && node ./scripts/probe-browser-harness.mjs",
 		"test:browser:vitest": "WASM_RUST_RUN_REAL_BROWSER_HARNESS=1 pnpm exec vitest run test/browser-harness.test.ts",
-		"test:browser:performance": "WASM_RUST_RUN_REAL_BROWSER_HARNESS=1 pnpm exec vitest run test/performance.playwright.test.ts",
+		"test:browser:performance": "WASM_RUST_RUN_REAL_BROWSER_HARNESS=1 pnpm exec vitest run test/performance.playwright.test.ts --silent=false",
 		"test:browser:playwright": "WASM_RUST_RUN_REAL_BROWSER_HARNESS=1 pnpm exec vitest run test/browser-playwright-integration.test.ts",
 		"validate:standalone-browser": "node ./scripts/validate-standalone-browser.mjs",
 		"serve:browser-harness": "node ./scripts/browser-harness-server.mjs",
