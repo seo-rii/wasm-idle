@@ -171,7 +171,8 @@ jobs:
         env:
             WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
+        # The distro profile permits /usr/bin/bwrap to prepare Nim's canonical build paths.
+        runs-on: ubuntu-26.04
         timeout-minutes: 90
         steps:
             - uses: actions/checkout@v4
@@ -185,6 +186,17 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm --dir packages/core build
             - run: pnpm exec playwright-core install --with-deps chromium
+            - name: Prepare Nim LSP build namespaces
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y --no-install-recommends bubblewrap
+                  /usr/bin/bwrap --version
+                  if ! /usr/bin/bwrap --ro-bind / / --proc /proc --dev /dev \
+                      --unshare-user --unshare-pid --unshare-ipc --unshare-uts \
+                      --die-with-parent /usr/bin/true; then
+                      echo '::error::Nim LSP builds require working unprivileged user/mount namespaces.'
+                      exit 1
+                  fi
             - run: pnpm run prepare:test-assets -- clangd ocaml container
             - run: pnpm run test:lsp:browser:full
             - run: pnpm run test:lsp:browser:gleam:csp

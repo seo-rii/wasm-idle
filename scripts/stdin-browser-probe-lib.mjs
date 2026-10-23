@@ -277,6 +277,24 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
 	};
 }
 
+/** Execution probes track compiler/runtime assets separately from editor-only tools.
+ * @param {string} pathname
+ */
+export function isExecutionRuntimeAssetPath(pathname) {
+	const containerCompiler =
+		/\/container-app\/objects\/[a-f0-9]{64}\/(?:(?:clang|lld)\.wasm\.gz\.bin|sysroot\.tar(?:\.bin)?)$/u.test(
+			pathname
+		);
+	return (
+		!pathname.includes('/@fs/') &&
+		!/\/wasm-[^/]+-lsp\//u.test(pathname) &&
+		(containerCompiler ||
+			/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
+				pathname
+			))
+	);
+}
+
 /**
  * @param {StdinBrowserProbeOptions & { preloadStdin?: boolean }} options
  */
@@ -334,17 +352,7 @@ export async function runStdinBrowserProbe(options) {
 	// Container guests run in nested Workers; their requests belong to the context.
 	context.on('request', (request) => {
 		const pathname = new URL(request.url()).pathname;
-		const containerCompiler =
-			/\/container-app\/objects\/[a-f0-9]{64}\/(?:(?:clang|lld)\.wasm\.gz\.bin|sysroot\.tar(?:\.bin)?)$/u.test(
-				pathname
-			);
-		if (
-			!pathname.includes('/@fs/') &&
-			(containerCompiler ||
-				/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
-					pathname
-				))
-		) {
+		if (isExecutionRuntimeAssetPath(pathname)) {
 			(languageSelected ? selectedRuntimeRequests : preselectionRuntimeRequests).push(
 				request.url()
 			);

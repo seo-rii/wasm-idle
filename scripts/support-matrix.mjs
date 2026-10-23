@@ -262,7 +262,7 @@ export const supportMatrixRows = [
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'c3-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/c3.playwright.test.ts',
@@ -522,7 +522,7 @@ export const supportMatrixRows = [
 		ids: ['GRAIN'],
 		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Grain LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/grain.playwright.test.ts',
@@ -587,7 +587,7 @@ export const supportMatrixRows = [
 		ids: ['FORTH'],
 		runtime: 'WAForth WASM worker',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'forth-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
@@ -652,7 +652,7 @@ export const supportMatrixRows = [
 		ids: ['NIM'],
 		runtime: 'Nim 2.2.4 WASM + clang/lld WASM',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Nim LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
@@ -665,7 +665,7 @@ export const supportMatrixRows = [
 		ids: ['BASH'],
 		runtime: 'GNU Bash WASIX / Wasmer SDK',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Bash LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/bash.playwright.test.ts',
@@ -691,7 +691,7 @@ export const supportMatrixRows = [
 		ids: ['RESCRIPT'],
 		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'ReScript LSP + types',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/rescript.playwright.test.ts',
@@ -808,7 +808,7 @@ export const supportMatrixRows = [
 		ids: ['FENNEL'],
 		runtime: 'fennel.lua on Wasmoon',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Fennel LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -899,7 +899,7 @@ export const supportMatrixRows = [
 		ids: ['LEAN4'],
 		runtime: 'Lean 4.34.1 lean --run (Emscripten)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Lean LSP (Init)',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/lean4.playwright.test.ts',
@@ -925,7 +925,7 @@ export const supportMatrixRows = [
 		ids: ['COBOL'],
 		runtime: 'GnuCOBOL 3.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'SuperBOL OSS LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -938,7 +938,7 @@ export const supportMatrixRows = [
 		ids: ['V'],
 		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'v-analyzer LSP',
 		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

@@ -424,6 +424,16 @@
 	const phpLspWasmUrl = $derived(
 		phpLspEnabled ? resolveApplicationAsset('wasm-phpantom-lsp/phpantom_lsp.wasm') : undefined
 	);
+	const forthLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'forth');
+	const forthLspWasmUrl = $derived(
+		forthLspEnabled ? resolveApplicationAsset('wasm-forth-lsp/forth_lsp.wasm') : undefined
+	);
+	const c3LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'c3');
+	const c3LspBaseUrl = $derived(
+		c3LspEnabled ? resolveApplicationAsset('wasm-c3-lsp/') : undefined
+	);
+	const vLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'v');
+	const vLspBaseUrl = $derived(vLspEnabled ? resolveApplicationAsset('wasm-v-lsp/') : undefined);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -435,6 +445,12 @@
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
 	const dLspManifestUrl = $derived(dLspEnabled ? runtimeAssets.d?.manifestUrl : undefined);
 	const dLspIntegrity = $derived(dLspEnabled ? runtimeAssets.d?.integrity : undefined);
+	const lean4LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lean4');
+	const lean4LspBaseUrl = $derived(
+		lean4LspEnabled
+			? runtimeAssets.lean4?.baseUrl || resolveApplicationAsset('wasm-lean4/')
+			: undefined
+	);
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
@@ -487,6 +503,43 @@
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
+	const bashLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'bash');
+	const bashLspModuleUrl = $derived(
+		bashLspEnabled
+			? resolveApplicationAsset('wasm-bash-lsp/runtime.mjs', '5.8.1-browser-v1')
+			: undefined
+	);
+	const bashLspFiles = $derived.by(() =>
+		bashLspEnabled
+			? Object.fromEntries(
+					files
+						.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+						.map((file) => [file.path, file.content])
+				)
+			: undefined
+	);
+	const cobolLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'cobol');
+	const cobolLspBaseUrl = $derived(
+		cobolLspEnabled ? resolveApplicationAsset('wasm-cobol-lsp/') : undefined
+	);
+	const cobolLspWorkspaceFiles = $derived.by(() =>
+		cobolLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
+	const nimLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'nim');
+	const nimLspBaseUrl = $derived(
+		nimLspEnabled ? resolveApplicationAsset('wasm-nim-lsp/') : undefined
+	);
+	const nimLspWorkspaceFiles = $derived.by(() =>
+		nimLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const postgresqlLspEnabled = $derived(
@@ -519,7 +572,24 @@
 	const awkLspWorkerUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.workerUrl : undefined);
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspRuntime = $derived(perlLspEnabled ? runtimeAssets.perl : undefined);
+	const fennelLspBaseUrl = $derived(resolveApplicationAsset('wasm-fennel-lsp/'));
 	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
+	const grainLspBaseUrl = $derived(resolveApplicationAsset('wasm-grain-lsp/'));
+	const grainLspWorkspaceFiles = $derived(
+		files
+			.filter((file) => file.path !== activePath && file.path.endsWith('.gr'))
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
+	const rescriptLspBaseUrl = $derived(resolveApplicationAsset('wasm-rescript-lsp/'));
+	const rescriptLspWorkspaceFiles = $derived(
+		files
+			.filter(
+				(file) =>
+					file.path !== activePath &&
+					(/\.resi?$/.test(file.path) || /(?:^|\/)rescript\.json$/.test(file.path))
+			)
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
 			? runtimeAssets.typescript?.libUrl
@@ -4534,6 +4604,10 @@
 							{compact}
 							dark={darkMode}
 							{lspEnabled}
+							{grainLspBaseUrl}
+							{grainLspWorkspaceFiles}
+							{rescriptLspBaseUrl}
+							{rescriptLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}
@@ -4552,6 +4626,12 @@
 							{gleamLspEnabled}
 							{phpLspEnabled}
 							{phpLspWasmUrl}
+							{forthLspEnabled}
+							{forthLspWasmUrl}
+							{c3LspEnabled}
+							{c3LspBaseUrl}
+							{vLspEnabled}
+							{vLspBaseUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}
@@ -4559,6 +4639,8 @@
 							{dLspModuleUrl}
 							{dLspManifestUrl}
 							{dLspIntegrity}
+							{lean4LspEnabled}
+							{lean4LspBaseUrl}
 							{tclLspEnabled}
 							{tclLspBaseUrl}
 							{tclLspWorkerUrl}
@@ -4590,10 +4672,19 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{cobolLspEnabled}
+							{cobolLspBaseUrl}
+							{cobolLspWorkspaceFiles}
+							{nimLspEnabled}
+							{nimLspBaseUrl}
+							{nimLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
 							{postgresqlLspEnabled}
 							{postgresqlLspModuleUrl}
+							{bashLspEnabled}
+							{bashLspModuleUrl}
+							{bashLspFiles}
 							{prologLspEnabled}
 							{prologLspBaseUrl}
 							{prologLspWorkerUrl}
@@ -4610,6 +4701,7 @@
 							{awkLspWorkerUrl}
 							{perlLspEnabled}
 							{perlLspRuntime}
+							{fennelLspBaseUrl}
 							{pythonLspBaseUrl}
 							{typescriptLspLibUrl}
 							breakpoints={debug.effectiveBreakpoints}

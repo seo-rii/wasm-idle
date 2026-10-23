@@ -1,4 +1,4 @@
-# Lean 4 browser execution
+# Lean 4 browser execution and language server
 
 `LEAN4` runs programs with the real upstream Lean 4.34.1 (`leanprover/lean4@5045d005`) frontend
 and IR interpreter: each run is `lean -j1 --run Main.lean [args...]`. The compiler is built for
@@ -13,6 +13,7 @@ Select **Lean 4** or use `?lang=lean4` (`lean` is an alias).
 
 ```sh
 pnpm run sync:wasm-lean4      # download from the pinned wasm-llvm commit
+pnpm run compress:static-runtimes # refresh the playground Service Worker delivery manifest
 pnpm run prepare:app
 pnpm run test:browser:lean4
 ```
@@ -25,7 +26,8 @@ and the decoded hash of each gzip file with a bounded output size, before replac
 producer receipt and validates the exact receipt asset set, library chunk/file ranges, complete
 module parts, and combined library digest.
 `--source /path/to/wasm-llvm/artifacts/lean-browser` reads a local checkout instead. The generated
-`src/lib/playground/wasmLean4Version.ts` binds the lock and the consumer Worker hash; a different
+`packages/lsp/src/bundledLean4Runtime.ts` binds the lock and the execution Worker hash;
+`src/lib/playground/wasmLean4Version.ts` re-exports this shared profile; a different
 release requires a reviewed lock update. `page:build` runs the sync.
 
 The pinned release includes the stricter validation from wasm-llvm PR #43. Its receipt records
@@ -60,3 +62,72 @@ then calls `callMain`. `runtimeAssets.lean4.baseUrl` relocates the reviewed bund
   memory limit is 1 GiB; importing `Init` grows memory to about 370 MiB, so the minimum is
   256 MiB initial and about 512 MiB in practice. A small program takes about 7-15 s per run in
   Chromium, mostly verification, inflation, and import.
+
+## Original language server
+
+Enable **LSP** with Lean 4 selected to use the original 4.34.1 language server in the browser.
+The editor reuses the same reviewed compiler and `Init` assets as execution. No alternative parser,
+compiler-output diagnostic adapter, remote server, or replacement language handler is involved.
+
+```ts
+import { getLean4LanguageServer } from '@wasm-idle/lsp/lean4';
+
+const server = await getLean4LanguageServer({
+	currentUrl: location.href,
+	rootUrl: '/wasm-idle/'
+	// Optional relocation of the unchanged, receipt-pinned distribution:
+	// lean4: { baseUrl: 'https://cdn.example.com/wasm-lean4/' }
+});
+// Pass server.transport to an LSP client; dispose it when the editor closes.
+```
+
+The browser host starts the original `--server` watchdog to obtain its real `initialize` response.
+The native watchdog cannot spawn child processes in Emscripten (`ENOSYS`, error 52), so the host
+then launches the original `lean -j4 --worker <document-uri>` in a dedicated Web Worker for each
+active document process. FileWorker consumes the original initialize parameters and didOpen, then
+its original request handlers perform hover, completion, definition, document symbols, semantic
+features and diagnostics through the original `Content-Length` stdin/stdout protocol. The host
+tracks client/server request IDs independently and aligns case variants of the active document URI
+for Monaco. Native-watchdog
+workspace symbols, references, rename, call hierarchy and experimental project capabilities are
+removed from the original capability response and return a standard unsupported-method error.
+
+Only the Emscripten platform glue is adapted: pthreads receive the shared stdin ring, fd 0 reads
+that ring without blocking other FS/stdout proxies, and completed pthreads return to the pool
+through Emscripten's native proxy queue. The pthread pool is preallocated to 64, and the actual
+WASI process-exit event is forwarded even when Emscripten keepalive suppresses its optional
+`onExit` callback. An SDK supervisor owns every physical process and pthread Worker and explicitly
+terminates them on disposal, startup abort, and process replacement; it does not rely on nested Worker
+termination cascading automatically.
+Lean's original [ServerTask](https://github.com/leanprover/lean4/blob/5045d0056413266e57c625dcd7c365b10e377c52/src/Lean/Server/ServerTask.lean)
+uses dedicated threads. Pools of 16 and 32 exhausted during elaboration; the browser test uses
+45–53 initial thread spawns without a late worker allocation. Subsequent tasks reuse completed
+threads. Exceeding the fixed pool fails explicitly.
+The Wasm bytes, compiler, elaborator and language handlers are unchanged. A document's MEMFS copies
+the shared library source bytes so user evaluation cannot modify another process's library pack.
+
+The supported editor profile is one active `.lean` buffer per handle, with `Init` imports. Opening
+another buffer replaces the previous process. No Lake builds, package downloads, Mathlib, `Std`
+or `Lean` library imports, or project-wide reference index are supplied. Changing the import header
+uses the original FileWorker restart signal (exit 2) and relaunches with the current full buffer.
+Cross-origin isolation, module/nested workers, WebAssembly exceptions and pthreads are required;
+Chromium is the tested browser. The default per-process Wasm limit is 1 GiB, configurable through
+`lean4.maxMemoryBytes`. The first download is about 143 MB; verified persistent assets are shared
+with execution. The SDK ships only host code, while `sync:wasm-lean4` prepares the pinned assets.
+The original Apache-2.0 and libuv MIT notices remain in the distribution.
+
+Verification commands:
+
+```sh
+pnpm --filter @wasm-idle/lsp build
+WASM_IDLE_LEAN4_LSP_BROWSER=1 node --test scripts/lean4-lsp-browser.test.mjs
+WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=LEAN4 \
+  pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts
+```
+
+The SDK browser test checks original initialize, a request before didOpen, completion, hover,
+local definition, versioned type diagnostics, correction, import restart, repeated edits, UTF-8
+frames and UTF-16 edits, unsupported project requests, cache reuse, timeout/startup abort and
+complete process/pthread disposal. The Monaco matrix checks the production editor path
+and SHA-pinned lazy assets. Browser tests are opt-in; ordinary Node test discovery does not start a
+browser or import browser tooling.

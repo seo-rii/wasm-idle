@@ -76,72 +76,72 @@ remaining producer requirements.
 
 | Language         | Browser runtime/compiler                     | Stdin | Editor support       | Debug          |
 | ---------------- | -------------------------------------------- | ----- | -------------------- | -------------- |
-| GolfScript | Original GolfScript interpreter on Ruby/WASI | Yes | plain text | - |
-| APECode | Original APECode interpreter on Pyodide | Yes | plain text | - |
-| LOLCODE 1.3 | Original lci 1.3 interpreter on WASI | Yes | plain text | - |
-| UHMLANG (엄준식) | Original Umjunsik Go interpreter on WASI | Yes | plain text | - |
-| Aheui | rpaheui 1.2.5 on Pyodide | Yes | plain text | - |
-| Malbolge | Ben Olmstead Malbolge on WASI | Yes | plain text | - |
-| Whitespace | koturn/Whitespace 0.3 on WASI | Yes | plain text | - |
-| C3 | C3 0.8.3 + LLVM/lld WASM (byte ABI) | Yes | compiler diagnostics | - |
-| C | @wasm-idle/llvm-core / Clang WASI | Yes | clangd | LLDB |
-| C++ | @wasm-idle/llvm-core / Clang WASI | Yes | clangd | LLDB |
-| Objective-C | GNUstep libobjc2 + @wasm-idle/llvm-core | Yes | clangd | LLDB |
-| Objective-C++ | GNUstep libobjc2 + @wasm-idle/llvm-core | Yes | clangd | LLDB |
-| Python | Pyodide | Yes | Python LSP | Trace |
-| Befunge-93 | Chris Pressey Befunge-93 on WASI | Yes | plain text | - |
-| Brainfuck | susam/bfc on WASI | Yes | plain text | - |
-| Hy | Hy 1.3.1 on Pyodide | Yes | syntax | - |
-| Java | TeaVM | Yes | syntax | Trace (source) |
-| Rust | wasm-rust / browser rustc | Yes | rustc diagnostics | LLDB |
-| Go | wasm-go / browser Go compiler | Yes | compiler diagnostics | Trace |
-| D | wasm-d | Yes | syntax | - |
-| C# | wasm-dotnet | Yes | compiler diagnostics | - |
-| F# | wasm-dotnet | Yes | compiler diagnostics | - |
-| VB.NET | wasm-dotnet | Yes | compiler diagnostics | - |
-| Elixir | AtomVM / Popcorn | Yes | syntax | - |
-| Erlang | AtomVM / Popcorn | Yes | syntax | - |
-| Prolog | SWI-Prolog WASM worker | Yes | syntax | - |
-| Gleam | Gleam precompiled browser runtime | Yes | compiler diagnostics | - |
-| Grain | Grain 0.7.2 js_of_ocaml compiler + WASI | Yes | compiler diagnostics | - |
-| Perl | Perl WASM worker | Yes | syntax | - |
-| Tcl | Wacl Tcl WASM worker | Yes | syntax | - |
-| AWK | GoAWK WASM worker | Yes | syntax | - |
-| Pascal | pas2js worker | Yes | syntax | - |
-| Forth | WAForth WASM worker | Yes | syntax | - |
-| J | J playground WASM worker | Yes | syntax | - |
-| BQN | CBQN WASM worker | Yes | syntax | - |
-| Janet | Janet VM WASM worker | Yes | syntax | - |
-| Julia | Julia 1.3.0-DEV.560 legacy WASM worker | Yes | syntax | - |
-| Nim | Nim 2.2.4 WASM + clang/lld WASM | Yes | syntax | - |
-| Bash | GNU Bash WASIX / Wasmer SDK | Yes | syntax | - |
-| ClojureScript | cljs.js self-hosted compiler | Yes | syntax | - |
-| ReScript | ReScript 12.3.1 compiler (js_of_ocaml) | Yes | compiler diagnostics | - |
-| TinyGo | wasm-tinygo | Yes | syntax | - |
-| OCaml | wasm-of-js-of-ocaml / js_of_ocaml | Yes | syntax | - |
-| JavaScript | wasm-typescript / TypeScript service | Yes | TypeScript LSP | - |
-| TypeScript | wasm-typescript / TypeScript service | Yes | TypeScript LSP | - |
-| AssemblyScript | AssemblyScript compiler | Yes | AssemblyScript LSP | - |
-| WAT | WABT | Yes | WAT LSP | - |
-| WASM | Browser WebAssembly + WASI shim | Yes | syntax | - |
-| Lua | Wasmoon | Yes | syntax | MobDebug |
-| Fennel | fennel.lua on Wasmoon | Yes | syntax | - |
-| Zig | zig_small.wasm | Yes | syntax | - |
-| Scheme | Puppy Scheme / wasm-lisp | Yes | syntax | - |
-| Common Lisp | ECL 26.5.5 (Embeddable Common-Lisp) WASM | Yes | syntax | - |
-| Ruby | CRuby WASI | Yes | syntax | TracePoint |
-| Haskell | ghc-in-browser | Yes | syntax | - |
-| LFortran | LFortran LLVM evaluator (experimental) | Yes | compiler diagnostics | - |
-| Lean 4 | Lean 4.34.1 lean --run (Emscripten) | Yes | compiler diagnostics | - |
-| Fortran | f2c + @wasm-idle/llvm-core | Yes | Fortran LSP | - |
-| COBOL | GnuCOBOL 3.2 + @wasm-idle/llvm-core | Yes | syntax | - |
-| V | V 0.5.2 + @wasm-idle/llvm-core | Yes | syntax | LLDB |
-| R | WebR | Yes | syntax | - |
-| Octave | wasm-octave | Yes | syntax | - |
-| DuckDB | DuckDB-Wasm | Files | DuckDB LSP | - |
-| SQLite | sql.js | n/a | syntax | - |
-| PostgreSQL | PostgreSQL 18 / PGlite | Files | syntax | - |
-| PHP | PHP 8.4 / php-wasm | Yes | PHPantom LSP | - |
+| GolfScript       | Original GolfScript interpreter on Ruby/WASI | Yes   | plain text           | -              |
+| APECode          | Original APECode interpreter on Pyodide      | Yes   | plain text           | -              |
+| LOLCODE 1.3      | Original lci 1.3 interpreter on WASI         | Yes   | plain text           | -              |
+| UHMLANG (엄준식) | Original Umjunsik Go interpreter on WASI     | Yes   | plain text           | -              |
+| Aheui            | rpaheui 1.2.5 on Pyodide                     | Yes   | plain text           | -              |
+| Malbolge         | Ben Olmstead Malbolge on WASI                | Yes   | plain text           | -              |
+| Whitespace       | koturn/Whitespace 0.3 on WASI                | Yes   | plain text           | -              |
+| C3               | C3 0.8.3 + LLVM/lld WASM (byte ABI)          | Yes   | c3-lsp               | -              |
+| C                | @wasm-idle/llvm-core / Clang WASI            | Yes   | clangd               | LLDB           |
+| C++              | @wasm-idle/llvm-core / Clang WASI            | Yes   | clangd               | LLDB           |
+| Objective-C      | GNUstep libobjc2 + @wasm-idle/llvm-core      | Yes   | clangd               | LLDB           |
+| Objective-C++    | GNUstep libobjc2 + @wasm-idle/llvm-core      | Yes   | clangd               | LLDB           |
+| Python           | Pyodide                                      | Yes   | Python LSP           | Trace          |
+| Befunge-93       | Chris Pressey Befunge-93 on WASI             | Yes   | plain text           | -              |
+| Brainfuck        | susam/bfc on WASI                            | Yes   | plain text           | -              |
+| Hy               | Hy 1.3.1 on Pyodide                          | Yes   | syntax               | -              |
+| Java             | TeaVM                                        | Yes   | syntax               | Trace (source) |
+| Rust             | wasm-rust / browser rustc                    | Yes   | rustc diagnostics    | LLDB           |
+| Go               | wasm-go / browser Go compiler                | Yes   | compiler diagnostics | Trace          |
+| D                | wasm-d                                       | Yes   | syntax               | -              |
+| C#               | wasm-dotnet                                  | Yes   | compiler diagnostics | -              |
+| F#               | wasm-dotnet                                  | Yes   | compiler diagnostics | -              |
+| VB.NET           | wasm-dotnet                                  | Yes   | compiler diagnostics | -              |
+| Elixir           | AtomVM / Popcorn                             | Yes   | syntax               | -              |
+| Erlang           | AtomVM / Popcorn                             | Yes   | syntax               | -              |
+| Prolog           | SWI-Prolog WASM worker                       | Yes   | syntax               | -              |
+| Gleam            | Gleam precompiled browser runtime            | Yes   | compiler diagnostics | -              |
+| Grain            | Grain 0.7.2 js_of_ocaml compiler + WASI      | Yes   | Grain LSP            | -              |
+| Perl             | Perl WASM worker                             | Yes   | syntax               | -              |
+| Tcl              | Wacl Tcl WASM worker                         | Yes   | syntax               | -              |
+| AWK              | GoAWK WASM worker                            | Yes   | syntax               | -              |
+| Pascal           | pas2js worker                                | Yes   | syntax               | -              |
+| Forth            | WAForth WASM worker                          | Yes   | forth-lsp            | -              |
+| J                | J playground WASM worker                     | Yes   | syntax               | -              |
+| BQN              | CBQN WASM worker                             | Yes   | syntax               | -              |
+| Janet            | Janet VM WASM worker                         | Yes   | syntax               | -              |
+| Julia            | Julia 1.3.0-DEV.560 legacy WASM worker       | Yes   | syntax               | -              |
+| Nim              | Nim 2.2.4 WASM + clang/lld WASM              | Yes   | Nim LSP              | -              |
+| Bash             | GNU Bash WASIX / Wasmer SDK                  | Yes   | Bash LSP             | -              |
+| ClojureScript    | cljs.js self-hosted compiler                 | Yes   | syntax               | -              |
+| ReScript         | ReScript 12.3.1 compiler (js_of_ocaml)       | Yes   | ReScript LSP + types | -              |
+| TinyGo           | wasm-tinygo                                  | Yes   | syntax               | -              |
+| OCaml            | wasm-of-js-of-ocaml / js_of_ocaml            | Yes   | syntax               | -              |
+| JavaScript       | wasm-typescript / TypeScript service         | Yes   | TypeScript LSP       | -              |
+| TypeScript       | wasm-typescript / TypeScript service         | Yes   | TypeScript LSP       | -              |
+| AssemblyScript   | AssemblyScript compiler                      | Yes   | AssemblyScript LSP   | -              |
+| WAT              | WABT                                         | Yes   | WAT LSP              | -              |
+| WASM             | Browser WebAssembly + WASI shim              | Yes   | syntax               | -              |
+| Lua              | Wasmoon                                      | Yes   | syntax               | MobDebug       |
+| Fennel           | fennel.lua on Wasmoon                        | Yes   | Fennel LSP           | -              |
+| Zig              | zig_small.wasm                               | Yes   | syntax               | -              |
+| Scheme           | Puppy Scheme / wasm-lisp                     | Yes   | syntax               | -              |
+| Common Lisp      | ECL 26.5.5 (Embeddable Common-Lisp) WASM     | Yes   | syntax               | -              |
+| Ruby             | CRuby WASI                                   | Yes   | syntax               | TracePoint     |
+| Haskell          | ghc-in-browser                               | Yes   | syntax               | -              |
+| LFortran         | LFortran LLVM evaluator (experimental)       | Yes   | compiler diagnostics | -              |
+| Lean 4           | Lean 4.34.1 lean --run (Emscripten)          | Yes   | Lean LSP (Init)      | -              |
+| Fortran          | f2c + @wasm-idle/llvm-core                   | Yes   | Fortran LSP          | -              |
+| COBOL            | GnuCOBOL 3.2 + @wasm-idle/llvm-core          | Yes   | SuperBOL OSS LSP     | -              |
+| V                | V 0.5.2 + @wasm-idle/llvm-core               | Yes   | v-analyzer LSP       | LLDB           |
+| R                | WebR                                         | Yes   | syntax               | -              |
+| Octave           | wasm-octave                                  | Yes   | syntax               | -              |
+| DuckDB           | DuckDB-Wasm                                  | Files | DuckDB LSP           | -              |
+| SQLite           | sql.js                                       | n/a   | syntax               | -              |
+| PostgreSQL       | PostgreSQL 18 / PGlite                       | Files | syntax               | -              |
+| PHP              | PHP 8.4 / php-wasm                           | Yes   | PHPantom LSP         | -              |
 
 ## Browser LLDB debug runtime
 

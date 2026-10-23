@@ -1,0 +1,33 @@
+{
+	"format": "wasm-idle-fennel-lsp-v1",
+	"upstream": {
+		"repository": "https://git.sr.ht/~xerool/fennel-ls",
+		"revision": "107fd29d4771440f4b5d8221caf6ccaeac969863",
+		"url": "https://git.sr.ht/~xerool/fennel-ls/archive/107fd29d4771440f4b5d8221caf6ccaeac969863.tar.gz",
+		"bytes": 338954,
+		"sha256": "5479148d0a61abddc005df17b0447a00c4b6d2bfadf65b83b29ff2864369e685"
+	},
+	"wasmoon": "1.16.0",
+	"assets": {
+		"fennel-ls.lua": {
+			"bytes": 996655,
+			"sha256": "af3c20e8feed65774471a9e070256a395bf683c3c346a6bf2d11b169b6f0cd24"
+		},
+		"engine.mjs": {
+			"bytes": 110583,
+			"sha256": "28c01718043043bcdf9ad3b38935e3aae3c7e471f48b5c1a3d2a41cd7446cbd6"
+		},
+		"lua.wasm": {
+			"bytes": 271581,
+			"sha256": "95f3f19ddb740125883bc41d5ec670cd0828e7b58c8bdad385323cbff497b55c"
+		},
+		"LICENSE.fennel-ls": {
+			"bytes": 1061,
+			"sha256": "30d6622db40db6c606a6e6e5cb98f8615252529ba5a5f8cbf374acb7090768b3"
+		},
+		"LICENSE.wasmoon": {
+			"bytes": 1074,
+			"sha256": "9ed9226c0138819a0859cf3c55a3414b4a186a17a4eaf4b5a51ceed7937615ac"
+		}
+	}
+}

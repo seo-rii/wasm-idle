@@ -1,0 +1,439 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -35,3 +35,15 @@
+
+ [dev-dependencies]
+ tempfile = "3.27.0"
++
++[lib]
++path = "src/main.rs"
++crate-type = ["cdylib"]
++
++[profile.wasm-release]
++inherits = "release"
++opt-level = "s"
++lto = true
++codegen-units = 1
++strip = "symbols"
++panic = "abort"
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -1,3 +1,6 @@
++#[cfg(target_arch = "wasm32")]
++mod wasm_reactor;
++
+ mod cli;
+ mod config;
+ mod error;
+@@ -63,89 +66,103 @@
+     Ok(())
+ }
+
+-fn main_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
+-    eprintln!("Starting main loop");
+-    let init: InitializeParams = serde_json::from_value(params)?;
+-    let mut files = HashMap::<String, Rope>::new();
+-
+-    // Load configuration from workspace root. Workspace folder URIs arrive as
+-    // percent-encoded `file://` URIs, so convert them to real filesystem paths
+-    // (handles `%XX` escapes and Windows drive letters) rather than using the
+-    // raw URI path component.
+-    let workspace_root: Option<String> = init
+-        .workspace_folders
+-        .as_ref()
+-        .and_then(|folders| folders.first())
+-        .and_then(|folder| uri_to_path(&folder.uri))
+-        .map(|path| path.to_string_lossy().into_owned());
+-    let config = Config::load_from_workspace(workspace_root.as_deref());
+-
+-    if let Some(roots) = init.workspace_folders {
+-        eprintln!("Root: {:?}", roots);
+-        for root in roots {
+-            if let Some(path) = uri_to_path(&root.uri) {
+-                load_dir(&path.to_string_lossy(), &mut files, &config.workspace)?;
+-            }
+-        }
+-    }
+-
+-    // Build initial definition index from loaded files
+-    let mut def_index = DefinitionIndex::new();
+-    for (path, rope) in &files {
+-        def_index.update_file(path, rope);
+-    }
+-    eprintln!("Indexed {} files", files.len());
+-
+-    let mut data = Words::default();
+-    let custom_words = config.builtin.to_static_words(workspace_root.as_deref());
+-    data.words.extend(custom_words);
+-    for msg in &connection.receiver {
++struct ServerState {
++    files: HashMap<String, Rope>,
++    config: Config,
++    def_index: DefinitionIndex,
++    data: Words<'static>,
++}
++
++impl ServerState {
++    fn new(params: serde_json::Value) -> Result<Self> {
++        eprintln!("Starting main loop");
++        let init: InitializeParams = serde_json::from_value(params)?;
++        let mut files = HashMap::<String, Rope>::new();
++
++        // Load configuration from workspace root. Workspace folder URIs arrive as
++        // percent-encoded `file://` URIs, so convert them to real filesystem paths
++        // (handles `%XX` escapes and Windows drive letters) rather than using the
++        // raw URI path component.
++        let workspace_root: Option<String> = init
++            .workspace_folders
++            .as_ref()
++            .and_then(|folders| folders.first())
++            .and_then(|folder| uri_to_path(&folder.uri))
++            .map(|path| path.to_string_lossy().into_owned());
++        let config = Config::load_from_workspace(workspace_root.as_deref());
++
++        if let Some(roots) = init.workspace_folders {
++            eprintln!("Root: {:?}", roots);
++            for root in roots {
++                if let Some(path) = uri_to_path(&root.uri) {
++                    load_dir(&path.to_string_lossy(), &mut files, &config.workspace)?;
++                }
++            }
++        }
++
++        // Build initial definition index from loaded files
++        let mut def_index = DefinitionIndex::new();
++        for (path, rope) in &files {
++            def_index.update_file(path, rope);
++        }
++        eprintln!("Indexed {} files", files.len());
++
++        let mut data = Words::default();
++        let custom_words = config.builtin.to_static_words(workspace_root.as_deref());
++        data.words.extend(custom_words);
++        Ok(Self {
++            files,
++            config,
++            def_index,
++            data,
++        })
++    }
++
++    fn handle_message(&mut self, msg: Message, connection: &Connection) -> Result<()> {
++        let Self {
++            files,
++            config,
++            def_index,
++            data,
++        } = self;
+         match msg {
+             Message::Request(request) => {
+-                if connection.handle_shutdown(&request)? {
+-                    return Ok(());
+-                }
+                 eprintln!("got request: {:?}", request.method);
+-                if handle_hover(&request, &connection, &data, &mut files, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_completion(&request, &connection, &data, &mut files, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_goto_definition(&request, &connection, &data, &mut files, &def_index)
+-                    .is_ok()
+-                {
+-                    continue;
+-                }
+-                if handle_find_references(&request, &connection, &mut files, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_prepare_rename(&request, &connection, &files, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_rename(&request, &connection, &mut files, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_signature_help(&request, &connection, &mut files, &data, &def_index)
+-                    .is_ok()
+-                {
+-                    continue;
+-                }
+-                if handle_document_symbols(&request, &connection, &mut files).is_ok() {
+-                    continue;
+-                }
+-                if handle_workspace_symbols(&request, &connection, &def_index).is_ok() {
+-                    continue;
+-                }
+-                if handle_formatting(&request, &connection, &files, &config).is_ok() {
+-                    continue;
+-                }
+-                if handle_semantic_tokens_full(&request, &connection, &mut files, &data).is_ok() {
+-                    continue;
+-                }
+-                if handle_code_action(&request, &connection, &mut files, &data, &def_index).is_ok()
+-                {
+-                    continue;
++                if handle_hover(&request, connection, data, files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_completion(&request, connection, data, files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_goto_definition(&request, connection, data, files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_find_references(&request, connection, files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_prepare_rename(&request, connection, &files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_rename(&request, connection, files, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_signature_help(&request, connection, files, data, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_document_symbols(&request, connection, files).is_ok() {
++                    return Ok(());
++                }
++                if handle_workspace_symbols(&request, connection, def_index).is_ok() {
++                    return Ok(());
++                }
++                if handle_formatting(&request, connection, &files, config).is_ok() {
++                    return Ok(());
++                }
++                if handle_semantic_tokens_full(&request, connection, files, data).is_ok() {
++                    return Ok(());
++                }
++                if handle_code_action(&request, connection, files, data, def_index).is_ok() {
++                    return Ok(());
+                 }
+             }
+             Message::Response(resp) => {
+@@ -155,42 +172,55 @@
+                 eprintln!("got notification: {:?}", notification.method);
+                 if handle_did_open_text_document(
+                     &notification,
+-                    &connection,
+-                    &mut files,
+-                    &mut def_index,
+-                    &data,
+-                    &config,
++                    connection,
++                    files,
++                    def_index,
++                    data,
++                    config,
+                 )
+                 .is_ok()
+                 {
+-                    continue;
++                    return Ok(());
+                 }
+                 if handle_did_change_text_document(
+                     &notification,
+-                    &connection,
+-                    &mut files,
+-                    &mut def_index,
+-                    &data,
+-                    &config,
++                    connection,
++                    files,
++                    def_index,
++                    data,
++                    config,
+                 )
+                 .is_ok()
+                 {
+-                    continue;
++                    return Ok(());
+                 }
+                 if handle_did_save_text_document(
+                     &notification,
+-                    &connection,
+-                    &mut files,
+-                    &mut def_index,
+-                    &data,
+-                    &config,
++                    connection,
++                    files,
++                    def_index,
++                    data,
++                    config,
+                 )
+                 .is_ok()
+                 {
+-                    continue;
+-                }
+-            }
+-        }
++                    return Ok(());
++                }
++            }
++        }
++        Ok(())
++    }
++}
++
++fn main_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
++    let mut state = ServerState::new(params)?;
++    for msg in &connection.receiver {
++        if let Message::Request(ref request) = msg {
++            if connection.handle_shutdown(request)? {
++                return Ok(());
++            }
++        }
++        state.handle_message(msg, &connection)?;
+     }
+     Ok(())
+ }
+--- /dev/null
++++ b/src/wasm_reactor.rs
+@@ -0,0 +1,148 @@
++//! Browser transport only. Parsing, indexing, diagnostics and every request handler remain upstream.
++use super::{ServerState, forth_lsp_capabilities};
++use lsp_server::{Connection, Message};
++use serde_json::{Value, json};
++use std::cell::{Cell, RefCell};
++
++struct Reactor {
++    server: Connection,
++    client: Connection,
++    state: Option<ServerState>,
++    shutdown: bool,
++}
++
++impl Reactor {
++    fn new() -> Self {
++        let (server, client) = Connection::memory();
++        Self {
++            server,
++            client,
++            state: None,
++            shutdown: false,
++        }
++    }
++
++    fn handle(&mut self, message: Value) -> Vec<Value> {
++        let id = message.get("id").cloned();
++        let method = message.get("method").and_then(Value::as_str).unwrap_or("");
++        let reply = |result: Value| json!({ "jsonrpc": "2.0", "id": id, "result": result });
++        if method == "initialize" {
++            let params = message
++                .get("params")
++                .cloned()
++                .unwrap_or(json!({ "capabilities": {} }));
++            return match ServerState::new(params) {
++                Ok(state) => {
++                    self.state = Some(state);
++                    vec![reply(json!({
++                        "capabilities": forth_lsp_capabilities(),
++                        "serverInfo": { "name": "forth-lsp", "version": env!("CARGO_PKG_VERSION") }
++                    }))]
++                }
++                Err(error) => vec![
++                    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32603, "message": error.to_string() } }),
++                ],
++            };
++        }
++        if method == "shutdown" {
++            self.shutdown = true;
++            return vec![reply(Value::Null)];
++        }
++        if method == "exit" || method == "initialized" || method == "$/cancelRequest" {
++            return vec![];
++        }
++        if self.shutdown || self.state.is_none() {
++            return if id.is_some() {
++                vec![
++                    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32002, "message": "server is not initialized" } }),
++                ]
++            } else {
++                vec![]
++            };
++        }
++        let state = self.state.as_mut().unwrap();
++        // The browser host releases closed buffers and their indices; no language analysis is added.
++        if method == "textDocument/didClose" {
++            if let Some(uri) = message
++                .pointer("/params/textDocument/uri")
++                .and_then(Value::as_str)
++            {
++                state.files.remove(uri);
++                state.def_index.remove_file(uri);
++                return vec![
++                    json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": [] } }),
++                ];
++            }
++            return vec![];
++        }
++        let handled = serde_json::from_value::<Message>(message.clone())
++            .map_err(|error| error.to_string())
++            .and_then(|message| {
++                state
++                    .handle_message(message, &self.server)
++                    .map_err(|error| error.to_string())
++            });
++        if let Err(error) = handled {
++            return if id.is_some() {
++                vec![
++                    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32603, "message": error } }),
++                ]
++            } else {
++                vec![]
++            };
++        }
++        let mut messages = Vec::new();
++        while let Ok(message) = self.client.receiver.try_recv() {
++            let mut value = serde_json::to_value(message).unwrap();
++            value
++                .as_object_mut()
++                .unwrap()
++                .insert("jsonrpc".into(), json!("2.0"));
++            messages.push(value);
++        }
++        if id.is_some()
++            && !messages
++                .iter()
++                .any(|message| message.get("id") == id.as_ref())
++        {
++            messages.push(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "method not found" } }));
++        }
++        messages
++    }
++}
++
++thread_local! {
++    static REACTOR: RefCell<Reactor> = RefCell::new(Reactor::new());
++    static RESPONSE_LEN: Cell<usize> = const { Cell::new(0) };
++}
++
++#[unsafe(no_mangle)]
++pub extern "C" fn lsp_alloc(len: usize) -> *mut u8 {
++    Box::into_raw(vec![0; len].into_boxed_slice()) as *mut u8
++}
++
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn lsp_dealloc(ptr: *mut u8, len: usize) {
++    if !ptr.is_null() {
++        unsafe {
++            drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)));
++        }
++    }
++}
++
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn lsp_handle(ptr: *const u8, len: usize) -> *mut u8 {
++    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
++    let messages = match serde_json::from_slice::<Value>(bytes) {
++        Ok(message) => REACTOR.with(|reactor| reactor.borrow_mut().handle(message)),
++        Err(_) => vec![],
++    };
++    let output = serde_json::to_vec(&messages).unwrap().into_boxed_slice();
++    RESPONSE_LEN.with(|len| len.set(output.len()));
++    Box::into_raw(output) as *mut u8
++}
++
++#[unsafe(no_mangle)]
++pub extern "C" fn lsp_response_len() -> usize {
++    RESPONSE_LEN.with(Cell::get)
++}

@@ -1,3 +1,5 @@
+import { getReScriptLanguageServer } from './rescript/language-server.js';
+import { getNimLanguageServer } from './nim/language-server.js';
 import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
 import { getCppLanguageServer } from './clangd/language-server.js';
 import { getDLanguageServer } from './d/language-server.js';
@@ -16,14 +18,20 @@ import {
 } from './dotnet/language-server.js';
 import { getElixirLanguageServer } from './elixir/language-server.js';
 import { getErlangLanguageServer } from './erlang/language-server.js';
+import { getC3LanguageServer } from './c3/language-server.js';
+import { getVLanguageServer } from './v/language-server.js';
 import { getFortranLanguageServer } from './fortran/language-server.js';
+import { getForthLanguageServer } from './forth/language-server.js';
 import { getGleamLanguageServer } from './gleam/language-server.js';
 import { getGoLanguageServer } from './go/language-server.js';
 import { getGraphqlLanguageServer } from './graphql/language-server.js';
 import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
+import { getLean4LanguageServer } from './lean4/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
+import { getFennelLanguageServer } from './fennel/language-server.js';
+import { getGrainLanguageServer } from './grain/language-server.js';
 import { getOcamlLanguageServer } from './ocaml/language-server.js';
 import { getOctaveLanguageServer } from './octave/language-server.js';
 import { getPascalLanguageServer } from './pascal/language-server.js';
@@ -36,6 +44,8 @@ import { getRubyLanguageServer } from './ruby/language-server.js';
 import { getRustLanguageServer } from './rust/language-server.js';
 import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/language-server.js';
 import { getPostgresqlLanguageServer } from './postgresql/language-server.js';
+import { getBashLanguageServer } from './bash/language-server.js';
+import { getCobolLanguageServer } from './cobol/language-server.js';
 import { getTclLanguageServer } from './tcl/language-server.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './types.js';
 import {
@@ -58,11 +68,29 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{ id: 'c3', languages: ['c3'], create: (options) => getC3LanguageServer(options) },
 	{
 		id: 'php',
 		languages: ['php', 'phpantom'],
 		create: (options) => getPhpLanguageServer(options)
 	},
+	{
+		id: 'forth',
+		languages: ['forth', 'fth', '4th'],
+		create: (options) => getForthLanguageServer(options)
+	},
+	{
+		id: 'rescript',
+		languages: ['rescript'],
+		create: (options) => getReScriptLanguageServer(options)
+	},
+	{ id: 'v', languages: ['v', 'vlang'], create: (options) => getVLanguageServer(options) },
+	{
+		id: 'lean4',
+		languages: ['lean4', 'lean'],
+		create: (options) => getLean4LanguageServer(options)
+	},
+	{ id: 'nim', languages: ['nim'], create: (options) => getNimLanguageServer(options) },
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],
@@ -159,9 +187,19 @@ const providerDefinitions = [
 		create: (options) => getZigLanguageServer(options)
 	},
 	{
+		id: 'grain',
+		languages: ['grain', 'gr'],
+		create: (options) => getGrainLanguageServer(options)
+	},
+	{
 		id: 'lua',
 		languages: ['lua'],
 		create: (options) => getLuaLanguageServer(options)
+	},
+	{
+		id: 'fennel',
+		languages: ['fennel', 'fnl'],
+		create: (options) => getFennelLanguageServer(options)
 	},
 	{
 		id: 'janet',
@@ -202,6 +240,16 @@ const providerDefinitions = [
 		id: 'postgresql',
 		languages: ['postgresql', 'postgres', 'pgsql'],
 		create: (options) => getPostgresqlLanguageServer(options)
+	},
+	{
+		id: 'bash',
+		languages: ['bash', 'shell', 'sh'],
+		create: (options) => getBashLanguageServer(options)
+	},
+	{
+		id: 'cobol',
+		languages: ['cobol', 'cob', 'cbl'],
+		create: (options) => getCobolLanguageServer(options)
 	},
 	{
 		id: 'graphql',

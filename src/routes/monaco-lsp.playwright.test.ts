@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { nimInvalidSource, nimValidSource } from '../../packages/lsp/test/fixtures/nim-protocol.js';
+
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import {
@@ -10,6 +12,7 @@ import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { cobolFixtureFiles } from '../../packages/lsp/test/fixtures/cobol-protocol.js';
 
 import {
 	runBrowserPreparationScripts,
@@ -24,6 +27,8 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
+// Collection precedes the browser build that creates the SDK output.
+import { WASM_LEAN4_PROFILE } from '../../packages/lsp/src/bundledLean4Runtime';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
 
 interface LspBrowserCase {
@@ -37,6 +42,8 @@ interface LspBrowserCase {
 	expectDiagnostics?: boolean;
 	validSource?: string;
 	errorLine?: number;
+	minimumMarkerSeverity?: number;
+	workspaceFiles?: Array<{ path: string; content: string }>;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	expectedRequestPathnames?: string[];
@@ -71,6 +78,8 @@ interface MonacoTestStatus {
 interface MonacoTestEditor {
 	focus(): void;
 	getModel?(): { uri: unknown } | null;
+	setPosition(position: { lineNumber: number; column: number }): void;
+	trigger(source: string, action: string, args: unknown): void;
 	getValue(): string;
 	setValue(value: string): void;
 }
@@ -126,6 +135,96 @@ const lspBrowserCases: LspBrowserCase[] = [
 		expectDiagnostics: false,
 		expectedResponses: ['/wasm-phpantom-lsp/phpantom_lsp.wasm'],
 		assertNoPreEnableRequests: ['/wasm-phpantom-lsp/']
+	},
+	{
+		language: 'FORTH',
+		label: 'Forth',
+		fileName: 'main.fth',
+		source: ': square ( n -- n ) dup * ;\n5 not-defined . cr\n',
+		expectedResponses: ['/wasm-forth-lsp/forth_lsp.wasm'],
+		assertNoPreEnableRequests: ['/wasm-forth-lsp/']
+	},
+	{
+		language: 'C3',
+		label: 'C3',
+		fileName: 'main.c3',
+		source: 'module main;\nfn void main() { \\ }\n',
+		expectedResponses: [
+			'/wasm-c3-lsp/c3_lsp.mjs',
+			'/wasm-c3-lsp/c3_lsp.wasm',
+			'/wasm-c3-lsp/stdlib.json.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-c3-lsp/']
+	},
+	{
+		language: 'RESCRIPT',
+		label: 'ReScript',
+		fileName: 'Main.res',
+		source: 'let answer: int = "text"\n',
+		validSource: 'let answer: int = 42\n',
+		errorLine: 1,
+		aliases: ['rescript'],
+		expectedResponses: [
+			'/wasm-rescript-lsp/runtime.mjs.gz.bin',
+			'/wasm-rescript-lsp/stdlib.pack.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-rescript-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'V',
+		label: 'V',
+		fileName: 'main.v',
+		statusKey: 'v',
+		source: 'module main\n// Squares an integer.\nfn square(value int) int {\n return value * value\n}\nfn main() {\n n := square(5)\n println(n)\n}\n',
+		expectDiagnostics: false,
+		expectedResponses: [
+			'/wasm-v-lsp/v_analyzer.mjs',
+			'/wasm-v-lsp/v_analyzer.wasm',
+			'/wasm-v-lsp/stdlib.json.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-v-lsp/'],
+		timeoutMs: 180_000
+	},
+	{
+		language: 'LEAN4',
+		label: 'Lean 4',
+		fileName: 'Main.lean',
+		aliases: ['lean'],
+		statusKey: 'lean4',
+		source: 'def answer : Nat := "bad"\n',
+		validSource: 'def answer : Nat := 42\n',
+		errorLine: 1,
+		timeoutMs: 240000,
+		assertNoPreEnableRequests: ['/wasm-lean4/'],
+		expectedResponses: ['/wasm-lean4/lean.mjs?', '/wasm-lean4/lean.wasm.gz.bin?'],
+		expectedRequestPathnames: Object.keys(WASM_LEAN4_PROFILE.assets).map(
+			(name) => '/wasm-lean4/' + name
+		),
+		requestPathMarker: '/wasm-lean4/',
+		requireSha256RequestPins: true,
+		expectedRequestSha256Pins: Object.fromEntries(
+			Object.entries(WASM_LEAN4_PROFILE.assets).map(([name, receipt]) => [
+				'/wasm-lean4/' + name,
+				receipt.sha256
+			])
+		)
+	},
+	{
+		language: 'NIM',
+		label: 'Nim',
+		fileName: 'main.nim',
+		source: nimInvalidSource,
+		validSource: nimValidSource,
+		errorLine: 4,
+		aliases: ['nimlsp'],
+		statusKey: 'nim',
+		assertNoPreEnableRequests: ['/wasm-nim-lsp/'],
+		expectedResponses: [
+			'/wasm-nim-lsp/nimlsp.mjs.gz.bin',
+			'/wasm-nim-lsp/nimlsp.wasm.gz.bin',
+			'/wasm-nim-lsp/stdlib.json.gz.bin'
+		]
 	},
 	{
 		language: 'CPP',
@@ -287,6 +386,43 @@ const lspBrowserCases: LspBrowserCase[] = [
 		expectedResponses: [
 			'/wasm-postgresql-lsp/dist/lsp.js',
 			'/wasm-postgresql-lsp/dist/pgls.wasm'
+		]
+	},
+	{
+		language: 'BASH',
+		label: 'Bash',
+		fileName: 'main.sh',
+		source: 'source ./missing.sh\n',
+		validSource: "printf 'hello\\n'\n",
+		errorLine: 1,
+		minimumMarkerSeverity: 2,
+		aliases: ['shell', 'sh'],
+		statusKey: 'bash',
+		assertNoPreEnableRequests: ['/wasm-bash-lsp/'],
+		expectedResponses: [
+			'/wasm-bash-lsp/runtime.mjs',
+			'/wasm-bash-lsp/tree-sitter-bash.wasm',
+			'/wasm-bash-lsp/web-tree-sitter.wasm',
+			'/wasm-bash-lsp/one_ini_bg.wasm'
+		]
+	},
+	{
+		language: 'COBOL',
+		label: 'COBOL',
+		fileName: 'main.cob',
+		source: cobolFixtureFiles['main.cob'].replace('DISPLAY GREETING.', 'DISPLAY "BROKEN.'),
+		validSource: cobolFixtureFiles['main.cob'],
+		errorLine: 8,
+		workspaceFiles: Object.entries(cobolFixtureFiles)
+			.filter(([path]) => path !== 'main.cob')
+			.map(([path, content]) => ({ path, content })),
+		aliases: ['cob', 'cbl', 'superbol'],
+		statusKey: 'cobol',
+		assertNoPreEnableRequests: ['/wasm-cobol-lsp/'],
+		expectedResponses: [
+			'/wasm-cobol-lsp/host.mjs',
+			'/wasm-cobol-lsp/superbol-browser.mjs.gz.bin',
+			'/wasm-cobol-lsp/gnucobol-config.json.gz.bin'
 		]
 	},
 	{
@@ -476,6 +612,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		timeoutMs: 240_000
 	},
 	{
+		language: 'GRAIN',
+		label: 'Grain',
+		fileName: 'main.gr',
+		aliases: ['gr'],
+		source: 'module Main\nlet value: Number = "text"\nprint(value)\n',
+		validSource: 'module Main\nlet value: Number = 42\nprint(value)\n',
+		errorLine: 2,
+		expectedResponses: [
+			'/wasm-grain-lsp/host.mjs',
+			'/wasm-grain-lsp/grainlsp.js.gz.bin',
+			'/wasm-grain-lsp/stdlib.pack.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-grain-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'TCL',
 		label: 'Tcl',
 		fileName: 'main.tcl',
@@ -495,6 +647,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		],
 		assertNoPreEnableRequests: ['/wasm-janet/'],
 		timeoutMs: 180_000
+	},
+	{
+		language: 'FENNEL',
+		label: 'Fennel',
+		fileName: 'main.fnl',
+		source: '(local answer ',
+		validSource: '(local answer 42)\n(print answer)\n',
+		errorLine: 1,
+		aliases: ['fnl'],
+		expectedResponses: [
+			'/wasm-fennel-lsp/engine.mjs',
+			'/wasm-fennel-lsp/lua.wasm',
+			'/wasm-fennel-lsp/fennel-ls.lua'
+		],
+		assertNoPreEnableRequests: ['/wasm-fennel-lsp/'],
+		timeoutMs: 120_000
 	},
 	{
 		language: 'LISP',
@@ -549,6 +717,11 @@ const lspBrowserMatrixGroups = {
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
 	'runtime-small': [
 		'PHP',
+		'FORTH',
+		'C3',
+		'COBOL',
+		'RESCRIPT',
+		'NIM',
 		'ASSEMBLYSCRIPT',
 		'WAT',
 		'GO',
@@ -558,14 +731,17 @@ const lspBrowserMatrixGroups = {
 		'PROLOG',
 		'RUBY'
 	],
-	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
+	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN', 'LEAN4'],
 	'runtime-extra': [
+		'V',
 		'OBJC',
 		'D',
 		'ELIXIR',
 		'ERLANG',
+		'GRAIN',
 		'TCL',
 		'JANET',
+		'FENNEL',
 		'LISP',
 		'R',
 		'OCTAVE',
@@ -596,11 +772,13 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:nim-lsp|lean4|v-lsp|rescript-lsp|cobol-lsp|c3-lsp|grain-lsp|bash-lsp|forth-lsp|fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
 const lspStatusKeyByLanguage: Record<string, string> = {
+	LEAN4: 'lean4',
+	NIM: 'nim',
 	TYPESCRIPT: 'typescript',
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
@@ -631,8 +809,11 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	FORTRAN: 'fortran',
 	SQLITE: 'sql',
 	POSTGRESQL: 'postgresql',
+	BASH: 'bash',
+	COBOL: 'cobol',
 	PROLOG: 'prolog',
-	RUBY: 'ruby'
+	RUBY: 'ruby',
+	RESCRIPT: 'rescript'
 };
 
 const dotnetRuntimeLanguageByLanguage: Record<string, 'csharp' | 'fsharp' | 'vbnet'> = {
@@ -1225,7 +1406,9 @@ async function runLspCase(
 		if (requestLooksLspRelated(url)) lspRequests.push(`< ${response.status()} ${url}`);
 		if (
 			process.env.WASM_IDLE_STRICT_CSP === '1' &&
-			/\/_app\/immutable\/workers\/[^/]+\.js$/u.test(new URL(url).pathname)
+			/\/_app\/immutable\/(?:workers|assets)\/(?:assets\/)?[^/]+\.js$/u.test(
+				new URL(url).pathname
+			)
 		) {
 			strictWorkerResponsePolicies.set(
 				url,
@@ -1236,6 +1419,21 @@ async function runLspCase(
 
 	await waitForPreparedPage(page, browserUrl);
 	await selectLanguage(page, testCase);
+	if (testCase.workspaceFiles) {
+		const configured = await page.evaluate(
+			async ({ files, path, content }) => {
+				const api = Reflect.get(globalThis, '__wasmIdleDebug');
+				return await api.setWorkspaceFiles([...files, { path, content }], path);
+			},
+			{
+				files: testCase.workspaceFiles,
+				path: testCase.fileName,
+				content: testCase.validSource || testCase.source
+			}
+		);
+		expect(configured).toBe(true);
+		await waitForSelectedEditorModel(page, testCase.language, testCase.fileName);
+	}
 	if (testCase.validSource) await replaceEditorSource(page, testCase.validSource);
 	await page
 		.waitForFunction(
@@ -1270,9 +1468,14 @@ async function runLspCase(
 			.filter((url) => !workersBeforeLsp.has(url) && !backgroundWorkerUrls.has(url));
 		expect(lspWorkerUrls.length).toBeGreaterThan(0);
 		for (const workerUrl of lspWorkerUrls) {
+			if (testCase.language === 'LEAN4' && workerUrl.startsWith('blob:')) {
+				// These pthread modules are the verified original glue with the documented platform patch.
+				expect(new URL(workerUrl).origin).toBe(new URL(browserUrl).origin);
+				continue;
+			}
 			const workerPolicy = strictWorkerResponsePolicies.get(workerUrl) || '';
 			expect(workerUrl, `Unexpected LSP worker URL: ${workerUrl}`).toMatch(
-				/\/_app\/immutable\/workers\/[^/]+\.js$/u
+				/\/_app\/immutable\/(?:workers|assets)\/(?:assets\/)?[^/]+\.js$/u
 			);
 			expect(workerPolicy).toContain(
 				"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
@@ -1294,7 +1497,7 @@ async function runLspCase(
 		expect(entry.progressValue).toBeGreaterThanOrEqual(0);
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
-	if (testCase.validSource) {
+	if (testCase.validSource && testCase.language !== 'LEAN4') {
 		if (lspStatusKeyFor(testCase) === 'clangd')
 			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
@@ -1351,7 +1554,8 @@ async function runLspCase(
 		expect(
 			markers.some(
 				(marker) =>
-					marker.startLineNumber === testCase.errorLine && (marker.severity || 0) >= 4
+					marker.startLineNumber === testCase.errorLine &&
+					(marker.severity || 0) >= (testCase.minimumMarkerSeverity ?? 4)
 			)
 		).toBe(true);
 		expect(
@@ -1362,17 +1566,23 @@ async function runLspCase(
 		await replaceEditorSource(page, testCase.validSource);
 		if (lspStatusKeyFor(testCase) === 'clangd')
 			await waitForClangdDiagnosticsForCurrentVersion(page);
-		else {
-			await page.waitForFunction(() => {
-				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
-				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
-				return (
-					model &&
-					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
-						.length === 0
-				);
-			});
-		}
+		else
+			await page.waitForFunction(
+				() => {
+					const api = (globalThis as typeof globalThis & MonacoTestGlobal)
+						.__wasmIdleMonacoApi;
+					const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+						.__wasmIdleMonacoEditor;
+					const model = editor?.getModel?.();
+					return (
+						api &&
+						model &&
+						api.editor.getModelMarkers({ resource: model.uri }).length === 0
+					);
+				},
+				undefined,
+				{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
+			);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'POSTGRESQL')
@@ -1412,6 +1622,249 @@ async function runLspCase(
 			testCase.source
 		);
 		await showReturnType(false);
+	}
+	if (testCase.language === 'GRAIN') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 21 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = x42\nprint(value)\n' &&
+				hooks
+					.__wasmIdleMonacoApi!.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+					})
+					.some(
+						(marker) =>
+							marker.startLineNumber === 2 &&
+							(marker.severity || 0) >= 4 &&
+							(marker.message || '').includes('x42')
+					)
+			);
+		});
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() ===
+					'module Main\nlet value: Number = 42\nprint(value)\n' &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 8 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page
+			.locator('.monaco-hover')
+			.filter({ hasText: 'Number' })
+			.first()
+			.waitFor({ timeout: 10_000 });
+		await page.keyboard.press('Escape');
+	}
+	if (testCase.language === 'C3') {
+		const validSource =
+			'module main;\nfn int square(int value) { return value * value; }\nfn void main() { int n = square(5); }\n';
+		await replaceEditorSource(page, validSource);
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: editor.getModel().getLineMaxColumn(2) });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('\\');
+		await waitForDiagnostics(page, testCase);
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction((source) => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === source &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		}, validSource);
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 9 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page.locator('.monaco-hover').filter({ hasText: 'square' }).first().waitFor();
+		await page.keyboard.press('Escape');
+	}
+	if (testCase.language === 'RESCRIPT') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 1, column: 19 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		await page.keyboard.type('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === 'let answer: int = x42\n' &&
+				hooks
+					.__wasmIdleMonacoApi!.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+					})
+					.some((marker) => (marker.severity || 0) >= 4)
+			);
+		});
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoEditor!.getValue() === 'let answer: int = 42\n' &&
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 1, column: 6 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page
+			.locator('.monaco-hover')
+			.filter({ hasText: 'int' })
+			.first()
+			.waitFor({ timeout: 10000 });
+		await page.keyboard.press('Escape');
+	}
+	if (testCase.language === 'V') {
+		// The upstream initial index runs after initialize. Wait for an editor feature
+		// from the opened document before triggering a hover at a fixed position.
+		await expect
+			.poll(
+				async () =>
+					(await page.locator('.view-lines').innerText()).replaceAll('\u00a0', ' '),
+				{
+					timeout: 120_000
+				}
+			)
+			.toContain('n: int');
+		async function expectVHover(signature: string) {
+			await page.keyboard.press('Escape');
+			await page.evaluate(() => {
+				const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+					.__wasmIdleMonacoEditor!;
+				editor.setPosition({ lineNumber: 7, column: 8 });
+				editor.focus();
+				editor.trigger('browser-test', 'editor.action.showHover', {});
+			});
+			await expect
+				.poll(
+					async () =>
+						await page
+							.locator('.monaco-hover')
+							.innerText()
+							.catch(() => ''),
+					{
+						timeout: 30_000
+					}
+				)
+				.toContain(signature);
+			expect(await page.locator('.monaco-hover').innerText()).toContain(
+				'Squares an integer.'
+			);
+		}
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 22 });
+			editor.getModel().pushStackElement();
+			editor.focus();
+		});
+		// One real keystroke changes the original analyzer's inferred return type.
+		await page.keyboard.type('?');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source.replace(') int {', ') ?int {')
+		);
+		await expectVHover('fn square(value int) ?int');
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source
+		);
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
+	}
+
+	if (testCase.language === 'NIM') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const end = editor.getModel().getLineMaxColumn(4);
+			editor.pushUndoStop();
+			editor.setSelection({
+				startLineNumber: 4,
+				startColumn: end - 1,
+				endLineNumber: 4,
+				endColumn: end
+			});
+			editor.focus();
+		});
+		// Exercise Monaco's actual edit events with the upstream Full sync contract.
+		await page.keyboard.insertText('x');
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+			return (
+				model &&
+				hooks.__wasmIdleMonacoApi?.editor
+					.getModelMarkers({ resource: model.uri })
+					.some((marker) => marker.severity === 8 && marker.startLineNumber === 4)
+			);
+		});
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction((source) => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			const editor = hooks.__wasmIdleMonacoEditor;
+			const model = editor?.getModel?.();
+			return (
+				model &&
+				editor?.getValue() === source &&
+				hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+					.length === 0
+			);
+		}, testCase.validSource);
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 5, column: 9 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		const hover = page.locator('.monaco-hover').filter({ hasText: 'proc' }).first();
+		await hover.waitFor({ timeout: 10_000 });
+		expect(await hover.innerText()).toMatch(/name:\s+string/);
+		await page.keyboard.press('Escape');
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
@@ -1571,6 +2024,7 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-heavy';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'LEAN4',
 				'DUCKDB',
 				'RUST',
 				'ZIG',
@@ -1581,12 +2035,15 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-extra';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'V',
 				'OBJC',
 				'D',
 				'ELIXIR',
 				'ERLANG',
+				'GRAIN',
 				'TCL',
 				'JANET',
+				'FENNEL',
 				'LISP',
 				'R',
 				'OCTAVE',
@@ -1668,8 +2125,49 @@ describe('Monaco LSP browser integration', () => {
 				) {
 					await runBrowserPreparationScripts(['sync:phpantom-lsp']);
 				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FENNEL')
+				) {
+					await runBrowserPreparationScripts(['sync:fennel-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FORTH')
+				) {
+					await runBrowserPreparationScripts(['sync:forth-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'BASH')
+				) {
+					await runBrowserPreparationScripts(['sync:bash-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'GRAIN')
+				)
+					await runBrowserPreparationScripts(['sync:grain-lsp']);
+				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'C3'))
+					await runBrowserPreparationScripts(['sync:c3-lsp']);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'COBOL')
+				) {
+					await runBrowserPreparationScripts(['sync:cobol-lsp']);
+				}
+				if (!reuseProvidedBrowserUrl && cases.some((entry) => entry.language === 'V'))
+					await runBrowserPreparationScripts(['sync:v-lsp']);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'NIM')
+				)
+					await runBrowserPreparationScripts(['sync:nim-lsp']);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
+						...(cases.some((testCase) => testCase.language === 'RESCRIPT')
+							? ['sync:rescript-lsp']
+							: []),
 						'build:preview',
 						'compress:build-runtimes'
 					]);
