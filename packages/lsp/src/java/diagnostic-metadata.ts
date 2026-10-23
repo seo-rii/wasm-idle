@@ -67,25 +67,27 @@ export class JavaDiagnosticMetadata {
 			!Array.isArray(params.context.diagnostics)
 		)
 			return message;
-		const originals = this.published.get(document.uri);
-		if (!originals) return message;
+		const originals = this.published.get(document.uri) || [];
 		return {
 			...message,
 			params: {
 				...params,
 				context: {
 					...params.context,
-					diagnostics: params.context.diagnostics.map((diagnostic: unknown) => {
-						if (!object(diagnostic)) return diagnostic;
+					diagnostics: params.context.diagnostics.flatMap((diagnostic: unknown) => {
+						if (!object(diagnostic)) return [diagnostic];
 						const matches = originals.filter((original) =>
 							sameDiagnostic(original, diagnostic)
 						);
-						if (matches.length !== 1) return diagnostic;
+						// A delayed or foreign marker has no usable javacs diagnostic code.
+						// Keep the actual cursor request, without inventing metadata for it.
+						if (matches.length !== 1)
+							return diagnostic.code === undefined ? [] : [diagnostic];
 						// JSON omits undefined properties; they must not erase an original field.
 						const provided = Object.fromEntries(
 							Object.entries(diagnostic).filter(([, value]) => value !== undefined)
 						);
-						return { ...matches[0], ...provided };
+						return [{ ...matches[0], ...provided }];
 					})
 				}
 			}

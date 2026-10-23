@@ -156,6 +156,30 @@ async function exerciseJavaUriBoundaries(client, snapshot, metadataFixture) {
 		code: 'explicit-client-code'
 	});
 	assert.deepEqual(explicitCodeActions, []);
+	const clearCursor = client.notifications.length;
+	await client.notify('textDocument/didChange', {
+		textDocument: { uri: alias, version: 5 },
+		contentChanges: [{ text: 'package src;\npublic class Main { int value; }\n' }]
+	});
+	// A delayed Monaco marker may arrive while the source has already changed.
+	const staleCodeActions = await codeAction({ range, message, severity });
+	assert.deepEqual(staleCodeActions, []);
+	const clearDeadline = Date.now() + 10000;
+	while (
+		!client.notifications
+			.slice(clearCursor)
+			.some(
+				(notification) =>
+					notification.method === 'textDocument/publishDiagnostics' &&
+					notification.params.uri === uri &&
+					notification.params.diagnostics.length === 0
+			)
+	) {
+		if (Date.now() > clearDeadline) throw new Error('Missing original Java diagnostic clear');
+		await new Promise((resolve) => setTimeout(resolve, 25));
+	}
+	const clearedCodeActions = await codeAction({ range, message, severity });
+	assert.deepEqual(clearedCodeActions, []);
 	await client.request('shutdown', null);
 	await client.notify('exit', null);
 	return {
@@ -168,7 +192,9 @@ async function exerciseJavaUriBoundaries(client, snapshot, metadataFixture) {
 		importDiagnostic,
 		originalCodeActions,
 		monacoCodeActions,
-		explicitCodeActions
+		explicitCodeActions,
+		staleCodeActions,
+		clearedCodeActions
 	};
 }
 

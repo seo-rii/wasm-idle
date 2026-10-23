@@ -25,6 +25,10 @@ const request = (diagnostic: unknown = omitted, targetUri = uri) => ({
 		context: { diagnostics: [diagnostic], only: ['quickfix'] }
 	}
 });
+const withoutDiagnostics = (message = request()) => ({
+	...message,
+	params: { ...message.params, context: { ...message.params.context, diagnostics: [] } }
+});
 
 describe('Java code-action diagnostic metadata', () => {
 	it('restores the exact original diagnostic without changing the request or published objects', () => {
@@ -60,18 +64,23 @@ describe('Java code-action diagnostic metadata', () => {
 		{ ...omitted, severity: undefined },
 		{ ...omitted, range: { ...omitted.range, start: { line: 3, character: 4 } } },
 		{ ...omitted, range: { ...omitted.range, end: { line: 2, character: 11 } } }
-	])('does not attach metadata to a different diagnostic: %j', (diagnostic) => {
-		const metadata = new JavaDiagnosticMetadata();
-		metadata.observe(published());
-		expect(metadata.prepare(request(diagnostic))).toEqual(request(diagnostic));
-	});
+	])(
+		'excludes an uncoded marker that does not match the current diagnostic: %j',
+		(diagnostic) => {
+			const metadata = new JavaDiagnosticMetadata();
+			metadata.observe(published());
+			expect(metadata.prepare(request(diagnostic))).toEqual(
+				withoutDiagnostics(request(diagnostic))
+			);
+		}
+	);
 
 	it('does not match diagnostics from another URI or case-distinct file', () => {
 		const metadata = new JavaDiagnosticMetadata();
 		metadata.observe(published());
 		for (const targetUri of ['file:///workspace/Other.java', uri.toLowerCase()])
 			expect(metadata.prepare(request(omitted, targetUri))).toEqual(
-				request(omitted, targetUri)
+				withoutDiagnostics(request(omitted, targetUri))
 			);
 	});
 
@@ -79,10 +88,10 @@ describe('Java code-action diagnostic metadata', () => {
 		const metadata = new JavaDiagnosticMetadata();
 		metadata.observe(published());
 		metadata.observe(published([{ ...original, message: 'new diagnostic' }]));
-		expect(metadata.prepare(request())).toEqual(request());
+		expect(metadata.prepare(request())).toEqual(withoutDiagnostics());
 		metadata.observe(published());
 		metadata.observe(published([]));
-		expect(metadata.prepare(request())).toEqual(request());
+		expect(metadata.prepare(request())).toEqual(withoutDiagnostics());
 	});
 
 	it.each(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose'])(
@@ -92,7 +101,7 @@ describe('Java code-action diagnostic metadata', () => {
 			metadata.observe(published());
 			const event = { method, params: { textDocument: { uri } } };
 			expect(metadata.prepare(event)).toBe(event);
-			expect(metadata.prepare(request())).toEqual(request());
+			expect(metadata.prepare(request())).toEqual(withoutDiagnostics());
 			metadata.observe(published());
 			expect(metadata.prepare(request())).toEqual(request(original));
 		}
@@ -101,7 +110,74 @@ describe('Java code-action diagnostic metadata', () => {
 	it('does not guess when multiple server diagnostics match the visible marker', () => {
 		const metadata = new JavaDiagnosticMetadata();
 		metadata.observe(published([original, { ...original, code: 'another-code' }]));
-		expect(metadata.prepare(request())).toEqual(request());
+		expect(metadata.prepare(request())).toEqual(withoutDiagnostics());
+	});
+
+	it('excludes uncoded markers before any diagnostic publication', () => {
+		const metadata = new JavaDiagnosticMetadata();
+		expect(metadata.prepare(request())).toEqual(withoutDiagnostics());
+		expect(metadata.prepare(request({ ...omitted, code: undefined }))).toEqual(
+			withoutDiagnostics()
+		);
+	});
+
+	it.each(['client-code', '', 0, null])(
+		'preserves explicitly coded unknown diagnostics: %j',
+		(code) => {
+			const metadata = new JavaDiagnosticMetadata();
+			const input = request({ ...omitted, code });
+			expect(metadata.prepare(input)).toEqual(input);
+		}
+	);
+
+	it('filters only delayed uncoded markers while preserving the request range and context', () => {
+		const metadata = new JavaDiagnosticMetadata();
+		metadata.observe(published());
+		const explicit = { ...omitted, code: 'other-provider', message: 'another provider' };
+		const input = {
+			...request(),
+			params: {
+				...request().params,
+				range: { start: { line: 2, character: 8 }, end: { line: 2, character: 8 } },
+				context: {
+					only: ['quickfix'],
+					triggerKind: 2,
+					diagnostics: [omitted, { ...omitted, message: 'stale marker' }, explicit]
+				}
+			}
+		};
+		expect(metadata.prepare(input)).toEqual({
+			...input,
+			params: {
+				...input.params,
+				context: { ...input.params.context, diagnostics: [original, explicit] }
+			}
+		});
+	});
+
+	it('drops a delayed typing marker after a newer publication moves its range', () => {
+		const metadata = new JavaDiagnosticMetadata();
+		const old = {
+			...original,
+			code: 'unused_local',
+			message: "'answer' is not used",
+			severity: 3,
+			range: { start: { line: 2, character: 7 }, end: { line: 2, character: 13 } }
+		};
+		metadata.observe(published([old]));
+		const delayed = request({ range: old.range, message: old.message, severity: old.severity });
+		metadata.observe(
+			published([
+				{
+					...old,
+					range: {
+						start: { line: 2, character: 8 },
+						end: { line: 2, character: 14 }
+					}
+				}
+			])
+		);
+		expect(metadata.prepare(delayed)).toEqual(withoutDiagnostics(delayed));
 	});
 
 	it('keeps an immutable snapshot of the actual server diagnostics', () => {
