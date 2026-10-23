@@ -364,6 +364,7 @@ describe('LldbSandboxSession', () => {
 				frameId: 41,
 				sourcePath: '/workspace/main.cpp',
 				sourceContentSha256: 'source-hash',
+				callStackComplete: false,
 				scopes: [],
 				callStack: [{ id: 41 }]
 			});
@@ -390,63 +391,99 @@ describe('LldbSandboxSession', () => {
 						?.callStack.map((frame: any) => frame.id)
 				).toEqual([41, 42]);
 				expect(details.find((event) => event.scopes)?.scopes).toHaveLength(3);
+				expect(details.find((event) => event.callStack)?.callStackComplete).toBe(true);
 			}
 			await controller.disconnect();
 			await completion;
 		}
 	);
 
-	it('unwinds in bounded pages and retains the existing 100-frame limit', async () => {
-		const events: any[] = [];
-		const controller = new LldbSandboxSession({
-			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
-			runtimeBaseUrl: 'https://example.com/debug/',
-			artifact: {
-				bytes: Uint8Array.of(0),
-				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
-			},
-			sourcePath: '/workspace/main.cpp',
-			breakpoints: [],
-			pauseOnEntry: true,
-			onDebugEvent: (event) => events.push(event),
-			onOutput: () => undefined,
-			fetchImpl: (async () =>
-				new Response(JSON.stringify({ manifestVersion: 2 }))) as typeof fetch
-		});
-		const completion = controller.start();
-		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
-		const session = runtimeState.session!;
-		const request = session.request.bind(session);
-		const pages: Array<{ startFrame: number; levels: number }> = [];
-		vi.spyOn(session, 'request').mockImplementation(async (command, args: any) => {
-			if (command !== 'stackTrace') return request(command, args);
-			pages.push(args);
-			return {
-				totalFrames: 125,
-				stackFrames: Array.from({ length: args.levels }, (_, index) => ({
-					id: args.startFrame + index + 1,
-					name: 'recursive',
-					line: 3,
-					column: 1,
-					source: { path: '/workspace/main.cpp' }
-				}))
-			};
-		});
-		session.emit({ event: 'stopped', body: { reason: 'breakpoint', threadId: 7 } });
-		await vi.waitFor(() =>
-			expect(events.some((event) => event.callStack?.length === 100)).toBe(true)
-		);
-		expect(pages.map(({ startFrame, levels }) => [startFrame, levels])).toEqual([
-			[0, 1],
-			[1, 20],
-			[21, 20],
-			[41, 20],
-			[61, 20],
-			[81, 19]
-		]);
-		await controller.disconnect();
-		await completion;
-	});
+	it.each([
+		{ totalFrames: 125, actualFrames: 125, expectedFrames: 100, complete: false },
+		{ totalFrames: undefined, actualFrames: 125, expectedFrames: 100, complete: false },
+		{ totalFrames: 100, actualFrames: 100, expectedFrames: 100, complete: true },
+		{ totalFrames: undefined, actualFrames: 2, expectedFrames: 2, complete: true },
+		{ totalFrames: 5, actualFrames: 2, expectedFrames: 2, complete: false }
+	])(
+		'bounds caller stack completion with total=$totalFrames actual=$actualFrames',
+		async ({ totalFrames, actualFrames, expectedFrames, complete }) => {
+			const events: any[] = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: (async () =>
+					new Response(JSON.stringify({ manifestVersion: 2 }))) as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const session = runtimeState.session!;
+			const request = session.request.bind(session);
+			const pages: Array<{ startFrame: number; levels: number }> = [];
+			vi.spyOn(session, 'request').mockImplementation(async (command, args: any) => {
+				if (command !== 'stackTrace') return request(command, args);
+				pages.push(args);
+				return {
+					totalFrames,
+					stackFrames: Array.from(
+						{ length: Math.min(args.levels, actualFrames - args.startFrame) },
+						(_, index) => ({
+							id: args.startFrame + index + 1,
+							name: 'recursive',
+							line: 3,
+							column: 1,
+							source: { path: '/workspace/main.cpp' }
+						})
+					)
+				};
+			});
+			session.emit({ event: 'stopped', body: { reason: 'breakpoint', threadId: 7 } });
+			const expectedPages =
+				expectedFrames === 100
+					? [
+							[0, 1],
+							[1, 20],
+							[21, 20],
+							[41, 20],
+							[61, 20],
+							[81, 19]
+						]
+					: totalFrames === undefined
+						? [
+								[0, 1],
+								[1, 20],
+								[2, 20]
+							]
+						: [
+								[0, 1],
+								[1, 4],
+								[2, 3]
+							];
+			await vi.waitFor(() =>
+				expect(
+					events.filter((event) => event.type === 'pauseDetails' && event.callStack)
+				).toHaveLength(expectedPages.length - 1)
+			);
+			const lastStack = events
+				.filter((event) => event.type === 'pauseDetails' && event.callStack)
+				.at(-1);
+			expect(lastStack.callStack).toHaveLength(expectedFrames);
+			expect(lastStack.callStackComplete).toBe(complete);
+			expect(pages.map(({ startFrame, levels }) => [startFrame, levels])).toEqual(
+				expectedPages
+			);
+			await controller.disconnect();
+			await completion;
+		}
+	);
 	it.each([false, true])(
 		'requests one formatted frame only when the adapter supports value formatting (%s)',
 		async (supported) => {
@@ -4420,6 +4457,23 @@ describe('LldbSandboxSession', () => {
 			const last = events.filter((event) => event.type === 'pause').at(-1);
 			expect(last.sessionId).toBe(first.sessionId);
 			expect(last.stopId).toBeGreaterThan(first.stopId);
+			const lastPauseIndex = events.lastIndexOf(last);
+			await vi.waitFor(() =>
+				expect(
+					events
+						.slice(lastPauseIndex + 1)
+						.filter((event) => event.type === 'pauseDetails')
+				).toHaveLength(2)
+			);
+			expect(
+				events
+					.slice(lastPauseIndex + 1)
+					.filter((event) => event.type === 'pauseDetails')
+					.every(
+						(event) =>
+							event.stopId === last.stopId && event.sessionId === last.sessionId
+					)
+			).toBe(true);
 			await controller.disconnect();
 			await completion;
 		});

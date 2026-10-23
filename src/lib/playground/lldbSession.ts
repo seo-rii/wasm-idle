@@ -1616,9 +1616,10 @@ export class LldbSandboxSession {
 			selectedFrame.source?.path || ''
 		);
 		const stopId = ++this.stopId;
+		const sessionId = `${this.sessionIdentity}-${this.lifecycleVersion}`;
 		this.options.onDebugEvent({
 			type: 'pause',
-			sessionId: `${this.sessionIdentity}-${this.lifecycleVersion}`,
+			sessionId,
 			stopId,
 			capabilities: {
 				readMemory: this.supportsReadMemory,
@@ -1642,6 +1643,7 @@ export class LldbSandboxSession {
 			frameId: selectedFrame.id,
 			locals: [],
 			callStack: this.debugFrames(frames),
+			callStackComplete: totalFrames !== undefined && frames.length >= totalFrames,
 			scopes: []
 		});
 		this.command = null;
@@ -1654,12 +1656,14 @@ export class LldbSandboxSession {
 				if (!this.isCurrentValueRequest(session, version)) return;
 				this.options.onDebugEvent({
 					type: 'pauseDetails',
+					sessionId,
 					stopId,
 					frameId: selectedFrame.id,
 					scopes
 				});
 			})(),
 			(async () => {
+				let knownTotalFrames = totalFrames;
 				let end = totalFrames === undefined ? 100 : Math.min(totalFrames, 100);
 				while (frames.length < end && this.isCurrentValueRequest(session, version)) {
 					const { frames: page, totalFrames: total } = await this.requestStackPage(
@@ -1669,7 +1673,21 @@ export class LldbSandboxSession {
 						Math.min(20, end - frames.length)
 					);
 					if (!this.isCurrentValueRequest(session, version)) return;
-					if (!page.length) break;
+					if (total !== undefined) {
+						knownTotalFrames = total;
+						end = Math.min(total, 100);
+					}
+					if (!page.length) {
+						this.options.onDebugEvent({
+							type: 'pauseDetails',
+							sessionId,
+							stopId,
+							callStack: this.debugFrames(frames),
+							callStackComplete:
+								knownTotalFrames === undefined || frames.length >= knownTotalFrames
+						});
+						break;
+					}
 					const ids = new Set(frames.map((frame) => frame.id));
 					for (const frame of page) {
 						if (ids.has(frame.id))
@@ -1681,11 +1699,13 @@ export class LldbSandboxSession {
 						ids.add(frame.id);
 					}
 					frames.push(...page);
-					if (total !== undefined) end = Math.min(total, 100);
 					this.options.onDebugEvent({
 						type: 'pauseDetails',
+						sessionId,
 						stopId,
-						callStack: this.debugFrames(frames)
+						callStack: this.debugFrames(frames),
+						callStackComplete:
+							knownTotalFrames !== undefined && frames.length >= knownTotalFrames
 					});
 				}
 			})()
