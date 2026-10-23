@@ -52,7 +52,10 @@ vi.mock('../../clang/src/index.js', () => {
 		stdout = (_chunk: string) => {};
 		log = false;
 		assetUrls = { lld: 'lld.wasm.gz' };
-		compilerConfig = { compilerRuntimeLibDir: 'lib/clang/22/lib/wasi' };
+		compilerConfig = {
+			compilerRuntimeLibDir: 'lib/clang/22/lib/wasi',
+			provenance: { name: 'clang', version: '22.1.8', revision: 'a'.repeat(40) }
+		};
 		constructor(options: Record<string, unknown>) {
 			calls.runtimeOptions.push(options);
 		}
@@ -249,6 +252,31 @@ describe('V llvm-core runtime', () => {
 		expect(result.stderr).not.toContain('/work/');
 		expect(calls.compile).toEqual([]);
 		expect(calls.run).toEqual([]);
+	});
+
+	it('requests V source line directives and unoptimized Clang DWARF for LLDB', async () => {
+		const compiler = await createVCompiler({ ...runtimeLocations, manifest });
+		const code = 'fn main() { println(73) }';
+		const result = await compiler.compile({ code, fileName: 'src/main.v', debugMode: 'lldb' });
+		expect(result.success, result.stderr).toBe(true);
+		expect(calls.translate[0].args).toContain('-g');
+		expect(calls.compile[0]).toMatchObject({
+			debugMode: 'lldb',
+			opt: '0',
+			compileArgs: expect.arrayContaining(['-fdebug-prefix-map=/work=/workspace'])
+		});
+		expect(result.artifact?.wasm).toBeUndefined();
+		expect(result.artifact?.debug).toMatchObject({
+			kind: 'dwarf',
+			sourceRoot: '/workspace',
+			files: [
+				{
+					path: '/workspace/src/main.v',
+					contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+				}
+			],
+			compiler: { name: 'clang', version: '22.1.8' }
+		});
 	});
 
 	it('rejects empty source without starting the compiler', async () => {

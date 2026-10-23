@@ -1,6 +1,8 @@
 import { compileDotnet, createDotnetCompiler, parseDotnetDiagnostics } from './compiler.js';
 import { executeBrowserDotnetArtifact } from './browser-execution.js';
 import { loadDotnetCompilerRuntime, resetDotnetCompilerRuntimeForTests } from './runtime-loader.js';
+export { connectMonoDebugAgent } from './debug-agent.js';
+export type { MonoDebugAgentConnection, MonoDebugCommandResponse } from './debug-agent.js';
 
 export type {
 	BrowserDotnetArtifact,
@@ -13,6 +15,7 @@ export type {
 	CompilerDiagnostic,
 	CompilerLogRecord,
 	DotnetLanguage,
+	DotnetDebugMetadata,
 	DotnetRuntimeCompileRequest,
 	DotnetRuntimeCompileResponse,
 	DotnetRuntimeRunRequest,

@@ -1,6 +1,7 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { CompiledLldbSandbox } from '$lib/playground/compiledLldb';
 import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
-import type { DebugCommand, DebugSessionEvent } from '$lib/playground/options';
+import type { DebugCommand } from '$lib/playground/options';
 import {
 	resolveObjectiveCRuntimeAssetConfig,
 	resolveRuntimeAssetConfig,
@@ -34,10 +35,8 @@ const objectiveCAssetsKey = (assets: ResolvedObjectiveCRuntimeAssetConfig) =>
 
 export type ObjectiveCSandboxLanguage = 'OBJC' | 'OBJECTIVECXX';
 
-class ObjectiveC implements Sandbox {
+class ObjectiveC extends CompiledLldbSandbox implements Sandbox {
 	language: ObjectiveCSandboxLanguage;
-	output?: (data: string) => void;
-	ondebug?: (event: DebugSessionEvent) => void;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(4096);
 	debugBuffer = createWasmIdleSharedBuffer(
@@ -79,6 +78,7 @@ class ObjectiveC implements Sandbox {
 	});
 
 	constructor(language: ObjectiveCSandboxLanguage = 'OBJC') {
+		super();
 		this.language = language;
 	}
 
@@ -107,6 +107,7 @@ class ObjectiveC implements Sandbox {
 			return Promise.reject(error);
 		}
 		return this.workerSession.load(async (resolve, reject, operation) => {
+			this.configureLldb(runtimeAssets, options);
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -183,12 +184,20 @@ class ObjectiveC implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.lldbSession) {
+			void this.lldbSession.write(input);
+			return;
+		}
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.lldbSession) {
+			void this.lldbSession.eof();
+			return;
+		}
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -214,7 +223,16 @@ class ObjectiveC implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (options.debug) requireSharedArrayBuffer('Objective-C debugging');
+		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
+		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
+			return Promise.reject(
+				new Error(`Objective-C does not support ${debugMode} debugging.`)
+			);
+		}
+		if (debugMode !== 'none') requireSharedArrayBuffer('Objective-C debugging');
+		if (debugMode === 'lldb') {
+			this.prepareLldb(options, this.language === 'OBJECTIVECXX' ? 'main.mm' : 'main.m');
+		} else this.lldbPending = false;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
@@ -224,7 +242,9 @@ class ObjectiveC implements Sandbox {
 				args,
 				options
 			);
-			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
+			if (debugMode !== 'lldb') {
+				this.setBreakpoints(debugMode === 'trace' ? [...(options.breakpoints || [])] : []);
+			}
 			const interrupt = new Uint8Array(this.interruptBuffer);
 			const _uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
@@ -232,7 +252,41 @@ class ObjectiveC implements Sandbox {
 				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, log, error, buffer, progress, debugEvent } = event.data;
+				const { output, results, log, error, buffer, progress, debugEvent, lldbArtifact } =
+					event.data;
+				if (lldbArtifact) {
+					const worker = this.worker;
+					const completion = this.startLldb(
+						lldbArtifact,
+						options,
+						programArgs,
+						this.pendingInput,
+						this.pendingEof
+					);
+					this.pendingEof = false;
+					if (this.workerSession.release(worker)) {
+						this.assetBridge?.dispose();
+						this.assetBridge = null;
+						delete this.worker;
+					}
+					void completion.then(
+						(result) => {
+							if (!this.workerSession.isActive(operation)) return;
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.workerSession.complete(operation);
+							resolve(result);
+						},
+						(sessionError) => {
+							if (!this.workerSession.isActive(operation)) return;
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.workerSession.complete(operation);
+							reject(sessionError);
+						}
+					);
+					return;
+				}
 				if (buffer) {
 					this.waitingForInput = true;
 					if (!prepare) {
@@ -243,6 +297,7 @@ class ObjectiveC implements Sandbox {
 				if (output) this.output?.(output);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
+					this.lldbPending = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -253,6 +308,7 @@ class ObjectiveC implements Sandbox {
 				}
 				if (log) console.log(log);
 				if (error) {
+					this.lldbPending = false;
 					this.elapse = Date.now() - this.begin;
 					this.waitingForInput = false;
 					this.pendingEof = false;
@@ -282,7 +338,8 @@ class ObjectiveC implements Sandbox {
 					options.activePath ||
 					(this.language === 'OBJECTIVECXX' ? 'main.mm' : undefined),
 				workspaceFiles: options.workspaceFiles,
-				debug: !!options.debug,
+				debugMode,
+				debug: debugMode === 'trace',
 				breakpoints: [...(options.breakpoints || [])],
 				pauseOnEntry: !!options.pauseOnEntry
 			});
@@ -290,6 +347,7 @@ class ObjectiveC implements Sandbox {
 	}
 
 	debugCommand(command: DebugCommand) {
+		if (this.lldbPending) return super.debugCommand(command);
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.store(
 			control,
@@ -301,7 +359,8 @@ class ObjectiveC implements Sandbox {
 		this.ondebug?.({ type: 'resume', command });
 	}
 
-	setBreakpoints(lines: number[]) {
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		if (this.lldbPending) return super.setBreakpoints(lines, sourcePath);
 		const control = new Int32Array(this.debugBuffer);
 		const next = [...new Set(lines.filter((line) => Number.isInteger(line) && line > 0))]
 			.sort((left, right) => left - right)
@@ -314,6 +373,7 @@ class ObjectiveC implements Sandbox {
 	}
 
 	async debugEvaluate(expression: string) {
+		if (this.lldbPending) return super.debugEvaluate(expression);
 		if (!this.worker) throw new Error('Worker not loaded');
 		resetBufferedStdin(this.watchResultBuffer);
 		const previousSequence = bufferedSequence(this.watchResultBuffer);
@@ -333,6 +393,7 @@ class ObjectiveC implements Sandbox {
 	}
 
 	terminate() {
+		void this.stopLldb();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;

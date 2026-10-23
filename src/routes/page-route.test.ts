@@ -354,12 +354,35 @@ describe('example route debug actions', () => {
 		expect(source).toContain('<strong>Changed</strong>');
 		expect(source).toMatch(/breakpoints: \[\.\.\.debug\.effectiveBreakpoints\],/);
 		expect(source).toMatch(/sourceBreakpoints: debug\.sourceBreakpoints\.filter/);
-		expect(source).toMatch(
-			/const lldbDebugLanguages = new Set<PlaygroundLanguage>\(\['C', 'CPP', 'RUST'\]\);/
-		);
-		expect(source).toMatch(
-			/const selectedDebugMode = \$derived\(\s*lldbDebugLanguages\.has\(language\) \? \('lldb' as const\) : \('trace' as const\)\s*\);/s
-		);
+		const lldbLanguages = source.match(
+			/const lldbDebugLanguages = new Set<PlaygroundLanguage>\(\[([\s\S]*?)\]\);/
+		)?.[1];
+		expect(lldbLanguages?.match(/'[^']+'/g)?.map((name) => name.slice(1, -1))).toEqual([
+			'C',
+			'CPP',
+			'RUST',
+			'OBJC',
+			'OBJECTIVECXX',
+			'V'
+		]);
+		const selectedMode = source
+			.match(/const selectedDebugMode = \$derived\(([\s\S]*?)\n\t\);/)?.[1]
+			.replaceAll(' as const', '');
+		expect(selectedMode).toBeDefined();
+		for (const [language, expected] of [
+			['C', 'lldb'],
+			['JAVA', 'trace'],
+			['GO', 'trace'],
+			['LUA', 'mobdebug'],
+			['RUBY', 'tracepoint']
+		]) {
+			expect(
+				runInNewContext(selectedMode!, {
+					language,
+					lldbDebugLanguages: new Set(['C', 'CPP', 'RUST', 'OBJC', 'OBJECTIVECXX', 'V'])
+				})
+			).toBe(expected);
+		}
 		expect(source).toMatch(/language !== 'RUST' \|\| rustTargetTriple === 'wasm32-wasip1'/);
 		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
 		expect(source).toMatch(/executionDebugMode = 'trace';/);

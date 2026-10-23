@@ -70,8 +70,9 @@ export interface LldbSandboxSessionOptions {
 	}>;
 	debugSteppingOptions?: DebugSteppingOptions;
 	pauseOnEntry: boolean;
-	/** C/C++ source entry; the low-level runtime still stops safely before _start executes. */
+	/** Source entry; the low-level runtime still stops safely before _start executes. */
 	pauseAtMain?: boolean;
+	entryFunctionName?: string;
 	programArgs?: string[];
 	stdin?: string;
 	onDebugEvent: (event: DebugSessionEvent) => void;
@@ -1387,7 +1388,11 @@ export class LldbSandboxSession {
 				invalidDapPayload('stopped event', 'allThreadsStopped', 'expected a boolean');
 			}
 			const reason =
-				this.pauseRequested && body.reason === 'exception' ? 'pause' : body.reason;
+				this.pauseRequested &&
+				(body.reason === 'exception' ||
+					(this.entryPhase === 'initial' && body.reason === 'entry'))
+					? 'pause'
+					: body.reason;
 			this.pauseRequested = false;
 			const session = this.requireSession();
 			const version = ++this.stateVersion;
@@ -1523,7 +1528,9 @@ export class LldbSandboxSession {
 			await this.entrySetup?.ready;
 			if (!this.isCurrentValueRequest(session, version)) return;
 			this.entryPhase = 'done';
-			if (reason === 'entry' && selectedFrame.name === '_start' && !isWorkspaceFrame) {
+			if (reason === 'entry' && !isWorkspaceFrame) {
+				// WAMR's initial stop can resolve to a WASI import wrapper in Rust modules.
+				// Only the entry reason authorizes running past a non-workspace frame.
 				// configurationDone has already installed all user source breakpoints. Function
 				// breakpoints occupy a separate DAP registry owned by this product session.
 				this.entryPhase = 'seeking-main';
@@ -1542,7 +1549,7 @@ export class LldbSandboxSession {
 					reason = 'pause';
 				} else {
 					this.options.onOutput(
-						'LLDB could not resolve main; paused at runtime entry.\n'
+						`LLDB could not resolve ${this.options.entryFunctionName ?? 'main'}; paused at runtime entry.\n`
 					);
 				}
 			}
@@ -1552,7 +1559,11 @@ export class LldbSandboxSession {
 			this.entryPhase = 'done';
 			await this.setMainEntryBreakpoint(session, false);
 			if (!this.isCurrentValueRequest(session, version)) return;
-			if (reason === 'breakpoint' && selectedFrame.name === 'main' && isWorkspaceFrame) {
+			if (
+				reason === 'breakpoint' &&
+				selectedFrame.name === (this.options.entryFunctionName ?? 'main') &&
+				isWorkspaceFrame
+			) {
 				reason = 'entry';
 			}
 		}
@@ -1610,7 +1621,7 @@ export class LldbSandboxSession {
 
 	private async setMainEntryBreakpoint(session: BrowserLldbSession, enabled: boolean) {
 		const response = await session.request<unknown>('setFunctionBreakpoints', {
-			breakpoints: enabled ? [{ name: 'main' }] : []
+			breakpoints: enabled ? [{ name: this.options.entryFunctionName ?? 'main' }] : []
 		});
 		const breakpoints = dapResponseCollection(
 			response,

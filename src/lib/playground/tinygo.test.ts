@@ -241,6 +241,16 @@ vi.mock('$lib/playground/tinygoExecutableGraph', () => ({
 import TinyGo from './tinygo';
 
 describe('TinyGo sandbox', () => {
+	it('rejects a debug request before compiling an ordinary release artifact', async () => {
+		const sandbox = new TinyGo();
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, false, undefined, [], {
+				debugMode: 'lldb'
+			})
+		).rejects.toThrow('does not provide a debug runtime closure');
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.stubGlobal('fetch', vi.fn());

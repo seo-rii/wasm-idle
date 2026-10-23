@@ -3,6 +3,7 @@ import {
 	type PlaygroundRuntimeAssets,
 	type ResolvedDRuntimeAssetConfig
 } from '$lib/playground/assets';
+import { CompiledLldbSandbox } from '$lib/playground/compiledLldb';
 import {
 	BusyError,
 	CancelledError,
@@ -28,7 +29,7 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import { WASM_D_COMPILER_PROFILE } from '$lib/playground/wasmDVersion';
@@ -54,7 +55,8 @@ const abortReason = (signal: AbortSignal, phase: DOperation['phase']) =>
 				'AbortError'
 			);
 
-class D implements Sandbox {
+class D extends CompiledLldbSandbox implements Sandbox {
+	protected lldbEntryFunction = '_Dmain';
 	output: any = null;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(1024);
@@ -71,6 +73,7 @@ class D implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: DOperation | null = null;
+	private lldbAssets: Pick<PlaygroundRuntimeAssets, 'rootUrl' | 'debug' | 'persistentCache'> = {};
 	private disposed = false;
 	private runtimeAssetCache = new RuntimeAssetCache();
 	private ownsRuntimeAssetCache = true;
@@ -219,9 +222,10 @@ class D implements Sandbox {
 	private bindOperationTimeout(operation: DOperation, timeoutMs: number) {
 		if (!this.isOperationActive(operation)) return;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
-		operation.cleanups.push(() => {
+		const cancelTimeout = () => {
 			if (timeout !== undefined) clearTimeout(timeout);
-		});
+		};
+		operation.cleanups.push(cancelTimeout);
 		try {
 			timeout = setTimeout(() => {
 				if (!this.isOperationActive(operation)) return;
@@ -239,6 +243,7 @@ class D implements Sandbox {
 		} catch (error) {
 			this.cancelOperation(operation, error);
 		}
+		return cancelTimeout;
 	}
 
 	private resetExplicitStdinState() {
@@ -276,6 +281,15 @@ class D implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
+			// Ordinary D execution only needs its compiler bundle. Keep debugger settings
+			// across worker retirement, but resolve their URLs only for an LLDB run.
+			const assets: PlaygroundRuntimeAssets =
+				typeof runtimeAssets === 'string' ? { rootUrl: runtimeAssets } : runtimeAssets;
+			this.lldbAssets = {
+				rootUrl: assets.rootUrl,
+				debug: assets.debug ? { ...assets.debug } : undefined,
+				persistentCache: options.persistentCache ?? assets.persistentCache
+			};
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
@@ -391,6 +405,10 @@ class D implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.lldbSession) {
+			void this.lldbSession.write(input);
+			return;
+		}
 		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
@@ -398,6 +416,10 @@ class D implements Sandbox {
 	}
 
 	eof() {
+		if (this.lldbSession) {
+			void this.lldbSession.eof();
+			return;
+		}
 		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
@@ -427,6 +449,7 @@ class D implements Sandbox {
 		if (!this.worker && this.moduleUrl && this.outerIntegrity && !this.disposed) {
 			await this.load(
 				{
+					...this.lldbAssets,
 					d: {
 						moduleUrl: this.moduleUrl,
 						manifestUrl: this.manifestUrl,
@@ -467,7 +490,21 @@ class D implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
+		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
 		try {
+			if (debugMode !== 'none' && debugMode !== 'lldb') {
+				throw new Error('D debugging requires debugMode: lldb.');
+			}
+			if (debugMode === 'lldb') {
+				requireSharedArrayBuffer('D debugging');
+				if (options.workspaceFiles?.some((file) => file.path !== options.activePath)) {
+					throw new Error(
+						'The packaged D compiler supports one source file per LLDB session.'
+					);
+				}
+				this.configureLldb(this.lldbAssets, options);
+				this.prepareLldb(options, 'main.d');
+			}
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) {
@@ -521,17 +558,18 @@ class D implements Sandbox {
 				2_147_483_647,
 				limits.compileTimeoutMs + limits.runTimeoutMs
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			const cancelCompileTimeout = this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
+			let handedOff = false;
 			const ownsRun = () =>
 				this.isOperationActive(activeOperation) &&
-				this.worker === worker &&
-				worker.onmessage === handler &&
+				(handedOff || (this.worker === worker && worker.onmessage === handler)) &&
 				_uid === this.uid;
 			const claimRun = () => {
 				if (!ownsRun()) return false;
+				this.lldbPending = false;
 				this.finishExplicitStdin(activeOperation);
 				this.elapse = Date.now() - this.begin;
 				this.exit = true;
@@ -564,7 +602,48 @@ class D implements Sandbox {
 			handler = (event: Event & { data: any }) => {
 				if (!ownsRun()) return;
 				try {
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const { output, results, error, buffer, diagnostic, progress, lldbArtifact } =
+						event.data;
+					if (lldbArtifact) {
+						cancelCompileTimeout?.();
+						handedOff = true;
+						const completion = this.startLldb(
+							lldbArtifact,
+							options,
+							programArgs,
+							this.pendingInput,
+							this.pendingEof,
+							(output) => {
+								if (!ownsRun()) return;
+								outputBytes += OUTPUT_ENCODER.encode(output).byteLength;
+								if (outputBytes > limits.maxOutputBytes) {
+									failRun(
+										new OutputLimitError(
+											`D output exceeded ${limits.maxOutputBytes} bytes`,
+											{
+												actual: outputBytes,
+												limit: limits.maxOutputBytes,
+												phase: 'execute',
+												runtimeId: 'D'
+											}
+										),
+										true
+									);
+									return;
+								}
+								this.output?.(output);
+							}
+						);
+						this.pendingEof = false;
+						if (this.workerSession.release(worker)) delete this.worker;
+						void completion.then(
+							(result) => {
+								if (claimRun()) resolve(result);
+							},
+							(error) => failRun(error)
+						);
+						return;
+					}
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
@@ -681,6 +760,7 @@ class D implements Sandbox {
 					stdin,
 					fileName: workspace.activePath,
 					log: _log,
+					debugMode,
 					...(modulePorts.ldc2 ? { compilerModulePorts: modulePorts } : {})
 				};
 				const transfers = Object.values(modulePorts);
@@ -701,6 +781,7 @@ class D implements Sandbox {
 
 	private cancelOperation(operation: DOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
+		void this.stopLldb();
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
 		this.activeOperation = null;
@@ -730,6 +811,7 @@ class D implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		void this.stopLldb();
 		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
@@ -758,6 +840,7 @@ class D implements Sandbox {
 
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
+		void this.stopLldb();
 		this.disposed = true;
 		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
 		this.disposePromise = Promise.resolve();
@@ -768,6 +851,7 @@ class D implements Sandbox {
 		this.manifestUrl = '';
 		this.outerIntegrity = undefined;
 		this.activeDAssetsKey = '';
+		this.lldbAssets = {};
 		this.output = null;
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();

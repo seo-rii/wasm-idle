@@ -29,6 +29,10 @@ export interface BrowserDotnetCompileRequest {
 	log?: boolean;
 	runtimeDiagnosticTracing?: boolean;
 	prepare?: boolean;
+	/** Emit and load Portable PDB symbols. This does not attach a debugger. */
+	debug?: boolean;
+	/** Normalized virtual path used by Portable PDB documents and diagnostics. */
+	sourcePath?: string;
 	onProgress?: (progress: BrowserDotnetCompileProgress) => void;
 }
 
@@ -37,6 +41,16 @@ export interface BrowserDotnetArtifact {
 	assemblyId: string;
 	language: DotnetLanguage;
 	target: DotnetTarget;
+	debug?: DotnetDebugMetadata;
+}
+
+export interface DotnetDebugMetadata {
+	format: 'portable-pdb';
+	sourcePath: string;
+	assemblyName: string;
+	moduleVersionId: string;
+	assemblyBytesBase64: string;
+	symbolsBytesBase64: string;
 }
 
 export interface CompilerLogRecord {
@@ -78,6 +92,8 @@ export interface DotnetRuntimeCompileRequest {
 	references?: DotnetReferenceAssembly[];
 	/** Managed-runtime-local token. Do not persist across runtime restarts. */
 	referenceSetId?: string;
+	debug?: boolean;
+	sourcePath?: string;
 }
 
 export interface DotnetRuntimeCompileResponse {
@@ -88,6 +104,7 @@ export interface DotnetRuntimeCompileResponse {
 	diagnostics?: CompilerDiagnostic[];
 	logs?: string[];
 	error?: string;
+	debug?: DotnetDebugMetadata;
 }
 
 export interface DotnetRuntimeRunRequest {

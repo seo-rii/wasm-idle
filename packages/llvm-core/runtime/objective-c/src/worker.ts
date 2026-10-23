@@ -5,6 +5,8 @@ import {
 	resolveClangLanguageArgs
 } from '../../core/src/clang-profile.js';
 import type { BrowserClangArtifact, BrowserClangRuntime as Clang } from '../../clang/src/index.js';
+import { createDwarfDebugDescriptor } from '../../clang/src/dwarf.js';
+import { normalizeDwarfWorkspacePath } from '../../clang/src/workspace.js';
 import {
 	BrowserClangRuntime,
 	executeBrowserClangArtifact,
@@ -854,7 +856,8 @@ async function compileObjectiveCObject(
 	language: ObjectiveCSourceLanguage,
 	compileArgs: string[] = [],
 	debug = false,
-	transformSource?: (source: string) => string
+	transformSource?: (source: string) => string,
+	lldb = false
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
 	if (debug) {
@@ -908,7 +911,16 @@ async function compileObjectiveCObject(
 		language,
 		...(usesObjectiveCRuntime(language) ? OBJECTIVE_C_RUNTIME_FLAGS : []),
 		input,
-		...compileArgs
+		...compileArgs,
+		...(lldb
+			? [
+					'-O0',
+					'-debug-info-kind=standalone',
+					'-dwarf-version=4',
+					'-debugger-tuning=gdb',
+					'-fdebug-compilation-dir=/'
+				]
+			: [])
 	];
 	try {
 		clangRuntime.stdout = (chunk) => compileOutput.push(chunk);
@@ -928,12 +940,30 @@ async function compileAndLinkObjectiveC(
 	activePath: string | undefined,
 	workspaceFiles: ObjectiveCWorkspaceFile[],
 	compileArgs: string[] = [],
-	debug = false
+	debug = false,
+	lldb = false
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
 	const trace = (message: string) => console.log(`[wasm-idle:objectivec-worker] ${message}`);
-	const inputPath = resolveInputPath(activePath);
-	const prefix = `__wasm_idle_objc_${++buildCounter}`;
+	const inputPath = resolveInputPath(
+		lldb ? normalizeDwarfWorkspacePath(activePath || '') : activePath
+	);
+	// Absolute DWARF paths must match the immutable source snapshots sent to LLDB.
+	const prefix = lldb ? 'workspace' : `__wasm_idle_objc_${++buildCounter}`;
+	if (
+		lldb &&
+		compileArgs.some(
+			(arg) =>
+				typeof arg !== 'string' ||
+				/^(?:@|-x|-target|--target|-triple|-mcpu|-march|-mattr|-mllvm|-mthread-model|-pthread|-fopenmp|-m(?:no-)?(?:simd128|atomics|memory64|shared-memory|multi-memory))/.test(
+					arg
+				)
+		)
+	) {
+		throw new Error(
+			'Objective-C LLDB compile arguments cannot change the WAMR debug target profile.'
+		);
+	}
 	const auxiliarySources: {
 		path: string;
 		prefixedPath: string;
@@ -941,7 +971,9 @@ async function compileAndLinkObjectiveC(
 	}[] = [];
 	const seenWorkspaceFiles = new Set<string>();
 	for (const file of workspaceFiles) {
-		const safePath = normalizeWorkspacePath(file.path);
+		const safePath = lldb
+			? normalizeDwarfWorkspacePath(file.path)
+			: normalizeWorkspacePath(file.path);
 		if (!safePath || safePath === inputPath || seenWorkspaceFiles.has(safePath)) continue;
 		seenWorkspaceFiles.add(safePath);
 		const prefixedPath = `${prefix}/${safePath}`;
@@ -960,6 +992,11 @@ async function compileAndLinkObjectiveC(
 	const needsFoundation =
 		sourceImportsFoundation(code) ||
 		workspaceFiles.some((file) => sourceImportsFoundation(file.content));
+	if (lldb && needsFoundation) {
+		throw new Error(
+			'Objective-C Foundation LLDB debugging requires libffi host imports that the WAMR debug runtime does not support. Use the normal runner for Foundation programs.'
+		);
+	}
 	const needsObjectiveCLoad =
 		!needsFoundation &&
 		usesObjectiveCRuntime(mainLanguage) &&
@@ -987,25 +1024,30 @@ async function compileAndLinkObjectiveC(
 	trace(`compiling ${inputPath}`);
 	await compileObjectiveCObject(
 		input,
-		ensureTrailingNewline(mainCode),
+		lldb ? mainCode : ensureTrailingNewline(mainCode),
 		mainObj,
 		mainLanguage,
 		['-I', prefix, ...foundationCompileArgs, ...compileArgs],
 		debug,
 		debug && needsFoundation
 			? (source) => inlineFoundationImportsForSource(inputPath, source)
-			: undefined
+			: undefined,
+		lldb
 	);
 	for (const source of auxiliarySources) {
 		const objectName = source.path.replace(/[^A-Za-z0-9_.-]/g, '_').replace(/\.[^.]+$/, '');
 		const objectPath = `${prefix}/${objectName}.o`;
 		trace(`compiling ${source.path}`);
-		await compileObjectiveCObject(source.prefixedPath, null, objectPath, source.language, [
-			'-I',
-			prefix,
-			...foundationCompileArgs,
-			...compileArgs
-		]);
+		await compileObjectiveCObject(
+			source.prefixedPath,
+			null,
+			objectPath,
+			source.language,
+			['-I', prefix, ...foundationCompileArgs, ...compileArgs],
+			false,
+			undefined,
+			lldb
+		);
 		auxiliaryObjects.push(objectPath);
 	}
 
@@ -1052,7 +1094,19 @@ async function compileAndLinkObjectiveC(
 		wasmPath
 	);
 	const bytes = Uint8Array.from(clang.memfs.getFileContents(wasmPath));
-	const wasm = await WebAssembly.compile(bytes);
+	const wasm = lldb ? undefined : await WebAssembly.compile(bytes);
+	const descriptor = lldb
+		? await createDwarfDebugDescriptor(
+				{
+					code,
+					language: 'C',
+					activePath: inputPath,
+					workspaceFiles
+				},
+				bytes,
+				clang.compilerConfig?.provenance
+			)
+		: undefined;
 	return {
 		bytes,
 		wasm,
@@ -1060,6 +1114,7 @@ async function compileAndLinkObjectiveC(
 		format: 'wasi-core-wasm',
 		fileName: wasmPath,
 		language: 'C',
+		debug: descriptor,
 		debugMetadata: debug
 			? {
 					variableMetadata: clang.debugVariableMetadata,
@@ -1076,14 +1131,16 @@ function artifactCacheKey(
 	activePath: string | undefined,
 	workspaceFiles: ObjectiveCWorkspaceFile[],
 	compileArgs: string[],
-	debug: boolean
+	debug: boolean,
+	lldb: boolean
 ) {
 	return JSON.stringify({
 		code,
 		activePath: activePath || '',
 		workspaceFiles,
 		compileArgs,
-		debug
+		debug,
+		lldb
 	});
 }
 
@@ -1101,6 +1158,7 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		workspaceFiles,
 		stdin,
 		debug,
+		debugMode,
 		breakpoints,
 		pauseOnEntry,
 		debugBuffer,
@@ -1134,7 +1192,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		try {
 			const normalizedWorkspaceFiles = workspaceFiles || [];
 			const normalizedCompileArgs = compileArgs || [];
-			const debugEnabled = !!debug;
+			const lldb = debugMode === 'lldb';
+			const debugEnabled = !lldb && !!debug;
 			clang.beginTrace(debugEnabled);
 			clang.debugBreakpoints = new Set(debugEnabled ? breakpoints || [] : []);
 			clang.debugPauseOnEntry = debugEnabled && !!pauseOnEntry;
@@ -1149,7 +1208,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 				activePath,
 				normalizedWorkspaceFiles,
 				normalizedCompileArgs,
-				debugEnabled
+				debugEnabled,
+				lldb
 			);
 			let artifact: ObjectiveCBrowserClangArtifact;
 			if (prepare) {
@@ -1158,7 +1218,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					activePath,
 					normalizedWorkspaceFiles,
 					normalizedCompileArgs,
-					debugEnabled
+					debugEnabled,
+					lldb
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
@@ -1173,10 +1234,36 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					activePath,
 					normalizedWorkspaceFiles,
 					normalizedCompileArgs,
-					debugEnabled
+					debugEnabled,
+					lldb
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
+			}
+			if (lldb) {
+				if (!artifact.debug)
+					throw new Error('Objective-C compiler did not produce a DWARF descriptor.');
+				const sources = new Map<string, string>(
+					normalizedWorkspaceFiles.map((file: ObjectiveCWorkspaceFile) => [
+						`/workspace/${normalizeDwarfWorkspacePath(file.path)}`,
+						file.content
+					])
+				);
+				sources.set(
+					`/workspace/${resolveInputPath(normalizeDwarfWorkspacePath(activePath || ''))}`,
+					code
+				);
+				postMessage({
+					lldbArtifact: {
+						bytes: artifact.bytes,
+						descriptor: artifact.debug,
+						sources: artifact.debug.files.map((file) => ({
+							...file,
+							content: sources.get(file.path)!
+						}))
+					}
+				});
+				return;
 			}
 			if (!prepare && debugEnabled) {
 				clang.memfs.stdin = () => readProgramStdin() ?? '';

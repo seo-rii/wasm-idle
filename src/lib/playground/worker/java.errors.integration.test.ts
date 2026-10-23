@@ -6,6 +6,11 @@ import { gunzipSync } from 'node:zlib';
 import ts from 'typescript';
 import * as javaOutput from './javaOutput';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { webcrypto } from 'node:crypto';
+import * as javaDebugBridge from '../javaDebugBridge';
+import * as javaDebugSource from '../javaDebugSource';
+import * as javaDebugRuntime from './javaDebugRuntime';
+import * as debugMailbox from '../debugMailbox';
 import * as javaRuntimeErrors from '../javaRuntimeErrors';
 import * as javaRuntimeStdin from '../javaRuntimeStdin';
 import * as javaSource from '../javaSource';
@@ -97,6 +102,7 @@ async function createRealWorker() {
 		performance,
 		setTimeout,
 		clearTimeout,
+		crypto: webcrypto,
 		TextDecoder,
 		TextEncoder,
 		Blob,
@@ -115,6 +121,10 @@ async function createRealWorker() {
 			postMessage: (message: WorkerMessage) => messages.push(structuredClone(message))
 		},
 		require(id: string) {
+			if (id === '../javaDebugBridge') return javaDebugBridge;
+			if (id === '../javaDebugSource') return javaDebugSource;
+			if (id === '../debugMailbox') return debugMailbox;
+			if (id === './javaDebugRuntime') return javaDebugRuntime;
 			if (id === 'blob:local-teavm') return runtimeBridge;
 			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming') return javaStreaming;

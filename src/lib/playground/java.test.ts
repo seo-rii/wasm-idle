@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { readDebugCommand } from './debugMailbox';
 import { TEAVM_RUNTIME_ASSET_NAMES, TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 
 const workerInstances: MockWorker[] = [];
@@ -2167,5 +2168,272 @@ public class Main {
 		expect(sandbox.assetBridge).toBeNull();
 		expect(sandbox.baseUrl).toBe('');
 		expect(workerInstances).toHaveLength(1);
+	});
+});
+
+describe('TeaVM Java snapshot evaluator worker', { timeout: 20_000 }, () => {
+	const sandboxes: Java[] = [];
+	const snapshot = { bindings: [{ name: 'value', type: 'int', value: '7' }] };
+
+	// A cold dynamic java-parser import can exceed Vitest's default 1 s wait
+	// when this file shares CPU with compiler and type-checking suites.
+	const eventually = (assertion: () => void) => vi.waitFor(assertion, { timeout: 10_000 });
+
+	function emit(worker: MockWorker, data: any) {
+		worker.onmessage?.({ data } as MessageEvent<any>);
+	}
+
+	function evaluationRuns(worker: MockWorker) {
+		return worker.postMessage.mock.calls
+			.map(([message]) => message)
+			.filter((message) => typeof message.code === 'string');
+	}
+
+	async function pausedTarget() {
+		const sandbox = new Java();
+		sandboxes.push(sandbox);
+		const output = vi.fn();
+		const events = vi.fn();
+		sandbox.output = output;
+		sandbox.ondebug = events;
+		await sandbox.load({
+			java: {
+				baseUrl: '/snapshot-compiler/',
+				allowedBaseUrls: ['/snapshot-mirror/'],
+				loader: async () => new Uint8Array()
+			}
+		});
+		const target = workerInstances[0];
+		onPostMessage = (worker, message) => {
+			if (message.load) queueMicrotask(() => emit(worker, { load: true }));
+		};
+		const code =
+			'public class Main { public static void main(String[] args) { System.out.print("original-target-source"); } }';
+		const running = sandbox.run(code, false, false, undefined, ['target-argument'], {
+			debugMode: 'trace',
+			activePath: 'project/Main.java',
+			workspaceFiles: [
+				{
+					path: 'project/Helper.java',
+					content: 'class Helper { static String text = "original-workspace-source"; }'
+				}
+			],
+			stdin: 'target-input\n'
+		});
+		const completed = running.then(
+			(value) => ({ value }),
+			(error: unknown) => ({ error })
+		);
+		const runMessage = evaluationRuns(target)[0];
+		const buffer = runMessage.javaDebug.buffer;
+		if (!(buffer instanceof SharedArrayBuffer))
+			throw new Error('SharedArrayBuffer unavailable');
+		const pause = (stopId = 1) =>
+			emit(target, {
+				javaDebug: {
+					stopId,
+					event: {
+						type: 'pause',
+						reason: 'breakpoint',
+						line: 3,
+						frameId: stopId * 100 + 1,
+						locals: [{ name: 'value', value: '7', type: 'int' }],
+						callStack: [
+							{
+								id: stopId * 100 + 1,
+								functionName: 'Main.main',
+								line: 3,
+								sourcePath: '/workspace/project/Main.java'
+							}
+						]
+					}
+				}
+			});
+		emit(target, { output: 'target-before-pause\n' });
+		pause();
+		const receive = () => {
+			const command = readDebugCommand(
+				buffer,
+				false,
+				() => emit(target, { javaDebug: { consumed: true } }),
+				'Java'
+			);
+			return command ? JSON.parse(command) : command;
+		};
+		const answerContext = () => {
+			const request = receive();
+			expect(request).toMatchObject({ op: 'context' });
+			emit(target, {
+				javaDebug: { response: { id: request.id, stopId: request.stopId, value: snapshot } }
+			});
+			return request;
+		};
+		const evaluate = (expression: string) => {
+			const pending = sandbox.debugEvaluate(expression);
+			// Retain the original rejecting promise for assertions, but observe it now:
+			// afterEach may cancel it if an earlier worker/message assertion fails.
+			void pending.catch(() => undefined);
+			return pending;
+		};
+		return {
+			sandbox,
+			target,
+			output,
+			events,
+			completed,
+			pause,
+			receive,
+			answerContext,
+			evaluate
+		};
+	}
+
+	beforeEach(() => {
+		workerInstances.length = 0;
+		suppressAutoLoadAck = false;
+		onPostMessage = null;
+		onWorkerConstruct = null;
+	});
+
+	afterEach(async () => {
+		for (const sandbox of sandboxes.splice(0)) await sandbox.dispose();
+		onPostMessage = null;
+	});
+
+	it('evaluates only a snapshot in a separate worker without resuming or printing into the target', async () => {
+		const fixture = await pausedTarget();
+		const result = fixture.evaluate('value + 4');
+		expect(fixture.answerContext()).toMatchObject({ frameId: 101, stopId: 1 });
+		await eventually(() => expect(workerInstances).toHaveLength(2));
+		const evaluator = workerInstances[1];
+		await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(1));
+		const request = evaluationRuns(evaluator)[0];
+		expect(request).toMatchObject({
+			prepare: false,
+			debugMode: 'none',
+			javaDebug: undefined,
+			workspaceFiles: [],
+			args: ['7'],
+			stdin: '',
+			hasExplicitStdin: true
+		});
+		expect(request.code).toContain('value + 4');
+		expect(request.code).not.toContain('original-target-source');
+		expect(request.code).not.toContain('original-workspace-source');
+		expect(request.activePath).not.toBe('project/Main.java');
+		expect(evaluator.postMessage.mock.calls[0][0]).toMatchObject({
+			load: true,
+			assets: {
+				baseUrl: new URL('/snapshot-compiler/', window.location.href).href,
+				streamCompiler: false
+			}
+		});
+		emit(evaluator, { output: '11', results: true });
+		await expect(result).resolves.toBe('11');
+		expect(fixture.output.mock.calls).toEqual([['target-before-pause\n']]);
+		expect(fixture.events.mock.calls.map(([event]) => event.type)).toEqual(['pause']);
+		expect(fixture.receive()).toBe('');
+		expect(fixture.target.postMessage).toHaveBeenCalledTimes(2);
+		expect(fixture.target.terminate).not.toHaveBeenCalled();
+		expect(fixture.sandbox.exit).toBe(false);
+		emit(fixture.target, { results: true });
+		await expect(fixture.completed).resolves.toEqual({ value: true });
+		expect(evaluator.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('serializes simultaneous watches and reuses one evaluator worker', async () => {
+		const fixture = await pausedTarget();
+		const first = fixture.evaluate('value + 1');
+		const second = fixture.evaluate('value + 2');
+		fixture.answerContext();
+		fixture.answerContext();
+		await eventually(() => expect(workerInstances).toHaveLength(2));
+		const evaluator = workerInstances[1];
+		await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(1));
+		expect(evaluationRuns(evaluator)[0].code).toContain('value + 1');
+		emit(evaluator, { output: '8', results: true });
+		await expect(first).resolves.toBe('8');
+		await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(2));
+		expect(evaluationRuns(evaluator)[1].code).toContain('value + 2');
+		emit(evaluator, { output: '9', results: true });
+		await expect(second).resolves.toBe('9');
+		expect(workerInstances).toHaveLength(2);
+		expect(evaluator.terminate).not.toHaveBeenCalled();
+		expect(fixture.receive()).toBe('');
+		expect(fixture.output.mock.calls).toEqual([['target-before-pause\n']]);
+	});
+
+	it.each(['control', 'resume', 'Stop', 'dispose'] as const)(
+		'cancels active and queued evaluations on %s and ignores a stale worker reply',
+		async (action) => {
+			const fixture = await pausedTarget();
+			const first = fixture.evaluate('value + 1');
+			const second = fixture.evaluate('value + 2');
+			fixture.answerContext();
+			fixture.answerContext();
+			await eventually(() => expect(workerInstances).toHaveLength(2));
+			const evaluator = workerInstances[1];
+			await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(1));
+			const staleHandler = evaluator.onmessage;
+			if (action === 'control') {
+				fixture.sandbox.debugCommand('continue');
+				expect(fixture.receive()).toEqual({ op: 'control', command: 'continue' });
+			} else if (action === 'resume')
+				emit(fixture.target, {
+					javaDebug: { event: { type: 'resume', command: 'continue' } }
+				});
+			else if (action === 'Stop') fixture.sandbox.terminate('Stopped by test');
+			else await fixture.sandbox.dispose();
+			await expect(first).rejects.toThrow(/stale|stopped/);
+			await expect(second).rejects.toThrow(/stale|stopped/);
+			expect(evaluator.terminate).toHaveBeenCalledOnce();
+			staleHandler?.({
+				data: { output: 'stale evaluator result', results: true }
+			} as MessageEvent<any>);
+			await Promise.resolve();
+			expect(evaluationRuns(evaluator)).toHaveLength(1);
+			expect(workerInstances).toHaveLength(2);
+			expect(fixture.output.mock.calls).toEqual([['target-before-pause\n']]);
+			if (action === 'control' || action === 'resume') {
+				expect(fixture.target.terminate).not.toHaveBeenCalled();
+				fixture.pause(2);
+				const current = fixture.evaluate('value + 3');
+				fixture.answerContext();
+				await eventually(() => expect(workerInstances).toHaveLength(3));
+				const replacement = workerInstances[2];
+				await eventually(() => expect(evaluationRuns(replacement)).toHaveLength(1));
+				emit(replacement, { output: '10', results: true });
+				await expect(current).resolves.toBe('10');
+				expect(replacement.terminate).not.toHaveBeenCalled();
+			} else {
+				expect(fixture.target.terminate).toHaveBeenCalledOnce();
+				await expect(fixture.completed).resolves.toHaveProperty('error');
+			}
+		}
+	);
+
+	it('keeps the target and a warmed evaluator reusable after expression source validation fails', async () => {
+		const fixture = await pausedTarget();
+		const first = fixture.evaluate('value');
+		fixture.answerContext();
+		await eventually(() => expect(workerInstances).toHaveLength(2));
+		const evaluator = workerInstances[1];
+		await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(1));
+		emit(evaluator, { output: '7', results: true });
+		await expect(first).resolves.toBe('7');
+		const invalid = fixture.evaluate('value++');
+		fixture.answerContext();
+		await expect(invalid).rejects.toThrow(/mutation|unsupported/);
+		expect(evaluationRuns(evaluator)).toHaveLength(1);
+		expect(evaluator.terminate).not.toHaveBeenCalled();
+		const next = fixture.evaluate('value + 2');
+		fixture.answerContext();
+		await eventually(() => expect(evaluationRuns(evaluator)).toHaveLength(2));
+		emit(evaluator, { output: '9', results: true });
+		await expect(next).resolves.toBe('9');
+		expect(workerInstances).toHaveLength(2);
+		expect(fixture.target.terminate).not.toHaveBeenCalled();
+		expect(fixture.events.mock.calls.map(([event]) => event.type)).toEqual(['pause']);
+		expect(fixture.output.mock.calls).toEqual([['target-before-pause\n']]);
 	});
 });

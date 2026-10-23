@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest';
+import { format, resolveConfig } from 'prettier';
 
 import {
 	blockedCandidateRows,
@@ -18,6 +19,11 @@ describe('README support matrix', () => {
 		expect(renderSupportMatrixSection()).toContain('@php-wasm/web-8-4@3.1.57');
 		expect(renderSupportMatrixSection()).not.toContain('@php-wasm/web-8-4@unknown');
 		const section = renderSupportMatrixSection();
+		expect(
+			(
+				await format(section, { ...(await resolveConfig('README.md')), parser: 'markdown' })
+			).trimEnd()
+		).toBe(section.trimEnd());
 		expect(section).toContain('## Browser LLDB debug runtime');
 		expect(section).toContain('Stable v2 inherits that exact release boundary');
 		expect(section).not.toContain('v2 inspection preview');
@@ -72,9 +78,7 @@ describe('README support matrix', () => {
 		expect(supportMatrixRows.find((row) => row.language === 'C')?.debug).toBe('LLDB');
 		expect(supportMatrixRows.find((row) => row.language === 'C++')?.debug).toBe('LLDB');
 		expect(supportMatrixRows.find((row) => row.language === 'Rust')?.debug).toBe('LLDB');
-		expect(supportMatrixRows.find((row) => row.language === 'Objective-C')?.debug).toBe(
-			'Trace'
-		);
+		expect(supportMatrixRows.find((row) => row.language === 'Objective-C')?.debug).toBe('LLDB');
 		expect(supportMatrixRows.find((row) => row.language === 'F#')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Fortran')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Haskell')?.stdin).toBe('Yes');

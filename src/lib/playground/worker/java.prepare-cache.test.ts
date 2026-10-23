@@ -6,6 +6,11 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as javaOutput from './javaOutput';
 import { test } from 'vitest';
+import { webcrypto } from 'node:crypto';
+import * as javaDebugBridge from '../javaDebugBridge';
+import * as javaDebugSource from '../javaDebugSource';
+import * as javaDebugRuntime from './javaDebugRuntime';
+import * as debugMailbox from '../debugMailbox';
 import { prepareJavaExceptionBridge } from '../javaRuntimeErrors';
 
 const source = readFileSync(new URL('./java.ts', import.meta.url), 'utf8');
@@ -42,7 +47,9 @@ function worker() {
 		clearInputClassFiles() {},
 		clearOutputFiles() {},
 		addSourceFile(name: string) {
-			compilingBridge = name.startsWith('WasmIdleJava');
+			compilingBridge =
+				name.startsWith('WasmIdleJavaEntryPoint') ||
+				name.startsWith('WasmIdleJavaExceptionBridge');
 		},
 		listOutputFiles: () => ['Main.class'],
 		getOutputFile: () => new Int8Array([1]),
@@ -103,6 +110,7 @@ function worker() {
 		performance,
 		setTimeout,
 		clearTimeout,
+		crypto: webcrypto,
 		TextDecoder,
 		TextEncoder,
 		Blob,
@@ -128,6 +136,10 @@ function worker() {
 			postMessage: (message: any) => messages.push(message)
 		},
 		require: (id: string) => {
+			if (id === '../javaDebugBridge') return javaDebugBridge;
+			if (id === '../javaDebugSource') return javaDebugSource;
+			if (id === '../debugMailbox') return debugMailbox;
+			if (id === './javaDebugRuntime') return javaDebugRuntime;
 			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
 			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming')
@@ -168,6 +180,7 @@ function worker() {
 	});
 	return {
 		counts,
+		hasDiagnosticListener: () => onDiagnostic !== undefined,
 		failure,
 		messages,
 		load: (baseUrl = '/teavm/', streamCompiler = true) =>
@@ -318,4 +331,46 @@ test('custom byte-only loaders retain their byte input contract', async () => {
 	await w.run({ prepare: false });
 	assert.equal(w.counts.engineCompile, 0);
 	assert.equal(w.counts.run, 1);
+});
+
+test('debug and ordinary preparation never reuse each other’s compiled artifact', async () => {
+	const w = worker();
+	await w.load();
+	await w.run({ debugMode: 'trace' });
+	assert.equal(w.messages.at(-1)?.results, true);
+	await w.run({ debugMode: 'none' });
+	await w.run({ debugMode: 'trace' });
+	await w.run({ debugMode: 'trace' });
+	assert.equal(w.counts.compile, 3);
+	assert.equal(w.counts.generate, 3);
+	assert.equal(w.counts.engineCompile, 3);
+	assert.equal(w.counts.run, 0);
+});
+
+test('unsupported debug syntax leaves no diagnostic registration and ordinary Run can recover', async () => {
+	const w = worker();
+	await w.load();
+	const code = String.raw`class Main { // \u0041
+ }`;
+	await w.run({ code, debugMode: 'trace' });
+	assert.match(w.messages.at(-1)?.error, /Unicode preprocessing/);
+	assert.equal(w.hasDiagnosticListener(), false);
+	await w.run({ code, debugMode: 'none' });
+	assert.equal(w.messages.at(-1)?.results, true);
+	assert.equal(w.hasDiagnosticListener(), false);
+});
+
+test('container UTF-8 auxiliary files share cache identity with source strings', async () => {
+	const w = worker();
+	await w.load();
+	const source = 'class Helper { String value = "한글"; }';
+	await w.run({
+		workspaceFiles: [{ path: 'Helper.java', content: new TextEncoder().encode(source) }]
+	});
+	assert.equal(w.messages.at(-1)?.results, true);
+	await w.run({ workspaceFiles: [{ path: 'Helper.java', content: source }] });
+	assert.equal(w.counts.compile, 1);
+	await w.run({ workspaceFiles: [{ path: 'Helper.java', content: new Uint8Array([255]) }] });
+	assert.ok(w.messages.at(-1)?.error);
+	assert.equal(w.counts.compile, 1);
 });

@@ -1,4 +1,5 @@
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { normalizeLldbWorkspacePath } from '$lib/playground/lldbSourcePath';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import {
 	configureWorkerRuntimeAssets,
@@ -78,7 +79,8 @@ self.onmessage = async (event: { data: any }) => {
 		stdin,
 		clangAssets,
 		vBaseUrl,
-		maxAssetBytes
+		maxAssetBytes,
+		debugMode
 	} = event.data;
 	if (load) {
 		try {
@@ -101,10 +103,18 @@ self.onmessage = async (event: { data: any }) => {
 		initialStdinConsumedV = false;
 
 		try {
-			const files = (workspaceFiles || []) as SandboxWorkspaceFile[];
+			const lldb = debugMode === 'lldb';
+			const files = ((workspaceFiles || []) as SandboxWorkspaceFile[]).map((file) => ({
+				...file,
+				path: lldb ? normalizeLldbWorkspacePath(file.path) : file.path
+			}));
+			const fileName = resolveInputPath(
+				lldb ? normalizeLldbWorkspacePath(activePath || '') : activePath
+			);
 			const result = await compiler.compile({
-				code: ensureTrailingNewline(code),
-				fileName: resolveInputPath(activePath),
+				code: lldb ? code : ensureTrailingNewline(code),
+				fileName,
+				debugMode: lldb ? 'lldb' : 'none',
 				compileArgs: compileArgs || [],
 				workspaceFiles: files,
 				log,
@@ -115,6 +125,25 @@ self.onmessage = async (event: { data: any }) => {
 			});
 			if (!result.success || !result.artifact) {
 				throw new Error(result.stderr || 'V did not produce a WebAssembly program.');
+			}
+			if (lldb && !prepare) {
+				const descriptor = result.artifact.debug;
+				if (!descriptor) throw new Error('V compiler did not produce a DWARF descriptor.');
+				const sources = new Map(
+					files.map((file) => [`/workspace/${file.path}`, file.content])
+				);
+				sources.set(`/workspace/${fileName}`, code);
+				postMessage({
+					lldbArtifact: {
+						bytes: result.artifact.bytes,
+						descriptor,
+						sources: descriptor.files.map((file) => ({
+							...file,
+							content: sources.get(file.path)!
+						}))
+					}
+				});
+				return;
 			}
 			if (!prepare) {
 				const execution = await executeBrowserVArtifact(result.artifact, {

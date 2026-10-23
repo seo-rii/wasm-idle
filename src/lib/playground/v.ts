@@ -1,4 +1,5 @@
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { CompiledLldbSandbox } from '$lib/playground/compiledLldb';
 import type { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 import {
 	resolveVBaseUrl,
@@ -18,7 +19,7 @@ import {
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady } from '$lib/playground/workerProgress';
 import {
@@ -47,9 +48,9 @@ const abortReason = (signal: AbortSignal, phase: VOperation['phase']) =>
 				'AbortError'
 			);
 
-class VLang implements Sandbox {
+class VLang extends CompiledLldbSandbox implements Sandbox {
+	protected lldbEntryFunction = 'main__main';
 	language = 'V';
-	output?: (data: string) => void;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(4096);
 	pendingInput: string[] = [];
@@ -225,9 +226,10 @@ class VLang implements Sandbox {
 	private bindOperationTimeout(operation: VOperation, timeoutMs: number) {
 		if (!this.isOperationActive(operation)) return;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
-		operation.cleanups.push(() => {
+		const cancelTimeout = () => {
 			if (timeout !== undefined) clearTimeout(timeout);
-		});
+		};
+		operation.cleanups.push(cancelTimeout);
 		try {
 			timeout = setTimeout(() => {
 				if (!this.isOperationActive(operation)) return;
@@ -245,6 +247,7 @@ class VLang implements Sandbox {
 		} catch (error) {
 			this.cancelOperation(operation, error);
 		}
+		return cancelTimeout;
 	}
 
 	private resetExplicitStdinState() {
@@ -282,6 +285,7 @@ class VLang implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
+			this.configureLldb(runtimeAssets, options);
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(operation, signal);
 			if (!this.isOperationActive(operation) || signal?.aborted) {
@@ -450,6 +454,10 @@ class VLang implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.lldbSession) {
+			void this.lldbSession.write(input);
+			return;
+		}
 		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
@@ -457,6 +465,10 @@ class VLang implements Sandbox {
 	}
 
 	eof() {
+		if (this.lldbSession) {
+			void this.lldbSession.eof();
+			return;
+		}
 		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
@@ -498,17 +510,24 @@ class VLang implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
+		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
 		try {
-			const debug = options.debug;
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'V execution cancelled')
 				);
 			}
-			if (debug) {
+			if (debugMode !== 'none' && debugMode !== 'lldb') {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'V debugging is not supported yet.')
+					this.releaseBeforeSession(
+						activeOperation,
+						'V debugging requires debugMode: lldb.'
+					)
 				);
+			}
+			if (debugMode === 'lldb') {
+				requireSharedArrayBuffer('V debugging');
+				this.prepareLldb(options, 'main.v');
 			}
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
@@ -572,19 +591,23 @@ class VLang implements Sandbox {
 					2_147_483_647,
 					limits.compileTimeoutMs + limits.runTimeoutMs
 				);
-				this.bindOperationTimeout(activeOperation, timeoutMs);
+				const cancelCompileTimeout = this.bindOperationTimeout(activeOperation, timeoutMs);
 				this.bindAbortSignal(activeOperation, signal);
 				if (!this.isOperationActive(activeOperation)) return;
 				const runUid = ++this.uid;
 				let handler: (event: Event & { data: any }) => void;
+				let handedOff = false;
 				const ownsWorker = () =>
 					this.worker === worker &&
 					this.assetBridge === assetBridge &&
 					worker.onmessage === handler;
 				const ownsRun = () =>
-					this.isOperationActive(activeOperation) && ownsWorker() && runUid === this.uid;
+					this.isOperationActive(activeOperation) &&
+					(handedOff || ownsWorker()) &&
+					runUid === this.uid;
 				const claimRun = () => {
 					if (!ownsRun()) return false;
+					this.lldbPending = false;
 					this.finishExplicitStdin(activeOperation);
 					this.workerSession.complete(workerOperation);
 					this.releaseOperation(activeOperation);
@@ -615,8 +638,53 @@ class VLang implements Sandbox {
 							log: workerLog,
 							error,
 							buffer,
-							progress
+							progress,
+							lldbArtifact
 						} = event.data;
+						if (lldbArtifact) {
+							cancelCompileTimeout?.();
+							handedOff = true;
+							const completion = this.startLldb(
+								lldbArtifact,
+								options,
+								programArgs,
+								this.pendingInput,
+								this.pendingEof,
+								(output) => {
+									if (!ownsRun()) return;
+									outputBytes += OUTPUT_ENCODER.encode(output).byteLength;
+									if (outputBytes > limits.maxOutputBytes) {
+										failRun(
+											new OutputLimitError(
+												`V output exceeded ${limits.maxOutputBytes} bytes`,
+												{
+													actual: outputBytes,
+													limit: limits.maxOutputBytes,
+													phase: 'execute',
+													runtimeId: 'V'
+												}
+											),
+											true
+										);
+										return;
+									}
+									this.output?.(output);
+								}
+							);
+							this.pendingEof = false;
+							if (this.workerSession.release(worker)) {
+								assetBridge.dispose();
+								this.assetBridge = null;
+								delete this.worker;
+							}
+							void completion.then(
+								(result) => {
+									if (claimRun()) resolve(result);
+								},
+								(error) => failRun(error)
+							);
+							return;
+						}
 						if (buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
 							if (!prepare) {
@@ -682,7 +750,8 @@ class VLang implements Sandbox {
 						compileArgs,
 						programArgs,
 						activePath: workspace.activePath,
-						workspaceFiles: workspace.workspaceFiles
+						workspaceFiles: workspace.workspaceFiles,
+						debugMode
 					});
 				} catch (error) {
 					failRun(error);
@@ -699,6 +768,7 @@ class VLang implements Sandbox {
 
 	private cancelOperation(operation: VOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
+		void this.stopLldb();
 		this.finishExplicitStdin(operation);
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
@@ -717,6 +787,7 @@ class VLang implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		if (this.disposed) return;
+		void this.stopLldb();
 		const operation = this.activeOperation;
 		if (operation) {
 			this.cancelOperation(operation, reason);
@@ -741,6 +812,7 @@ class VLang implements Sandbox {
 
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
+		void this.stopLldb();
 		this.disposed = true;
 		this.disposePromise = Promise.resolve();
 

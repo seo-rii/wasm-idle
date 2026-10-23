@@ -1,0 +1,221 @@
+{
+	"schemaVersion": 1,
+	"language": "zig",
+	"probedAt": "2026-10-23T01:30:13.968Z",
+	"hostNode": "v24.1.0",
+	"milliseconds": 150751,
+	"status": "blocked",
+	"blocker": "ZIG_PACKAGED_BACKEND_HAS_NO_USABLE_WASM32_DWARF",
+	"version": "zigc-wasm-0.11.0",
+	"compilerSha256": "cbfc172100b07beee2710c837b7ed0fe2e456fb10c00aa7ff5e618db949adf61",
+	"source": "const std = @import(\"std\");\npub fn main() !void {\n    var input: [16]u8 = undefined;\n    const count = try std.io.getStdIn().read(&input);\n    try std.io.getStdOut().writeAll(input[0..count]);\n}\n",
+	"attempts": [
+		{
+			"target": "wasm64-wasi",
+			"optimization": "ReleaseSmall",
+			"args": [
+				"zigc.wasm",
+				"build-exe",
+				"main.zig",
+				"-Dtarget=wasm64-wasi",
+				"-fno-llvm",
+				"-fno-lld",
+				"-O",
+				"ReleaseSmall",
+				"-femit-bin=output.wasm"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": "",
+			"artifact": {
+				"bytes": 15375,
+				"sha256": "7c470740fef95e3086e480490321549788aba22fa3321c9e28c15a67d1aeb364",
+				"customSections": [],
+				"dwarfSections": [],
+				"hasSourceDwarf": false
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "7\n",
+				"stderr": ""
+			}
+		},
+		{
+			"target": "wasm64-wasi",
+			"optimization": "Debug",
+			"args": [
+				"zigc.wasm",
+				"build-exe",
+				"main.zig",
+				"-Dtarget=wasm64-wasi",
+				"-fno-llvm",
+				"-fno-lld",
+				"-O",
+				"Debug",
+				"-femit-bin=output.wasm",
+				"-fno-strip"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": "",
+			"artifact": {
+				"bytes": 19512,
+				"sha256": "5dfb4cc80de46fdc4653c563278ccf4970329c0abb63120137d26bd84e59520f",
+				"customSections": [
+					{
+						"name": "name",
+						"bytes": 2061
+					},
+					{
+						"name": "producers",
+						"bytes": 83
+					},
+					{
+						"name": "target_features",
+						"bytes": 28
+					}
+				],
+				"dwarfSections": [],
+				"hasSourceDwarf": false
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "7\n",
+				"stderr": ""
+			}
+		},
+		{
+			"target": "wasm32-wasi",
+			"optimization": "Debug",
+			"args": [
+				"zigc.wasm",
+				"build-exe",
+				"main.zig",
+				"-Dtarget=wasm32-wasi",
+				"-fno-llvm",
+				"-fno-lld",
+				"-O",
+				"Debug",
+				"-femit-bin=output.wasm",
+				"-fno-strip"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": "",
+			"artifact": {
+				"bytes": 19512,
+				"sha256": "5dfb4cc80de46fdc4653c563278ccf4970329c0abb63120137d26bd84e59520f",
+				"customSections": [
+					{
+						"name": "name",
+						"bytes": 2061
+					},
+					{
+						"name": "producers",
+						"bytes": 83
+					},
+					{
+						"name": "target_features",
+						"bytes": 28
+					}
+				],
+				"dwarfSections": [],
+				"hasSourceDwarf": false
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "7\n",
+				"stderr": ""
+			}
+		},
+		{
+			"target": "wasm32-wasi",
+			"optimization": "ReleaseSmall",
+			"args": [
+				"zigc.wasm",
+				"build-exe",
+				"main.zig",
+				"-Dtarget=wasm32-wasi",
+				"-fno-llvm",
+				"-fno-lld",
+				"-O",
+				"ReleaseSmall",
+				"-femit-bin=output.wasm",
+				"-fno-strip"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": "",
+			"artifact": {
+				"bytes": 17573,
+				"sha256": "54625459dacf3ed1efc6e37149d38975c996062641b889cdd7593c734db94a2d",
+				"customSections": [
+					{
+						"name": "name",
+						"bytes": 2038
+					},
+					{
+						"name": "producers",
+						"bytes": 83
+					},
+					{
+						"name": "target_features",
+						"bytes": 28
+					}
+				],
+				"dwarfSections": [],
+				"hasSourceDwarf": false
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "7\n",
+				"stderr": ""
+			}
+		},
+		{
+			"target": "wasm32-wasi",
+			"optimization": "Debug",
+			"args": [
+				"zigc.wasm",
+				"build-exe",
+				"main.zig",
+				"-target",
+				"wasm32-wasi",
+				"-fno-llvm",
+				"-fno-lld",
+				"-O",
+				"Debug",
+				"-femit-bin=output.wasm",
+				"-fno-strip"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": "",
+			"artifact": {
+				"bytes": 19512,
+				"sha256": "5dfb4cc80de46fdc4653c563278ccf4970329c0abb63120137d26bd84e59520f",
+				"customSections": [
+					{
+						"name": "name",
+						"bytes": 2061
+					},
+					{
+						"name": "producers",
+						"bytes": 83
+					},
+					{
+						"name": "target_features",
+						"bytes": 28
+					}
+				],
+				"dwarfSections": [],
+				"hasSourceDwarf": false
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "7\n",
+				"stderr": ""
+			}
+		}
+	]
+}

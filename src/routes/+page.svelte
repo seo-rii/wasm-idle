@@ -14,7 +14,11 @@
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
 		goDebugLanguageAdapter,
+		javaDebugLanguageAdapter,
+		luaDebugLanguageAdapter,
+		vDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
+		rubyDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
 		type DebugLanguageAdapter,
 		type DebugVariableNode,
@@ -39,6 +43,7 @@
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
+		BrowserDebugMode,
 		DebugDataBreakpoint,
 		DebugDataBreakpointAccessType,
 		DebugDataBreakpointInfo,
@@ -175,22 +180,40 @@
 
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
-	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	const lldbDebugLanguages = new Set<PlaygroundLanguage>([
+		'C',
+		'CPP',
+		'RUST',
+		'OBJC',
+		'OBJECTIVECXX',
+		'V'
+	]);
+	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
 		OBJC: cppDebugLanguageAdapter,
+		OBJECTIVECXX: cppDebugLanguageAdapter,
+		V: vDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
+		JAVA: javaDebugLanguageAdapter,
+		LUA: luaDebugLanguageAdapter,
+		RUBY: rubyDebugLanguageAdapter,
 		RUST: rustDebugLanguageAdapter,
 		PYTHON: pythonDebugLanguageAdapter
 	};
 	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
 		C: 'C · LLDB / WAMR',
 		CPP: 'C++ · LLDB / WAMR',
-		OBJC: 'Objective-C Trace',
+		OBJC: 'Objective-C · LLDB / WAMR',
+		OBJECTIVECXX: 'Objective-C++ · LLDB / WAMR',
+		V: 'V · LLDB / WAMR',
 		GO: 'Go Trace',
+		JAVA: 'Java · Trace',
+		LUA: 'Lua · MobDebug',
+		RUBY: 'Ruby · TracePoint',
 		RUST: 'Rust · LLDB / WAMR',
 		PYTHON: 'Pyodide Trace'
 	};
@@ -241,7 +264,7 @@
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
-		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
+		activeDebugBackend = $state<BrowserDebugMode | null>(null),
 		progressVisible = $state(false),
 		progress = $state(0),
 		progressStage = $state(''),
@@ -524,7 +547,13 @@
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
-		lldbDebugLanguages.has(language) ? ('lldb' as const) : ('trace' as const)
+		lldbDebugLanguages.has(language)
+			? ('lldb' as const)
+			: language === 'LUA'
+				? ('mobdebug' as const)
+				: language === 'RUBY'
+					? ('tracepoint' as const)
+					: ('trace' as const)
 	);
 	const debugTargetAvailable = $derived(
 		language !== 'RUST' || rustTargetTriple === 'wasm32-wasip1'
@@ -2563,6 +2592,7 @@
 							progressOutcome = 'cancelled';
 							return;
 						}
+						if (!traceFallbackLanguages.has(language)) throw error;
 						executionDebugMode = 'trace';
 						activeDebugBackend = 'trace';
 						console.warn(
@@ -3242,8 +3272,13 @@
 						<button
 							class="action-button debug-control"
 							onclick={() => debug.pause()}
-							disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
-							title="Pause"
+							disabled={(activeDebugBackend !== 'lldb' &&
+								!(language === 'JAVA' && activeDebugBackend === 'trace')) ||
+								!debug.active ||
+								debug.paused}
+							title={language === 'JAVA'
+								? 'Pause at the next Java statement'
+								: 'Pause'}
 							aria-label="Pause"
 						>
 							<span class="material-symbols-outlined" aria-hidden="true">pause</span>
@@ -3371,6 +3406,12 @@
 						</header>
 						{#if debugPanelOpen.variables}
 							<div class="debug-panel__body" id="debug-panel-variables">
+								{#if language === 'JAVA'}
+									<p>
+										Java shows local values and array elements for the currently
+										stopped frame. Other objects are shown by type and identity.
+									</p>
+								{/if}
 								{#if debug.scopes.length}
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
@@ -3469,6 +3510,12 @@
 						</header>
 						{#if debugPanelOpen.watch}
 							<div class="debug-panel__body" id="debug-panel-watch">
+								{#if language === 'JAVA'}
+									<p>
+										Java watches use a read-only snapshot of primitive and
+										String values.
+									</p>
+								{/if}
 								<div class="watch-row">
 									<input
 										bind:value={debug.watchInput}

@@ -1,0 +1,54 @@
+{
+	"schemaVersion": 1,
+	"language": "tinygo",
+	"probedAt": "2026-10-23T01:27:40.701Z",
+	"hostNode": "v24.1.0",
+	"milliseconds": 30991,
+	"status": "blocked",
+	"blocker": "TINYGO_PRODUCER_REJECTS_DEBUG_PROFILE",
+	"compileProtocolVersion": 6,
+	"compilerSha256": "a65f51c7d2845ea1469328705f2c9839f0151ee221e6a3efea851226e4e2d649",
+	"runtimeProfile": {
+		"id": "wasip1-asyncify-precise-o1",
+		"target": "wasip1",
+		"opt": "1",
+		"gc": "precise",
+		"panicStrategy": "print",
+		"scheduler": "asyncify",
+		"debug": false,
+		"parallelism": 1
+	},
+	"source": "package main\nimport \"fmt\"\nfunc main() {\n var value int\n fmt.Scan(&value)\n value += 5\n fmt.Println(value)\n}\n",
+	"attempts": [
+		{
+			"request": {
+				"package": ".",
+				"packageJSON": "/work/package-list.json",
+				"workingDirectory": "/workspace",
+				"outputDirectory": "/work/output",
+				"temporaryDirectory": "/work/tmp",
+				"target": "wasip1",
+				"opt": "1",
+				"gc": "precise",
+				"panicStrategy": "print",
+				"scheduler": "asyncify",
+				"debug": true,
+				"parallelism": 1,
+				"runtime": {
+					"compilerRT": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/compiler-rt.a",
+					"wasiLibc": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/wasi-libc.a",
+					"libCxx": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/libcxx.a",
+					"libCxxAbi": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/libcxxabi.a",
+					"extraFiles": {
+						"src/runtime/asm_tinygowasm.S": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/extra-0.o",
+						"src/runtime/gc_boehm.c": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/extra-1.bc",
+						"src/internal/task/task_asyncify_wasm.S": "/tinygo-root/runtime/wasip1-asyncify-precise-o1/extra-2.o"
+					}
+				}
+			},
+			"exitCode": 1,
+			"stdout": "",
+			"stderr": "tinygo-browser-adapter: compile protocol v5 does not provide a debug runtime closure\n"
+		}
+	]
+}

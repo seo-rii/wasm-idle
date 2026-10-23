@@ -13,8 +13,12 @@ export { createAdapterDebugSessionController } from './adapter-controller.js';
 export {
 	cppDebugLanguageAdapter,
 	goDebugLanguageAdapter,
+	javaDebugLanguageAdapter,
+	luaDebugLanguageAdapter,
 	pythonDebugLanguageAdapter,
-	rustDebugLanguageAdapter
+	rubyDebugLanguageAdapter,
+	rustDebugLanguageAdapter,
+	vDebugLanguageAdapter
 } from './language/index.js';
 export { createDebugSessionController } from './controller.js';
 export {

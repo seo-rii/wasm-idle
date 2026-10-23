@@ -1,5 +1,9 @@
 export { cppDebugLanguageAdapter } from './cpp.js';
 export { goDebugLanguageAdapter } from './go.js';
+export { javaDebugLanguageAdapter } from './java.js';
+export { luaDebugLanguageAdapter } from './lua.js';
 export { pythonDebugLanguageAdapter } from './python.js';
+export { rubyDebugLanguageAdapter } from './ruby.js';
 export { rustDebugLanguageAdapter } from './rust.js';
+export { vDebugLanguageAdapter } from './v.js';
 export type { DebugLanguageAdapter } from './types.js';

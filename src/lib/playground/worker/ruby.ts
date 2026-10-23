@@ -1,6 +1,8 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import { readDebugCommand } from '../debugMailbox';
+import { executeRubyTracepoint } from './rubyTracepoint';
 import { createReadonlyGolfscriptMount } from './golfscriptMount';
 import {
 	GOLFSCRIPT_RUNTIME_DIRECTORY,
@@ -654,6 +656,28 @@ end`);
 			} finally {
 				execution.flushOutput!();
 			}
+		} else if (message.rubyDebug) {
+			const debug = message.rubyDebug;
+			await executeRubyTracepoint(
+				vm,
+				code,
+				{
+					path: activePath,
+					debugPath: debug.sourcePath,
+					breakpoints: debug.breakpoints,
+					sourceBreakpoints: debug.sourceBreakpoints,
+					pauseOnEntry: debug.pauseOnEntry,
+					files: workspaceFiles
+				},
+				(message) => postMessage({ rubyDebug: message }),
+				(blocking) =>
+					readDebugCommand(
+						debug.buffer,
+						blocking,
+						() => postMessage({ rubyDebug: { consumed: true } }),
+						'Ruby'
+					)
+			);
 		} else {
 			vm.eval(code);
 		}

@@ -1,4 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { normalizeLldbWorkspacePath } from '$lib/playground/lldbSourcePath';
 import {
 	loadVerifiedDOuterAssets,
 	snapshotDOuterAssetConfig,
@@ -17,6 +18,7 @@ let runtimeConfig: DOuterAssetConfig | null = null;
 let loadedRuntimeKey = '';
 let runtimePromise: Promise<{
 	compiler: any;
+	compilerProvenance?: { name: string; version: string; binarySha256: string };
 	executeBrowserDArtifact: (
 		artifact: any,
 		options?: {
@@ -82,6 +84,13 @@ async function loadRuntime(config: DOuterAssetConfig) {
 		const runtimeBaseUrl = new URL('./', manifestUrl);
 		runtimeBaseUrl.search = manifestUrl.search;
 		return {
+			compilerProvenance: manifest.compiler?.ldc2?.integrity
+				? {
+						name: 'ldc',
+						version: manifest.version,
+						binarySha256: manifest.compiler.ldc2.integrity.uncompressedSha256
+					}
+				: undefined,
 			compiler: await factory({
 				runtimeBaseUrl: runtimeBaseUrl.href,
 				manifest,
@@ -136,7 +145,8 @@ self.onmessage = async (event: { data: any }) => {
 		args = [],
 		stdin,
 		fileName = 'main.d',
-		log
+		log,
+		debugMode
 	} = event.data;
 	try {
 		if (load) {
@@ -155,7 +165,10 @@ self.onmessage = async (event: { data: any }) => {
 		compilerModulePorts = event.data.compilerModulePorts;
 		if (!runtimeConfig) throw new Error('D runtime has not been loaded');
 		const runtime = await loadRuntime(runtimeConfig);
-		const compileCacheKey = `${fileName}\n${code}`;
+		const lldb = debugMode === 'lldb';
+		const sourcePath = normalizeLldbWorkspacePath(fileName);
+		const compilerFileName = sourcePath.split('/').at(-1) || 'main.d';
+		const compileCacheKey = `${debugMode || 'none'}\n${fileName}\n${code}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
@@ -167,6 +180,16 @@ self.onmessage = async (event: { data: any }) => {
 				fileName,
 				target: 'wasm32-wasi',
 				log,
+				...(lldb
+					? {
+							compileArgs: [
+								'-g',
+								'-O0',
+								'-dwarf-version=4',
+								`--fdebug-prefix-map=/work/${compilerFileName}=/workspace/${sourcePath}`
+							]
+						}
+					: {}),
 				onProgress(progress: unknown) {
 					postMessage({ progress });
 				}
@@ -199,6 +222,36 @@ self.onmessage = async (event: { data: any }) => {
 
 		if (prepare) {
 			postMessage({ results: true });
+			return;
+		}
+		if (lldb) {
+			if (!runtime.compilerProvenance)
+				throw new Error('D LLDB debugging requires verified compiler provenance.');
+			if (!compiledArtifact.bytes)
+				throw new Error(
+					'D LLDB debugging requires the compiler to return WebAssembly bytes.'
+				);
+			const bytes = new Uint8Array(compiledArtifact.bytes);
+			const sha256 = async (value: Uint8Array) =>
+				Array.from(
+					new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(value))),
+					(byte) => byte.toString(16).padStart(2, '0')
+				).join('');
+			const contentSha256 = await sha256(new TextEncoder().encode(code));
+			const path = `/workspace/${sourcePath}`;
+			postMessage({
+				lldbArtifact: {
+					bytes,
+					descriptor: {
+						kind: 'dwarf',
+						sourceRoot: '/workspace',
+						moduleSha256: await sha256(bytes),
+						files: [{ path, contentSha256 }],
+						compiler: runtime.compilerProvenance
+					},
+					sources: [{ path, content: code, contentSha256 }]
+				}
+			});
 			return;
 		}
 

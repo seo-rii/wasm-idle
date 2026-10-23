@@ -11,6 +11,8 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 #if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Emit;
+using Microsoft.CodeAnalysis.Text;
 #endif
 #if WASM_DOTNET_CSHARP
 using Microsoft.CodeAnalysis.CSharp;
@@ -127,13 +129,14 @@ public static partial class CompilerHost
                 throw new InvalidDataException("Specify references or referenceSetId, not both.");
             var registered = request.ReferenceSetId is null ? null : ReferenceSets.Get(request.ReferenceSetId);
             var references = registered?.Assemblies ?? request.References;
+            var sourcePath = NormalizeSourcePath(request.SourcePath);
 
 #if WASM_DOTNET_CSHARP
-            var result = CompileCSharp(request.Source, references);
+            var result = CompileCSharp(request.Source, references, sourcePath, request.Debug);
 #elif WASM_DOTNET_FSHARP
-            var result = await CompileFSharp(request.Source, references, registered?.Directory);
+            var result = await CompileFSharp(request.Source, references, sourcePath, request.Debug, registered?.Directory);
 #elif WASM_DOTNET_VBNET
-            var result = CompileVisualBasic(request.Source, references);
+            var result = CompileVisualBasic(request.Source, references, sourcePath, request.Debug);
 #endif
 
             if (!result.Success || result.Assembly is null)
@@ -152,6 +155,7 @@ public static partial class CompilerHost
             {
                 Success = true,
                 AssemblyId = assemblyId,
+                Debug = result.Debug,
                 Diagnostics = result.Diagnostics,
                 Logs = result.Logs
             });
@@ -243,17 +247,21 @@ public static partial class CompilerHost
     }
 
 #if WASM_DOTNET_CSHARP
-    private static CompileResult CompileCSharp(string source, ReferenceAssembly[]? references)
+    private static CompileResult CompileCSharp(string source, ReferenceAssembly[]? references, string sourcePath, bool debug)
     {
         using var stream = new MemoryStream();
-        var syntaxTree = CSharpSyntaxTree.ParseText(RewriteCSharpSource(source));
+        using var symbols = new MemoryStream();
+        var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(RewriteCSharpSource(source), Encoding.UTF8), path: sourcePath);
         var compilation = CSharpCompilation.Create(
             $"WasmIdleCSharp_{Guid.NewGuid():N}",
             [syntaxTree],
             MetadataReferences(references),
             new CSharpCompilationOptions(OutputKind.ConsoleApplication)
+                .WithOptimizationLevel(OptimizationLevel.Debug)
                 .WithConcurrentBuild(false));
-        var emit = compilation.Emit(stream);
+        var emit = debug
+            ? compilation.Emit(stream, symbols, options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb, pdbFilePath: Path.ChangeExtension(sourcePath, ".pdb")))
+            : compilation.Emit(stream);
         var diagnostics = emit.Diagnostics.Select(ToDiagnostic).ToArray();
         if (!emit.Success)
         {
@@ -265,31 +273,29 @@ public static partial class CompilerHost
             };
         }
 
-        stream.Position = 0;
-        return new CompileResult
-        {
-            Success = true,
-            Assembly = Assembly.Load(stream.ToArray()),
-            Diagnostics = diagnostics
-        };
+        return LoadCompiledAssembly(stream.ToArray(), debug ? symbols.ToArray() : null, sourcePath, diagnostics);
     }
 #endif
 
 #if WASM_DOTNET_VBNET
-    private static CompileResult CompileVisualBasic(string source, ReferenceAssembly[]? references)
+    private static CompileResult CompileVisualBasic(string source, ReferenceAssembly[]? references, string sourcePath, bool debug)
     {
         using var stream = new MemoryStream();
-        var syntaxTree = VisualBasicSyntaxTree.ParseText(RewriteVisualBasicSource(source));
+        using var symbols = new MemoryStream();
+        var syntaxTree = VisualBasicSyntaxTree.ParseText(SourceText.From(RewriteVisualBasicSource(source), Encoding.UTF8), path: sourcePath);
         var compilation = VisualBasicCompilation.Create(
             $"WasmIdleVisualBasic_{Guid.NewGuid():N}",
             [syntaxTree],
             MetadataReferences(references),
             new VisualBasicCompilationOptions(OutputKind.ConsoleApplication)
+                .WithOptimizationLevel(OptimizationLevel.Debug)
                 .WithConcurrentBuild(false)
                 .WithOptionStrict(OptionStrict.Off)
                 .WithOptionInfer(true)
                 .WithOptionExplicit(true));
-        var emit = compilation.Emit(stream);
+        var emit = debug
+            ? compilation.Emit(stream, symbols, options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb, pdbFilePath: Path.ChangeExtension(sourcePath, ".pdb")))
+            : compilation.Emit(stream);
         var diagnostics = emit.Diagnostics.Select(ToDiagnostic).ToArray();
         if (!emit.Success)
         {
@@ -301,24 +307,19 @@ public static partial class CompilerHost
             };
         }
 
-        stream.Position = 0;
-        return new CompileResult
-        {
-            Success = true,
-            Assembly = Assembly.Load(stream.ToArray()),
-            Diagnostics = diagnostics
-        };
+        return LoadCompiledAssembly(stream.ToArray(), debug ? symbols.ToArray() : null, sourcePath, diagnostics);
     }
 #endif
 
 #if WASM_DOTNET_FSHARP
-    private static async Task<CompileResult> CompileFSharp(string source, ReferenceAssembly[]? references, string? referenceDirectory = null)
+    private static async Task<CompileResult> CompileFSharp(string source, ReferenceAssembly[]? references, string virtualSourcePath, bool debug, string? referenceDirectory = null)
     {
         var workDir = Path.Combine(Path.GetTempPath(), $"wasm-dotnet-{Guid.NewGuid():N}");
         Directory.CreateDirectory(workDir);
-        var sourcePath = Path.Combine(workDir, "Program.fs");
+        var sourcePath = Path.Combine(workDir, Path.GetFileName(virtualSourcePath));
         var outputPath = Path.Combine(workDir, "Program.dll");
-        File.WriteAllText(sourcePath, RewriteFSharpSource(source));
+        var symbolsPath = Path.Combine(workDir, "Program.pdb");
+        File.WriteAllText(sourcePath, RewriteFSharpSource(source), new UTF8Encoding(false));
         var argv = new List<string>
         {
             "fsc.exe",
@@ -327,11 +328,16 @@ public static partial class CompilerHost
             "--noframework",
             "--simpleresolution",
             "--nowin32manifest",
-            "--debug-",
+            debug ? "--debug:portable" : "--debug-",
             "--optimize-",
             $"--out:{outputPath}",
             sourcePath
         };
+        if (debug)
+        {
+            argv.Add($"--pdb:{symbolsPath}");
+            argv.Add($"--pathmap:{workDir}={Path.GetDirectoryName(virtualSourcePath)}");
+        }
         var referencePaths = ReferenceAssemblyPaths(workDir, references, referenceDirectory);
         argv.AddRange(referencePaths.Select(path => $"-r:{path}"));
 
@@ -376,12 +382,7 @@ public static partial class CompilerHost
             };
         }
 
-        return new CompileResult
-        {
-            Success = true,
-            Assembly = Assembly.Load(File.ReadAllBytes(outputPath)),
-            Diagnostics = diagnostics
-        };
+        return LoadCompiledAssembly(File.ReadAllBytes(outputPath), debug ? File.ReadAllBytes(symbolsPath) : null, virtualSourcePath, diagnostics);
     }
 #endif
 
@@ -605,6 +606,32 @@ public static partial class CompilerHost
     private static string WriteJson(RunResponse value) =>
         JsonSerializer.Serialize(value, CompilerJsonContext.Default.RunResponse);
 
+    private static string NormalizeSourcePath(string? sourcePath)
+    {
+        sourcePath ??= $"/workspace/Program.{(RuntimeLanguage == "csharp" ? "cs" : RuntimeLanguage == "vbnet" ? "vb" : "fs")}";
+        if (!sourcePath.StartsWith("/workspace/", StringComparison.Ordinal) || sourcePath.Contains('\\') || sourcePath.Contains('\0') ||
+            sourcePath["/workspace/".Length..].Split('/').Any(part => part is "" or "." or ".."))
+            throw new InvalidDataException(".NET sourcePath must be a normalized file path below /workspace/.");
+        return sourcePath;
+    }
+
+    private static CompileResult LoadCompiledAssembly(byte[] assemblyBytes, byte[]? symbolsBytes, string sourcePath, CompilerDiagnostic[] diagnostics)
+    {
+        var assembly = symbolsBytes is null ? Assembly.Load(assemblyBytes) : Assembly.Load(assemblyBytes, symbolsBytes);
+        return new CompileResult
+        {
+            Success = true,
+            Assembly = assembly,
+            Diagnostics = diagnostics,
+            Debug = symbolsBytes is null ? null : new DebugMetadata
+            {
+                Format = "portable-pdb", SourcePath = sourcePath,
+                AssemblyName = assembly.GetName().Name ?? "", ModuleVersionId = assembly.ManifestModule.ModuleVersionId.ToString(),
+                AssemblyBytesBase64 = Convert.ToBase64String(assemblyBytes), SymbolsBytesBase64 = Convert.ToBase64String(symbolsBytes)
+            }
+        };
+    }
+
     public sealed class CompileRequest
     {
         public string? Source { get; set; }
@@ -612,6 +639,8 @@ public static partial class CompilerHost
         public string[]? Args { get; set; }
         public ReferenceAssembly[]? References { get; set; }
         public string? ReferenceSetId { get; set; }
+        public bool Debug { get; set; }
+        public string? SourcePath { get; set; }
     }
 
     public sealed class RegisterReferencesRequest { public ReferenceAssembly[]? References { get; set; } }
@@ -672,6 +701,7 @@ public static partial class CompilerHost
         public CompilerDiagnostic[]? Diagnostics { get; set; }
         public string? Stderr { get; set; }
         public string[]? Logs { get; set; }
+        public DebugMetadata? Debug { get; set; }
     }
 
     public sealed class CompileResponse
@@ -683,6 +713,17 @@ public static partial class CompilerHost
         public CompilerDiagnostic[]? Diagnostics { get; set; }
         public string[]? Logs { get; set; }
         public string? Error { get; set; }
+        public DebugMetadata? Debug { get; set; }
+    }
+
+    public sealed class DebugMetadata
+    {
+        public string Format { get; set; } = "portable-pdb";
+        public string SourcePath { get; set; } = "";
+        public string AssemblyName { get; set; } = "";
+        public string ModuleVersionId { get; set; } = "";
+        public string AssemblyBytesBase64 { get; set; } = "";
+        public string SymbolsBytesBase64 { get; set; } = "";
     }
 
     public sealed class RunResponse
