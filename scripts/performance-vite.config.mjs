@@ -23,7 +23,7 @@ export default defineConfig({
 	},
 	optimizeDeps: {
 		noDiscovery: true,
-		include: ['@wasm-idle/lsp > vscode-jsonrpc'],
+		include: ['@wasm-idle/lsp > vscode-jsonrpc/browser'],
 		exclude: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@seorii/monaco', 'monaco-editor']
 	},
 	worker: { format: 'es' },
