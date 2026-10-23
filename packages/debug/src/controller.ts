@@ -1190,8 +1190,13 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		const isPausedSource = get(pausedSourcePathStore) === sourcePath;
 		const sourceRevisionStale = isPausedSource && get(staleSourcePathsStore).has(sourcePath);
 		sourceRevisionStaleStore.set(sourceRevisionStale);
+		const selectedFrameId = get(frameIdStore);
+		const selectedFrame =
+			selectedFrameId === null
+				? get(callStackStore)[0]
+				: get(callStackStore).find((frame) => frame.id === selectedFrameId);
 		pausedLineStore.set(
-			isPausedSource && !sourceRevisionStale ? (get(callStackStore)[0]?.line ?? null) : null
+			isPausedSource && !sourceRevisionStale ? (selectedFrame?.line ?? null) : null
 		);
 		syncBreakpoints();
 	}
