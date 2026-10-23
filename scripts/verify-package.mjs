@@ -48,9 +48,9 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// The root install includes container execution modules and release metadata.
 		// Keep the bounded byte/package limits; shipped module/declaration pairs now
-		// total 436 root files + 267 dependency files + npm's installation metadata,
-		// including the debug-configuration module's JS and declaration files.
-		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 704, maxPackages: 6 },
+		// total 438 root files + 267 dependency files + npm's installation metadata,
+		// including the Java output and debug-configuration JS/declaration pairs.
+		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 706, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
