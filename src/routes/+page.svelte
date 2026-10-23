@@ -14,7 +14,11 @@
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
 		goDebugLanguageAdapter,
+		javaDebugLanguageAdapter,
+		luaDebugLanguageAdapter,
+		vDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
+		rubyDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
 		type DebugLanguageAdapter,
 		type DebugVariableNode,
@@ -39,6 +43,7 @@
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
+		BrowserDebugMode,
 		DebugDataBreakpoint,
 		DebugDataBreakpointAccessType,
 		DebugDataBreakpointInfo,
@@ -175,22 +180,40 @@
 
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
-	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	const lldbDebugLanguages = new Set<PlaygroundLanguage>([
+		'C',
+		'CPP',
+		'RUST',
+		'OBJC',
+		'OBJECTIVECXX',
+		'V'
+	]);
+	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
 		OBJC: cppDebugLanguageAdapter,
+		OBJECTIVECXX: cppDebugLanguageAdapter,
+		V: vDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
+		JAVA: javaDebugLanguageAdapter,
+		LUA: luaDebugLanguageAdapter,
+		RUBY: rubyDebugLanguageAdapter,
 		RUST: rustDebugLanguageAdapter,
 		PYTHON: pythonDebugLanguageAdapter
 	};
 	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
 		C: 'C · LLDB / WAMR',
 		CPP: 'C++ · LLDB / WAMR',
-		OBJC: 'Objective-C Trace',
+		OBJC: 'Objective-C · LLDB / WAMR',
+		OBJECTIVECXX: 'Objective-C++ · LLDB / WAMR',
+		V: 'V · LLDB / WAMR',
 		GO: 'Go Trace',
+		JAVA: 'Java · Trace',
+		LUA: 'Lua · MobDebug',
+		RUBY: 'Ruby · TracePoint',
 		RUST: 'Rust · LLDB / WAMR',
 		PYTHON: 'Pyodide Trace'
 	};
@@ -241,7 +264,7 @@
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
-		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
+		activeDebugBackend = $state<BrowserDebugMode | null>(null),
 		progressVisible = $state(false),
 		progress = $state(0),
 		progressStage = $state(''),
@@ -397,6 +420,20 @@
 		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
 	);
 	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
+	const phpLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'php');
+	const phpLspWasmUrl = $derived(
+		phpLspEnabled ? resolveApplicationAsset('wasm-phpantom-lsp/phpantom_lsp.wasm') : undefined
+	);
+	const forthLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'forth');
+	const forthLspWasmUrl = $derived(
+		forthLspEnabled ? resolveApplicationAsset('wasm-forth-lsp/forth_lsp.wasm') : undefined
+	);
+	const c3LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'c3');
+	const c3LspBaseUrl = $derived(
+		c3LspEnabled ? resolveApplicationAsset('wasm-c3-lsp/') : undefined
+	);
+	const vLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'v');
+	const vLspBaseUrl = $derived(vLspEnabled ? resolveApplicationAsset('wasm-v-lsp/') : undefined);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -408,6 +445,12 @@
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
 	const dLspManifestUrl = $derived(dLspEnabled ? runtimeAssets.d?.manifestUrl : undefined);
 	const dLspIntegrity = $derived(dLspEnabled ? runtimeAssets.d?.integrity : undefined);
+	const lean4LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lean4');
+	const lean4LspBaseUrl = $derived(
+		lean4LspEnabled
+			? runtimeAssets.lean4?.baseUrl || resolveApplicationAsset('wasm-lean4/')
+			: undefined
+	);
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
@@ -460,6 +503,43 @@
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
+	const bashLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'bash');
+	const bashLspModuleUrl = $derived(
+		bashLspEnabled
+			? resolveApplicationAsset('wasm-bash-lsp/runtime.mjs', '5.8.1-browser-v1')
+			: undefined
+	);
+	const bashLspFiles = $derived.by(() =>
+		bashLspEnabled
+			? Object.fromEntries(
+					files
+						.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+						.map((file) => [file.path, file.content])
+				)
+			: undefined
+	);
+	const cobolLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'cobol');
+	const cobolLspBaseUrl = $derived(
+		cobolLspEnabled ? resolveApplicationAsset('wasm-cobol-lsp/') : undefined
+	);
+	const cobolLspWorkspaceFiles = $derived.by(() =>
+		cobolLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
+	const nimLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'nim');
+	const nimLspBaseUrl = $derived(
+		nimLspEnabled ? resolveApplicationAsset('wasm-nim-lsp/') : undefined
+	);
+	const nimLspWorkspaceFiles = $derived.by(() =>
+		nimLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const postgresqlLspEnabled = $derived(
@@ -492,7 +572,24 @@
 	const awkLspWorkerUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.workerUrl : undefined);
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspRuntime = $derived(perlLspEnabled ? runtimeAssets.perl : undefined);
+	const fennelLspBaseUrl = $derived(resolveApplicationAsset('wasm-fennel-lsp/'));
 	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
+	const grainLspBaseUrl = $derived(resolveApplicationAsset('wasm-grain-lsp/'));
+	const grainLspWorkspaceFiles = $derived(
+		files
+			.filter((file) => file.path !== activePath && file.path.endsWith('.gr'))
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
+	const rescriptLspBaseUrl = $derived(resolveApplicationAsset('wasm-rescript-lsp/'));
+	const rescriptLspWorkspaceFiles = $derived(
+		files
+			.filter(
+				(file) =>
+					file.path !== activePath &&
+					(/\.resi?$/.test(file.path) || /(?:^|\/)rescript\.json$/.test(file.path))
+			)
+			.map((file) => ({ path: file.path, content: file.content }))
+	);
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
 			? runtimeAssets.typescript?.libUrl
@@ -520,7 +617,13 @@
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
-		lldbDebugLanguages.has(language) ? ('lldb' as const) : ('trace' as const)
+		lldbDebugLanguages.has(language)
+			? ('lldb' as const)
+			: language === 'LUA'
+				? ('mobdebug' as const)
+				: language === 'RUBY'
+					? ('tracepoint' as const)
+					: ('trace' as const)
 	);
 	const debugTargetAvailable = $derived(
 		language !== 'RUST' || rustTargetTriple === 'wasm32-wasip1'
@@ -2559,6 +2662,7 @@
 							progressOutcome = 'cancelled';
 							return;
 						}
+						if (!traceFallbackLanguages.has(language)) throw error;
 						executionDebugMode = 'trace';
 						activeDebugBackend = 'trace';
 						console.warn(
@@ -3238,8 +3342,13 @@
 						<button
 							class="action-button debug-control"
 							onclick={() => debug.pause()}
-							disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
-							title="Pause"
+							disabled={(activeDebugBackend !== 'lldb' &&
+								!(language === 'JAVA' && activeDebugBackend === 'trace')) ||
+								!debug.active ||
+								debug.paused}
+							title={language === 'JAVA'
+								? 'Pause at the next Java statement'
+								: 'Pause'}
 							aria-label="Pause"
 						>
 							<span class="material-symbols-outlined" aria-hidden="true">pause</span>
@@ -3367,6 +3476,12 @@
 						</header>
 						{#if debugPanelOpen.variables}
 							<div class="debug-panel__body" id="debug-panel-variables">
+								{#if language === 'JAVA'}
+									<p>
+										Java shows local values and array elements for the currently
+										stopped frame. Other objects are shown by type and identity.
+									</p>
+								{/if}
 								{#if debug.scopes.length}
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
@@ -3465,6 +3580,12 @@
 						</header>
 						{#if debugPanelOpen.watch}
 							<div class="debug-panel__body" id="debug-panel-watch">
+								{#if language === 'JAVA'}
+									<p>
+										Java watches use a read-only snapshot of primitive and
+										String values.
+									</p>
+								{/if}
 								<div class="watch-row">
 									<input
 										bind:value={debug.watchInput}
@@ -4483,6 +4604,10 @@
 							{compact}
 							dark={darkMode}
 							{lspEnabled}
+							{grainLspBaseUrl}
+							{grainLspWorkspaceFiles}
+							{rescriptLspBaseUrl}
+							{rescriptLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}
@@ -4499,6 +4624,14 @@
 							erlangLspWorkerUrl={beamLspWorkerUrl}
 							{erlangLspIntegrity}
 							{gleamLspEnabled}
+							{phpLspEnabled}
+							{phpLspWasmUrl}
+							{forthLspEnabled}
+							{forthLspWasmUrl}
+							{c3LspEnabled}
+							{c3LspBaseUrl}
+							{vLspEnabled}
+							{vLspBaseUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}
@@ -4506,6 +4639,8 @@
 							{dLspModuleUrl}
 							{dLspManifestUrl}
 							{dLspIntegrity}
+							{lean4LspEnabled}
+							{lean4LspBaseUrl}
 							{tclLspEnabled}
 							{tclLspBaseUrl}
 							{tclLspWorkerUrl}
@@ -4537,10 +4672,19 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{cobolLspEnabled}
+							{cobolLspBaseUrl}
+							{cobolLspWorkspaceFiles}
+							{nimLspEnabled}
+							{nimLspBaseUrl}
+							{nimLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
 							{postgresqlLspEnabled}
 							{postgresqlLspModuleUrl}
+							{bashLspEnabled}
+							{bashLspModuleUrl}
+							{bashLspFiles}
 							{prologLspEnabled}
 							{prologLspBaseUrl}
 							{prologLspWorkerUrl}
@@ -4557,6 +4701,7 @@
 							{awkLspWorkerUrl}
 							{perlLspEnabled}
 							{perlLspRuntime}
+							{fennelLspBaseUrl}
 							{pythonLspBaseUrl}
 							{typescriptLspLibUrl}
 							breakpoints={debug.effectiveBreakpoints}

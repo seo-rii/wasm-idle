@@ -1,3 +1,5 @@
+import type { C3LspAssetReceipts } from './c3/assets.js';
+import type { VLspAssetReceipts } from './v/assets.js';
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
 import type { LanguageToolAssetConfig } from './assets.js';
@@ -54,8 +56,43 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
 		headers?: string | false;
 	};
+	c3?: {
+		baseUrl?: string;
+		integrity?: C3LspAssetReceipts;
+	};
+	rescript?: {
+		baseUrl?: string;
+		/** Text snapshots relative to /workspace; plain ReScript projects, up to 64 source files. */
+		workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+	};
+	v?: {
+		baseUrl?: string;
+		integrity?: VLspAssetReceipts;
+	};
+	lean4?: {
+		baseUrl?: string;
+		/** Per-document shared Wasm memory ceiling; defaults to 1 GiB. */
+		maxMemoryBytes?: number;
+	};
+	nim?: {
+		/** External, pinned nimlsp/nimsuggest browser assets. */
+		baseUrl?: string;
+		workspaceFiles?: Array<{ path: string; content: string }>;
+		/** Send standard didSave after opening/full changes for autosaving hosts. Default false. */
+		autoSave?: boolean;
+	};
 	python?: {
 		baseUrl?: string;
+	};
+	/** PHPantom's original WASI reactor. It does not currently publish diagnostics. */
+	php?: {
+		wasmUrl?: string;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+	};
+	/** Upstream forth-lsp compiled as a WASI reactor. */
+	forth?: {
+		wasmUrl?: string;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	rust?: {
 		compilerUrl?: string;
@@ -69,6 +106,11 @@ export interface EditorLanguageServerRuntimeOptions {
 	go?: {
 		compilerUrl?: string;
 		target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
+	};
+	grain?: {
+		baseUrl?: string;
+		/** Read-only project snapshot mounted below file:///workspace/. */
+		workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 	};
 	d?: {
 		moduleUrl?: string;
@@ -116,6 +158,9 @@ export interface EditorLanguageServerRuntimeOptions {
 		stdlibUrl?: string;
 		targetTriple?: 'wasm64-wasi';
 		compileArgs?: string[];
+	};
+	fennel?: {
+		baseUrl?: string;
 	};
 	lua?: {
 		moduleUrl?: string;
@@ -167,6 +212,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		wasmUrl?: string;
 		duckdbBundles?: DuckDBBundles;
 	};
+	cobol?: {
+		baseUrl?: string;
+		workspaceFiles?: Array<{ path: string; content: string }>;
+	};
 	graphql?: {
 		schema?: string;
 	};
@@ -175,6 +224,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		moduleUrl?: string;
 		/** JSON exported by postgres-language-server schema-export. */
 		schema?: string;
+	};
+	bash?: {
+		moduleUrl?: string;
+		files?: Readonly<Record<string, string>>;
 	};
 	fortran?: {
 		analyzerUrl?: string;

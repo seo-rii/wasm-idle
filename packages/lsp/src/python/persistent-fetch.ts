@@ -33,7 +33,7 @@ export async function withPersistentPythonLspAssets<T>(
 		}
 		const url = new URL(request?.url ?? String(input), globalThis.location?.href).href;
 		// A distribution may customize its package lock at this same root (for
-		// example Trinity's robot package). An inferred stock receipt must not
+		// example by adding custom packages). An inferred stock receipt must not
 		// replace that lock or become a new integrity requirement for its packages.
 		const filename = new URL(url).pathname.split('/').at(-1);
 		if (filename !== 'pyodide.asm.wasm' && filename !== 'python_stdlib.zip') {

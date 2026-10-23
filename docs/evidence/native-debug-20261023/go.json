@@ -1,0 +1,75 @@
+{
+	"schemaVersion": 1,
+	"language": "go",
+	"probedAt": "2026-10-23T01:27:06.711Z",
+	"hostNode": "v24.1.0",
+	"milliseconds": 23314,
+	"status": "blocked",
+	"blocker": "GO_WASM_LINKER_OMITS_DWARF",
+	"version": "go1.26.1",
+	"manifestSha256": "63f3cf89895207371ed310039721b65cb8227be284ed6d9a2556fb174b7d432b",
+	"target": "wasip1/wasm",
+	"source": "package main\nimport \"fmt\"\nfunc main() {\n var value int\n fmt.Scan(&value)\n value += 5\n fmt.Println(value)\n}\n",
+	"invocations": [
+		{
+			"tool": "compile",
+			"args": [
+				"compile",
+				"-N",
+				"-l",
+				"-p",
+				"main",
+				"-pack",
+				"-lang",
+				"go1.26",
+				"-trimpath",
+				"/workspace",
+				"-importcfg",
+				"/workspace/importcfg",
+				"-o",
+				"/workspace/pkg/main.a",
+				"/workspace/main.go"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": ""
+		},
+		{
+			"tool": "link",
+			"args": [
+				"link",
+				"-w=false",
+				"-importcfg",
+				"/workspace/importcfg",
+				"-o",
+				"/workspace/bin/main.wasm",
+				"/workspace/pkg/main.a"
+			],
+			"exitCode": 0,
+			"stdout": "",
+			"stderr": ""
+		}
+	],
+	"artifact": {
+		"bytes": 2785577,
+		"sha256": "d86632ec19fb362a3aa895c1cdcfe0854903905a03c64bd35daf95b860ff864e",
+		"customSections": [
+			{
+				"name": "producers",
+				"bytes": 61
+			},
+			{
+				"name": "name",
+				"bytes": 52447
+			}
+		],
+		"dwarfSections": [],
+		"hasSourceDwarf": false
+	},
+	"execution": {
+		"exitCode": 0,
+		"stdin": "7\n",
+		"stdout": "12\n",
+		"stderr": ""
+	}
+}

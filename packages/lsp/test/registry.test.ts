@@ -6,6 +6,13 @@ import {
 } from '../src/registry.js';
 
 const expectedLanguagesByProvider = {
+	php: ['php', 'phpantom'],
+	forth: ['forth', 'fth', '4th'],
+	c3: ['c3'],
+	rescript: ['rescript'],
+	v: ['v', 'vlang'],
+	lean4: ['lean4', 'lean'],
+	nim: ['nim'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],
@@ -26,6 +33,8 @@ const expectedLanguagesByProvider = {
 	assemblyscript: ['assemblyscript', 'as'],
 	zig: ['zig'],
 	lua: ['lua'],
+	fennel: ['fennel', 'fnl'],
+	grain: ['grain', 'gr'],
 	janet: ['janet'],
 	lisp: ['lisp', 'scheme', 'scm'],
 	octave: ['octave', 'matlab', 'm'],
@@ -34,6 +43,8 @@ const expectedLanguagesByProvider = {
 	sql: ['sql', 'sqlite'],
 	duckdb: ['duckdb'],
 	postgresql: ['postgresql', 'postgres', 'pgsql'],
+	bash: ['bash', 'shell', 'sh'],
+	cobol: ['cobol', 'cob', 'cbl'],
 	graphql: ['graphql', 'gql'],
 	fortran: ['fortran', 'f90', 'f95'],
 	prolog: ['prolog', 'swipl'],

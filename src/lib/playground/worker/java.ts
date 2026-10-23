@@ -7,6 +7,9 @@ import {
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
 import { prepareJavaExceptionBridge } from '$lib/playground/javaRuntimeErrors';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { createJavaDebugBridge } from '../javaDebugBridge';
+import { readDebugCommand } from '../debugMailbox';
+import { createJavaDebugRuntime, type JavaDebugFile } from './javaDebugRuntime';
 import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
@@ -40,6 +43,8 @@ let acceptsCompiledModule = false;
 let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
+let compiledDebugEnabled = false;
+let compiledDebugFiles: JavaDebugFile[] = [];
 let currentSourcePaths = new Set<string>();
 const decoder = new TextDecoder();
 
@@ -59,6 +64,8 @@ self.addEventListener('message', async (event) => {
 		buffer,
 		code,
 		prepare,
+		debugMode,
+		javaDebug,
 		args = [],
 		stdin = '',
 		hasExplicitStdin = false,
@@ -152,6 +159,8 @@ self.addEventListener('message', async (event) => {
 				compiledDiagnostics = [];
 				compiledActivePath = '';
 				compiledWorkspaceFiles = [];
+				compiledDebugEnabled = false;
+				compiledDebugFiles = [];
 				currentSourcePaths = new Set();
 			}
 			self.postMessage({ load: true });
@@ -171,12 +180,28 @@ self.addEventListener('message', async (event) => {
 		if (
 			!Array.isArray(workspaceFiles) ||
 			!workspaceFiles.every(
-				(file) => file && typeof file.path === 'string' && typeof file.content === 'string'
+				(file) =>
+					file &&
+					typeof file.path === 'string' &&
+					(typeof file.content === 'string' || file.content instanceof Uint8Array)
 			)
 		) {
 			throw new Error('Invalid Java workspace files');
 		}
-		const sourceFiles = workspaceFiles as Array<{ path: string; content: string }>;
+		// Container files arrive as bytes; Java compiler inputs are strict UTF-8 source text.
+		const sourceDecoder = new TextDecoder('utf-8', { fatal: true });
+		const sourceFiles: Array<{ path: string; content: string }> = workspaceFiles.map(
+			(file: { path: string; content: string | Uint8Array }) => ({
+				path: file.path,
+				content:
+					typeof file.content === 'string'
+						? file.content
+						: sourceDecoder.decode(file.content)
+			})
+		);
+		const debugEnabled = debugMode === 'trace';
+		if (debugMode && debugMode !== 'none' && !debugEnabled)
+			throw new Error('Java supports the trace debugger backend');
 		const workspaceChanged =
 			compiledActivePath !== sourcePath ||
 			compiledWorkspaceFiles.length !== sourceFiles.length ||
@@ -198,6 +223,7 @@ self.addEventListener('message', async (event) => {
 
 		if (
 			compiledCode !== code ||
+			compiledDebugEnabled !== debugEnabled ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
 			workspaceChanged ||
 			!compiledWasm
@@ -206,6 +232,7 @@ self.addEventListener('message', async (event) => {
 			compiledWasm = null;
 			compiledModule = null;
 			compiledDiagnostics = [];
+			compiledDebugFiles = [];
 			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
 				[sourcePath, ...sourceFiles.map((file) => file.path)].flatMap((path) => [
@@ -213,6 +240,57 @@ self.addEventListener('message', async (event) => {
 					path.split('/').pop() || path
 				])
 			);
+			let mainSource = stdinInjection.transformedCode;
+			let otherSources = sourceFiles;
+			let debugBridge: ReturnType<typeof createJavaDebugBridge> | undefined;
+			const debugFiles: JavaDebugFile[] = [];
+			if (debugEnabled) {
+				const { instrumentJavaDebugSource } = await import('../javaDebugSource');
+				const originals = [{ path: sourcePath, content: code }, ...sourceFiles];
+				let nonce: string;
+				do {
+					nonce = crypto.randomUUID().replaceAll('-', '');
+				} while (
+					originals.some(
+						(file) => file.content.includes(nonce) || file.path.includes(nonce)
+					)
+				);
+				debugBridge = createJavaDebugBridge(
+					`WasmIdleJavaDebug_${nonce}`,
+					`wasm_idle_debug_${nonce}`
+				);
+				const instrumented: Array<{ path: string; content: string }> = [];
+				for (const file of originals) {
+					if (file.path !== sourcePath && !file.path.endsWith('.java')) {
+						instrumented.push(file);
+						continue;
+					}
+					const result = instrumentJavaDebugSource(
+						file.content,
+						file.path,
+						debugBridge.qualifiedName
+					);
+					const hash = new Uint8Array(
+						await crypto.subtle.digest(
+							'SHA-256',
+							new TextEncoder().encode(file.content)
+						)
+					);
+					debugFiles.push({
+						path: file.path,
+						sourceContentSha256: [...hash]
+							.map((byte) => byte.toString(16).padStart(2, '0'))
+							.join(''),
+						lineCount: file.content.trimEnd().split(/\r\n|\r|\n/).length,
+						locations: result.locations
+					});
+					instrumented.push({ path: file.path, content: result.code });
+				}
+				mainSource = prepareJavaRuntimeStdinInjection(
+					instrumented[0].content
+				).transformedCode;
+				otherSources = instrumented.slice(1);
+			}
 			const diagnosticLines: string[] = [];
 			const diagnosticMessages: object[] = [];
 			let compilingExceptionBridge = false;
@@ -257,10 +335,11 @@ self.addEventListener('message', async (event) => {
 			compiler.clearInputClassFiles?.();
 			compiler.clearOutputFiles?.();
 			// TeaVM derives packages from source text but validates public types against the basename.
-			compiler.addSourceFile(sourceFileName, stdinInjection.transformedCode);
-			for (const file of sourceFiles) {
+			compiler.addSourceFile(sourceFileName, mainSource);
+			for (const file of otherSources) {
 				compiler.addSourceFile(file.path.split('/').pop() || file.path, file.content);
 			}
+			if (debugBridge) compiler.addSourceFile(debugBridge.sourceFileName, debugBridge.source);
 			if (
 				stdinInjection.usesStdin &&
 				stdinInjection.helperSourcePath &&
@@ -353,6 +432,8 @@ self.addEventListener('message', async (event) => {
 			compiledModule = nextModule;
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
+			compiledDebugEnabled = debugEnabled;
+			compiledDebugFiles = debugFiles;
 			compiledDiagnostics = diagnosticMessages;
 		} else {
 			// Every operation has its own diagnostic sink, even when compilation is reused.
@@ -375,6 +456,7 @@ self.addEventListener('message', async (event) => {
 			window?: Window & typeof globalThis;
 			wasmIdleJavaStdin?: unknown;
 			wasmIdleJavaOutput?: unknown;
+			wasmIdleJavaDebug?: unknown;
 		};
 		const previousWindow = workerGlobal.window;
 		const hadStdinBridge = Object.prototype.hasOwnProperty.call(
@@ -387,10 +469,55 @@ self.addEventListener('message', async (event) => {
 			'wasmIdleJavaOutput'
 		);
 		const previousOutputBridge = workerGlobal.wasmIdleJavaOutput;
+		const hadDebugBridge = Object.prototype.hasOwnProperty.call(
+			workerGlobal,
+			'wasmIdleJavaDebug'
+		);
+		const previousDebugBridge = workerGlobal.wasmIdleJavaDebug;
+		const errorConstructor = Error as ErrorConstructor & { stackTraceLimit?: number };
+		const stackTraceLimit = Object.getOwnPropertyDescriptor(
+			errorConstructor,
+			'stackTraceLimit'
+		);
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
 		workerGlobal.wasmIdleJavaStdin = stdinBridge;
 		workerGlobal.wasmIdleJavaOutput = { flush: () => output?.flush() };
 		try {
+			if (debugEnabled) {
+				if (!javaDebug) throw new Error('Java debugger command transport is missing');
+				// V8 defaults to ten physical frames; retain full depth for recursive next/out.
+				if (typeof errorConstructor.stackTraceLimit === 'number')
+					errorConstructor.stackTraceLimit = Infinity;
+				workerGlobal.wasmIdleJavaDebug = createJavaDebugRuntime(
+					compiledDebugFiles,
+					{
+						activePath: sourcePath,
+						debugPath: javaDebug.sourcePath,
+						breakpoints: javaDebug.breakpoints ?? [],
+						sourceBreakpoints: javaDebug.sourceBreakpoints,
+						pauseOnEntry: javaDebug.pauseOnEntry !== false
+					},
+					(event, stopId) => {
+						if (event.type === 'pause') {
+							flushStdout();
+							flushStderr();
+						}
+						self.postMessage({ javaDebug: { event, stopId } });
+					},
+					(blocking) => {
+						// Synchronous Java loops prevent output timers from running. Keep
+						// elapsed batches visible while hooks poll, without flushing every hook.
+						if (!blocking) output?.flushIfDue();
+						return readDebugCommand(
+							javaDebug.buffer,
+							blocking,
+							() => self.postMessage({ javaDebug: { consumed: true } }),
+							'Java'
+						);
+					},
+					(response) => self.postMessage({ javaDebug: { response } })
+				);
+			}
 			const module = await runtimeLoad(compiledModule ?? compiledWasm!, {
 				installImports(imports: any) {
 					imports.teavmConsole.putcharStdout = pushStdout;
@@ -431,6 +558,11 @@ self.addEventListener('message', async (event) => {
 			stdinBridge.dispose();
 			if (hadOutputBridge) workerGlobal.wasmIdleJavaOutput = previousOutputBridge;
 			else delete workerGlobal.wasmIdleJavaOutput;
+			if (hadDebugBridge) workerGlobal.wasmIdleJavaDebug = previousDebugBridge;
+			else delete workerGlobal.wasmIdleJavaDebug;
+			if (stackTraceLimit)
+				Object.defineProperty(errorConstructor, 'stackTraceLimit', stackTraceLimit);
+			else Reflect.deleteProperty(errorConstructor, 'stackTraceLimit');
 			if (hadStdinBridge) workerGlobal.wasmIdleJavaStdin = previousStdinBridge;
 			else delete workerGlobal.wasmIdleJavaStdin;
 			if (previousWindow === undefined) {

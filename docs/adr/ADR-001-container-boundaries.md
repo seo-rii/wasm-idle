@@ -30,3 +30,16 @@ full offline app bootstrap each have additional gates.
 
 See [development plan](../container-development-plan.md) and
 [compatibility ledger](../container-compatibility.md).
+
+## Shared language-host entry (2026-10-23)
+
+The website consumes the optional `wasm-idle/container` integration entry, which
+other browser applications can reuse. Process/VFS/asset primitives remain in `@wasm-idle/container`; the root SDK
+owns the higher-level language execution contract. This avoids making the container
+package depend on the language SDK, or introducing another release unit.
+
+The integration accepts an application-owned Worker factory, language binding
+factory, and pinned Bash/SDK configuration. Importing it has no Worker, fetch, or
+message-handler side effects. Website release modules, language selection, UI,
+and application persistence are kept outside the published entry. See the
+[host setup contract](../container-website.md#sharing-the-execution-host).

@@ -1,0 +1,30 @@
+{
+	"name": "@wasm-idle/rescript-language-server-producer",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@12.9.1",
+	"dependencies": {
+		"@rescript/runtime": "12.3.1",
+		"assert": "2.1.0",
+		"buffer": "6.0.3",
+		"events": "3.3.0",
+		"memfs": "4.17.0",
+		"path-browserify": "1.0.1",
+		"process": "0.11.10",
+		"semver": "7.7.2",
+		"stream-browserify": "3.0.0",
+		"url": "0.11.4",
+		"util": "0.12.5",
+		"vscode-jsonrpc": "8.2.1",
+		"vscode-languageserver": "9.0.1",
+		"vscode-languageserver-protocol": "3.17.5",
+		"vscode-languageserver-types": "3.17.5"
+	},
+	"devDependencies": {
+		"esbuild": "0.28.2"
+	},
+	"scripts": {
+		"build": "node build.mjs"
+	}
+}

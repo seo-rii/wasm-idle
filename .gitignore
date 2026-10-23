@@ -13,6 +13,8 @@ runtimes/wasm-clang/artifacts/
 
 # Local build caches and generated sync outputs
 .cache/
+/static/wasm-phpantom-lsp/
+/static/wasm-forth-lsp/
 **/.svelte-kit/
 static/.cache/
 static/clang/bin/
@@ -34,6 +36,7 @@ static/wasm-d/runtime/bin/lld.wasm
 static/wasm-d/runtime/toolchain/toolchain.tar
 
 # C3 assets are synced from the separately verified wasm-llvm producer.
+/static/wasm-c3-lsp/
 /static/wasm-c3/
 # Common Lisp (ECL) assets are downloaded from the pinned wasm-llvm revision, never committed.
 /static/wasm-commonlisp/
@@ -43,7 +46,22 @@ static/wasm-lfortran/
 /static/wasm-postgresql-lsp/
 # Lean 4 assets are downloaded from the pinned wasm-llvm release, never committed.
 /static/wasm-lean4/
+# Original Bash LSP and parser binaries are built from the pinned producer dependencies.
+/static/wasm-bash-lsp/
 
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+# Original Fennel LSP assets are produced from pinned source.
+/static/wasm-fennel-lsp/
+# Original Grain LSP and its verified runtime host are prepared locally.
+/static/wasm-grain-lsp/
+# Original SuperBOL OSS JavaScript and dialect data are mirrored from pinned assets.
+/static/wasm-cobol-lsp/
+/static/wasm-rescript-lsp/
+/producers/rescript-language-server/node_modules/
+# Original v-analyzer browser LSP assets are produced from pinned sources.
+/static/wasm-v-lsp/
+# Original Nim compiler/nimsuggest LSP assets are deployed externally.
+/static/wasm-nim-lsp/

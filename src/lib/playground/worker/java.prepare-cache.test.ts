@@ -6,6 +6,11 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as javaOutput from './javaOutput';
 import { test } from 'vitest';
+import { webcrypto } from 'node:crypto';
+import * as javaDebugBridge from '../javaDebugBridge';
+import * as javaDebugSource from '../javaDebugSource';
+import * as javaDebugRuntime from './javaDebugRuntime';
+import * as debugMailbox from '../debugMailbox';
 import { prepareJavaExceptionBridge } from '../javaRuntimeErrors';
 
 const source = readFileSync(new URL('./java.ts', import.meta.url), 'utf8');
@@ -13,7 +18,16 @@ const compiled = ts.transpileModule(source, {
 	compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 
-function worker() {
+function worker(
+	options: {
+		now?: () => number;
+		program?: (
+			write: (charCode: number) => void,
+			debug: ReturnType<typeof javaDebugRuntime.createJavaDebugRuntime>
+		) => void;
+		onMessage?: (message: any) => void;
+	} = {}
+) {
 	const messages: any[] = [];
 	const counts = {
 		compile: 0,
@@ -42,7 +56,9 @@ function worker() {
 		clearInputClassFiles() {},
 		clearOutputFiles() {},
 		addSourceFile(name: string) {
-			compilingBridge = name.startsWith('WasmIdleJava');
+			compilingBridge =
+				name.startsWith('WasmIdleJavaEntryPoint') ||
+				name.startsWith('WasmIdleJavaExceptionBridge');
 		},
 		listOutputFiles: () => ['Main.class'],
 		getOutputFile: () => new Int8Array([1]),
@@ -85,24 +101,32 @@ function worker() {
 		}
 	};
 	const runtime = {
-		load: async (bytes: Uint8Array) => {
-			if (bytes[0] === 9 || (bytes as any).app)
+		load: async (bytes: Uint8Array, settings?: { installImports?: (imports: any) => void }) => {
+			if (bytes[0] === 9 || (bytes as any).app) {
+				const imports = { teavmConsole: { putcharStdout: (_charCode: number) => {} } };
+				settings?.installImports?.(imports);
 				return {
 					exports: {
 						main: () => {
 							counts.run++;
+							options.program?.(
+								imports.teavmConsole.putcharStdout,
+								context.wasmIdleJavaDebug
+							);
 						}
 					}
 				};
+			}
 			counts.initialize++;
 			return { exports: { createCompiler: () => compiler } };
 		}
 	};
-	vm.runInNewContext(compiled, {
+	const context = vm.createContext({
 		exports: {},
 		performance,
 		setTimeout,
 		clearTimeout,
+		crypto: webcrypto,
 		TextDecoder,
 		TextEncoder,
 		Blob,
@@ -125,11 +149,22 @@ function worker() {
 			addEventListener: (_: string, listener: typeof handler) => {
 				handler = listener;
 			},
-			postMessage: (message: any) => messages.push(message)
+			postMessage: (message: any) => {
+				messages.push(message);
+				options.onMessage?.(message);
+			}
 		},
 		require: (id: string) => {
+			if (id === '../javaDebugBridge') return javaDebugBridge;
+			if (id === '../javaDebugSource') return javaDebugSource;
+			if (id === '../debugMailbox') return debugMailbox;
+			if (id === './javaDebugRuntime') return javaDebugRuntime;
 			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
-			if (id === './javaOutput') return javaOutput;
+			if (id === './javaOutput')
+				return {
+					createJavaOutput: (emit: (text: string) => void) =>
+						javaOutput.createJavaOutput(emit, { now: options.now })
+				};
 			if (id === './javaStreaming')
 				return {
 					acceptCompiledTeaVmModule: (source: string) => source,
@@ -166,8 +201,10 @@ function worker() {
 			throw new Error(`Unexpected dependency: ${id}`);
 		}
 	});
+	vm.runInContext(compiled, context);
 	return {
 		counts,
+		hasDiagnosticListener: () => onDiagnostic !== undefined,
 		failure,
 		messages,
 		load: (baseUrl = '/teavm/', streamCompiler = true) =>
@@ -186,6 +223,72 @@ function worker() {
 		}
 	};
 }
+
+test('debug polling publishes elapsed output batches before an output-triggered pause', async () => {
+	const mailbox = new debugMailbox.DebugCommandMailbox('Java');
+	const pauses: Array<{ reason: string; line: number }> = [];
+	let time = 0;
+	let output = '';
+	let outputDuringLoop = '';
+	let outputBeforeDeadline = '';
+	let runningLoop = false;
+	let pauseRequests = 0;
+	const w = worker({
+		now: () => time,
+		onMessage(message) {
+			if (message.javaDebug?.consumed) mailbox.flush();
+			const event = message.javaDebug?.event;
+			if (event?.type === 'pause') {
+				pauses.push({ reason: event.reason, line: event.line });
+				mailbox.send(JSON.stringify({ op: 'control', command: 'continue' }));
+			}
+			if (message.output) {
+				output += message.output;
+				if (runningLoop && output.includes('loop-ready') && pauseRequests === 0) {
+					pauseRequests++;
+					mailbox.send(JSON.stringify({ op: 'pause' }));
+				}
+			}
+		},
+		program(write, debug) {
+			debug.poll('Main.java', 2, 3);
+			debug.pause('Main.java', 2, 3, '[["Main","main","Main.java",2]]', 1);
+			runningLoop = true;
+			for (const char of 'loop-ready\n') write(char.charCodeAt(0));
+			// No await or timer advancement: Wasm retains the worker until it pauses.
+			for (time = 1; time <= 17; time++) {
+				if (debug.poll('Main.java', 4, 18))
+					debug.pause('Main.java', 4, 18, '[["Main","main","Main.java",4]]', 1);
+				if (time === 15) outputBeforeDeadline = output;
+			}
+			outputDuringLoop = output;
+			runningLoop = false;
+		}
+	});
+	try {
+		await w.load();
+		await w.run({
+			code: 'public class Main {\n  public static void main(String[] args) {\n    System.out.println("loop-ready");\n    while (true) {}\n  }\n}',
+			prepare: false,
+			debugMode: 'trace',
+			javaDebug: {
+				buffer: mailbox.buffer,
+				sourcePath: '/workspace/Main.java',
+				pauseOnEntry: true
+			}
+		});
+		assert.equal(w.messages.find((message) => message.error)?.error, undefined);
+		assert.equal(outputBeforeDeadline, 'l');
+		assert.equal(outputDuringLoop, 'loop-ready\n');
+		assert.equal(pauseRequests, 1);
+		assert.deepEqual(pauses, [
+			{ reason: 'entry', line: 2 },
+			{ reason: 'pause', line: 4 }
+		]);
+	} finally {
+		mailbox.close();
+	}
+});
 
 test('unchanged prepare requests compile only once and never execute the program', async () => {
 	const w = worker();
@@ -318,4 +421,46 @@ test('custom byte-only loaders retain their byte input contract', async () => {
 	await w.run({ prepare: false });
 	assert.equal(w.counts.engineCompile, 0);
 	assert.equal(w.counts.run, 1);
+});
+
+test('debug and ordinary preparation never reuse each other’s compiled artifact', async () => {
+	const w = worker();
+	await w.load();
+	await w.run({ debugMode: 'trace' });
+	assert.equal(w.messages.at(-1)?.results, true);
+	await w.run({ debugMode: 'none' });
+	await w.run({ debugMode: 'trace' });
+	await w.run({ debugMode: 'trace' });
+	assert.equal(w.counts.compile, 3);
+	assert.equal(w.counts.generate, 3);
+	assert.equal(w.counts.engineCompile, 3);
+	assert.equal(w.counts.run, 0);
+});
+
+test('unsupported debug syntax leaves no diagnostic registration and ordinary Run can recover', async () => {
+	const w = worker();
+	await w.load();
+	const code = String.raw`class Main { // \u0041
+ }`;
+	await w.run({ code, debugMode: 'trace' });
+	assert.match(w.messages.at(-1)?.error, /Unicode preprocessing/);
+	assert.equal(w.hasDiagnosticListener(), false);
+	await w.run({ code, debugMode: 'none' });
+	assert.equal(w.messages.at(-1)?.results, true);
+	assert.equal(w.hasDiagnosticListener(), false);
+});
+
+test('container UTF-8 auxiliary files share cache identity with source strings', async () => {
+	const w = worker();
+	await w.load();
+	const source = 'class Helper { String value = "한글"; }';
+	await w.run({
+		workspaceFiles: [{ path: 'Helper.java', content: new TextEncoder().encode(source) }]
+	});
+	assert.equal(w.messages.at(-1)?.results, true);
+	await w.run({ workspaceFiles: [{ path: 'Helper.java', content: source }] });
+	assert.equal(w.counts.compile, 1);
+	await w.run({ workspaceFiles: [{ path: 'Helper.java', content: new Uint8Array([255]) }] });
+	assert.ok(w.messages.at(-1)?.error);
+	assert.equal(w.counts.compile, 1);
 });

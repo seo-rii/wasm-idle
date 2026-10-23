@@ -1,4 +1,7 @@
 import { LuaFactory } from 'wasmoon';
+import { runLuaWithMobDebug, type LuaDebugOptions } from './mobdebug';
+
+export type { LuaDebugOptions, LuaDebugEvent, LuaDebugFrame, LuaDebugVariable } from './mobdebug';
 
 export type BrowserLuaDiagnosticSeverity = 'error' | 'warning' | 'other';
 
@@ -50,6 +53,7 @@ export interface BrowserLuaExecutionOptions {
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 	wasmUrl?: string;
+	debug?: LuaDebugOptions;
 }
 
 export interface BrowserLuaExecutionResult {
@@ -252,7 +256,11 @@ if io then
 end
 `);
 		options.onReady?.();
-		await lua.doString(artifact.source);
+		if (options.debug) {
+			await runLuaWithMobDebug(lua, artifact.source, artifact.fileName, options.debug);
+		} else {
+			await lua.doString(artifact.source);
+		}
 		return {
 			exitCode: 0,
 			stdout: stdoutChunks.join(''),

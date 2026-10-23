@@ -8,6 +8,10 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const ASSET_VERIFIERS = new Set(['verify:page-c3', 'verify:page-lfortran', 'check:assets-lock']);
 const ASSET_PREPARATION = new Set([
+	'sync:phpantom-lsp',
+	'sync:forth-lsp',
+	'sync:c3-lsp',
+	'sync:v-lsp',
 	'sync:wasm-lean4',
 	'prepare:test-assets',
 	'build:page-runtimes',

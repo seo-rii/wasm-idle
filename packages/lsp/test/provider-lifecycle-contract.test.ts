@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
@@ -88,12 +89,21 @@ const mockState = vi.hoisted(() => {
 		}
 	}
 
-	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter };
+	class MockEmitter {
+		event = () => ({ dispose() {} });
+		fire() {}
+		dispose() {}
+	}
+
+	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter, MockEmitter };
 });
 
-vi.mock('../src/jsonrpc.js', () => ({
+vi.mock('../src/jsonrpc.js', async () => ({
 	BrowserMessageReader: mockState.MockReader,
-	BrowserMessageWriter: mockState.MockWriter
+	BrowserMessageWriter: mockState.MockWriter,
+	ReadableStreamMessageReader: mockState.MockReader,
+	WriteableStreamMessageWriter: mockState.MockWriter,
+	Emitter: (await import('vscode-jsonrpc')).Emitter
 }));
 
 const rubyRuntimeMocks = vi.hoisted(() => ({
@@ -124,6 +134,8 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 
 import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
+import type { C3LspAssetReceipts } from '../src/c3/assets.js';
+import type { VLspAssetReceipts } from '../src/v/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
 import { createAwkTestAssetResponse } from './awk-fixture.js';
@@ -132,6 +144,33 @@ import { createPerlTestAssetResponse } from './perl-fixture.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createTclTestAssetResponse } from './tcl-fixture.js';
 
+// The fake Worker exercises host lifecycle only; real upstream semantics have a browser suite.
+const phpWasmFixture = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+const forthWasmFixture = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+// These verified fixtures cover the fake Worker's lifecycle; real semantics have a browser suite.
+const c3AssetFixtures = {
+	'c3_lsp.mjs': new TextEncoder().encode('export default async () => ({});'),
+	'c3_lsp.wasm': Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0),
+	'stdlib.json.gz.bin': Uint8Array.from(gzipSync('{}'))
+};
+const c3AssetReceipts = Object.fromEntries(
+	Object.entries(c3AssetFixtures).map(([name, bytes]) => [
+		name,
+		{ bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+	])
+) as C3LspAssetReceipts;
+// These verified fixtures cover the fake Worker's lifecycle; real semantics have a browser suite.
+const vAssetFixtures = {
+	'v_analyzer.mjs': new TextEncoder().encode('export default async () => ({});'),
+	'v_analyzer.wasm': Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0),
+	'stdlib.json.gz.bin': Uint8Array.from(gzipSync('{}'))
+};
+const vAssetReceipts = Object.fromEntries(
+	Object.entries(vAssetFixtures).map(([name, bytes]) => [
+		name,
+		{ bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+	])
+) as VLspAssetReceipts;
 const applicationOrigin = 'https://app.example.com';
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -185,6 +224,20 @@ const createProviderOptions = (
 	rootUrl: deployment.rootUrl,
 	currentUrl: deployment.currentUrl,
 	createWorker: () => new mockState.FakeWorker() as unknown as Worker,
+	php: {
+		wasmReceipt: {
+			bytes: phpWasmFixture.byteLength,
+			sha256: createHash('sha256').update(phpWasmFixture).digest('hex')
+		}
+	},
+	forth: {
+		wasmReceipt: {
+			bytes: forthWasmFixture.byteLength,
+			sha256: createHash('sha256').update(forthWasmFixture).digest('hex')
+		}
+	},
+	c3: { integrity: c3AssetReceipts },
+	v: { integrity: vAssetReceipts },
 	cpp: {
 		loader: async ({ asset }) =>
 			asset === 'clangd.wasm.gz'
@@ -273,6 +326,44 @@ describe('registered LSP provider lifecycle contract', () => {
 				const requestUrl = new URL(
 					typeof input === 'string' || input instanceof URL ? input : input.url
 				);
+				if (requestUrl.pathname.endsWith('/wasm-phpantom-lsp/phpantom_lsp.wasm')) {
+					const response = new Response(phpWasmFixture, {
+						headers: { 'content-length': String(phpWasmFixture.byteLength) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
+				if (requestUrl.pathname.endsWith('/wasm-forth-lsp/forth_lsp.wasm')) {
+					const response = new Response(forthWasmFixture, {
+						headers: { 'content-length': String(forthWasmFixture.byteLength) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
+				if (requestUrl.pathname.includes('/wasm-c3-lsp/')) {
+					const bytes =
+						c3AssetFixtures[
+							path.basename(requestUrl.pathname) as keyof typeof c3AssetFixtures
+						];
+					if (!bytes) throw new Error('Unexpected C3 lifecycle asset');
+					const response = new Response(bytes, {
+						headers: { 'content-length': String(bytes.length) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
+				if (requestUrl.pathname.includes('/wasm-v-lsp/')) {
+					const bytes =
+						vAssetFixtures[
+							path.basename(requestUrl.pathname) as keyof typeof vAssetFixtures
+						];
+					if (!bytes) throw new Error('Unexpected V lifecycle asset');
+					const response = new Response(bytes, {
+						headers: { 'content-length': String(bytes.length) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				}
 				if (requestUrl.pathname.includes('/wasm-prolog/')) {
 					const response = createPrologTestAssetResponse(requestUrl);
 					if (response) return response;

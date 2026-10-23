@@ -99,6 +99,41 @@ describe('required CI workflow gates', () => {
 		expect(packagesJob).toContain('- run: pnpm run check:asset-sizes');
 	});
 
+	it('checks Nim build namespaces before cold LSP preparation in the full job', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const jobs = workflow.split(/^(?= {4}[a-z-]+:$)/m).slice(1);
+		const fullJob = jobs.find((job) => job.startsWith('    lsp-browser-full:'))!;
+		const install = fullJob.indexOf(
+			'sudo apt-get install -y --no-install-recommends bubblewrap'
+		);
+		const preflight = fullJob.indexOf('if ! /usr/bin/bwrap --ro-bind / /');
+		const prepare = fullJob.indexOf('- run: pnpm run prepare:test-assets -- clangd ocaml');
+		const browser = fullJob.indexOf('- run: pnpm run test:lsp:browser:full');
+
+		expect(fullJob).toContain('runs-on: ubuntu-26.04');
+		expect(install).toBeGreaterThanOrEqual(0);
+		expect(preflight).toBeGreaterThan(install);
+		expect(prepare).toBeGreaterThan(preflight);
+		expect(browser).toBeGreaterThan(prepare);
+		for (const argument of [
+			'--proc /proc',
+			'--dev /dev',
+			'--unshare-user',
+			'--unshare-pid',
+			'--unshare-ipc',
+			'--unshare-uts',
+			'--die-with-parent /usr/bin/true'
+		])
+			expect(fullJob).toContain(argument);
+		expect(fullJob).toContain('exit 1');
+		expect(fullJob).not.toMatch(/sudo\s+(?:sysctl|apparmor_parser|systemctl)/u);
+		expect(fullJob).not.toContain('continue-on-error:');
+		for (const job of jobs.filter((job) => job !== fullJob)) {
+			expect(job).not.toContain('bubblewrap');
+			expect(job).not.toContain('/usr/bin/bwrap');
+		}
+	});
+
 	it('verifies the code-only LLVM package boundary before install budgets', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');

@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,20 @@ import { build } from 'esbuild';
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const require = createRequire(import.meta.url);
+
+const rawLuaPlugin = {
+	name: 'raw-lua',
+	setup(esbuild) {
+		esbuild.onResolve({ filter: /\.lua\?raw$/ }, (args) => ({
+			path: path.resolve(args.resolveDir, args.path.replace(/\?raw$/, '')),
+			namespace: 'raw-lua'
+		}));
+		esbuild.onLoad({ filter: /.*/, namespace: 'raw-lua' }, async (args) => ({
+			loader: 'text',
+			contents: await readFile(args.path, 'utf8')
+		}));
+	}
+};
 
 const emptyNodeBuiltinPlugin = {
 	name: 'empty-node-builtins',
@@ -39,6 +53,14 @@ await copyFile(
 	require.resolve('wasmoon/dist/glue.wasm'),
 	path.join(REPO_ROOT, 'dist', 'glue.wasm')
 );
+await copyFile(
+	path.join(REPO_ROOT, 'src', 'vendor', 'MobDebug.LICENSE'),
+	path.join(REPO_ROOT, 'dist', 'MobDebug.LICENSE')
+);
+await copyFile(
+	path.join(REPO_ROOT, 'src', 'vendor', 'mobdebug.provenance.json'),
+	path.join(REPO_ROOT, 'dist', 'mobdebug.provenance.json')
+);
 
 await build({
 	entryPoints: [path.join(REPO_ROOT, 'src', 'index.ts')],
@@ -49,7 +71,7 @@ await build({
 	target: 'es2022',
 	sourcemap: false,
 	minify: true,
-	plugins: [emptyNodeBuiltinPlugin],
+	plugins: [rawLuaPlugin, emptyNodeBuiltinPlugin],
 	banner: {
 		js: '/* wasm-lua browser bundle */'
 	}

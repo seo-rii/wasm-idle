@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { util as prettierUtil } from 'prettier';
 
 const SUPPORT_MATRIX_START = '## Support matrix';
 const SUPPORT_MATRIX_END = '## Monorepo layout';
@@ -261,7 +262,7 @@ export const supportMatrixRows = [
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'c3-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/c3.playwright.test.ts',
@@ -301,7 +302,7 @@ export const supportMatrixRows = [
 		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: 'Trace',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
@@ -314,7 +315,7 @@ export const supportMatrixRows = [
 		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: '-',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/objectivecxx.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
@@ -379,7 +380,7 @@ export const supportMatrixRows = [
 		runtime: 'TeaVM',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'Trace (source)',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -521,7 +522,7 @@ export const supportMatrixRows = [
 		ids: ['GRAIN'],
 		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Grain LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/grain.playwright.test.ts',
@@ -586,7 +587,7 @@ export const supportMatrixRows = [
 		ids: ['FORTH'],
 		runtime: 'WAForth WASM worker',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'forth-lsp',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
@@ -651,7 +652,7 @@ export const supportMatrixRows = [
 		ids: ['NIM'],
 		runtime: 'Nim 2.2.4 WASM + clang/lld WASM',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Nim LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
@@ -664,7 +665,7 @@ export const supportMatrixRows = [
 		ids: ['BASH'],
 		runtime: 'GNU Bash WASIX / Wasmer SDK',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Bash LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/bash.playwright.test.ts',
@@ -690,7 +691,7 @@ export const supportMatrixRows = [
 		ids: ['RESCRIPT'],
 		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'ReScript LSP + types',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/rescript.playwright.test.ts',
@@ -795,7 +796,7 @@ export const supportMatrixRows = [
 		runtime: 'Wasmoon',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'MobDebug',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -807,7 +808,7 @@ export const supportMatrixRows = [
 		ids: ['FENNEL'],
 		runtime: 'fennel.lua on Wasmoon',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Fennel LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -860,7 +861,7 @@ export const supportMatrixRows = [
 		runtime: 'CRuby WASI',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'TracePoint',
 		browserTest: {
 			file: 'src/lib/playground/ruby.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_RUBY',
@@ -898,7 +899,7 @@ export const supportMatrixRows = [
 		ids: ['LEAN4'],
 		runtime: 'Lean 4.34.1 lean --run (Emscripten)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Lean LSP (Init)',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/lean4.playwright.test.ts',
@@ -924,7 +925,7 @@ export const supportMatrixRows = [
 		ids: ['COBOL'],
 		runtime: 'GnuCOBOL 3.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'SuperBOL OSS LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -937,8 +938,8 @@ export const supportMatrixRows = [
 		ids: ['V'],
 		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
-		debug: '-',
+		editorSupport: 'v-analyzer LSP',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_V',
@@ -1015,7 +1016,7 @@ export const supportMatrixRows = [
 		ids: ['PHP'],
 		runtime: 'PHP 8.4 / php-wasm',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'PHPantom LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
@@ -1955,7 +1956,7 @@ const runtimeDetailsByLanguage = new Map([
  * @param {number} width
  */
 function padCell(value, width) {
-	return String(value).padEnd(width);
+	return value + ' '.repeat(Math.max(0, width - prettierUtil.getStringWidth(value)));
 }
 
 /**
@@ -1971,7 +1972,10 @@ export function renderSupportMatrixTable(rows = supportMatrixRows) {
 		row.debug
 	]);
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2005,7 +2009,10 @@ export function renderRuntimeDetailsTable(rows = supportMatrixRows) {
 		];
 	});
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2035,7 +2042,10 @@ export function renderBlockedCandidatesTable(rows = blockedCandidateRows) {
 		row.requiredFollowUp
 	]);
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2056,16 +2066,23 @@ export function renderSupportMatrixSection(rows = supportMatrixRows) {
 
 All execution entries run in the browser through real runtime, compiler, or interpreter
 implementations. \`Editor support\` lists browser LSP/compiler diagnostics when wired; \`syntax\`
-means Monaco syntax highlighting only. C, C++, and \`wasm32-wasip1\` Rust use the browser LLDB/WAMR
-debug runtime; the remaining debug-enabled languages retain wasm-idle's trace controls.
+means Monaco syntax highlighting only. C, C++, Objective-C, Objective-C++, V, and
+\`wasm32-wasip1\` Rust use LLDB/WAMR. Java uses parser-based source hooks compiled by the real
+javac/TeaVM pipeline, with current-frame local values, array inspection and read-only
+primitive/String snapshot expressions. Lua uses the pinned
+MobDebug engine in its real VM; Ruby uses CRuby TracePoint and Binding without rewriting user
+source. Enabled debugger backends run in the page and its Workers without browser extensions.
+JavaScript and TypeScript debugging stays disabled. See
+[language debugger details](docs/debugger-language-support.md) for verified operations and
+remaining producer requirements.
 
 ${renderSupportMatrixTable(rows)}
 
 ## Browser LLDB debug runtime
 
 Normal execution still compiles and instantiates the user module with the browser WebAssembly
-engine and the existing WASI host. C, C++, and \`wasm32-wasip1\` Rust debug sessions use a separate,
-lazy-loaded path:
+engine and the existing WASI host. C, C++, Objective-C, Objective-C++, V, and
+\`wasm32-wasip1\` Rust debug sessions use a separate, lazy-loaded path:
 
 \`\`\`text
 Monaco / debug UI

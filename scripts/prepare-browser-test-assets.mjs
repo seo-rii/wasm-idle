@@ -410,9 +410,12 @@ export async function verifyBrowserTestAssets({
 	}
 	for (const group of ['lean4', 'commonlisp']) {
 		if (!selectedGroups.includes(group)) continue;
+		// Node verification needs the self-contained metadata before the SDK is built.
 		const exports = await loadBundledProfile(
 			new URL(
-				`../src/lib/playground/wasm${group === 'lean4' ? 'Lean4' : 'CommonLisp'}Version.ts`,
+				group === 'lean4'
+					? '../packages/lsp/src/bundledLean4Runtime.ts'
+					: '../src/lib/playground/wasmCommonLispVersion.ts',
 				import.meta.url
 			)
 		);

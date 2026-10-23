@@ -141,22 +141,26 @@ describe('browser test asset preparation', () => {
 		}> = manifest.assets.filter((asset: { group: string }) => asset.group === 'container');
 		const byTarget = new Map(assets.map((asset) => [asset.target, asset]));
 		const expectedTargets: string[] = [];
-		const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const hash = (bytes: string | Uint8Array) =>
+			createHash('sha256').update(bytes).digest('hex');
 		const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 		expect(manifest.groupBaseUrls.container).toMatch(
 			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/_ci\/container\/[a-f0-9]{64}\/$/u
 		);
 
 		const objects = release.distribution.packages.flatMap(
-			(pkg: { assets: Array<{ url: string; delivery: { bytes: number; sha256: string } }> }) =>
-				pkg.assets
+			(pkg: {
+				assets: Array<{ url: string; delivery: { bytes: number; sha256: string } }>;
+			}) => pkg.assets
 		);
 		expect(objects).toHaveLength(6);
 		for (const object of objects) {
 			const relative = new URL(object.url).pathname.slice(
 				new URL(release.baseURL).pathname.length
 			);
-			expect(relative).toMatch(new RegExp(`^objects/${object.delivery.sha256}/[a-z0-9.-]+$`, 'u'));
+			expect(relative).toMatch(
+				new RegExp(`^objects/${object.delivery.sha256}/[a-z0-9.-]+$`, 'u')
+			);
 			const target = `container-app/${relative}`;
 			expectedTargets.push(target);
 			expect(byTarget.get(target)).toMatchObject({
@@ -331,6 +335,16 @@ describe('browser test asset preparation', () => {
 			targetDir: path.join(root, 'wasm-commonlisp'),
 			fetchImpl
 		});
+	});
+
+	it('loads shared Lean source receipts before checking downloaded assets', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-lean-source-receipts-'));
+		temporaryDirectories.push(root);
+		await expect(
+			verifyBrowserTestAssets({ groups: ['lean4'], staticDir: root })
+		).rejects.toThrow(
+			'Missing or oversized required browser test asset: wasm-lean4/producer-receipt.json'
+		);
 	});
 
 	it('pins complete C3 and LFortran bundles to the committed consumer profiles', async () => {

@@ -16,6 +16,8 @@ import {
 } from './persistent-assets.js';
 
 export type LanguageToolAssetRuntime =
+	| 'c3'
+	| 'v'
 	| 'awk'
 	| 'clangd'
 	| 'objectivec'
@@ -23,6 +25,8 @@ export type LanguageToolAssetRuntime =
 	| 'janet'
 	| 'pascal'
 	| 'perl'
+	| 'php'
+	| 'forth'
 	| 'prolog'
 	| 'ruby'
 	| 'tcl';

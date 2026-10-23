@@ -1,3 +1,4 @@
+export { getNimLanguageServer, type NimLanguageServerOptions } from './nim/index.js';
 export {
 	editorLanguageServerProviders,
 	getEditorLanguageServer,
@@ -318,6 +319,12 @@ export {
 	type PostgresqlLanguageServerHandle
 } from './postgresql/index.js';
 export {
+	getBashLanguageServer,
+	resolveBashLanguageServerModuleUrl,
+	type BashLanguageServerConfig,
+	type BashLanguageServerOptions
+} from './bash/index.js';
+export {
 	createSqlWorkerService,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,
@@ -436,3 +443,49 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+export {
+	getPhpLanguageServer,
+	type PhpLanguageServerOptions,
+	PHPANTOM_VERSION,
+	PHPANTOM_WASM_ASSET,
+	PHPANTOM_WASM_RECEIPT
+} from './php/index.js';
+
+export { getFennelLanguageServer, type FennelLanguageServerOptions } from './fennel/index.js';
+export {
+	getForthLanguageServer,
+	type ForthLanguageServerOptions,
+	FORTH_LSP_VERSION,
+	FORTH_LSP_WASM_ASSET,
+	FORTH_LSP_WASM_RECEIPT
+} from './forth/index.js';
+
+export { getGrainLanguageServer, type GrainLanguageServerOptions } from './grain/index.js';
+
+export {
+	getC3LanguageServer,
+	type C3LanguageServerOptions,
+	C3_LSP_VERSION,
+	C3_LSP_ASSET_RECEIPTS,
+	type C3LspAssetReceipts
+} from './c3/index.js';
+
+export { getCobolLanguageServer, type CobolLanguageServerOptions } from './cobol/index.js';
+
+export {
+	getReScriptLanguageServer,
+	type ReScriptLanguageServerOptions
+} from './rescript/language-server.js';
+
+export {
+	getVLanguageServer,
+	type VLanguageServerOptions,
+	V_LSP_VERSION,
+	V_LSP_ASSET_RECEIPTS,
+	type VLspAssetReceipts
+} from './v/index.js';
+
+export {
+	getLean4LanguageServer,
+	type Lean4LanguageServerOptions
+} from './lean4/language-server.js';

@@ -74,22 +74,6 @@ function manifest() {
 }
 
 describe('debug runtime manifest', () => {
-	it('preserves only the supported producer module-instantiation contract', () => {
-		const candidate = manifest();
-		for (const asset of [candidate.debugger.lldb, candidate.debugger.targetRuntime])
-			Object.assign(asset, { moduleInstantiation: 'emscripten-instantiate-wasm-v1' });
-		const parsed = parseDebugRuntimeManifest(candidate);
-		expect(parsed.debugger.lldb.moduleInstantiation).toBe('emscripten-instantiate-wasm-v1');
-		expect(parsed.debugger.targetRuntime.moduleInstantiation).toBe(
-			'emscripten-instantiate-wasm-v1'
-		);
-		Object.assign(candidate.debugger.targetRuntime, { moduleInstantiation: 'unsupported' });
-		expect(() => parseDebugRuntimeManifest(candidate)).toThrow('moduleInstantiation');
-		expect(
-			parseDebugRuntimeManifest(manifest()).debugger.lldb.moduleInstantiation
-		).toBeUndefined();
-	});
-
 	it('keeps old manifests compatible and validates optional debugger qualification flags', () => {
 		const old = parseDebugRuntimeManifest(manifest());
 		expect(old.debugger.capabilities.hitConditionalBreakpoints).toBeUndefined();
@@ -106,6 +90,22 @@ describe('debug runtime manifest', () => {
 		});
 		Object.assign(value.debugger.capabilities, { skipLibraryCode: 'yes' });
 		expect(() => parseDebugRuntimeManifest(value)).toThrow('skipLibraryCode');
+	});
+
+	it('preserves only the supported producer module-instantiation contract', () => {
+		const candidate = manifest();
+		for (const asset of [candidate.debugger.lldb, candidate.debugger.targetRuntime])
+			Object.assign(asset, { moduleInstantiation: 'emscripten-instantiate-wasm-v1' });
+		const parsed = parseDebugRuntimeManifest(candidate);
+		expect(parsed.debugger.lldb.moduleInstantiation).toBe('emscripten-instantiate-wasm-v1');
+		expect(parsed.debugger.targetRuntime.moduleInstantiation).toBe(
+			'emscripten-instantiate-wasm-v1'
+		);
+		Object.assign(candidate.debugger.targetRuntime, { moduleInstantiation: 'unsupported' });
+		expect(() => parseDebugRuntimeManifest(candidate)).toThrow('moduleInstantiation');
+		expect(
+			parseDebugRuntimeManifest(manifest()).debugger.lldb.moduleInstantiation
+		).toBeUndefined();
 	});
 
 	it('parses pinned LLDB/WAMR assets and resolves their URLs', () => {

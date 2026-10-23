@@ -13,6 +13,8 @@ import {
 } from '$lib/playground/rubyAssets';
 import {
 	resolveSandboxExecutionArgs,
+	type DebugCommand,
+	type DebugSessionEvent,
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -24,6 +26,8 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { RubyDebugSession } from './rubyDebug';
+import { DebugDeadline } from './debugDeadline';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
@@ -78,6 +82,8 @@ class Ruby implements Sandbox {
 	moduleUrl = '';
 	private runtimeAssetKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	ondebug?: (event: DebugSessionEvent) => void;
+	private debugSession?: RubyDebugSession;
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: RubyOperation | null = null;
@@ -744,6 +750,7 @@ class Ruby implements Sandbox {
 		const hasExplicitStdin = request.stdin !== undefined;
 		this.prepareRunStdin(activeOperation, hasExplicitStdin);
 		this.exit = false;
+		let runDebugSession: RubyDebugSession | undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			let diagnosticCount = 0;
 			let outputBytes = 0;
@@ -752,7 +759,34 @@ class Ruby implements Sandbox {
 				2_147_483_647,
 				limits.compileTimeoutMs + limits.runTimeoutMs
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			let debugDeadline: DebugDeadline | undefined;
+			if (!prepare && this.workerLanguage === 'ruby' && options.debugMode === 'tracepoint') {
+				debugDeadline = new DebugDeadline(timeoutMs, () =>
+					this.cancelOperation(
+						activeOperation,
+						new TimeoutError(`Ruby execution timed out after ${timeoutMs} ms`, {
+							phase: 'execute',
+							runtimeId: 'RUBY',
+							timeoutMs
+						})
+					)
+				);
+				runDebugSession = new RubyDebugSession(
+					options.debugPath || request.activePath,
+					(event) => {
+						if (event.type === 'pause') debugDeadline?.pause();
+						if (event.type === 'resume') debugDeadline?.resume();
+						this.ondebug?.(event);
+					}
+				);
+				this.debugSession = runDebugSession;
+				const session = runDebugSession;
+				activeOperation.cleanups.push(() => {
+					debugDeadline?.dispose();
+					if (this.debugSession === session) this.debugSession = undefined;
+					session.dispose();
+				});
+			} else this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			const runUid = ++this.uid;
@@ -800,6 +834,10 @@ class Ruby implements Sandbox {
 					return;
 				}
 				try {
+					if (event.data.rubyDebug && runDebugSession) {
+						runDebugSession.handle(event.data.rubyDebug);
+						return;
+					}
 					const { output, results, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
@@ -878,6 +916,17 @@ class Ruby implements Sandbox {
 					stdin: request.stdin,
 					activePath: request.activePath,
 					workspaceFiles: request.workspaceFiles,
+					...(runDebugSession
+						? {
+								rubyDebug: {
+									buffer: runDebugSession.mailbox.buffer,
+									sourcePath: options.debugPath || request.activePath,
+									breakpoints: options.breakpoints ?? [],
+									sourceBreakpoints: options.sourceBreakpoints,
+									pauseOnEntry: options.pauseOnEntry !== false
+								}
+							}
+						: {}),
 					log: _log
 				});
 			} catch (error) {
@@ -894,6 +943,28 @@ class Ruby implements Sandbox {
 			}
 			this.cleanupOperation(activeOperation);
 		});
+	}
+
+	debugCommand(command: DebugCommand) {
+		this.debugSession?.command(command);
+	}
+	debugPause() {
+		this.debugSession?.pause();
+	}
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		this.debugSession?.setBreakpoints(lines, sourcePath);
+	}
+	debugEvaluate(expression: string) {
+		return this.debugSession?.evaluate(expression) ?? Promise.resolve('?');
+	}
+	async debugScopes(frameId: number) {
+		return this.debugSession?.scopes(frameId) ?? [];
+	}
+	async debugFrameScopes(frameId: number) {
+		return this.debugSession?.scopes(frameId, false) ?? [];
+	}
+	async debugVariables(reference: number, start?: number, count?: number) {
+		return this.debugSession?.variables(reference, start, count) ?? [];
 	}
 
 	kill() {

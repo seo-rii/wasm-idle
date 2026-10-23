@@ -627,6 +627,17 @@ class TypeScriptSandbox implements Sandbox {
 			this.requireOperationActive(activeOperation);
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
 			this.requireOperationActive(activeOperation);
+			const debugMode = options.debugMode;
+			this.requireOperationActive(activeOperation);
+			const debug = options.debug;
+			this.requireOperationActive(activeOperation);
+			const resolvedDebugMode = debugMode ?? (debug ? 'trace' : 'none');
+			if (resolvedDebugMode !== 'none') {
+				throw new RuntimeConfigurationError(
+					`${this.languageLabel} source debugging is unavailable in this browser runtime.`,
+					{ runtimeId: this.language, phase: 'execute' }
+				);
+			}
 			const configuredProgramArgs = options.programArgs;
 			this.requireOperationActive(activeOperation);
 			const sourceProgramArgs = configuredProgramArgs ?? args;

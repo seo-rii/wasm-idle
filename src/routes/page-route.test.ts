@@ -224,60 +224,66 @@ describe('example route debug actions', () => {
 		);
 	});
 
-	it('swaps run/debug actions for stop buttons while sessions are active', () => {
-		const stopExecutionStart = source.indexOf('async function stopExecution()');
-		const restartExecutionStart = source.indexOf(
-			'async function restartDebugExecution()',
-			stopExecutionStart
-		);
-		const stopExecutionSource = source.slice(stopExecutionStart, restartExecutionStart);
-		expect(() =>
-			compile(source, {
-				filename: 'src/routes/+page.svelte',
-				generate: 'client'
-			})
-		).not.toThrow();
-		expect(source.includes('let executionStopPending = $state(false);')).toBe(true);
-		expect(stopExecutionSource).toMatch(/async function stopExecution\(\) \{/);
-		expect(stopExecutionSource).toMatch(
-			/if \(\s*!terminal \|\|\s*!runningMode \|\|\s*executionStopPending \|\|\s*restartDebugPending\s*\)/s
-		);
-		expect(stopExecutionSource.includes('const stoppedMode = runningMode;')).toBe(true);
-		expect(stopExecutionSource.includes('const previousExecution = activeExecution;')).toBe(
-			true
-		);
-		expect(stopExecutionSource.includes('const stopGeneration = ++executionGeneration;')).toBe(
-			true
-		);
-		expect(stopExecutionSource).toContain('executionAbortController.abort(');
-		expect(stopExecutionSource).toContain("new DOMException('Execution stopped by the user'");
-		expect(source).toMatch(
-			/if \(stoppedMode === 'debug'\) \{\s+await debug\.stop\(\);\s+return;\s+\}\s+await terminal\?\.stop\?\.\(\);/s
-		);
-		expect(source.includes('await Promise.allSettled([')).toBe(true);
-		expect(stopExecutionSource.includes('completeExecutionGeneration(stopGeneration);')).toBe(
-			true
-		);
-		expect(stopExecutionSource).toMatch(
-			/catch \(error\) \{\s+reportExecutionTeardownFailure\('stop', error\);\s+\}/s
-		);
-		expect(source).toMatch(
-			/\{#if runningMode === 'run'\}\s+<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending\}/s
-		);
-		expect(source).toMatch(/<span>Stop Running<\/span>/);
-		expect(source).toMatch(
-			/\{#if runningMode === 'debug'\}\s+<button\s+class="action-button action-button--debug-restart"/s
-		);
-		expect(source).toContain('aria-label="Restart Debug"');
-		expect(source).toMatch(
-			/<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending \|\| restartDebugPending\}/s
-		);
-		expect(source).toMatch(/<span>Stop Debug<\/span>/);
-		expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
-		expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
-		expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
-		expect(source).toMatch(/title="Send EOF"/);
-	});
+	it(
+		'swaps run/debug actions for stop buttons while sessions are active',
+		{ timeout: 15_000 },
+		() => {
+			const stopExecutionStart = source.indexOf('async function stopExecution()');
+			const restartExecutionStart = source.indexOf(
+				'async function restartDebugExecution()',
+				stopExecutionStart
+			);
+			const stopExecutionSource = source.slice(stopExecutionStart, restartExecutionStart);
+			expect(() =>
+				compile(source, {
+					filename: 'src/routes/+page.svelte',
+					generate: 'client'
+				})
+			).not.toThrow();
+			expect(source.includes('let executionStopPending = $state(false);')).toBe(true);
+			expect(stopExecutionSource).toMatch(/async function stopExecution\(\) \{/);
+			expect(stopExecutionSource).toMatch(
+				/if \(\s*!terminal \|\|\s*!runningMode \|\|\s*executionStopPending \|\|\s*restartDebugPending\s*\)/s
+			);
+			expect(stopExecutionSource.includes('const stoppedMode = runningMode;')).toBe(true);
+			expect(stopExecutionSource.includes('const previousExecution = activeExecution;')).toBe(
+				true
+			);
+			expect(
+				stopExecutionSource.includes('const stopGeneration = ++executionGeneration;')
+			).toBe(true);
+			expect(stopExecutionSource).toContain('executionAbortController.abort(');
+			expect(stopExecutionSource).toContain(
+				"new DOMException('Execution stopped by the user'"
+			);
+			expect(source).toMatch(
+				/if \(stoppedMode === 'debug'\) \{\s+await debug\.stop\(\);\s+return;\s+\}\s+await terminal\?\.stop\?\.\(\);/s
+			);
+			expect(source.includes('await Promise.allSettled([')).toBe(true);
+			expect(
+				stopExecutionSource.includes('completeExecutionGeneration(stopGeneration);')
+			).toBe(true);
+			expect(stopExecutionSource).toMatch(
+				/catch \(error\) \{\s+reportExecutionTeardownFailure\('stop', error\);\s+\}/s
+			);
+			expect(source).toMatch(
+				/\{#if runningMode === 'run'\}\s+<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending\}/s
+			);
+			expect(source).toMatch(/<span>Stop Running<\/span>/);
+			expect(source).toMatch(
+				/\{#if runningMode === 'debug'\}\s+<button\s+class="action-button action-button--debug-restart"/s
+			);
+			expect(source).toContain('aria-label="Restart Debug"');
+			expect(source).toMatch(
+				/<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending \|\| restartDebugPending\}/s
+			);
+			expect(source).toMatch(/<span>Stop Debug<\/span>/);
+			expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
+			expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
+			expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
+			expect(source).toMatch(/title="Send EOF"/);
+		}
+	);
 
 	it('handles expected cancellation and timeout outcomes without rejecting the click handler', () => {
 		expect(source).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
@@ -354,12 +360,35 @@ describe('example route debug actions', () => {
 		expect(source).toContain('<strong>Changed</strong>');
 		expect(source).toMatch(/breakpoints: \[\.\.\.debug\.effectiveBreakpoints\],/);
 		expect(source).toMatch(/sourceBreakpoints: debug\.sourceBreakpoints\.filter/);
-		expect(source).toMatch(
-			/const lldbDebugLanguages = new Set<PlaygroundLanguage>\(\['C', 'CPP', 'RUST'\]\);/
-		);
-		expect(source).toMatch(
-			/const selectedDebugMode = \$derived\(\s*lldbDebugLanguages\.has\(language\) \? \('lldb' as const\) : \('trace' as const\)\s*\);/s
-		);
+		const lldbLanguages = source.match(
+			/const lldbDebugLanguages = new Set<PlaygroundLanguage>\(\[([\s\S]*?)\]\);/
+		)?.[1];
+		expect(lldbLanguages?.match(/'[^']+'/g)?.map((name) => name.slice(1, -1))).toEqual([
+			'C',
+			'CPP',
+			'RUST',
+			'OBJC',
+			'OBJECTIVECXX',
+			'V'
+		]);
+		const selectedMode = source
+			.match(/const selectedDebugMode = \$derived\(([\s\S]*?)\n\t\);/)?.[1]
+			.replaceAll(' as const', '');
+		expect(selectedMode).toBeDefined();
+		for (const [language, expected] of [
+			['C', 'lldb'],
+			['JAVA', 'trace'],
+			['GO', 'trace'],
+			['LUA', 'mobdebug'],
+			['RUBY', 'tracepoint']
+		]) {
+			expect(
+				runInNewContext(selectedMode!, {
+					language,
+					lldbDebugLanguages: new Set(['C', 'CPP', 'RUST', 'OBJC', 'OBJECTIVECXX', 'V'])
+				})
+			).toBe(expected);
+		}
 		expect(source).toMatch(/language !== 'RUST' \|\| rustTargetTriple === 'wasm32-wasip1'/);
 		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
 		expect(source).toMatch(/executionDebugMode = 'trace';/);

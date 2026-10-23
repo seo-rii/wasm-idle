@@ -15,6 +15,12 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'php'
+	| 'forth'
+	| 'c3'
+	| 'rescript'
+	| 'v'
+	| 'lean4'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -32,12 +38,15 @@ export type RuntimeLspCapability =
 	| 'fortran'
 	| 'sql'
 	| 'postgresql'
+	| 'bash'
+	| 'cobol'
 	| 'prolog'
 	| 'ruby'
 	| 'r'
 	| 'octave'
 	| 'awk'
 	| 'perl'
+	| 'nim'
 	| 'wasm';
 
 export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
@@ -85,6 +94,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',
+		runtimeLspCapability: 'c3',
+		lspLanguageOverride: 'c3',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
@@ -202,6 +213,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	},
 	GRAIN: {
 		label: 'Grain',
+		lspLanguageOverride: 'grain',
 		editorLanguage: 'rust',
 		supportsArgs: true,
 		compilerDiagnostics: true,
@@ -235,7 +247,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		runtimeLspCapability: 'pascal',
 		diagnosticMarkers: true
 	},
-	FORTH: { label: 'Forth', editorLanguage: 'forth' },
+	FORTH: {
+		label: 'Forth',
+		editorLanguage: 'forth',
+		runtimeLspCapability: 'forth',
+		diagnosticMarkers: true
+	},
 	J: { label: 'J', editorLanguage: 'j' },
 	BQN: { label: 'BQN', editorLanguage: 'bqn' },
 	JANET: {
@@ -249,11 +266,25 @@ export const playgroundLanguageDescriptors: Readonly<
 		editorLanguage: 'julia',
 		diagnosticMarkers: true
 	},
-	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
-	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
+	NIM: {
+		label: 'Nim',
+		editorLanguage: 'nim',
+		diagnosticMarkers: true,
+		runtimeLspCapability: 'nim'
+	},
+	BASH: {
+		label: 'Bash',
+		editorLanguage: 'shell',
+		lspLanguageOverride: 'bash',
+		runtimeLspCapability: 'bash',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
 	RESCRIPT: {
 		label: 'ReScript',
+		lspLanguageOverride: 'rescript',
+		runtimeLspCapability: 'rescript',
 		editorLanguage: 'rust',
 		supportsArgs: true,
 		compilerDiagnostics: true,
@@ -313,6 +344,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	FENNEL: {
 		label: 'Fennel',
 		editorLanguage: 'clojure',
+		lspLanguageOverride: 'fennel',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
@@ -373,10 +405,10 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	// Monaco ships no Lean grammar; plain text avoids borrowing another language's LSP.
 	LEAN4: {
 		label: 'Lean 4',
-		editorLanguage: 'plaintext',
+		editorLanguage: 'lean4',
+		runtimeLspCapability: 'lean4',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
@@ -390,12 +422,15 @@ export const playgroundLanguageDescriptors: Readonly<
 	COBOL: {
 		label: 'COBOL',
 		editorLanguage: 'cobol',
+		runtimeLspCapability: 'cobol',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
 	V: {
 		label: 'V',
 		editorLanguage: 'go',
+		runtimeLspCapability: 'v',
+		lspLanguageOverride: 'v',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
@@ -425,6 +460,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	PHP: {
 		label: 'PHP',
 		editorLanguage: 'php',
+		runtimeLspCapability: 'php',
 		supportsArgs: true,
 		compilerDiagnostics: true
 	},

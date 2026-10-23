@@ -72,6 +72,17 @@ vi.mock('$lib/playground/worker/go?worker', () => ({
 import Go from './go';
 
 describe('Go sandbox', () => {
+	it('rejects native debugging instead of silently using trace execution', async () => {
+		const sandbox = new Go();
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, false, undefined, [], {
+				debugMode: 'lldb',
+				debug: true
+			})
+		).rejects.toThrow('does not emit DWARF');
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	beforeEach(() => {
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;

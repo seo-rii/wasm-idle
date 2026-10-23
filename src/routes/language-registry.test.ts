@@ -34,6 +34,11 @@ describe('language registry', () => {
 		}
 	});
 
+	it('connects ReScript to its original typed language server', () => {
+		expect(runtimeLspCapabilities.RESCRIPT).toBe('rescript');
+		expect(lspLanguageOverrides.RESCRIPT).toBe('rescript');
+	});
+
 	it('derives page capability indexes from the language descriptors', () => {
 		for (const language of playgroundLanguages) {
 			const descriptor = playgroundLanguageDescriptors[language];
@@ -115,8 +120,11 @@ describe('language registry', () => {
 		expect(typescriptLspLanguages.has('JAVASCRIPT')).toBe(true);
 		expect(typescriptLspLanguages.has('TYPESCRIPT')).toBe(true);
 		expect(lspLanguageOverrides.ASSEMBLYSCRIPT).toBe('assemblyscript');
+		expect(lspLanguageOverrides.FENNEL).toBe('fennel');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
 		expect(lspLanguageOverrides.POSTGRESQL).toBe('postgresql');
+		expect(lspLanguageOverrides.BASH).toBe('bash');
+		expect(lspLanguageOverrides.GRAIN).toBe('grain');
 	});
 
 	it('registers Bash with shell syntax and CLI args', () => {
@@ -162,6 +170,8 @@ describe('language registry', () => {
 	});
 
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
+		expect(runtimeLspCapabilities.LEAN4).toBe('lean4');
+		expect(editorLanguages.LEAN4).toBe('lean4');
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(runtimeLspCapabilities.D).toBe('d');
@@ -171,6 +181,9 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
 		expect(runtimeLspCapabilities.POSTGRESQL).toBe('postgresql');
+		expect(runtimeLspCapabilities.BASH).toBe('bash');
+		expect(runtimeLspCapabilities.COBOL).toBe('cobol');
+		expect(runtimeLspCapabilities.NIM).toBe('nim');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');

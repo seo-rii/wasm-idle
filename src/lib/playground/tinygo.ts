@@ -1568,6 +1568,15 @@ class TinyGo implements Sandbox {
 				if (typeof code !== 'string') {
 					throw new TypeError('TinyGo source code must be a string');
 				}
+				const configuredDebugMode = options.debugMode;
+				this.assertOperation(operation);
+				const debugMode = configuredDebugMode ?? (options.debug ? 'trace' : 'none');
+				this.assertOperation(operation);
+				if (debugMode !== 'none') {
+					throw new RuntimeConfigurationError(
+						'TinyGo debugging is unavailable: the current compiler protocol does not provide a debug runtime closure.'
+					);
+				}
 				const configuredTarget = options.tinygoTarget;
 				this.assertOperation(operation);
 				const target = configuredTarget ?? 'wasip1';

@@ -1,0 +1,23 @@
+{
+	"version": "0.11.1",
+	"source": "https://github.com/PHPantom-dev/phpantom_lsp/tree/0.11.1",
+	"archive": {
+		"url": "https://github.com/PHPantom-dev/phpantom_lsp/releases/download/0.11.1/phpantom_lsp-wasm32-wasip1.tar.gz",
+		"bytes": 4026855,
+		"sha256": "611d56ee95368d10562fa2bc2e7ea145a6a02f849b2bc2950e201cfbd3c75e2b"
+	},
+	"wasm": {
+		"bytes": 17424132,
+		"sha256": "b591013fd512d0f5b815a0074f9646a4742a8af4b90173ff617215356e8444c0"
+	},
+	"license": {
+		"url": "https://raw.githubusercontent.com/PHPantom-dev/phpantom_lsp/0.11.1/LICENSE",
+		"bytes": 1065,
+		"sha256": "0558c8ee80c9eacd4168299a3e6479b65287353a691a107a8681575f0b038dca"
+	},
+	"nativeLinuxX64": {
+		"url": "https://github.com/PHPantom-dev/phpantom_lsp/releases/download/0.11.1/phpantom_lsp-x86_64-unknown-linux-gnu.tar.gz",
+		"bytes": 17410185,
+		"sha256": "906dd8104d4bf82aa1c4225fba297a90ff1cff0552df635ee858fc272f445fc6"
+	}
+}

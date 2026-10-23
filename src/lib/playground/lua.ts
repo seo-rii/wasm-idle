@@ -13,6 +13,11 @@ import {
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
+	type DebugCommand,
+	type DebugFrame,
+	type DebugScope,
+	type DebugSessionEvent,
+	type DebugVariable,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -24,6 +29,9 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { LuaDebugMailbox } from '$lib/playground/luaDebug';
+import { requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+import type { LuaDebugEvent } from '../../../runtimes/wasm-lua/src/mobdebug';
 
 type LuaOperation = {
 	token: symbol;
@@ -33,6 +41,9 @@ type LuaOperation = {
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
 	explicitStdin: boolean;
+	timer?: ReturnType<typeof setTimeout>;
+	timerStartedAt?: number;
+	timeoutRemainingMs?: number;
 };
 
 const OUTPUT_ENCODER = new TextEncoder();
@@ -82,6 +93,7 @@ class Lua implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	ondebug?: (event: DebugSessionEvent) => void;
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: LuaOperation | null = null;
@@ -93,6 +105,21 @@ class Lua implements Sandbox {
 	private workerIdentity = '';
 	private readonly disposeCancellation: CancelledError;
 	private readonly workerSession: WorkerSession;
+	private readonly debugMailbox = new LuaDebugMailbox();
+	private debugEnabled = false;
+	private debugPaused = false;
+	private debugPath = 'main.lua';
+	private debugFrames: Array<DebugFrame & { locals: DebugVariable[] }> = [];
+	private selectedDebugFrame = 1;
+	private evaluationId = 0;
+	private pendingEvaluations = new Map<
+		number,
+		{
+			resolve: (value: string) => void;
+			reject: (reason: unknown) => void;
+			timer: ReturnType<typeof setTimeout>;
+		}
+	>();
 
 	constructor(dialect: LuaSandboxDialect = LUA_DIALECT) {
 		this.dialect = dialect;
@@ -110,6 +137,7 @@ class Lua implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
+				this.finishDebug();
 			}
 		});
 	}
@@ -138,6 +166,10 @@ class Lua implements Sandbox {
 			cleanups: [],
 			explicitStdin: false
 		};
+		operation.cleanups.push(() => {
+			if (operation.timer !== undefined) clearTimeout(operation.timer);
+			operation.timer = undefined;
+		});
 		this.activeOperation = operation;
 		return operation;
 	}
@@ -167,6 +199,7 @@ class Lua implements Sandbox {
 
 	private releaseBeforeSession(operation: LuaOperation, reason: unknown) {
 		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		if (operation.phase === 'execute') this.finishDebug();
 		this.releaseOperation(operation);
 		this.cleanupOperation(operation);
 		return outcome;
@@ -242,12 +275,11 @@ class Lua implements Sandbox {
 
 	private bindOperationTimeout(operation: LuaOperation, timeoutMs: number) {
 		if (!this.isOperationActive(operation)) return;
-		let timeout: ReturnType<typeof setTimeout> | undefined;
-		operation.cleanups.push(() => {
-			if (timeout !== undefined) clearTimeout(timeout);
-		});
+		if (operation.timer !== undefined) clearTimeout(operation.timer);
+		operation.timerStartedAt = Date.now();
+		operation.timeoutRemainingMs = timeoutMs;
 		try {
-			timeout = setTimeout(() => {
+			operation.timer = setTimeout(() => {
 				if (!this.isOperationActive(operation)) return;
 				const label = operation.phase === 'startup' ? 'startup' : 'execution';
 				this.cancelOperation(
@@ -259,10 +291,159 @@ class Lua implements Sandbox {
 					})
 				);
 			}, timeoutMs);
-			if (operation.cleanedUp) clearTimeout(timeout);
+			if (operation.cleanedUp) clearTimeout(operation.timer);
 		} catch (error) {
 			this.cancelOperation(operation, error);
 		}
+	}
+
+	private pauseDebugTimeout() {
+		const operation = this.activeOperation;
+		if (!operation || operation.timer === undefined) return;
+		clearTimeout(operation.timer);
+		operation.timer = undefined;
+		operation.timeoutRemainingMs = Math.max(
+			1,
+			(operation.timeoutRemainingMs ?? 1) -
+				(Date.now() - (operation.timerStartedAt ?? Date.now()))
+		);
+	}
+
+	private finishDebug() {
+		const wasEnabled = this.debugEnabled;
+		this.debugEnabled = false;
+		this.debugPaused = false;
+		this.debugFrames = [];
+		this.debugMailbox.close();
+		for (const pending of this.pendingEvaluations.values()) {
+			clearTimeout(pending.timer);
+			pending.reject(new Error('Lua debugger is no longer paused.'));
+		}
+		this.pendingEvaluations.clear();
+		if (wasEnabled) {
+			try {
+				this.ondebug?.({ type: 'stop' });
+			} catch (error) {
+				console.error('Lua debugger stop listener failed', error);
+			}
+		}
+	}
+
+	private handleDebugEvent(event: LuaDebugEvent) {
+		if (!this.debugEnabled) return;
+		if (event.type === 'evaluate') {
+			const pending = this.pendingEvaluations.get(event.id);
+			if (!pending) return;
+			this.pendingEvaluations.delete(event.id);
+			clearTimeout(pending.timer);
+			if (event.error) pending.reject(new Error(event.error));
+			else pending.resolve(event.value ?? 'nil');
+			return;
+		}
+		this.debugPaused = true;
+		this.pauseDebugTimeout();
+		this.selectedDebugFrame = 1;
+		this.debugFrames = event.frames.map((frame, index) => ({
+			...frame,
+			id: index + 1,
+			sourcePath: `/workspace/${frame.sourcePath}`
+		}));
+		this.ondebug?.({
+			type: 'pause',
+			line: event.line,
+			reason: event.reason,
+			sourcePath: `/workspace/${event.sourcePath}`,
+			frameId: 1,
+			locals: this.debugFrames[0]?.locals ?? [],
+			callStack: this.debugFrames.map(({ locals: _locals, ...frame }) => frame)
+		});
+	}
+
+	debugCommand(command: DebugCommand) {
+		if (!this.debugEnabled || !this.debugPaused) throw new Error('Lua debugger is not paused.');
+		this.debugMailbox.send(
+			`${command === 'stepInto' ? 'STEP' : command === 'nextLine' ? 'OVER' : command === 'stepOut' ? 'OUT' : 'RUN'}\n`
+		);
+		this.debugPaused = false;
+		this.debugFrames = [];
+		for (const pending of this.pendingEvaluations.values()) {
+			clearTimeout(pending.timer);
+			pending.reject(new Error('Lua debugger resumed.'));
+		}
+		this.pendingEvaluations.clear();
+		const operation = this.activeOperation;
+		if (operation) this.bindOperationTimeout(operation, operation.timeoutRemainingMs ?? 1);
+		this.ondebug?.({ type: 'resume', command });
+	}
+
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		if (!this.debugEnabled) return;
+		if (sourcePath && sourcePath.replace(/^\/workspace\//u, '') !== this.debugPath) return;
+		const next = [
+			...new Set(lines.filter((line) => Number.isSafeInteger(line) && line > 0))
+		].slice(0, 1024);
+		this.debugMailbox.send(
+			`DELB * 0\n${next.map((line) => `SETB ${this.debugPath} ${line}\n`).join('')}`
+		);
+	}
+
+	debugEvaluate(expression: string): Promise<string> {
+		if (!this.debugEnabled || !this.debugPaused)
+			return Promise.reject(new Error('Lua debugger is not paused.'));
+		if (this.selectedDebugFrame !== 1)
+			return Promise.reject(
+				new Error('Lua evaluation currently supports the top frame only.')
+			);
+		if (!expression || expression.length > 4096 || this.pendingEvaluations.size >= 64) {
+			return Promise.reject(new RangeError('Lua debugger expression limit exceeded.'));
+		}
+		const id = ++this.evaluationId;
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				this.pendingEvaluations.delete(id);
+				reject(new Error('Lua debugger evaluation timed out.'));
+			}, 5000);
+			this.pendingEvaluations.set(id, { resolve, reject, timer });
+			try {
+				this.debugMailbox.send(
+					`EXEC return (${expression.replace(/[\r\n]/gu, '\f')}) --{stack=${this.selectedDebugFrame},requestId=${id},metatostring=false,maxlevel=2,maxnum=25,maxlength=1024}\n`
+				);
+			} catch (error) {
+				clearTimeout(timer);
+				this.pendingEvaluations.delete(id);
+				reject(error);
+			}
+		});
+	}
+
+	async debugScopes(frameId = this.selectedDebugFrame): Promise<DebugScope[]> {
+		this.selectedDebugFrame = frameId;
+		return this.debugFrameScopes(frameId);
+	}
+
+	async debugFrameScopes(frameId: number): Promise<DebugScope[]> {
+		if (!this.debugPaused) return [];
+		const frame = this.debugFrames[frameId - 1];
+		return frame
+			? [
+					{
+						name: 'Locals',
+						variablesReference: frameId,
+						expensive: false,
+						namedVariables: frame.locals.length,
+						variables: frame.locals
+					}
+				]
+			: [];
+	}
+
+	async debugFrameName(frameId: number): Promise<string | null> {
+		return this.debugPaused ? (this.debugFrames[frameId - 1]?.functionName ?? null) : null;
+	}
+
+	async debugVariables(reference: number, start = 0, count?: number): Promise<DebugVariable[]> {
+		const variables = this.debugPaused ? (this.debugFrames[reference - 1]?.locals ?? []) : [];
+		return variables.slice(start, count === undefined ? undefined : start + count);
 	}
 
 	private resetExplicitStdinState() {
@@ -499,6 +680,21 @@ class Lua implements Sandbox {
 				)
 			});
 			stdin = options.stdin;
+			const debugMode = options.debugMode ?? (options.debug ? 'mobdebug' : 'none');
+			if (!['none', 'trace', 'mobdebug'].includes(debugMode)) {
+				throw new RuntimeConfigurationError('Lua debugging uses the MobDebug backend.');
+			}
+			if (!prepare && debugMode !== 'none') {
+				if (this.runtimeId !== 'LUA')
+					throw new RuntimeConfigurationError(
+						`${this.label} source debugging is not supported.`
+					);
+				requireSharedArrayBuffer('Lua debugging');
+				this.debugEnabled = true;
+				this.debugPaused = false;
+				this.debugPath = workspace.activePath ?? this.dialect.defaultActivePath;
+				this.debugMailbox.reset();
+			}
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, `${this.label} execution cancelled`)
@@ -544,6 +740,7 @@ class Lua implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
+				this.finishDebug();
 				this.workerSession.complete(operation);
 				this.releaseOperation(activeOperation);
 				this.cleanupOperation(activeOperation);
@@ -566,7 +763,18 @@ class Lua implements Sandbox {
 			handler = (event: Event & { data: any }) => {
 				if (!ownsRun()) return;
 				try {
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const {
+						output,
+						results,
+						error,
+						buffer,
+						diagnostic,
+						progress,
+						luaDebug,
+						debugCommandConsumed
+					} = event.data;
+					if (debugCommandConsumed) this.debugMailbox.flush();
+					if (luaDebug) this.handleDebugEvent(luaDebug);
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
@@ -643,6 +851,10 @@ class Lua implements Sandbox {
 					stdin,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
+					debug: this.debugEnabled,
+					debugBuffer: this.debugEnabled ? this.debugMailbox.buffer : undefined,
+					breakpoints: options.breakpoints ?? [],
+					pauseOnEntry: options.pauseOnEntry !== false,
 					log: _log
 				});
 			} catch (error) {
@@ -668,6 +880,7 @@ class Lua implements Sandbox {
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.exit = true;
+		this.finishDebug();
 		this.workerSession.terminate(reason);
 		this.cleanupOperation(operation);
 	}
@@ -685,6 +898,7 @@ class Lua implements Sandbox {
 		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
+		this.finishDebug();
 		this.uid += 1;
 		this.workerSession.terminate(reason);
 		this.exit = true;

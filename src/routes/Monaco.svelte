@@ -2327,7 +2327,12 @@
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let forthLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let c3LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let vLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let lean4LspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2338,6 +2343,9 @@
 	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let fennelLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let grainLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2345,8 +2353,11 @@
 	let fortranLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let nimLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let postgresqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let bashLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let cobolLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2384,6 +2395,14 @@
 		erlangLspWorkerUrl?: string;
 		erlangLspIntegrity?: ElixirRuntimeAssetReceipts;
 		gleamLspEnabled?: boolean;
+		phpLspEnabled?: boolean;
+		phpLspWasmUrl?: string;
+		forthLspEnabled?: boolean;
+		forthLspWasmUrl?: string;
+		c3LspEnabled?: boolean;
+		c3LspBaseUrl?: string;
+		vLspEnabled?: boolean;
+		vLspBaseUrl?: string;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
 		gleamLspManifestFingerprint?: string;
@@ -2391,6 +2410,8 @@
 		dLspModuleUrl?: string;
 		dLspManifestUrl?: string;
 		dLspIntegrity?: DOuterAssetReceipts;
+		lean4LspEnabled?: boolean;
+		lean4LspBaseUrl?: string;
 		tclLspEnabled?: boolean;
 		tclLspBaseUrl?: string;
 		tclLspWorkerUrl?: string;
@@ -2423,10 +2444,19 @@
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
 		duckDbLspModuleUrl?: string;
+		cobolLspEnabled?: boolean;
+		cobolLspBaseUrl?: string;
+		cobolLspWorkspaceFiles?: Array<{ path: string; content: string }>;
+		nimLspEnabled?: boolean;
+		nimLspBaseUrl?: string;
+		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
 		postgresqlLspEnabled?: boolean;
 		postgresqlLspModuleUrl?: string;
+		bashLspEnabled?: boolean;
+		bashLspModuleUrl?: string;
+		bashLspFiles?: Readonly<Record<string, string>>;
 		prologLspEnabled?: boolean;
 		prologLspBaseUrl?: string;
 		prologLspWorkerUrl?: string;
@@ -2443,7 +2473,12 @@
 		awkLspWorkerUrl?: string;
 		perlLspEnabled?: boolean;
 		perlLspRuntime?: PerlLspRuntimeConfig;
+		fennelLspBaseUrl?: string;
 		pythonLspBaseUrl?: string;
+		grainLspBaseUrl?: string;
+		grainLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+		rescriptLspBaseUrl?: string;
+		rescriptLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -2488,6 +2523,14 @@
 		erlangLspWorkerUrl,
 		erlangLspIntegrity = WASM_ELIXIR_ASSET_RECEIPTS,
 		gleamLspEnabled = false,
+		phpLspEnabled = false,
+		phpLspWasmUrl,
+		forthLspEnabled = false,
+		forthLspWasmUrl,
+		c3LspEnabled = false,
+		c3LspBaseUrl,
+		vLspEnabled = false,
+		vLspBaseUrl,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
 		gleamLspManifestFingerprint,
@@ -2495,6 +2538,8 @@
 		dLspModuleUrl,
 		dLspManifestUrl,
 		dLspIntegrity = WASM_D_OUTER_ASSET_RECEIPTS,
+		lean4LspEnabled = false,
+		lean4LspBaseUrl,
 		tclLspEnabled = false,
 		tclLspBaseUrl,
 		tclLspWorkerUrl,
@@ -2527,10 +2572,19 @@
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
 		duckDbLspModuleUrl,
+		cobolLspEnabled = false,
+		cobolLspBaseUrl,
+		cobolLspWorkspaceFiles,
+		nimLspEnabled = false,
+		nimLspBaseUrl,
+		nimLspWorkspaceFiles,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
 		postgresqlLspEnabled = false,
 		postgresqlLspModuleUrl,
+		bashLspEnabled = false,
+		bashLspModuleUrl,
+		bashLspFiles,
 		prologLspEnabled = false,
 		prologLspBaseUrl,
 		prologLspWorkerUrl,
@@ -2547,7 +2601,12 @@
 		awkLspWorkerUrl,
 		perlLspEnabled = false,
 		perlLspRuntime,
+		fennelLspBaseUrl,
 		pythonLspBaseUrl,
+		grainLspBaseUrl,
+		grainLspWorkspaceFiles = [],
+		rescriptLspBaseUrl,
+		rescriptLspWorkspaceFiles = [],
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -2598,6 +2657,7 @@
 				| 'forth'
 				| 'j'
 				| 'bqn'
+				| 'lean4'
 				| 'janet'
 				| 'ocaml'
 				| 'javascript'
@@ -2624,6 +2684,7 @@
 				| 'html'
 				| 'css'
 				| 'markdown'
+				| 'rescript'
 				| 'rust',
 			rustTargetTriple
 		)
@@ -2666,12 +2727,17 @@
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			erlangLspEnabled ? JSON.stringify(erlangLspIntegrity) : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
+			phpLspEnabled ? phpLspWasmUrl || '' : '',
+			forthLspEnabled ? forthLspWasmUrl || '' : '',
+			c3LspEnabled ? c3LspBaseUrl || '' : '',
+			vLspEnabled ? vLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
 			dLspEnabled ? dLspManifestUrl || '' : '',
 			dLspEnabled ? dLspIntegrity['index.js'].sha256 : '',
 			dLspEnabled ? dLspIntegrity['runtime/runtime-manifest.v1.json'].sha256 : '',
+			lean4LspEnabled ? lean4LspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
 			pascalLspEnabled ? JSON.stringify(pascalLspRuntime) : '',
@@ -2695,8 +2761,14 @@
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
+			cobolLspEnabled ? cobolLspBaseUrl || '' : '',
+			cobolLspEnabled ? JSON.stringify(cobolLspWorkspaceFiles) : '',
+			nimLspEnabled ? nimLspBaseUrl || '' : '',
+			nimLspEnabled ? JSON.stringify(nimLspWorkspaceFiles) : '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			postgresqlLspEnabled ? postgresqlLspModuleUrl || '' : '',
+			bashLspEnabled ? bashLspModuleUrl || '' : '',
+			bashLspEnabled ? JSON.stringify(bashLspFiles) : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
 			rubyLspEnabled ? JSON.stringify(rubyLspRuntime) : '',
@@ -2708,6 +2780,11 @@
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
+			fennelLspBaseUrl || '',
+			grainLspBaseUrl || '',
+			activeLspLanguage === 'grain' ? JSON.stringify(grainLspWorkspaceFiles) : '',
+			rescriptLspBaseUrl || '',
+			activeLspLanguage === 'rescript' ? JSON.stringify(rescriptLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2758,9 +2835,29 @@
 				label = 'Gleam LSP';
 				status = gleamLspStatus;
 				break;
+			case 'php':
+				label = 'PHP LSP';
+				status = phpLspStatus;
+				break;
+			case 'forth':
+				label = 'Forth LSP';
+				status = forthLspStatus;
+				break;
+			case 'c3':
+				label = 'C3 LSP';
+				status = c3LspStatus;
+				break;
+			case 'v':
+				label = 'V LSP';
+				status = vLspStatus;
+				break;
 			case 'd':
 				label = 'D LSP';
 				status = dLspStatus;
+				break;
+			case 'lean4':
+				label = 'Lean 4 LSP';
+				status = lean4LspStatus;
 				break;
 			case 'tcl':
 				label = 'Tcl LSP';
@@ -2802,9 +2899,21 @@
 				label = 'Zig LSP';
 				status = zigLspStatus;
 				break;
+			case 'grain':
+				label = 'Grain LSP';
+				status = grainLspStatus;
+				break;
+			case 'rescript':
+				label = 'ReScript LSP';
+				status = rescriptLspStatus;
+				break;
 			case 'lua':
 				label = 'Lua LSP';
 				status = luaLspStatus;
+				break;
+			case 'fennel':
+				label = 'Fennel LSP';
+				status = fennelLspStatus;
 				break;
 			case 'janet':
 				label = 'Janet LSP';
@@ -2834,6 +2943,10 @@
 				label = 'DuckDB LSP';
 				status = duckdbLspStatus;
 				break;
+			case 'nim':
+				label = 'Nim LSP';
+				status = nimLspStatus;
+				break;
 			case 'sql':
 				label = 'SQL LSP';
 				status = sqlLspStatus;
@@ -2841,6 +2954,14 @@
 			case 'postgresql':
 				label = 'PostgreSQL LSP';
 				status = postgresqlLspStatus;
+				break;
+			case 'bash':
+				label = 'Bash LSP';
+				status = bashLspStatus;
+				break;
+			case 'cobol':
+				label = 'COBOL LSP';
+				status = cobolLspStatus;
 				break;
 			case 'prolog':
 				label = 'Prolog LSP';
@@ -2937,6 +3058,124 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['php'],
+			isEnabled: () => phpLspEnabled && !!phpLspWasmUrl,
+			setStatus: (status) => (phpLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getPhpLanguageServer } = await import('@wasm-idle/lsp/php');
+				return await getPhpLanguageServer({
+					currentUrl,
+					signal,
+					php: { wasmUrl: phpLspWasmUrl },
+					onStatus: (status) => (phpLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['fennel'],
+			isEnabled: () => !!fennelLspBaseUrl,
+			setStatus: (status) => (fennelLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getFennelLanguageServer } = await import('@wasm-idle/lsp/fennel');
+				return getFennelLanguageServer({
+					currentUrl,
+					signal,
+					fennel: { baseUrl: fennelLspBaseUrl },
+					onStatus: (status) => (fennelLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['forth'],
+			isEnabled: () => forthLspEnabled && !!forthLspWasmUrl,
+			setStatus: (status) => (forthLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getForthLanguageServer } = await import('@wasm-idle/lsp/forth');
+				return await getForthLanguageServer({
+					currentUrl,
+					signal,
+					forth: { wasmUrl: forthLspWasmUrl },
+					onStatus: (status) => (forthLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['grain'],
+			isEnabled: () => !!grainLspBaseUrl,
+			setStatus: (status) => (grainLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getGrainLanguageServer } = await import('@wasm-idle/lsp/grain');
+				return getGrainLanguageServer({
+					currentUrl,
+					signal,
+					grain: { baseUrl: grainLspBaseUrl, workspaceFiles: grainLspWorkspaceFiles },
+					onStatus: (status) => (grainLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['c3'],
+			isEnabled: () => c3LspEnabled && !!c3LspBaseUrl,
+			setStatus: (status) => (c3LspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getC3LanguageServer } = await import('@wasm-idle/lsp/c3');
+				return await getC3LanguageServer({
+					currentUrl,
+					signal,
+					c3: { baseUrl: c3LspBaseUrl },
+					onStatus: (status) => (c3LspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['rescript'],
+			isEnabled: () => !!rescriptLspBaseUrl,
+			setStatus: (status) => (rescriptLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getReScriptLanguageServer } = await import('@wasm-idle/lsp/rescript');
+				return getReScriptLanguageServer({
+					currentUrl,
+					signal,
+					rescript: {
+						baseUrl: rescriptLspBaseUrl,
+						workspaceFiles: [
+							...rescriptLspWorkspaceFiles,
+							{ path: normalizedFilePath, content: model?.getValue() ?? value ?? '' }
+						]
+					},
+					onStatus: (status) => (rescriptLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['v'],
+			isEnabled: () => vLspEnabled && !!vLspBaseUrl,
+			setStatus: (status) => (vLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getVLanguageServer } = await import('@wasm-idle/lsp/v');
+				return await getVLanguageServer({
+					currentUrl,
+					signal,
+					v: { baseUrl: vLspBaseUrl },
+					onStatus: (status) => (vLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['lean4'],
+			isEnabled: () => lean4LspEnabled,
+			setStatus: (status) => (lean4LspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getLean4LanguageServer } = await import('@wasm-idle/lsp/lean4');
+				return getLean4LanguageServer({
+					currentUrl,
+					signal,
+					lean4: { baseUrl: lean4LspBaseUrl },
+					onStatus: (status) => (lean4LspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3416,6 +3655,55 @@
 			}
 		},
 		{
+			languages: ['bash', 'shell', 'sh'],
+			isEnabled: () => bashLspEnabled && !!bashLspModuleUrl,
+			setStatus: (status) => (bashLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getBashLanguageServer } = await import('@wasm-idle/lsp/bash');
+				return await getBashLanguageServer({
+					currentUrl,
+					signal,
+					bash: { moduleUrl: bashLspModuleUrl, files: $state.snapshot(bashLspFiles) },
+					onStatus: (status) => (bashLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['cobol', 'cob', 'cbl'],
+			isEnabled: () => cobolLspEnabled && !!cobolLspBaseUrl,
+			setStatus: (status) => (cobolLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getCobolLanguageServer } = await import('@wasm-idle/lsp/cobol');
+				return await getCobolLanguageServer({
+					currentUrl,
+					signal,
+					cobol: {
+						baseUrl: cobolLspBaseUrl,
+						workspaceFiles: $state.snapshot(cobolLspWorkspaceFiles)
+					},
+					onStatus: (status) => (cobolLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['nim'],
+			isEnabled: () => nimLspEnabled && !!nimLspBaseUrl,
+			setStatus: (status) => (nimLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getNimLanguageServer } = await import('@wasm-idle/lsp/nim');
+				return await getNimLanguageServer({
+					currentUrl,
+					signal,
+					nim: {
+						baseUrl: nimLspBaseUrl,
+						workspaceFiles: $state.snapshot(nimLspWorkspaceFiles),
+						autoSave: true
+					},
+					onStatus: (status) => (nimLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3651,7 +3939,12 @@
 			elixir: elixirLspStatus,
 			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
+			php: phpLspStatus,
+			forth: forthLspStatus,
+			c3: c3LspStatus,
+			v: vLspStatus,
 			d: dLspStatus,
+			lean4: lean4LspStatus,
 			tcl: tclLspStatus,
 			pascal: pascalLspStatus,
 			go: goLspStatus,
@@ -3662,6 +3955,9 @@
 			wasm: wasmLspStatus,
 			zig: zigLspStatus,
 			lua: luaLspStatus,
+			fennel: fennelLspStatus,
+			grain: grainLspStatus,
+			rescript: rescriptLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,
@@ -3671,6 +3967,9 @@
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
 			postgresql: postgresqlLspStatus,
+			bash: bashLspStatus,
+			cobol: cobolLspStatus,
+			nim: nimLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,
@@ -3852,6 +4151,13 @@
 					'scrollbarSlider.hoverBackground': '#5c6169aa'
 				}
 			});
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lean4')) {
+				monacoApi.languages.register({
+					id: 'lean4',
+					aliases: ['Lean 4', 'lean4'],
+					extensions: ['.lean']
+				});
+			}
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
 				monacoApi.languages.register({
 					id: 'ocaml',

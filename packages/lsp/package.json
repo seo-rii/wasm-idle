@@ -5,6 +5,11 @@
 	"license": "MIT",
 	"type": "module",
 	"exports": {
+		"./php": {
+			"types": "./dist/php/index.d.ts",
+			"import": "./dist/php/index.js",
+			"default": "./dist/php/index.js"
+		},
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
@@ -224,6 +229,56 @@
 			"types": "./dist/document/index.d.ts",
 			"import": "./dist/document/index.js",
 			"default": "./dist/document/index.js"
+		},
+		"./fennel": {
+			"types": "./dist/fennel/index.d.ts",
+			"import": "./dist/fennel/index.js",
+			"default": "./dist/fennel/index.js"
+		},
+		"./forth": {
+			"types": "./dist/forth/index.d.ts",
+			"import": "./dist/forth/index.js",
+			"default": "./dist/forth/index.js"
+		},
+		"./bash": {
+			"types": "./dist/bash/index.d.ts",
+			"import": "./dist/bash/index.js",
+			"default": "./dist/bash/index.js"
+		},
+		"./grain": {
+			"types": "./dist/grain/index.d.ts",
+			"import": "./dist/grain/index.js",
+			"default": "./dist/grain/index.js"
+		},
+		"./c3": {
+			"types": "./dist/c3/index.d.ts",
+			"import": "./dist/c3/index.js",
+			"default": "./dist/c3/index.js"
+		},
+		"./cobol": {
+			"types": "./dist/cobol/index.d.ts",
+			"import": "./dist/cobol/index.js",
+			"default": "./dist/cobol/index.js"
+		},
+		"./rescript": {
+			"types": "./dist/rescript/index.d.ts",
+			"import": "./dist/rescript/index.js",
+			"default": "./dist/rescript/index.js"
+		},
+		"./v": {
+			"types": "./dist/v/index.d.ts",
+			"import": "./dist/v/index.js",
+			"default": "./dist/v/index.js"
+		},
+		"./lean4": {
+			"types": "./dist/lean4/index.d.ts",
+			"import": "./dist/lean4/index.js",
+			"default": "./dist/lean4/index.js"
+		},
+		"./nim": {
+			"types": "./dist/nim/index.d.ts",
+			"import": "./dist/nim/index.js",
+			"default": "./dist/nim/index.js"
 		}
 	},
 	"files": [

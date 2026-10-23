@@ -8,6 +8,20 @@ import {
 } from '@wasm-idle/core';
 
 class Nim extends StaticWorkerRuntimeSandbox {
+	run(...args: Parameters<StaticWorkerRuntimeSandbox['run']>) {
+		const options = args[5] || {};
+		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
+		if (debugMode !== 'none') {
+			return Promise.reject(
+				new RuntimeConfigurationError(
+					'Nim debugging requires a debug-capable compiler producer. The packaged Nim runtime uses LLVM 8 release builds and does not return a DWARF artifact for LLDB.',
+					{ runtimeId: 'NIM' }
+				)
+			);
+		}
+		return super.run(...args);
+	}
+
 	constructor() {
 		super({
 			displayName: 'Nim',

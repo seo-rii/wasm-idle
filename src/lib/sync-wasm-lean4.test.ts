@@ -11,7 +11,7 @@ import {
 	syncWasmLean4Assets,
 	verifyLean4Release
 } from '../../scripts/sync-wasm-lean4.mjs';
-import { WASM_LEAN4_PROFILE } from './playground/wasmLean4Version';
+import { WASM_LEAN4_PROFILE } from '../../packages/lsp/src/bundledLean4Runtime';
 
 const lockUrl = new URL('../../scripts/wasm-lean4-assets.lock.json', import.meta.url);
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');

@@ -189,6 +189,9 @@ function worker() {
 				};
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			if (id === './javaStreaming') return {};
+			// This fixture runs ordinary programs without enabling source debugging.
+			if (['../javaDebugBridge', '../debugMailbox', './javaDebugRuntime'].includes(id))
+				return {};
 			throw new Error(id);
 		}
 	};

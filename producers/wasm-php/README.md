@@ -51,3 +51,26 @@ both modes, native-module reuse, isolated filesystems, I/O, legacy entry behavio
 and rejected instantiation. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` may select a local
 Chromium executable. Unit tests are in `src/lib/php-startup-loader.test.ts` at
 the repository root and participate in the normal application test suite.
+
+## Native debugger capability
+
+The shipped PHP 8.4.25 engine from `@php-wasm/web-8-4` 3.1.57 does not contain Xdebug.
+The [runtime receipt](docs/debug-capabilities-20261023.json) records actual
+`extension_loaded('xdebug')`, `function_exists('xdebug_break')` and `ini_get('xdebug.mode')`
+results, the loaded Wasm SHA-256, and a successful stdin `7` to stdout `12` control.
+To reproduce from the repository root without building PHP:
+
+```sh
+node producers/wasm-php/scripts/probe-debug-runtime.mjs static/wasm-php out/php-debug-agent.json asyncify
+```
+
+This runs the verified browser engine in a dedicated Node host, supplying local files for asset
+fetches and selecting Emscripten's worker host path. It does not qualify browser breakpoint or
+variable support. A timeout or loader failure is a probe error, not proof that Xdebug is unavailable.
+
+[WordPress Playground's Xdebug build](https://github.com/WordPress/wordpress-playground/blob/trunk/packages/php-wasm/compile/shared/xdebug/Dockerfile)
+provides a real Wasm extension build with `wasm_recv` and JSPI/Asyncify support. The remaining work
+is to build/package the extension for this exact PHP ABI and async mode, provide its debugger
+transport, and connect DBGp breakpoints, PHP stack frames and locals to the app. The current
+`startup.ts` WebSocket decorator stubs networking, so packaging the extension alone would not
+complete the transport. No PHP debug UI is enabled by this probe.

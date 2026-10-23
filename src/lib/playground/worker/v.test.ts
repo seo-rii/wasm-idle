@@ -142,6 +142,43 @@ describe('V worker', () => {
 		});
 	});
 
+	it('hands original V sources to LLDB without executing the guest in the compiler worker', async () => {
+		const code = 'fn main() { println(73) }';
+		const descriptor = {
+			kind: 'dwarf',
+			files: [{ path: '/workspace/src/main.v', contentSha256: 'hash' }]
+		};
+		mocks.compile.mockResolvedValue({
+			success: true,
+			artifact: {
+				sourceLanguage: 'V',
+				bytes: new Uint8Array([0, 97, 115, 109]),
+				debug: descriptor
+			}
+		});
+		await import('./v');
+		await (globalThis as any).self.onmessage({ data: { load: true, vBaseUrl: '/wasm-v/' } });
+		await (globalThis as any).self.onmessage({
+			data: {
+				code,
+				activePath: 'src/main.v',
+				debugMode: 'lldb',
+				buffer: new SharedArrayBuffer(1024)
+			}
+		});
+		expect(mocks.compile).toHaveBeenCalledWith(
+			expect.objectContaining({ code, debugMode: 'lldb' })
+		);
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			lldbArtifact: {
+				bytes: new Uint8Array([0, 97, 115, 109]),
+				descriptor,
+				sources: [{ path: '/workspace/src/main.v', contentSha256: 'hash', content: code }]
+			}
+		});
+		expect(mocks.executeBrowserVArtifact).not.toHaveBeenCalled();
+	});
+
 	it('posts non-Error load and execution failures as error text', async () => {
 		mocks.createVCompiler.mockRejectedValueOnce('V runtime fetch failed');
 		await import('./v');

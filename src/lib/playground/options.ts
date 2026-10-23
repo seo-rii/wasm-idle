@@ -46,7 +46,7 @@ export interface CompilerDiagnostic {
 
 export type RustOptimizationProfile = 'interactive' | 'speed' | 'size';
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
-export type BrowserDebugMode = 'none' | 'trace' | 'lldb';
+export type BrowserDebugMode = 'none' | 'trace' | 'lldb' | 'mobdebug' | 'tracepoint';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
@@ -62,7 +62,7 @@ export interface SandboxExecutionOptions {
 	/** Overrides instance/global persistent asset caching for this operation. */
 	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	debugMode?: BrowserDebugMode;
-	/** @deprecated Use debugMode. true maps to trace unless the caller explicitly selects lldb. */
+	/** @deprecated Use debugMode. true follows the language's compatibility backend. */
 	debug?: boolean;
 	/** Keep the final run alive until the host explicitly stops or disposes it. */
 	interactive?: boolean;
