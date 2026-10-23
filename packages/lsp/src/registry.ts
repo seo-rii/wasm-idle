@@ -24,6 +24,7 @@ import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
+import { getFennelLanguageServer } from './fennel/language-server.js';
 import { getOcamlLanguageServer } from './ocaml/language-server.js';
 import { getOctaveLanguageServer } from './octave/language-server.js';
 import { getPascalLanguageServer } from './pascal/language-server.js';
@@ -155,6 +156,11 @@ const providerDefinitions = [
 		id: 'lua',
 		languages: ['lua'],
 		create: (options) => getLuaLanguageServer(options)
+	},
+	{
+		id: 'fennel',
+		languages: ['fennel', 'fnl'],
+		create: (options) => getFennelLanguageServer(options)
 	},
 	{
 		id: 'janet',

@@ -2332,6 +2332,7 @@
 	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let fennelLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2434,6 +2435,7 @@
 		awkLspWorkerUrl?: string;
 		perlLspEnabled?: boolean;
 		perlLspRuntime?: PerlLspRuntimeConfig;
+		fennelLspBaseUrl?: string;
 		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -2531,6 +2533,7 @@
 		awkLspWorkerUrl,
 		perlLspEnabled = false,
 		perlLspRuntime,
+		fennelLspBaseUrl,
 		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -2685,6 +2688,7 @@
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
+			fennelLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2782,6 +2786,10 @@
 			case 'lua':
 				label = 'Lua LSP';
 				status = luaLspStatus;
+				break;
+			case 'fennel':
+				label = 'Fennel LSP';
+				status = fennelLspStatus;
 				break;
 			case 'janet':
 				label = 'Janet LSP';
@@ -2910,6 +2918,20 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['fennel'],
+			isEnabled: () => !!fennelLspBaseUrl,
+			setStatus: (status) => (fennelLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getFennelLanguageServer } = await import('@wasm-idle/lsp/fennel');
+				return getFennelLanguageServer({
+					currentUrl,
+					signal,
+					fennel: { baseUrl: fennelLspBaseUrl },
+					onStatus: (status) => (fennelLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3609,6 +3631,7 @@
 			wasm: wasmLspStatus,
 			zig: zigLspStatus,
 			lua: luaLspStatus,
+			fennel: fennelLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,

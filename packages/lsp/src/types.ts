@@ -117,6 +117,9 @@ export interface EditorLanguageServerRuntimeOptions {
 		targetTriple?: 'wasm64-wasi';
 		compileArgs?: string[];
 	};
+	fennel?: {
+		baseUrl?: string;
+	};
 	lua?: {
 		moduleUrl?: string;
 	};

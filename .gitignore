@@ -45,3 +45,6 @@ static/wasm-lfortran/
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+# Original Fennel LSP assets are produced from pinned source.
+/static/wasm-fennel-lsp/

@@ -429,3 +429,5 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export { getFennelLanguageServer, type FennelLanguageServerOptions } from './fennel/index.js';

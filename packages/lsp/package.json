@@ -219,6 +219,11 @@
 			"types": "./dist/document/index.d.ts",
 			"import": "./dist/document/index.js",
 			"default": "./dist/document/index.js"
+		},
+		"./fennel": {
+			"types": "./dist/fennel/index.d.ts",
+			"import": "./dist/fennel/index.js",
+			"default": "./dist/fennel/index.js"
 		}
 	},
 	"files": [

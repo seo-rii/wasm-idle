@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -469,6 +472,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		timeoutMs: 180_000
 	},
 	{
+		language: 'FENNEL',
+		label: 'Fennel',
+		fileName: 'main.fnl',
+		source: '(local answer ',
+		validSource: '(local answer 42)\n(print answer)\n',
+		errorLine: 1,
+		aliases: ['fnl'],
+		expectedResponses: [
+			'/wasm-fennel-lsp/engine.mjs',
+			'/wasm-fennel-lsp/lua.wasm',
+			'/wasm-fennel-lsp/fennel-ls.lua'
+		],
+		assertNoPreEnableRequests: ['/wasm-fennel-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'LISP',
 		label: 'Scheme',
 		fileName: 'main.scm',
@@ -528,6 +547,7 @@ const lspBrowserMatrixGroups = {
 		'ERLANG',
 		'TCL',
 		'JANET',
+		'FENNEL',
 		'LISP',
 		'R',
 		'OCTAVE',
@@ -558,7 +578,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1188,7 +1208,8 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
@@ -1232,7 +1253,8 @@ async function runLspCase(
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		const markers = await page.evaluate(() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
 			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
@@ -1251,7 +1273,19 @@ async function runLspCase(
 			)
 		).toBe(false);
 		await replaceEditorSource(page, testCase.validSource);
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd') {
+			await waitForClangdDiagnosticsForCurrentVersion(page);
+		} else {
+			await page.waitForFunction(() => {
+				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+				return (
+					model &&
+					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+						.length === 0
+				);
+			});
+		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
@@ -1405,6 +1439,7 @@ describe('Monaco LSP browser integration', () => {
 				'ERLANG',
 				'TCL',
 				'JANET',
+				'FENNEL',
 				'LISP',
 				'R',
 				'OCTAVE',
@@ -1474,6 +1509,12 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FENNEL')
+				) {
+					await runBrowserPreparationScripts(['sync:fennel-lsp']);
+				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

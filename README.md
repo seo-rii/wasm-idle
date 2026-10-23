@@ -118,7 +118,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | WAT            | WABT                                         | Yes   | WAT LSP              | -     |
 | WASM           | Browser WebAssembly + WASI shim              | Yes   | syntax               | -     |
 | Lua            | Wasmoon                                      | Yes   | syntax               | -     |
-| Fennel         | fennel.lua on Wasmoon                        | Yes   | syntax               | -     |
+| Fennel         | fennel.lua on Wasmoon                        | Yes   | Fennel LSP           | -     |
 | Zig            | zig_small.wasm                               | Yes   | syntax               | -     |
 | Scheme         | Puppy Scheme / wasm-lisp                     | Yes   | syntax               | -     |
 | Common Lisp    | ECL 26.5.5 (Embeddable Common-Lisp) WASM     | Yes   | syntax               | -     |
