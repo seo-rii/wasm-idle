@@ -157,14 +157,14 @@ export function readCompilerOptions(value: unknown): CompilerOptionsByLanguage {
 	return result;
 }
 
-/** Old Objective-C and Haskell Args fields contained compiler flags. */
+/** Legacy C-family and Haskell Args fields contained compiler flags. */
 export function restoreCompilerOptions(
 	value: unknown,
 	language: PlaygroundLanguage,
 	argsInput: string
 ) {
 	const compilerOptions = readCompilerOptions(value);
-	if (value === undefined && ['OBJC', 'OBJECTIVECXX', 'HASKELL'].includes(language)) {
+	if (value === undefined && (clangCompilerLanguages.has(language) || language === 'HASKELL')) {
 		compilerOptions[language] = { ...defaultCompilerSettings, arguments: argsInput };
 		return { compilerOptions, argsInput: '' };
 	}

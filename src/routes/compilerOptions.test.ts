@@ -136,12 +136,34 @@ describe('saved compiler options', () => {
 		expect(original.C.arguments).toBe('-DVALUE=1');
 	});
 
-	it.each(['OBJC', 'OBJECTIVECXX', 'HASKELL'] as const)(
+	it.each(['C', 'CPP', 'OBJC', 'OBJECTIVECXX', 'HASKELL'] as const)(
 		'migrates legacy compiler arguments for %s without turning them into argv',
 		(language) => {
 			const restored = restoreCompilerOptions(undefined, language, '-Wall -O2');
 			expect(restored.argsInput).toBe('');
 			expect(restored.compilerOptions[language]?.arguments).toBe('-Wall -O2');
+		}
+	);
+
+	it.each(['C', 'CPP'] as const)(
+		'restores legacy %s response files as compiler flags',
+		(language) => {
+			const snapshot = { version: 6, language, argsInput: '@flags.rsp', files };
+			expect(() => validateWorkspaceSnapshot(snapshot)).not.toThrow();
+			const restored = restoreCompilerOptions(undefined, language, snapshot.argsInput);
+			expect(restored.argsInput).toBe('');
+			expect(resolveCompilerArguments(language, restored.compilerOptions[language]!)).toEqual(
+				['@flags.rsp']
+			);
+		}
+	);
+
+	it.each(['C', 'CPP', 'OBJC', 'OBJECTIVECXX'] as const)(
+		'preserves %s argv when a new snapshot has compiler settings',
+		(language) => {
+			const restored = restoreCompilerOptions({}, language, '"two words" ""');
+			expect(restored.argsInput).toBe('"two words" ""');
+			expect(restored.compilerOptions).toEqual({});
 		}
 	);
 
