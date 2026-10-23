@@ -119,6 +119,8 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 		expect(clangSimdDriverArgs()).toEqual([
 			'-msimd128',
 			...expectedDefines,
+			'-include',
+			`/${CLANG_SIMD_INCLUDE_PATH}/__wasm_idle_simd_target.h`,
 			'-isystem',
 			`/${CLANG_SIMD_INCLUDE_PATH}`
 		]);
@@ -126,6 +128,8 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			'-target-feature',
 			'+simd128',
 			...expectedDefines,
+			'-include',
+			`/${CLANG_SIMD_INCLUDE_PATH}/__wasm_idle_simd_target.h`,
 			'-internal-isystem',
 			`/${CLANG_SIMD_INCLUDE_PATH}`
 		]);
@@ -153,7 +157,7 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			expect(fs.mkdirTree).toHaveBeenCalledWith(directory);
 			expect(clangSimdDriverArgs(mountRoot).at(-1)).toBe(directory);
 			expect(clangSimdFrontendArgs(mountRoot).at(-1)).toBe(directory);
-			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length + 1);
+			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length + 2);
 			for (const name of expectedHeaders) {
 				const installedName = name === 'xmmintrin.h' ? `emscripten/${name}` : name;
 				expect(files.get(`${directory}/${installedName}`)).toEqual(
@@ -164,6 +168,13 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			expect(publicHeader).toMatch(
 				/#include "emscripten\/xmmintrin.h"\s+#undef _mm_malloc\s+#undef _mm_free\s+#include <mm_malloc.h>/
 			);
+			for (const args of [clangSimdDriverArgs(mountRoot), clangSimdFrontendArgs(mountRoot)]) {
+				const targetHeaderPath = args[args.indexOf('-include') + 1];
+				expect(targetHeaderPath).toBe(`${directory}/__wasm_idle_simd_target.h`);
+				expect(new TextDecoder().decode(files.get(targetHeaderPath))).toContain(
+					'#ifndef __wasm_simd128__'
+				);
+			}
 			expect(files.get(nativePath)).toBe(nativeHeader);
 		}
 	);

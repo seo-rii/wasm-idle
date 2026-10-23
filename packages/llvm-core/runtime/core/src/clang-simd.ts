@@ -2,6 +2,24 @@ import { CLANG_SIMD_DEFINES, CLANG_SIMD_HEADERS } from './clang-simd-headers.gen
 
 export const CLANG_SIMD_INCLUDE_PATH = 'include/wasm-idle/simd';
 
+const simdTargetHeaderName = '__wasm_idle_simd_target.h';
+// Read the compiler's final target, including options expanded from response files.
+// Keep explicit user -U overrides when SIMD is enabled.
+const simdTargetHeader = `#ifndef __wasm_idle_simd_target_h__
+#define __wasm_idle_simd_target_h__
+#ifndef __wasm_simd128__
+#undef __SSE__
+#undef __SSE2__
+#undef __SSE3__
+#undef __SSSE3__
+#undef __SSE4_1__
+#undef __SSE4_2__
+#undef __AVX__
+#undef __AVX2__
+#endif
+#endif
+`;
+
 interface SimdHeaderFileSystem {
 	mkdirTree(path: string): void;
 	writeFile(path: string, contents: Uint8Array): void;
@@ -13,17 +31,28 @@ function simdIncludeDirectory(root: string) {
 
 /** Driver flags for the pinned SSE through AVX2 compatibility headers. */
 export function clangSimdDriverArgs(root = '') {
-	return ['-msimd128', ...CLANG_SIMD_DEFINES, '-isystem', simdIncludeDirectory(root)];
+	const directory = simdIncludeDirectory(root);
+	return [
+		'-msimd128',
+		...CLANG_SIMD_DEFINES,
+		'-include',
+		`${directory}/${simdTargetHeaderName}`,
+		'-isystem',
+		directory
+	];
 }
 
 /** Clang's -cc1 entry point accepts target features instead of driver -m flags. */
 export function clangSimdFrontendArgs(root = '') {
+	const directory = simdIncludeDirectory(root);
 	return [
 		'-target-feature',
 		'+simd128',
 		...CLANG_SIMD_DEFINES,
+		'-include',
+		`${directory}/${simdTargetHeaderName}`,
 		'-internal-isystem',
-		simdIncludeDirectory(root)
+		directory
 	];
 }
 
@@ -54,4 +83,5 @@ export function installClangSimdHeaders(fs: SimdHeaderFileSystem, root = '') {
 #endif
 `)
 	);
+	fs.writeFile(`${directory}/${simdTargetHeaderName}`, encoder.encode(simdTargetHeader));
 }

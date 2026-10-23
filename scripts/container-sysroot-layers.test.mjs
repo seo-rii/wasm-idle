@@ -379,6 +379,7 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 				]);
 				const directory = `${root}/${CLANG_SIMD_INCLUDE_PATH}`;
 				assert.deepEqual(f.profile.container.fs.readdir(directory).sort(), [
+					'__wasm_idle_simd_target.h',
 					'avx2intrin.h',
 					'avxintrin.h',
 					'emmintrin.h',
@@ -392,6 +393,10 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 					'wasm_simd128.h',
 					'xmmintrin.h'
 				]);
+				assert.equal(
+					args[args.indexOf('-include') + 1],
+					`${directory}/__wasm_idle_simd_target.h`
+				);
 				assert.match(
 					new TextDecoder().decode(
 						f.profile.container.fs.readFile(`${directory}/xmmintrin.h`)

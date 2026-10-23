@@ -8,6 +8,7 @@ import { executeBrowserClangArtifact } from '../src/browser-execution.js';
 const read = promisify(readFile);
 const root = new URL('../../../../../', import.meta.url);
 const source = readFileSync(new URL('scripts/fixtures/clang-simd.c', root), 'utf8');
+const targetSource = readFileSync(new URL('scripts/fixtures/clang-simd-target.c', root), 'utf8');
 const fetchAssets: typeof fetch = async (input) => {
 	const url = new URL(input instanceof Request ? input.url : input);
 	if (url.origin !== 'http://wasm-idle.test' || !url.pathname.startsWith('/clang/')) {
@@ -90,6 +91,61 @@ int main(void) {
 				const execution = await executeBrowserClangArtifact(result.artifact);
 				expect(execution.exitCode, execution.stderr).toBe(0);
 				expect(execution.stderr).toBe('');
+			}
+		);
+
+		it.each(['C', 'CPP'] as const)(
+			'uses the final %s target features and preserves explicit macro overrides',
+			{ timeout: 180_000 },
+			async (language) => {
+				const cases = [
+					{ name: 'default', compileArgs: [], path: 'simd' },
+					{
+						name: 'disabled',
+						compileArgs: ['-target-feature', '-simd128'],
+						path: 'scalar'
+					},
+					{
+						name: 'enabled then disabled',
+						compileArgs: ['-target-feature', '+simd128', '-target-feature', '-simd128'],
+						path: 'scalar'
+					},
+					{
+						name: 'disabled then enabled',
+						compileArgs: ['-target-feature', '-simd128', '-target-feature', '+simd128'],
+						path: 'simd'
+					},
+					{ name: 'user macro override', compileArgs: ['-U__SSE2__'], path: 'scalar' },
+					{ name: 'response file', compileArgs: ['@scalar.rsp'], path: 'scalar' }
+				];
+				for (const testCase of cases) {
+					const result = await compileClang(
+						{
+							code: targetSource,
+							language,
+							compileArgs: testCase.compileArgs,
+							workspaceFiles: [
+								{ path: 'scalar.rsp', content: '-target-feature -simd128' }
+							]
+						},
+						{ runtimeBaseUrl: 'http://wasm-idle.test/clang/', fetchImpl: fetchAssets }
+					);
+					expect(result.success, `${testCase.name}: ${result.stderr}`).toBe(true);
+					if (!result.artifact) throw new Error(`Missing ${testCase.name} artifact`);
+					let consumed = false;
+					const execution = await executeBrowserClangArtifact(result.artifact, {
+						stdin: () => {
+							if (consumed) return null;
+							consumed = true;
+							return '17\n';
+						}
+					});
+					expect(execution.exitCode, `${testCase.name}: ${execution.stderr}`).toBe(0);
+					expect(execution.stdout, testCase.name).toBe(
+						`path=${testCase.path} value=22\n`
+					);
+					expect(execution.stderr, testCase.name).toBe('');
+				}
 			}
 		);
 	}

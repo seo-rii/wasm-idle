@@ -473,6 +473,17 @@ const clangStdinBrowserCases = [
 		stdinText: '17\n',
 		expectedOutput: 'simd=17 sse=22 avx2=96 wasm=20'
 	})),
+	...(['C', 'CPP'] as const).map((language) => ({
+		name: `${language} scalar SIMD override`,
+		language,
+		source: readFileSync(
+			new URL('../../../scripts/fixtures/clang-simd-target.c', import.meta.url),
+			'utf8'
+		),
+		argsInput: '-mno-simd128',
+		stdinText: '17\n',
+		expectedOutput: 'path=scalar value=22'
+	})),
 	{
 		name: 'C',
 		language: 'C',
@@ -669,11 +680,13 @@ describe('wasm-idle browser stdin connection', () => {
 			},
 			timeout: browserStdinTestTimeoutMs
 		},
-		async ({ expectedOutput, language, source, stdinText }) => {
+		async (testCase) => {
+			const { expectedOutput, language, source, stdinText } = testCase;
 			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
+					argsInput: 'argsInput' in testCase ? testCase.argsInput : '',
 					browserUrl,
 					expectedOutput,
 					language,
