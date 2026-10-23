@@ -497,6 +497,22 @@ const lspBrowserCases: LspBrowserCase[] = [
 		timeoutMs: 180_000
 	},
 	{
+		language: 'FENNEL',
+		label: 'Fennel',
+		fileName: 'main.fnl',
+		source: '(local answer ',
+		validSource: '(local answer 42)\n(print answer)\n',
+		errorLine: 1,
+		aliases: ['fnl'],
+		expectedResponses: [
+			'/wasm-fennel-lsp/engine.mjs',
+			'/wasm-fennel-lsp/lua.wasm',
+			'/wasm-fennel-lsp/fennel-ls.lua'
+		],
+		assertNoPreEnableRequests: ['/wasm-fennel-lsp/'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'LISP',
 		label: 'Scheme',
 		fileName: 'main.scm',
@@ -566,6 +582,7 @@ const lspBrowserMatrixGroups = {
 		'ERLANG',
 		'TCL',
 		'JANET',
+		'FENNEL',
 		'LISP',
 		'R',
 		'OCTAVE',
@@ -596,7 +613,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:wasm-phpantom-lsp|lsp|pyodide|wasm-(?:fennel-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|postgresql-lsp|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1587,6 +1604,7 @@ describe('Monaco LSP browser integration', () => {
 				'ERLANG',
 				'TCL',
 				'JANET',
+				'FENNEL',
 				'LISP',
 				'R',
 				'OCTAVE',
@@ -1667,6 +1685,12 @@ describe('Monaco LSP browser integration', () => {
 					cases.some((testCase) => testCase.language === 'PHP')
 				) {
 					await runBrowserPreparationScripts(['sync:phpantom-lsp']);
+				}
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'FENNEL')
+				) {
+					await runBrowserPreparationScripts(['sync:fennel-lsp']);
 				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([

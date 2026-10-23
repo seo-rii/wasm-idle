@@ -496,6 +496,7 @@
 	const awkLspWorkerUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.workerUrl : undefined);
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspRuntime = $derived(perlLspEnabled ? runtimeAssets.perl : undefined);
+	const fennelLspBaseUrl = $derived(resolveApplicationAsset('wasm-fennel-lsp/'));
 	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
@@ -4563,6 +4564,7 @@
 							{awkLspWorkerUrl}
 							{perlLspEnabled}
 							{perlLspRuntime}
+							{fennelLspBaseUrl}
 							{pythonLspBaseUrl}
 							{typescriptLspLibUrl}
 							breakpoints={debug.effectiveBreakpoints}

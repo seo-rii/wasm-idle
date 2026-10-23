@@ -314,6 +314,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	FENNEL: {
 		label: 'Fennel',
 		editorLanguage: 'clojure',
+		lspLanguageOverride: 'fennel',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true

@@ -115,6 +115,7 @@ describe('language registry', () => {
 		expect(typescriptLspLanguages.has('JAVASCRIPT')).toBe(true);
 		expect(typescriptLspLanguages.has('TYPESCRIPT')).toBe(true);
 		expect(lspLanguageOverrides.ASSEMBLYSCRIPT).toBe('assemblyscript');
+		expect(lspLanguageOverrides.FENNEL).toBe('fennel');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
 		expect(lspLanguageOverrides.POSTGRESQL).toBe('postgresql');
 	});

@@ -443,3 +443,5 @@ export {
 	PHPANTOM_WASM_ASSET,
 	PHPANTOM_WASM_RECEIPT
 } from './php/index.js';
+
+export { getFennelLanguageServer, type FennelLanguageServerOptions } from './fennel/index.js';

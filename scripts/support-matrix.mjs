@@ -807,7 +807,7 @@ export const supportMatrixRows = [
 		ids: ['FENNEL'],
 		runtime: 'fennel.lua on Wasmoon',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'Fennel LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

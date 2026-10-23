@@ -27,6 +27,7 @@ const expectedLanguagesByProvider = {
 	assemblyscript: ['assemblyscript', 'as'],
 	zig: ['zig'],
 	lua: ['lua'],
+	fennel: ['fennel', 'fnl'],
 	janet: ['janet'],
 	lisp: ['lisp', 'scheme', 'scm'],
 	octave: ['octave', 'matlab', 'm'],
