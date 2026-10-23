@@ -2,7 +2,38 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { normalizeVEmbeddedFileIds, vLspLock, verifyVLspAsset } from './build-v-lsp.mjs';
+import {
+	normalizeVEmbeddedFileIds,
+	vLspCacheKey,
+	vLspLock,
+	verifyVLspAsset
+} from './build-v-lsp.mjs';
+
+test('V preparation caches are isolated for every independently pinned producer input', () => {
+	const original = vLspCacheKey(vLspLock);
+	assert.equal(vLspCacheKey(structuredClone(vLspLock)), original);
+	for (const select of [
+		(lock) => lock.sources.server,
+		(lock) => lock.sources.treeSitter,
+		(lock) => lock.compiler,
+		(lock) => lock.emscripten
+	]) {
+		const changed = structuredClone(vLspLock);
+		select(changed).sha256 = 'f'.repeat(64);
+		assert.notEqual(
+			vLspCacheKey(changed),
+			original,
+			'updated input reused prepared sources/toolchain'
+		);
+	}
+	const patched = structuredClone(vLspLock);
+	patched.patchSha256 = 'f'.repeat(64);
+	assert.notEqual(
+		vLspCacheKey(patched),
+		original,
+		'updated browser patch reused prepared sources'
+	);
+});
 
 test('embedded-file lookup keys reproduce across source paths without changing the file data', () => {
 	const generated = (unsigned, signed) =>

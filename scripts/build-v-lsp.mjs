@@ -12,6 +12,10 @@ export const vLspLock = JSON.parse(
 );
 const names = ['v_analyzer.mjs', 'v_analyzer.wasm', 'stdlib.json.gz.bin'];
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+export function vLspCacheKey(lock) {
+	// Prepared sources and extracted toolchains must agree with every pinned input.
+	return `${lock.sources.server.commit}-${sha256(JSON.stringify(lock))}`;
+}
 export function verifyVLspAsset(bytes, receipt, label) {
 	if (!receipt || bytes.length !== receipt.bytes || sha256(bytes) !== receipt.sha256)
 		throw new Error(`V LSP ${label} differs from the pinned producer receipt`);
@@ -111,11 +115,7 @@ export async function buildVLsp({
 		throw new Error('V LSP lock is missing qualified assets');
 	const patch = await readFile(patchPath);
 	if (sha256(patch) !== lock.patchSha256) throw new Error('V LSP patch differs from its lock');
-	const cache = path.join(
-		root,
-		'.cache/v-lsp',
-		`${lock.sources.server.commit}-${lock.patchSha256.slice(0, 16)}`
-	);
+	const cache = path.join(root, '.cache/v-lsp', vLspCacheKey(lock));
 	const source = path.join(cache, 'source'),
 		original = path.join(cache, 'native-source');
 	const compilerRoot = path.join(cache, 'compiler'),
