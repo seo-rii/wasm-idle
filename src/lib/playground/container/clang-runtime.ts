@@ -1,4 +1,4 @@
-import type { Container, ContainerProcess, ProcessResult } from '@wasm-idle/container';
+import type { Container, ContainerProcess, FileVersion, ProcessResult } from '@wasm-idle/container';
 import { resolveSandboxExecutionArgs, type SandboxExecutionOptions } from '../options';
 import type { ProgressLike } from '@wasm-idle/core';
 import type { ContainerWorkerEvent } from './protocol';
@@ -16,12 +16,20 @@ interface Execution {
 	signal: AbortSignal;
 	stopped?: boolean;
 }
+interface PreparedProgram {
+	key: string;
+	generation: number;
+	version: FileVersion;
+	reusable: boolean;
+	diagnostics: ContainerWorkerEvent[];
+}
 /** The Run button uses the same real Clang command and artifacts as Bash. Debug uses its qualified backend. */
 export class WebsiteClangRuntime {
 	#active = new Map<string, Execution>();
-	#prepared = new Map<string, string>();
+	#prepared = new Map<string, PreparedProgram>();
 	#input = new Map<string, { chunks: string[]; size: number; eof: boolean }>();
 	#header?: { key: string; path: string; bytes: Uint8Array };
+	#disposed = false;
 	constructor(
 		private readonly profile: Profile,
 		private readonly files: WebsiteRuntimeAdapter,
@@ -36,21 +44,33 @@ export class WebsiteClangRuntime {
 		return JSON.stringify([
 			language,
 			code,
-			args,
+			resolveSandboxExecutionArgs(language, args, options).compileArgs,
 			options.cppVersion,
 			options.cVersion,
-			options.compileArgs,
 			options.activePath,
-			options.env,
-			options.workspaceFiles
+			options.env
 		]);
+	}
+	private currentProgram(program: PreparedProgram | undefined, key: string, artifact: string) {
+		const fs = this.profile.container.fs;
+		if (!program || program.key !== key || program.generation !== fs.generation) return;
+		try {
+			if (
+				fs.captureFileVersion(artifact) === program.version &&
+				fs.stat(artifact).mode & 0o111
+			)
+				return program;
+		} catch {
+			/* A removed or replaced artifact requires a new build. */
+		}
 	}
 	private async drain(
 		process: ContainerProcess,
 		language: string,
 		requestId: number,
 		diagnostics = false,
-		quiet = false
+		quiet = false,
+		emit = this.emit
 	) {
 		const output = async (stream: ReadableStream<Uint8Array>, stderr: boolean) => {
 			const reader = stream.getReader(),
@@ -60,8 +80,7 @@ export class WebsiteClangRuntime {
 				for (;;) {
 					const { value, done } = await reader.read();
 					const text = done ? decoder.decode() : decoder.decode(value, { stream: true });
-					if (text && !quiet)
-						this.emit({ language, name: 'output', data: text, requestId });
+					if (text && !quiet) emit({ language, name: 'output', data: text, requestId });
 					if (stderr && diagnostics) {
 						pending += text;
 						const lines = pending.split('\n');
@@ -74,7 +93,7 @@ export class WebsiteClangRuntime {
 									plain
 								);
 							if (match)
-								this.emit({
+								emit({
 									language,
 									name: 'diagnostic',
 									requestId,
@@ -152,10 +171,12 @@ export class WebsiteClangRuntime {
 		if (!/^#[ \t]*include[ \t]*<bits\/stdc\+\+\.h>/.test(rest)) return;
 		return JSON.stringify([cwd, standard, '-fno-exceptions']);
 	}
-	private discardHeader() {
+	private discardHeader(source?: unknown) {
 		if (!this.#header) return;
 		try {
-			this.profile.container.fs.unlink(this.#header.path);
+			this.profile.container.fs.withMutationSource(source, () =>
+				this.profile.container.fs.unlink(this.#header!.path)
+			);
 		} catch {
 			/* Already removed. */
 		}
@@ -170,22 +191,70 @@ export class WebsiteClangRuntime {
 		progress: ProgressLike | undefined,
 		requestId: number
 	) {
+		if (this.#disposed) throw new Error('Clang runtime has been disposed');
 		if (this.#active.has(language))
 			throw new Error(`${language} already has an active command`);
-		const input = this.files.inputs(language, code, options);
-		const cwd = this.files.directory(language),
-			artifact = `${cwd}/program.wasm`;
 		const job: Execution = { language, phase: 'prepare', signal };
+		let mutations: ReturnType<Container['fs']['observeMutations']> | undefined;
 		this.#active.set(language, job);
+		const previous = this.#prepared.get(language);
 		this.#prepared.delete(language);
 		try {
+			signal.throwIfAborted();
+			const input = this.files.inputs(language, code, options);
+			const cwd = this.files.directory(language),
+				artifact = `${cwd}/program.wasm`,
+				key = this.key(language, input.code, args, input.options);
+			const cached = this.currentProgram(previous, key, artifact);
+			if (cached?.reusable) {
+				progress?.report?.({
+					kind: 'activity',
+					phase: 'starting',
+					label: 'Reusing the compiled program'
+				});
+				for (const event of cached.diagnostics)
+					this.emit({ ...structuredClone(event), requestId });
+				signal.throwIfAborted();
+				if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
+				// Event callbacks may synchronously edit the shared workspace.
+				if (this.currentProgram(cached, key, artifact)) {
+					this.#prepared.set(language, cached);
+					return true;
+				}
+			}
 			progress?.report?.({
 				kind: 'activity',
 				phase: 'initializing',
 				label: 'Preparing the Clang toolchain'
 			});
 			await this.profile.prepareCommand({ path: '/usr/local/bin/clang' }, signal);
+			signal.throwIfAborted();
+			if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
 			const { compileArgs } = resolveSandboxExecutionArgs(language, args, options);
+			// Opaque flags/response files can request additional outputs or driver side effects.
+			// They retain only the immediate prepare-to-run handoff, not cross-Run reuse.
+			let reusable = compileArgs.length === 0 && Object.keys(options.env ?? {}).length === 0;
+			const mutationSources = new Set<unknown>([job]);
+			try {
+				mutations = this.profile.container.fs.observeMutations();
+			} catch {
+				reusable = false; /* Optional reuse must not prevent ordinary compilation. */
+			}
+			let diagnosticBytes = 0;
+			const diagnostics: ContainerWorkerEvent[] = [];
+			const emit = (event: ContainerWorkerEvent) => {
+				diagnosticBytes += new TextEncoder().encode(JSON.stringify(event)).byteLength;
+				if (diagnostics.length < 256 && diagnosticBytes <= 64 * 1024)
+					diagnostics.push(structuredClone(event));
+				else reusable = false;
+				this.emit(event);
+			};
+			let oldVersion: FileVersion | undefined;
+			try {
+				oldVersion = this.profile.container.fs.captureFileVersion(artifact);
+			} catch {
+				/* No previous output. */
+			}
 			const standard =
 				language === 'CPP'
 					? (options.cppVersion ?? 'CPP20').replace(/^CPP/, 'c++').toLowerCase()
@@ -207,7 +276,8 @@ export class WebsiteClangRuntime {
 					signal,
 					env: options.env
 				});
-				const drained = this.drain(job.process, language, requestId, !quiet, quiet);
+				mutationSources.add(job.process.mutationSource ?? job.process.pid);
+				const drained = this.drain(job.process, language, requestId, !quiet, quiet, emit);
 				await job.process.stdin.getWriter().close();
 				const result = await drained;
 				if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
@@ -221,19 +291,22 @@ export class WebsiteClangRuntime {
 				cwd,
 				standard
 			);
-			if (headerKey && this.#header?.key !== headerKey) this.discardHeader();
+			if (headerKey && this.#header?.key !== headerKey) this.discardHeader(job);
 			let header = headerKey === this.#header?.key ? this.#header : undefined;
 			if (header) {
 				// Restore owned bytes instead of trusting a writable temporary file.
+				const ownedHeader = header;
 				try {
-					try {
-						this.profile.container.fs.unlink(header.path);
-					} catch {
-						/* Already removed. */
-					}
-					this.profile.container.fs.writeFile(header.path, header.bytes);
+					this.profile.container.fs.withMutationSource(job, () => {
+						try {
+							this.profile.container.fs.unlink(ownedHeader.path);
+						} catch {
+							/* Already removed. */
+						}
+						this.profile.container.fs.writeFile(ownedHeader.path, ownedHeader.bytes);
+					});
 				} catch {
-					this.discardHeader();
+					this.discardHeader(job);
 					header = undefined;
 				}
 			}
@@ -247,7 +320,7 @@ export class WebsiteClangRuntime {
 			]);
 			if (header && okay) progress?.set?.(95, 'Compiled with precompiled <bits/stdc++.h>');
 			else if (header) {
-				this.discardHeader();
+				this.discardHeader(job);
 				okay = await compile([
 					...common,
 					input.options.activePath!,
@@ -282,16 +355,38 @@ export class WebsiteClangRuntime {
 				} finally {
 					if (this.#header?.path !== path) {
 						try {
-							this.profile.container.fs.unlink(path);
+							this.profile.container.fs.withMutationSource(job, () =>
+								this.profile.container.fs.unlink(path)
+							);
 						} catch {
 							/* No usable header. */
 						}
 					}
 				}
 			}
-			if (okay) this.#prepared.set(language, this.key(language, input.code, args, options));
+			if (okay) {
+				if (mutations?.hasChangesOutside(mutationSources)) reusable = false;
+				signal.throwIfAborted();
+				if (job.stopped) throw new DOMException('Command cancelled', 'AbortError');
+				const fs = this.profile.container.fs;
+				try {
+					const version = fs.captureFileVersion(artifact),
+						stat = fs.stat(artifact);
+					if (version === oldVersion || !stat.size || !(stat.mode & 0o111)) return false;
+					this.#prepared.set(language, {
+						key,
+						generation: fs.generation,
+						version,
+						reusable,
+						diagnostics
+					});
+				} catch {
+					return false;
+				}
+			}
 			return okay;
 		} finally {
+			mutations?.dispose();
 			if (this.#active.get(language) === job) this.#active.delete(language);
 		}
 	}
@@ -304,14 +399,28 @@ export class WebsiteClangRuntime {
 		progress: ProgressLike | undefined,
 		requestId: number
 	) {
+		if (this.#disposed) throw new Error('Clang runtime has been disposed');
+		signal.throwIfAborted();
 		const input = this.files.inputs(language, code, options);
+		const cwd = this.files.directory(language),
+			artifact = `${cwd}/program.wasm`;
 		if (
-			this.#prepared.get(language) !== this.key(language, input.code, args, options) &&
+			!this.currentProgram(
+				this.#prepared.get(language),
+				this.key(language, input.code, args, input.options),
+				artifact
+			) &&
 			!(await this.prepare(language, code, args, options, signal, progress, requestId))
 		)
 			return false;
-		const cwd = this.files.directory(language),
-			job: Execution = { language, phase: 'run', signal };
+		const program = this.currentProgram(
+			this.#prepared.get(language),
+			this.key(language, input.code, args, input.options),
+			artifact
+		);
+		if (!program) return false;
+		if (!program.reusable) this.#prepared.delete(language);
+		const job: Execution = { language, phase: 'run', signal };
 		if (this.#active.has(language))
 			throw new Error(`${language} already has an active command`);
 		this.#active.set(language, job);
@@ -384,6 +493,8 @@ export class WebsiteClangRuntime {
 		}));
 	}
 	async dispose() {
+		this.#disposed = true;
+		this.#prepared.clear();
 		await Promise.allSettled([...this.#active.keys()].map((language) => this.stop(language)));
 		this.discardHeader();
 	}

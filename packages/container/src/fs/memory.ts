@@ -2,7 +2,7 @@ import { FsError } from './errors.js';
 import { createFileSystemWatch } from './watch.js';
 import type {
   FileStat, FileSystemLease, FileSystemSnapshot, FileType, MemoryFileSystemOptions,
-  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions, FileVersion, FileTimes,
+  OpenOptions, PathOptions, SnapshotEntry, FileSystemChange, FileSystemWatchOptions, FileVersion, FileTimes, FileSystemMutationObserver,
 } from './types.js';
 
 interface Inode {
@@ -79,6 +79,8 @@ export class MemoryFileSystem {
   private nextFd = 3;
   private usedBytes = 0;
   private revision = 0;
+  private mutationSource: unknown;
+  private mutationObservers = new Set<{ generation: number; sources: Set<unknown>; overflow: boolean }>();
   private versionSequence = 0n;
   private versions = new WeakMap<FileVersion, Inode>();
   private lease: symbol | undefined;
@@ -108,6 +110,35 @@ export class MemoryFileSystem {
   }
 
   get generation(): number { return this.revision; }
+
+  /** Attribute only the synchronous part of a trusted owner operation; never an await. */
+  withMutationSource<T>(source: unknown, operation: () => T): T {
+    const previous = this.mutationSource;
+    this.mutationSource = source;
+    try { return operation(); } finally { this.mutationSource = previous; }
+  }
+
+  observeMutations(): FileSystemMutationObserver {
+    if (this.mutationObservers.size >= 64) throw new FsError('ENOSPC', 'Filesystem mutation observer limit reached');
+    const observer = { generation: this.revision, sources: new Set<unknown>(), overflow: false };
+    this.mutationObservers.add(observer);
+    let disposed = false;
+    return {
+      hasChangesOutside: sources => disposed || observer.overflow || observer.generation !== this.revision ||
+        [...observer.sources].some(source => !sources.has(source)),
+      dispose: () => { disposed = true; observer.sources.clear(); this.mutationObservers.delete(observer); }
+    };
+  }
+
+  private advanceGeneration(): void {
+    this.revision++;
+    for (const observer of this.mutationObservers) {
+      observer.generation = this.revision;
+      if (observer.sources.size < 64 || observer.sources.has(this.mutationSource)) observer.sources.add(this.mutationSource);
+      else observer.overflow = true;
+    }
+  }
+
   get byteLength(): number { return this.usedBytes; }
   get inodeCount(): number { return this.nodes.size; }
   get watcherCount(): number { return this.watchers.size; }
@@ -187,7 +218,7 @@ export class MemoryFileSystem {
   }
 
   private changed(...nodes: Inode[]): void {
-    this.revision++;
+    this.advanceGeneration();
     const now = Date.now();
     for (const node of nodes) {
       node.mtimeMs = node.ctimeMs = now;
@@ -384,7 +415,7 @@ export class MemoryFileSystem {
     if (values.atimeMs !== undefined) node.atimeMs = values.atimeMs === 'now' ? now : values.atimeMs;
     if (values.mtimeMs !== undefined) node.mtimeMs = values.mtimeMs === 'now' ? now : values.mtimeMs;
     node.ctimeMs = now;
-    this.revision++;
+    this.advanceGeneration();
     this.invalidateVersion(node);
     this.notifyFile(node);
   }
@@ -780,7 +811,7 @@ export class MemoryFileSystem {
     this.mounts = candidate.mounts;
     this.usedBytes = candidate.usedBytes + retainedBytes;
     this.nextInode = candidate.nextInode;
-    this.revision++;
+    this.advanceGeneration();
     this.notify({ kind: 'rescan', path: '/' });
   }
 
@@ -1029,7 +1060,7 @@ export class MemoryFileSystem {
     this.root = adopted.get(candidate.root.inode)!;
     this.nodes = nodes; this.mounts = candidate.mounts;
     this.usedBytes = candidate.usedBytes + retainedBytes; this.nextInode = candidate.nextInode;
-    this.revision++;
+    this.advanceGeneration();
     this.notify({ kind: 'rescan', path: '/' });
   }
 }
