@@ -65,12 +65,47 @@ describe('debugHoverExpression', () => {
 		expect(debugHoverExpression('items[2].value + other', 11)).toBe('items[2].value');
 		expect(debugHoverExpression('items[2].value + other', 18)).toBe('other');
 		expect(debugHoverExpression('x + y', 3)).toBeNull();
+		expect(debugHoverExpression('return value;', 10)).toBe('value');
+		expect(debugHoverExpression('value ? other : last', 10)).toBe('other');
 		expect(debugHoverExpression('value', -1)).toBeNull();
 		expect(debugHoverExpression('x'.repeat(5000), 2500)).toBeNull();
+	});
+
+	it.each([
+		['pointer->value', 11],
+		['pointer -> value', 13],
+		['items[index].value', 16],
+		['items[index]', 3],
+		['make().value', 9],
+		['namespace::value', 14],
+		['1value', 4],
+		['items[01]', 3]
+	])('does not resolve an unsupported expression fragment: %s', (line, column) => {
+		expect(debugHoverExpression(line, column)).toBeNull();
 	});
 });
 
 describe('debug hover lifecycle', () => {
+	it('keeps keyboard controls available after the pointer leaves', async () => {
+		vi.useFakeTimers();
+		const fixture = setup();
+		fixture.move();
+		await vi.runAllTimersAsync();
+		const root = document.querySelector('.wasm-idle-debug-hover') as HTMLDivElement;
+		const addWatch = root.querySelector('button') as HTMLButtonElement;
+		addWatch.focus();
+		root.dispatchEvent(new MouseEvent('mouseleave'));
+		fixture.move(18);
+		await vi.advanceTimersByTimeAsync(250);
+		expect(document.activeElement).toBe(addWatch);
+		expect(root.isConnected).toBe(true);
+		addWatch.click();
+		expect(fixture.onAddWatch).toHaveBeenCalledWith('items[2].value');
+		addWatch.blur();
+		await vi.advanceTimersByTimeAsync(250);
+		expect(root.isConnected).toBe(false);
+		fixture.hover.dispose();
+	});
 	it('loads children only on expansion and renders untrusted values as text', async () => {
 		vi.useFakeTimers();
 		const resolve = vi.fn(async () => ({

@@ -36,6 +36,19 @@ export function debugHoverExpression(line: string, column: number): string | nul
 	for (const match of text.matchAll(paths)) {
 		const begin = start + match.index;
 		if (begin <= cursor && cursor < begin + match[0].length) {
+			const before = line.slice(0, begin);
+			const after = line.slice(begin + match[0].length);
+			// A suffix of an unsupported expression can name a different local.
+			// For example, the member in pointer->value is not the local value.
+			if (
+				/[A-Za-z0-9_]$/u.test(before) ||
+				/[\].:]$/u.test(before.trimEnd()) ||
+				before.trimEnd().endsWith('->') ||
+				/^[A-Za-z0-9_]/u.test(after) ||
+				/^(?:[\[.(]|::|->)/u.test(after.trimStart())
+			) {
+				return null;
+			}
 			return match[0].length <= 4096 ? match[0] : null;
 		}
 	}
@@ -55,6 +68,7 @@ export function attachMonacoDebugHover(
 	let hideTimer: ReturnType<typeof setTimeout> | undefined;
 	let widget: monaco.editor.IContentWidget | undefined;
 	let node: HTMLDivElement | undefined;
+	let pointerInside = false;
 	let pendingKey = '';
 	const delay = Math.min(2000, Math.max(0, options.delayMs ?? 250));
 	const disposables: monaco.IDisposable[] = [];
@@ -77,11 +91,14 @@ export function attachMonacoDebugHover(
 		if (widget) editor.removeContentWidget(widget);
 		widget = undefined;
 		node = undefined;
+		pointerInside = false;
 	}
 
 	function hideSoon() {
 		clearTimeout(hideTimer);
-		hideTimer = setTimeout(clear, 200);
+		hideTimer = setTimeout(() => {
+			if (!pointerInside && !node?.contains(document.activeElement)) clear();
+		}, 200);
 	}
 
 	function show(
@@ -104,8 +121,16 @@ export function attachMonacoDebugHover(
 			color: 'var(--vscode-editorHoverWidget-foreground, #eee)',
 			fontSize: '12px'
 		});
-		root.addEventListener('mouseenter', () => clearTimeout(hideTimer));
-		root.addEventListener('mouseleave', hideSoon);
+		root.addEventListener('mouseenter', () => {
+			pointerInside = true;
+			clearTimeout(hideTimer);
+		});
+		root.addEventListener('mouseleave', () => {
+			pointerInside = false;
+			hideSoon();
+		});
+		root.addEventListener('focusin', () => clearTimeout(hideTimer));
+		root.addEventListener('focusout', hideSoon);
 		const title = document.createElement('code');
 		title.textContent = `${expression}${value.type ? `: ${value.type}` : ''} = ${value.value}`;
 		root.append(title);
@@ -207,6 +232,7 @@ export function attachMonacoDebugHover(
 				clearTimeout(hideTimer);
 				return;
 			}
+			if (node?.contains(document.activeElement)) return;
 			const position = event.target.position;
 			const model = editor.getModel();
 			if (
