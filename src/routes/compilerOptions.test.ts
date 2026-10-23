@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { createClangdConfiguration } from '../../packages/lsp/src/clangd/config';
 import {
 	compilerArgumentConfig,
 	defaultCompilerSettings,
 	readCompilerOptions,
+	resolveClangdCompilerArguments,
 	resolveCompilerArguments,
+	resolveCompilerSourceLanguage,
 	restoreCompilerOptions
 } from './compilerOptions';
 import { validateWorkspaceSnapshot } from './workspaceSnapshot';
@@ -40,34 +43,141 @@ describe('compiler option arguments', () => {
 		]);
 	});
 
-	it.each(['CPP', 'OBJECTIVECXX'] as const)(
-		'uses the selected ISO C++ dialect for %s',
+	it.each(['CPP'] as const)('uses the selected ISO C++ dialect for %s', (language) => {
+		expect(
+			resolveCompilerArguments(
+				language,
+				{
+					...defaultCompilerSettings,
+					gnuExtensions: false,
+					warnings: 'none',
+					optimization: 'z'
+				},
+				'CPP98'
+			)
+		).toEqual(['-std=c++98', '-Oz', '-w']);
+	});
+	it.each(['OBJC', 'OBJECTIVECXX'] as const)(
+		'keeps %s standards separate from flags shared by mixed source units',
 		(language) => {
 			expect(
 				resolveCompilerArguments(
 					language,
 					{
 						...defaultCompilerSettings,
+						cVersion: 'C23',
 						gnuExtensions: false,
-						warnings: 'none',
-						optimization: 'z'
+						warnings: 'extra',
+						arguments: '-DVALUE=42'
 					},
-					'CPP98'
+					'CPP17'
 				)
-			).toEqual(['-std=c++98', '-Oz', '-w']);
+			).toEqual(['-Wall', '-Wextra', '-DVALUE=42']);
 		}
 	);
-	it('passes GNU standard selections explicitly to Objective-C frontend adapters', () => {
-		expect(
-			resolveCompilerArguments('OBJC', {
+
+	it('uses the active Objective-C file extension for standard controls and clangd', () => {
+		expect(resolveCompilerSourceLanguage('OBJC', 'src/main.mm')).toBe('OBJECTIVECXX');
+		expect(resolveCompilerSourceLanguage('OBJC', 'src/MAIN.MM')).toBe('OBJECTIVECXX');
+		expect(resolveCompilerSourceLanguage('OBJECTIVECXX', 'src/helper.m')).toBe('OBJC');
+		expect(resolveCompilerSourceLanguage('OBJECTIVECXX', 'src/helper.c')).toBe('OBJC');
+		expect(resolveCompilerSourceLanguage('OBJECTIVECXX', 'header.h')).toBe('OBJECTIVECXX');
+		expect(resolveCompilerSourceLanguage('C', 'src/main.mm')).toBe('C');
+	});
+
+	it.each(['main.cc', 'src/main.cpp', 'main.cxx', 'main.C'])(
+		'uses the C++ dialect for C-selected %s while retaining explicit overrides',
+		(activePath) => {
+			const settings = {
 				...defaultCompilerSettings,
-				cVersion: 'C23'
-			})
-		).toEqual(['-std=gnu23']);
-		expect(resolveCompilerArguments('OBJECTIVECXX', defaultCompilerSettings, 'CPP23')).toEqual([
-			'-std=gnu++23'
+				cVersion: 'C99' as const,
+				gnuExtensions: false,
+				arguments: '-std=c++23'
+			};
+			expect(resolveCompilerSourceLanguage('C', activePath)).toBe('CPP');
+			expect(resolveCompilerArguments('C', settings, 'CPP17', activePath)).toEqual([
+				'-std=c++17',
+				'-std=c++23'
+			]);
+			expect(resolveClangdCompilerArguments('C', settings, 'CPP17', activePath)).toEqual([
+				'-std=c++17',
+				'-std=c++23'
+			]);
+		}
+	);
+
+	it('preserves the C dialect for C-selected .c and the C++ driver dialect for CPP-selected .c', () => {
+		const settings = {
+			...defaultCompilerSettings,
+			cVersion: 'C99' as const,
+			gnuExtensions: false
+		};
+		expect(resolveCompilerSourceLanguage('C', 'main.c')).toBe('C');
+		expect(resolveCompilerArguments('C', settings, 'CPP17', 'main.c')).toEqual(['-std=c99']);
+		expect(resolveCompilerSourceLanguage('CPP', 'main.c')).toBe('CPP');
+		expect(resolveCompilerArguments('CPP', settings, 'CPP17', 'main.c')).toEqual([
+			'-std=c++17'
 		]);
 	});
+
+	it('configures C-selected C++ and C sibling clangd profiles with their own versions', () => {
+		const settings = {
+			...defaultCompilerSettings,
+			cVersion: 'C99' as const,
+			gnuExtensions: false
+		};
+		const compileArgs = resolveClangdCompilerArguments('C', settings, 'CPP17', 'main.cpp');
+		const profiles = createClangdConfiguration({
+			cVersion: settings.cVersion,
+			cppVersion: 'CPP17',
+			sourceLanguage: 'CPP',
+			compileArgs
+		})
+			.split('\n---\n')
+			.map((profile) => JSON.parse(profile));
+		const cppFlags: string[] = profiles[1].CompileFlags.Add;
+		const cFlags: string[] = profiles[0].CompileFlags.Add;
+		expect(cppFlags.filter((flag) => flag.startsWith('-std=')).at(-1)).toBe('-std=c++17');
+		expect(cFlags.filter((flag) => flag.startsWith('-std=')).at(-1)).toBe('-std=gnu99');
+	});
+
+	it.each([
+		{ activePath: 'main.m', gnuExtensions: true },
+		{ activePath: 'main.mm', gnuExtensions: true },
+		{ activePath: 'main.m', gnuExtensions: false },
+		{ activePath: 'main.mm', gnuExtensions: false }
+	])(
+		'configures clangd standards for mixed Objective-C sources: %j',
+		({ activePath, gnuExtensions }) => {
+			const settings = {
+				...defaultCompilerSettings,
+				cVersion: 'C99' as const,
+				gnuExtensions
+			};
+			const compileArgs = resolveClangdCompilerArguments(
+				'OBJC',
+				settings,
+				'CPP17',
+				activePath
+			);
+			const sourceLanguage = activePath.endsWith('.mm') ? 'OBJCXX' : 'OBJC';
+			const profiles = createClangdConfiguration({
+				cVersion: 'C99',
+				cppVersion: 'CPP17',
+				sourceLanguage,
+				compileArgs
+			})
+				.split('\n---\n')
+				.map((profile) => JSON.parse(profile));
+			for (const profile of profiles) {
+				const flags: string[] = profile.CompileFlags.Add;
+				const cpp = ['c++', 'objective-c++'].includes(flags[flags.indexOf('-x') + 1]);
+				expect(flags.filter((flag) => flag.startsWith('-std=')).at(-1)).toBe(
+					`-std=${gnuExtensions ? 'gnu' : 'c'}${cpp ? '++17' : '99'}`
+				);
+			}
+		}
+	);
 
 	it.each(['D', 'ZIG', 'COBOL', 'V', 'FORTRAN'] as const)(
 		'forwards only native arguments for %s',

@@ -68,7 +68,9 @@
 		clangCompilerLanguages,
 		compilerArgumentConfig,
 		defaultCompilerSettings,
+		resolveClangdCompilerArguments,
 		resolveCompilerArguments,
+		resolveCompilerSourceLanguage,
 		restoreCompilerOptions,
 		type CompilerOptionsByLanguage
 	} from './compilerOptions';
@@ -401,23 +403,45 @@
 		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
 	};
 	const currentCompilerSettings = $derived(compilerOptions[language] ?? defaultCompilerSettings);
+	const compilerSourceLanguage = $derived(resolveCompilerSourceLanguage(language, activePath));
 	const parsedCompilerArgs = $derived.by(() => {
 		try {
 			return {
-				args: resolveCompilerArguments(language, currentCompilerSettings, cppVersion),
+				args: resolveCompilerArguments(
+					language,
+					currentCompilerSettings,
+					cppVersion,
+					activePath
+				),
 				error: null
 			};
 		} catch (error) {
 			return { args: null, error: error instanceof Error ? error.message : String(error) };
 		}
 	});
+	const clangdCompilerArgs = $derived.by(() => {
+		try {
+			return resolveClangdCompilerArguments(
+				language,
+				currentCompilerSettings,
+				cppVersion,
+				activePath
+			);
+		} catch {
+			return [];
+		}
+	});
 	const languageExecutionOptions = $derived.by<Partial<SandboxExecutionOptions>>(() => ({
-		...executionOptionResolvers[language]?.(),
+		...executionOptionResolvers[compilerSourceLanguage]?.(),
 		...(compilerArgumentConfig[language] ? { compileArgs: parsedCompilerArgs.args ?? [] } : {}),
-		...(language === 'C' || language === 'OBJC'
-			? { cVersion: currentCompilerSettings.cVersion }
-			: {}),
-		...(language === 'OBJECTIVECXX' ? { cppVersion } : {})
+		...(language === 'C' ? { cVersion: currentCompilerSettings.cVersion } : {}),
+		...(language === 'OBJC' || language === 'OBJECTIVECXX'
+			? {
+					cVersion: currentCompilerSettings.cVersion,
+					cppVersion,
+					objectivecGnuExtensions: currentCompilerSettings.gnuExtensions
+				}
+			: {})
 	}));
 	const editorLanguage = $derived(editorLanguages[language]);
 	const executionAvailable = $derived(!editorOnlyLanguages.has(language));
@@ -4282,7 +4306,7 @@
 						<span role="alert">{parsedArgs.error}</span>
 					{/if}
 				{/if}
-				{#if language === 'CPP' || language === 'OBJECTIVECXX'}
+				{#if compilerSourceLanguage === 'CPP' || compilerSourceLanguage === 'OBJECTIVECXX'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined" aria-hidden="true">tune</span>
 						<span class="visually-hidden">C++ standard</span>
@@ -4477,7 +4501,7 @@
 	<div class="workspace-configuration">
 		{#if compilerArgumentConfig[language]}
 			<CompilerOptions
-				{language}
+				language={compilerSourceLanguage}
 				settings={currentCompilerSettings}
 				error={parsedCompilerArgs.error}
 				onchange={(settings) =>
@@ -4675,12 +4699,12 @@
 							clangdRuntimeAssets={runtimeAssets}
 							clangdCppVersion={cppVersion}
 							clangdCVersion={languageExecutionOptions.cVersion}
-							clangdCompileArgs={parsedCompilerArgs.args ?? []}
-							clangdSourceLanguage={language === 'C'
+							clangdCompileArgs={clangdCompilerArgs}
+							clangdSourceLanguage={compilerSourceLanguage === 'C'
 								? 'C'
-								: language === 'OBJC'
+								: compilerSourceLanguage === 'OBJC'
 									? 'OBJC'
-									: language === 'OBJECTIVECXX'
+									: compilerSourceLanguage === 'OBJECTIVECXX'
 										? 'OBJCXX'
 										: 'CPP'}
 							{dotnetLspEnabled}

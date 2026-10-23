@@ -35,6 +35,18 @@ export const clangCompilerLanguages = new Set<PlaygroundLanguage>([
 	'OBJECTIVECXX'
 ]);
 
+/** Match the driver's C++ filename inference and the Objective-C worker's per-file frontend. */
+export function resolveCompilerSourceLanguage(
+	language: PlaygroundLanguage,
+	activePath: string
+): PlaygroundLanguage {
+	if (language === 'C' && /\.(?:cc|cpp|cxx|C)$/u.test(activePath)) return 'CPP';
+	if (language !== 'OBJC' && language !== 'OBJECTIVECXX') return language;
+	if (/\.mm$/iu.test(activePath)) return 'OBJECTIVECXX';
+	if (/\.(?:m|c)$/iu.test(activePath)) return 'OBJC';
+	return language;
+}
+
 export const compilerArgumentConfig: Partial<
 	Record<PlaygroundLanguage, { label: string; placeholder: string; help: string }>
 > = {
@@ -94,8 +106,10 @@ export const compilerArgumentConfig: Partial<
 export function resolveCompilerArguments(
 	language: PlaygroundLanguage,
 	settings: CompilerSettings,
-	cppVersion = 'CPP20'
+	cppVersion = 'CPP20',
+	activePath = ''
 ) {
+	language = resolveCompilerSourceLanguage(language, activePath);
 	const extra = parseArgs(settings.arguments);
 	if (language === 'HASKELL' && extra.some((argument) => !argument || /\s/u.test(argument))) {
 		throw new Error(
@@ -108,8 +122,8 @@ export function resolveCompilerArguments(
 			? cppVersion.replace(/^CPP/, 'c++').toLowerCase()
 			: settings.cVersion.toLowerCase();
 	return [
-		...(!settings.gnuExtensions || language === 'OBJC' || language === 'OBJECTIVECXX'
-			? [`-std=${settings.gnuExtensions ? standard.replace(/^c/, 'gnu') : standard}`]
+		...(!settings.gnuExtensions && (language === 'C' || language === 'CPP')
+			? [`-std=${standard}`]
 			: []),
 		...(settings.optimization === 'default' ? [] : [`-O${settings.optimization}`]),
 		...(settings.warnings === 'all'
@@ -123,6 +137,24 @@ export function resolveCompilerArguments(
 		...(settings.pedantic ? ['-pedantic'] : []),
 		...extra
 	];
+}
+
+/** clangd retains the active command and filters opposite-family standards for sibling files. */
+export function resolveClangdCompilerArguments(
+	language: PlaygroundLanguage,
+	settings: CompilerSettings,
+	cppVersion: string,
+	activePath: string
+) {
+	const args = resolveCompilerArguments(language, settings, cppVersion, activePath);
+	if (language !== 'OBJC' && language !== 'OBJECTIVECXX') return args;
+	const prefix = settings.gnuExtensions ? 'gnu' : 'c';
+	const standards = [
+		`-std=${prefix}${settings.cVersion.slice(1).toLowerCase()}`,
+		`-std=${prefix}++${cppVersion.replace(/^CPP/, '').toLowerCase()}`
+	];
+	if (resolveCompilerSourceLanguage(language, activePath) !== 'OBJECTIVECXX') standards.reverse();
+	return [...standards, ...args];
 }
 
 /** Validate saved/shared JSON before replacing any workspace state. */

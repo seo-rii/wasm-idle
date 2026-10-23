@@ -334,6 +334,9 @@ class ObjectiveC extends CompiledLldbSandbox implements Sandbox {
 				log,
 				compileArgs,
 				programArgs,
+				cVersion: options.cVersion,
+				cppVersion: options.cppVersion,
+				gnuExtensions: options.objectivecGnuExtensions,
 				activePath:
 					options.activePath ||
 					(this.language === 'OBJECTIVECXX' ? 'main.mm' : undefined),

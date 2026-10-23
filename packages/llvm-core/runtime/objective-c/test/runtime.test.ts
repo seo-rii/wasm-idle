@@ -946,6 +946,83 @@ describe('Objective-C worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
+	it.each([true, false])(
+		"uses each mixed source unit's selected standard with GNU extensions %s",
+		async (gnuExtensions) => {
+			await installWorker();
+			await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'int main() { return 0; }',
+					activePath: 'main.mm',
+					buffer: new SharedArrayBuffer(64),
+					stdin: '',
+					cVersion: 'C99',
+					cppVersion: 'CPP17',
+					gnuExtensions,
+					compileArgs: ['-Wall'],
+					workspaceFiles: [
+						{ path: 'helper.m', content: 'int helper(void) { return 1; }' },
+						{ path: 'bridge.c', content: 'int bridge(void) { return 2; }' }
+					]
+				}
+			});
+			const calls = runCalls.filter((call) => call[0] === 'clang');
+			expect(calls).toHaveLength(3);
+			for (const call of calls) {
+				const cpp = call[call.indexOf('-x') + 1] === 'objective-c++';
+				expect(call.filter((argument) => argument.startsWith('-std='))).toEqual([
+					`-std=${gnuExtensions ? 'gnu' : 'c'}${cpp ? '++17' : '99'}`
+				]);
+				expect(call).toContain('-Wall');
+			}
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		}
+	);
+
+	it.each([{ cVersion: 'C99' }, { cppVersion: 'CPP17' }, { gnuExtensions: false }])(
+		'invalidates prepared artifacts when standards change: %j',
+		async (changedOptions) => {
+			await installWorker();
+			await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+			const data = {
+				code: 'int main() { return 0; }',
+				activePath: 'main.mm',
+				buffer: new SharedArrayBuffer(64),
+				stdin: '',
+				cVersion: 'C11',
+				cppVersion: 'CPP20',
+				gnuExtensions: true
+			};
+			await (globalThis as any).self.onmessage({ data: { ...data, prepare: true } });
+			await (globalThis as any).self.onmessage({ data });
+			expect(runCalls.filter((call) => call[0] === 'clang')).toHaveLength(1);
+			await (globalThis as any).self.onmessage({ data: { ...data, ...changedOptions } });
+			expect(runCalls.filter((call) => call[0] === 'clang')).toHaveLength(2);
+		}
+	);
+
+	it('uses the selected C standard for Objective-C trace compilation', async () => {
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'int main(void) { return 0; }',
+				activePath: 'main.m',
+				buffer: new SharedArrayBuffer(64),
+				debug: true,
+				cVersion: 'C99',
+				gnuExtensions: false,
+				compileArgs: ['-Wall']
+			}
+		});
+		expect(compileCalls).toEqual([
+			expect.objectContaining({
+				compileArgs: ['-std=c99', '-I', expect.any(String), '-Wall']
+			})
+		]);
+	});
+
 	it('links GNUstep Base and libffi only when Foundation is imported', async () => {
 		await installWorker();
 		await (globalThis as any).self.onmessage({
