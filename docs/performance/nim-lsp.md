@@ -78,3 +78,14 @@ preserves the original compiler's path-sensitive type signature hashing and asse
 filenames while producing identical bytes across different physical checkouts.
 No generated C or analyzer logic is rewritten. The asset qualification rebuilds from
 independently extracted inputs and compares every compressed and decoded receipt.
+
+The full LSP workflow installs Bubblewrap and checks `/usr/bin/bwrap` before its cold
+Nim asset preparation. Its `ubuntu-26.04` runner uses the distribution's namespace
+profile. In the official Ubuntu archives, the updated
+[24.04 AppArmor package](https://archive.ubuntu.com/ubuntu/pool/main/a/apparmor/apparmor_4.0.1really4.0.1-0ubuntu0.24.04.9_amd64.deb)
+and [24.04 Bubblewrap package](https://archive.ubuntu.com/ubuntu/pool/main/b/bubblewrap/bubblewrap_0.9.0-1ubuntu0.3_amd64.deb)
+do not contain this profile, while the
+[26.04 package](https://archive.ubuntu.com/ubuntu/pool/main/a/apparmor/apparmor_5.0.0~beta1-0ubuntu7_amd64.deb)
+includes `/etc/apparmor.d/bwrap-userns-restrict`, granting namespace setup to
+`/usr/bin/bwrap`. The job uses the packaged policy and fails early if its namespace
+check fails.

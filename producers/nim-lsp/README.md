@@ -37,3 +37,13 @@ preserves the original compiler's path-sensitive type signature hashing and asse
 filenames while producing identical bytes across different physical checkouts.
 No generated C or analyzer logic is rewritten. The asset qualification rebuilds from
 independently extracted inputs and compares every compressed and decoded receipt.
+
+The scheduled/manual `lsp-browser-full` workflow installs the distribution's
+`bubblewrap` package and checks `/usr/bin/bwrap` as the unprivileged runner before
+preparing assets. This job uses GitHub's generally available
+[`ubuntu-26.04` image](https://github.com/actions/runner-images/issues/14747), whose
+distribution includes the `bwrap-userns-restrict` profile. Ubuntu documents this
+profile's namespace support in its
+[release notes](https://documentation.ubuntu.com/release-notes/25.04/#apparmor-profile-for-bwrap).
+The workflow fails at the preflight if namespaces are unavailable. Other build hosts
+running `pnpm run page:build` must provide the same prerequisites.
