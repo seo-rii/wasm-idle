@@ -1,4 +1,12 @@
 export {
+	getJavaLanguageServer,
+	type JavaLanguageServerOptions,
+	JAVA_LANGUAGE_SERVER_ASSETS,
+	JAVA_LANGUAGE_SERVER_PROFILE,
+	JAVA_CHEERPJ_LOADER,
+	type JavaLanguageServerAsset
+} from './java/index.js';
+export {
 	editorLanguageServerProviders,
 	getEditorLanguageServer,
 	resolveEditorLanguageServerProvider,

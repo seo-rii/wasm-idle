@@ -144,6 +144,7 @@ describe('application runtime asset root', () => {
 		expect(assets.lfortran).toEqual({ baseUrl: '/foo/bar/wasm-lfortran/' });
 		expect(assets.lean4).toEqual({ baseUrl: '/foo/bar/wasm-lean4/' });
 		expect(assets.commonlisp).toEqual({ baseUrl: '/foo/bar/wasm-commonlisp/' });
+		expect(assets.javaLsp).toEqual({ baseUrl: '/foo/bar/java-lsp/' });
 		expect(Object.keys(assets).sort()).toEqual([
 			'assemblyscript',
 			'awk',
@@ -166,6 +167,7 @@ describe('application runtime asset root', () => {
 			'haskell',
 			'j',
 			'janet',
+			'javaLsp',
 			'julia',
 			'lean4',
 			'lfortran',

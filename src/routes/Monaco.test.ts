@@ -223,6 +223,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).not.toMatch(/await import\('@wasm-idle\/lsp'\)/);
 		for (const entrypoint of [
+			'java',
 			'python',
 			'dotnet',
 			'gleam',
@@ -258,6 +259,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getFSharpLanguageServer/);
 		expect(source).toMatch(/getVisualBasicLanguageServer/);
 		expect(source).toMatch(/getGleamLanguageServer/);
+		expect(source).toMatch(/getJavaLanguageServer/);
 		expect(source).toMatch(/getDLanguageServer/);
 		expect(source).toMatch(/getTclLanguageServer/);
 		expect(source).toMatch(/getPascalLanguageServer/);

@@ -20,8 +20,10 @@ export default defineConfig({
 		{
 			name: 'wasm-idle-release-preview-security-headers',
 			configurePreviewServer(server) {
-				server.middlewares.use((_request, response, next) => {
-					for (const [name, value] of Object.entries(releasePreviewSecurityHeaders)) {
+				server.middlewares.use((request, response, next) => {
+					for (const [name, value] of Object.entries(
+						createReleasePreviewSecurityHeaders(undefined, request.url)
+					)) {
 						response.setHeader(name, value);
 					}
 					next();
@@ -49,6 +51,8 @@ export default defineConfig({
 		}
 	},
 	preview: {
-		headers: releasePreviewSecurityHeaders
+		// Static middleware applies these after plugin middleware; keep CSP in the
+		// path-aware middleware above so it preserves the dedicated JVM policy.
+		headers: createReleasePreviewSecurityHeaders(false)
 	}
 });

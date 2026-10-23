@@ -366,6 +366,9 @@
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
+	const javaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'java');
+	const javaLspBaseUrl = $derived(javaLspEnabled ? runtimeAssets.javaLsp?.baseUrl : undefined);
+	const javaLspHostUrl = $derived(javaLspEnabled ? runtimeAssets.javaLsp?.hostUrl : undefined);
 	const clangdLspEnabled = $derived(
 		lspEnabled && (clangdRequested || clangdLspLanguages.has(language))
 	);
@@ -4167,6 +4170,9 @@
 							erlangLspWorkerUrl={beamLspWorkerUrl}
 							{erlangLspIntegrity}
 							{gleamLspEnabled}
+							{javaLspEnabled}
+							{javaLspBaseUrl}
+							{javaLspHostUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}

@@ -2317,6 +2317,7 @@
 
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pythonLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let javaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dotnetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2350,6 +2351,9 @@
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
+		javaLspEnabled?: boolean;
+		javaLspBaseUrl?: string;
+		javaLspHostUrl?: string;
 		compact?: boolean;
 		dark?: boolean;
 		editor: monaco.editor.IStandaloneCodeEditor | null;
@@ -2447,6 +2451,9 @@
 	}
 
 	let {
+		javaLspEnabled = false,
+		javaLspBaseUrl,
+		javaLspHostUrl,
 		compact = false,
 		dark = false,
 		editor = $bindable(),
@@ -2633,6 +2640,8 @@
 		[
 			language,
 			normalizedFilePath,
+			javaLspEnabled ? javaLspBaseUrl || '' : '',
+			javaLspEnabled ? javaLspHostUrl || '' : '',
 			clangdEnabled ? clangdBaseUrl || '' : '',
 			clangdCppVersion || '',
 			clangdCVersion || '',
@@ -2695,6 +2704,10 @@
 		let label = '';
 		let status: LanguageServerStatus | null = null;
 		switch (activeLspLanguage) {
+			case 'java':
+				label = 'Java LSP';
+				status = javaLspStatus;
+				break;
 			case 'c':
 				label = 'C LSP';
 				status = clangdStatus;
@@ -2910,6 +2923,24 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['java'],
+			isEnabled: () => javaLspEnabled && !!javaLspBaseUrl,
+			setStatus: (status) => (javaLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getJavaLanguageServer } = await import('@wasm-idle/lsp/java');
+				return await getJavaLanguageServer({
+					currentUrl,
+					signal,
+					java: {
+						baseUrl: javaLspBaseUrl,
+						hostUrl: javaLspHostUrl,
+						initialFiles: model ? { [model.uri.toString(true)]: model.getValue() } : {}
+					},
+					onStatus: (status) => (javaLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3592,6 +3623,7 @@
 		const testGlobal = globalThis as MonacoTestGlobal;
 		testGlobal.__wasmIdleMonacoApi = Monaco;
 		testGlobal.__wasmIdleMonacoLspStatus = {
+			java: javaLspStatus,
 			clangd: clangdStatus,
 			python: pythonLspStatus,
 			dotnet: dotnetLspStatus,

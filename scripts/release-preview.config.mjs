@@ -7,5 +7,19 @@ export default {
 	base: DEFAULT_BROWSER_BASE_PATH,
 	publicDir: false,
 	build: { outDir: 'build' },
-	preview: { headers: createReleasePreviewSecurityHeaders() }
+	plugins: [
+		{
+			name: 'wasm-idle-release-preview-java-host-policy',
+			configurePreviewServer(server) {
+				server.middlewares.use((request, response, next) => {
+					for (const [name, value] of Object.entries(
+						createReleasePreviewSecurityHeaders(undefined, request.url)
+					))
+						response.setHeader(name, value);
+					next();
+				});
+			}
+		}
+	],
+	preview: { headers: createReleasePreviewSecurityHeaders(false) }
 };

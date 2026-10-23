@@ -25,6 +25,11 @@ In particular:
   URL-only overrides fail closed.
 - Python and R load their externally deployed Pyodide and WebR trees from `python.baseUrl` and
   `r.baseUrl`.
+- Java runs original javacs and OpenJDK 17 in a dedicated CheerpJ document. Supply
+  `java.baseUrl` for the separately prepared host and five pinned JARs. It requires
+  Chromium credentialless iframe support, the official CheerpJ CDN, and a scoped
+  JVM-host CSP. See the [Java host recipe](https://github.com/seo-rii/wasm-idle/blob/main/docs/performance/java-javacs-browser.md)
+  for asset preparation, source receipts, language limits and licensing.
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.
 
 Clangd and Python deliberately have no document-relative fallback. Supply their individual asset
@@ -63,3 +68,12 @@ import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
 
 `@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
 available, including their `create*WorkerService` exports for custom worker hosts.
+
+Java is available through `getJavaLanguageServer` from `@wasm-idle/lsp/java` or
+`getEditorLanguageServer('java', options)`. Its descriptor has `host: 'document'`;
+`createWorker` is a worker-host option and does not replace the Java JVM document.
+The returned JSON-RPC transport and idempotent `dispose()` follow the shared SDK
+contract. Java LSP is powered by [javacs](https://github.com/georgewfraser/java-language-server),
+[OpenJDK](https://openjdk.org/) and [CheerpJ by Leaning Technologies](https://cheerpj.com/).
+CheerpJ's Community License permits qualifying FOSS/personal CDN use with credit;
+self-hosting/redistribution and other business use require applicable commercial terms.

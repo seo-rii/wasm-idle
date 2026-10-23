@@ -22,6 +22,7 @@ import { getGoLanguageServer } from './go/language-server.js';
 import { getGraphqlLanguageServer } from './graphql/language-server.js';
 import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
+import { getJavaLanguageServer } from './java/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
 import { getOcamlLanguageServer } from './ocaml/language-server.js';
@@ -50,12 +51,20 @@ export type EditorLanguageServerProviderFactory = (
 ) => Promise<EditorLanguageServerHandle>;
 
 export interface EditorLanguageServerProviderDescriptor {
+	/** Document hosts own a JVM iframe rather than a Web Worker. */
+	readonly host?: 'worker' | 'document';
 	readonly id: string;
 	readonly languages: readonly string[];
 	readonly create: EditorLanguageServerProviderFactory;
 }
 
 const providerDefinitions = [
+	{
+		id: 'java',
+		languages: ['java'],
+		host: 'document',
+		create: (options) => getJavaLanguageServer(options)
+	},
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

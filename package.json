@@ -14,6 +14,7 @@
 		"runtimes/*"
 	],
 	"scripts": {
+		"prepare:java-lsp": "node scripts/prepare-java-lsp-assets.mjs",
 		"dev": "pnpm run prepare:app && vite dev",
 		"build:preview": "pnpm run prepare:app && vite build",
 		"build": "pnpm run prepare:app && vite build && pnpm run package:root",

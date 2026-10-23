@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -20,6 +23,7 @@ import {
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
+import { JAVA_LANGUAGE_SERVER_ASSETS } from '../../packages/lsp/src/java/assets';
 
 interface LspBrowserCase {
 	language: string;
@@ -41,6 +45,7 @@ interface LspBrowserCase {
 	allowAdditionalRequestPathnames?: boolean;
 	expectedRequestSha256Pins?: Readonly<Record<string, string>>;
 	timeoutMs?: number;
+	host?: 'worker' | 'document';
 }
 
 interface MonacoDiagnosticCounts {
@@ -113,6 +118,24 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 ]);
 
 const lspBrowserCases: LspBrowserCase[] = [
+	{
+		language: 'JAVA',
+		label: 'Java',
+		fileName: 'Main.java',
+		source: 'public class Main {\n  public static void main(String[] args) {\n    String answer = 42;\n    System.out.println(answer + args.length);\n  }\n}\n',
+		statusKey: 'java',
+		host: 'document',
+		assertNoPreEnableRequests: ['/java-lsp/', 'cjrtnc.leaningtech.com'],
+		expectedRequestPathnames: JAVA_LANGUAGE_SERVER_ASSETS.map(
+			(asset) => `/java-lsp/${asset.path}`
+		),
+		expectedRequestSha256Pins: Object.fromEntries(
+			JAVA_LANGUAGE_SERVER_ASSETS.map((asset) => [`/java-lsp/${asset.path}`, asset.sha256])
+		),
+		requestPathMarker: '/java-lsp/',
+		allowAdditionalRequestPathnames: true,
+		timeoutMs: 240_000
+	},
 	{
 		language: 'CPP',
 		label: 'C++',
@@ -517,6 +540,7 @@ const lspBrowserCases: LspBrowserCase[] = [
 ];
 
 const lspBrowserMatrixGroups = {
+	java: ['JAVA'],
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
 	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
@@ -558,11 +582,12 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:java-lsp|lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
-	);
+	) || url.startsWith('https://cjrtnc.leaningtech.com/');
 
 const lspStatusKeyByLanguage: Record<string, string> = {
+	JAVA: 'java',
 	TYPESCRIPT: 'typescript',
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
@@ -952,8 +977,10 @@ async function readDiagnosticCounts(page: Page): Promise<MonacoDiagnosticCounts>
 
 async function waitForDiagnostics(page: Page, testCase: LspBrowserCase) {
 	await page.waitForFunction(
-		(selector) => {
+		({ selector, statusKey }) => {
 			const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
+			const status = testGlobal.__wasmIdleMonacoLspStatus?.[statusKey];
+			if (status?.state === 'error') throw new Error(status.message || `${statusKey} failed`);
 			const model = testGlobal.__wasmIdleMonacoEditor?.getModel?.() || null;
 			const markers =
 				testGlobal.__wasmIdleMonacoApi && model
@@ -963,7 +990,7 @@ async function waitForDiagnostics(page: Page, testCase: LspBrowserCase) {
 					: 0;
 			return document.querySelectorAll(selector).length > 0 || markers > 0;
 		},
-		diagnosticSelector,
+		{ selector: diagnosticSelector, statusKey: lspStatusKeyFor(testCase) },
 		{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
 	);
 }
@@ -997,6 +1024,35 @@ async function waitForClangdDiagnosticsForCurrentVersion(page: Page) {
 	);
 	// Monaco consumes the same notification asynchronously after the transport records it.
 	await page.waitForTimeout(100);
+}
+
+async function checkJavaEditorFeatures(page: Page) {
+	const source =
+		'public class Main {\n  public static void main(String[] args) {\n    int answer = 42;\n    System.out.println(answer + args.length);\n  }\n}\n';
+	await replaceEditorSource(page, source);
+	await page.waitForFunction(() => {
+		const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+		return (
+			hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			}).length === 0
+		);
+	});
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		editor.setPosition({
+			lineNumber: 4,
+			column: editor.getValue().split('\n')[3].indexOf('answer') + 2
+		});
+		editor.focus();
+		editor.trigger('browser-regression', 'editor.action.showHover', {});
+	});
+	await page.locator('.monaco-hover').filter({ hasText: 'int answer' }).first().waitFor();
+	await page.keyboard.press('Escape');
+	await page.locator('#lsp-toggle').uncheck();
+	await page.waitForFunction(
+		() => document.querySelectorAll('iframe[data-wasm-idle-java-lsp-host]').length === 0
+	);
 }
 
 async function checkCppEditorFeatures(page: Page) {
@@ -1158,7 +1214,7 @@ async function runLspCase(
 	await enableLsp(page);
 	await waitForVisibleLspStatus(page);
 	await waitForLspReady(page, testCase);
-	if (process.env.WASM_IDLE_STRICT_CSP === '1') {
+	if (process.env.WASM_IDLE_STRICT_CSP === '1' && testCase.host !== 'document') {
 		const lspWorkerUrls = page
 			.workers()
 			.map((worker) => worker.url())
@@ -1255,6 +1311,7 @@ async function runLspCase(
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
+	if (testCase.language === 'JAVA') await checkJavaEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
 	if (selectedDotnetRuntime) {

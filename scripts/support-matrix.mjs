@@ -378,7 +378,7 @@ export const supportMatrixRows = [
 		ids: ['JAVA'],
 		runtime: 'TeaVM',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'javacs LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

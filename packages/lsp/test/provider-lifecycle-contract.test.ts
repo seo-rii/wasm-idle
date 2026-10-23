@@ -123,6 +123,10 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 }));
 
 import { editorLanguageServerProviders } from '../src/registry.js';
+// The real document-host lifecycle is covered by java-language-server and the opt-in SDK browser test.
+const workerProviders = editorLanguageServerProviders.filter(
+	(provider) => provider.host !== 'document'
+);
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
@@ -254,7 +258,7 @@ const collectUrls = (value: unknown, urls: URL[] = []): URL[] => {
 };
 
 const providerDeploymentCases = deploymentBases.flatMap((deployment) =>
-	editorLanguageServerProviders.map((provider) => ({
+	workerProviders.map((provider) => ({
 		title: `${provider.id} at ${deployment.label}`,
 		deployment,
 		provider
@@ -321,25 +325,22 @@ describe('registered LSP provider lifecycle contract', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it.each(editorLanguageServerProviders)(
-		'$id initializes and disposes idempotently',
-		async (provider) => {
-			const handle = await provider.create(createProviderOptions());
-			const worker = mockState.workers[0];
+	it.each(workerProviders)('$id initializes and disposes idempotently', async (provider) => {
+		const handle = await provider.create(createProviderOptions());
+		const worker = mockState.workers[0];
 
-			expect(worker, provider.id).toBeDefined();
-			expect(worker?.messages[0], provider.id).toMatchObject({ type: 'init' });
-			expect(handle.transport.reader, provider.id).toBeDefined();
-			expect(handle.transport.writer, provider.id).toBeDefined();
+		expect(worker, provider.id).toBeDefined();
+		expect(worker?.messages[0], provider.id).toMatchObject({ type: 'init' });
+		expect(handle.transport.reader, provider.id).toBeDefined();
+		expect(handle.transport.writer, provider.id).toBeDefined();
 
-			handle.dispose();
-			handle.dispose();
+		handle.dispose();
+		handle.dispose();
 
-			expect(worker?.terminateCalls, provider.id).toBe(1);
-			expect(mockState.readers[0]?.disposeCalls, provider.id).toBe(1);
-			expect(mockState.writers[0]?.disposeCalls, provider.id).toBe(1);
-		}
-	);
+		expect(worker?.terminateCalls, provider.id).toBe(1);
+		expect(mockState.readers[0]?.disposeCalls, provider.id).toBe(1);
+		expect(mockState.writers[0]?.disposeCalls, provider.id).toBe(1);
+	});
 
 	it.each(providerDeploymentCases)(
 		'$title keeps application assets under the deployment base',
@@ -362,7 +363,7 @@ describe('registered LSP provider lifecycle contract', () => {
 		}
 	);
 
-	it.each(editorLanguageServerProviders)(
+	it.each(workerProviders)(
 		'$id terminates a worker that exceeds the startup timeout',
 		async (provider) => {
 			mockState.behavior.respondToInit = false;

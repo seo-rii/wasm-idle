@@ -5,6 +5,11 @@
 	"license": "MIT",
 	"type": "module",
 	"exports": {
+		"./java": {
+			"types": "./dist/java/index.d.ts",
+			"import": "./dist/java/index.js",
+			"default": "./dist/java/index.js"
+		},
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",

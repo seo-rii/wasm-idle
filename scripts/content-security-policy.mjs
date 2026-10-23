@@ -1,4 +1,4 @@
-const quotedSources = new Set(['none', 'self', 'unsafe-inline', 'wasm-unsafe-eval']);
+const quotedSources = new Set(['none', 'self', 'unsafe-inline', 'unsafe-eval', 'wasm-unsafe-eval']);
 
 /** @typedef {NonNullable<import('@sveltejs/kit/vite').Config['csp']>} SvelteContentSecurityPolicy */
 
@@ -52,13 +52,43 @@ export const releaseResponseContentSecurityPolicy = serializeDirectives({
 	'script-src': [...applicationContentSecurityPolicyDirectives['script-src'], 'unsafe-inline']
 });
 
+// CheerpJ 4.3 uses new Function during cj3Init and inline compiler-frame bootstrap.
+// Keep these permissions confined to the dedicated JVM document.
+export const javaLanguageServerHostContentSecurityPolicy = serializeDirectives({
+	'default-src': ['self'],
+	'base-uri': ['none'],
+	'object-src': ['none'],
+	'script-src': [
+		'self',
+		'blob:',
+		'wasm-unsafe-eval',
+		'unsafe-inline',
+		'unsafe-eval',
+		'https://cjrtnc.leaningtech.com'
+	],
+	'worker-src': ['self', 'blob:'],
+	'connect-src': ['self', 'blob:', 'https://cjrtnc.leaningtech.com'],
+	'frame-src': ['self', 'https://cjrtnc.leaningtech.com'],
+	'img-src': ['self', 'data:', 'blob:'],
+	'style-src': ['self', 'unsafe-inline', 'https://cjrtnc.leaningtech.com'],
+	'form-action': ['none']
+});
+
 /** @param {boolean} [strictContentSecurityPolicy] */
 export function createReleasePreviewSecurityHeaders(
-	strictContentSecurityPolicy = isStrictContentSecurityPolicyEnabled()
+	strictContentSecurityPolicy = isStrictContentSecurityPolicyEnabled(),
+	pathname = ''
 ) {
+	const isJavaHost = /\/java-lsp\/host\.html$/.test(
+		new URL(pathname, 'https://preview.invalid').pathname
+	);
 	return {
 		...(strictContentSecurityPolicy
-			? { 'Content-Security-Policy': releaseResponseContentSecurityPolicy }
+			? {
+					'Content-Security-Policy': isJavaHost
+						? javaLanguageServerHostContentSecurityPolicy
+						: releaseResponseContentSecurityPolicy
+				}
 			: {}),
 		'Cross-Origin-Opener-Policy': 'same-origin',
 		'Cross-Origin-Embedder-Policy': 'require-corp',

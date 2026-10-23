@@ -12,6 +12,7 @@ dist/
 runtimes/wasm-clang/artifacts/
 
 # Local build caches and generated sync outputs
+/static/java-lsp/
 .cache/
 **/.svelte-kit/
 static/.cache/

@@ -41,6 +41,14 @@ export interface EditorLanguageServerHandle {
 }
 
 export interface EditorLanguageServerRuntimeOptions {
+	java?: {
+		baseUrl?: string;
+		hostUrl?: string;
+		/** Workspace snapshot keyed by exact file URI, available before initialize. */
+		initialFiles?: Readonly<Record<string, string>>;
+		assets?: readonly import('./java/assets.js').JavaLanguageServerAsset[];
+		licenseKey?: string;
+	};
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	rootUrl?: string;

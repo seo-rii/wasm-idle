@@ -653,6 +653,7 @@ export interface PhpRuntimeAssetConfig {
 }
 
 export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
+	javaLsp?: { baseUrl?: string; hostUrl?: string };
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	clang?: RuntimeAssetConfig;

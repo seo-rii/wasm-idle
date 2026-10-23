@@ -7,6 +7,7 @@ import {
 	applicationContentSecurityPolicyDirectives,
 	createReleasePreviewSecurityHeaders,
 	isStrictContentSecurityPolicyEnabled,
+	javaLanguageServerHostContentSecurityPolicy,
 	releaseResponseContentSecurityPolicy,
 	svelteContentSecurityPolicy
 } from '../../scripts/content-security-policy.mjs';
@@ -75,6 +76,36 @@ describe('release content security policy', () => {
 				preview?: { headers?: Record<string, string> };
 			}
 		).preview?.headers;
-		expect(previewHeaders).toEqual(releasePreviewSecurityHeaders);
+		expect(previewHeaders).toEqual(createReleasePreviewSecurityHeaders(false));
+	});
+
+	it('scopes the Java vendor bootstrap policy to the standalone JVM document', () => {
+		for (const path of [
+			'/java-lsp/host.html',
+			'/wasm-idle/java-lsp/host.html?cache=1',
+			'/apps/editor/java-lsp/host.html'
+		]) {
+			const headers = createReleasePreviewSecurityHeaders(true, path);
+			expect(headers['Content-Security-Policy']).toBe(
+				javaLanguageServerHostContentSecurityPolicy
+			);
+			expect(headers['Cross-Origin-Embedder-Policy']).toBe('require-corp');
+		}
+		for (const path of [
+			'/wasm-idle/',
+			'/java-lsp/host.mjs',
+			'/java-lsp/host.html/other',
+			'/java-lsp/host.html/../other',
+			'/_app/immutable/workers/java.js'
+		]) {
+			expect(createReleasePreviewSecurityHeaders(true, path)['Content-Security-Policy']).toBe(
+				releaseResponseContentSecurityPolicy
+			);
+		}
+		expect(javaLanguageServerHostContentSecurityPolicy).toContain(
+			'https://cjrtnc.leaningtech.com'
+		);
+		expect(javaLanguageServerHostContentSecurityPolicy).toContain("'unsafe-eval'");
+		expect(releaseResponseContentSecurityPolicy).not.toContain('leaningtech');
 	});
 });

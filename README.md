@@ -85,7 +85,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Befunge-93     | Chris Pressey Befunge-93 on WASI             | Yes   | plain text           | -     |
 | Brainfuck      | susam/bfc on WASI                            | Yes   | plain text           | -     |
 | Hy             | Hy 1.3.1 on Pyodide                          | Yes   | syntax               | -     |
-| Java           | TeaVM                                        | Yes   | syntax               | -     |
+| Java           | TeaVM                                        | Yes   | javacs LSP           | -     |
 | Rust           | wasm-rust / browser rustc                    | Yes   | rustc diagnostics    | LLDB  |
 | Go             | wasm-go / browser Go compiler                | Yes   | compiler diagnostics | Trace |
 | D              | wasm-d                                       | Yes   | syntax               | -     |

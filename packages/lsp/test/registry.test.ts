@@ -6,6 +6,7 @@ import {
 } from '../src/registry.js';
 
 const expectedLanguagesByProvider = {
+	java: ['java'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],
@@ -76,5 +77,14 @@ describe('editor language server provider registry', () => {
 	it('does not route unknown editor languages', () => {
 		expect(resolveEditorLanguageServerProvider('')).toBeUndefined();
 		expect(resolveEditorLanguageServerProvider('crystal')).toBeUndefined();
+	});
+
+	it('identifies Java as a document JVM host', () => {
+		expect(resolveEditorLanguageServerProvider('java')?.host).toBe('document');
+		expect(
+			editorLanguageServerProviders
+				.filter((provider) => provider.host === 'document')
+				.map((provider) => provider.id)
+		).toEqual(['java']);
 	});
 });
