@@ -66,6 +66,7 @@ class Python implements Sandbox {
 	watchResultBuffer = createWasmIdleSharedBuffer(320 * 1024);
 	private pausedVariablesReference: number | undefined;
 	private inspectionController = new AbortController();
+	private inspectionFailure: Error | undefined;
 	private inspectionQueue: Promise<unknown> = Promise.resolve();
 	interruptBuffer = createWasmIdleSharedBuffer(1);
 	pendingInput: string[] = [];
@@ -716,6 +717,7 @@ class Python implements Sandbox {
 	private setInspectionPause(reference?: number) {
 		this.inspectionController.abort();
 		this.inspectionController = new AbortController();
+		this.inspectionFailure = undefined;
 		this.pausedVariablesReference = reference;
 	}
 
@@ -740,6 +742,17 @@ class Python implements Sandbox {
 			);
 		} catch (error) {
 			if (signal.aborted) return '?';
+			if (signal === this.inspectionController.signal) {
+				// Replies have no request identifier. A timed-out target evaluation can
+				// still finish, so this pause cannot safely reuse its response mailbox.
+				const failure = new Error(
+					'Python debugger inspection timed out. Resume or step to a new pause before inspecting again.',
+					{ cause: error }
+				);
+				this.inspectionFailure = failure;
+				this.inspectionController.abort(failure);
+				throw failure;
+			}
 			throw error;
 		}
 	}
@@ -748,6 +761,8 @@ class Python implements Sandbox {
 		const reference = this.pausedVariablesReference;
 		const signal = this.inspectionController.signal;
 		const request = this.inspectionQueue.then(async () => {
+			if (signal === this.inspectionController.signal && this.inspectionFailure)
+				throw this.inspectionFailure;
 			if (
 				signal.aborted ||
 				reference === undefined ||
@@ -772,6 +787,8 @@ class Python implements Sandbox {
 			return Promise.resolve([]);
 		const signal = this.inspectionController.signal;
 		const request = this.inspectionQueue.then(async () => {
+			if (signal === this.inspectionController.signal && this.inspectionFailure)
+				throw this.inspectionFailure;
 			if (signal.aborted || reference !== this.pausedVariablesReference) return [];
 			const result = await this.inspect(
 				6,

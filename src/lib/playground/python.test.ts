@@ -709,6 +709,63 @@ print((left + right) // (left - left))`,
 		await running;
 	});
 
+	it('rejects inspection after a timeout until a new pause, ignoring the late reply', async () => {
+		const sandbox = new Python();
+		const worker = new MockWorker();
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('value = 3', false, true, undefined, [], { debug: true });
+		const pause = (reference: number) =>
+			worker.emit({
+				debugEvent: {
+					type: 'pause',
+					line: reference,
+					scopes: [{ name: 'Locals', variablesReference: reference }]
+				}
+			});
+		pause(1);
+		const responses = Promise.allSettled([
+			sandbox.debugEvaluate('slow'),
+			sandbox.debugEvaluate('queued'),
+			sandbox.debugVariables(1)
+		]);
+		// This crosses the real five-second mailbox deadline. The delayed target
+		// response must never become the queued expression's answer.
+		const lateReply = new Promise<void>((resolve) =>
+			setTimeout(() => {
+				flushQueuedStdin(['slow-result'], sandbox.watchResultBuffer);
+				resolve();
+			}, 5_200)
+		);
+		try {
+			const results = await responses;
+			await lateReply;
+			for (const result of results) {
+				expect(result.status).toBe('rejected');
+				if (result.status === 'rejected')
+					expect(String(result.reason)).toMatch(/timed out/i);
+			}
+			await expect(sandbox.debugEvaluate('new')).rejects.toThrow(/new pause/i);
+			await expect(sandbox.debugVariables(1)).rejects.toThrow(/new pause/i);
+			sandbox.debugCommand('nextLine');
+			expect(Atomics.load(new Int32Array(sandbox.debugBuffer), 1)).toBe(3);
+			pause(2);
+			setTimeout(() => flushQueuedStdin(['3'], sandbox.watchResultBuffer), 0);
+			await expect(sandbox.debugEvaluate('value')).resolves.toBe('3');
+			setTimeout(
+				() =>
+					flushQueuedStdin(['[{"name":"value","value":"3"}]'], sandbox.watchResultBuffer),
+				0
+			);
+			await expect(sandbox.debugVariables(2)).resolves.toEqual([
+				{ name: 'value', value: '3' }
+			]);
+		} finally {
+			worker.emit({ results: true });
+			await running;
+		}
+	}, 15_000);
+
 	it('publishes live breakpoint updates through the Python debug buffer', async () => {
 		const sandbox = new Python();
 		const worker = new MockWorker();
