@@ -31,6 +31,40 @@ function response(url, corrupt = false) {
 }
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 
+async function multiAssetDistribution() {
+  const bodies = new Map();
+  const packages = ['tools-a', 'tools-b'].map((id) => ({
+    id, identity: `sha256:${hash(new TextEncoder().encode(id))}`, dependencies: [], mount: `/opt/toolchains/${id}`, capabilities: [],
+    producer: { repository: 'https://github.com/seo-rii/wasm-llvm', revision: 'b'.repeat(40), receiptSha256: 'c'.repeat(64) },
+    assets: Array.from({ length: 5 }, (_, index) => {
+      const bytes = new TextEncoder().encode(`${id} asset ${index}`);
+      const url = `https://assets.example.test/${id}/${index}-${hash(bytes)}`;
+      bodies.set(url, bytes);
+      const identity = { sha256: hash(bytes), bytes: bytes.byteLength, mediaType: 'application/octet-stream' };
+      return { id: `asset-${index}`, url, encoding: 'identity', delivery: identity, logical: identity };
+    }),
+    files: Array.from({ length: 5 }, (_, index) => ({ path: `file-${index}`, asset: `asset-${index}`, executable: false }))
+  }));
+  const bytes = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, distributionId: 'multi-asset', packages, commands: [] }));
+  const distribution = await validateDistribution({ bytes, expectedSha256: hash(bytes), adapterIds: [], allowedAssetURLs: [...bodies.keys()] });
+  const response = (url, corrupt = false) => {
+    const result = new Response(corrupt ? new Uint8Array(bodies.get(url).length) : bodies.get(url), { headers: { 'content-type': 'application/octet-stream' } });
+    Object.defineProperty(result, 'url', { value: url });
+    return result;
+  };
+  const check = (prepared, id) => {
+    assert.deepEqual(prepared.packages.map(pkg => pkg.id), [id]);
+    assert.deepEqual(prepared.packages[0].files.map(file => file.path), Array.from({ length: 5 }, (_, index) => `file-${index}`));
+    for (const file of prepared.packages[0].files) {
+      const index = Number(file.path.slice('file-'.length));
+      const asset = distribution.packages.find(pkg => pkg.id === id).assets[index];
+      assert.deepEqual(file.bytes, bodies.get(asset.url));
+      assert.equal(file.sha256, asset.logical.sha256);
+    }
+  };
+  return { distribution, response, check };
+}
+
 test('PKG-01/02: command lookup performs no fetch; first command prepares a dependency-first readonly closure', async () => {
   const requested = [];
   const manager = createContainerPackageManager({ distribution: await distribution(), persistentCache: false, fetch: async (url) => { requested.push(url); return response(url); } });
@@ -121,4 +155,98 @@ test('host capability arrays and preparation signals are snapshotted', async () 
   const preparing = manager.prepareCommand('clang', request); const failure = assert.rejects(preparing, { code: 'ABORTED' });
   request.signal = undefined; await started.promise; controller.abort(); await failure;
   await manager.dispose();
+});
+
+test('asset concurrency is shared across preparations, configurable and capped by loader limits', { timeout: 15000 }, async (t) => {
+  for (const [options, expected] of [[{}, 3], [{ maxConcurrentAssets: 2 }, 2], [{ maxConcurrentAssets: 1 }, 1], [{ maxPendingAssets: 1 }, 1], [{ maxConsumers: 1 }, 1]]) {
+    await t.test(JSON.stringify(options), { timeout: 2500 }, async () => {
+      const f = await multiAssetDistribution(), started = deferred(), release = deferred();
+      const requested = []; let active = 0, peak = 0;
+      const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, ...options, fetch: async (url) => {
+        requested.push(url); peak = Math.max(peak, ++active);
+        if (requested.length === expected) started.resolve();
+        try { await release.promise; return f.response(url); } finally { active--; }
+      } });
+      const first = manager.prepare('tools-a'), second = manager.prepare('tools-b');
+      try {
+        await started.promise;
+        assert.equal(requested.length, expected, 'fills the bounded loading slots before either preparation completes');
+        assert.equal(manager.inspect().assets.consumers, expected);
+        assert.ok(manager.inspect().preparingBytes > 0);
+        release.resolve();
+        const results = await Promise.all([first, second]);
+        f.check(results[0], 'tools-a'); f.check(results[1], 'tools-b');
+        assert.equal(requested.length, 10); assert.equal(new Set(requested).size, 10);
+        assert.equal(peak, expected);
+        assert.equal(manager.inspect().preparingBytes, 0);
+        assert.deepEqual(manager.inspect().pendingPackages, []);
+      } finally { release.resolve(); await manager.dispose(); await Promise.allSettled([first, second]); }
+    });
+  }
+});
+
+test('parallel integrity failure cancels sibling loads before publishing or releasing preparation budgets', { timeout: 5000 }, async () => {
+  const f = await multiAssetDistribution(), started = deferred(), fail = deferred(), requested = [], signals = [];
+  let corrupt = true;
+  const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, fetch: async (url, { signal }) => {
+    if (!corrupt) return f.response(url);
+    requested.push(url); signals.push(signal);
+    if (requested.length === 3) started.resolve();
+    if (url.includes('/0-')) { await fail.promise; return f.response(url, true); }
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  } });
+  const published = [];
+  const preparing = manager.prepare('tools-a').then(value => published.push(value));
+  const failure = assert.rejects(preparing, { code: 'INTEGRITY' });
+  try {
+    await started.promise; fail.resolve(); await failure;
+    assert.deepEqual(published, []);
+    assert.equal(requested.length, 3, 'unstarted assets remain unrequested after a sibling fails');
+    assert(signals.slice(1).every(signal => signal.aborted));
+    assert.equal(manager.inspect().preparingBytes, 0);
+    assert.deepEqual(manager.inspect().pendingPackages, []);
+    assert.equal(manager.inspect().assets.pendingRequests, 0);
+    assert.equal(manager.inspect().assets.consumers, 0);
+    corrupt = false; f.check(await manager.prepare('tools-a'), 'tools-a');
+  } finally { fail.resolve(); await manager.dispose(); await failure; }
+});
+
+test('cancelling a queued preparation never starts its assets or cancels another preparation', { timeout: 5000 }, async () => {
+  const f = await multiAssetDistribution(), started = deferred(), release = deferred(), abort = new AbortController();
+  const requested = [], signals = [];
+  const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, maxConcurrentAssets: 1, fetch: async (url, { signal }) => {
+    requested.push(url); signals.push(signal); started.resolve(); await release.promise; return f.response(url);
+  } });
+  const first = manager.prepare('tools-a');
+  const second = manager.prepare('tools-b', { signal: abort.signal });
+  const failure = assert.rejects(second, { code: 'ABORTED' });
+  try {
+    await started.promise; abort.abort(); await failure;
+    assert.equal(signals[0].aborted, false);
+    assert.deepEqual(manager.inspect().pendingPackages, ['tools-a']);
+    release.resolve(); f.check(await first, 'tools-a');
+    assert.equal(requested.length, 5);
+    assert(requested.every(url => url.includes('/tools-a/')));
+    assert.equal(manager.inspect().preparingBytes, 0);
+  } finally { release.resolve(); await manager.dispose(); await Promise.allSettled([first, second]); }
+});
+
+test('dispose settles both active and queued parallel preparations', { timeout: 5000 }, async () => {
+  const f = await multiAssetDistribution(), started = deferred(), signals = [];
+  const manager = createContainerPackageManager({ distribution: f.distribution, persistentCache: false, maxConcurrentAssets: 2, fetch: async (_url, { signal }) => {
+    signals.push(signal); if (signals.length === 2) started.resolve(); return new Promise(() => {});
+  } });
+  const first = assert.rejects(manager.prepare('tools-a'), { code: 'ABORTED' });
+  const second = assert.rejects(manager.prepare('tools-b'), { code: 'ABORTED' });
+  await started.promise; await manager.dispose(); await Promise.all([first, second]);
+  assert.equal(signals.length, 2); assert(signals.every(signal => signal.aborted));
+  assert.equal(manager.inspect().assets.pendingRequests, 0); assert.equal(manager.inspect().assets.consumers, 0);
+  assert.equal(manager.inspect().preparingBytes, 0); assert.deepEqual(manager.inspect().pendingPackages, []);
+});
+
+test('invalid asset concurrency fails before any network request', async () => {
+  const f = await multiAssetDistribution();
+  for (const maxConcurrentAssets of [0, -1, 0.5, Infinity, NaN]) {
+    assert.throws(() => createContainerPackageManager({ distribution: f.distribution, maxConcurrentAssets }), { code: 'INVALID_ARGUMENT' });
+  }
 });

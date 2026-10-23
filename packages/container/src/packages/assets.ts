@@ -18,6 +18,9 @@ export interface VerifiedAssetLoaderOptions {
 }
 
 export interface AssetLoaderInspection {
+  /** Reported by the built-in loader; optional for custom loader implementations. */
+  readonly maxPendingAssets?: number;
+  readonly maxConsumers?: number;
   readonly pendingRequests: number;
   readonly consumers: number;
   readonly cachedEntries: number;
@@ -225,7 +228,7 @@ export function createVerifiedAssetLoader(options: VerifiedAssetLoaderOptions): 
       });
     },
     inspect() {
-      return Object.freeze({ pendingRequests: active.size, consumers, cachedEntries: cached.size, cachedBytes: cacheBytes, memoryCacheHits });
+      return Object.freeze({ maxPendingAssets, maxConsumers, pendingRequests: active.size, consumers, cachedEntries: cached.size, cachedBytes: cacheBytes, memoryCacheHits });
     },
     clearMemoryCache() { cached.clear(); cacheBytes = 0; },
     dispose() {
