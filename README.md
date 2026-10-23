@@ -109,7 +109,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Nim            | Nim 2.2.4 WASM + clang/lld WASM              | Yes   | syntax               | -     |
 | Bash           | GNU Bash WASIX / Wasmer SDK                  | Yes   | syntax               | -     |
 | ClojureScript  | cljs.js self-hosted compiler                 | Yes   | syntax               | -     |
-| ReScript       | ReScript 12.3.1 compiler (js_of_ocaml)       | Yes   | compiler diagnostics | -     |
+| ReScript       | ReScript 12.3.1 compiler (js_of_ocaml)       | Yes   | ReScript LSP + types | -     |
 | TinyGo         | wasm-tinygo                                  | Yes   | syntax               | -     |
 | OCaml          | wasm-of-js-of-ocaml / js_of_ocaml            | Yes   | syntax               | -     |
 | JavaScript     | wasm-typescript / TypeScript service         | Yes   | TypeScript LSP       | -     |

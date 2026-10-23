@@ -18,6 +18,7 @@
 		"wasm-golfscript": { "maxBytes": 25000, "maxFiles": 4 },
 		"wasm-assemblyscript": { "maxBytes": 3500000, "maxFiles": 10 },
 		"wasm-awk": { "maxBytes": 2700000, "maxFiles": 8 },
+		"wasm-rescript-lsp": { "maxBytes": 12000000, "maxFiles": 5, "optional": true },
 		"wasm-bash": { "maxBytes": 6500000, "maxFiles": 16 },
 		"wasm-bqn": { "maxBytes": 1100000, "maxFiles": 8 },
 		"wasm-befunge93": { "maxBytes": 60000, "maxFiles": 3 },

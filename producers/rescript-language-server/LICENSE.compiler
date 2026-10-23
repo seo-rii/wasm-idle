@@ -1,0 +1,11 @@
+This repository contains code under multiple licenses.
+
+- compiler/: LGPL-3.0-or-later
+- compiler/syntax/: MIT
+- packages/@rescript/runtime/: MIT
+- rewatch/: MIT
+
+See full license texts:
+
+- LGPL-3.0-or-later: COPYING.LESSER (and COPYING where applicable)
+- MIT: LICENSE.MIT

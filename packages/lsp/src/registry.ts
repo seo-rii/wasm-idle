@@ -1,3 +1,4 @@
+import { getReScriptLanguageServer } from './rescript/language-server.js';
 import { getAssemblyScriptLanguageServer } from './assemblyscript/language-server.js';
 import { getCppLanguageServer } from './clangd/language-server.js';
 import { getDLanguageServer } from './d/language-server.js';
@@ -56,6 +57,11 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{
+		id: 'rescript',
+		languages: ['rescript'],
+		create: (options) => getReScriptLanguageServer(options)
+	},
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

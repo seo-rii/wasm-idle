@@ -2332,6 +2332,7 @@
 	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2435,6 +2436,8 @@
 		perlLspEnabled?: boolean;
 		perlLspRuntime?: PerlLspRuntimeConfig;
 		pythonLspBaseUrl?: string;
+		rescriptLspBaseUrl?: string;
+		rescriptLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -2532,6 +2535,8 @@
 		perlLspEnabled = false,
 		perlLspRuntime,
 		pythonLspBaseUrl,
+		rescriptLspBaseUrl,
+		rescriptLspWorkspaceFiles = [],
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -2602,6 +2607,7 @@
 				| 'html'
 				| 'css'
 				| 'markdown'
+				| 'rescript'
 				| 'rust',
 			rustTargetTriple
 		)
@@ -2685,6 +2691,8 @@
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
+			rescriptLspBaseUrl || '',
+			activeLspLanguage === 'rescript' ? JSON.stringify(rescriptLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -2778,6 +2786,10 @@
 			case 'zig':
 				label = 'Zig LSP';
 				status = zigLspStatus;
+				break;
+			case 'rescript':
+				label = 'ReScript LSP';
+				status = rescriptLspStatus;
 				break;
 			case 'lua':
 				label = 'Lua LSP';
@@ -2910,6 +2922,26 @@
 	});
 	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['rescript'],
+			isEnabled: () => !!rescriptLspBaseUrl,
+			setStatus: (status) => (rescriptLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getReScriptLanguageServer } = await import('@wasm-idle/lsp/rescript');
+				return getReScriptLanguageServer({
+					currentUrl,
+					signal,
+					rescript: {
+						baseUrl: rescriptLspBaseUrl,
+						workspaceFiles: [
+							...rescriptLspWorkspaceFiles,
+							{ path: normalizedFilePath, content: model?.getValue() ?? value ?? '' }
+						]
+					},
+					onStatus: (status) => (rescriptLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
@@ -3609,6 +3641,7 @@
 			wasm: wasmLspStatus,
 			zig: zigLspStatus,
 			lua: luaLspStatus,
+			rescript: rescriptLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,
 			ocaml: ocamlLspStatus,

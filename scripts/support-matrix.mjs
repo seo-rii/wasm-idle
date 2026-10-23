@@ -690,7 +690,7 @@ export const supportMatrixRows = [
 		ids: ['RESCRIPT'],
 		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'ReScript LSP + types',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/rescript.playwright.test.ts',

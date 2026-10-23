@@ -54,6 +54,11 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
 		headers?: string | false;
 	};
+	rescript?: {
+		baseUrl?: string;
+		/** Text snapshots relative to /workspace; plain ReScript projects, up to 64 source files. */
+		workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
+	};
 	python?: {
 		baseUrl?: string;
 	};

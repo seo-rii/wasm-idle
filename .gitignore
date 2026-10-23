@@ -45,3 +45,6 @@ static/wasm-lfortran/
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+/static/wasm-rescript-lsp/
+/producers/rescript-language-server/node_modules/

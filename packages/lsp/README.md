@@ -63,3 +63,9 @@ import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
 
 `@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
 available, including their `create*WorkerService` exports for custom worker hosts.
+
+ReScript uses the original server, ReScript 12.3.1 compiler and matching editor analysis.
+Pass `rescript.workspaceFiles` with the initial `.res`/`.resi` files; use root URI
+`file:///workspace`. The verified browser profile supports plain projects and the standard
+library. Run `pnpm run sync:rescript-lsp` and deploy `wasm-rescript-lsp/` separately.
+See [the source pins, project limits and reproduction steps](../../docs/performance/rescript-lsp.md).

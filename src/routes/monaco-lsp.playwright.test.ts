@@ -2,7 +2,10 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -113,6 +116,21 @@ const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([mo
 ]);
 
 const lspBrowserCases: LspBrowserCase[] = [
+	{
+		language: 'RESCRIPT',
+		label: 'ReScript',
+		fileName: 'Main.res',
+		source: 'let answer: int = "text"\n',
+		validSource: 'let answer: int = 42\n',
+		errorLine: 1,
+		aliases: ['rescript'],
+		expectedResponses: [
+			'/wasm-rescript-lsp/runtime.mjs.gz.bin',
+			'/wasm-rescript-lsp/stdlib.pack.gz.bin'
+		],
+		assertNoPreEnableRequests: ['/wasm-rescript-lsp/'],
+		timeoutMs: 120_000
+	},
 	{
 		language: 'CPP',
 		label: 'C++',
@@ -519,7 +537,17 @@ const lspBrowserCases: LspBrowserCase[] = [
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
-	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
+	'runtime-small': [
+		'RESCRIPT',
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'GO',
+		'GLEAM',
+		'PASCAL',
+		'LUA',
+		'PROLOG',
+		'RUBY'
+	],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
 		'OBJC',
@@ -558,7 +586,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|rescript-lsp|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -593,7 +621,8 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	FORTRAN: 'fortran',
 	SQLITE: 'sql',
 	PROLOG: 'prolog',
-	RUBY: 'ruby'
+	RUBY: 'ruby',
+	RESCRIPT: 'rescript'
 };
 
 const dotnetRuntimeLanguageByLanguage: Record<string, 'csharp' | 'fsharp' | 'vbnet'> = {
@@ -1188,7 +1217,8 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
@@ -1232,7 +1262,8 @@ async function runLspCase(
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		const markers = await page.evaluate(() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
 			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
@@ -1251,8 +1282,31 @@ async function runLspCase(
 			)
 		).toBe(false);
 		await replaceEditorSource(page, testCase.validSource);
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
+		await page.waitForFunction(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return (
+				hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+					resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+				}).length === 0
+			);
+		});
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
+	}
+	if (testCase.language === 'RESCRIPT') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 1, column: 6 });
+			editor.focus();
+			editor.trigger('browser-regression', 'editor.action.showHover', {});
+		});
+		await page
+			.locator('.monaco-hover')
+			.filter({ hasText: 'int' })
+			.first()
+			.waitFor({ timeout: 10000 });
+		await page.keyboard.press('Escape');
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
@@ -1476,6 +1530,9 @@ describe('Monaco LSP browser integration', () => {
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
+						...(cases.some((testCase) => testCase.language === 'RESCRIPT')
+							? ['sync:rescript-lsp']
+							: []),
 						'build:preview',
 						'compress:build-runtimes'
 					]);

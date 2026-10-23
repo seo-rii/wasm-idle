@@ -253,6 +253,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
 	RESCRIPT: {
 		label: 'ReScript',
+		lspLanguageOverride: 'rescript',
+		runtimeLspCapability: 'rescript',
 		editorLanguage: 'rust',
 		supportsArgs: true,
 		compilerDiagnostics: true,

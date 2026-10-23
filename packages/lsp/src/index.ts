@@ -429,3 +429,8 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export {
+	getReScriptLanguageServer,
+	type ReScriptLanguageServerOptions
+} from './rescript/language-server.js';
