@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -131,18 +132,41 @@ class Document:
 
     @property
     def lines(self) -> list[str]:
-        lines = self.source.splitlines(True)
-        return lines or [""]
+        # LSP and Jedi only recognize CR/LF boundaries. str.splitlines also splits
+        # valid string contents such as U+2028 and form feed, shifting all positions.
+        return re.split(r"(?<=\n)|(?<=\r)(?!\n)", self.source)
+
+    def python_column(self, position: dict) -> int:
+        line = max(int(position.get("line", 0)), 0)
+        remaining = max(int(position.get("character", 0)), 0)
+        lines = self.lines
+        text = lines[line].rstrip("\r\n") if line < len(lines) else ""
+        column = 0
+        for character in text:
+            width = 2 if ord(character) > 0xFFFF else 1
+            if remaining < width:
+                break
+            remaining -= width
+            column += 1
+        return column
+
+    def lsp_position(self, line: int, column: int) -> dict:
+        lines = self.lines
+        text = lines[line].rstrip("\r\n") if 0 <= line < len(lines) else ""
+        prefix = text[:max(column, 0)]
+        return {
+            "line": line,
+            "character": len(prefix.encode("utf-16-le", errors="surrogatepass")) // 2,
+        }
 
     def offset_at(self, position: dict) -> int:
         line = max(int(position.get("line", 0)), 0)
-        character = max(int(position.get("character", 0)), 0)
         lines = self.lines
         if line >= len(lines):
             return len(self.source)
 
         offset = sum(len(lines[idx]) for idx in range(line))
-        return offset + min(character, len(lines[line]))
+        return offset + self.python_column(position)
 
     def apply_change(self, change: dict) -> None:
         if "range" not in change or change["range"] is None:
@@ -240,25 +264,40 @@ class WasmIdlePythonLsp:
             self._script_cache.popitem(last=False)
         return script
 
-    def _range_for_name(self, name) -> dict | None:
+    def _range_for_name(self, name, document: Document | None) -> dict | None:
         if name.line is None or name.column is None:
             return None
 
+        if document is not None:
+            return {
+                "start": document.lsp_position(name.line - 1, name.column),
+                "end": document.lsp_position(name.line - 1, name.column + len(name.name)),
+            }
         return {
             "start": {"line": name.line - 1, "character": name.column},
             "end": {"line": name.line - 1, "character": name.column + len(name.name)},
         }
 
     def _location_for_name(self, name, fallback_uri: str) -> dict | None:
-        range_value = self._range_for_name(name)
-        if range_value is None:
-            return None
-
         module_path = getattr(name, "module_path", None)
         uri = fallback_uri
         if module_path is not None:
             uri = _path_to_uri(Path(module_path), fallback_uri)
 
+        path = Path(_uri_to_path(uri)).resolve()
+        document = next(
+            (document for document in self.documents.values()
+             if Path(document.path).resolve() == path),
+            None,
+        )
+        if document is None:
+            try:
+                document = Document(uri, path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError):
+                pass
+        range_value = self._range_for_name(name, document)
+        if range_value is None:
+            return None
         return {"uri": uri, "range": range_value}
 
     def _completion_kind(self, name_type: str) -> int:
@@ -279,8 +318,8 @@ class WasmIdlePythonLsp:
             diagnostics.append(
                 {
                     "range": {
-                        "start": {"line": line, "character": column},
-                        "end": {"line": line, "character": column + 1},
+                        "start": document.lsp_position(line, column),
+                        "end": document.lsp_position(line, column + 1),
                     },
                     "severity": DIAGNOSTIC_SEVERITY_ERROR,
                     "source": SERVER_NAME,
@@ -320,6 +359,7 @@ class WasmIdlePythonLsp:
         self._refresh_project(root_uri)
         capabilities = {
             "textDocumentSync": TEXT_DOCUMENT_SYNC_FULL,
+            "positionEncoding": "utf-16",
         }
         if Script is not None:
             capabilities.update(
@@ -350,7 +390,7 @@ class WasmIdlePythonLsp:
         document = self._document(uri)
         completions = self._script(uri).complete(
             line=position["line"] + 1,
-            column=position["character"],
+            column=document.python_column(position),
         )
         incomplete = len(completions) > MAX_COMPLETION_ITEMS
         completions = completions[:MAX_COMPLETION_ITEMS]
@@ -400,9 +440,10 @@ class WasmIdlePythonLsp:
 
     def _signature_help(self, params: dict) -> dict | None:
         position = params["position"]
-        signatures = self._script(params["textDocument"]["uri"]).get_signatures(
+        uri = params["textDocument"]["uri"]
+        signatures = self._script(uri).get_signatures(
             line=position["line"] + 1,
-            column=position["character"],
+            column=self._document(uri).python_column(position),
         )
         if not signatures:
             return None
@@ -423,9 +464,10 @@ class WasmIdlePythonLsp:
 
     def _hover(self, params: dict) -> dict | None:
         position = params["position"]
-        definitions = self._script(params["textDocument"]["uri"]).infer(
+        uri = params["textDocument"]["uri"]
+        definitions = self._script(uri).infer(
             line=position["line"] + 1,
-            column=position["character"],
+            column=self._document(uri).python_column(position),
         )
         hover_text = self._hover_text(definitions)
         if not hover_text:
@@ -434,9 +476,10 @@ class WasmIdlePythonLsp:
 
     def _definition(self, params: dict) -> list[dict] | None:
         position = params["position"]
-        definitions = self._script(params["textDocument"]["uri"]).goto(
+        uri = params["textDocument"]["uri"]
+        definitions = self._script(uri).goto(
             line=position["line"] + 1,
-            column=position["character"],
+            column=self._document(uri).python_column(position),
             follow_imports=True,
             follow_builtin_imports=True,
         )
