@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as javaOutput from './javaOutput';
 import { test } from 'vitest';
 import { prepareJavaExceptionBridge } from '../javaRuntimeErrors';
 
@@ -99,6 +100,9 @@ function worker() {
 	};
 	vm.runInNewContext(compiled, {
 		exports: {},
+		performance,
+		setTimeout,
+		clearTimeout,
 		TextDecoder,
 		TextEncoder,
 		Blob,
@@ -125,6 +129,7 @@ function worker() {
 		},
 		require: (id: string) => {
 			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
+			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming')
 				return {
 					acceptCompiledTeaVmModule: (source: string) => source,

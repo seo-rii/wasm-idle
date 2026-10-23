@@ -1,4 +1,5 @@
 import { acceptCompiledTeaVmModule, loadStreamingJavaCompiler } from './javaStreaming';
+import { createJavaOutput } from './javaOutput';
 import {
 	createJavaStdinBridge,
 	prepareJavaRuntimeStdinInjection
@@ -28,8 +29,7 @@ let runtimeLoad:
 	| null = null;
 let exceptionDeobfuscator: WebAssembly.Module | null = null;
 let loadedBaseUrl = '';
-let stdoutBuffer = '';
-let stderrBuffer = '';
+let output: ReturnType<typeof createJavaOutput> | null = null;
 let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
@@ -46,27 +46,10 @@ const decoder = new TextDecoder();
 const toInt8Array = (bytes: Uint8Array) =>
 	new Int8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 
-const flushStdout = () => {
-	if (!stdoutBuffer) return;
-	self.postMessage({ output: stdoutBuffer });
-	stdoutBuffer = '';
-};
-
-const flushStderr = () => {
-	if (!stderrBuffer) return;
-	self.postMessage({ output: stderrBuffer });
-	stderrBuffer = '';
-};
-
-const pushStdout = (charCode: number) => {
-	stdoutBuffer += String.fromCharCode(charCode);
-	if (charCode === 10) flushStdout();
-};
-
-const pushStderr = (charCode: number) => {
-	stderrBuffer += String.fromCharCode(charCode);
-	if (charCode === 10) flushStderr();
-};
+const flushStdout = () => output?.flush();
+const flushStderr = flushStdout;
+const pushStdout = (charCode: number) => output?.write(charCode);
+const pushStderr = pushStdout;
 
 self.addEventListener('message', async (event) => {
 	if (handleWorkerAssetMessage(event.data)) return;
@@ -177,8 +160,8 @@ self.addEventListener('message', async (event) => {
 
 		if (!compiler || !runtimeLoad || !exceptionDeobfuscator)
 			throw new Error('TeaVM compiler not loaded');
-		stdoutBuffer = '';
-		stderrBuffer = '';
+		output?.close();
+		output = createJavaOutput((text) => self.postMessage({ output: text }));
 		const explicitStdin = hasExplicitStdin === true;
 		const stdinInjection = prepareJavaRuntimeStdinInjection(code);
 		const sourceIdentity = resolveJavaSourceIdentity(code);
@@ -391,6 +374,7 @@ self.addEventListener('message', async (event) => {
 		const workerGlobal = globalThis as typeof globalThis & {
 			window?: Window & typeof globalThis;
 			wasmIdleJavaStdin?: unknown;
+			wasmIdleJavaOutput?: unknown;
 		};
 		const previousWindow = workerGlobal.window;
 		const hadStdinBridge = Object.prototype.hasOwnProperty.call(
@@ -398,8 +382,14 @@ self.addEventListener('message', async (event) => {
 			'wasmIdleJavaStdin'
 		);
 		const previousStdinBridge = workerGlobal.wasmIdleJavaStdin;
+		const hadOutputBridge = Object.prototype.hasOwnProperty.call(
+			workerGlobal,
+			'wasmIdleJavaOutput'
+		);
+		const previousOutputBridge = workerGlobal.wasmIdleJavaOutput;
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
 		workerGlobal.wasmIdleJavaStdin = stdinBridge;
+		workerGlobal.wasmIdleJavaOutput = { flush: () => output?.flush() };
 		try {
 			const module = await runtimeLoad(compiledModule ?? compiledWasm!, {
 				installImports(imports: any) {
@@ -439,6 +429,8 @@ self.addEventListener('message', async (event) => {
 			self.postMessage({ results: true, mainClass: compiledMainClass });
 		} finally {
 			stdinBridge.dispose();
+			if (hadOutputBridge) workerGlobal.wasmIdleJavaOutput = previousOutputBridge;
+			else delete workerGlobal.wasmIdleJavaOutput;
 			if (hadStdinBridge) workerGlobal.wasmIdleJavaStdin = previousStdinBridge;
 			else delete workerGlobal.wasmIdleJavaStdin;
 			if (previousWindow === undefined) {
@@ -453,5 +445,8 @@ self.addEventListener('message', async (event) => {
 		self.postMessage({
 			error: error instanceof Error ? error.message : String(error)
 		});
+	} finally {
+		output?.close();
+		output = null;
 	}
 });
