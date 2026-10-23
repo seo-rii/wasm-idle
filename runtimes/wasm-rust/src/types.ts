@@ -1,6 +1,8 @@
 export type SupportedTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 export type BrowserRustArtifactFormat = 'core-wasm' | 'component';
 export type BrowserRustDebugMode = 'none' | 'trace' | 'lldb';
+/** Interactive favors compilation latency; speed/size optimize the user program. */
+export type BrowserRustOptimizationProfile = 'interactive' | 'speed' | 'size';
 export type BrowserRustCompileStage =
 	| 'manifest'
 	| 'fetch-rustc'
@@ -79,6 +81,8 @@ export interface BrowserRustCompileRequest {
 	 * `lldb` emits unoptimized embedded DWARF for the wasm32-wasip1 target.
 	 */
 	debugMode?: BrowserRustDebugMode;
+	/** Keeps overflow checks and debug assertions enabled in every profile. */
+	optimizationProfile?: BrowserRustOptimizationProfile;
 	edition?: string;
 	crateType?: string;
 	targetTriple?: SupportedTargetTriple;
@@ -145,7 +149,18 @@ export interface BrowserRustCompilerResult {
 
 export interface BrowserRustCompiler {
 	compile: (request: BrowserRustCompileRequest) => Promise<BrowserRustCompilerResult>;
+	/** Type-checks without code generation, linking or a runnable artifact. */
+	check: (request: BrowserRustCheckRequest) => Promise<BrowserRustCheckResult>;
 }
+
+export type BrowserRustCheckRequest = Omit<
+	BrowserRustCompileRequest,
+	'debugMode' | 'optimizationProfile'
+>;
+
+export type BrowserRustCheckResult = Omit<BrowserRustCompilerResult, 'artifact'> & {
+	artifact?: never;
+};
 
 export type BrowserRustCompilerFactory = (
 	options?: import('./compiler.js').CreateRustCompilerOptions
@@ -153,4 +168,4 @@ export type BrowserRustCompilerFactory = (
 export type BrowserRustCompileWorkerRequest = Omit<
 	BrowserRustCompileRequest,
 	'onProgress' | 'assetCache'
->;
+> & { checkOnly?: boolean };

@@ -10,6 +10,7 @@ export interface InitialWorkspaceOverrides {
 	code: string | null;
 	argsInput: string | null;
 	rustTargetTriple: string | null;
+	rustOptimizationProfile: string | null;
 	goTarget: string | null;
 	ocamlBackend: string | null;
 	ocamlWasmBinaryenMode: string | null;
@@ -62,6 +63,7 @@ export function resolveInitialWorkspace<Language extends string>(
 		code: null,
 		argsInput: null,
 		rustTargetTriple: null,
+		rustOptimizationProfile: null,
 		goTarget: null,
 		ocamlBackend: null,
 		ocamlWasmBinaryenMode: null
@@ -125,6 +127,7 @@ export function resolveInitialWorkspace<Language extends string>(
 				argsInput:
 					decodeBase64Url(url.searchParams.get('args64')) ?? url.searchParams.get('args'),
 				rustTargetTriple: url.searchParams.get('rustTargetTriple'),
+				rustOptimizationProfile: url.searchParams.get('rustOptimizationProfile'),
 				goTarget: url.searchParams.get('goTarget'),
 				ocamlBackend: url.searchParams.get('ocamlBackend'),
 				ocamlWasmBinaryenMode: url.searchParams.get('ocamlWasmBinaryenMode')
@@ -162,6 +165,7 @@ export function resolveInitialWorkspace<Language extends string>(
 		code: read('code'),
 		argsInput: read('argsInput'),
 		rustTargetTriple: read('rustTargetTriple'),
+		rustOptimizationProfile: read('rustOptimizationProfile'),
 		goTarget: read('goTarget'),
 		ocamlBackend: read('ocamlBackend'),
 		ocamlWasmBinaryenMode: read('ocamlWasmBinaryenMode')

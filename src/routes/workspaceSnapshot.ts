@@ -80,6 +80,7 @@ export function validateWorkspaceSnapshot(
 		cppVersion: ['CPP03', 'CPP11', 'CPP14', 'CPP17', 'CPP20', 'CPP23', 'CPP26'],
 		goTarget: ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'],
 		rustTargetTriple: ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'],
+		rustOptimizationProfile: ['interactive', 'speed', 'size'],
 		ocamlBackend: ['js', 'wasm'],
 		ocamlWasmBinaryenMode: ['fast', 'full']
 	};

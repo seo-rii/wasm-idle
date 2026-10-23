@@ -10,6 +10,7 @@ describe('workspace JSON boundary', () => {
 	it('accepts current and legacy snapshots without rewriting their input', () => {
 		for (const snapshot of [
 			{ files, activePath: 'main.cpp' },
+			{ files, rustOptimizationProfile: 'speed' },
 			{ version: 6, language: 'CPP', workspaces: { CPP: { files, openTabs: ['main.cpp'] } } }
 		]) {
 			const before = JSON.stringify(snapshot);
@@ -29,6 +30,7 @@ describe('workspace JSON boundary', () => {
 		{ files, version: 7 },
 		{ files, version: 4.5 },
 		{ files, cppVersion: 'CPP99' },
+		{ files, rustOptimizationProfile: 'unknown' },
 		{ files: [{ path: 'main.cpp', content: 42 }] },
 		{ files: [{ path: 'main.cpp', content: '', encoding: 'other' }] },
 		{ workspaces: [] },

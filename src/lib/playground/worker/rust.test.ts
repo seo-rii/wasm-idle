@@ -946,6 +946,36 @@ describe('Rust worker', () => {
 		});
 	});
 
+	it('caches each optimization profile separately', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() { return { async compile(options) {
+				globalThis.__compileModes.push(options.optimizationProfile);
+				return { success: true, artifact: { wasm: new Uint8Array([0,97,115,109]), targetTriple: 'wasm32-wasip1', format: 'core-wasm' } };
+			} }; }
+			export async function executeBrowserRustArtifact() { return { exitCode: 0, stdout: '', stderr: '' }; }
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({ data: compilerBootstrap(compilerModuleUrl) });
+		for (const optimizationProfile of [
+			'interactive',
+			'interactive',
+			'speed',
+			'speed',
+			'size'
+		]) {
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: false,
+					buffer: new SharedArrayBuffer(1024),
+					limits: nonDebugExecutionLimits,
+					optimizationProfile
+				}
+			});
+		}
+		expect((globalThis as any).__compileModes).toEqual(['interactive', 'speed', 'size']);
+	});
+
 	it('separates LLDB artifacts from the normal cache and returns copied bytes without executing them', async () => {
 		const compilerModuleUrl = await createMockRustRuntimeModule(`
 			export async function createRustCompiler() {
@@ -1024,6 +1054,7 @@ describe('Rust worker', () => {
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
 				debugMode: 'lldb',
+				optimizationProfile: 'speed',
 				targetTriple: 'wasm32-wasip1'
 			}
 		});
@@ -1036,6 +1067,7 @@ describe('Rust worker', () => {
 		expect((globalThis as any).__lastCompileOptions).toMatchObject({
 			code: source,
 			debugMode: 'lldb',
+			optimizationProfile: 'interactive',
 			targetTriple: 'wasm32-wasip1'
 		});
 		expect((globalThis as any).__executionCalls).toBe(1);
