@@ -88,7 +88,68 @@ describe('D worker', () => {
 		expect(messages.at(-1)).toEqual({ error: 'D program exited with code 1' });
 	});
 
-	it('recompiles prepared non-debug artifacts with LDC DWARF and maps nested source paths', async () => {
+	it('reuses prepared flags and recompiles changed compiler arguments independently of program argv', async () => {
+		runtime.source = `
+			export function parseRuntimeManifest(manifest) { return manifest; }
+			export async function createDCompiler() {
+				return { async compile(options) {
+					postMessage({ compiledWith: options.compileArgs, target: options.target });
+					return { success: true, artifact: {
+						bytes: new Uint8Array([0,97,115,109,1,0,0,0]),
+						compiledWith: options.compileArgs
+					} };
+				} };
+			}
+			export async function executeBrowserDArtifact(artifact, options) {
+				postMessage({ executedWith: options.args, compiledWith: artifact.compiledWith });
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`;
+		await import('./d');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: 'https://runtime.example/d/index.js',
+				manifestUrl: 'https://runtime.example/d/runtime-manifest.v1.json',
+				outerIntegrity: {}
+			}
+		});
+		const data = {
+			code: 'void main(string[] args) {}',
+			fileName: 'main.d',
+			buffer: new SharedArrayBuffer(1024),
+			stdin: ''
+		};
+		const compileArgs = ['-O2', '-w'];
+		const preparing = (globalThis as any).self.onmessage({
+			data: { ...data, prepare: true, compileArgs }
+		});
+		compileArgs[0] = '-O0';
+		await preparing;
+		await (globalThis as any).self.onmessage({
+			data: { ...data, compileArgs: ['-O2', '-w'], args: ['first', 'two words', ''] }
+		});
+		await (globalThis as any).self.onmessage({
+			data: { ...data, compileArgs, args: ['second'] }
+		});
+		await (globalThis as any).self.onmessage({
+			data: { ...data, compileArgs: ['-O0', '-w'], args: ['third'] }
+		});
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		expect(messages.filter((message: any) => 'target' in message)).toEqual([
+			{ compiledWith: ['-O2', '-w'], target: 'wasm32-wasi' },
+			{ compiledWith: ['-O0', '-w'], target: 'wasm32-wasi' }
+		]);
+		expect(messages.filter((message: any) => 'executedWith' in message)).toEqual([
+			{ executedWith: ['first', 'two words', ''], compiledWith: ['-O2', '-w'] },
+			{ executedWith: ['second'], compiledWith: ['-O0', '-w'] },
+			{ executedWith: ['third'], compiledWith: ['-O0', '-w'] }
+		]);
+	});
+
+	it('recompiles prepared non-debug artifacts with mandatory LDC DWARF after custom flags', async () => {
 		runtime.manifest = {
 			version: 'ldc-1.42.0',
 			compiler: { ldc2: { integrity: { uncompressedSha256: 'c'.repeat(64) } } }
@@ -113,11 +174,19 @@ describe('D worker', () => {
 			}
 		});
 		const code = 'void main() { int value = 73; }';
-		const data = { code, fileName: 'src/hello.d', buffer: new SharedArrayBuffer(1024) };
+		const data = {
+			code,
+			fileName: 'src/hello.d',
+			buffer: new SharedArrayBuffer(1024),
+			compileArgs: ['-w', '-O2', '-dwarf-version=5']
+		};
 		await (globalThis as any).self.onmessage({ data: { ...data, prepare: true } });
 		await (globalThis as any).self.onmessage({ data: { ...data, debugMode: 'lldb' } });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			compiledWith: [
+				'-w',
+				'-O2',
+				'-dwarf-version=5',
 				'-g',
 				'-O0',
 				'-dwarf-version=4',

@@ -150,6 +150,44 @@ void main() {
 		expect(values).toEqual([0.25]);
 	});
 
+	it('snapshots compiler flags separately from program arguments', async () => {
+		const sandbox = new D();
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
+		const compileArgs = new Proxy(['-O2', '-w'], {});
+		const programArgs = new Proxy(['first', 'two words', ''], {});
+		let reads = 0;
+		const options = {
+			get compileArgs() {
+				reads += 1;
+				return compileArgs;
+			},
+			programArgs,
+			stdin: ''
+		};
+
+		const running = sandbox.run(
+			'void main(string[] args) {}',
+			false,
+			true,
+			undefined,
+			['legacy'],
+			options
+		);
+		compileArgs[0] = '-O0';
+		programArgs[0] = 'changed';
+		await expect(running).resolves.toBe(true);
+
+		expect(reads).toBe(1);
+		const request = workerInstances[0].postMessage.mock.calls.at(-1)?.[0];
+		expect(request).toMatchObject({
+			compileArgs: ['-O2', '-w'],
+			args: ['first', 'two words', '']
+		});
+		expect(request.compileArgs).not.toBe(compileArgs);
+		expect(request.args).not.toBe(programArgs);
+		expect(() => structuredClone(request)).not.toThrow();
+	});
+
 	it('replaces the D worker when an outer asset receipt changes', async () => {
 		const sandbox = new D();
 		const moduleUrl = 'https://runtime.example/wasm-d/index.js?v=one';
