@@ -497,6 +497,12 @@ class Zig implements Sandbox {
 				);
 			}
 			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('ZIG', args, options));
+			const debugMode = options.debugMode ?? (options.debug ? 'trace' : 'none');
+			if (debugMode !== 'none') {
+				throw new RuntimeConfigurationError(
+					'Zig source debugging is unavailable: the current Wasm compiler does not emit DWARF.'
+				);
+			}
 			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.zig';
