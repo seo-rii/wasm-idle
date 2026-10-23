@@ -165,6 +165,10 @@ the command Worker; abandoned native compilation cannot publish a cached module.
 At most two native preparation operations (hashing or compilation) run at once,
 including abandoned work that the engine cannot cancel; cancelled queued requests
 are removed before they can start native work.
+Module service preparation has an independent two-minute request deadline;
+`maxBlockedIoMs` controls only blocked guest syscalls. `SpawnOptions.timeoutMs`
+still bounds overall startup and execution, retiring preparation endpoints and
+the Worker when the command is cancelled.
 
 The owner-side executable reads, snapshots and integrity hashes remain costs of
 each invocation. Cache accounting does not measure native compiled-code memory.

@@ -63,6 +63,25 @@ test('live Clang reuses verified modules across fresh Workers without command/li
   } finally { await f.container.dispose(); f.adapter.clearModuleCache(); }
 });
 
+test('compiler hashing and compilation do not use blocked-I/O deadlines', { timeout: 30000 }, async t => {
+  const native = WebAssembly.compile.bind(WebAssembly), digest = crypto.subtle.digest.bind(crypto.subtle);
+  const wait = () => new Promise(resolve => setTimeout(resolve, 750));
+  const compile = t.mock.method(WebAssembly, 'compile', async bytes => {
+    if (isTool(bytes)) await wait();
+    return native(bytes);
+  });
+  t.mock.method(crypto.subtle, 'digest', async (...args) => {
+    if (isTool(args[1])) await wait();
+    return digest(...args);
+  });
+  const f = fixture({ options: { maxBlockedIoMs: 250 } });
+  try {
+    assert.equal((await f.run()).code, 0);
+    assert.equal((await f.run()).code, 0);
+    assert.equal(toolCompiles(compile), 2);
+  } finally { await f.container.dispose(); f.adapter.clearModuleCache(); }
+});
+
 test('owner cache is bounded and a disabled cache retains no compiler modules', { timeout: 30000 }, async t => {
   const compile = t.mock.method(WebAssembly, 'compile'), f = fixture({ options: { moduleCacheBytes: 0 } });
   try { assert.equal((await f.run()).code, 0); assert.equal((await f.run()).code, 0); assert.equal(toolCompiles(compile), 4); }

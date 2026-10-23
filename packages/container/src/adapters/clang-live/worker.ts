@@ -63,7 +63,7 @@ scope.onmessage = async ({ data }) => {
         }
       };
       const toolHost = request.configuration.services
-        ? await createLlvmToolHostFromServices({ ...hostOptions, services: request.configuration.services, timeoutMs: request.maxBlockedIoMs })
+        ? await createLlvmToolHostFromServices({ ...hostOptions, services: request.configuration.services })
         : await createLlvmToolHost({ ...hostOptions, tools: {
           clang: { bytes: request.command.bytes!, sha256: request.configuration.clangSha256 },
           'wasm-ld': { bytes: request.configuration.linker!, sha256: request.configuration.linkerSha256 }
