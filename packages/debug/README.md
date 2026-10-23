@@ -11,6 +11,15 @@ The Monaco integration is available from `@wasm-idle/debug/editor`; `monaco-edit
 peer dependency. This package contains code only and includes no runtime, compiler, WebAssembly, or
 toolchain assets.
 
+`attachMonacoDebugHover(Monaco, editor, options)` adds an optional debugger content widget with
+typed values, lazy child pages and an Add Watch action. Supply `resolve` from the controller's
+`resolveHover`, and `loadChildren` from its raw child-loading API. It starts disabled: call
+`setEnabled(paused)` on every stop and frame change, including a new stop on the same source line,
+so old asynchronous values and child references are discarded. Call `dispose()` when the editor
+binding is removed. Labels are configurable and target values are always inserted as text.
+`attachMonacoDebugActions` also accepts `onAddWatch` and `onEditBreakpoint` callbacks for editor
+context-menu actions. These helpers leave application panel layout and translations to the host.
+
 Debug execution is exposed through one adapter contract:
 
 - `TraceDebugAdapter` preserves the existing source-instrumentation controls.

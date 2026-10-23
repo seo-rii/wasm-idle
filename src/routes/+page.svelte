@@ -16,7 +16,9 @@
 		goDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
-		type DebugLanguageAdapter
+		type DebugLanguageAdapter,
+		type DebugVariableNode,
+		type DebugSnapshotVariable
 	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
 	import { browser } from '$app/env';
@@ -162,9 +164,9 @@
 	};
 	type ActiveDebugDataBreakpoint = {
 		accessType: DebugDataBreakpointAccessType;
-		address: string;
-		bytes: number;
-		dataId: string;
+		address?: string;
+		bytes?: number;
+		dataId?: string;
 		description: string;
 		id?: number;
 	};
@@ -522,6 +524,50 @@
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
+	const debugHoverOptions = {
+		resolve: (expression: string) => debug.resolveHover(expression),
+		loadChildren: (reference: number, start: number, count: number) =>
+			debug.loadVariableChildren(reference, start, count),
+		onAddWatch: (expression: string) => {
+			debug.addWatchExpression(expression);
+		}
+	};
+	let debugInteractionError = $state('');
+	let breakpointEditOpen = $state(false);
+	let breakpointLine = $state(1);
+	let breakpointEnabled = $state(true);
+	let breakpointCondition = $state('');
+	let breakpointHitCondition = $state('');
+	let breakpointLogMessage = $state('');
+	function editDebugBreakpoint(line: number) {
+		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
+		breakpointLine = line;
+		breakpointEnabled = spec?.enabled !== false;
+		breakpointCondition = spec?.condition ?? '';
+		breakpointHitCondition = spec?.hitCondition ?? '';
+		breakpointLogMessage = spec?.logMessage ?? '';
+		breakpointEditOpen = true;
+	}
+	async function saveDebugBreakpoint() {
+		debugInteractionError = '';
+		try {
+			const next = debug.structuredBreakpoints.filter(
+				(entry) => entry.line !== breakpointLine
+			);
+			next.push({
+				line: breakpointLine,
+				enabled: breakpointEnabled,
+				...(breakpointCondition.trim() ? { condition: breakpointCondition.trim() } : {}),
+				...(breakpointHitCondition.trim()
+					? { hitCondition: breakpointHitCondition.trim() }
+					: {}),
+				...(breakpointLogMessage.trim() ? { logMessage: breakpointLogMessage.trim() } : {})
+			});
+			if (await debug.setStructuredBreakpoints(next)) breakpointEditOpen = false;
+		} catch (error) {
+			debugInteractionError = error instanceof Error ? error.message : String(error);
+		}
+	}
 	let memoryReference = $state('0x0');
 	let memoryOffsetInput = $state('0');
 	let memoryCountInput = $state('4');
@@ -2348,6 +2394,45 @@
 		return debug.runToCursor(targetLine);
 	}
 
+	async function watchDebugVariable(node: DebugVariableNode) {
+		if (dataBreakpointLoadingOwner !== null || !debug.paused) return;
+		const requestVersion = ++dataBreakpointRequestVersion;
+		const frame = debug.frameId;
+		dataBreakpointLoadingOwner = requestVersion;
+		dataBreakpointLoading = true;
+		dataBreakpointError = '';
+		activeDataBreakpoint = null;
+		try {
+			const resolved = await debug.watchVariable(node.path, 'write', {
+				replaceExisting: true
+			});
+			if (
+				requestVersion !== dataBreakpointRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frame
+			)
+				return;
+			if (!resolved[0]?.verified) {
+				dataBreakpointError =
+					resolved[0]?.message || 'This variable cannot be watched for writes.';
+				return;
+			}
+			activeDataBreakpoint = {
+				accessType: 'write',
+				description: node.expression ?? node.variable.name,
+				id: resolved[0].id
+			};
+		} catch (error) {
+			if (requestVersion === dataBreakpointRequestVersion && debug.paused)
+				dataBreakpointError = String(error);
+		} finally {
+			if (dataBreakpointLoadingOwner === requestVersion) {
+				dataBreakpointLoadingOwner = null;
+				dataBreakpointLoading = false;
+			}
+		}
+	}
+
 	function exec(enableDebug = false): Promise<void> {
 		const args = parsedArgs.args;
 		if (!args) return Promise.resolve();
@@ -2373,6 +2458,7 @@
 			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
 				? selectedDebugMode
 				: 'none';
+			let executionDebugSteppingOptions: SandboxExecutionOptions['debugSteppingOptions'];
 			runningMode = enableDebug ? 'debug' : 'run';
 			activeDebugBackend = enableDebug ? selectedDebugMode : null;
 			if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
@@ -2433,6 +2519,8 @@
 							abortController.signal
 						);
 						const capabilities = manifest.debugger.capabilities;
+						if (capabilities.skipLibraryCode === true)
+							executionDebugSteppingOptions = debug.steppingOptions;
 						if (
 							!capabilities.breakpoints ||
 							!capabilities.stepping ||
@@ -2478,6 +2566,9 @@
 						debugMode: executionDebugMode,
 						debug: enableDebug,
 						interactive: enableDebug,
+						...(executionDebugSteppingOptions
+							? { debugSteppingOptions: executionDebugSteppingOptions }
+							: {}),
 						breakpoints: [...debug.effectiveBreakpoints],
 						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
 							runWorkspaceFiles.some(
@@ -2985,60 +3076,93 @@
 		type="file"
 	/>
 	{#snippet consoleTail()}
-		{#snippet debugVariableRows(variables: DebugVariable[])}
-			{#each variables as variable, index (`${variable.name}:${index}`)}
-				{@const reference = variable.variablesReference || 0}
-				{@const children = debug.variablesByReference.get(reference)}
-				{@const childCount =
-					(variable.namedVariables ?? 0) + (variable.indexedVariables ?? 0)}
-				{@const loadingChildren = debug.loadingVariableReferences.has(reference)}
-				<li class="debug-entry debug-entry--local">
+		{#snippet debugNodeRows(nodes: readonly DebugVariableNode[])}
+			{#each nodes as node (node.path)}
+				{@const variable = node.variable}
+				<li
+					class={[
+						'debug-entry debug-entry--local',
+						{ 'debug-entry--changed': node.changed }
+					]}
+					data-variable-path={node.path}
+				>
 					<div class="debug-entry__body">
 						<code class="debug-key">{variable.name}</code>
 						{#if variable.type}<span class="debug-variable-type">{variable.type}</span
 							>{/if}
 					</div>
+					{#if node.previousValue !== undefined && node.changed}<code
+							class="debug-previous-value">{node.previousValue} →</code
+						>{/if}
 					<code class="debug-value">{variable.value}</code>
-					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
+					{#if node.expression}
+						<button
+							class="debug-expand"
+							aria-label={`Add watch for ${variable.name}`}
+							onclick={() => debug.addWatchFromVariable(node.path)}
+							disabled={!debug.paused || debug.selectedHistoryId !== null}
+							>Watch</button
+						>
+					{/if}
+					{#if debug.capabilities.dataBreakpoints}
+						<button
+							class="debug-expand"
+							aria-label={`Break on write to ${variable.name}`}
+							disabled={!debug.paused ||
+								dataBreakpointLoading ||
+								debug.selectedHistoryId !== null}
+							onclick={() => watchDebugVariable(node)}>Watch writes</button
+						>
+					{/if}
+					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory)}
 						<button
 							class="debug-memory-inspect"
 							onclick={() => inspectDebugVariable(variable)}
 							aria-label={`Inspect memory for ${variable.name}`}
+							><span class="material-symbols-outlined" aria-hidden="true">memory</span
+							></button
 						>
-							<span class="material-symbols-outlined" aria-hidden="true">memory</span>
-						</button>
 					{/if}
-					{#if reference > 0}
+					{#if (variable.variablesReference ?? 0) > 0}
 						<button
 							class="debug-expand"
-							onclick={() => debug.loadMoreVariableChildren(variable)}
-							disabled={children !== undefined || loadingChildren}
-							aria-label={`Load children for ${variable.name}`}
+							onclick={() => debug.expandVariable(node.path, !node.expanded)}
+							disabled={node.loading || debug.selectedHistoryId !== null}
+							aria-expanded={node.expanded}
+							aria-label={`${node.expanded ? 'Collapse' : 'Load children for'} ${variable.name}`}
+							><span class="material-symbols-outlined" aria-hidden="true"
+								>{node.expanded ? 'expand_more' : 'chevron_right'}</span
+							></button
 						>
-							<span class="material-symbols-outlined" aria-hidden="true">
-								{children === undefined ? 'chevron_right' : 'expand_more'}
-							</span>
-						</button>
 					{/if}
 				</li>
-				{#if children?.length}
+				{#if node.expanded}
 					<li class="debug-variable-children">
-						<ul>{@render debugVariableRows(children)}</ul>
-						{#if (variable.indexedVariables ?? 0) > 0 && children.length < childCount}
-							<button
+						<ul>{@render debugNodeRows(node.children)}</ul>
+						{#if node.hasMore}<button
 								class="debug-load-scope"
-								onclick={() => debug.loadMoreVariableChildren(variable)}
-								disabled={loadingChildren}
+								onclick={() => debug.loadMoreVariablePath(node.path)}
+								disabled={node.loading || debug.selectedHistoryId !== null}
 								aria-label={`Load more children for ${variable.name}`}
-							>
-								Load more ({children.length} / {childCount})
-							</button>
-						{/if}
+								>Load more ({node.children.length} / {(variable.namedVariables ??
+									0) + (variable.indexedVariables ?? 0)})</button
+							>{/if}
 					</li>
 				{/if}
 			{/each}
 		{/snippet}
-		{#if debugLanguage && debug.active}
+		{#snippet debugSnapshotRows(nodes: readonly DebugSnapshotVariable[])}
+			{#each nodes as node (node.path)}
+				<li>
+					<code>{node.name}</code>: <code>{node.value}</code>{#if node.children.length}<ul
+						>
+							{@render debugSnapshotRows(node.children)}
+						</ul>{/if}
+				</li>
+			{/each}
+		{/snippet}
+
+		{#if debugLanguage && (debug.active || debug.history.length > 0)}
 			<section
 				class={[
 					'debug-shell',
@@ -3220,11 +3344,9 @@
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
 											{@const loadedScopeVariables =
-												scope.variables.length > 0
-													? scope.variables
-													: debug.variablesByReference.get(
-															scope.variablesReference
-														)}
+												debug.variablesByReference.get(
+													scope.variablesReference
+												) ?? scope.variables}
 											<details
 												class="debug-scope"
 												bind:open={
@@ -3235,8 +3357,8 @@
 												<summary><h4>{scope.name}</h4></summary>
 												{#if loadedScopeVariables?.length}
 													<ul>
-														{@render debugVariableRows(
-															loadedScopeVariables
+														{@render debugNodeRows(
+															debug.scopeNodes(scope)
 														)}
 													</ul>
 													{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
@@ -3276,7 +3398,7 @@
 									</div>
 								{:else if debug.locals.length}
 									<ul>
-										{@render debugVariableRows(debug.locals)}
+										{@render debugNodeRows(debug.variableNodes)}
 									</ul>
 								{:else}
 									<p class="empty">
@@ -3354,7 +3476,42 @@
 														aria-hidden="true">close</span
 													>
 												</button>
+												{#if watch.node && (watch.node.variable.variablesReference ?? 0) > 0}
+													<button
+														class="debug-expand"
+														disabled={watch.node.loading ||
+															debug.selectedHistoryId !== null}
+														aria-label={`${watch.node.expanded ? 'Collapse' : 'Expand'} watch ${watch.expression}`}
+														aria-expanded={watch.node.expanded}
+														onclick={() =>
+															watch.node &&
+															debug.expandVariable(
+																watch.node.path,
+																!watch.node.expanded
+															)}
+														>{watch.node.expanded
+															? 'Collapse'
+															: 'Expand'}</button
+													>
+												{/if}
 											</li>
+											{#if watch.node?.expanded}
+												<li class="debug-variable-children">
+													<ul>
+														{@render debugNodeRows(watch.node.children)}
+													</ul>
+													{#if watch.node.hasMore}<button
+															class="debug-load-scope"
+															onclick={() =>
+																watch.node &&
+																debug.loadMoreVariablePath(
+																	watch.node.path
+																)}
+															disabled={watch.node.loading}
+															>Load more</button
+														>{/if}
+												</li>
+											{/if}
 										{/each}
 									</ul>
 								{:else}
@@ -3436,6 +3593,127 @@
 								{/if}
 							</div>
 						{/if}
+					</section>
+					<section class="debug-panel">
+						<details class="debug-feature-panel" bind:open={breakpointEditOpen}>
+							<summary>Breakpoints</summary>
+							<ul>
+								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
+										<button onclick={() => editDebugBreakpoint(spec.line)}
+											>Line {spec.line}{spec.enabled === false
+												? ' (disabled)'
+												: ''}{spec.hitCondition
+												? ` · hit ${spec.hitCondition}`
+												: ''}{spec.condition
+												? ` · ${spec.condition}`
+												: ''}{spec.logMessage ? ' · log' : ''}</button
+										>
+									</li>{/each}
+							</ul>
+							<form
+								class="debug-breakpoint-editor"
+								onsubmit={(event) => {
+									event.preventDefault();
+									void saveDebugBreakpoint();
+								}}
+							>
+								<label
+									>Line<input
+										aria-label="Breakpoint line"
+										type="number"
+										min="1"
+										required
+										value={breakpointLine}
+										oninput={(event) =>
+											(breakpointLine = Number(event.currentTarget.value))}
+									/></label
+								>
+								<label
+									><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
+								>
+								{#if debug.capabilities.hitConditionalBreakpoints}<label
+										>Hit count<input
+											aria-label="Breakpoint hit count"
+											bind:value={breakpointHitCondition}
+											maxlength={4096}
+											placeholder="100"
+										/></label
+									>{/if}
+								{#if debug.capabilities.conditionalBreakpoints}<label
+										>Condition<input
+											aria-label="Breakpoint condition"
+											bind:value={breakpointCondition}
+											maxlength={4096}
+										/></label
+									>{/if}
+								{#if debug.capabilities.logPoints}<label
+										>Log message<input
+											aria-label="Breakpoint log message"
+											bind:value={breakpointLogMessage}
+											maxlength={4096}
+										/></label
+									>{/if}
+								<button
+									type="submit"
+									disabled={!Number.isSafeInteger(breakpointLine) ||
+										breakpointLine < 1 ||
+										dataBreakpointLoading}>Save breakpoint</button
+								>
+							</form>
+							{#if debug.breakpointError}<p role="alert">
+									{debug.breakpointError}
+								</p>{/if}
+						</details>
+						{#if debug.capabilities.skipLibraryCode}<label class="debug-feature-panel"
+								><input
+									type="checkbox"
+									checked={debug.steppingOptions.skipLibraryCode}
+									disabled={!debug.paused || dataBreakpointLoading}
+									onchange={(event) => {
+										void debug
+											.setSteppingOptions({
+												skipLibraryCode: event.currentTarget.checked
+											})
+											.catch(
+												(error) => (debugInteractionError = String(error))
+											);
+									}}
+								/> Skip standard library calls</label
+							>{/if}
+						{#if debugInteractionError}<p role="alert">{debugInteractionError}</p>{/if}
+					</section>
+					<section class="debug-panel">
+						<details class="debug-feature-panel">
+							<summary>Recent stops ({debug.history.length})</summary>
+							<ol>
+								{#each debug.history as stop (stop.id)}<li>
+										<button
+											aria-pressed={debug.selectedHistoryId === stop.id}
+											onclick={() => debug.selectHistory(stop.id)}
+											>#{stop.id}
+											{stop.callStack[0]?.functionName ?? ''} · line {stop.line ??
+												'?'} · {stop.reason ?? 'stop'}</button
+										>
+									</li>{/each}
+							</ol>
+							{#if debug.selectedHistory}
+								<button onclick={() => debug.selectHistory(null)}
+									>Back to live values</button
+								>
+								<p>
+									Recorded values. Execution controls apply to the current stop.
+								</p>
+								<ul>
+									{@render debugSnapshotRows(debug.selectedHistory.variables)}
+								</ul>
+								{#each debug.selectedHistory.watches as watch (watch.expression)}<p>
+										<code>{watch.expression}</code>: <code>{watch.value}</code>
+									</p>{/each}
+								{#if debug.selectedHistory.truncated}<p>
+										Some values were omitted from this snapshot.
+									</p>{/if}
+							{/if}
+						</details>
 					</section>
 					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
 						<section class="debug-panel debug-memory-panel">
@@ -4233,6 +4511,15 @@
 							bind:lspStatus={editorLspStatus}
 							onCursorLineChange={debug.setCursorLine}
 							onRunToCursor={runToCursorWhileDataBreakpointIdle}
+							onAddWatch={(expression) => {
+								debug.addWatchExpression(expression);
+							}}
+							onEditBreakpoint={editDebugBreakpoint}
+							{debugHoverOptions}
+							debugHoverEnabled={debug.paused &&
+								!debug.sourceRevisionStale &&
+								debug.selectedHistoryId === null}
+							debugStopKey={`${debug.history.at(-1)?.id ?? 0}:${debug.frameId ?? 0}`}
 							onBreakpointsChange={debug.setBreakpoints}
 						/>
 					{/key}
@@ -6456,6 +6743,37 @@
 
 	.debug-entry:hover {
 		background: var(--surface);
+	}
+	.debug-entry--changed {
+		background: color-mix(in srgb, #d6a63c 18%, var(--surface));
+	}
+	.debug-previous-value {
+		color: var(--text-3);
+		font-family: var(--mono);
+		font-size: 11px;
+		overflow-wrap: anywhere;
+	}
+	.debug-feature-panel {
+		display: block;
+		padding: 10px;
+		font-size: 12px;
+	}
+	.debug-feature-panel summary {
+		cursor: pointer;
+		font-weight: 600;
+		margin-bottom: 8px;
+	}
+	.debug-breakpoint-editor {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: 8px;
+		margin-top: 8px;
+	}
+	.debug-breakpoint-editor label {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
 	}
 
 	.debug-entry__body {
