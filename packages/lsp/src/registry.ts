@@ -23,6 +23,7 @@ import { getGraphqlLanguageServer } from './graphql/language-server.js';
 import { getHaskellLanguageServer } from './haskell/language-server.js';
 import { getJanetLanguageServer } from './janet/language-server.js';
 import { getLispLanguageServer } from './lisp/language-server.js';
+import { getLean4LanguageServer } from './lean4/language-server.js';
 import { getLuaLanguageServer } from './lua/language-server.js';
 import { getOcamlLanguageServer } from './ocaml/language-server.js';
 import { getOctaveLanguageServer } from './octave/language-server.js';
@@ -56,6 +57,11 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{
+		id: 'lean4',
+		languages: ['lean4', 'lean'],
+		create: (options) => getLean4LanguageServer(options)
+	},
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],

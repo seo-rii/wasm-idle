@@ -6,6 +6,7 @@ import {
 } from '../src/registry.js';
 
 const expectedLanguagesByProvider = {
+	lean4: ['lean4', 'lean'],
 	clangd: ['c', 'cpp'],
 	python: ['python'],
 	rust: ['rust', 'rs'],

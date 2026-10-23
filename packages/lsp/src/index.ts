@@ -429,3 +429,8 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export {
+	getLean4LanguageServer,
+	type Lean4LanguageServerOptions
+} from './lean4/language-server.js';

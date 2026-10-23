@@ -26,3 +26,8 @@ await build({
 
 // The TypeScript wrapper map is unused after replacing it with the browser bundle.
 await rm(`${jsonrpcOutputPath}.map`, { force: true });
+
+await cp(
+	path.join(packageRoot, 'src/lean4/runtime-worker.js'),
+	path.join(packageRoot, 'dist/lean4/runtime-worker.js')
+);

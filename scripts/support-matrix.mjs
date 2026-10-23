@@ -898,7 +898,7 @@ export const supportMatrixRows = [
 		ids: ['LEAN4'],
 		runtime: 'Lean 4.34.1 lean --run (Emscripten)',
 		stdin: 'Yes',
-		editorSupport: 'compiler diagnostics',
+		editorSupport: 'Lean LSP (Init)',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/lean4.playwright.test.ts',

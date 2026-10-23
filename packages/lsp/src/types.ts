@@ -54,6 +54,11 @@ export interface EditorLanguageServerRuntimeOptions {
 		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
 		headers?: string | false;
 	};
+	lean4?: {
+		baseUrl?: string;
+		/** Per-document shared Wasm memory ceiling; defaults to 1 GiB. */
+		maxMemoryBytes?: number;
+	};
 	python?: {
 		baseUrl?: string;
 	};

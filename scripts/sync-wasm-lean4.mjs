@@ -270,7 +270,7 @@ async function download(url, expectedBytes, fetchImpl) {
 export async function syncWasmLean4Assets({
 	sourceDir,
 	targetDir = path.join(root, 'static/wasm-lean4'),
-	versionModulePath = path.join(root, 'src/lib/playground/wasmLean4Version.ts'),
+	versionModulePath = path.join(root, 'packages/lsp/src/bundledLean4Runtime.ts'),
 	fetchImpl = globalThis.fetch
 } = {}) {
 	const lock = JSON.parse(await readFile(LOCK_URL, 'utf8'));

@@ -15,6 +15,7 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'lean4'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -372,10 +373,10 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	// Monaco ships no Lean grammar; plain text avoids borrowing another language's LSP.
 	LEAN4: {
 		label: 'Lean 4',
-		editorLanguage: 'plaintext',
+		editorLanguage: 'lean4',
+		runtimeLspCapability: 'lean4',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true

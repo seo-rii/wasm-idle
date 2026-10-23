@@ -125,7 +125,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Ruby           | CRuby WASI                                   | Yes   | syntax               | -     |
 | Haskell        | ghc-in-browser                               | Yes   | syntax               | -     |
 | LFortran       | LFortran LLVM evaluator (experimental)       | Yes   | compiler diagnostics | -     |
-| Lean 4         | Lean 4.34.1 lean --run (Emscripten)          | Yes   | compiler diagnostics | -     |
+| Lean 4         | Lean 4.34.1 lean --run (Emscripten)          | Yes   | Lean LSP (Init)      | -     |
 | Fortran        | f2c + @wasm-idle/llvm-core                   | Yes   | Fortran LSP          | -     |
 | COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core          | Yes   | syntax               | -     |
 | V              | V 0.5.2 + @wasm-idle/llvm-core               | Yes   | syntax               | -     |
