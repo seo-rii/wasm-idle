@@ -220,6 +220,7 @@ ranged edit events to the original server's Full sync contract using the actual 
 Diagnostics, completion, hover, definition, references, rename, signature help and
 symbols use the original handlers. External Nimble/other subprocesses are unavailable;
 include dependency source in `workspaceFiles`. See the [build and validation notes](../../docs/performance/nim-lsp.md).
+
 ## Java
 
 ```ts
@@ -241,9 +242,15 @@ java.dispose();
 ```
 
 `initialFiles` provides the original source text before initialize scans the workspace. Use local
-file URIs under `file:///workspace/`; Java filenames are case sensitive. The total source snapshot
+file URIs under `file:///workspace/`; Java filename case is preserved. The total source snapshot
 is limited to 16 MiB. Each server owns a worker and compiler instance. `signal` cancels startup;
 `startupTimeoutMs` bounds startup; `dispose()` terminates the worker and is idempotent.
+
+The snapshot rejects duplicate decoded paths, including repeated slashes and equivalent URI
+encodings. Request and change URIs may be lowercased by Monaco. The first `didOpen` owns its
+filename spelling for the session, including after `didClose`; a subsequent `didOpen` with
+conflicting case is rejected without changing the existing document. Rejected notifications
+emit `window/logMessage` with type 1; requests receive JSON-RPC error `-32602`.
 
 The worker verifies the loader, Wasm, and JDK API archive against pinned size/SHA-256 receipts before
 executing them and reuses the shared verified asset cache. `persistentCache: false` disables that

@@ -6,6 +6,7 @@ import {
 import { runWithSignalAndTimeout } from '../lifecycle.js';
 import { snapshotJavaLanguageServerAssets, type JavaLanguageServerAsset } from './assets.js';
 import { formatJavaDocHtml } from './markdown.js';
+import { JavaDocumentUriError, JavaDocumentUris } from './document-uris.js';
 
 interface JavaSession {
 	dispatch(json: string): void;
@@ -44,31 +45,14 @@ const scope = globalThis as unknown as {
 };
 let initialized = false;
 let session: JavaSession | undefined;
-let canonicalUris: Record<string, string> = Object.create(null);
-
-function canonicalize(value: unknown, key = ''): unknown {
-	if (
-		typeof value === 'string' &&
-		['uri', 'rootUri', 'targetUri', 'oldUri', 'newUri'].includes(key)
-	) {
-		const uri = value.startsWith('file:') ? new URL(value).href : value;
-		return canonicalUris[uri.toLowerCase()] || uri;
-	}
-	if (Array.isArray(value)) return value.map((entry) => canonicalize(entry));
-	if (value && typeof value === 'object') {
-		return Object.fromEntries(
-			Object.entries(value).map(([name, entry]) => [name, canonicalize(entry, name)])
-		);
-	}
-	return value;
-}
+let documentUris = new JavaDocumentUris({});
 
 async function initialize(
 	options: JavaWorkerOptions,
 	persistentAssets: LanguageToolPersistentOptions
 ) {
 	configureWorkerLanguageToolPersistentAssets(persistentAssets);
-	canonicalUris = options.canonicalUris;
+	documentUris = new JavaDocumentUris(options.canonicalUris);
 	const assets = snapshotJavaLanguageServerAssets(options.assets);
 	const bytes = new Map<string, Uint8Array<ArrayBuffer>>();
 	await runWithSignalAndTimeout(
@@ -162,17 +146,25 @@ scope.addEventListener('message', (event) => {
 			};
 		}
 		if (message.method === 'textDocument/didOpen') {
-			const uri = new URL(message.params.textDocument.uri).href;
-			canonicalUris[uri.toLowerCase()] ??= uri;
+			documentUris.registerOpen(message.params.textDocument.uri);
 		}
-		session.dispatch(JSON.stringify(canonicalize(message)));
+		session.dispatch(JSON.stringify(documentUris.canonicalize(message)));
 	} catch (error) {
 		if (message.id !== undefined)
 			scope.postMessage({
 				jsonrpc: '2.0',
 				id: message.id,
 				error: {
-					code: -32603,
+					code: error instanceof JavaDocumentUriError ? -32602 : -32603,
+					message: error instanceof Error ? error.message : String(error)
+				}
+			});
+		else
+			scope.postMessage({
+				jsonrpc: '2.0',
+				method: 'window/logMessage',
+				params: {
+					type: 1,
 					message: error instanceof Error ? error.message : String(error)
 				}
 			});

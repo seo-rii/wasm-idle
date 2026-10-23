@@ -9,6 +9,7 @@ import {
 	JAVA_TEAVM_FIXTURE_DIRECTORY,
 	createJavaTeavmLspClient,
 	exerciseJavaTeavmLsp,
+	javaPositionAt,
 	loadJavaTeavmFixture
 } from './java-teavm-lsp-protocol.mjs';
 
@@ -36,6 +37,88 @@ async function assetFiles(directory, prefix = '') {
 		else if (entry.isFile()) files.push(relative);
 	}
 	return files;
+}
+
+async function exerciseJavaUriBoundaries(client, snapshot) {
+	await client.request('initialize', {
+		processId: null,
+		rootUri: null,
+		capabilities: { textDocument: { hover: { contentFormat: ['plaintext'] } } }
+	});
+	await client.notify('initialized', {});
+	const snapshotUri = 'file:///workspace/src/SnapshotMain.java';
+	const snapshotAlias = snapshotUri.toLowerCase();
+	await client.notify('textDocument/didOpen', {
+		textDocument: {
+			uri: snapshotAlias,
+			languageId: 'java',
+			version: 1,
+			text: snapshot['src/SnapshotMain.java']
+		}
+	});
+	const snapshotSymbols = await client.request('textDocument/documentSymbol', {
+		textDocument: { uri: snapshotAlias }
+	});
+	assert.match(JSON.stringify(snapshotSymbols), /SnapshotMain/);
+
+	const uri = 'file:///workspace/src/Main.java';
+	const alias = uri.toLowerCase();
+	const original = 'package src; public class Main { int original = 1; }';
+	const overwritten = 'package src; class main { int overwritten = 2; }';
+	const open = (targetUri, text, version = 1) =>
+		client.notify('textDocument/didOpen', {
+			textDocument: { uri: targetUri, languageId: 'java', version, text }
+		});
+	await open(uri, original);
+	const before = client.notifications.length;
+	await open(alias, overwritten);
+	const symbols = await client.request('textDocument/documentSymbol', {
+		textDocument: { uri: alias }
+	});
+	assert.match(JSON.stringify(symbols), /original/);
+	assert.doesNotMatch(JSON.stringify(symbols), /overwritten/);
+	const rejection = client.notifications
+		.slice(before)
+		.find((message) => message.method === 'window/logMessage' && message.params.type === 1);
+	assert.match(rejection?.params.message || '', /Ambiguous Java didOpen URI/);
+	await assert.rejects(
+		client.request('textDocument/didOpen', {
+			textDocument: { uri: alias, languageId: 'java', version: 1, text: overwritten }
+		}),
+		(error) => error.response?.code === -32602
+	);
+
+	const changed =
+		'package src; public class Main { int changed = 3; void run() { int answer = changed; System.out.println(answer); } }';
+	await client.notify('textDocument/didChange', {
+		textDocument: { uri: alias, version: 2 },
+		contentChanges: [{ text: changed }]
+	});
+	const hover = await client.request('textDocument/hover', {
+		textDocument: { uri: alias },
+		position: javaPositionAt(changed, changed.lastIndexOf('answer') + 2)
+	});
+	assert.match(JSON.stringify(hover), /int answer/);
+	for (const [targetUri, text] of [
+		[uri, changed],
+		[snapshotAlias, snapshot['src/SnapshotMain.java']]
+	]) {
+		await client.notify('textDocument/didClose', { textDocument: { uri: targetUri } });
+		await open(targetUri, text, 3);
+	}
+	await open(alias, overwritten);
+	const afterReopen = await client.request('textDocument/documentSymbol', {
+		textDocument: { uri: alias }
+	});
+	assert.match(JSON.stringify(afterReopen), /changed/);
+	assert.doesNotMatch(JSON.stringify(afterReopen), /overwritten/);
+	const snapshotAfterReopen = await client.request('textDocument/documentSymbol', {
+		textDocument: { uri: snapshotAlias }
+	});
+	assert.match(JSON.stringify(snapshotAfterReopen), /SnapshotMain/);
+	await client.request('shutdown', null);
+	await client.notify('exit', null);
+	return { snapshotSymbols, symbols, rejection, hover, afterReopen, snapshotAfterReopen };
 }
 
 export async function probeJavaTeavmLspBrowser(options = {}) {
@@ -210,8 +293,48 @@ export async function probeJavaTeavmLspBrowser(options = {}) {
 		const assetRequestCount = () =>
 			evidence.requests.filter((url) => url.startsWith('/wasm-java-lsp/')).length;
 		assert.equal(assetRequestCount(), 0, 'Java assets fetched before enabling the LSP');
-		for (const profile of ['project', 'default-package', 'project']) {
-			const run = { profile, initialSnapshot: evidence.runs.length < 2, messages: [] };
+		evidence.sourceSnapshotAliases = await page.evaluate(async () => {
+			const results = [];
+			for (const alias of [
+				'file:///workspace/src//Main.java',
+				'file:///workspace/src%2fMain.java',
+				'file:///workspace/src/%4dain.java'
+			]) {
+				const before = globalThis.__javaWorkers.created;
+				try {
+					const handle = await globalThis.__getJavaLanguageServer({
+						java: {
+							baseUrl: new URL('/wasm-java-lsp/', location.href).href,
+							initialFiles: {
+								'file:///workspace/src/Main.java': 'public class Main {}',
+								[alias]: 'class Main { int overwritten; }'
+							}
+						},
+						createWorker: () => new Worker('/worker.js', { type: 'module' })
+					});
+					handle.dispose();
+					results.push({ alias, unexpectedSuccess: true });
+				} catch (error) {
+					results.push({
+						alias,
+						error: String(error.message),
+						workers: globalThis.__javaWorkers.created - before
+					});
+				}
+			}
+			return results;
+		});
+		for (const rejection of evidence.sourceSnapshotAliases) {
+			assert.match(rejection.error || '', /Ambiguous|duplicate/i);
+			assert.equal(rejection.workers, 0);
+		}
+		assert.equal(assetRequestCount(), 0, 'Invalid initial sources fetched Java assets');
+		for (const profile of ['project', 'default-package', 'project', 'uri-boundaries']) {
+			const run = {
+				profile,
+				initialSnapshot: profile === 'uri-boundaries' || evidence.runs.length < 2,
+				messages: []
+			};
 			evidence.runs.push(run);
 			activeClient = createJavaTeavmLspClient(
 				(message) =>
@@ -221,7 +344,10 @@ export async function probeJavaTeavmLspBrowser(options = {}) {
 					),
 				{ messages: run.messages, timeoutMs: options.timeoutMs || 60000 }
 			);
-			const fixture = await loadJavaTeavmFixture(profile);
+			const fixture =
+				profile === 'uri-boundaries'
+					? { 'src/SnapshotMain.java': 'package src; public class SnapshotMain {}' }
+					: await loadJavaTeavmFixture(profile);
 			const initialFiles = Object.fromEntries(
 				Object.entries(fixture).map(([name, text]) => [`file:///workspace/${name}`, text])
 			);
@@ -257,14 +383,19 @@ export async function probeJavaTeavmLspBrowser(options = {}) {
 			else
 				assert.equal(run.assetRequests, 0, 'Verified Java TeaVM assets were fetched again');
 			const protocolStarted = Date.now();
-			run.results = await exerciseJavaTeavmLsp(activeClient, 'file:///workspace', {
-				profile,
-				files: fixture,
-				monacoInitialize: !run.initialSnapshot
-			});
+			run.results =
+				profile === 'uri-boundaries'
+					? await exerciseJavaUriBoundaries(activeClient, fixture)
+					: await exerciseJavaTeavmLsp(activeClient, 'file:///workspace', {
+							profile,
+							files: fixture,
+							monacoInitialize: !run.initialSnapshot
+						});
 			run.protocolMs = Date.now() - protocolStarted;
-			assertNativeParity(run.results, oracle.profiles[profile]);
-			run.nativeParity = true;
+			if (profile !== 'uri-boundaries') {
+				assertNativeParity(run.results, oracle.profiles[profile]);
+				run.nativeParity = true;
+			} else run.uriBoundaries = true;
 			await page.evaluate(() => {
 				globalThis.__javaTeavmHandle.dispose();
 				globalThis.__javaTeavmHandle.dispose();
