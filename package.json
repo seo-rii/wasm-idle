@@ -199,7 +199,7 @@
 		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
 		"benchmark:container": "node scripts/benchmark-container.mjs",
 		"sync:fennel-lsp": "node scripts/sync-fennel-lsp.mjs",
-		"test:lsp:fennel": "node --test scripts/fennel-lsp.browser.test.mjs"
+		"test:lsp:fennel": "WASM_IDLE_RUN_REAL_BROWSER_FENNEL_LSP=1 node --test scripts/fennel-lsp.browser.test.mjs"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

@@ -11,9 +11,11 @@ import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_FENNEL_LSP === '1';
 let browser, server, temporary, origin;
 
 before(async () => {
+	if (!enabled) return;
 	temporary = await mkdtemp(path.join(os.tmpdir(), 'fennel-lsp-browser-'));
 	await build({
 		entryPoints: [path.join(ROOT, 'packages/lsp/src/fennel/worker.ts')],
@@ -80,7 +82,7 @@ after(async () => {
 
 test(
 	'original Fennel dispatcher serves real browser diagnostics and semantic requests',
-	{ timeout: 60_000 },
+	{ timeout: 60_000, skip: !enabled },
 	async () => {
 		const context = await browser.newContext();
 		await addBrowserTestCookies(context, origin);
@@ -205,35 +207,39 @@ test(
 	}
 );
 
-test('tampered original runtime is rejected before evaluation', { timeout: 30_000 }, async () => {
-	const context = await browser.newContext();
-	await addBrowserTestCookies(context, origin);
-	try {
-		const page = await context.newPage();
-		await page.goto(origin);
-		const error = await page.evaluate(
-			() =>
-				new Promise((resolve, reject) => {
-					const worker = new Worker('/worker.js', { type: 'module' });
-					worker.onmessage = ({ data }) => {
-						if (data.type === 'error') {
-							worker.terminate();
-							resolve(data.message);
-						}
-						if (data.type === 'ready') {
-							worker.terminate();
-							reject(new Error('Tampered runtime was accepted'));
-						}
-					};
-					worker.postMessage({
-						type: 'init',
-						persistentAssets: { persistentCache: false },
-						options: { baseUrl: `${location.origin}/tampered/` }
-					});
-				})
-		);
-		assert.match(error, /integrity|size|hash|SHA-256/iu);
-	} finally {
-		await context.close();
+test(
+	'tampered original runtime is rejected before evaluation',
+	{ timeout: 30_000, skip: !enabled },
+	async () => {
+		const context = await browser.newContext();
+		await addBrowserTestCookies(context, origin);
+		try {
+			const page = await context.newPage();
+			await page.goto(origin);
+			const error = await page.evaluate(
+				() =>
+					new Promise((resolve, reject) => {
+						const worker = new Worker('/worker.js', { type: 'module' });
+						worker.onmessage = ({ data }) => {
+							if (data.type === 'error') {
+								worker.terminate();
+								resolve(data.message);
+							}
+							if (data.type === 'ready') {
+								worker.terminate();
+								reject(new Error('Tampered runtime was accepted'));
+							}
+						};
+						worker.postMessage({
+							type: 'init',
+							persistentAssets: { persistentCache: false },
+							options: { baseUrl: `${location.origin}/tampered/` }
+						});
+					})
+			);
+			assert.match(error, /integrity|size|hash|SHA-256/iu);
+		} finally {
+			await context.close();
+		}
 	}
-});
+);
