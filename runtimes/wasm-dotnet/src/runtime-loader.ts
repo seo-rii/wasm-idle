@@ -6,6 +6,7 @@ import type {
 	DotnetRuntimeRunRequest,
 	DotnetRuntimeRunResponse
 } from './types.js';
+import { connectMonoDebugAgent, type MonoDebugAgentConnection } from './debug-agent.js';
 
 export interface DotnetCompilerRuntimeOptions {
 	language?: DotnetLanguage;
@@ -15,9 +16,12 @@ export interface DotnetCompilerRuntimeOptions {
 	dotnetModule?: unknown;
 	diagnosticTracing?: boolean;
 	onFatalError?: (error: Error) => void;
+	/** Enable the native Mono debugger at startup. Requires a compatible runtime build. */
+	enableDebugging?: boolean;
 }
 
 export interface DotnetCompilerRuntime {
+	debugAgent?: MonoDebugAgentConnection;
 	prepareReferences?(references: DotnetReferenceAssembly[]): Promise<void>;
 	compile(request: DotnetRuntimeCompileRequest): Promise<DotnetRuntimeCompileResponse>;
 	run(request: DotnetRuntimeRunRequest): Promise<DotnetRuntimeRunResponse>;
@@ -27,9 +31,11 @@ type DotnetBuilder = {
 	withModuleConfig?: (config: {
 		onAbort: (reason: unknown) => void;
 		onExit: (code: number) => void;
+		onConfigLoaded?: (config: { debugLevel?: number }) => void;
 	}) => DotnetBuilder;
 	withConfig?: (config: Record<string, unknown>) => DotnetBuilder;
 	withDiagnosticTracing?: (enabled: boolean) => DotnetBuilder;
+	withDebugging?: (level: number) => DotnetBuilder;
 	create: () => Promise<{
 		getAssemblyExports?: (assemblyName: string) => Promise<Record<string, unknown>>;
 		getConfig?: () => { mainAssemblyName?: string };
@@ -120,7 +126,7 @@ export async function loadDotnetCompilerRuntime(
 	options: DotnetCompilerRuntimeOptions = {}
 ): Promise<DotnetCompilerRuntime> {
 	const dotnetJsUrl = resolveDotnetJsUrl(options);
-	const key = `${dotnetJsUrl}\n${options.mainAssemblyName || ''}\n${options.dotnetModule ? 'injected' : ''}\n${options.diagnosticTracing ? 'trace' : ''}`;
+	const key = `${dotnetJsUrl}\n${options.mainAssemblyName || ''}\n${options.dotnetModule ? 'injected' : ''}\n${options.diagnosticTracing ? 'trace' : ''}\n${options.enableDebugging ? 'mono-debug' : ''}`;
 	const cached = runtimePromises.get(key);
 	if (cached) return await cached;
 	const promise: Promise<DotnetCompilerRuntime> = Promise.resolve().then(async () => {
@@ -156,7 +162,16 @@ export async function loadDotnetCompilerRuntime(
 		if (builder.withModuleConfig) {
 			builder = builder.withModuleConfig({
 				onAbort: abort,
-				onExit: (code) => abort(new Error(`.NET runtime exited with code ${code}`))
+				onExit: (code) => abort(new Error(`.NET runtime exited with code ${code}`)),
+				...(options.enableDebugging
+					? {
+							// The boot manifest merges after withDebugging() and may contain zero.
+							// This callback runs after that merge and before Mono initializes.
+							onConfigLoaded: (config: { debugLevel?: number }) => {
+								config.debugLevel = 1;
+							}
+						}
+					: {})
 			});
 		}
 		if (builder.withConfig) {
@@ -167,7 +182,13 @@ export async function loadDotnetCompilerRuntime(
 		if (builder.withDiagnosticTracing) {
 			builder = builder.withDiagnosticTracing(Boolean(options.diagnosticTracing));
 		}
+		if (options.enableDebugging) {
+			if (!builder.withDebugging || !builder.withModuleConfig)
+				throw new Error('The .NET runtime builder does not support native debugging.');
+			builder = builder.withDebugging(1);
+		}
 		const runtime = await call(() => builder.create());
+		const debugAgent = options.enableDebugging ? connectMonoDebugAgent(runtime) : undefined;
 		if (typeof runtime.getAssemblyExports !== 'function') {
 			throw new Error('wasm-dotnet runtime did not expose getAssemblyExports().');
 		}
@@ -240,6 +261,7 @@ export async function loadDotnetCompilerRuntime(
 			return id;
 		};
 		return {
+			...(debugAgent ? { debugAgent } : {}),
 			...(register
 				? {
 						async prepareReferences(references: DotnetReferenceAssembly[]) {

@@ -224,6 +224,20 @@ export async function compileDotnet(
 	if (target !== 'browser-wasm') {
 		return failure(`Unsupported .NET target: ${target}`);
 	}
+	const sourcePath =
+		request.sourcePath ??
+		`/workspace/Program.${language === 'csharp' ? 'cs' : language === 'vbnet' ? 'vb' : 'fs'}`;
+	if (
+		!sourcePath.startsWith('/workspace/') ||
+		sourcePath.includes('\\') ||
+		sourcePath.includes('\0') ||
+		sourcePath
+			.slice('/workspace/'.length)
+			.split('/')
+			.some((part) => !part || part === '.' || part === '..')
+	) {
+		return failure('.NET sourcePath must be a normalized file path below /workspace/.');
+	}
 	emitProgress(request, 'runtime', 1, 10, 'loading .NET browser compiler runtime');
 	try {
 		const runtimeOptions = request.runtimeDiagnosticTracing
@@ -247,8 +261,26 @@ export async function compileDotnet(
 			language,
 			target,
 			args: request.args || [],
+			...(request.debug
+				? { debug: true, sourcePath }
+				: request.sourcePath
+					? { sourcePath }
+					: {}),
 			...(references.length > 0 ? { references } : {})
 		});
+		if (
+			request.debug &&
+			payload.success !== false &&
+			payload.assemblyId &&
+			(payload.debug?.format !== 'portable-pdb' ||
+				payload.debug.sourcePath !== sourcePath ||
+				!payload.debug.assemblyBytesBase64 ||
+				!payload.debug.symbolsBytesBase64)
+		) {
+			return failure(
+				'The loaded .NET compiler did not return Portable PDB symbols. Publish a debug-capable compiler bundle before requesting debug artifacts.'
+			);
+		}
 		emitProgress(request, 'done', 1, 1);
 		const diagnostics =
 			payload.diagnostics || parseDotnetDiagnostics(payload.stderr || payload.error || '');
@@ -259,7 +291,8 @@ export async function compileDotnet(
 						format: 'dotnet-browser-assembly',
 						assemblyId: payload.assemblyId,
 						language,
-						target
+						target,
+						...(payload.debug ? { debug: payload.debug } : {})
 					}
 				: undefined,
 			stdout: payload.stdout,
