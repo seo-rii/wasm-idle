@@ -1287,25 +1287,54 @@ async function runLspCase(
 				}
 			)
 			.toContain('n: int');
+		async function expectVHover(signature: string) {
+			await page.keyboard.press('Escape');
+			await page.evaluate(() => {
+				const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
+					.__wasmIdleMonacoEditor!;
+				editor.setPosition({ lineNumber: 7, column: 8 });
+				editor.focus();
+				editor.trigger('browser-test', 'editor.action.showHover', {});
+			});
+			await expect
+				.poll(
+					async () =>
+						await page
+							.locator('.monaco-hover')
+							.innerText()
+							.catch(() => ''),
+					{
+						timeout: 30_000
+					}
+				)
+				.toContain(signature);
+			expect(await page.locator('.monaco-hover').innerText()).toContain(
+				'Squares an integer.'
+			);
+		}
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
 		await page.evaluate(() => {
-			const editor = (globalThis as typeof globalThis & MonacoTestGlobal)
-				.__wasmIdleMonacoEditor!;
-			editor.setPosition({ lineNumber: 7, column: 8 });
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 3, column: 22 });
+			editor.getModel().pushStackElement();
 			editor.focus();
-			editor.trigger('browser-test', 'editor.action.showHover', {});
 		});
-		await expect
-			.poll(
-				async () =>
-					await page
-						.locator('.monaco-hover')
-						.innerText()
-						.catch(() => ''),
-				{
-					timeout: 30_000
-				}
-			)
-			.toContain('Squares an integer.');
+		// One real keystroke changes the original analyzer's inferred return type.
+		await page.keyboard.type('?');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source.replace(') int {', ') ?int {')
+		);
+		await expectVHover('fn square(value int) ?int');
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Control+z');
+		await page.waitForFunction(
+			(expected) => Reflect.get(globalThis, '__wasmIdleMonacoEditor').getValue() === expected,
+			testCase.source
+		);
+		await expectVHover('fn square(value int) int');
+		await page.keyboard.press('Escape');
 	}
 
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
