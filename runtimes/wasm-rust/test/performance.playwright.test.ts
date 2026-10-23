@@ -17,7 +17,8 @@ describe.skipIf(process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1')(
 				const page = await browser.newPage();
 				await page.goto(`${server.origin}/browser-harness/`);
 				const report = await page.evaluate(async () => {
-					const api = await import(/* @vite-ignore */ '/dist/index.js');
+					// Keep this import native in the page; Vitest rewrites ordinary imports for SSR.
+					const api = await new Function('return import("/dist/index.js")')();
 					const compiler = await api.createRustCompiler();
 					const source = `use std::io::{self, Read};
 fn main() {
