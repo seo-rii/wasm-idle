@@ -67,6 +67,7 @@ let processStartupTimeoutMs = 120000;
 let initialized = false;
 let bootstrap: Process | undefined;
 let fileProcess: Process | undefined;
+let restarting: Promise<void> | undefined;
 let initializeParams: any;
 let initializeId: string | number | undefined;
 let active: Document | undefined;
@@ -223,7 +224,12 @@ async function openDocument(document: Document) {
 			fileProcess = undefined;
 			if (code === 2 && active) {
 				// The original FileWorker requests this restart when imports/header state changes.
-				void openDocument(active).catch(fail);
+				// Hold client traffic until initialize and didOpen are queued for the new process.
+				const restart = openDocument(active);
+				restarting = restart;
+				void restart.catch(fail).finally(() => {
+					if (restarting === restart) restarting = undefined;
+				});
 			} else cancelPending(`Lean document process exited with code ${code}.`);
 		}
 	);
@@ -461,7 +467,10 @@ scope.onmessage = ({ data }) => {
 		return;
 	}
 	queued = queued
-		.then(() => (data?.type === 'init' ? init(data) : handle(data as Rpc)))
+		.then(async () => {
+			await restarting;
+			return data?.type === 'init' ? init(data) : handle(data as Rpc);
+		})
 		.catch((cause) => {
 			if (data?.id !== undefined) error(data.id, -32603, String(cause));
 			fail(cause);
