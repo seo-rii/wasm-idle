@@ -67,6 +67,7 @@ export async function getGrainLanguageServer(
 	status.loading('grain-lsp-startup');
 	let worker: Worker | undefined;
 	let disposed = false;
+	let terminalError: Error | undefined;
 	const dispose = () => {
 		if (disposed) return;
 		disposed = true;
@@ -80,6 +81,13 @@ export async function getGrainLanguageServer(
 		errors.dispose();
 		close.dispose();
 		status.disabled();
+	};
+	const fail = (error: Error) => {
+		if (disposed) return;
+		terminalError = error;
+		errors.fire(error);
+		dispose();
+		status.error(error.message);
 	};
 	try {
 		await waitForLanguageServerStartup(
@@ -95,14 +103,23 @@ export async function getGrainLanguageServer(
 						else if (data?.type === 'progress') status.progress(data);
 						else if (data?.type === 'error') {
 							const error = new Error(data.message);
-							errors.fire(error);
 							reject(error);
-						} else if (data?.type === 'exit') close.fire();
+							fail(error);
+						} else if (data?.type === 'exit') {
+							if (reader) dispose();
+							else {
+								const error = new Error('Grain LSP exited before initialization');
+								reject(error);
+								fail(error);
+							}
+						}
 					});
 					worker.addEventListener('error', (event) => {
-						const error = event.error || new Error(event.message);
-						errors.fire(error);
+						if (disposed) return;
+						const error =
+							event.error instanceof Error ? event.error : new Error(event.message);
 						reject(error);
+						fail(error);
 					});
 					worker.postMessage({
 						type: 'init',
@@ -115,6 +132,7 @@ export async function getGrainLanguageServer(
 				}),
 			{ signal: config?.signal, timeoutMs: config?.startupTimeoutMs }
 		);
+		if (disposed) throw terminalError || new Error('Grain LSP stopped during initialization');
 		reader = new ReadableStreamMessageReader({
 			onData: stdout.event,
 			onError: errors.event,
@@ -135,8 +153,10 @@ export async function getGrainLanguageServer(
 		status.ready();
 		return { transport: { reader, writer }, dispose };
 	} catch (error) {
-		dispose();
-		status.error(error instanceof Error ? error.message : String(error));
+		if (!disposed) {
+			dispose();
+			status.error(error instanceof Error ? error.message : String(error));
+		}
 		throw error;
 	}
 }
