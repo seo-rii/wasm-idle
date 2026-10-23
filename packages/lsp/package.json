@@ -219,6 +219,11 @@
 			"types": "./dist/document/index.d.ts",
 			"import": "./dist/document/index.js",
 			"default": "./dist/document/index.js"
+		},
+		"./c3": {
+			"types": "./dist/c3/index.d.ts",
+			"import": "./dist/c3/index.js",
+			"default": "./dist/c3/index.js"
 		}
 	},
 	"files": [

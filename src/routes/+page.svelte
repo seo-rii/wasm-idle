@@ -391,6 +391,10 @@
 		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
 	);
 	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
+	const c3LspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'c3');
+	const c3LspBaseUrl = $derived(
+		c3LspEnabled ? resolveApplicationAsset('wasm-c3-lsp/') : undefined
+	);
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
@@ -4167,6 +4171,8 @@
 							erlangLspWorkerUrl={beamLspWorkerUrl}
 							{erlangLspIntegrity}
 							{gleamLspEnabled}
+							{c3LspEnabled}
+							{c3LspBaseUrl}
 							{gleamLspBaseUrl}
 							{gleamLspManifestUrl}
 							{gleamLspManifestFingerprint}

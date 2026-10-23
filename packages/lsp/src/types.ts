@@ -1,3 +1,4 @@
+import type { C3LspAssetReceipts } from './c3/assets.js';
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
 import type { LanguageToolAssetConfig } from './assets.js';
@@ -53,6 +54,10 @@ export interface EditorLanguageServerRuntimeOptions {
 	cpp?: LanguageToolAssetConfig & {
 		/** Separate header asset for custom clangd builds; false keeps embedded headers. */
 		headers?: string | false;
+	};
+	c3?: {
+		baseUrl?: string;
+		integrity?: C3LspAssetReceipts;
 	};
 	python?: {
 		baseUrl?: string;

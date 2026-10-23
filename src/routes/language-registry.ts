@@ -15,6 +15,7 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'c3'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -84,6 +85,8 @@ export const playgroundLanguageDescriptors: Readonly<
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',
+		runtimeLspCapability: 'c3',
+		lspLanguageOverride: 'c3',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},

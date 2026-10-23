@@ -76,7 +76,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Aheui          | rpaheui 1.2.5 on Pyodide                     | Yes   | plain text           | -     |
 | Malbolge       | Ben Olmstead Malbolge on WASI                | Yes   | plain text           | -     |
 | Whitespace     | koturn/Whitespace 0.3 on WASI                | Yes   | plain text           | -     |
-| C3             | C3 0.8.3 + LLVM/lld WASM (byte ABI)          | Yes   | compiler diagnostics | -     |
+| C3             | C3 0.8.3 + LLVM/lld WASM (byte ABI)          | Yes   | c3-lsp               | -     |
 | C              | @wasm-idle/llvm-core / Clang WASI            | Yes   | clangd               | LLDB  |
 | C++            | @wasm-idle/llvm-core / Clang WASI            | Yes   | clangd               | LLDB  |
 | Objective-C    | GNUstep libobjc2 + @wasm-idle/llvm-core      | Yes   | clangd               | Trace |
