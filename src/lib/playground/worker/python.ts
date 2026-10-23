@@ -889,9 +889,7 @@ __wasm_idle_debug_breakpoints = set(${normalizedBreakpoints})
 __wasm_idle_debug_breakpoint_version = -1
 __wasm_idle_debug_pause_on_entry = ${pauseOnEntry ? 'True' : 'False'}
 __wasm_idle_debug_step_mode = None
-__wasm_idle_debug_resume_skip = None
 __wasm_idle_debug_next_depth = None
-__wasm_idle_debug_next_line = None
 __wasm_idle_debug_step_out_depth = None
 
 def __wasm_idle_debug_refresh_breakpoints():
@@ -951,9 +949,7 @@ def __wasm_idle_debug_stack(frame):
 def __wasm_idle_debug_trace(frame, event, arg):
     global __wasm_idle_debug_pause_on_entry
     global __wasm_idle_debug_step_mode
-    global __wasm_idle_debug_resume_skip
     global __wasm_idle_debug_next_depth
-    global __wasm_idle_debug_next_line
     global __wasm_idle_debug_step_out_depth
 
     if frame.f_code.co_filename not in __wasm_idle_debug_source_filenames:
@@ -962,13 +958,11 @@ def __wasm_idle_debug_trace(frame, event, arg):
         return __wasm_idle_debug_trace
 
     __wasm_idle_debug_refresh_breakpoints()
-    needs_depth = (__wasm_idle_debug_resume_skip is not None or __wasm_idle_debug_step_mode in ("next", "out"))
+    # Returning from a trace callback executes this event; a later event on the same
+    # line is another loop iteration, not a replay of the previous stop.
+    needs_depth = __wasm_idle_debug_step_mode in ("next", "out")
     depth = __wasm_idle_debug_depth(frame) if needs_depth else None
     line = frame.f_lineno
-    if __wasm_idle_debug_resume_skip == (depth, line):
-        return __wasm_idle_debug_trace
-    if __wasm_idle_debug_resume_skip is not None:
-        __wasm_idle_debug_resume_skip = None
 
     reason = None
     if __wasm_idle_debug_pause_on_entry:
@@ -977,7 +971,7 @@ def __wasm_idle_debug_trace(frame, event, arg):
         reason = "breakpoint"
     elif __wasm_idle_debug_step_mode == "step":
         reason = "step"
-    elif __wasm_idle_debug_step_mode == "next" and __wasm_idle_debug_next_depth is not None and depth <= __wasm_idle_debug_next_depth and line != __wasm_idle_debug_next_line:
+    elif __wasm_idle_debug_step_mode == "next" and __wasm_idle_debug_next_depth is not None and depth <= __wasm_idle_debug_next_depth:
         reason = "nextLine"
     elif __wasm_idle_debug_step_mode == "out" and __wasm_idle_debug_step_out_depth is not None and depth <= __wasm_idle_debug_step_out_depth:
         reason = "stepOut"
@@ -990,7 +984,6 @@ def __wasm_idle_debug_trace(frame, event, arg):
     __wasm_idle_debug_pause_on_entry = False
     __wasm_idle_debug_step_mode = None
     __wasm_idle_debug_next_depth = None
-    __wasm_idle_debug_next_line = None
     __wasm_idle_debug_step_out_depth = None
 
     sys.stdout.flush()
@@ -1018,13 +1011,11 @@ def __wasm_idle_debug_trace(frame, event, arg):
         except Exception as error:
             result = "?" if error.__class__.__name__ == "NameError" else "error"
         ${debugWriteWatchName}(result)
-    __wasm_idle_debug_resume_skip = (depth, line)
     if command == 2:
         __wasm_idle_debug_step_mode = "step"
     elif command == 3:
         __wasm_idle_debug_step_mode = "next"
         __wasm_idle_debug_next_depth = depth
-        __wasm_idle_debug_next_line = line
     elif command == 4:
         __wasm_idle_debug_step_mode = "out"
         __wasm_idle_debug_step_out_depth = max(0, depth - 1)
@@ -1103,9 +1094,7 @@ finally:
 		debug
 			? `
     __wasm_idle_debug_step_mode = None
-    __wasm_idle_debug_resume_skip = None
     __wasm_idle_debug_next_depth = None
-    __wasm_idle_debug_next_line = None
     __wasm_idle_debug_step_out_depth = None
 `
 			: ''
