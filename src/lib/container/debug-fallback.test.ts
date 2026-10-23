@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDebugSessionController } from '@wasm-idle/debug/controller';
+import { createDebugSessionController } from '../../../packages/debug/src/controller.js';
 import type { DebugSourceBreakpoint } from '@wasm-idle/core';
 import type { BoundSandbox, PlaygroundBinding } from '../playground/sandbox.js';
 import { createContainerPlaygroundBinding } from './binding.js';
