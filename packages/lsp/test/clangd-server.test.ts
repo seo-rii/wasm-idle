@@ -195,6 +195,54 @@ describe('getCppLanguageServer', () => {
 		expect(worker?.terminated).toBe(true);
 		expect(status).toHaveBeenCalledWith({ state: 'disabled' });
 	});
+	it('snapshots proxied compile profiles before asset loading and sends cloneable values', async () => {
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const compileProfile = new Proxy(
+			{
+				cppVersion: 'CPP20',
+				cVersion: 'C11',
+				sourceLanguage: 'CPP' as 'CPP' | 'C',
+				compileArgs: new Proxy(
+					['-DNAME="hello world"', '-I', '/workspace/include path'],
+					{}
+				)
+			},
+			{}
+		);
+		class CloningWorker extends mockState.FakeWorker {
+			postMessage(message: any, transfer: Transferable[] = []) {
+				super.postMessage(structuredClone(message), transfer);
+			}
+		}
+		const loader = vi.fn(async ({ asset }: { asset: string }) => {
+			await pending;
+			return asset === 'clangd.js' ? jsBytes : deliveryBytes;
+		});
+		const starting = getCppLanguageServer({
+			cpp: { baseUrl: 'https://assets.example.com/proxied-profile/', loader },
+			compileProfile,
+			createWorker: () => new CloningWorker() as unknown as Worker
+		});
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+		compileProfile.cppVersion = 'CPP98';
+		compileProfile.cVersion = 'C23';
+		compileProfile.sourceLanguage = 'C';
+		compileProfile.compileArgs[0] = '-DCHANGED=1';
+		compileProfile.compileArgs.push('-Werror');
+		compileProfile.compileArgs = new Proxy(['-DREPLACED=1'], {});
+		release();
+		const handle = await starting;
+		expect(mockState.workers[0].messages[0].compileProfile).toEqual({
+			cppVersion: 'CPP20',
+			cVersion: 'C11',
+			sourceLanguage: 'CPP',
+			compileArgs: ['-DNAME="hello world"', '-I', '/workspace/include path']
+		});
+		handle.dispose();
+	});
 
 	it('preloads clangd assets through the configured loader before worker init', async () => {
 		const jsBytes = new TextEncoder().encode('export default async () => ({})');

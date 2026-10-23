@@ -173,6 +173,15 @@ async function createServer(
 	debug = false,
 	hostOptions?: ClangdLanguageServerOptions
 ) {
+	// Reactive framework values may be proxies, and callers can edit them while
+	// assets load. Snapshot only the public fields into cloneable worker data.
+	const profile = hostOptions?.compileProfile;
+	const compileProfile: ClangdCompileProfile | undefined = profile && {
+		cppVersion: profile.cppVersion,
+		cVersion: profile.cVersion,
+		sourceLanguage: profile.sourceLanguage,
+		compileArgs: profile.compileArgs ? [...profile.compileArgs] : undefined
+	};
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
 	let preloaded: Awaited<ReturnType<typeof preloadClangdAssets>>;
@@ -256,7 +265,7 @@ async function createServer(
 							type: 'init',
 							baseUrl: assetConfig.baseUrl,
 							...(debug ? { debug } : {}),
-							compileProfile: hostOptions?.compileProfile,
+							compileProfile,
 							assets: preloaded.assets
 						},
 						preloaded.transfer
