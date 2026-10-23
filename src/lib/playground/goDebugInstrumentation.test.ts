@@ -15,7 +15,7 @@ func add(left int, right int) int {
 }`);
 
 		expect(output).toContain('import (');
-		expect(output).toContain('\t"fmt"');
+		expect(output).toContain('import "fmt"');
 		expect(output).toContain('__wasm_idle_debug_json "encoding/json"');
 		expect(output).toContain('__wasm_idle_debug_js "syscall/js"');
 		expect(output).toContain('__wasmIdleDebugEnter("add", 5)');
@@ -23,6 +23,25 @@ func add(left int, right int) int {
 		expect(output).toContain('__wasmIdleDebugLine(7)');
 		expect(output).toContain('__wasmIdleDebugLine(8)');
 		expect(output).not.toMatch(/__wasmIdleDebugEnter\("__wasmIdleDebug/);
+	});
+
+	it.each([
+		'import ("fmt")',
+		'import (\n\t"fmt")',
+		'import (f "fmt")',
+		'import "fmt"\nimport "strings"',
+		'import ("fmt"; "strings") // user imports'
+	])('preserves legal import declarations: %s', (imports) => {
+		const output = instrumentGoDebugSource(
+			`package main\n${imports}\nfunc main() {\n\tprintln("hello")\n}`
+		);
+		expect(output).toContain(`${imports}\nfunc main()`);
+		expect(output.indexOf('__wasm_idle_debug_json "encoding/json"')).toBeLessThan(
+			output.indexOf(imports)
+		);
+		expect(output.indexOf('type __wasmIdleDebugFrame')).toBeGreaterThan(
+			output.indexOf('func main()')
+		);
 	});
 
 	it('creates an import block when the original file has no imports', () => {
