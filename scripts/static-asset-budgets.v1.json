@@ -24,6 +24,7 @@
 		"wasm-brainfuck": { "maxBytes": 50000, "maxFiles": 3 },
 		"wasm-c3": { "maxBytes": 40000000, "maxFiles": 4, "optional": true },
 		"wasm-clojurescript": { "maxBytes": 1500000, "maxFiles": 8 },
+		"wasm-cobol-lsp": { "maxBytes": 4000000, "maxFiles": 8, "optional": true },
 		"wasm-cobol": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-v": { "maxBytes": 4400000, "maxFiles": 8 },
 		"wasm-d": { "maxBytes": 18000000, "maxFiles": 20 },

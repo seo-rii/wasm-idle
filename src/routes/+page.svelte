@@ -454,6 +454,17 @@
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
+	const cobolLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'cobol');
+	const cobolLspBaseUrl = $derived(
+		cobolLspEnabled ? resolveApplicationAsset('wasm-cobol-lsp/') : undefined
+	);
+	const cobolLspWorkspaceFiles = $derived.by(() =>
+		cobolLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: undefined
+	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
@@ -4205,6 +4216,9 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{cobolLspEnabled}
+							{cobolLspBaseUrl}
+							{cobolLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
 							{prologLspEnabled}

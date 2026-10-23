@@ -93,7 +93,14 @@ const mockState = vi.hoisted(() => {
 
 vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageReader: mockState.MockReader,
-	BrowserMessageWriter: mockState.MockWriter
+	BrowserMessageWriter: mockState.MockWriter,
+	ReadableStreamMessageReader: mockState.MockReader,
+	WriteableStreamMessageWriter: mockState.MockWriter,
+	Emitter: class {
+		event = () => ({ dispose() {} });
+		fire() {}
+		dispose() {}
+	}
 }));
 
 const rubyRuntimeMocks = vi.hoisted(() => ({

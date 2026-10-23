@@ -429,3 +429,5 @@ export type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerTransport
 } from './types.js';
+
+export { getCobolLanguageServer, type CobolLanguageServerOptions } from './cobol/index.js';

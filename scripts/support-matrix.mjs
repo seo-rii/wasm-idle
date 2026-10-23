@@ -924,7 +924,7 @@ export const supportMatrixRows = [
 		ids: ['COBOL'],
 		runtime: 'GnuCOBOL 3.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'SuperBOL OSS LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

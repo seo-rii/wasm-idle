@@ -31,6 +31,7 @@ export type RuntimeLspCapability =
 	| 'haskell'
 	| 'fortran'
 	| 'sql'
+	| 'cobol'
 	| 'prolog'
 	| 'ruby'
 	| 'r'
@@ -389,6 +390,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	COBOL: {
 		label: 'COBOL',
 		editorLanguage: 'cobol',
+		runtimeLspCapability: 'cobol',
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},

@@ -145,6 +145,11 @@
 			"import": "./dist/sql/index.js",
 			"default": "./dist/sql/index.js"
 		},
+		"./cobol": {
+			"types": "./dist/cobol/index.d.ts",
+			"import": "./dist/cobol/index.js",
+			"default": "./dist/cobol/index.js"
+		},
 		"./graphql": {
 			"types": "./dist/graphql/index.d.ts",
 			"import": "./dist/graphql/index.js",

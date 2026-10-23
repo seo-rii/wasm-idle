@@ -45,3 +45,6 @@ static/wasm-lfortran/
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
 /static/container-app.preparing-*/
+
+# Original SuperBOL OSS JavaScript and dialect data are mirrored from pinned assets.
+/static/wasm-cobol-lsp/

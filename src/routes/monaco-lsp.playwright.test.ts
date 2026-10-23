@@ -2,9 +2,13 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
-import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
+import {
+	waitForEditorWorkspace,
+	waitForSelectedEditorModel
+} from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { cobolFixtureFiles } from '../../packages/lsp/test/fixtures/cobol-protocol.js';
 
 import {
 	runBrowserPreparationScripts,
@@ -32,6 +36,7 @@ interface LspBrowserCase {
 	expectDiagnostics?: boolean;
 	validSource?: string;
 	errorLine?: number;
+	workspaceFiles?: Array<{ path: string; content: string }>;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	expectedRequestPathnames?: string[];
@@ -260,6 +265,25 @@ const lspBrowserCases: LspBrowserCase[] = [
 		requireSha256RequestPins: true,
 		allowAdditionalRequestPathnames: true,
 		expectedRequestSha256Pins: rustExecutableStoragePins
+	},
+	{
+		language: 'COBOL',
+		label: 'COBOL',
+		fileName: 'main.cob',
+		source: cobolFixtureFiles['main.cob'].replace('DISPLAY GREETING.', 'DISPLAY "BROKEN.'),
+		validSource: cobolFixtureFiles['main.cob'],
+		errorLine: 8,
+		workspaceFiles: Object.entries(cobolFixtureFiles)
+			.filter(([path]) => path !== 'main.cob')
+			.map(([path, content]) => ({ path, content })),
+		aliases: ['cob', 'cbl', 'superbol'],
+		statusKey: 'cobol',
+		assertNoPreEnableRequests: ['/wasm-cobol-lsp/'],
+		expectedResponses: [
+			'/wasm-cobol-lsp/host.mjs',
+			'/wasm-cobol-lsp/superbol-browser.mjs.gz.bin',
+			'/wasm-cobol-lsp/gnucobol-config.json.gz.bin'
+		]
 	},
 	{
 		language: 'GO',
@@ -519,7 +543,17 @@ const lspBrowserCases: LspBrowserCase[] = [
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
-	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
+	'runtime-small': [
+		'COBOL',
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'GO',
+		'GLEAM',
+		'PASCAL',
+		'LUA',
+		'PROLOG',
+		'RUBY'
+	],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	'runtime-extra': [
 		'OBJC',
@@ -558,7 +592,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:cobol-lsp|dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -592,6 +626,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	HASKELL: 'haskell',
 	FORTRAN: 'fortran',
 	SQLITE: 'sql',
+	COBOL: 'cobol',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
 };
@@ -1132,6 +1167,21 @@ async function runLspCase(
 
 	await waitForPreparedPage(page, browserUrl);
 	await selectLanguage(page, testCase);
+	if (testCase.workspaceFiles) {
+		const configured = await page.evaluate(
+			async ({ files, path, content }) => {
+				const api = Reflect.get(globalThis, '__wasmIdleDebug');
+				return await api.setWorkspaceFiles([...files, { path, content }], path);
+			},
+			{
+				files: testCase.workspaceFiles,
+				path: testCase.fileName,
+				content: testCase.validSource || testCase.source
+			}
+		);
+		expect(configured).toBe(true);
+		await waitForSelectedEditorModel(page, testCase.language, testCase.fileName);
+	}
 	if (testCase.validSource) await replaceEditorSource(page, testCase.validSource);
 	await page
 		.waitForFunction(
@@ -1188,7 +1238,8 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
@@ -1232,7 +1283,8 @@ async function runLspCase(
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
 	if (testCase.validSource) {
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
 		const markers = await page.evaluate(() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
 			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
@@ -1251,7 +1303,19 @@ async function runLspCase(
 			)
 		).toBe(false);
 		await replaceEditorSource(page, testCase.validSource);
-		await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd')
+			await waitForClangdDiagnosticsForCurrentVersion(page);
+		else {
+			await page.waitForFunction(() => {
+				const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+				const model = hooks.__wasmIdleMonacoEditor?.getModel?.();
+				return (
+					model &&
+					hooks.__wasmIdleMonacoApi?.editor.getModelMarkers({ resource: model.uri })
+						.length === 0
+				);
+			});
+		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
@@ -1474,6 +1538,12 @@ describe('Monaco LSP browser integration', () => {
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (
+					!reuseProvidedBrowserUrl &&
+					cases.some((testCase) => testCase.language === 'COBOL')
+				) {
+					await runBrowserPreparationScripts(['sync:cobol-lsp']);
+				}
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 					await runBrowserPreparationScripts([
 						'build:preview',

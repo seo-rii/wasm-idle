@@ -1,0 +1,219 @@
+{
+	"format": "wasm-idle-cobol-lsp-source-v1",
+	"version": "0.3.0",
+	"revision": "bf5491727e140334a1ec437ff1a3c3363f7bbe4e",
+	"release": {
+		"url": "https://open-vsx.org/api/OCamlPro/SuperBOL/0.3.0/file/OCamlPro.SuperBOL-0.3.0.vsix",
+		"bytes": 26463208,
+		"sha256": "05e5e038b8ee11dc75730aae8e792847101305e2a4e9b1d5d0b44ffb65d8d80d"
+	},
+	"serverPath": "extension/_dist/superbol-free.js",
+	"server": {
+		"bytes": 10864987,
+		"sha256": "b86ba24a074bd555af024bd583dea81ad26703c63900ed0fd4f54a91fe96ba8a"
+	},
+	"license": {
+		"bytes": 37334,
+		"sha256": "fa20de4e8191e30f5e80d8eb148ba45327924e8cc29211cf9d1441d1fdf9677b"
+	},
+	"configurations": {
+		"extension/gnucobol-config/acu-strict.conf": {
+			"bytes": 9854,
+			"sha256": "4322ebf6b0689e8e225246b7811da9257c9c6117669326905d7b08616c745deb"
+		},
+		"extension/gnucobol-config/acu.conf": {
+			"bytes": 1139,
+			"sha256": "92447a47ec7b231a05167c5b2e0f0dccb47ec71e78cf1fb99250cff00fb75870"
+		},
+		"extension/gnucobol-config/acu.words": {
+			"bytes": 21985,
+			"sha256": "b140978b10640938dbce45bcd22080708839f983dac20c77891eca662cd903ce"
+		},
+		"extension/gnucobol-config/alternate.ttbl": {
+			"bytes": 1834,
+			"sha256": "682cc87ebb78bae01b8e292017e4d6e7638910c38fa1a1985d52c571501af6b0"
+		},
+		"extension/gnucobol-config/bs2000-strict.conf": {
+			"bytes": 9683,
+			"sha256": "469f5152ed2c595369b42d2757bb32786edceabdeb76dc26375b467f8769e008"
+		},
+		"extension/gnucobol-config/bs2000.conf": {
+			"bytes": 1146,
+			"sha256": "69a5052615d17da4c34059aefea25a2823fab940c89d13abd8146105b714a926"
+		},
+		"extension/gnucobol-config/bs2000.words": {
+			"bytes": 14787,
+			"sha256": "beccc4b0fd2832852c765ea360f5b620a32620d40749ac05dcf10e0267c760be"
+		},
+		"extension/gnucobol-config/cobol2002.conf": {
+			"bytes": 9413,
+			"sha256": "345f41a5465ba2b10860a35b328f2140d2ba6c320b15b57b5947de45dad520e4"
+		},
+		"extension/gnucobol-config/cobol2002.words": {
+			"bytes": 13522,
+			"sha256": "468115aea27fb01076fbf39014c0f2125f20ab19b144c96de1272677c05cb910"
+		},
+		"extension/gnucobol-config/cobol2014.conf": {
+			"bytes": 9131,
+			"sha256": "3ac4b106fa29e7bc1ae1221388072dace6575d0fe4ea922f80a320d5f4dd130d"
+		},
+		"extension/gnucobol-config/cobol2014.words": {
+			"bytes": 14058,
+			"sha256": "97d1724136479f6175edcc54e253d1d5542c0b7fafcab7b0f8671d2385e4d6bd"
+		},
+		"extension/gnucobol-config/cobol85.conf": {
+			"bytes": 9523,
+			"sha256": "1256a388c7f2dc8c02b550fd1b742f6ac5f7c0abd94aa52db0ea530ee3410b46"
+		},
+		"extension/gnucobol-config/cobol85.words": {
+			"bytes": 9990,
+			"sha256": "88178a1a3118a47818128b7ec3ee1ecdf2e560ba8f7b72c559f4a2be5355ac1b"
+		},
+		"extension/gnucobol-config/default.conf": {
+			"bytes": 10536,
+			"sha256": "bfc395411e3b5a4a9d288f74d96687ed561e840913e76b90426531f5924bec31"
+		},
+		"extension/gnucobol-config/default.ttbl": {
+			"bytes": 3663,
+			"sha256": "2df73339eed67eb7a5f525f35f1ce68aad00f404767385b42200b26c76c697ab"
+		},
+		"extension/gnucobol-config/ebcdic500_ascii7bit.ttbl": {
+			"bytes": 3698,
+			"sha256": "a866e5419438c724f3021489307886f992624fa90212ead136b6090939e5393e"
+		},
+		"extension/gnucobol-config/ebcdic500_ascii8bit.ttbl": {
+			"bytes": 2357,
+			"sha256": "9762266eda54ede37d4267c176b259d107ba3db26e334f030ff7094eab811f79"
+		},
+		"extension/gnucobol-config/ebcdic500_latin1.ttbl": {
+			"bytes": 2393,
+			"sha256": "599f257c8635510683017a52dad3f02999f05b5dd31955c819a71a61045394f2"
+		},
+		"extension/gnucobol-config/gcos-strict.conf": {
+			"bytes": 9290,
+			"sha256": "87a967369de13d5b86bec33d2cc89a2d400d46668104b17a19b13ceaf4a74024"
+		},
+		"extension/gnucobol-config/gcos.conf": {
+			"bytes": 1178,
+			"sha256": "09608acbd485958b195d3646984284f1e12f8c89b464dfca1fc75789ffebf80b"
+		},
+		"extension/gnucobol-config/gcos.words": {
+			"bytes": 13641,
+			"sha256": "bcc7b5f28092cdf5e0e7a032bf9f042fe85f3852cde6a11500f8813cb9fa80a2"
+		},
+		"extension/gnucobol-config/ibm-strict.conf": {
+			"bytes": 9224,
+			"sha256": "e89839ac2e84d8c8d6884c34402fd189c6588c8d2dfc6af77e7b5decf030e616"
+		},
+		"extension/gnucobol-config/ibm.conf": {
+			"bytes": 1137,
+			"sha256": "9220624ee67056073268e58bd16fdf819afd1e17f249c4603c06270717a3995c"
+		},
+		"extension/gnucobol-config/ibm.words": {
+			"bytes": 18806,
+			"sha256": "e13017258080c6a41f596724aec3d4aa6c65082368d3dd94d1bbb6344ab8054d"
+		},
+		"extension/gnucobol-config/lax.conf-inc": {
+			"bytes": 4727,
+			"sha256": "eef95c410d0b0c358b9978bc6d292587144850c4d3f5c919aac4428260c66d74"
+		},
+		"extension/gnucobol-config/mf-strict.conf": {
+			"bytes": 9412,
+			"sha256": "1e70a01f5f46fce250710011e4971bcd5380e90cd7c7c234243704d7e1eb247a"
+		},
+		"extension/gnucobol-config/mf.conf": {
+			"bytes": 1143,
+			"sha256": "71c1a63d4d3821a1b43f563c7801b187510e506f0de7209f86bdd4c468acf3ff"
+		},
+		"extension/gnucobol-config/mf.words": {
+			"bytes": 19858,
+			"sha256": "42fdb9a89aa9464b69deb831e1bd4c0e575f70f8cfcc96fc3fe63b580a4c6f8a"
+		},
+		"extension/gnucobol-config/mvs-strict.conf": {
+			"bytes": 9436,
+			"sha256": "bfca6b5f41a5b62a9fe75121fb30a1481ea45ff763b46964e22600ee05205b17"
+		},
+		"extension/gnucobol-config/mvs.conf": {
+			"bytes": 1140,
+			"sha256": "9e83b7e75e2af00b4e154b39f66584b968250c1fd22147ff341f35ece051b6ce"
+		},
+		"extension/gnucobol-config/mvs.words": {
+			"bytes": 13546,
+			"sha256": "1754e0627579c2d5dee1274d731b544f6824295ac111bd9c0563228e8bd9fba4"
+		},
+		"extension/gnucobol-config/realia-strict.conf": {
+			"bytes": 9889,
+			"sha256": "bcd9f267f560f344791d3eabd46d084e47520be81d580a999e581aefabc94510"
+		},
+		"extension/gnucobol-config/realia.conf": {
+			"bytes": 1085,
+			"sha256": "30dd72751fdb35c6d305f0a274012d5fd21f5fe53b4f5937886e9d2dc17cc79c"
+		},
+		"extension/gnucobol-config/realia.words": {
+			"bytes": 13306,
+			"sha256": "dbdb13d9fb39d4603934fecac33ed87288705871e9b14e065acb75a06d168e10"
+		},
+		"extension/gnucobol-config/rm-strict.conf": {
+			"bytes": 10315,
+			"sha256": "6b30c72eb5b699eb65325987f89694ba58d24e2d30ddf428d9f14032ce29ed66"
+		},
+		"extension/gnucobol-config/rm.conf": {
+			"bytes": 1134,
+			"sha256": "40576a422ae2e25fdd5e4d5647766119dfb3a06c207c684970083fb274c5b771"
+		},
+		"extension/gnucobol-config/rm.words": {
+			"bytes": 11342,
+			"sha256": "71986d9838d38f6849d67e21c7e30224fd9049a444bd572c8d1d7079268be37b"
+		},
+		"extension/gnucobol-config/xopen.conf": {
+			"bytes": 11753,
+			"sha256": "08642e1fd4a0914ffb5831ac7d0aeaf5ba7dadf29ba8a93123dc21fd23786a21"
+		}
+	},
+	"gnucobol": {
+		"revision": "5a8666888fada0fdbbc904269ef809629fd93fbb",
+		"license": {
+			"url": "https://raw.githubusercontent.com/OCamlPro/gnucobol/5a8666888fada0fdbbc904269ef809629fd93fbb/COPYING",
+			"bytes": 35149,
+			"sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+		}
+	},
+	"assets": {
+		"superbol-free.js.gz.bin": {
+			"bytes": 1741230,
+			"sha256": "2bc6427a224354072706209fc9848c0ebcfb5d3843aa097890ae98c0ca5d385b"
+		},
+		"superbol-browser.mjs.gz.bin": {
+			"bytes": 1741228,
+			"sha256": "41929889a8ab2f8cfe1136c493d8e367587a8c1fea8222842a751601d1cffdbf"
+		},
+		"gnucobol-config.json.gz.bin": {
+			"bytes": 48080,
+			"sha256": "e2ff4568ddbfbb5ac903b30428d7ec963ae0659c2f199acbf0f54fb34e90070f"
+		},
+		"host.mjs": {
+			"bytes": 5639,
+			"sha256": "ae521902d96498e6a2dcddf20dd523fe39a93eea9aed4363037911685edf3924"
+		},
+		"LICENSE.superbol.md": {
+			"bytes": 37334,
+			"sha256": "fa20de4e8191e30f5e80d8eb148ba45327924e8cc29211cf9d1441d1fdf9677b"
+		},
+		"LICENSE.gnucobol.txt": {
+			"bytes": 35149,
+			"sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+		},
+		"SOURCE.txt": {
+			"bytes": 958,
+			"sha256": "9cabcb637a6d6b2bcfce333d7d3600595d3cf003fe2fa66b11d25df3dd2e8b24"
+		}
+	},
+	"configuration": {
+		"bytes": 346241,
+		"sha256": "356100164793fdb3e7a88219515a639fa99b0c739460e7ba2ed0c32d4a19f0f3"
+	},
+	"browserServer": {
+		"bytes": 10864986,
+		"sha256": "af47c8a22be61fd9cc462cdaf7f07cc4aa98faaff84f68e00e331a9a842119dc"
+	}
+}

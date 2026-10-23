@@ -2340,6 +2340,7 @@
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let cobolLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2416,6 +2417,9 @@
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
 		duckDbLspModuleUrl?: string;
+		cobolLspEnabled?: boolean;
+		cobolLspBaseUrl?: string;
+		cobolLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
 		prologLspEnabled?: boolean;
@@ -2513,6 +2517,9 @@
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
 		duckDbLspModuleUrl,
+		cobolLspEnabled = false,
+		cobolLspBaseUrl,
+		cobolLspWorkspaceFiles,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
 		prologLspEnabled = false,
@@ -2673,6 +2680,8 @@
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
+			cobolLspEnabled ? cobolLspBaseUrl || '' : '',
+			cobolLspEnabled ? JSON.stringify(cobolLspWorkspaceFiles) : '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
@@ -2814,6 +2823,10 @@
 			case 'sql':
 				label = 'SQL LSP';
 				status = sqlLspStatus;
+				break;
+			case 'cobol':
+				label = 'COBOL LSP';
+				status = cobolLspStatus;
 				break;
 			case 'prolog':
 				label = 'Prolog LSP';
@@ -3375,6 +3388,23 @@
 			}
 		},
 		{
+			languages: ['cobol', 'cob', 'cbl'],
+			isEnabled: () => cobolLspEnabled && !!cobolLspBaseUrl,
+			setStatus: (status) => (cobolLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getCobolLanguageServer } = await import('@wasm-idle/lsp/cobol');
+				return await getCobolLanguageServer({
+					currentUrl,
+					signal,
+					cobol: {
+						baseUrl: cobolLspBaseUrl,
+						workspaceFiles: $state.snapshot(cobolLspWorkspaceFiles)
+					},
+					onStatus: (status) => (cobolLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3617,6 +3647,7 @@
 			graphql: graphqlLspStatus,
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
+			cobol: cobolLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,

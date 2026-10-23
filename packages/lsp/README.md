@@ -63,3 +63,32 @@ import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
 
 `@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
 available, including their `create*WorkerService` exports for custom worker hosts.
+
+## COBOL (SuperBOL Studio OSS)
+
+`@wasm-idle/lsp/cobol` runs the original SuperBOL Studio OSS 0.3.0 parser and LSP handlers in a
+browser worker. Prepare/deploy `static/wasm-cobol-lsp/` with `pnpm run sync:cobol-lsp`.
+
+```ts
+import { getCobolLanguageServer } from '@wasm-idle/lsp/cobol';
+
+const cobol = await getCobolLanguageServer({
+	cobol: {
+		baseUrl: 'https://cdn.example.com/wasm-cobol-lsp/',
+		workspaceFiles: [{ path: 'greeting.cpy', content: '       01 GREETING PIC X(5).\n' }]
+	}
+});
+// Connect cobol.transport to an LSP client rooted at file:///workspace.
+cobol.dispose();
+```
+
+The provider aliases are `cobol`, `cob` and `cbl`. An explicit `rootUrl` resolves `wasm-cobol-lsp/`
+under that root. Cross-origin isolation and `SharedArrayBuffer` are required. Workspace files
+are read-only snapshots; recreate the provider when closed files change.
+
+The default dialect stays GnuCOBOL-compatible. Upstream 0.3.0 publishes diagnostics for an
+explicit `cobol85` project (`superbol.toml`); its other dialects retain upstream's diagnostic
+restriction. Completion, hover, copybook navigation, references, paragraph rename and symbols
+use the original handlers. This release's optional persistent cache prevents reliable graceful
+protocol shutdown; call `dispose()` to terminate the worker. See the [platform, license and
+validation notes](../../docs/performance/cobol-lsp.md).
