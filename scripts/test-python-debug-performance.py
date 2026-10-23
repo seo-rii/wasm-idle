@@ -94,7 +94,7 @@ class DebugTests(unittest.TestCase):
         self.ns['__wasm_idle_debug_trace'](self.frame(4), 'line', None)
         self.ns['__wasm_idle_debug_trace'](self.frame(5), 'line', None)
         self.assertEqual(self.events, [(3, 'breakpoint')])
-        self.assertEqual(len(calls), 2)  # pause depth and one resume-skip comparison
+        self.assertEqual(len(calls), 1)  # Only an actual pause needs the stack depth.
 
     def test_real_trace_preserves_entry_next_step_and_step_out(self):
         self.ns['__wasm_idle_debug_pause_on_entry'] = True
@@ -108,6 +108,32 @@ class DebugTests(unittest.TestCase):
             sys.settrace(None)
         self.assertEqual(scope['value'], 7)
         self.assertEqual(self.events, [(1, 'entry'), (3, 'nextLine'), (2, 'step'), (4, 'stepOut')])
+
+    def test_continue_revisits_breakpoints_on_same_line_loop_iterations(self):
+        self.lines, self.version = [2], 1
+        scope = {}
+        try:
+            sys.settrace(self.ns['__wasm_idle_debug_trace'])
+            exec(compile('value = 0\nwhile value < 3: value += 1\nfinished = value\n', 'user.py', 'exec'), scope)
+        finally:
+            sys.settrace(None)
+        self.assertEqual(scope['finished'], 3)
+        self.assertEqual(self.events, [(2, 'breakpoint')] * 3)
+
+    def test_step_commands_stop_on_later_iterations_of_the_same_line(self):
+        for command, reason in [(2, 'step'), (3, 'nextLine')]:
+            with self.subTest(command=command):
+                self.setUp()
+                self.ns['__wasm_idle_debug_pause_on_entry'] = True
+                self.commands = iter([command] * 4 + [1])
+                scope = {}
+                try:
+                    sys.settrace(self.ns['__wasm_idle_debug_trace'])
+                    exec(compile('value = 0\nwhile value < 3: value += 1\nfinished = value\n', 'user.py', 'exec'), scope)
+                finally:
+                    sys.settrace(None)
+                self.assertEqual(scope['finished'], 3)
+                self.assertEqual(self.events, [(1, 'entry'), (2, reason), (2, reason), (2, reason), (3, reason)])
 
     def test_large_string_and_bytes_are_sliced_before_repr(self):
         for value in ('한' * 1000000, b'x' * 1000000, bytearray(1000000)):
