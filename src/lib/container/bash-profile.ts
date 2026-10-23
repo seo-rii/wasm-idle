@@ -29,31 +29,43 @@ export const BASH_SYSROOT = '/usr/share/wasm-sysroot';
 export const C_SYSROOT = '/usr/share/wasm-sysroot-c';
 const TOOLCHAIN = '/opt/toolchains/llvm';
 
-/** Keep the verified runtime bytes while exposing Clang's canonical per-target filename. */
-export function withCanonicalWasiBuiltins(entries: readonly Omit<SnapshotEntry, 'inode'>[]) {
+/** Expose the verified legacy sysroot through the canonical driver's automatic search paths. */
+export function withCanonicalWasiPaths(entries: readonly Omit<SnapshotEntry, 'inode'>[]) {
+	const additions: Omit<SnapshotEntry, 'inode'>[] = [];
+	for (const parent of ['include', 'lib']) {
+		if (
+			entries.some(
+				(entry) => entry.path === `${parent}/wasm32-wasi` && entry.type === 'directory'
+			) &&
+			!entries.some((entry) => entry.path === `${parent}/wasm32-wasip1`)
+		)
+			additions.push({
+				path: `${parent}/wasm32-wasip1`,
+				type: 'symlink',
+				mode: 0o777,
+				target: 'wasm32-wasi'
+			});
+	}
 	const directory = 'lib/clang/22/lib/wasm32-unknown-wasip1';
 	const path = `${directory}/libclang_rt.builtins.a`;
 	if (
-		entries.some((entry) => entry.path === path) ||
-		!entries.some(
+		!entries.some((entry) => entry.path === path) &&
+		entries.some(
 			(entry) =>
 				entry.path === 'lib/clang/22/lib/wasi/libclang_rt.builtins-wasm32.a' &&
 				entry.type === 'file'
 		)
-	)
-		return entries;
-	return [
-		...entries,
-		...(!entries.some((entry) => entry.path === directory)
-			? [{ path: directory, type: 'directory' as const, mode: 0o755 }]
-			: []),
-		{
+	) {
+		if (!entries.some((entry) => entry.path === directory))
+			additions.push({ path: directory, type: 'directory', mode: 0o755 });
+		additions.push({
 			path,
 			type: 'symlink' as const,
 			mode: 0o777,
 			target: '../wasi/libclang_rt.builtins-wasm32.a'
-		}
-	];
+		});
+	}
+	return additions.length ? [...entries, ...additions] : entries;
 }
 
 /** Pinned assets and worker URLs selected by trusted application code. */
@@ -297,7 +309,7 @@ export async function createBashProfile({
 		};
 		signal.throwIfAborted();
 		if (!sysroots.has(profile)) {
-			container.fs.mountReadonly(root, withCanonicalWasiBuiltins(entries));
+			container.fs.mountReadonly(root, withCanonicalWasiPaths(entries));
 			sysroots.set(profile, metadata);
 		}
 		return args;

@@ -50,15 +50,36 @@ export const createClangdCompileFlags = (
 		options.sourceLanguage && cpp !== sourceCpp
 			? (options.compileArgs ?? []).filter((argument) => !incompatibleStandard.test(argument))
 			: (options.compileArgs ?? []);
+	const omitStandardIncludes = compileArgs.includes('-nostdinc');
+	const omitLibraryIncludes =
+		omitStandardIncludes ||
+		compileArgs.includes('-nostdlibinc') ||
+		compileArgs.some(
+			(argument) =>
+				argument === '--sysroot' ||
+				argument.startsWith('--sysroot=') ||
+				argument.startsWith('-isysroot')
+		);
+	const includeResourceDir =
+		omitStandardIncludes || compileArgs.includes('-nobuiltininc')
+			? undefined
+			: options.resourceDir;
+	const systemIncludes = omitLibraryIncludes
+		? includeResourceDir
+			? [`${includeResourceDir.replace(/\/+$/, '')}/include`]
+			: []
+		: clangSystemIncludePaths(
+				compileArgs.includes('-nostdinc++') ? 'C' : language,
+				'/usr',
+				includeResourceDir
+			);
 	return [
 		profile.standardArg,
 		'-x',
 		profile.languageArg,
 		`--target=${CLANG_WASI_DRIVER_TARGET}`,
 		...(options.resourceDir ? ['-resource-dir', options.resourceDir] : []),
-		...clangSystemIncludePaths(language, '/usr', options.resourceDir).map(
-			(path) => `-isystem${path}`
-		),
+		...systemIncludes.map((path) => `-isystem${path}`),
 		...(language === 'OBJC' || language === 'OBJCXX'
 			? [
 					// The execution compiler invokes cc1 directly. Pass the same runtime

@@ -160,6 +160,73 @@ describe('clangd compile profiles', () => {
 			flags.indexOf('-isystem/usr/include/wasm32-wasi')
 		);
 	});
+	it.each([
+		['-nostdinc', []],
+		['-nostdinc++', ['/lib/clang/22/include', '/usr/include/wasm32-wasi', '/usr/include']],
+		[
+			'-nobuiltininc',
+			[
+				'/usr/include/c++/v1',
+				'/usr/include/wasm32-wasi/c++/v1',
+				'/usr/include/wasm32-wasi',
+				'/usr/include'
+			]
+		],
+		['-nostdlibinc', ['/lib/clang/22/include']]
+	] as const)('honors %s without removing explicit user include paths', (suppression, paths) => {
+		const compileArgs = [
+			suppression,
+			'-I',
+			'/workspace/header path',
+			'-isystem',
+			'/custom system'
+		];
+		const flags = createClangdCompileFlags('CPP', {
+			resourceDir: '/lib/clang/22',
+			compileArgs
+		});
+		expect(
+			flags.slice(0, -compileArgs.length).filter((flag) => flag.startsWith('-isystem'))
+		).toEqual(paths.map((path) => `-isystem${path}`));
+		expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
+	});
+	it.each([
+		['--sysroot=/custom root'],
+		['--sysroot', '/custom root'],
+		['-isysroot', '/custom root'],
+		['-isysroot/custom root'],
+		['-isysroot=/custom root']
+	])(
+		'lets the driver resolve user sysroot arguments %j without bundled /usr paths',
+		(...sysrootArgs) => {
+			const compileArgs = [...sysrootArgs, '-I/custom header path'];
+			const flags = createClangdCompileFlags('CPP', {
+				resourceDir: '/lib/clang/22/',
+				compileArgs
+			});
+			expect(flags.filter((flag) => flag.startsWith('-isystem'))).toEqual([
+				'-isystem/lib/clang/22/include'
+			]);
+			expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
+		}
+	);
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'keeps standard include suppression effective for every %s profile',
+		(language) => {
+			for (const compileArgs of [
+				['-nostdinc'],
+				['-nostdlibinc', '-nobuiltininc'],
+				['--sysroot=/custom', '-nobuiltininc']
+			]) {
+				const flags = createClangdCompileFlags(language, {
+					resourceDir: '/lib/clang/22',
+					compileArgs
+				});
+				expect(flags.some((flag) => flag.startsWith('-isystem'))).toBe(false);
+				expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
+			}
+		}
+	);
 	it('maps .mm sources to an Objective-C++ profile with libc++ and the libobjc2 ABI', () => {
 		const configurations = createClangdConfiguration()
 			.split('\n---\n')

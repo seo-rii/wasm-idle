@@ -9,7 +9,7 @@ import {
 import { MemoryFileSystem, type SnapshotEntry } from '@wasm-idle/container';
 import {
 	createBashProfile,
-	withCanonicalWasiBuiltins,
+	withCanonicalWasiPaths,
 	type BashProfileConfiguration
 } from './bash-profile.js';
 
@@ -68,7 +68,7 @@ describe('canonical WASI compiler runtime paths', () => {
 			{ path: legacy, type: 'file', mode: 0o644, data: bytes }
 		];
 		const fs = new MemoryFileSystem();
-		fs.mountReadonly('/toolchain', withCanonicalWasiBuiltins(entries));
+		fs.mountReadonly('/toolchain', withCanonicalWasiPaths(entries));
 		expect(fs.readFile(`/toolchain/${canonical}`)).toEqual(bytes);
 		expect(fs.readFile(`/toolchain/${legacy}`)).toEqual(bytes);
 		expect(() => fs.writeFile(`/toolchain/${canonical}`, Uint8Array.of(9))).toThrow();
@@ -79,9 +79,42 @@ describe('canonical WASI compiler runtime paths', () => {
 			{ path: canonical, type: 'file', mode: 0o644, data: Uint8Array.of(4) },
 			{ path: legacy, type: 'file', mode: 0o644, data: Uint8Array.of(5) }
 		];
-		expect(withCanonicalWasiBuiltins(existing)).toBe(existing);
+		expect(withCanonicalWasiPaths(existing)).toBe(existing);
 		const empty: Omit<SnapshotEntry, 'inode'>[] = [];
-		expect(withCanonicalWasiBuiltins(empty)).toBe(empty);
+		expect(withCanonicalWasiPaths(empty)).toBe(empty);
+	});
+	it('lets the driver find headers and libraries automatically through readonly aliases', () => {
+		const entries: Omit<SnapshotEntry, 'inode'>[] = [
+			...['include', 'include/wasm32-wasi', 'lib', 'lib/wasm32-wasi'].map(directory),
+			{
+				path: 'include/wasm32-wasi/stdio.h',
+				type: 'file',
+				mode: 0o644,
+				data: Uint8Array.of(1)
+			},
+			{ path: 'lib/wasm32-wasi/libc.a', type: 'file', mode: 0o644, data: Uint8Array.of(2) }
+		];
+		const paths = withCanonicalWasiPaths(entries);
+		const fs = new MemoryFileSystem();
+		fs.mountReadonly('/toolchain', paths);
+		expect(fs.readFile('/toolchain/include/wasm32-wasip1/stdio.h')).toEqual(Uint8Array.of(1));
+		expect(fs.readFile('/toolchain/lib/wasm32-wasip1/libc.a')).toEqual(Uint8Array.of(2));
+		expect(() =>
+			fs.writeFile('/toolchain/include/wasm32-wasip1/stdio.h', Uint8Array.of(3))
+		).toThrow();
+		expect(withCanonicalWasiPaths(paths)).toBe(paths);
+		expect(entries).toHaveLength(6);
+	});
+	it('does not replace canonical include or library trees provided by the producer', () => {
+		const entries = [
+			'include',
+			'include/wasm32-wasi',
+			'include/wasm32-wasip1',
+			'lib',
+			'lib/wasm32-wasi',
+			'lib/wasm32-wasip1'
+		].map(directory);
+		expect(withCanonicalWasiPaths(entries)).toBe(entries);
 	});
 });
 
