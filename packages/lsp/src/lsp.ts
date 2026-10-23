@@ -44,6 +44,8 @@ export interface WorkerLanguageService {
 	name: string;
 	version?: string;
 	diagnosticDelay?: number;
+	/** Serializes expensive diagnostics and coalesces waiting versions per document. */
+	diagnosticScheduling?: 'latest-only';
 	capabilities?: Record<string, unknown>;
 	initialize?: (options: unknown, context: LspDocumentContext) => void | Promise<void>;
 	diagnostics?: (
@@ -213,68 +215,77 @@ export function startWorkerLanguageServer(
 		}
 	};
 
+	const diagnosticTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	const pendingDiagnostics = new Map<string, { document: LspDocument; version: number }>();
+	let diagnosticsActive = false;
+	const isCurrentDiagnostic = (document: LspDocument, version: number) =>
+		!shutdown &&
+		diagnosticVersions.get(document.uri) === version &&
+		documents.get(document.uri) === document;
+
+	const runDiagnostics = async (document: LspDocument, version: number) => {
+		if (!isCurrentDiagnostic(document, version)) return;
+		try {
+			const diagnostics = await service.diagnostics?.(document, context);
+			if (isCurrentDiagnostic(document, version))
+				publishDiagnostics(document.uri, diagnostics || []);
+		} catch (error) {
+			if (debug)
+				console.error(`[wasm-idle:lsp-worker:${service.name}] diagnostics failed`, error);
+			if (!isCurrentDiagnostic(document, version)) return;
+			publishDiagnostics(document.uri, [
+				{
+					range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+					severity: 1,
+					source: service.name,
+					message: error instanceof Error ? error.message : String(error)
+				}
+			]);
+		}
+	};
+
+	const drainDiagnostics = async () => {
+		if (diagnosticsActive) return;
+		diagnosticsActive = true;
+		try {
+			while (!shutdown && pendingDiagnostics.size) {
+				const [uri, next] = pendingDiagnostics.entries().next().value!;
+				pendingDiagnostics.delete(uri);
+				await runDiagnostics(next.document, next.version);
+			}
+		} finally {
+			diagnosticsActive = false;
+		}
+	};
+
+	const clearDiagnosticWork = () => {
+		for (const timer of diagnosticTimers.values()) clearTimeout(timer);
+		diagnosticTimers.clear();
+		pendingDiagnostics.clear();
+	};
+
 	const scheduleDiagnostics = (document: LspDocument) => {
-		if (!service.diagnostics) return;
+		if (!service.diagnostics || shutdown) return;
 		const version = (diagnosticVersions.get(document.uri) || 0) + 1;
 		diagnosticVersions.set(document.uri, version);
-		if (debug) {
-			console.debug(
-				`[wasm-idle:lsp-worker:${service.name}] schedule diagnostics uri=${document.uri} version=${document.version} bytes=${document.text.length}`
-			);
-		}
-		setTimeout(
-			async () => {
-				try {
-					if (
-						diagnosticVersions.get(document.uri) !== version ||
-						documents.get(document.uri)?.version !== document.version
-					) {
-						if (debug) {
-							console.debug(
-								`[wasm-idle:lsp-worker:${service.name}] diagnostics skipped stale uri=${document.uri} version=${document.version}`
-							);
-						}
-						return;
+		clearTimeout(diagnosticTimers.get(document.uri));
+		// A newer edit must debounce before replacing work whose timer already fired.
+		pendingDiagnostics.delete(document.uri);
+		diagnosticTimers.set(
+			document.uri,
+			setTimeout(
+				() => {
+					diagnosticTimers.delete(document.uri);
+					if (!isCurrentDiagnostic(document, version)) return;
+					if (service.diagnosticScheduling === 'latest-only') {
+						pendingDiagnostics.set(document.uri, { document, version });
+						void drainDiagnostics();
+					} else {
+						void runDiagnostics(document, version);
 					}
-					if (debug) {
-						console.debug(
-							`[wasm-idle:lsp-worker:${service.name}] diagnostics start uri=${document.uri} version=${document.version}`
-						);
-					}
-					const diagnostics = await service.diagnostics?.(document, context);
-					if (debug) {
-						console.debug(
-							`[wasm-idle:lsp-worker:${service.name}] diagnostics done uri=${document.uri} version=${document.version} count=${diagnostics?.length || 0}`
-						);
-					}
-					if (
-						diagnosticVersions.get(document.uri) === version &&
-						documents.get(document.uri)?.version === document.version
-					) {
-						publishDiagnostics(document.uri, diagnostics || []);
-					}
-				} catch (error) {
-					if (debug) {
-						console.error(
-							`[wasm-idle:lsp-worker:${service.name}] diagnostics failed`,
-							error
-						);
-					}
-					if (diagnosticVersions.get(document.uri) !== version) return;
-					publishDiagnostics(document.uri, [
-						{
-							range: {
-								start: { line: 0, character: 0 },
-								end: { line: 0, character: 1 }
-							},
-							severity: 1,
-							source: service.name,
-							message: error instanceof Error ? error.message : String(error)
-						}
-					]);
-				}
-			},
-			Math.max(0, service.diagnosticDelay || 0)
+				},
+				Math.max(0, service.diagnosticDelay || 0)
+			)
 		);
 	};
 
@@ -306,6 +317,7 @@ export function startWorkerLanguageServer(
 					return;
 				case 'shutdown':
 					shutdown = true;
+					clearDiagnosticWork();
 					respond(id, null);
 					return;
 			}
@@ -367,9 +379,11 @@ export function startWorkerLanguageServer(
 			case 'initialized':
 				return;
 			case 'exit':
+				clearDiagnosticWork();
 				if (!shutdown) {
 					await service.dispose?.();
 				}
+				shutdown = true;
 				return;
 			case 'textDocument/didOpen': {
 				const textDocument = params.textDocument;
@@ -421,6 +435,9 @@ export function startWorkerLanguageServer(
 				if (!document) return;
 				documents.delete(document.uri);
 				diagnosticVersions.delete(document.uri);
+				clearTimeout(diagnosticTimers.get(document.uri));
+				diagnosticTimers.delete(document.uri);
+				pendingDiagnostics.delete(document.uri);
 				publishDiagnostics(document.uri, []);
 				await service.close?.(document, context);
 			}

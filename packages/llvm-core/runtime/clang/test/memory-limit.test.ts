@@ -75,6 +75,7 @@ describe('native guest Wasm memory ceilings', () => {
 		const invoke = vi.spyOn(Runtime.prototype, 'run').mockResolvedValue(null);
 		const bytes = moduleBytes(2);
 		const runtime = Object.assign(Object.create(ArtifactRuntime.prototype), {
+			mountedWorkspace: new Map(),
 			ready: Promise.resolve(),
 			stdout: vi.fn(),
 			log: false,

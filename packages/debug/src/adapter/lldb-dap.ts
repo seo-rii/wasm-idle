@@ -1,3 +1,12 @@
+import {
+	normalizeDebugSourceBreakpoints,
+	mergeDebugBreakpointLines,
+	assertDebugBreakpointSupport,
+	normalizeDebugSteppingOptions,
+	type DebugEvaluateOptions,
+	type DebugSourceBreakpoint,
+	type DebugSteppingOptions
+} from '@wasm-idle/core';
 import type {
 	DapCapabilities,
 	DapEvent,
@@ -44,6 +53,10 @@ export interface LldbDapAdapterOptions {
 		writeMemory?: boolean;
 		/** Enable watchpoints only for a manifest-qualified LLDB/WAMR pair. */
 		dataBreakpoints?: boolean;
+		conditionalBreakpoints?: boolean;
+		hitConditionalBreakpoints?: boolean;
+		logPoints?: boolean;
+		skipLibraryCode?: boolean;
 	};
 }
 
@@ -339,8 +352,18 @@ function mapCapabilities(
 	return Object.freeze({
 		supportsConfigurationDone: capabilities.supportsConfigurationDoneRequest === true,
 		supportsBreakpoints: true,
-		supportsConditionalBreakpoints: false,
-		supportsLogPoints: false,
+		supportsConditionalBreakpoints:
+			options.featureSupport?.conditionalBreakpoints === true &&
+			capabilities.supportsConditionalBreakpoints === true,
+		supportsLogPoints:
+			options.featureSupport?.logPoints === true && capabilities.supportsLogPoints === true,
+		...(options.featureSupport?.hitConditionalBreakpoints === true &&
+		capabilities.supportsHitConditionalBreakpoints === true
+			? { supportsHitConditionalBreakpoints: true }
+			: {}),
+		...(options.featureSupport?.skipLibraryCode === true
+			? { supportsSkipLibraryCode: true }
+			: {}),
 		supportsContinue: true,
 		supportsPause: true,
 		supportsStepIn: true,
@@ -372,6 +395,7 @@ export class LldbDapAdapter implements DebugAdapter {
 	readonly #breakpointsBySource = new Map<string, ResolvedBreakpoint[]>();
 	readonly #breakpointIdsBySource = new Map<string, Set<number>>();
 	readonly #breakpointRequestVersions = new Map<string, number>();
+	readonly #sourceBreakpointSpecifications = new Map<string, DebugSourceBreakpoint[]>();
 	#capabilities: DebugCapabilities | null = null;
 	#initializeRequest: Promise<DebugCapabilities> | null = null;
 
@@ -430,8 +454,39 @@ export class LldbDapAdapter implements DebugAdapter {
 	}
 
 	async setBreakpoints(source: DebugSource, lines: number[]) {
+		return this.setSourceBreakpoints(
+			source,
+			mergeDebugBreakpointLines(
+				this.#sourceBreakpointSpecifications.get(debugSourceKey(source)) ?? [],
+				validateBreakpointLines(lines)
+			)
+		);
+	}
+
+	async setSteppingOptions(options: DebugSteppingOptions) {
+		const value = normalizeDebugSteppingOptions(options);
 		this.#requireInitialized();
-		const requestedLines = validateBreakpointLines(lines);
+		if (!this.#capabilities?.supportsSkipLibraryCode)
+			throw new UnsupportedDebugOperationError('set stepping options');
+		await this.#session.request('evaluate', {
+			expression: value.skipLibraryCode
+				? '`settings set target.process.thread.step-avoid-regexp ^std::'
+				: '`settings set target.process.thread.step-avoid-regexp ^$',
+			context: 'repl'
+		});
+	}
+
+	async setSourceBreakpoints(source: DebugSource, values: DebugSourceBreakpoint[]) {
+		this.#requireInitialized();
+		const specifications = normalizeDebugSourceBreakpoints(values);
+		assertDebugBreakpointSupport(specifications, {
+			conditionalBreakpoints: this.#capabilities?.supportsConditionalBreakpoints,
+			hitConditionalBreakpoints: this.#capabilities?.supportsHitConditionalBreakpoints,
+			logPoints: this.#capabilities?.supportsLogPoints
+		});
+		const enabled = specifications.filter((value) => value.enabled !== false);
+		this.#sourceBreakpointSpecifications.set(debugSourceKey(source), specifications);
+		const requestedLines = enabled.map((value) => value.line);
 		const requestSource = cloneDebugSource(source);
 		const sourceKey = debugSourceKey(requestSource);
 		const requestVersion = (this.#breakpointRequestVersions.get(sourceKey) ?? 0) + 1;
@@ -440,7 +495,7 @@ export class LldbDapAdapter implements DebugAdapter {
 		try {
 			response = await this.#session.request<unknown>('setBreakpoints', {
 				source: requestSource,
-				breakpoints: requestedLines.map((line) => ({ line })),
+				breakpoints: enabled.map(({ enabled: _enabled, ...value }) => value),
 				lines: requestedLines
 			});
 		} catch (error) {
@@ -771,11 +826,32 @@ export class LldbDapAdapter implements DebugAdapter {
 	}
 
 	async evaluate(expression: string, frameId?: number) {
+		return this.evaluateValue(expression, { frameId });
+	}
+
+	async evaluateValue(expression: string, options: DebugEvaluateOptions = {}) {
 		this.#requireCapability('supportsEvaluate', 'evaluate expressions');
+		assertBoundedNonEmptyString(expression, 'expression');
+		if (
+			!options ||
+			typeof options !== 'object' ||
+			Array.isArray(options) ||
+			Object.keys(options).some((key) => key !== 'frameId' && key !== 'context')
+		)
+			throw new TypeError('Invalid evaluate options.');
+		if (
+			options.context !== undefined &&
+			options.context !== 'watch' &&
+			options.context !== 'hover'
+		)
+			throw new TypeError('evaluate context must be watch or hover.');
+		if (options.context === 'hover')
+			this.#requireCapability('supportsEvaluateForHovers', 'evaluate hover');
+		const frameId = options.frameId;
 		if (frameId !== undefined) assertPositiveSafeInteger(frameId, 'frameId');
 		const response = await this.#session.request<unknown>('evaluate', {
 			expression,
-			context: 'watch',
+			context: options.context ?? 'watch',
 			...(frameId === undefined ? {} : { frameId })
 		});
 		assertDapRecord(response, 'evaluate', 'body');
@@ -1037,6 +1113,7 @@ export class LldbDapAdapter implements DebugAdapter {
 		capability:
 			| 'supportsDataBreakpoints'
 			| 'supportsEvaluate'
+			| 'supportsEvaluateForHovers'
 			| 'supportsReadMemory'
 			| 'supportsWriteMemory',
 		operation: string

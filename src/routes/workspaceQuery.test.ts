@@ -9,6 +9,7 @@ describe('explicit URL workspace inputs', () => {
 		'args',
 		'args64',
 		'rustTargetTriple',
+		'rustOptimizationProfile',
 		'goTarget',
 		'ocamlBackend',
 		'ocamlWasmBinaryenMode'

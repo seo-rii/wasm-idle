@@ -1,4 +1,5 @@
 import { acceptCompiledTeaVmModule, loadStreamingJavaCompiler } from './javaStreaming';
+import { createJavaOutput } from './javaOutput';
 import {
 	createJavaStdinBridge,
 	prepareJavaRuntimeStdinInjection
@@ -28,13 +29,14 @@ let runtimeLoad:
 	| null = null;
 let exceptionDeobfuscator: WebAssembly.Module | null = null;
 let loadedBaseUrl = '';
-let stdoutBuffer = '';
-let stderrBuffer = '';
+let output: ReturnType<typeof createJavaOutput> | null = null;
 let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
 let compiledExceptionFormatter = '';
 let compiledWasm: Uint8Array | null = null;
+let compiledModule: WebAssembly.Module | null = null;
+let acceptsCompiledModule = false;
 let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
@@ -44,27 +46,10 @@ const decoder = new TextDecoder();
 const toInt8Array = (bytes: Uint8Array) =>
 	new Int8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 
-const flushStdout = () => {
-	if (!stdoutBuffer) return;
-	self.postMessage({ output: stdoutBuffer });
-	stdoutBuffer = '';
-};
-
-const flushStderr = () => {
-	if (!stderrBuffer) return;
-	self.postMessage({ output: stderrBuffer });
-	stderrBuffer = '';
-};
-
-const pushStdout = (charCode: number) => {
-	stdoutBuffer += String.fromCharCode(charCode);
-	if (charCode === 10) flushStdout();
-};
-
-const pushStderr = (charCode: number) => {
-	stderrBuffer += String.fromCharCode(charCode);
-	if (charCode === 10) flushStderr();
-};
+const flushStdout = () => output?.flush();
+const flushStderr = flushStdout;
+const pushStdout = (charCode: number) => output?.write(charCode);
+const pushStderr = pushStdout;
 
 self.addEventListener('message', async (event) => {
 	if (handleWorkerAssetMessage(event.data)) return;
@@ -97,7 +82,9 @@ self.addEventListener('message', async (event) => {
 								let runtimeSource = decoder.decode(
 									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
 								);
-								if (streamCompiler)
+								// Custom runtime loaders retain their original byte-input contract.
+								acceptsCompiledModule = streamCompiler;
+								if (acceptsCompiledModule)
 									runtimeSource = acceptCompiledTeaVmModule(runtimeSource);
 								const runtimeUrl = URL.createObjectURL(
 									new Blob([runtimeSource], {
@@ -161,6 +148,7 @@ self.addEventListener('message', async (event) => {
 				compiledMainClass = '';
 				compiledExceptionFormatter = '';
 				compiledWasm = null;
+				compiledModule = null;
 				compiledDiagnostics = [];
 				compiledActivePath = '';
 				compiledWorkspaceFiles = [];
@@ -172,8 +160,8 @@ self.addEventListener('message', async (event) => {
 
 		if (!compiler || !runtimeLoad || !exceptionDeobfuscator)
 			throw new Error('TeaVM compiler not loaded');
-		stdoutBuffer = '';
-		stderrBuffer = '';
+		output?.close();
+		output = createJavaOutput((text) => self.postMessage({ output: text }));
 		const explicitStdin = hasExplicitStdin === true;
 		const stdinInjection = prepareJavaRuntimeStdinInjection(code);
 		const sourceIdentity = resolveJavaSourceIdentity(code);
@@ -216,6 +204,7 @@ self.addEventListener('message', async (event) => {
 		) {
 			// A failed rebuild must never leave a previous artifact eligible for reuse.
 			compiledWasm = null;
+			compiledModule = null;
 			compiledDiagnostics = [];
 			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
@@ -347,11 +336,21 @@ self.addEventListener('message', async (event) => {
 					diagnosticLines.join('\n') || 'TeaVM WebAssembly generation failed'
 				);
 			}
+			const nextWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			const nextModule = acceptsCompiledModule
+				? await (
+						WebAssembly.compile as (
+							bytes: BufferSource,
+							options: { builtins: string[] }
+						) => Promise<WebAssembly.Module>
+					)(nextWasm as BufferSource, { builtins: ['js-string'] })
+				: null;
 			compiledCode = code;
 			compiledStdin = stdinInjection.stdinCacheKey;
 			compiledMainClass = mainClass;
 			compiledExceptionFormatter = exceptionBridge.formatExport;
-			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			compiledWasm = nextWasm;
+			compiledModule = nextModule;
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
 			compiledDiagnostics = diagnosticMessages;
@@ -375,6 +374,7 @@ self.addEventListener('message', async (event) => {
 		const workerGlobal = globalThis as typeof globalThis & {
 			window?: Window & typeof globalThis;
 			wasmIdleJavaStdin?: unknown;
+			wasmIdleJavaOutput?: unknown;
 		};
 		const previousWindow = workerGlobal.window;
 		const hadStdinBridge = Object.prototype.hasOwnProperty.call(
@@ -382,10 +382,16 @@ self.addEventListener('message', async (event) => {
 			'wasmIdleJavaStdin'
 		);
 		const previousStdinBridge = workerGlobal.wasmIdleJavaStdin;
+		const hadOutputBridge = Object.prototype.hasOwnProperty.call(
+			workerGlobal,
+			'wasmIdleJavaOutput'
+		);
+		const previousOutputBridge = workerGlobal.wasmIdleJavaOutput;
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
 		workerGlobal.wasmIdleJavaStdin = stdinBridge;
+		workerGlobal.wasmIdleJavaOutput = { flush: () => output?.flush() };
 		try {
-			const module = await runtimeLoad(compiledWasm!, {
+			const module = await runtimeLoad(compiledModule ?? compiledWasm!, {
 				installImports(imports: any) {
 					imports.teavmConsole.putcharStdout = pushStdout;
 					imports.teavmConsole.putcharStderr = pushStderr;
@@ -423,6 +429,8 @@ self.addEventListener('message', async (event) => {
 			self.postMessage({ results: true, mainClass: compiledMainClass });
 		} finally {
 			stdinBridge.dispose();
+			if (hadOutputBridge) workerGlobal.wasmIdleJavaOutput = previousOutputBridge;
+			else delete workerGlobal.wasmIdleJavaOutput;
 			if (hadStdinBridge) workerGlobal.wasmIdleJavaStdin = previousStdinBridge;
 			else delete workerGlobal.wasmIdleJavaStdin;
 			if (previousWindow === undefined) {
@@ -437,5 +445,8 @@ self.addEventListener('message', async (event) => {
 		self.postMessage({
 			error: error instanceof Error ? error.message : String(error)
 		});
+	} finally {
+		output?.close();
+		output = null;
 	}
 });

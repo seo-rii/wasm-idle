@@ -9,13 +9,19 @@ import {
 	ContainerError,
 	type Container,
 	type ContainerProcess,
+	type FileVersion,
 	type LiveCommandAdapter,
 	type MemoryFileSystem
 } from '@wasm-idle/container';
 import { createPlaygroundBinding } from '../index';
 import type { BoundSandbox, PlaygroundBinding, SandboxRuntimeAssets } from '../sandbox';
 import type { SandboxExecutionOptions } from '../options';
-import type { ContainerWorkerEvent, ContainerWorkspaceEntry } from './protocol';
+import type {
+	ContainerWorkerEvent,
+	ContainerWorkspaceDelta,
+	ContainerWorkspaceEntry,
+	ContainerWorkspaceFileMetadata
+} from './protocol';
 
 const COMMAND = 'website-playground-engine';
 const ADAPTER = 'website-playground-host-v1';
@@ -78,6 +84,7 @@ export class WebsiteRuntimeAdapter {
 	#sessions = new Map<string, Session>();
 	#jobs = new Map<string, Job>();
 	#published = new Map<string, Set<string>>();
+	#workspaceReads = new Map<string, { revision: number; versions: Map<string, FileVersion> }>();
 	#nextJob = 0;
 	#disposed = false;
 
@@ -245,7 +252,8 @@ export class WebsiteRuntimeAdapter {
 	syncWorkspace(
 		language: string,
 		files: readonly WorkspaceFile[],
-		expectedBaseFiles?: readonly WorkspaceFile[]
+		expectedBaseFiles?: readonly WorkspaceFile[],
+		project?: readonly ContainerWorkspaceFileMetadata[]
 	) {
 		const path = this.directory(language);
 		const validated = validateWorkspaceFiles(files, {
@@ -255,6 +263,35 @@ export class WebsiteRuntimeAdapter {
 			caseSensitive: true
 		});
 		const next = new Set(validated.map((file) => file.path));
+		let publishedNext = next;
+		if (project !== undefined) {
+			if (expectedBaseFiles === undefined || !Array.isArray(project) || project.length > 2048)
+				throw new TypeError('Invalid workspace delta metadata');
+			// Keep whole-project path/count/size admission without sending unchanged bodies.
+			const paths = validateWorkspaceFiles(
+				project.map((file) => ({ path: file.path, content: '' })),
+				{ maxFiles: 2048, caseSensitive: true }
+			);
+			const sizes = new Map<string, number>();
+			let total = 0;
+			for (let index = 0; index < paths.length; index++) {
+				const size = project[index].bytes;
+				if (!Number.isSafeInteger(size) || size < 0 || size > 16 * 1024 * 1024)
+					throw new TypeError('Invalid workspace file size');
+				total += size;
+				sizes.set(paths[index].path, size);
+			}
+			if (total > 64 * 1024 * 1024) throw new TypeError('Workspace exceeds total size limit');
+			for (const file of validated) {
+				const size =
+					typeof file.content === 'string'
+						? encoder.encode(file.content).length
+						: file.content.length;
+				if (sizes.get(file.path) !== size)
+					throw new TypeError('Workspace delta size mismatch');
+			}
+			publishedNext = new Set(sizes.keys());
+		}
 		const asBytes = (content: WorkspaceFile['content']) =>
 			typeof content === 'string' ? encoder.encode(content) : content;
 		const equal = (left: Uint8Array | undefined, right: Uint8Array | undefined) =>
@@ -283,14 +320,17 @@ export class WebsiteRuntimeAdapter {
 					);
 		const previousPaths = base?.keys() ?? this.#published.get(language) ?? [];
 		const deletions = [...previousPaths].filter((previous) => !next.has(previous));
+		if (project && deletions.some((name) => publishedNext.has(name)))
+			throw new TypeError('Deleted workspace file remains in project metadata');
 		// Compare all touched files before publishing even the first edit. Shell-created
 		// paths outside the editor's baseline are retained unless explicitly supplied.
 		if (base) {
 			for (const file of validated) {
 				const before = base.get(file.path),
-					after = asBytes(file.content),
-					present = current(file.path);
-				if (!equal(before, after) && !equal(present, before) && !equal(present, after))
+					after = asBytes(file.content);
+				if (equal(before, after)) continue;
+				const present = current(file.path);
+				if (!equal(present, before) && !equal(present, after))
 					throw new ContainerError(
 						'FILESYSTEM_CONFLICT',
 						`Workspace changed while editing ${file.path}`
@@ -330,7 +370,38 @@ export class WebsiteRuntimeAdapter {
 				continue;
 			this.fs.writeFile(file.path, bytes, { root: path, cwd: path });
 		}
-		this.#published.set(language, next);
+		this.#published.set(language, publishedNext);
+	}
+	readWorkspaceDelta(language: string, since?: number): ContainerWorkspaceDelta {
+		const root = this.directory(language);
+		const previous = this.#workspaceReads.get(language);
+		const reset = !previous || since !== previous.revision;
+		const versions = new Map<string, FileVersion>();
+		const files: WorkspaceFile[] = [];
+		const visit = (path: string) => {
+			for (const name of this.fs.readdir(path || '.', { root, cwd: root })) {
+				const relative = path ? `${path}/${name}` : name;
+				const options = { root, cwd: root };
+				const stat = this.fs.lstat(relative, options);
+				if (stat.type === 'directory') visit(relative);
+				else if (stat.type === 'file') {
+					const version = this.fs.captureFileVersion(relative, options);
+					versions.set(relative, version);
+					if (reset || previous?.versions.get(relative) !== version)
+						files.push({
+							path: relative,
+							content: this.fs.readFile(relative, options)
+						});
+				}
+			}
+		};
+		visit('');
+		const deleted = reset
+			? []
+			: [...previous!.versions.keys()].filter((path) => !versions.has(path));
+		const revision = (previous?.revision ?? 0) + 1;
+		this.#workspaceReads.set(language, { revision, versions });
+		return { revision, reset, files, deleted };
 	}
 	readWorkspace(language: string): WorkspaceFile[] {
 		const root = this.directory(language),
@@ -515,7 +586,10 @@ export class WebsiteRuntimeAdapter {
 			'debugCommand',
 			'debugPause',
 			'setBreakpoints',
+			'setSourceBreakpoints',
 			'debugEvaluate',
+			'debugEvaluateValue',
+			'debugSetSteppingOptions',
 			'debugVariables',
 			'debugScopes',
 			'debugFrameScopes',
@@ -551,5 +625,6 @@ export class WebsiteRuntimeAdapter {
 		);
 		this.#sessions.clear();
 		this.#jobs.clear();
+		this.#workspaceReads.clear();
 	}
 }

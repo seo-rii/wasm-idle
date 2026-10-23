@@ -1,5 +1,9 @@
 import type {
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
 	DebugDataBreakpoint,
 	DebugDataBreakpointInfo,
 	DebugDataBreakpointInfoArguments,
@@ -37,6 +41,15 @@ export interface TerminalControl {
 	debugPause?: () => Promise<void>;
 	setBreakpoints?: (lines: number[], sourcePath?: string) => Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugEvaluateValue?: (
+		expression: string,
+		options?: DebugEvaluateOptions
+	) => Promise<DebugEvaluateResult>;
+	setSourceBreakpoints?: (
+		breakpoints: DebugSourceBreakpoint[],
+		sourcePath?: string
+	) => Promise<void>;
+	debugSetSteppingOptions?: (options: DebugSteppingOptions) => Promise<void>;
 	debugVariables?: (
 		variablesReference: number,
 		start?: number,

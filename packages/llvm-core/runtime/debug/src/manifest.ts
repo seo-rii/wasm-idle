@@ -117,6 +117,20 @@ function parseCapabilities(value: unknown): RuntimeDebugCapabilities {
 			capabilities.dataBreakpoints,
 			'root.debugger.capabilities.dataBreakpoints'
 		),
+		...Object.fromEntries(
+			[
+				'conditionalBreakpoints',
+				'hitConditionalBreakpoints',
+				'logPoints',
+				'skipLibraryCode',
+				'returnValues'
+			]
+				.filter((key) => capabilities[key] !== undefined)
+				.map((key) => [
+					key,
+					expectBoolean(capabilities[key], `root.debugger.capabilities.${key}`)
+				])
+		),
 		wasmThreads: expectBoolean(
 			capabilities.wasmThreads,
 			'root.debugger.capabilities.wasmThreads'

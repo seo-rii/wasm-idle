@@ -1,9 +1,13 @@
 import {
 	compileRust,
+	checkRust,
 	createBrowserRustCompileRequestIdentity,
 	preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal,
 	resolveBrowserRustDebugMode,
 	type BrowserRustArtifact,
+	type BrowserRustCheckRequest,
+	type BrowserRustCheckResult,
+	type BrowserRustOptimizationProfile,
 	type BrowserRustCompileProgress,
 	type BrowserRustCompiler,
 	type BrowserRustCompilerFactory,
@@ -25,6 +29,7 @@ import {
 } from './compiler.js';
 import {
 	executeBrowserRustArtifact as executeBrowserRustArtifactInternal,
+	clearBrowserRustExecutionCache,
 	type BrowserExecutionOptions,
 	type BrowserExecutionResult
 } from './browser-execution.js';
@@ -38,6 +43,9 @@ import {
 
 export type {
 	BrowserRustArtifact,
+	BrowserRustCheckRequest,
+	BrowserRustCheckResult,
+	BrowserRustOptimizationProfile,
 	BrowserRustCompiler,
 	BrowserRustCompilerFactory,
 	BrowserRustCompilerResult,
@@ -60,6 +68,7 @@ export type {
 };
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { configureVerifiedRuntimeExecutableModuleUrls };
+export { clearBrowserRustExecutionCache };
 export type {
 	RuntimeAssetPersistentCache,
 	RuntimeAssetPersistentCacheIdentity
@@ -158,6 +167,13 @@ export async function createRustCompiler(
 ): Promise<BrowserRustCompiler> {
 	requireVerifiedExecutableGraph();
 	return {
+		check: async (request) =>
+			checkRust(
+				request,
+				bundledRuntimeProfile
+					? sealCompileDependencies(options?.dependencies, bundledRuntimeProfile)
+					: options?.dependencies
+			),
 		compile: async (request) =>
 			compileRust(
 				request,

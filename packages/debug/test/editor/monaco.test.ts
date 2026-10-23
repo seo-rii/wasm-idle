@@ -3,6 +3,32 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachMonacoDebugActions, MonacoDebugView } from '../../src/editor/monaco.js';
 
 describe('MonacoDebugView', () => {
+	it('adds only requested editor actions and passes the selected watch expression', () => {
+		const onAddWatch = vi.fn();
+		const onEditBreakpoint = vi.fn();
+		const actions = new Map<string, () => void>();
+		const editor = {
+			onDidChangeCursorPosition: () => ({ dispose() {} }),
+			getPosition: () => ({ lineNumber: 3, column: 8 }),
+			getSelection: () => ({}),
+			getModel: () => ({
+				getValueInRange: () => ' items[2] ',
+				getLineContent: () => 'items[2] += 1;'
+			}),
+			addAction: ({ id, run }: { id: string; run: () => void }) => {
+				actions.set(id, run);
+				return { dispose() {} };
+			}
+		};
+		const binding = attachMonacoDebugActions(editor as never, { onAddWatch, onEditBreakpoint });
+		expect([...actions.keys()]).toEqual(['wasm-idle-add-watch', 'wasm-idle-edit-breakpoint']);
+		actions.get('wasm-idle-add-watch')!();
+		actions.get('wasm-idle-edit-breakpoint')!();
+		expect(onAddWatch).toHaveBeenCalledWith('items[2]');
+		expect(onEditBreakpoint).toHaveBeenCalledWith(3);
+		binding.dispose();
+	});
+
 	it('ignores a paused line outside the active editor model', () => {
 		const inlineValueDecorations = { set: vi.fn(), clear: vi.fn() };
 		const breakpointDecorations = { set: vi.fn(), clear: vi.fn() };
@@ -210,8 +236,7 @@ describe('MonacoDebugView', () => {
 
 	it('registers cursor sync and run-to-cursor actions together for host editors', () => {
 		let cursorHandler:
-			| ((event: { position?: { lineNumber?: number | null } | null }) => void)
-			| null = null;
+			((event: { position?: { lineNumber?: number | null } | null }) => void) | null = null;
 		const cursorDispose = vi.fn();
 		const actionDispose = vi.fn();
 		const onCursorLineChange = vi.fn();

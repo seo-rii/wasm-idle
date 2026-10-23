@@ -332,3 +332,71 @@ describe('Terminal sandbox input generations', () => {
 		}
 	});
 });
+
+describe('Terminal structured debugger bridge', () => {
+	it('preserves expandable metadata and snapshots breakpoint options across the bridge', async () => {
+		const sandbox = createSandbox();
+		const value = {
+			result: 'size=2',
+			type: 'std::vector<int>',
+			variablesReference: 19,
+			indexedVariables: 2
+		};
+		sandbox.debugEvaluateValue = vi.fn(async () => value);
+		sandbox.setSourceBreakpoints = vi.fn(async () => undefined);
+		const terminal = await mountTerminal({
+			runtimeAssets: {},
+			load: vi.fn(async () => sandbox)
+		});
+		await terminal.run('C', 'int main() {}', false);
+		await expect(
+			terminal.debugEvaluateValue!('values', { context: 'hover', frameId: 7 })
+		).resolves.toEqual(value);
+		expect(sandbox.debugEvaluateValue).toHaveBeenCalledWith('values', {
+			context: 'hover',
+			frameId: 7
+		});
+		const breakpoints = [{ line: 7, hitCondition: '3' }];
+		const pending = terminal.setSourceBreakpoints!(breakpoints, '/workspace/main.cpp');
+		breakpoints[0].hitCondition = '5';
+		await pending;
+		expect(sandbox.setSourceBreakpoints).toHaveBeenCalledWith(
+			[{ line: 7, hitCondition: '3' }],
+			'/workspace/main.cpp'
+		);
+	});
+
+	it('keeps disabled initial locations off legacy lines and rejects advanced trace options', async () => {
+		const sandbox = createSandbox();
+		sandbox.setBreakpoints = vi.fn(async () => undefined);
+		sandbox.debugEvaluate = vi.fn(async () => '42');
+		const terminal = await mountTerminal({
+			runtimeAssets: {},
+			load: vi.fn(async () => sandbox)
+		});
+		await terminal.run('C', 'int main() {}', false, undefined, [], {
+			sourceBreakpoints: [
+				{
+					sourcePath: '/workspace/main.c',
+					lines: [5, 7],
+					breakpoints: [{ line: 5, enabled: false }, { line: 7 }]
+				}
+			]
+		});
+		expect(vi.mocked(sandbox.run).mock.calls.at(-1)?.[5]).toMatchObject({
+			sourceBreakpoints: [{ lines: [7] }]
+		});
+		await expect(
+			terminal.setSourceBreakpoints!([{ line: 7, hitCondition: '3' }])
+		).rejects.toThrow('hitCondition');
+		expect(sandbox.setBreakpoints).not.toHaveBeenCalled();
+		await expect(terminal.debugEvaluateValue!('answer')).resolves.toEqual({
+			result: '42',
+			variablesReference: 0
+		});
+		await expect(terminal.debugEvaluateValue!('answer', { frameId: 42 })).resolves.toEqual({
+			result: '?',
+			variablesReference: 0
+		});
+	});
+});

@@ -1,3 +1,8 @@
+import type {
+	DebugEvaluateOptions,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions
+} from '@wasm-idle/core';
 import type { DebugMemory as CoreDebugMemory } from '@wasm-idle/core';
 
 export type DebugAdapterKind = 'trace' | 'lldb';
@@ -6,6 +11,8 @@ export interface DebugCapabilities {
 	readonly supportsConfigurationDone: boolean;
 	readonly supportsBreakpoints: boolean;
 	readonly supportsConditionalBreakpoints: boolean;
+	readonly supportsHitConditionalBreakpoints?: boolean;
+	readonly supportsSkipLibraryCode?: boolean;
 	readonly supportsLogPoints: boolean;
 	readonly supportsContinue: boolean;
 	readonly supportsPause: boolean;
@@ -237,6 +244,11 @@ export interface DebugAdapter {
 	disconnect(options?: DebugDisconnectOptions): Promise<void>;
 
 	setBreakpoints(source: DebugSource, lines: number[]): Promise<ResolvedBreakpoint[]>;
+	setSourceBreakpoints?(
+		source: DebugSource,
+		breakpoints: DebugSourceBreakpoint[]
+	): Promise<ResolvedBreakpoint[]>;
+	setSteppingOptions?(options: DebugSteppingOptions): Promise<void>;
 
 	continue(threadId: number): Promise<void>;
 	pause(threadId: number): Promise<void>;
@@ -261,6 +273,10 @@ export interface DebugAdapter {
 	): Promise<DebugDataBreakpointInfo>;
 	setDataBreakpoints(breakpoints: DebugDataBreakpoint[]): Promise<ResolvedDataBreakpoint[]>;
 	evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult>;
+	evaluateValue?(
+		expression: string,
+		options?: DebugEvaluateOptions
+	): Promise<DebugEvaluateResult>;
 
 	onEvent(listener: (event: DebugAdapterEvent) => void): () => void;
 }
