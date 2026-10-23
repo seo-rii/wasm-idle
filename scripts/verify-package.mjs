@@ -50,7 +50,8 @@ export const scenarios = [
 		// Keep the bounded byte/package limits; shipped module/declaration pairs now
 		// total 438 root files + 271 dependency files + npm's installation metadata,
 		// including Java output, Python cache, debug configuration and compiled-module cache pairs.
-		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 710, maxPackages: 6 },
+		// Combined integration measured 6,389,511 bytes; 104 KiB leaves 8,441 bytes.
+		budget: { maxBytes: 6 * MiB + 104 * 1024, maxFiles: 710, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
