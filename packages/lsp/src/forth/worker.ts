@@ -8,8 +8,9 @@ let host: Awaited<ReturnType<typeof createForthLspHost>> | undefined;
 let initializing = false;
 const openDocuments = new Set<string>();
 const beforeOpen: Array<{
-	id: string | number;
-	params: { textDocument: { uri: string } };
+	id?: string | number;
+	method: string;
+	params: { textDocument: { uri: string; version?: number } };
 }> = [];
 
 function dispatch(message: unknown) {
@@ -37,16 +38,22 @@ scope.addEventListener('message', async (event) => {
 			host = undefined;
 			return;
 		}
-		// Monaco can request features while attaching providers, before didOpen.
-		// Let the original handler run only after its document buffer exists.
+		// Monaco can send edits and feature requests while attaching providers,
+		// before didOpen. Upstream must have a buffer before it receives either.
 		const uri = message.params?.textDocument?.uri;
-		if (message.id !== undefined && typeof uri === 'string' && !openDocuments.has(uri)) {
-			if (beforeOpen.length >= 128) throw new Error('Too many requests before didOpen');
+		if (
+			(message.id !== undefined || message.method === 'textDocument/didChange') &&
+			typeof uri === 'string' &&
+			!openDocuments.has(uri)
+		) {
+			if (beforeOpen.length >= 128) throw new Error('Too many messages before didOpen');
 			beforeOpen.push(message);
 			return;
 		}
 		if (message.method === '$/cancelRequest') {
-			const index = beforeOpen.findIndex((request) => request.id === message.params?.id);
+			const index = beforeOpen.findIndex(
+				(request) => request.id !== undefined && request.id === message.params?.id
+			);
 			if (index >= 0) {
 				const [request] = beforeOpen.splice(index, 1);
 				scope.postMessage({
@@ -57,6 +64,18 @@ scope.addEventListener('message', async (event) => {
 				return;
 			}
 		}
+		if (message.method === 'textDocument/didClose') {
+			for (let index = beforeOpen.length - 1; index >= 0; index--) {
+				if (beforeOpen[index].params.textDocument.uri !== uri) continue;
+				const [pending] = beforeOpen.splice(index, 1);
+				if (pending.id !== undefined)
+					scope.postMessage({
+						jsonrpc: '2.0',
+						id: pending.id,
+						error: { code: -32800, message: 'Document closed before didOpen' }
+					});
+			}
+		}
 		dispatch(message);
 		if (message.method === 'textDocument/didOpen' && typeof uri === 'string') {
 			openDocuments.add(uri);
@@ -65,15 +84,27 @@ scope.addEventListener('message', async (event) => {
 					index++;
 					continue;
 				}
-				const request = beforeOpen.splice(index, 1)[0];
+				const pending = beforeOpen.splice(index, 1)[0];
+				// The attach snapshot may already contain an early incremental edit.
+				// Only replay edits newer than the snapshot to avoid applying it twice.
+				if (
+					pending.method === 'textDocument/didChange' &&
+					typeof pending.params.textDocument.version === 'number' &&
+					typeof message.params.textDocument.version === 'number' &&
+					pending.params.textDocument.version <= message.params.textDocument.version
+				)
+					continue;
 				try {
-					dispatch(request);
+					dispatch(pending);
 				} catch (error) {
-					scope.postMessage({
-						jsonrpc: '2.0',
-						id: request.id,
-						error: { code: -32603, message: String(error) }
-					});
+					const detail = error instanceof Error ? error.message : String(error);
+					if (pending.id !== undefined)
+						scope.postMessage({
+							jsonrpc: '2.0',
+							id: pending.id,
+							error: { code: -32603, message: detail }
+						});
+					else scope.postMessage({ type: 'error', message: detail });
 				}
 			}
 		} else if (message.method === 'textDocument/didClose') {

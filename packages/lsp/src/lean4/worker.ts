@@ -67,6 +67,8 @@ let processStartupTimeoutMs = 120000;
 let initialized = false;
 let bootstrap: Process | undefined;
 let fileProcess: Process | undefined;
+let restarting: Promise<void> | undefined;
+let terminalError: string | undefined;
 let initializeParams: any;
 let initializeId: string | number | undefined;
 let active: Document | undefined;
@@ -76,13 +78,16 @@ const early: Rpc[] = [];
 const serverRequests = new Map<string, string | number>();
 let nextServerId = 0;
 
-function cancelPending(message: string) {
+function cancelPending(message: string, cancelEarly = false) {
 	if (!initialized && initializeId !== undefined) {
 		error(initializeId, -32603, message);
 		initializeId = undefined;
 	}
 	for (const id of pending) error(id, -32801, message);
 	pending.clear();
+	if (cancelEarly)
+		for (const request of early.splice(0))
+			if (request.method && request.id !== undefined) error(request.id, -32801, message);
 }
 
 function startProcess(
@@ -106,11 +111,10 @@ function startProcess(
 		resolve = res;
 		reject = rej;
 	});
-	const fail = (message: string) => {
+	const failProcess = (message: string) => {
 		if (disposed) return;
 		reject(new Error(message));
-		cancelPending(message);
-		scope.postMessage({ type: 'error', message });
+		fail(message);
 		process.dispose();
 	};
 	worker.onmessage = ({ data }) => {
@@ -127,7 +131,8 @@ function startProcess(
 						worker.postMessage({ threadEvent: { id: thread.id, data } });
 					// The process owner may be inside callMain, so its JS message loop cannot
 					// report a crashed pthread. Fail through this idle supervisor instead.
-					pthread.onerror = ({ message }) => fail(`Lean pthread failed: ${message}`);
+					pthread.onerror = ({ message }) =>
+						failProcess(`Lean pthread failed: ${message}`);
 				} else if (thread.type === 'post')
 					pthreads.get(thread.id)?.postMessage(thread.data);
 				else if (thread.type === 'terminate') {
@@ -139,16 +144,16 @@ function startProcess(
 				resolve();
 			} else if (data.stdout)
 				for (const message of frames.push(data.stdout)) output(message as Rpc);
-			else if (data.error) fail(data.error);
+			else if (data.error) failProcess(data.error);
 			else if (typeof data.exit === 'number') exit(data.exit);
 			else if (data.stderr) console.warn('Lean 4:', String(data.stderr).slice(0, 4096));
 		} catch (cause) {
-			fail(String(cause));
+			failProcess(String(cause));
 		}
 	};
 	worker.onerror = (event) => {
 		event.preventDefault();
-		fail(event.message || 'Lean process worker failed.');
+		failProcess(event.message || 'Lean process worker failed.');
 	};
 	const process = {
 		ready,
@@ -168,7 +173,7 @@ function startProcess(
 		}
 	};
 	startupTimer = setTimeout(
-		() => fail('Lean document process startup timed out.'),
+		() => failProcess('Lean document process startup timed out.'),
 		processStartupTimeoutMs
 	);
 	worker.postMessage({
@@ -223,8 +228,13 @@ async function openDocument(document: Document) {
 			fileProcess = undefined;
 			if (code === 2 && active) {
 				// The original FileWorker requests this restart when imports/header state changes.
-				void openDocument(active).catch(fail);
-			} else cancelPending(`Lean document process exited with code ${code}.`);
+				// Hold client traffic until initialize and didOpen are queued for the new process.
+				const restart = openDocument(active);
+				restarting = restart;
+				void restart.catch(fail).finally(() => {
+					if (restarting === restart) restarting = undefined;
+				});
+			} else fail(`Lean document process exited with code ${code}.`);
 		}
 	);
 	fileProcess = process;
@@ -352,7 +362,7 @@ async function handle(message: Rpc) {
 			fileProcess?.dispose();
 			bootstrap?.dispose();
 			fileProcess = bootstrap = undefined;
-			cancelPending('Lean LSP shut down.');
+			cancelPending('Lean LSP shut down.', true);
 			if (message.id !== undefined) send({ jsonrpc: '2.0', id: message.id, result: null });
 			return;
 		case 'exit':
@@ -363,10 +373,16 @@ async function handle(message: Rpc) {
 }
 
 function fail(cause: unknown) {
+	if (terminalError !== undefined) return;
 	const message = cause instanceof Error ? cause.message : String(cause);
-	cancelPending(message);
+	terminalError = message;
+	generation++;
+	cancelPending(message, true);
 	bootstrap?.dispose();
 	fileProcess?.dispose();
+	bootstrap = fileProcess = undefined;
+	active = undefined;
+	serverRequests.clear();
 	scope.postMessage({ type: 'error', message });
 }
 
@@ -461,7 +477,14 @@ scope.onmessage = ({ data }) => {
 		return;
 	}
 	queued = queued
-		.then(() => (data?.type === 'init' ? init(data) : handle(data as Rpc)))
+		.then(async () => {
+			await restarting;
+			if (terminalError !== undefined) {
+				if (data?.id !== undefined && data?.method) error(data.id, -32603, terminalError);
+				return;
+			}
+			return data?.type === 'init' ? init(data) : handle(data as Rpc);
+		})
 		.catch((cause) => {
 			if (data?.id !== undefined) error(data.id, -32603, String(cause));
 			fail(cause);

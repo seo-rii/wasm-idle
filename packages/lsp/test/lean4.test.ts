@@ -1,11 +1,147 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
+import { createMessageConnection } from 'vscode-jsonrpc/node';
 import { WASM_LEAN4_PROFILE } from '../src/bundledLean4Runtime.js';
 import { getLean4LanguageServer } from '../src/lean4/language-server.js';
 import { LEAN4_RUNTIME_MANIFEST, resolveLean4RuntimeAssetConfig } from '../src/lean4/assets.js';
 import { frameMessage, LeanStdin, LspFrameDecoder } from '../src/lean4/stdio.js';
 
 describe('original Lean distribution contract', () => {
+	it.each(['supervisor-error', 'dispose'])(
+		'settles outstanding client requests on %s without a worker response',
+		async (reason) => {
+			class ReadyWorker extends EventTarget {
+				onmessage?: (event: MessageEvent) => void;
+				posted: unknown[] = [];
+				terminate = vi.fn();
+				postMessage(message: { type?: string }) {
+					this.posted.push(message);
+					if (message.type === 'init')
+						this.dispatchEvent(
+							new MessageEvent('message', { data: { type: 'ready' } })
+						);
+				}
+			}
+			const worker = new ReadyWorker();
+			const server = await getLean4LanguageServer({
+				currentUrl: 'https://app.test/',
+				createWorker: () => worker as unknown as Worker
+			});
+			const connection = createMessageConnection(
+				server.transport.reader,
+				server.transport.writer
+			);
+			connection.listen();
+			const closed = vi.fn();
+			connection.onClose(closed);
+			let settled: unknown;
+			const pending = connection.sendRequest('textDocument/hover', {}).then(
+				(result) => {
+					settled = result;
+				},
+				(error) => {
+					settled = error;
+				}
+			);
+			try {
+				if (reason === 'dispose') server.dispose();
+				else
+					worker.dispatchEvent(
+						Object.assign(new Event('error'), { message: 'Supervisor crashed' })
+					);
+				expect(closed).toHaveBeenCalledTimes(1);
+				await vi.waitFor(() => expect(settled).toMatchObject({ code: -32801 }));
+				await pending;
+				expect(connection.hasPendingResponse()).toBe(false);
+				const count = worker.posted.length;
+				await expect(
+					server.transport.writer.write({ jsonrpc: '2.0', id: 12, method: 'test' })
+				).rejects.toThrow(reason === 'dispose' ? 'closed' : 'Supervisor crashed');
+				expect(worker.posted).toHaveLength(count);
+				expect(worker.terminate).toHaveBeenCalledTimes(1);
+			} finally {
+				connection.dispose();
+				server.dispose();
+				await pending;
+			}
+		}
+	);
+	it('closes the JSON-RPC transport and terminates owned workers after a runtime failure', async () => {
+		class ReadyWorker extends EventTarget {
+			onmessage?: (event: MessageEvent) => void;
+			terminate = vi.fn();
+			emit(data: unknown) {
+				const event = new MessageEvent('message', { data });
+				this.dispatchEvent(event);
+				this.onmessage?.(event);
+			}
+			postMessage(message: { type?: string }) {
+				if (message.type === 'init') this.emit({ type: 'ready' });
+			}
+		}
+		const outer = new ReadyWorker();
+		const physical = new ReadyWorker();
+		vi.stubGlobal(
+			'Worker',
+			class {
+				constructor() {
+					return physical;
+				}
+			}
+		);
+		const statuses: any[] = [];
+		const server = await getLean4LanguageServer({
+			currentUrl: 'https://app.test/',
+			createWorker: () => outer as unknown as Worker,
+			onStatus: (status) => statuses.push(status)
+		});
+		const received: unknown[] = [];
+		const connection = createMessageConnection(
+			{
+				...server.transport.reader,
+				listen(callback) {
+					return server.transport.reader.listen((message) => {
+						received.push(message);
+						callback(message);
+					});
+				}
+			},
+			server.transport.writer
+		);
+		const closed = vi.fn();
+		connection.onClose(closed);
+		connection.listen();
+		try {
+			const pending = connection.sendRequest('textDocument/hover', {});
+			const rejected = expect(pending).rejects.toMatchObject({ code: -32801 });
+			outer.emit({
+				leanWorker: { type: 'create', id: 1, url: 'https://app.test/worker.js' }
+			});
+			outer.emit({
+				jsonrpc: '2.0',
+				id: 0,
+				error: { code: -32801, message: 'Lean pthread failed' }
+			});
+			outer.emit({ type: 'error', message: 'Lean pthread failed' });
+			await rejected;
+			expect(received).toEqual([
+				{ jsonrpc: '2.0', id: 0, error: { code: -32801, message: 'Lean pthread failed' } }
+			]);
+			expect(closed).toHaveBeenCalledTimes(1);
+			expect(() => connection.sendRequest('textDocument/hover', {})).toThrow('closed');
+			await expect(
+				server.transport.writer.write({ jsonrpc: '2.0', id: 8, method: 'test' })
+			).rejects.toThrow('Lean pthread failed');
+			expect(outer.terminate).toHaveBeenCalledTimes(1);
+			expect(physical.terminate).toHaveBeenCalledTimes(1);
+			expect(statuses.at(-1)).toEqual({ state: 'error', message: 'Lean pthread failed' });
+		} finally {
+			connection.dispose();
+			server.dispose();
+			server.dispose();
+			vi.unstubAllGlobals();
+		}
+	});
 	it('keeps JSON-RPC stdout separate from physical worker ownership commands', async () => {
 		class ReadyWorker extends EventTarget {
 			postMessage(message: { type?: string }) {

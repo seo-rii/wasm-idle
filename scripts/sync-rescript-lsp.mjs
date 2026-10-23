@@ -13,6 +13,32 @@ export function verifyReScriptAsset(bytes, receipt, label = 'ReScript asset') {
 		throw Error(`${label} failed its pinned receipt`);
 }
 
+async function writeReScriptMetadata(targetDir, lock) {
+	await writeFile(
+		path.join(targetDir, 'runtime-manifest.json'),
+		JSON.stringify(
+			{
+				format: 'wasm-idle-rescript-lsp-v1',
+				version: lock.version,
+				compilerVersion: lock.compilerVersion,
+				sources: lock.sources,
+				assets: lock.assets,
+				decoded: lock.decoded,
+				sourceFiles: lock.sourceFiles
+			},
+			null,
+			'\t'
+		) + '\n'
+	);
+	await writeFile(
+		path.join(targetDir, 'SOURCE.txt'),
+		Object.values(lock.sources)
+			.map((s) => s.repository + '/tree/' + s.revision)
+			.join('\n') +
+			'\nReproduce with the pinned toolchain in scripts/rescript-lsp-assets.lock.json and pnpm run sync:rescript-lsp. Only the bsc Dune executable gains a bytecode build mode. Original parser, compiler, analysis and LSP handler sources remain unchanged.\n'
+	);
+}
+
 export async function syncReScriptLsp({
 	targetDir = path.join(ROOT, 'static/wasm-rescript-lsp'),
 	cacheDir = path.join(ROOT, '.cache/rescript-lsp-producer'),
@@ -23,11 +49,16 @@ export async function syncReScriptLsp({
 } = {}) {
 	const lock = JSON.parse(await readFile(LOCK, 'utf8'));
 	if (!rebuild && !updateLock && lock.assets) {
+		let cached = false;
 		try {
 			for (const [name, receipt] of Object.entries(lock.assets))
 				verifyReScriptAsset(await readFile(path.join(targetDir, name)), receipt, name);
-			return { targetDir, cached: true };
+			cached = true;
 		} catch {}
+		if (cached) {
+			await writeReScriptMetadata(targetDir, lock);
+			return { targetDir, cached: true };
+		}
 	}
 	const sourceDirs = {};
 	for (const [name, source] of Object.entries(lock.sources)) {
@@ -92,27 +123,7 @@ export async function syncReScriptLsp({
 		for (const [name, receipt] of Object.entries(lock.assets))
 			verifyReScriptAsset(await readFile(path.join(targetDir, name)), receipt, name);
 	}
-	await writeFile(
-		path.join(targetDir, 'runtime-manifest.json'),
-		JSON.stringify(
-			{
-				format: 'wasm-idle-rescript-lsp-v1',
-				version: lock.version,
-				compilerVersion: lock.compilerVersion,
-				sources: lock.sources,
-				...result
-			},
-			null,
-			'\t'
-		) + '\n'
-	);
-	await writeFile(
-		path.join(targetDir, 'SOURCE.txt'),
-		Object.values(lock.sources)
-			.map((s) => s.repository + '/tree/' + s.revision)
-			.join('\n') +
-			'\nReproduce with the pinned toolchain in scripts/rescript-lsp-assets.lock.json and pnpm run sync:rescript-lsp. Only the bsc Dune executable gains a bytecode build mode. Original parser, compiler, analysis and LSP handler sources remain unchanged.\n'
-	);
+	await writeReScriptMetadata(targetDir, lock);
 	const profile = {
 		version: lock.version,
 		compilerVersion: lock.compilerVersion,

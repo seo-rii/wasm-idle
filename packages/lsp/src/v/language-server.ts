@@ -31,13 +31,14 @@ export async function getVLanguageServer(
 			{ ...receipt }
 		])
 	);
-	if (hostOptions?.maxAssetBytes !== undefined) {
-		if (!Number.isSafeInteger(hostOptions.maxAssetBytes) || hostOptions.maxAssetBytes <= 0)
+	const maxAssetBytes = hostOptions?.maxAssetBytes;
+	if (maxAssetBytes !== undefined) {
+		if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0)
 			throw new TypeError('V language server maxAssetBytes must be a positive safe integer');
 		if (
-			Object.values(receipts).some((receipt) => receipt.bytes === undefined) ||
-			Object.values(receipts).reduce((total, receipt) => total + (receipt.bytes || 0), 0) >
-				hostOptions.maxAssetBytes
+			Object.values(receipts).some(
+				(receipt) => receipt.bytes === undefined || receipt.bytes > maxAssetBytes
+			)
 		)
 			throw new Error('V LSP assets exceed maxAssetBytes');
 	}

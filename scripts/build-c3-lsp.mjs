@@ -12,6 +12,11 @@ export const c3LspLock = JSON.parse(
 );
 const names = ['c3_lsp.mjs', 'c3_lsp.wasm', 'stdlib.json.gz.bin'];
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+export function c3LspBuildCacheKey(lock = c3LspLock) {
+	// Extracted sources, both compilers, and intermediate objects must share the
+	// same complete pin set; checking downloaded archives alone cannot refresh them.
+	return `${lock.sources.server.commit}-${sha256(JSON.stringify(lock))}`;
+}
 export function verifyC3LspAsset(bytes, receipt, label) {
 	if (!receipt || bytes.length !== receipt.bytes || sha256(bytes) !== receipt.sha256)
 		throw new Error(`C3 LSP ${label} differs from the pinned producer receipt`);
@@ -73,11 +78,7 @@ export async function buildC3Lsp({
 		throw new Error('C3 LSP lock is missing qualified assets');
 	const patch = await readFile(patchPath);
 	if (sha256(patch) !== lock.patchSha256) throw new Error('C3 LSP patch differs from its lock');
-	const cache = path.join(
-		root,
-		'.cache/c3-lsp',
-		`${lock.sources.server.commit}-${lock.patchSha256.slice(0, 16)}`
-	);
+	const cache = path.join(root, '.cache/c3-lsp', c3LspBuildCacheKey(lock));
 	await mkdir(cache, { recursive: true });
 	const source = path.join(cache, 'source');
 	const original = path.join(cache, 'native-source');
