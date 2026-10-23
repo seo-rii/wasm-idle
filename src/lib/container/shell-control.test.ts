@@ -17,7 +17,7 @@ import {
 	SHELL_CONTROL_RCFILE,
 	SHELL_CONTROL_REQUEST,
 	SHELL_CONTROL_ROUTE
-} from './shell-control';
+} from './shell-control.js';
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -253,6 +253,74 @@ describe('real Bash directory control protocol', () => {
 		expect(changes).toHaveBeenCalledTimes(3);
 	});
 
+	it('separates source output and requests native redisplay without replacing shell state or consuming input', () => {
+		for (const [action, status] of [
+			['suspend', '0'],
+			['resume', '124']
+		] as const) {
+			const local = nativeFixture(`2 ${'ab'.repeat(16)} 1 ${action}\n`);
+			const result = local.run(
+				[
+					'set -eu',
+					'export sentinel=retained',
+					'if __wasm_idle_poll; then status=0; else status=$?; fi',
+					'IFS= builtin read -r untouched',
+					'printf "%s|%s|%s|%s\\n" "$status" "$PWD" "$sentinel" "$untouched"'
+				].join('\n'),
+				{ input: 'partial 한글🙂 input\n', ackExit: '73' }
+			);
+			expect(result).toMatchObject({ status: 0, stderr: '' });
+			expect(result.stdout).toBe(
+				`\r\n${status}|${join(local.workspace, 'C')}|retained|partial 한글🙂 input\n`
+			);
+			expect(readFileSync(local.ack, 'utf8')).toBe(
+				`${join(local.workspace, 'C')}|2|${'ab'.repeat(16)}|1|${action}|ok\n`
+			);
+		}
+	});
+
+	it('uses prompt generations without entering a language directory or accepting directory acknowledgements', async () => {
+		const { control, fs } = fixture();
+		const paused = control.requestPrompt('suspend');
+		expect(control.inspect()).toMatchObject({ generation: 1, pendingCwd: null });
+		const ack = acknowledgement(fs, '/workspace/C/subdirectory');
+		expect(ack.argv).toEqual([SHELL_CONTROL_ROUTE, '2', 'ab'.repeat(16), '1', 'suspend', 'ok']);
+		expect(
+			control.onInvocation({ ...ack, argv: [SHELL_CONTROL_ROUTE, '1', ...ack.argv.slice(2)] })
+		).toBe(126);
+		expect(control.onInvocation(ack)).toBe(0);
+		await paused;
+		expect(control.inspect()).toMatchObject({
+			cwd: '/workspace/C/subdirectory',
+			appliedGeneration: 1
+		});
+		const resumed = control.requestPrompt('resume');
+		expect(control.onInvocation(acknowledgement(fs, '/workspace/C/subdirectory'))).toBe(0);
+		await resumed;
+		expect(control.inspect()).toMatchObject({
+			cwd: '/workspace/C/subdirectory',
+			appliedGeneration: 2
+		});
+	});
+
+	it('cancels a busy prompt request without leaving a delayed control operation for the next prompt', async () => {
+		const { control, fs } = fixture();
+		const abort = new AbortController();
+		const paused = control.requestPrompt('suspend', abort.signal);
+		const rejected = expect(paused).rejects.toThrow('Busy shell');
+		const stale = acknowledgement(fs, '/workspace/C');
+		abort.abort(new DOMException('Busy shell', 'TimeoutError'));
+		await rejected;
+		expect(decoder.decode(fs.readFile(SHELL_CONTROL_REQUEST))).toBe(
+			`1 ${'ab'.repeat(16)} 0 -\n`
+		);
+		expect(control.onInvocation(stale)).toBe(126);
+		const resumed = control.requestPrompt('resume');
+		control.onInvocation(acknowledgement(fs, '/workspace/C'));
+		await resumed;
+		expect(control.inspect()).toMatchObject({ appliedGeneration: 2, pendingCwd: null });
+	});
+
 	it('publishes only the newest generation and rejects superseded callers explicitly', async () => {
 		const { control, fs } = fixture();
 		const earlier = control.requestDirectory('C');
@@ -369,22 +437,14 @@ describe('real Bash directory control protocol', () => {
 		control.setup(container.fs);
 		const moved = control.requestDirectory('CPP');
 		const inv = acknowledgement(container.fs);
-		const rejected = await container.run(
-			SHELL_CONTROL_COMMAND,
-			inv.argv.slice(1),
-			{
-				cwd: '/workspace'
-			}
-		);
+		const rejected = await container.run(SHELL_CONTROL_COMMAND, inv.argv.slice(1), {
+			cwd: '/workspace'
+		});
 		expect(rejected.code).toBe(126);
 		expect(control.inspect().pendingCwd).toBe('/workspace/CPP');
-		const accepted = await container.run(
-			SHELL_CONTROL_COMMAND,
-			inv.argv.slice(1),
-			{
-				cwd: inv.cwd
-			}
-		);
+		const accepted = await container.run(SHELL_CONTROL_COMMAND, inv.argv.slice(1), {
+			cwd: inv.cwd
+		});
 		await moved;
 		expect(accepted).toMatchObject({ code: 0, reason: 'exited' });
 		expect(accepted.stdout).toHaveLength(0);

@@ -21,6 +21,11 @@ Compiler source pins, patches, and reproducible asset builds live in
 [`seo-rii/wasm-llvm`](https://github.com/seo-rii/wasm-llvm); wasm-idle loads the generated
 artifacts from external URLs instead of embedding them in npm packages.
 
+The optional [`wasm-idle/container` entry](docs/container-website.md#sharing-the-execution-host)
+shares the language/terminal owner, Bash/Clang setup, cancellation, and workspace synchronization
+between browser applications. Hosts provide their Worker entry and pinned assets; UI and account
+storage remain application-owned. Install `@wasm-idle/container` alongside wasm-idle to use it.
+
 Verified downloads can be retained across reloads using a version-pinned, capacity-bounded
 CacheStorage/IndexedDB cache. See [persistent asset cache configuration and coverage](docs/runtime-asset-cache.md)
 for global/per-call opt-out, cleanup and prefetch APIs.

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createContainerPlaygroundBinding } from './binding';
-import type { ContainerWorkerClient } from './client';
-import type { ContainerWorkerEvent } from './protocol';
+import { createContainerPlaygroundBinding } from './binding.js';
+import { createContainerWorkerClient, type ContainerWorkerClient } from './client.js';
+import type { ContainerWorkerEvent } from './protocol.js';
 function fixture() {
 	let listener: (event: ContainerWorkerEvent) => void = () => {};
 	const call = vi.fn(
@@ -65,6 +65,66 @@ describe('existing playground container binding', () => {
 		await binding.dispose?.();
 	});
 
+	it('does not create an owner for an unused facade or a language selection', async () => {
+		const factory = vi.fn();
+		const binding = createContainerPlaygroundBinding('/runtime/', {
+			applicationRootURL: 'https://example.test/sandbox/',
+			workspaceId: 'unused',
+			clientFactory: factory
+		});
+		await binding.setShellDirectory('PYTHON3');
+		await binding.load('PYTHON3');
+		await binding.dispose();
+		expect(factory).not.toHaveBeenCalled();
+	});
+	it('cannot start a queued workspace operation after its panel is disposed', async () => {
+		const factory = vi.fn();
+		const binding = createContainerPlaygroundBinding('/runtime/', {
+			applicationRootURL: 'https://example.test/sandbox/',
+			workspaceId: 'leaving',
+			clientFactory: factory
+		});
+		const publishing = binding.syncWorkspace('PYTHON3', [
+			{ path: 'main.py', content: 'print(1)' }
+		]);
+		const rejected = expect(publishing).rejects.toThrow('disposed');
+		await binding.dispose();
+		await rejected;
+		expect(factory).not.toHaveBeenCalled();
+	});
+	it('retires its real transport while the first workspace publish is awaiting initialization', async () => {
+		vi.useFakeTimers();
+		try {
+			const worker = Object.assign(new EventTarget(), {
+				postMessage: vi.fn(),
+				terminate: vi.fn()
+			});
+			const binding = createContainerPlaygroundBinding('/runtime/', {
+				applicationRootURL: 'https://example.test/sandbox/',
+				workspaceId: 'leaving-during-init',
+				clientFactory: () =>
+					createContainerWorkerClient({
+						runtimeAssets: '/runtime/',
+						applicationRootURL: 'https://example.test/sandbox/',
+						workspaceId: 'leaving-during-init',
+						workerFactory: () => worker,
+						cleanupDeadlineMs: 20
+					})
+			});
+			const publishing = binding.syncWorkspace('PYTHON3', [
+				{ path: 'main.py', content: 'print(1)' }
+			]);
+			const rejected = expect(publishing).rejects.toThrow('disposal deadline expired');
+			await vi.advanceTimersByTimeAsync(0);
+			expect(worker.postMessage).toHaveBeenCalledTimes(1);
+			const disposal = binding.dispose();
+			await vi.advanceTimersByTimeAsync(20);
+			await Promise.all([disposal, rejected]);
+			expect(worker.terminate).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 	it('keeps prepare, execute, stdin and debugger commands on one owner connection', async () => {
 		const { binding, call, client } = fixture();
 		await binding.syncWorkspace('C', [{ path: 'main.c', content: 'int main(){}' }]);
@@ -83,6 +143,30 @@ describe('existing playground container binding', () => {
 		await binding.dispose?.();
 		await binding.dispose?.();
 		expect(client.dispose).toHaveBeenCalledTimes(1);
+	});
+	it('lets terminal cleanup overlap owner disposal while preserving cleanup failures on a live owner', async () => {
+		const { binding, call } = fixture();
+		const sandbox = await binding.load('C');
+		await binding.inspect();
+		call.mockRejectedValueOnce(new Error('Live shell cleanup failed'));
+		await expect(binding.shell.dispose()).rejects.toThrow('Live shell cleanup failed');
+		call.mockRejectedValueOnce(new Error('Live sandbox cleanup failed'));
+		await expect(sandbox.clear()).rejects.toThrow('Live sandbox cleanup failed');
+		const failures: Array<(error: Error) => void> = [];
+		call.mockImplementation(
+			() =>
+				new Promise((_, reject) => {
+					failures.push(reject);
+				})
+		);
+		const shellCleanup = binding.shell.dispose();
+		const sandboxCleanup = sandbox.dispose!();
+		const clear = sandbox.clear();
+		const cleanups = Promise.all([shellCleanup, sandboxCleanup, clear]);
+		await binding.dispose();
+		for (const reject of failures) reject(new Error('Container owner has been disposed'));
+		await expect(cleanups).resolves.toEqual([undefined, undefined, undefined]);
+		await expect(sandbox.clear()).resolves.toBeUndefined();
 	});
 	it('clones queued bytes and sends only changed files with their conflict precondition', async () => {
 		const { binding, call } = fixture();
@@ -240,10 +324,7 @@ describe('existing playground container binding', () => {
 		expect(call).not.toHaveBeenCalled();
 		await binding.shell.connect(() => {});
 		expect(call).toHaveBeenCalledExactlyOnceWith('shellStart', [
-			{
-				cwd: '/workspace/PYTHON',
-				env: { PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ' }
-			}
+			{ cwd: '/workspace/PYTHON', env: { PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ' } }
 		]);
 	});
 
@@ -273,5 +354,76 @@ describe('existing playground container binding', () => {
 		const signal = new AbortController().signal;
 		await sandbox.run('code', false, false, undefined, [], { signal });
 		expect((call.mock.calls[0] as unknown[])[2]).toMatchObject({ signal });
+	});
+
+	it('hands the shared terminal back after success and never resumes a failed claim', async () => {
+		const { binding, call } = fixture();
+		const sandbox = await binding.load('C');
+		await binding.shell.connect(() => {});
+		await binding.beginTerminalExecution();
+		await binding.beginTerminalExecution();
+		await sandbox.run('source', false);
+		await binding.endTerminalExecution();
+		await binding.endTerminalExecution();
+		call.mockRejectedValueOnce(new Error('Execution failed'));
+		await expect(
+			(async () => {
+				await binding.beginTerminalExecution();
+				try {
+					await sandbox.run('source', false);
+				} finally {
+					await binding.endTerminalExecution();
+				}
+			})()
+		).rejects.toThrow('Execution failed');
+		// The failed suspend cannot claim stdin or cause a later unpaired resume.
+		await binding.endTerminalExecution();
+		expect(call.mock.calls.map((row) => row[0])).toEqual([
+			'shellStart',
+			'shellSuspend',
+			'run',
+			'shellResume',
+			'shellSuspend'
+		]);
+	});
+
+	it('restores the shell after runtime failures or Stop without injecting terminal input', async () => {
+		const { binding, call } = fixture();
+		const sandbox = await binding.load('C');
+		await binding.shell.connect(() => {});
+		await binding.beginTerminalExecution();
+		call.mockRejectedValueOnce(new Error('Runtime operation cancelled'));
+		try {
+			await expect(sandbox.run('source', false)).rejects.toThrow('cancelled');
+			await sandbox.kill?.();
+		} finally {
+			await binding.endTerminalExecution();
+		}
+		expect(call.mock.calls.map((row) => row[0])).toEqual([
+			'shellStart',
+			'shellSuspend',
+			'run',
+			'stop',
+			'shellResume'
+		]);
+		expect(call.mock.calls.some((row) => ['shellWrite', 'write'].includes(row[0]))).toBe(false);
+	});
+
+	it('keeps batch execution independent from an unused or unavailable shell and skips redraw after disposal', async () => {
+		const { binding, call } = fixture();
+		await binding.beginTerminalExecution();
+		await binding.endTerminalExecution();
+		expect(call).not.toHaveBeenCalled();
+		call.mockRejectedValueOnce(new Error('Shell unavailable'));
+		await expect(binding.shell.connect(() => {})).rejects.toThrow('unavailable');
+		await binding.beginTerminalExecution();
+		await binding.endTerminalExecution();
+		expect(call).toHaveBeenCalledOnce();
+		const live = fixture();
+		await live.binding.shell.connect(() => {});
+		await live.binding.beginTerminalExecution();
+		await live.binding.dispose();
+		await live.binding.endTerminalExecution();
+		expect(live.call.mock.calls.map((row) => row[0])).toEqual(['shellStart', 'shellSuspend']);
 	});
 });

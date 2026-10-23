@@ -8,6 +8,7 @@ import ts from 'typescript';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** @type {Array<[string, string]>} */
 const packages = [
+	['container', 'packages/container'],
 	['core', 'packages/core'],
 	['debug', 'packages/debug'],
 	['llvm-core', 'packages/llvm-core'],
@@ -29,6 +30,7 @@ const MiB = 1024 * 1024;
  *   packageNames: string[];
  *   absentPackageNames?: string[];
  *   imports: string[];
+ *   typeCheck?: string;
  * }} InstallScenario
  * @typedef {{ bytes: number; files: number }} DirectoryMeasurement
  * @typedef {{ bytes: number; files: number; name: string }} InstallBudgetContributor
@@ -57,6 +59,7 @@ export const scenarios = [
 			'lodash',
 			'lodash-es',
 			'@lezer/rust',
+			'@wasm-idle/container',
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
 			'@wasm-idle/terminal',
@@ -80,6 +83,50 @@ export const scenarios = [
 			"const javaNotices = await (await import('node:fs/promises')).readFile(new URL('./playground/java-debug-notices.txt', import.meta.resolve('wasm-idle')), 'utf8');",
 			"if (!javaNotices.includes('java-parser@3.0.1') || !javaNotices.includes('Apache License')) throw new Error('Packaged Java parser notices are missing');"
 		]
+	},
+	{
+		name: 'wasm-idle/container install',
+		packageNames: [
+			'wasm-idle',
+			'@wasm-idle/container',
+			'@wasm-idle/core',
+			'@wasm-idle/llvm-core'
+		],
+		budget: { maxBytes: 8 * MiB, maxFiles: 1_100, maxPackages: 7 },
+		absentPackageNames: [
+			'@wasm-idle/terminal',
+			'@wasm-idle/debug',
+			'@wasm-idle/lsp',
+			'@xterm/xterm',
+			'svelte',
+			'monaco-editor'
+		],
+		imports: [
+			'let workers = 0, requests = 0;',
+			"globalThis.Worker = class { constructor() { workers++; throw new Error('Unexpected Worker'); } };",
+			"globalThis.fetch = () => { requests++; throw new Error('Unexpected runtime fetch'); };",
+			'const listener = () => {}; globalThis.onmessage = listener;',
+			"const api = await import('wasm-idle/container');",
+			"for (const name of ['createContainerPlaygroundBinding', 'createContainerWorkerClient', 'serveContainerWorker', 'createBashProfile', 'mergeContainerWorkspace']) if (typeof api[name] !== 'function') throw new Error(`Missing public container API: ${name}`);",
+			"const binding = api.createContainerPlaygroundBinding('', { applicationRootURL: 'https://example.invalid/', workspaceId: 'package-smoke', workerFactory: () => new Worker() });",
+			'await binding.dispose();',
+			"if (workers || requests || globalThis.onmessage !== listener) throw new Error('Container import or unused binding changed the host realm');"
+		],
+		typeCheck: `import type { PlaygroundBinding, SandboxRuntimeAssets } from 'wasm-idle';
+import { createContainerPlaygroundBinding, serveContainerWorker, mergeContainerWorkspace,
+  type ContainerOwnerWorker, type ContainerShellBinding, type ContainerWorkerOptions } from 'wasm-idle/container';
+declare const worker: ContainerOwnerWorker;
+declare const createBinding: (assets: SandboxRuntimeAssets) => PlaygroundBinding;
+declare const configuration: ContainerWorkerOptions['createBashConfiguration'];
+const binding = createContainerPlaygroundBinding('', {
+  applicationRootURL: 'https://example.invalid/', workspaceId: 'type-smoke', workerFactory: () => worker
+});
+const shell: ContainerShellBinding = binding.shell;
+const options: ContainerWorkerOptions = { languages: ['CPP'], createBinding, createBashConfiguration: configuration };
+const serve: typeof serveContainerWorker = serveContainerWorker;
+const result = mergeContainerWorkspace([{ path: 'main.cpp', content: '' }], [], []);
+void [shell, options, serve, result, binding.dispose()];
+`
 	},
 	{
 		name: '@wasm-idle/terminal install',
@@ -520,6 +567,28 @@ async function verifyScenario(tempRoot, tarballs, scenario, index) {
 			['--input-type=module', '--eval', scenario.imports.join('\n')],
 			installDir
 		);
+		if (scenario.typeCheck) {
+			const sourcePath = path.join(installDir, 'container-consumer.ts');
+			await writeFile(sourcePath, scenario.typeCheck);
+			await run(
+				'node',
+				[
+					path.join(REPO_ROOT, 'node_modules/typescript/bin/tsc'),
+					'--noEmit',
+					'--module',
+					'ESNext',
+					'--moduleResolution',
+					'bundler',
+					'--target',
+					'ES2022',
+					'--lib',
+					'ES2022,DOM',
+					'--strict',
+					sourcePath
+				],
+				installDir
+			);
+		}
 
 		const contributors = await measurePackageContributors(nodeModulesDirectory);
 		const installedPackageNames = new Set(
@@ -599,6 +668,13 @@ async function main() {
 				);
 			}
 			if (manifest.name === 'wasm-idle') {
+				if (
+					packedPaths.some((packedPath) =>
+						packedPath.startsWith('dist/playground/container/')
+					)
+				) {
+					throw new Error('wasm-idle contains website-only container entries');
+				}
 				const legacyPluginFiles = packedPaths.filter(
 					(packedPath) =>
 						packedPath.startsWith('dist/terminal/') ||
@@ -618,8 +694,8 @@ async function main() {
 				[
 					'--dir',
 					path.join(REPO_ROOT, packageDir),
+					'--config.ignore-scripts=true',
 					'pack',
-					'--ignore-scripts',
 					'--out',
 					tarballPath
 				],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeContainerWorkspace } from './workspace';
+import { mergeContainerWorkspace } from './workspace.js';
 const f = (path: string, content: string) => ({ path, content });
 describe('container editor reconciliation', () => {
 	it('adopts shell creates, writes and deletions when editor revision is unchanged', () => {

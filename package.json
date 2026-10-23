@@ -264,8 +264,17 @@
 		"@wasm-idle/llvm-core": "workspace:*",
 		"fflate": "0.8.3"
 	},
+	"peerDependencies": {
+		"@wasm-idle/container": "0.1.1"
+	},
+	"peerDependenciesMeta": {
+		"@wasm-idle/container": {
+			"optional": true
+		}
+	},
 	"files": [
 		"dist",
+		"!dist/playground/container/**",
 		"!dist/test-fixtures/**",
 		"!dist/**/*.test.*",
 		"!dist/**/*.spec.*",
@@ -280,6 +289,11 @@
 			"svelte": "./dist/index.js",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
+		},
+		"./container": {
+			"types": "./dist/container/index.d.ts",
+			"import": "./dist/container/index.js",
+			"default": "./dist/container/index.js"
 		}
 	},
 	"svelte": "./dist/index.js",
