@@ -1,8 +1,8 @@
 export const WASM_RUST_RUNTIME_PROFILE = Object.freeze({
-	profileId: 'wasm-rust-7f65a4c793bc46e94bc6844d93b94eb5499610932ca111f7079300a21a731105',
+	profileId: 'wasm-rust-eba199cc60d739360c0e51388c1342fd2ed8bf137385a86f9a092ab14eb9d18a',
 	protocolVersion: 1,
 	manifestPath: 'runtime/runtime-manifest.v3.json',
-	manifestFingerprint: '7f65a4c793bc46e94bc6844d93b94eb5499610932ca111f7079300a21a731105',
+	manifestFingerprint: 'eba199cc60d739360c0e51388c1342fd2ed8bf137385a86f9a092ab14eb9d18a',
 	manifestReceipt: {
 		bytes: 6185,
 		sha256: '30b210003632395a1effd19f7a46565d5f8c52a9d3a28a310fa24219f97a5a9a'
@@ -183,12 +183,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 6936,
-				sha256: '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'
+				bytes: 10748,
+				sha256: 'b18798a82090629e5f86524476d757932de74af580431874c2eeebf6b704cb0f'
 			},
 			logical: {
-				bytes: 6936,
-				sha256: '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'
+				bytes: 10748,
+				sha256: 'b18798a82090629e5f86524476d757932de74af580431874c2eeebf6b704cb0f'
 			},
 			imports: [
 				{
@@ -208,23 +208,8 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				},
 				{
 					kind: 'static',
-					specifier: './vendor/browser_wasi_shim/fd.js',
-					target: 'vendor/browser_wasi_shim/fd.js'
-				},
-				{
-					kind: 'static',
-					specifier: './vendor/browser_wasi_shim/fs_mem.js',
-					target: 'vendor/browser_wasi_shim/fs_mem.js'
-				},
-				{
-					kind: 'static',
-					specifier: './vendor/browser_wasi_shim/wasi.js',
-					target: 'vendor/browser_wasi_shim/wasi.js'
-				},
-				{
-					kind: 'static',
-					specifier: './vendor/browser_wasi_shim/wasi_defs.js',
-					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+					specifier: './vendor/browser_wasi_shim/index.js',
+					target: 'vendor/browser_wasi_shim/index.js'
 				}
 			],
 			assets: [],
@@ -417,12 +402,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 5220,
-				sha256: '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'
+				bytes: 5819,
+				sha256: '8933c8f043fb3dbee28d4f61d8a3ea16a372b2c833b1071a6531071388fed730'
 			},
 			logical: {
-				bytes: 5220,
-				sha256: '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'
+				bytes: 5819,
+				sha256: '8933c8f043fb3dbee28d4f61d8a3ea16a372b2c833b1071a6531071388fed730'
 			},
 			imports: [],
 			assets: [],
@@ -434,12 +419,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 22093,
-				sha256: '72cd8fe5c7999ffa6e144b3d6ea3691686843063dc8405274c2573f1ea8356a2'
+				bytes: 24012,
+				sha256: 'c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604'
 			},
 			logical: {
-				bytes: 22093,
-				sha256: '72cd8fe5c7999ffa6e144b3d6ea3691686843063dc8405274c2573f1ea8356a2'
+				bytes: 24012,
+				sha256: 'c08d429b5f57c40169ccd525886e027419a0fbb10c4cd92ad6ced62c07331604'
 			},
 			imports: [
 				{
@@ -532,12 +517,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 35204,
-				sha256: '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'
+				bytes: 37627,
+				sha256: '2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd'
 			},
 			logical: {
-				bytes: 35204,
-				sha256: '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'
+				bytes: 37627,
+				sha256: '2134f9a764e5021af2860549aa237ba287176ad94e33e4a4fe6758cd483b18bd'
 			},
 			imports: [
 				{
@@ -630,12 +615,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 3686,
-				sha256: 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'
+				bytes: 3969,
+				sha256: 'c3ee4682af8d8b9f338f1258fdff5701754f72753aa1b5385b7848bff1ff3e8d'
 			},
 			logical: {
-				bytes: 3686,
-				sha256: 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'
+				bytes: 3969,
+				sha256: 'c3ee4682af8d8b9f338f1258fdff5701754f72753aa1b5385b7848bff1ff3e8d'
 			},
 			imports: [
 				{
@@ -1590,7 +1575,7 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 			externals: []
 		}
 	},
-	fingerprint: '8216ff2b93e5d712c78033636c02aadfa8a1bbfd1de88c6bfa4995b4ea0b4870'
+	fingerprint: '8a061914959a80bf3a93507dcf1b54cab0e9760e0a9bdf1f861fab00099d9fa5'
 } as const);
 
 export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;

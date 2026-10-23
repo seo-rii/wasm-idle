@@ -28,12 +28,13 @@ const PROGRESS_STAGE_RANGES = {
     retry: [0, 99],
     done: [100, 100]
 };
-export async function compileRust(request, dependencies = {}) {
+async function runRustCompiler(request, dependencies = {}, checkOnly = false) {
     const validationError = validateCompileRequest(request);
     if (validationError) {
         return makeFailure(validationError);
     }
     const debugMode = resolveBrowserRustDebugMode(request);
+    const optimizationProfile = request.optimizationProfile || 'interactive';
     if (debugMode !== 'none' && request.assetDeliveryBudget !== undefined) {
         return makeFailure('wasm-rust debug compilation does not accept an asset delivery budget');
     }
@@ -211,6 +212,8 @@ export async function compileRust(request, dependencies = {}) {
         const { assetCache: _ignoredAssetCache, onProgress: _ignoredOnProgress, workerLimits: _ignoredWorkerLimits, assetDeliveryBudget: _ignoredAssetDeliveryBudget, ...workerRequestBase } = request;
         const workerRequest = {
             ...workerRequestBase,
+            optimizationProfile,
+            ...(checkOnly ? { checkOnly: true } : {}),
             ...(workerLimits ? { workerLimits } : {}),
             ...(deliveryBudget ? { assetDeliveryBudget: deliveryBudget } : {})
         };
@@ -246,7 +249,7 @@ export async function compileRust(request, dependencies = {}) {
                 worker.terminate();
             };
             activeWorkerCleanup = stopWorker;
-            const sharedBitcodeBuffer = new SharedArrayBuffer(16 + manifest.compiler.workerSharedOutputBytes);
+            const sharedBitcodeBuffer = new SharedArrayBuffer(16 + (checkOnly ? 0 : manifest.compiler.workerSharedOutputBytes));
             const sharedWorkspaceBuffer = new SharedArrayBuffer(manifest.compiler.workerSharedWorkspaceBytes);
             const sharedStatusBuffer = new SharedArrayBuffer(WORKER_STATUS_BUFFER_BYTES);
             const workerResult = new Promise((resolve, reject) => {
@@ -321,6 +324,10 @@ export async function compileRust(request, dependencies = {}) {
                 ]);
                 if (raced.type === 'message') {
                     workerResultConsumed = true;
+                    if (checkOnly) {
+                        settledMessage = raced.message;
+                        break;
+                    }
                     const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
                     if (raced.message.type === 'error') {
                         const workerFailureKind = classifyRetryableFailureKind([raced.message.message || '', raced.message.stderr || ''].join('\n'));
@@ -367,6 +374,14 @@ export async function compileRust(request, dependencies = {}) {
                         stopWorker();
                         attemptResult = makeFailure(pendingHelperThreadFailure);
                         break;
+                    }
+                    if (checkOnly) {
+                        const failure = readWorkerFailure(sharedStatusBuffer);
+                        if (failure) {
+                            attemptResult = makeFailure(failure);
+                            break;
+                        }
+                        continue;
                     }
                 }
                 else if (mirrored.length > 0) {
@@ -434,6 +449,33 @@ export async function compileRust(request, dependencies = {}) {
                         artifact
                     }, readCompileLogs(), readCompileLogRecords());
                 }
+            }
+            if (checkOnly) {
+                stopWorker();
+                flushAttemptCompileLogs(attemptCompileLogs);
+                const result = settledMessage?.type === 'result'
+                    ? {
+                        success: settledMessage.exitCode === 0,
+                        stdout: settledMessage.stdout,
+                        stderr: settledMessage.stderr,
+                        ...(settledMessage.diagnostics
+                            ? { diagnostics: settledMessage.diagnostics }
+                            : {})
+                    }
+                    : {
+                        success: false,
+                        stderr: attemptResult?.stderr ||
+                            workerBootstrapError?.message ||
+                            (settledMessage?.type === 'error'
+                                ? settledMessage.stderr || settledMessage.message
+                                : 'browser rustc metadata check timed out')
+                    };
+                emitCompileProgress('done', attempt, {
+                    completed: 1,
+                    total: 1,
+                    message: 'metadata check finished'
+                });
+                return attachCompileLogs(result, readCompileLogs(), readCompileLogRecords());
             }
             if (!attemptResult && workerBootstrapError) {
                 stopWorker();
@@ -637,4 +679,12 @@ export async function compileRust(request, dependencies = {}) {
     finally {
         activeWorkerCleanup?.();
     }
+}
+export function compileRust(request, dependencies = {}) {
+    return runRustCompiler(request, dependencies);
+}
+export async function checkRust(request, dependencies = {}) {
+    // No debug artifact or code-generation profile can turn this into a link operation.
+    const { artifact: _artifact, ...result } = await runRustCompiler({ ...request, debugMode: 'none', optimizationProfile: 'interactive' }, dependencies, true);
+    return result;
 }
