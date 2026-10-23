@@ -1,5 +1,7 @@
 import {
 	resolveSandboxExecutionArgs,
+	type DebugCommand,
+	type DebugSessionEvent,
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -34,6 +36,9 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { CdpSandboxSession, createCdpWorkerName } from './cdpSession';
+import { readTeaVmDebugLocations } from '@wasm-idle/debug';
+import { DebugDeadline } from './debugDeadline';
 
 type JavaOperation = {
 	token: symbol;
@@ -66,6 +71,9 @@ class Java implements Sandbox {
 	exit = true;
 	baseUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	ondebug?: (event: DebugSessionEvent) => void;
+	private cdpWorkerName = '';
+	private cdpSession?: CdpSandboxSession;
 	waitingForInput = false;
 	pendingEof = false;
 	assetBridge: WorkerAssetBridge | null = null;
@@ -436,7 +444,8 @@ class Java implements Sandbox {
 					const WorkerConstructor = (await import('$lib/playground/worker/java?worker'))
 						.default;
 					if (!this.isOperationActive(activeOperation)) return;
-					const worker = new WorkerConstructor();
+					this.cdpWorkerName = createCdpWorkerName();
+					const worker = new WorkerConstructor({ name: this.cdpWorkerName });
 					if (!this.isOperationActive(activeOperation)) {
 						worker.terminate();
 						return;
@@ -635,6 +644,8 @@ class Java implements Sandbox {
 			this.resetExplicitStdinState();
 		}
 		this.exit = false;
+		let runCdpSession: CdpSandboxSession | undefined;
+		let debugDeadline: DebugDeadline | undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			let diagnosticCount = 0;
@@ -644,7 +655,19 @@ class Java implements Sandbox {
 				2_147_483_647,
 				limits.compileTimeoutMs + limits.runTimeoutMs
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			if (options.debugMode === 'cdp' && !prepare) {
+				debugDeadline = new DebugDeadline(timeoutMs, () =>
+					this.cancelOperation(
+						activeOperation,
+						new TimeoutError(`Java execution timed out after ${timeoutMs} ms`, {
+							phase: 'execute',
+							runtimeId: 'JAVA',
+							timeoutMs
+						})
+					)
+				);
+				activeOperation.cleanups.push(() => debugDeadline?.dispose());
+			} else this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
@@ -679,7 +702,75 @@ class Java implements Sandbox {
 				try {
 					if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 					if (!ownsRun()) return;
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const { output, results, error, buffer, diagnostic, progress, cdpReady } =
+						event.data;
+					if (cdpReady && options.debugMode === 'cdp' && !prepare) {
+						if (runCdpSession)
+							throw new Error('Duplicate Java debugger initialization');
+						const bytes = cdpReady.bytes as Uint8Array;
+						const activePath = workspace.activePath;
+						if (!activePath)
+							throw new Error('Java debugger requires an active source path');
+						const sourcePath = options.debugPath || activePath;
+						// The existing stdin compatibility transform appends generated Scanner
+						// code after trimEnd(). Trailing blank editor lines cannot own its locations.
+						const sourceLines = new Map([
+							[activePath, code.trimEnd().split('\n').length],
+							...workspace.workspaceFiles.flatMap((file) =>
+								typeof file.content === 'string' && file.path.endsWith('.java')
+									? [
+											[
+												file.path,
+												file.content.trimEnd().split('\n').length
+											] as const
+										]
+									: []
+							)
+						]);
+						const locations = readTeaVmDebugLocations(bytes, [...sourceLines.keys()])
+							.filter(
+								(location) =>
+									location.line <= (sourceLines.get(location.sourcePath) ?? 0)
+							)
+							.map((location) => ({
+								...location,
+								sourcePath:
+									location.sourcePath === activePath
+										? sourcePath
+										: location.sourcePath
+							}));
+						if (!locations.length)
+							throw new Error(
+								'Java compiler emitted no locations for the workspace sources'
+							);
+						const session = new CdpSandboxSession({
+							workerName: this.cdpWorkerName,
+							sourcePath,
+							source: code,
+							breakpoints: options.breakpoints || [],
+							pauseOnEntry: options.pauseOnEntry !== false,
+							sourceBreakpoints: options.sourceBreakpoints,
+							wasm: { bytes, locations },
+							onDebugEvent: (event) => {
+								if (event.type === 'pause') debugDeadline?.pause();
+								else if (event.type === 'resume') debugDeadline?.resume();
+								if (
+									this.cdpSession === session &&
+									(ownsRun() || event.type === 'stop')
+								)
+									this.ondebug?.(event);
+							},
+							onFailure: (error) => failRun(error, true)
+						});
+						this.cdpSession = runCdpSession = session;
+						void session
+							.start()
+							.then(() => {
+								if (ownsRun()) worker.postMessage({ cdpRun: cdpReady.token });
+							})
+							.catch((error) => failRun(error, true));
+						return;
+					}
 					if (buffer && !hasExplicitStdin) {
 						if (!prepare) {
 							_prog?.report?.({
@@ -757,6 +848,7 @@ class Java implements Sandbox {
 				worker.postMessage({
 					code,
 					prepare,
+					debugMode: options.debugMode,
 					buffer: this.buffer,
 					args: programArgs,
 					stdin: stdin ?? '',
@@ -769,7 +861,9 @@ class Java implements Sandbox {
 				failRun(error, true);
 			}
 		});
-		return running.finally(() => {
+		return running.finally(async () => {
+			await runCdpSession?.dispose().catch(() => undefined);
+			if (this.cdpSession === runCdpSession) this.cdpSession = undefined;
 			if (this.releaseOperation(activeOperation)) {
 				this.finishExplicitStdin(activeOperation);
 				this.exit = true;
@@ -789,7 +883,30 @@ class Java implements Sandbox {
 		this.pendingEof = false;
 		this.exit = true;
 		this.workerSession.terminate(reason);
+		void this.cdpSession?.dispose().catch(() => undefined);
 		this.cleanupOperation(operation);
+	}
+
+	debugCommand(command: DebugCommand) {
+		return this.cdpSession?.debugCommand(command);
+	}
+	debugPause() {
+		return this.cdpSession?.pause();
+	}
+	setBreakpoints(lines: number[], sourcePath?: string) {
+		return this.cdpSession?.setBreakpoints(lines, sourcePath);
+	}
+	async debugEvaluate(expression: string) {
+		return (await this.cdpSession?.evaluate(expression)) ?? '?';
+	}
+	async debugVariables(reference: number, start?: number, count?: number) {
+		return (await this.cdpSession?.variables(reference, start, count)) ?? [];
+	}
+	async debugScopes(frameId: number) {
+		return (await this.cdpSession?.scopes(frameId)) ?? [];
+	}
+	async debugFrameScopes(frameId: number) {
+		return (await this.cdpSession?.frameScopes(frameId)) ?? [];
 	}
 
 	kill() {
