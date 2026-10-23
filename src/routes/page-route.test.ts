@@ -138,6 +138,28 @@ describe('shared workspace refresh scheduling', () => {
 });
 
 describe('example route debug actions', () => {
+	it('preserves an armed watchpoint when variable discovery cannot replace it', async () => {
+		const begin = source.indexOf('async function watchDebugVariable(');
+		const action = source
+			.slice(begin, source.indexOf('\n\tfunction exec(', begin))
+			.replace('node: DebugVariableNode', 'node');
+		const previous = { accessType: 'write', description: 'old', id: 7 };
+		const context = {
+			dataBreakpointLoadingOwner: null,
+			dataBreakpointRequestVersion: 0,
+			dataBreakpointLoading: false,
+			dataBreakpointError: '',
+			activeDataBreakpoint: previous,
+			debug: { paused: true, frameId: 1, watchVariable: vi.fn(async () => []) }
+		};
+		const watch = runInNewContext(`${action}\nwatchDebugVariable`, context);
+		await watch({ path: 'unsupported', variable: { name: 'container' } });
+		expect(context.activeDataBreakpoint).toBe(previous);
+		expect(context.dataBreakpointError).toContain('cannot be watched');
+		expect(context.dataBreakpointLoading).toBe(false);
+		expect(context.dataBreakpointLoadingOwner).toBeNull();
+	});
+
 	it('reloads once the Pages isolation service worker is ready', () => {
 		expect(layoutSource).toMatch(/await navigator\.serviceWorker\.ready;/);
 		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
@@ -387,6 +409,30 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(source).toMatch(
 			/<span class="material-symbols-outlined" aria-hidden="true"\s*>play_circle<\/span/
+		);
+	});
+
+	it('distinguishes unloaded debugger scopes from inline and cached variables', () => {
+		const expression = source.match(/\{@const loadedScopeVariables =\s*([^}]+)\}/u)?.[1];
+		expect(expression).toBeTruthy();
+		const inline = [{ name: 'inline', value: '1' }];
+		const cached = [{ name: 'cached', value: '2' }];
+		const knownEmpty: typeof inline = [];
+		for (const { variables, cache, expected } of [
+			{ variables: [], cache: undefined, expected: undefined },
+			{ variables: inline, cache: undefined, expected: inline },
+			{ variables: inline, cache: knownEmpty, expected: knownEmpty },
+			{ variables: inline, cache: cached, expected: cached }
+		]) {
+			const variablesByReference = new Map(cache === undefined ? [] : [[7, cache]]);
+			const loaded = runInNewContext(expression!, {
+				debug: { variablesByReference },
+				scope: { variablesReference: 7, variables }
+			});
+			expect(loaded).toBe(expected);
+		}
+		expect(source).toContain(
+			'{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}'
 		);
 	});
 
@@ -1436,6 +1482,33 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="js">js_of_ocaml<\/option>/);
 		expect(source).toMatch(/<option value="fast">Binaryen fast<\/option>/);
 		expect(source).toMatch(/<option value="full">Binaryen full<\/option>/);
+	});
+
+	it('renders retained watch subtrees in history without requesting live children', () => {
+		const historyStart = source.indexOf('<summary>Recent stops (');
+		const historyPanel = source.slice(historyStart, source.indexOf('</details>', historyStart));
+		const watchMarkup = historyPanel.match(
+			/\{#each debug\.selectedHistory\.watches as watch \(watch\.expression\)\}([\s\S]*?)\{\/each\}/u
+		)?.[1];
+		expect(watchMarkup).toBeTruthy();
+		const tree = watchMarkup!.match(
+			/\{#if ([^}]+)\}[\s\S]*?\{@render debugSnapshotRows\(([^)]+)\)\}/u
+		);
+		expect(tree).toBeTruthy();
+		const children = Object.freeze([
+			Object.freeze({ name: '[0]', value: '7', children: Object.freeze([]) })
+		]);
+		for (const [watch, visible] of [
+			[{ expression: 'scalar', value: '3' }, false],
+			[{ expression: 'empty', value: 'size=0', node: { children: [] } }, false],
+			[{ expression: 'items', value: 'size=1', node: { children } }, true]
+		] as const) {
+			expect(runInNewContext(`Boolean(${tree![1]})`, { watch })).toBe(visible);
+			if (visible) expect(runInNewContext(tree![2], { watch })).toBe(children);
+		}
+		expect(watchMarkup).not.toMatch(
+			/variablesReference|memoryReference|debug\.(?:loadVariableChildren|loadMoreVariablePath|expandVariable)\s*\(/u
+		);
 	});
 
 	it('keeps the workspace resizable and shows debug panels for active sessions or retained history', () => {

@@ -2401,7 +2401,6 @@
 		dataBreakpointLoadingOwner = requestVersion;
 		dataBreakpointLoading = true;
 		dataBreakpointError = '';
-		activeDataBreakpoint = null;
 		try {
 			const resolved = await debug.watchVariable(node.path, 'write', {
 				replaceExisting: true
@@ -2413,6 +2412,7 @@
 			)
 				return;
 			if (!resolved[0]?.verified) {
+				if (resolved.length) activeDataBreakpoint = null;
 				dataBreakpointError =
 					resolved[0]?.message || 'This variable cannot be watched for writes.';
 				return;
@@ -3346,7 +3346,10 @@
 											{@const loadedScopeVariables =
 												debug.variablesByReference.get(
 													scope.variablesReference
-												) ?? scope.variables}
+												) ??
+												(scope.variables.length
+													? scope.variables
+													: undefined)}
 											<details
 												class="debug-scope"
 												bind:open={
@@ -3456,11 +3459,20 @@
 								{#if debug.watchValues.length}
 									<ul>
 										{#each debug.watchValues as watch (watch.expression)}
-											<li class="debug-entry debug-entry--watch">
+											<li
+												class={[
+													'debug-entry debug-entry--watch',
+													{ 'debug-entry--changed': watch.node?.changed }
+												]}
+											>
 												<div class="debug-entry__body">
 													<span class="debug-expression"
 														>{watch.expression}</span
 													>
+													{#if watch.node?.changed && watch.node.previousValue !== undefined}<code
+															class="debug-previous-value"
+															>{watch.node.previousValue} →</code
+														>{/if}
 													<code class="debug-value">{watch.value}</code>
 												</div>
 												<button
@@ -3706,9 +3718,14 @@
 								<ul>
 									{@render debugSnapshotRows(debug.selectedHistory.variables)}
 								</ul>
-								{#each debug.selectedHistory.watches as watch (watch.expression)}<p>
+								{#each debug.selectedHistory.watches as watch (watch.expression)}
+									<p>
 										<code>{watch.expression}</code>: <code>{watch.value}</code>
-									</p>{/each}
+									</p>
+									{#if watch.node?.children.length}
+										<ul>{@render debugSnapshotRows(watch.node.children)}</ul>
+									{/if}
+								{/each}
 								{#if debug.selectedHistory.truncated}<p>
 										Some values were omitted from this snapshot.
 									</p>{/if}
@@ -3829,16 +3846,14 @@
 													? 'Setting…'
 													: 'Set data breakpoint'}
 											</button>
-											{#if activeDataBreakpoint}
-												<button
-													class="debug-data-breakpoint-clear"
-													onclick={() => void clearMemoryDataBreakpoint()}
-													disabled={dataBreakpointLoading}
-													aria-label="Clear data breakpoint"
-												>
-													Clear
-												</button>
-											{/if}
+											<button
+												class="debug-data-breakpoint-clear"
+												onclick={() => void clearMemoryDataBreakpoint()}
+												disabled={dataBreakpointLoading}
+												aria-label="Clear data breakpoint"
+											>
+												Clear
+											</button>
 										</div>
 									{/if}
 									{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
