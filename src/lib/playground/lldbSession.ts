@@ -1179,7 +1179,11 @@ export class LldbSandboxSession {
 				invalidDapPayload('stopped event', 'allThreadsStopped', 'expected a boolean');
 			}
 			const reason =
-				this.pauseRequested && body.reason === 'exception' ? 'pause' : body.reason;
+				this.pauseRequested &&
+				(body.reason === 'exception' ||
+					(this.entryPhase === 'initial' && body.reason === 'entry'))
+					? 'pause'
+					: body.reason;
 			this.pauseRequested = false;
 			const session = this.requireSession();
 			const version = ++this.stateVersion;
@@ -1315,7 +1319,9 @@ export class LldbSandboxSession {
 			await this.entrySetup?.ready;
 			if (!this.isCurrentValueRequest(session, version)) return;
 			this.entryPhase = 'done';
-			if (reason === 'entry' && selectedFrame.name === '_start' && !isWorkspaceFrame) {
+			if (reason === 'entry' && !isWorkspaceFrame) {
+				// WAMR's initial stop can resolve to a WASI import wrapper in Rust modules.
+				// Only the entry reason authorizes running past a non-workspace frame.
 				// configurationDone has already installed all user source breakpoints. Function
 				// breakpoints occupy a separate DAP registry owned by this product session.
 				this.entryPhase = 'seeking-main';

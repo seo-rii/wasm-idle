@@ -1226,6 +1226,7 @@ describe('Rust sandbox', () => {
 
 		const run = sandbox.run('fn main() {}', false, true, undefined, [], {
 			debugMode: 'lldb',
+			pauseOnEntry: true,
 			activePath: 'src/../solution.rs',
 			breakpoints: [7, 2, 2, -1],
 			sourceBreakpoints: [
@@ -1239,6 +1240,9 @@ describe('Rust sandbox', () => {
 		const session = lldbSessions[0];
 		expect(session.options).toMatchObject({
 			manifestReceipt,
+			pauseOnEntry: true,
+			pauseAtMain: true,
+			entryFunctionName: 'main::main',
 			sourcePath: '/workspace/main.rs',
 			breakpoints: [2, 3, 4, 7],
 			sourceBreakpoints: [

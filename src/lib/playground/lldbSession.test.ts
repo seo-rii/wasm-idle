@@ -444,7 +444,7 @@ describe('LldbSandboxSession', () => {
 		);
 	});
 
-	describe('C/C++ source entry', () => {
+	describe('source entry', () => {
 		async function startEntry(
 			pauseAtMain = true,
 			pauseOnEntry = true,
@@ -486,12 +486,69 @@ describe('LldbSandboxSession', () => {
 			return { controller, completion, runtime, events, output };
 		}
 
-		it('uses a language entry symbol and removes it before reporting source entry', async () => {
+		it.each(['main__main', 'main::main'])(
+			'uses the language entry symbol %s and removes it before reporting source entry',
+			async (entryFunctionName) => {
+				const { controller, completion, runtime, events } = await startEntry(
+					true,
+					true,
+					entryFunctionName
+				);
+				runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+				await vi.waitFor(() =>
+					expect(runtime.requests).toContainEqual({
+						command: 'continue',
+						args: { threadId: 7 }
+					})
+				);
+				expect(runtime.requests).toContainEqual({
+					command: 'setFunctionBreakpoints',
+					args: { breakpoints: [{ name: entryFunctionName }] }
+				});
+				runtime.emit({ event: 'continued', body: { threadId: 7 } });
+				runtimeState.responseOverrides.set('stackTrace', {
+					stackFrames: [
+						{
+							id: 41,
+							name: entryFunctionName,
+							line: 6,
+							column: 1,
+							source: { path: '/workspace/main.cpp' }
+						}
+					]
+				});
+				await emitStoppedAndWait(runtime);
+				await vi.waitFor(() =>
+					expect(events).toContainEqual(
+						expect.objectContaining({ type: 'pause', reason: 'entry' })
+					)
+				);
+				expect(
+					runtime.requests
+						.filter((request) => request.command === 'setFunctionBreakpoints')
+						.at(-1)?.args
+				).toEqual({ breakpoints: [] });
+				await controller.disconnect();
+				await completion;
+			}
+		);
+
+		it('seeks source entry when the runtime entry resolves to a WASI import wrapper', async () => {
 			const { controller, completion, runtime, events } = await startEntry(
 				true,
 				true,
-				'main__main'
+				'main::main'
 			);
+			runtimeState.responseOverrides.set('stackTrace', {
+				stackFrames: [
+					{
+						id: 41,
+						name: '__imported_wasi_snapshot_preview1_fd_read',
+						line: 0,
+						column: 0
+					}
+				]
+			});
 			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
 			await vi.waitFor(() =>
 				expect(runtime.requests).toContainEqual({
@@ -499,36 +556,34 @@ describe('LldbSandboxSession', () => {
 					args: { threadId: 7 }
 				})
 			);
+			expect(events.filter((event) => event.type === 'pause')).toEqual([]);
 			expect(runtime.requests).toContainEqual({
 				command: 'setFunctionBreakpoints',
-				args: { breakpoints: [{ name: 'main__main' }] }
+				args: { breakpoints: [{ name: 'main::main' }] }
 			});
-			runtime.emit({ event: 'continued', body: { threadId: 7 } });
-			runtimeState.responseOverrides.set('stackTrace', {
-				stackFrames: [
-					{
-						id: 41,
-						name: 'main__main',
-						line: 6,
-						column: 1,
-						source: { path: '/workspace/main.cpp' }
-					}
-				]
-			});
-			await emitStoppedAndWait(runtime);
-			await vi.waitFor(() =>
-				expect(events).toContainEqual(
-					expect.objectContaining({ type: 'pause', reason: 'entry' })
-				)
-			);
-			expect(
-				runtime.requests
-					.filter((request) => request.command === 'setFunctionBreakpoints')
-					.at(-1)?.args
-			).toEqual({ breakpoints: [] });
 			await controller.disconnect();
 			await completion;
 		});
+
+		it.each(['exception', 'breakpoint', 'pause'])(
+			'preserves a non-workspace %s stop during startup',
+			async (reason) => {
+				const { controller, completion, runtime, events } = await startEntry();
+				runtime.emit({ event: 'stopped', body: { reason, threadId: 7 } });
+				await vi.waitFor(() =>
+					expect(events).toContainEqual(
+						expect.objectContaining({ type: 'pause', stoppedReason: reason })
+					)
+				);
+				expect(
+					runtime.requests.some((request) =>
+						['setFunctionBreakpoints', 'continue'].includes(request.command)
+					)
+				).toBe(false);
+				await controller.disconnect();
+				await completion;
+			}
+		);
 
 		it('hides runtime entry and removes the private main breakpoint before publishing source entry', async () => {
 			const { controller, completion, runtime, events } = await startEntry();
@@ -690,6 +745,28 @@ describe('LldbSandboxSession', () => {
 				expect(events.filter((event) => event.type === 'pause')).toEqual([]);
 			}
 		);
+
+		it('honors Pause requested before the initial runtime stop without seeking main', async () => {
+			const { controller, completion, runtime, events } = await startEntry();
+			await controller.pause();
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({
+						type: 'pause',
+						reason: 'pause',
+						stoppedReason: 'pause'
+					})
+				)
+			);
+			expect(
+				runtime.requests.some((request) =>
+					['setFunctionBreakpoints', 'continue'].includes(request.command)
+				)
+			).toBe(false);
+			await controller.disconnect();
+			await completion;
+		});
 
 		it('honors Pause during entry breakpoint installation without resuming the guest', async () => {
 			const { controller, completion, runtime, events } = await startEntry();

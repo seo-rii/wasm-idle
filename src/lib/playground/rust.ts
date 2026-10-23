@@ -726,6 +726,8 @@ class Rust implements Sandbox {
 							})
 						),
 						pauseOnEntry: !!options.pauseOnEntry,
+						pauseAtMain: true,
+						entryFunctionName: 'main::main',
 						programArgs,
 						stdin: options.stdin,
 						onDebugEvent: (debugEvent) => {
