@@ -3123,6 +3123,16 @@ describe('native-source browser debugging in Chromium', () => {
 							}, stepStartLine);
 						}
 						if (requireLldbDebug && testCase.backend === 'lldb') {
+							// The navigable pause precedes scope metadata. Wait for the details
+							// before snapshotting references used by the variable assertions below.
+							await page.waitForFunction(
+								() => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									return state.paused && state.scopes.length > 0;
+								},
+								undefined,
+								{ timeout: 10_000 }
+							);
 							const debugState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
@@ -4185,6 +4195,24 @@ describe('native-source browser debugging in Chromium', () => {
 										null,
 										2
 									)}`
+								);
+							}
+							if (!(
+								'expectScopesAtStop' in testCase && !testCase.expectScopesAtStop
+							)) {
+								await page.waitForFunction(
+									(reason) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.stoppedReason === reason &&
+											state.scopes.length > 0
+										);
+									},
+									testCase.expectedStoppedReason,
+									{ timeout: 10_000 }
 								);
 							}
 							const stoppedState = await page.evaluate(() =>
