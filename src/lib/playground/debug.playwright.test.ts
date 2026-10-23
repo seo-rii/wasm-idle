@@ -2889,8 +2889,13 @@ describe('native-source browser debugging in Chromium', () => {
 								const resumedState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
+								const resumedVariables = new Map<number, any[]>(
+									resumedState.variablesByReference
+								);
 								const resumedLocals = resumedState.scopes.flatMap(
-									(scope: { variables: any[] }) => scope.variables
+									(scope: { variablesReference: number; variables: any[] }) =>
+										resumedVariables.get(scope.variablesReference) ??
+										scope.variables
 								);
 								const resumedArray = resumedLocals.find(
 									(variable: any) => variable.name === 'values'
@@ -2899,9 +2904,9 @@ describe('native-source browser debugging in Chromium', () => {
 								expect(
 									resumedLocals.find((variable: any) => variable.name === 'ready')
 								).toMatchObject({ value: '1' });
-								const resumedChildren = new Map<number, any[]>(
-									resumedState.variablesByReference
-								).get(resumedArray.variablesReference);
+								const resumedChildren = resumedVariables.get(
+									resumedArray.variablesReference
+								);
 								expect(
 									resumedChildren?.map(
 										({ name, value }: { name: string; value: string }) => ({
