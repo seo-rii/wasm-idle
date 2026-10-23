@@ -484,6 +484,7 @@ class Rust implements Sandbox {
 			this.runActive = true;
 			this.exit = false;
 			let settled = false;
+			let terminating = false;
 			let phaseTimeout: ReturnType<typeof setTimeout> | undefined;
 			let phaseTimeoutState:
 				| {
@@ -534,28 +535,7 @@ class Rust implements Sandbox {
 							timeoutMs: state.timeoutMs
 						}
 					);
-					const lldbSession = this.lldbSession;
-					if (!lldbSession) {
-						this.workerSession.terminate(timeoutError);
-						return;
-					}
-					if (!this.workerSession.complete(operation)) return;
-					let disconnecting: Promise<void>;
-					try {
-						disconnecting = Promise.resolve(lldbSession.disconnect());
-					} catch {
-						disconnecting = Promise.resolve();
-					}
-					void disconnecting
-						.catch(() => undefined)
-						.then(() => {
-							if (this.lldbSession === lldbSession) this.lldbSession = undefined;
-							this.lldbEditorSourcePath = rustLldbSourcePath;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							finishReject(timeoutError);
-						});
+					terminateRun(timeoutError);
 				}, state.remainingMs);
 			};
 			const debugPhaseTimeout: DebugPhaseTimeoutControl = {
@@ -600,6 +580,43 @@ class Rust implements Sandbox {
 				}
 				options.signal?.removeEventListener('abort', abortRun);
 				reject(reason);
+			};
+			const terminateRun = (error: Error) => {
+				if (settled || terminating) return;
+				terminating = true;
+				clearPhaseTimeout();
+				const lldbSession = this.lldbSession;
+				if (!lldbSession) {
+					this.workerSession.terminate(error);
+					return;
+				}
+				if (!this.workerSession.complete(operation)) return;
+				let disconnecting: Promise<void>;
+				try {
+					disconnecting = Promise.resolve(lldbSession.disconnect());
+				} catch {
+					disconnecting = Promise.resolve();
+				}
+				void disconnecting
+					.catch(() => undefined)
+					.then(() => {
+						if (this.lldbSession === lldbSession) this.lldbSession = undefined;
+						this.lldbEditorSourcePath = rustLldbSourcePath;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						finishReject(error);
+					});
+			};
+			const forwardOutput = (output: string) => {
+				if (settled || terminating) return false;
+				outputBytes += outputEncoder.encode(output).byteLength;
+				if (outputBytes > limits.maxOutputBytes) {
+					terminateRun(new Error(`Rust output exceeded ${limits.maxOutputBytes} bytes`));
+					return false;
+				}
+				this.output(output);
+				return true;
 			};
 			const abortRun = () => {
 				try {
@@ -685,16 +702,7 @@ class Rust implements Sandbox {
 					this.flushPendingInput();
 				}
 				reportWorkerProgress(_prog, progress);
-				if (output) {
-					outputBytes += outputEncoder.encode(String(output)).byteLength;
-					if (outputBytes > limits.maxOutputBytes) {
-						this.workerSession.terminate(
-							new Error(`Rust output exceeded ${limits.maxOutputBytes} bytes`)
-						);
-						return;
-					}
-					this.output(output);
-				}
+				if (output && !forwardOutput(String(output))) return;
 				if (diagnostic) {
 					diagnosticCount += 1;
 					if (diagnosticCount > limits.maxDiagnostics) {
@@ -777,7 +785,7 @@ class Rust implements Sandbox {
 							}
 							forwardDebugEvent(debugEvent);
 						},
-						onOutput: (debugOutput) => this.output(debugOutput)
+						onOutput: forwardOutput
 					});
 					this.lldbSession = lldbSession;
 					for (const input of this.pendingInput.splice(0)) void lldbSession.write(input);

@@ -972,6 +972,96 @@ describe('Rust sandbox', () => {
 		expect(worker.terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('shares the UTF-8 output budget across compiler and LLDB output and awaits disposal', async () => {
+		const sandbox = new Rust();
+		const outputs: string[] = [];
+		sandbox.output = (output: string) => outputs.push(output);
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		let settled = false;
+		const run = sandbox.run('fn main() {}', false, true, undefined, [], {
+			debugMode: 'lldb',
+			limits: { maxOutputBytes: 5 }
+		});
+		const completion = run.then(
+			() => {
+				settled = true;
+				return null;
+			},
+			(error) => {
+				settled = true;
+				return error;
+			}
+		);
+		worker.onmessage?.({ data: { output: 'a' } } as MessageEvent<any>);
+		worker.onmessage?.({
+			data: {
+				lldbArtifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.rs', content: 'fn main() {}' }]
+				}
+			}
+		} as MessageEvent<any>);
+		const session = lldbSessions[0];
+		let finishDisconnect!: () => void;
+		session.disconnect.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishDisconnect = resolve;
+				})
+		);
+		session.options.onOutput('é');
+		session.options.onOutput('xy');
+		expect(outputs).toEqual(['a', 'é', 'xy']);
+		session.options.onOutput('!');
+		session.options.onOutput('late');
+		expect(session.disconnect).toHaveBeenCalledTimes(1);
+		expect(outputs).toEqual(['a', 'é', 'xy']);
+		session.finish();
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		finishDisconnect();
+		expect(await completion).toEqual(new Error('Rust output exceeded 5 bytes'));
+		session.options.onOutput('after disposal');
+		expect(outputs).toEqual(['a', 'é', 'xy']);
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
+		await expect(sandbox.run('fn main() {}', false)).resolves.toBe(true);
+	});
+
+	it.each(['reject', 'throw'] as const)(
+		'preserves the LLDB output-budget error when disconnect %ss',
+		async (failure) => {
+			const sandbox = new Rust();
+			sandbox.output = vi.fn();
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
+			const worker = workerInstances[0];
+			worker.postMessage.mockImplementationOnce(() => {});
+			const run = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debugMode: 'lldb',
+				limits: { maxOutputBytes: 1 }
+			});
+			const rejectedRun = expect(run).rejects.toThrow('Rust output exceeded 1 bytes');
+			worker.onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0),
+						sources: [{ path: '/workspace/main.rs', content: 'fn main() {}' }]
+					}
+				}
+			} as MessageEvent<any>);
+			const session = lldbSessions[0];
+			session.disconnect.mockImplementationOnce(() => {
+				if (failure === 'throw') throw new Error('disconnect failed');
+				return Promise.reject(new Error('disconnect failed'));
+			});
+			session.options.onOutput('é');
+			await rejectedRun;
+			expect(sandbox.output).not.toHaveBeenCalled();
+			expect(session.disconnect).toHaveBeenCalledTimes(1);
+		}
+	);
+
 	it('forwards executable graph asset limits and abort signal', async () => {
 		const controller = new AbortController();
 		const sandbox = new Rust();
