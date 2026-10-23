@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 /** @typedef {{ source: string; bytes: number; sha256: string }} SourceReceipt */
-/** @type {{ version: string; revision: string; baseUrl: string; compilerFlags: SourceReceipt; defines: string[]; license: SourceReceipt; headers: Array<SourceReceipt & { path: string }>; llvmDependency: { name: string; version: string; revision: string; baseUrl: string; header: SourceReceipt & { path: string } } }} */
+/** @type {{ version: string; revision: string; baseUrl: string; compilerFlags: SourceReceipt; defines: string[]; license: SourceReceipt; headers: Array<SourceReceipt & { path: string }>; llvmDependency: { name: string; version: string; revision: string; baseUrl: string; headers: Array<SourceReceipt & { path: string }> } }} */
 const lock = JSON.parse(
 	await readFile(new URL('scripts/clang-simd-headers.lock.json', root), 'utf8')
 );
@@ -41,10 +41,12 @@ for (let offset = 0; offset < lock.headers.length; offset += 4) {
 		headers[batch[index].path] = sources[index];
 	}
 }
-headers[lock.llvmDependency.header.path] = await fetchPinned(
-	lock.llvmDependency.header,
-	lock.llvmDependency.baseUrl
+const llvmHeaders = await Promise.all(
+	lock.llvmDependency.headers.map((receipt) => fetchPinned(receipt, lock.llvmDependency.baseUrl))
 );
+for (let index = 0; index < lock.llvmDependency.headers.length; index++) {
+	headers[lock.llvmDependency.headers[index].path] = llvmHeaders[index];
+}
 const license = await fetchPinned(lock.license);
 const provenance = { name: 'emscripten', version: lock.version, revision: lock.revision };
 const wasmProvenance = {
@@ -70,5 +72,5 @@ await writeFile(
 );
 await writeFile(new URL('packages/llvm-core/LICENSE.emscripten.txt', root), license);
 console.log(
-	`Synced ${lock.headers.length} Emscripten ${lock.version} SIMD headers and the LLVM ${lock.llvmDependency.version} WebAssembly intrinsic header.`
+	`Synced ${lock.headers.length} Emscripten ${lock.version} SIMD headers and ${lock.llvmDependency.headers.length} LLVM ${lock.llvmDependency.version} intrinsic and allocator headers.`
 );

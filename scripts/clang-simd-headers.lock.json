@@ -3,7 +3,7 @@
 	"version": "6.0.0",
 	"revision": "afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3",
 	"baseUrl": "https://raw.githubusercontent.com/emscripten-core/emscripten/afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3/",
-	"selection": "Emscripten WebAssembly SIMD compatibility headers for SSE through AVX2, with the matching LLVM WebAssembly intrinsic dependency; excludes native x86 headers, MMX, FMA and AVX-512",
+	"selection": "Emscripten WebAssembly SIMD compatibility headers for SSE through AVX2, with matching LLVM WebAssembly intrinsic and portable aligned allocation dependencies; excludes native x86 headers, MMX, FMA and AVX-512",
 	"compilerFlags": {
 		"source": "tools/compile.py",
 		"bytes": 5183,
@@ -85,11 +85,19 @@
 		"version": "22.1.8",
 		"revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
 		"baseUrl": "https://raw.githubusercontent.com/llvm/llvm-project/ca7933e47d3a3451d81e72ac174dcb5aa28b59d1/",
-		"header": {
-			"path": "wasm_simd128.h",
-			"source": "clang/lib/Headers/wasm_simd128.h",
-			"bytes": 83675,
-			"sha256": "93a4905ac462809f5a5d970286e0ef7cca11b27726c2e8461304e7bc701f9db7"
-		}
+		"headers": [
+			{
+				"path": "wasm_simd128.h",
+				"source": "clang/lib/Headers/wasm_simd128.h",
+				"bytes": 83675,
+				"sha256": "93a4905ac462809f5a5d970286e0ef7cca11b27726c2e8461304e7bc701f9db7"
+			},
+			{
+				"path": "mm_malloc.h",
+				"source": "clang/lib/Headers/mm_malloc.h",
+				"bytes": 1929,
+				"sha256": "5cd8a3d288d469c9e5a2fc8a8ee624f50889dbcd06dea1262ef7aaf510a204af"
+			}
+		]
 	}
 }

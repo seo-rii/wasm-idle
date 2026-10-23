@@ -58,5 +58,39 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_CLANG_SIMD !== '1')(
 				}
 			}
 		);
+
+		it.each(['C', 'CPP'] as const)(
+			'provides WASI aligned allocation through the %s intrinsic headers',
+			{ timeout: 180_000 },
+			async (language) => {
+				const code = `#include <xmmintrin.h>
+#include <immintrin.h>
+int main(void) {
+    for (size_t size = 1; size <= 33; size += 16) {
+        for (size_t alignment = 1; alignment <= 64; alignment *= 2) {
+            unsigned char *memory = (unsigned char *)_mm_malloc(size, alignment);
+            if (!memory || ((size_t)memory % alignment)) return 1;
+            memory[0] = 42;
+            memory[size - 1] = 73;
+            if (memory[size - 1] != 73) return 2;
+            _mm_free(memory);
+        }
+    }
+    _mm_free((void *)0);
+    if (_mm_malloc(17, 3) != (void *)0) return 3;
+    if (_mm_malloc(17, 6) != (void *)0) return 4;
+    return 0;
+}`;
+				const result = await compileClang(
+					{ code, language },
+					{ runtimeBaseUrl: 'http://wasm-idle.test/clang/', fetchImpl: fetchAssets }
+				);
+				expect(result.success, result.stderr).toBe(true);
+				if (!result.artifact) throw new Error('Missing aligned allocation artifact');
+				const execution = await executeBrowserClangArtifact(result.artifact);
+				expect(execution.exitCode, execution.stderr).toBe(0);
+				expect(execution.stderr).toBe('');
+			}
+		);
 	}
 );

@@ -6,10 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { extractTarPackage, validateDistribution } from '@wasm-idle/container';
-import {
-	CLANG_SIMD_INCLUDE_PATH,
-	clangSimdDriverArgs
-} from '@wasm-idle/llvm-core/core/clang-simd';
+import { CLANG_SIMD_INCLUDE_PATH, clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
 import { preparePageContainer } from './prepare-page-container.mjs';
 import { prepareContainerSysrootLayers } from './lib/container-sysroot-layers.mjs';
 import { composeSysrootLayers } from '../examples/container/sysroot-layers.mjs';
@@ -224,9 +221,7 @@ async function profileFixture({
 		layers = prepareContainerSysrootLayers(f.archive, f.distribution, f.receipt);
 	const distribution = legacy ? f.distribution : layers.distribution;
 	distribution.commands[0].adapter =
-		clangFilesystem === 'live'
-			? 'llvm-clang-tool-host-live-v1'
-			: 'llvm-clang-tool-host-v1';
+		clangFilesystem === 'live' ? 'llvm-clang-tool-host-live-v1' : 'llvm-clang-tool-host-v1';
 	const bodies = new Map([
 		['clang', wasm],
 		['lld', wasm],
@@ -339,7 +334,9 @@ test('explicit C profile consumer downloads only base, then adds the delta once 
 			'an already available full tree can serve C without another mount'
 		);
 		assert.deepEqual(
-			f.profile.container.fs.readFile(`${BASH_SYSROOT}/${CLANG_SIMD_INCLUDE_PATH}/immintrin.h`),
+			f.profile.container.fs.readFile(
+				`${BASH_SYSROOT}/${CLANG_SIMD_INCLUDE_PATH}/immintrin.h`
+			),
 			f.profile.container.fs.readFile(simdHeader)
 		);
 		assert.equal(f.requested.length, 4);
@@ -376,13 +373,18 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 				assert(args.includes('-msimd128'));
 				assert(args.includes('-D__SSE2__=1'));
 				assert(args.includes('-D__AVX2__=1'));
-				assert.deepEqual(args.slice(-2), ['-isystem', `${root}/${CLANG_SIMD_INCLUDE_PATH}`]);
+				assert.deepEqual(args.slice(-2), [
+					'-isystem',
+					`${root}/${CLANG_SIMD_INCLUDE_PATH}`
+				]);
 				const directory = `${root}/${CLANG_SIMD_INCLUDE_PATH}`;
 				assert.deepEqual(f.profile.container.fs.readdir(directory).sort(), [
 					'avx2intrin.h',
 					'avxintrin.h',
 					'emmintrin.h',
+					'emscripten',
 					'immintrin.h',
+					'mm_malloc.h',
 					'nmmintrin.h',
 					'pmmintrin.h',
 					'smmintrin.h',
@@ -390,6 +392,21 @@ for (const clangFilesystem of ['snapshot', 'live']) {
 					'wasm_simd128.h',
 					'xmmintrin.h'
 				]);
+				assert.match(
+					new TextDecoder().decode(
+						f.profile.container.fs.readFile(`${directory}/xmmintrin.h`)
+					),
+					/#include <mm_malloc.h>/
+				);
+				assert(
+					new TextDecoder()
+						.decode(
+							f.profile.container.fs.readFile(`${directory}/emscripten/xmmintrin.h`)
+						)
+						.includes(
+							'#define _mm_malloc(__size, __align) memalign((__align), (__size))'
+						)
+				);
 				for (const header of ['immintrin.h', 'wasm_simd128.h']) {
 					const native = `lib/clang/22/include/${header}`;
 					assert.deepEqual(

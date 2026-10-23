@@ -36,7 +36,22 @@ export function installClangSimdHeaders(fs: SimdHeaderFileSystem, root = '') {
 		fs.mkdirTree(`${directory.startsWith('/') ? '/' : ''}${parts.slice(0, count).join('/')}`);
 	}
 	const encoder = new TextEncoder();
+	fs.mkdirTree(`${directory}/emscripten`);
 	for (const [name, contents] of Object.entries(CLANG_SIMD_HEADERS)) {
-		fs.writeFile(`${directory}/${name}`, encoder.encode(contents));
+		const installedName = name === 'xmmintrin.h' ? `emscripten/${name}` : name;
+		fs.writeFile(`${directory}/${installedName}`, encoder.encode(contents));
 	}
+	// Preserve upstream SIMD sources while replacing Emscripten's memalign macros
+	// with Clang's portable allocator, which uses WASI's posix_memalign.
+	fs.writeFile(
+		`${directory}/xmmintrin.h`,
+		encoder.encode(`#ifndef __wasm_idle_xmmintrin_h__
+#define __wasm_idle_xmmintrin_h__
+#include "emscripten/xmmintrin.h"
+#undef _mm_malloc
+#undef _mm_free
+#include <mm_malloc.h>
+#endif
+`)
+	);
 }

@@ -43,6 +43,14 @@ int main(void) {
     v128_t native = wasm_i32x4_add(wasm_i32x4_splat(n), wasm_i32x4_make(0, 1, 2, 3));
     int last = wasm_i32x4_extract_lane(native, 3);
     if (last != n + 3) return 10;
+
+    /* The x86 allocation API must use the portable WASI allocator. */
+    unsigned char *aligned = (unsigned char *)_mm_malloc(17, 32);
+    if (!aligned || (size_t)aligned % 32) return 11;
+    aligned[0] = (unsigned char)n;
+    aligned[16] = 42;
+    if (aligned[0] != (unsigned char)n || aligned[16] != 42) return 12;
+    _mm_free(aligned);
     printf("simd=%d sse=%d avx2=%d wasm=%d\n", n, sse[1], avx[8], last);
     return 0;
 }

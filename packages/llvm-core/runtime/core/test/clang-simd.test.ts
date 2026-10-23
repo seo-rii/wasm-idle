@@ -40,7 +40,8 @@ const expectedHeaders = [
 	'nmmintrin.h',
 	'avxintrin.h',
 	'avx2intrin.h',
-	'wasm_simd128.h'
+	'wasm_simd128.h',
+	'mm_malloc.h'
 ];
 
 describe('pinned WebAssembly SIMD compatibility headers', () => {
@@ -57,7 +58,7 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 		expect(lock.revision).toMatch(/^[0-9a-f]{40}$/);
 		expect(Object.keys(CLANG_SIMD_HEADERS)).toEqual(expectedHeaders);
 		expect(lock.headers.map((entry: { path: string }) => entry.path)).toEqual(
-			expectedHeaders.slice(0, -1)
+			expectedHeaders.slice(0, -2)
 		);
 		for (const entry of lock.headers) {
 			const bytes = Buffer.from(CLANG_SIMD_HEADERS[entry.path]);
@@ -75,10 +76,15 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 		expect(dependency.baseUrl).toBe(
 			`https://raw.githubusercontent.com/llvm/llvm-project/${dependency.revision}/`
 		);
-		expect(dependency.header.source).toBe('clang/lib/Headers/wasm_simd128.h');
-		const wasmHeader = Buffer.from(CLANG_SIMD_HEADERS[dependency.header.path]);
-		expect(wasmHeader.byteLength).toBe(dependency.header.bytes);
-		expect(sha256(wasmHeader)).toBe(dependency.header.sha256);
+		expect(dependency.headers.map((entry: { path: string }) => entry.path)).toEqual(
+			expectedHeaders.slice(-2)
+		);
+		for (const entry of dependency.headers) {
+			expect(entry.source).toBe(`clang/lib/Headers/${entry.path}`);
+			const bytes = Buffer.from(CLANG_SIMD_HEADERS[entry.path]);
+			expect(bytes.byteLength, entry.path).toBe(entry.bytes);
+			expect(sha256(bytes), entry.path).toBe(entry.sha256);
+		}
 		const license = readFileSync(new URL('packages/llvm-core/LICENSE.emscripten.txt', root));
 		expect(license.byteLength).toBe(lock.license.bytes);
 		expect(sha256(license)).toBe(lock.license.sha256);
@@ -91,10 +97,16 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			'stdint.h',
 			'limits.h',
 			'math.h',
-			'string.h'
+			'string.h',
+			'stdlib.h'
 		]);
 		for (const [name, contents] of Object.entries(CLANG_SIMD_HEADERS)) {
 			for (const match of contents.matchAll(/^#\s*include\s+[<"]([^>"]+)[>"]/gm)) {
+				if (name === 'mm_malloc.h' && match[1] === 'malloc.h') {
+					// This dependency belongs only to the allocator's Windows branch.
+					expect(contents).toContain('#ifdef _WIN32\n#include <malloc.h>\n#else');
+					continue;
+				}
 				expect(available.has(match[1]), `${name} requires ${match[1]}`).toBe(true);
 			}
 		}
@@ -141,12 +153,17 @@ describe('pinned WebAssembly SIMD compatibility headers', () => {
 			expect(fs.mkdirTree).toHaveBeenCalledWith(directory);
 			expect(clangSimdDriverArgs(mountRoot).at(-1)).toBe(directory);
 			expect(clangSimdFrontendArgs(mountRoot).at(-1)).toBe(directory);
-			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length);
+			expect(fs.writeFile).toHaveBeenCalledTimes(expectedHeaders.length + 1);
 			for (const name of expectedHeaders) {
-				expect(files.get(`${directory}/${name}`)).toEqual(
+				const installedName = name === 'xmmintrin.h' ? `emscripten/${name}` : name;
+				expect(files.get(`${directory}/${installedName}`)).toEqual(
 					new TextEncoder().encode(CLANG_SIMD_HEADERS[name])
 				);
 			}
+			const publicHeader = new TextDecoder().decode(files.get(`${directory}/xmmintrin.h`));
+			expect(publicHeader).toMatch(
+				/#include "emscripten\/xmmintrin.h"\s+#undef _mm_malloc\s+#undef _mm_free\s+#include <mm_malloc.h>/
+			);
 			expect(files.get(nativePath)).toBe(nativeHeader);
 		}
 	);
