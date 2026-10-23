@@ -13,6 +13,10 @@ except Exception:
     Script = None
 
 from wasm_idle_lsp_bridge import emit
+try:
+    from wasm_idle_lsp_bridge import schedule_diagnostics
+except ImportError:
+    schedule_diagnostics = None
 
 SERVER_NAME = "wasm-idle-python-lsp"
 SERVER_VERSION = "0.2.0"
@@ -286,8 +290,14 @@ class WasmIdlePythonLsp:
 
         self._notify(
             "textDocument/publishDiagnostics",
-            {"uri": uri, "diagnostics": diagnostics},
+            {"uri": uri, "version": document.version, "diagnostics": diagnostics},
         )
+
+    def _queue_diagnostics(self, uri: str) -> None:
+        if schedule_diagnostics is None:
+            self._publish_diagnostics(uri)
+        else:
+            schedule_diagnostics(uri, self._document(uri).version)
 
     def _hover_text(self, definitions) -> str | None:
         chunks: list[str] = []
@@ -494,6 +504,11 @@ class WasmIdlePythonLsp:
 
     def _handle_notification(self, method: str, params: dict) -> None:
         try:
+            if method == "wasmIdle/publishDiagnostics":
+                document = self.documents.get(params.get("uri"))
+                if not self.shutdown_requested and document is not None and document.version == params.get("version"):
+                    self._publish_diagnostics(document.uri)
+                return
             if method == "initialized":
                 return
             if method == "exit":
@@ -513,7 +528,7 @@ class WasmIdlePythonLsp:
                     language_id=text_document.get("languageId"),
                 )
                 self._mirror_document(text_document["uri"])
-                self._publish_diagnostics(text_document["uri"])
+                self._queue_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didChange":
                 self._invalidate_analysis()
@@ -523,7 +538,7 @@ class WasmIdlePythonLsp:
                     document.apply_change(change)
                 document.version = text_document.get("version")
                 self._mirror_document(text_document["uri"])
-                self._publish_diagnostics(text_document["uri"])
+                self._queue_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didSave":
                 self._invalidate_analysis()
@@ -532,12 +547,14 @@ class WasmIdlePythonLsp:
                 if "text" in params and params["text"] is not None:
                     document.source = params["text"]
                 self._mirror_document(text_document["uri"])
-                self._publish_diagnostics(text_document["uri"])
+                self._queue_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didClose":
                 self._invalidate_analysis()
                 text_document = params["textDocument"]
                 self.documents.pop(text_document["uri"], None)
+                if schedule_diagnostics is not None:
+                    schedule_diagnostics(text_document["uri"], None, True)
                 self._notify(
                     "textDocument/publishDiagnostics",
                     {"uri": text_document["uri"], "diagnostics": []},

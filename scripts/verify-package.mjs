@@ -47,10 +47,11 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// The root install includes container execution modules and release metadata.
-		// Keep the bounded byte/package limits; shipped module/declaration pairs now
-		// total 438 root files + 267 dependency files + npm's installation metadata,
-		// including the Java output and debug-configuration JS/declaration pairs.
-		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 706, maxPackages: 6 },
+		// Keep bounded byte/package limits; shipped module/declaration pairs now
+		// total 438 root files + 269 dependency files + npm's installation metadata,
+		// including the Java output, Python cache and debug-configuration JS/types.
+		// Current-main integration measured 6,378,105 bytes; 88 KiB leaves 3,463 bytes.
+		budget: { maxBytes: 6 * MiB + 88 * 1024, maxFiles: 708, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',

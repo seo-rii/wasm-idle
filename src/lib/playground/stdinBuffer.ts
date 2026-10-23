@@ -68,20 +68,37 @@ export const bufferedSequence = (buffer: StdinBuffer) =>
 export const waitForBufferedSequenceChange = (
 	buffer: StdinBuffer,
 	sequence: number,
-	timeoutMs = 5000
+	timeoutMs = 5000,
+	signal?: AbortSignal
 ) =>
 	new Promise<string | null>((resolve, reject) => {
 		const startedAt = Date.now();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const cleanup = () => {
+			if (timer !== undefined) clearTimeout(timer);
+			signal?.removeEventListener('abort', abort);
+		};
+		const abort = () => {
+			cleanup();
+			reject(signal?.reason ?? new Error('Buffered wait aborted'));
+		};
+		if (signal?.aborted) {
+			abort();
+			return;
+		}
+		signal?.addEventListener('abort', abort, { once: true });
 		const poll = () => {
 			if (bufferedSequence(buffer) !== sequence) {
+				cleanup();
 				resolve(readBufferedStdin(buffer));
 				return;
 			}
 			if (Date.now() - startedAt >= timeoutMs) {
+				cleanup();
 				reject(new Error('Timed out waiting for buffered value'));
 				return;
 			}
-			setTimeout(poll, 10);
+			timer = setTimeout(poll, 10);
 		};
 		poll();
 	});
