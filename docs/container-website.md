@@ -48,6 +48,15 @@ workspace saving/export remains responsible for the editor workspace; the
 container owner itself has page lifetime, and asset-cache eviction never deletes
 user workspace storage.
 
+Editor publication sends changed file bodies and only their touched baseline bodies;
+unchanged files contribute path/size metadata for whole-project admission. The owner
+still validates every touched conflict before publishing a batch and preserves unknown
+shell files. Worker reads use a per-project cursor and exact VFS file revisions, returning
+changed bodies and deletions. A missing or stale cursor receives a full reset, so bounded
+watch-queue rescans recover without trusting missed events. The facade continues to return
+owned complete file arrays to the existing editor API. Metadata enumeration and the private
+source snapshots passed to language engines remain complete project operations.
+
 Initial language and files resolve before the editor, terminal or runtime starts.
 A valid shared snapshot takes precedence, followed by explicit URL inputs, the
 current workspace snapshot, legacy preferences in the base workspace, and the
@@ -82,6 +91,61 @@ such as `https://seo-rii.github.io/wasm-idle/container-app/`. Generated runtime
 files live in ignored `static/container-app/`. The compiled application rebases
 only its fixed object and host paths onto the application's same-origin base,
 so local and deployed website paths use the same verified byte identities.
+
+Full selected-target sysroot delivery remains the default, using the original single tar
+asset and complete header namespace. To opt into reduced C delivery, add this field to the
+existing pinned configuration passed through `WASM_IDLE_PAGE_CONTAINER_CONFIG`:
+
+```json
+{ "sysrootProfile": "c-base-v1" }
+```
+
+Only this explicit build profile derives a C base and C++ delta. The website C Run path
+uses the base for a lowercase `.c` source without custom compiler arguments or environment
+overrides. This reduced profile omits the C++ subtree even when a header there is usable
+from C, and changes include-presence probes involving that subtree. It is an explicit
+choice of available headers, not a claim of equivalence for arbitrary C preprocessing.
+No source-text heuristic is used to infer equivalence. C++, other source extensions,
+response files, custom arguments/environment, and shell `clang` retain the full tree.
+The full profile reuses the base and adds the delta; C and full readonly trees use separate
+fixed mount paths. Already available full trees also serve later C requests. Under this
+opt-in, full preparation needs two archive requests instead of the default one.
+Once the full tree is mounted, later C requests use it without another C mount or download.
+`c-base-v1` admits the current Clang 22 layout: derivation requires
+`lib/clang/22/include` and uses the matching fixed resource directory. Other producer
+resource-directory versions require a separately qualified profile.
+
+The derivation moves only `include/c++/` and the known `libc++.a`/`libc++abi.a` archives.
+Unknown paths stay in the base. Every original USTAR header and file body, including its
+mode fields, is retained unchanged in exactly one layer. The complete tar is recomposed
+with a new independently pinned SHA-256 before extraction; grouping records and normalizing
+the zero terminator changes its byte identity. `provenance.json` retains the original
+receipt, derived logical/delivery identities, and derivation source hashes. The VFS retains
+its existing readonly file/directory mode policy.
+
+For the pinned 35,328,000-byte source tar with SHA-256
+`b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f`, local deterministic
+gzip derivation produced these file bodies:
+
+| Profile     | Logical tar bytes | Gzip delivery bytes | Original records |
+| ----------- | ----------------: | ------------------: | ---------------: |
+| C base      |        11,945,472 |           1,965,206 |              506 |
+| C++ delta   |        23,380,992 |           4,776,132 |            1,779 |
+| Both layers |        35,326,464 |           6,741,338 |            2,285 |
+
+The existing deployed full tar already uses HTTP gzip (observed body 6,793,809 bytes).
+Opted-in C skips the 4,776,132-byte encoded C++ package body; that is a package-byte saving,
+not a measured browser wire delta. The reduction comes from omitting the C++ layer, rather
+than simply adding compression. These are artifact/HTTP body sizes, not end-to-end browser timing or a
+measurement of a deployed layered release. Host JavaScript, Clang, LLD, and protocol overhead
+are additional bytes.
+
+The checked-in generated `release.ts` and previously prepared assets retain their full-tar
+fallback. New preparation records `sysrootProfile: "full"` by default; selecting
+`"c-base-v1"` emits the split assets and supplies pinned `sysrootLayers` configuration
+through the generated application release. Reusing old prepared assets does not enable
+layering, and rebuilding without the opt-in keeps full delivery. This code change does
+not upload or deploy a release.
 
 After a workspace install, preparation detects the locally resolved Container
 package. Set `"containerSource": "workspace"` in the build configuration to

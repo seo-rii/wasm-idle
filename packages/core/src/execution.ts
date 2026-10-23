@@ -8,7 +8,7 @@ import {
 	type RuntimeErrorCode,
 	type RuntimePhase
 } from './errors.js';
-import type { DebugSourceBreakpoints } from './debug.js';
+import type { DebugSourceBreakpoints, DebugSteppingOptions } from './debug.js';
 import {
 	WorkspaceValidationError,
 	normalizeWorkspacePath,
@@ -80,6 +80,7 @@ export interface ExecutionDebugOptions {
 	mode?: 'none' | 'trace' | 'native';
 	pauseOnEntry?: boolean;
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	steppingOptions?: DebugSteppingOptions;
 }
 
 export interface ExecutionRuntimeRequirements extends Omit<RuntimeTrustRequest, 'environment'> {

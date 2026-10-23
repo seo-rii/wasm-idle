@@ -26,6 +26,11 @@ cross-mount rename returns `EXDEV`. Unlink removes a name while existing file
 descriptors continue to reference the data. Those retained bytes and inodes still
 count against quota. Directory descriptors can report their current path after
 rename; an unlinked directory cannot resolve new paths. Mount roots cannot move.
+Current-name lookup follows inode parent links in time proportional to path depth,
+without enumerating unrelated directory entries. Rename updates those links;
+snapshot restoration and readonly publication rebuild them without changing the
+snapshot format. Descriptors still reject paths moved outside their original
+directory capability, and recreating an unlinked name does not revive its old handle.
 
 `open` returns an integer descriptor starting at 3. Options select read/write,
 create/exclusive, truncate, append or directory access. `resize: true` separately

@@ -1,3 +1,11 @@
+import {
+	normalizeDebugSourceBreakpoints,
+	mergeDebugBreakpointLines,
+	assertDebugBreakpointSupport,
+	normalizeDebugSteppingOptions,
+	type DebugSourceBreakpoint,
+	type DebugSteppingOptions
+} from '@wasm-idle/core';
 import { DapClient, resolveDapTimeout } from './dap-client.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
@@ -34,6 +42,7 @@ const DAP_BOOLEAN_CAPABILITY_KEYS = [
 	'supportsWriteMemoryRequest',
 	'supportsEvaluateForHovers',
 	'supportsConditionalBreakpoints',
+	'supportsHitConditionalBreakpoints',
 	'supportsLogPoints',
 	'supportsDataBreakpoints',
 	'supportsTerminateRequest'
@@ -283,6 +292,8 @@ export class BrowserLldbSession {
 	private disposePromise?: Promise<void>;
 	private targetExitPending = false;
 	private initialized = false;
+	private adapterCapabilities: DebugCapabilities = {};
+	private readonly sourceBreakpointSpecifications = new Map<string, DebugSourceBreakpoint[]>();
 	private disposed = false;
 
 	constructor(options: BrowserLldbSessionOptions) {
@@ -405,16 +416,22 @@ export class BrowserLldbSession {
 				);
 			}
 			validateBreakpointLines(breakpoint.lines);
+			if (breakpoint.breakpoints)
+				assertDebugBreakpointSupport(
+					normalizeDebugSourceBreakpoints(breakpoint.breakpoints),
+					this.options.manifest.debugger.capabilities
+				);
+			const specificationCount = breakpoint.breakpoints?.length ?? breakpoint.lines.length;
 			const sourceBreakpointCount =
 				(initialBreakpointCountBySource.get(breakpoint.source.path) ?? 0) +
-				breakpoint.lines.length;
+				specificationCount;
 			if (sourceBreakpointCount > MAX_BREAKPOINTS_PER_SOURCE) {
 				throw new RangeError(
 					`breakpoints for ${breakpoint.source.path} must not exceed ${MAX_BREAKPOINTS_PER_SOURCE} lines; received ${sourceBreakpointCount}`
 				);
 			}
 			initialBreakpointCountBySource.set(breakpoint.source.path, sourceBreakpointCount);
-			initialBreakpointCount += breakpoint.lines.length;
+			initialBreakpointCount += specificationCount;
 			if (initialBreakpointCount > MAX_INITIAL_BREAKPOINT_COUNT) {
 				throw new RangeError(
 					`initial breakpoint count must not exceed ${MAX_INITIAL_BREAKPOINT_COUNT}; received ${initialBreakpointCount}`
@@ -423,8 +440,21 @@ export class BrowserLldbSession {
 		}
 		const breakpoints = initialBreakpoints.map((breakpoint) => ({
 			source: { ...breakpoint.source },
-			lines: [...breakpoint.lines]
+			lines: [...breakpoint.lines],
+			...(breakpoint.breakpoints
+				? { breakpoints: normalizeDebugSourceBreakpoints(breakpoint.breakpoints) }
+				: {})
 		}));
+		const steppingOptions =
+			this.options.steppingOptions === undefined
+				? undefined
+				: normalizeDebugSteppingOptions(this.options.steppingOptions);
+		if (
+			steppingOptions &&
+			this.options.manifest.debugger.capabilities.skipLibraryCode !== true
+		) {
+			throw new Error('Debugger does not support stepping options.');
+		}
 		const launchOption: unknown = this.options.launch;
 		if (
 			launchOption !== undefined &&
@@ -704,6 +734,7 @@ export class BrowserLldbSession {
 				}
 			}
 			const capabilities = { ...capabilityRecord } as DebugCapabilities;
+			this.adapterCapabilities = capabilities;
 			const attachResponse = this.dap.request(
 				'attach',
 				{
@@ -712,6 +743,15 @@ export class BrowserLldbSession {
 					args: launch?.args ?? [],
 					env: launch?.env ?? {},
 					cwd: launch?.cwd ?? '/workspace',
+					...(steppingOptions
+						? {
+								initCommands: [
+									steppingOptions.skipLibraryCode
+										? 'settings set target.process.thread.step-avoid-regexp ^std::'
+										: 'settings set target.process.thread.step-avoid-regexp ^$'
+								]
+							}
+						: {}),
 					attachCommands: [
 						`process connect --plugin wasm wasm-messageport://${this.generation}`
 					]
@@ -739,7 +779,9 @@ export class BrowserLldbSession {
 				})
 			);
 			for (const breakpoint of breakpoints) {
-				await this.setBreakpoints(breakpoint.source, breakpoint.lines);
+				if (breakpoint.breakpoints)
+					await this.setSourceBreakpoints(breakpoint.source, breakpoint.breakpoints);
+				else await this.setBreakpoints(breakpoint.source, breakpoint.lines);
 			}
 			await this.awaitWhileActive(this.dap.request('configurationDone'));
 			let attachCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -782,9 +824,46 @@ export class BrowserLldbSession {
 	}
 
 	async setBreakpoints(source: DebugSource, lines: number[]) {
+		return this.setSourceBreakpoints(
+			source,
+			mergeDebugBreakpointLines(
+				this.sourceBreakpointSpecifications.get(source.path) ?? [],
+				validateBreakpointLines(lines)
+			)
+		);
+	}
+
+	async setSteppingOptions(options: DebugSteppingOptions) {
+		const value = normalizeDebugSteppingOptions(options);
+		if (this.options.manifest.debugger.capabilities.skipLibraryCode !== true) {
+			throw new Error('Debugger does not support stepping options.');
+		}
+		await this.request('evaluate', {
+			expression: value.skipLibraryCode
+				? '`settings set target.process.thread.step-avoid-regexp ^std::'
+				: '`settings set target.process.thread.step-avoid-regexp ^$',
+			context: 'repl'
+		});
+	}
+
+	async setSourceBreakpoints(source: DebugSource, values: DebugSourceBreakpoint[]) {
+		const specifications = normalizeDebugSourceBreakpoints(values);
+		const manifest = this.options.manifest.debugger.capabilities;
+		assertDebugBreakpointSupport(specifications, {
+			conditionalBreakpoints:
+				manifest.conditionalBreakpoints === true &&
+				this.adapterCapabilities.supportsConditionalBreakpoints === true,
+			hitConditionalBreakpoints:
+				manifest.hitConditionalBreakpoints === true &&
+				this.adapterCapabilities.supportsHitConditionalBreakpoints === true,
+			logPoints:
+				manifest.logPoints === true && this.adapterCapabilities.supportsLogPoints === true
+		});
+		const enabled = specifications.filter((value) => value.enabled !== false);
+		this.sourceBreakpointSpecifications.set(source.path, specifications);
 		const requestSource = { ...source };
 		validateDebugSourcePath(requestSource.path);
-		const requestedLines = validateBreakpointLines(lines);
+		const requestedLines = enabled.map((value) => value.line);
 		const sourcePath = requestSource.path;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
@@ -793,7 +872,7 @@ export class BrowserLldbSession {
 			response = await this.awaitWhileActive(
 				this.request<unknown>('setBreakpoints', {
 					source: requestSource,
-					breakpoints: requestedLines.map((line) => ({ line })),
+					breakpoints: enabled.map(({ enabled: _enabled, ...value }) => value),
 					lines: requestedLines,
 					sourceModified: false
 				})

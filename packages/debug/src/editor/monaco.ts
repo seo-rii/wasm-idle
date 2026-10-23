@@ -2,11 +2,16 @@ import type { DebugVariable } from '@wasm-idle/core';
 import type monaco from 'monaco-editor';
 
 import type { DebugLanguageAdapter } from '../language/index.js';
+import { debugHoverExpression } from './hover.js';
 
 export type MonacoDebugActionsOptions = {
 	runToCursorLabel?: string;
 	onCursorLineChange?: (line: number | null) => void;
 	onRunToCursor?: (line: number | null) => void;
+	addWatchLabel?: string;
+	onAddWatch?: (expression: string) => void;
+	editBreakpointLabel?: string;
+	onEditBreakpoint?: (line: number) => void;
 };
 
 export class MonacoDebugView {
@@ -173,6 +178,44 @@ export function attachMonacoDebugActions(
 				contextMenuGroupId: 'navigation',
 				contextMenuOrder: 0.5,
 				run: () => options.onRunToCursor?.(editor.getPosition()?.lineNumber || null)
+			})
+		);
+	}
+	if (options.onAddWatch) {
+		disposables.push(
+			editor.addAction({
+				id: 'wasm-idle-add-watch',
+				label: options.addWatchLabel || 'Add to Watch',
+				contextMenuGroupId: 'navigation',
+				contextMenuOrder: 0.6,
+				run: () => {
+					const model = editor.getModel();
+					const selection = editor.getSelection();
+					const position = editor.getPosition();
+					if (!model || !position) return;
+					const selected = selection ? model.getValueInRange(selection).trim() : '';
+					const expression =
+						selected ||
+						debugHoverExpression(
+							model.getLineContent(position.lineNumber),
+							position.column
+						);
+					if (expression && expression.length <= 4096) options.onAddWatch?.(expression);
+				}
+			})
+		);
+	}
+	if (options.onEditBreakpoint) {
+		disposables.push(
+			editor.addAction({
+				id: 'wasm-idle-edit-breakpoint',
+				label: options.editBreakpointLabel || 'Edit Breakpoint',
+				contextMenuGroupId: 'navigation',
+				contextMenuOrder: 0.7,
+				run: () => {
+					const line = editor.getPosition()?.lineNumber;
+					if (line) options.onEditBreakpoint?.(line);
+				}
 			})
 		);
 	}

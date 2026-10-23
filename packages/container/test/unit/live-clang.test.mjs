@@ -13,8 +13,8 @@ const { readFile } = await import('node:fs/promises');
 const command = new Uint8Array(await readFile(new URL('../fixtures/command.wasm', import.meta.url)));
 const wasiImports = new Set(WebAssembly.Module.imports(new WebAssembly.Module(command)).filter(item => item.module === 'wasi_snapshot_preview1').map(item => item.name));
 const limits = { maxMemoryBytes: 2 ** 32, maxInputBytes: 65536, maxOutputBytes: 65536, maxWorkspaceBytes: 2 ** 20, maxWorkspaceInodes: 256 };
-function outputFixture() {
-  const fs = new MemoryFileSystem(), outputs = createCompilerOutputs(fs);
+function outputFixture(mutationSource) {
+  const fs = new MemoryFileSystem(), outputs = createCompilerOutputs(fs, fs.maxInodes, mutationSource);
   const io = createLiveIo(fs, limits, 65536, error => { throw error; }, undefined, outputs.record);
   const call = (op, args, data = new Uint8Array()) => io.dispatch(op, args, data);
   const write = async (path, data = command) => {
@@ -58,6 +58,20 @@ test('edits while asynchronous module qualification is pending cannot gain execu
     const pending = f.qualify();
     f.fs.writeFile('/workspace/out', command);
     await pending; assert.equal(f.fs.stat('/workspace/out').mode, 0o644);
+  } finally { f.io.dispose(); f.outputs.dispose(); }
+});
+
+test('asynchronous executable qualification attributes its metadata grant to the bound compiler source', async () => {
+  const source = {}, f = outputFixture(source);
+  try {
+    await f.write('/workspace/out');
+    const observer = f.fs.observeMutations();
+    try {
+      await f.qualify();
+      assert.equal(f.fs.stat('/workspace/out').mode, 0o755);
+      assert.equal(observer.hasChangesOutside(new Set()), true);
+      assert.equal(observer.hasChangesOutside(new Set([source])), false);
+    } finally { observer.dispose(); }
   } finally { f.io.dispose(); f.outputs.dispose(); }
 });
 

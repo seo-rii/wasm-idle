@@ -1,4 +1,4 @@
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { verifyRuntimeAssetIntegrity, requestPreparedRuntimeWasmModule } from '@wasm-idle/core';
 
 export type LlvmToolExecutable = 'clang' | 'wasm-ld';
 export type LlvmToolHostErrorCode =
@@ -46,6 +46,20 @@ export interface CreateLlvmToolHostOptions {
 	readonly allowClangCc1?: boolean;
 	/** Optional host profile admission before any instance can execute. */
 	readonly validateModule?: (executable: LlvmToolExecutable, module: WebAssembly.Module) => void;
+}
+export interface LlvmToolModuleService {
+	/** A single-use endpoint created by the trusted owner for this exact receipt/profile. */
+	readonly port: MessagePort;
+	readonly sha256: string;
+	readonly bytes: number;
+	readonly identity: string;
+	readonly compileKey: string;
+	readonly maxAssetBytes: number;
+}
+export interface CreateLlvmToolHostFromServicesOptions extends Omit<CreateLlvmToolHostOptions, 'tools'> {
+	readonly services: Readonly<Record<LlvmToolExecutable, LlvmToolModuleService>>;
+	readonly signal?: AbortSignal;
+	readonly timeoutMs?: number;
 }
 export interface LlvmToolInvocationProvenance {
 	readonly identity: LlvmToolIdentity;
@@ -108,8 +122,62 @@ function snapshotInvocation(value: LlvmToolInvocation, allowEmptyArgv0 = false):
 }
 const isPromise = (value: unknown): boolean => Boolean(value && (typeof value === 'object' || typeof value === 'function') && typeof (value as { then?: unknown }).then === 'function');
 
+type PreparedTool = { identity: LlvmToolIdentity; module: WebAssembly.Module };
+
 /** Prepare trusted bytes once; execution and child exec imports remain synchronous. */
-export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Promise<LlvmToolHost> {
+export function createLlvmToolHost(options: CreateLlvmToolHostOptions): Promise<LlvmToolHost> {
+	return createToolHost(options, async () => {
+		// Snapshot both inputs before the first await, including caller-owned Buffer views.
+		const pinned = tools.map((executable) => {
+			const tool = options.tools?.[executable];
+			if (!tool || !(tool.bytes instanceof Uint8Array) || !/^[a-f0-9]{64}$/u.test(tool.sha256)) invalid(`Invalid pinned tool ${executable}`);
+			return { executable, bytes: Uint8Array.from(tool.bytes), sha256: tool.sha256 };
+		});
+		for (const tool of pinned) {
+			try { await verifyRuntimeAssetIntegrity({ asset: tool.executable, bytes: tool.bytes, expected: tool.sha256 }); }
+			catch (cause) { throw new LlvmToolHostError('INTEGRITY', `Pinned ${tool.executable} failed integrity verification`, { cause }); }
+		}
+		const prepared: PreparedTool[] = [];
+		for (const tool of pinned) {
+			try { prepared.push({ identity: { executable: tool.executable, sha256: tool.sha256, bytes: tool.bytes.length }, module: await WebAssembly.compile(tool.bytes) }); }
+			catch (cause) { throw new LlvmToolHostError('COMPILE_FAILED', `Pinned ${tool.executable} is not a supported Wasm module`, { cause }); }
+		}
+		return prepared;
+	});
+}
+
+/**
+ * Only trusted owner endpoints authorize modules. No raw Module/claimed-hash input
+ * is accepted. The owner verifies actual source bytes and enforces memory policy;
+ * this worker still performs its import/export/cwd admission for every host.
+ */
+export function createLlvmToolHostFromServices(options: CreateLlvmToolHostFromServicesOptions): Promise<LlvmToolHost> {
+	const endpoints = tools.map(executable => options?.services?.[executable]?.port);
+	const controller = new AbortController(), signal = options?.signal;
+	const abort = () => controller.abort(signal?.reason);
+	signal?.addEventListener('abort', abort, { once: true });
+	if (signal?.aborted) abort();
+	return createToolHost(options, async () => {
+		const services = tools.map(executable => {
+			const source = options.services?.[executable];
+			if (!source || !source.port || typeof source.port.postMessage !== 'function' || !/^[a-f0-9]{64}$/u.test(source.sha256) ||
+				!Number.isSafeInteger(source.bytes) || source.bytes < 8) invalid(`Invalid ${executable} module service`);
+			return { port: source.port, profile: { identity: source.identity, compileKey: source.compileKey, maxAssetBytes: source.maxAssetBytes },
+				identity: Object.freeze({ executable, sha256: source.sha256, bytes: source.bytes }) };
+		});
+		return await Promise.all(services.map(async source => ({ identity: source.identity,
+			module: await requestPreparedRuntimeWasmModule(source.port, { ...source.profile, receipt: source.identity,
+				signal: controller.signal, timeoutMs: options.timeoutMs }) })));
+	}).finally(() => {
+		controller.abort(); signal?.removeEventListener('abort', abort);
+		for (const port of endpoints) { try { port?.postMessage({ type: 'cancel' }); } catch {} try { port?.close(); } catch {} }
+	});
+}
+
+async function createToolHost(
+	options: Omit<CreateLlvmToolHostOptions, 'tools'>,
+	prepare: () => Promise<readonly PreparedTool[]>
+): Promise<LlvmToolHost> {
 	if (!options || typeof options.createBindings !== 'function') invalid('A synchronous bindings factory is required');
 	const createBindings = options.createBindings;
 	const validateModule = options.validateModule;
@@ -129,27 +197,17 @@ export async function createLlvmToolHost(options: CreateLlvmToolHostOptions): Pr
 		if (!value.startsWith('/') || value.includes('\\') || value.slice(1).split('/').some((part) => !part || part === '.' || part === '..') || encoder.encode(value).length > 4096 || allowedLinkers.has(value)) invalid('Compiler paths must be distinct canonical absolute filesystem paths');
 		allowedCompilers.add(value);
 	}
-	// Copy every input before the first digest await, so caller mutation cannot replace a pin.
-	const pinned = tools.map((executable) => {
-		const tool = options.tools?.[executable];
-		if (!tool || !(tool.bytes instanceof Uint8Array) || !/^[a-f0-9]{64}$/u.test(tool.sha256)) invalid(`Invalid pinned tool ${executable}`);
-		return { executable, bytes: Uint8Array.from(tool.bytes), sha256: tool.sha256 };
-	});
-	for (const tool of pinned) {
-		try { await verifyRuntimeAssetIntegrity({ asset: tool.executable, bytes: tool.bytes, expected: tool.sha256 }); }
-		catch (cause) { throw new LlvmToolHostError('INTEGRITY', `Pinned ${tool.executable} failed integrity verification`, { cause }); }
-	}
+	const prepared = await prepare();
 	const modules = new Map<LlvmToolExecutable, WebAssembly.Module>();
-	for (const tool of pinned) {
+	for (const tool of prepared) {
 		try {
-			const module = await WebAssembly.compile(tool.bytes);
-			if (isPromise(validateModule?.(tool.executable, module))) invalid('Module validation must be synchronous');
-			modules.set(tool.executable, module);
+			if (isPromise(validateModule?.(tool.identity.executable, tool.module))) invalid('Module validation must be synchronous');
+			modules.set(tool.identity.executable, tool.module);
 		}
-		catch (cause) { throw new LlvmToolHostError('COMPILE_FAILED', `Pinned ${tool.executable} is not a supported Wasm module`, { cause }); }
+		catch (cause) { throw new LlvmToolHostError('COMPILE_FAILED', `Pinned ${tool.identity.executable} is not a supported Wasm module`, { cause }); }
 	}
-	const identities = Object.freeze(Object.fromEntries(pinned.map((tool) => [tool.executable,
-		Object.freeze({ executable: tool.executable, sha256: tool.sha256, bytes: tool.bytes.length })
+	const identities = Object.freeze(Object.fromEntries(prepared.map((tool) => [tool.identity.executable,
+		Object.freeze(tool.identity)
 	])) as Record<LlvmToolExecutable, LlvmToolIdentity>);
 	let disposed = false, running = false;
 

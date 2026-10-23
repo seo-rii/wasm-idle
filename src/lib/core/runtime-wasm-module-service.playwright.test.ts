@@ -68,9 +68,9 @@ describe('shared compiler modules in Chromium', () => {
 				await page.goto(origin);
 				await page.addScriptTag({
 					type: 'module',
-					content: `import { createRuntimeWasmModuleService } from '/core/runtime-wasm-module-service.js';
+					content: `import { createRuntimeWasmModuleService, createPreparedRuntimeWasmModuleService } from '/core/runtime-wasm-module-service.js';
 import { RuntimeAssetCache } from '/core/session-asset-cache.js';
-window.sharedCompilerTest = { createRuntimeWasmModuleService, RuntimeAssetCache };`
+window.sharedCompilerTest = { createRuntimeWasmModuleService, createPreparedRuntimeWasmModuleService, RuntimeAssetCache };`
 				});
 				await page.waitForFunction(() => 'sharedCompilerTest' in window);
 				const bytes = [0, 97, 115, 109, 1, 0, 0, 0];
@@ -84,11 +84,11 @@ window.sharedCompilerTest = { createRuntimeWasmModuleService, RuntimeAssetCache 
 							'/core/runtime-wasm-module-service.js',
 							location.href
 						).href;
-						const { createRuntimeWasmModuleService, RuntimeAssetCache } = (
+						const { createRuntimeWasmModuleService, createPreparedRuntimeWasmModuleService, RuntimeAssetCache } = (
 							window as unknown as {
 								sharedCompilerTest: Pick<
 									typeof import('@wasm-idle/core'),
-									'createRuntimeWasmModuleService' | 'RuntimeAssetCache'
+									'createRuntimeWasmModuleService' | 'createPreparedRuntimeWasmModuleService' | 'RuntimeAssetCache'
 								>;
 							}
 						).sharedCompilerTest;
@@ -99,10 +99,12 @@ window.sharedCompilerTest = { createRuntimeWasmModuleService, RuntimeAssetCache 
 							compiled++;
 							return WebAssembly.compile(ownedBytes);
 						};
-						const workerSource = `import { requestRuntimeWasmModule } from ${JSON.stringify(serviceUrl)};
+						const workerSource = `import { requestRuntimeWasmModule, requestPreparedRuntimeWasmModule } from ${JSON.stringify(serviceUrl)};
 self.onmessage = async ({data}) => {
   try {
-    const module = await requestRuntimeWasmModule(new Uint8Array(data.bytes), data.port, { timeoutMs: 5000 });
+    const module = data.prepared
+      ? await requestPreparedRuntimeWasmModule(data.port, { ...data.expected, timeoutMs: 5000 })
+      : await requestRuntimeWasmModule(new Uint8Array(data.bytes), data.port, { timeoutMs: 5000 });
     const instance = await WebAssembly.instantiate(module, {});
     self.postMessage({ ready: instance instanceof WebAssembly.Instance });
   } catch (error) { self.postMessage({ error: String(error) }); }
@@ -110,8 +112,9 @@ self.onmessage = async ({data}) => {
 						const workerUrl = URL.createObjectURL(
 							new Blob([workerSource], { type: 'text/javascript' })
 						);
-						const run = async (identity: string, compileKey: string) => {
-							const service = createRuntimeWasmModuleService({
+						const run = async (identity: string, compileKey: string, prepared = false) => {
+							const expected = { receipt, identity, compileKey, maxAssetBytes: 64 };
+							const service = prepared ? createPreparedRuntimeWasmModuleService({ ...expected, cache, compile, bytes: new Uint8Array(bytes) }) : createRuntimeWasmModuleService({
 								cache,
 								receipt,
 								identity,
@@ -127,7 +130,7 @@ self.onmessage = async ({data}) => {
 										event.data.error
 											? reject(new Error(event.data.error))
 											: accept(event.data.ready);
-									worker.postMessage({ bytes, port: service.port }, [
+									worker.postMessage(prepared ? { prepared, expected, port: service.port } : { bytes, port: service.port }, [
 										service.port
 									]);
 								});
@@ -148,6 +151,8 @@ self.onmessage = async ({data}) => {
 								['tinygo-profile', 'cap-v1:32MiB']
 							])
 								results.push(await run(identity, compileKey));
+							results.push(await run('prepared-clang-profile', 'native-v1', true));
+							results.push(await run('prepared-clang-profile', 'native-v1', true));
 							const stats = cache.stats();
 							cache.dispose();
 							return {
@@ -164,10 +169,10 @@ self.onmessage = async ({data}) => {
 					},
 					{ bytes, receipt }
 				);
-				expect(summary.results).toEqual([true, true, true, true, true, true]);
-				expect(summary.compiled).toBe(4);
-				expect(summary.retired).toBe(6);
-				expect(summary.stats).toMatchObject({ entries: 4, disposed: false, inFlight: 0 });
+				expect(summary.results).toEqual(Array(8).fill(true));
+				expect(summary.compiled).toBe(5);
+				expect(summary.retired).toBe(8);
+				expect(summary.stats).toMatchObject({ entries: 5, disposed: false, inFlight: 0 });
 				expect(summary.disposed).toBe(true);
 			} finally {
 				await browser?.close();

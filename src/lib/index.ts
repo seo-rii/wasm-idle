@@ -29,6 +29,13 @@ export {
 } from '$lib/playground/sharedBuffer';
 export type {
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSourceBreakpoints,
+	DebugSteppingOptions,
+	DebugSessionCapabilities,
+	DebugVariablePresentationHint,
 	DebugFrame,
 	DebugSessionEvent,
 	DebugVariable,

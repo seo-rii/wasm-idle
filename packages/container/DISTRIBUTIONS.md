@@ -95,7 +95,8 @@ Concurrent consumers of the same receipt and fixed loader policy share one reque
 one consumer leaves others running; the final cancellation aborts network/decompression and
 removes the old request generation. Failed work is retryable. Each result is an owned byte
 copy. A separate bounded LRU retains verified logical bytes (64 MiB by default); zero disables
-that memory cache. Pending asset requests and consumer counts are bounded as well.
+that memory cache. Pending asset requests and consumer counts are bounded as well;
+`inspect()` exposes their configured `maxPendingAssets` and `maxConsumers` limits.
 `dispose()` is idempotent and aborts outstanding work. `clearMemoryCache()` touches only this
 loader's re-downloadable bytes, never workspace files or the shared persistent asset cache.
 
@@ -122,10 +123,16 @@ Commands outside that closure still require preparation; failed mounts publish n
 readiness. The manager's standalone preparation API does not own or inspect container mounts.
 
 The manager checks host capability IDs and reserves preparation count/file-byte budgets
-before downloading. Byte accounting covers prepared file copies and a command executable
-copy. This is an admission budget, not a browser JS heap/RSS hard limit; delivery buffers,
-decoding, the asset cache and engine memory have separate bounds. No partial package closure
-is returned on failure or cancellation. The caller must atomically mount the completed
+before downloading. Assets within each package load concurrently; dependency packages and
+the returned closure retain their dependency-first order. `maxConcurrentAssets` defaults to
+three shared loading slots across all preparations, capped by `maxPendingAssets` and
+`maxConsumers`. Set it to one for serial loading. Queued loads honor their own preparation's
+cancellation. A failed load cancels and settles its siblings before releasing the preparation
+budget; other preparations can continue sharing their requests. Byte accounting covers
+prepared file copies and a command executable copy. This is an admission budget, not a
+browser JS heap/RSS hard limit; delivery buffers, decoding, the asset cache and engine memory
+have separate bounds. No partial package closure is returned on failure or cancellation.
+The caller must atomically mount the completed
 closure readonly, snapshot the incoming bytes, and make repeated mounting of the same
 `distributionSha256`/package identity/mount idempotent. A filesystem writer lease belongs
 after preparation, so downloads do not hold a workspace lock. The manager never reads,

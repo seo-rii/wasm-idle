@@ -1,6 +1,6 @@
 import { ContainerError } from '../errors.js';
 import {
-  createVerifiedAssetLoader, type AssetLoaderInspection, type VerifiedAssetLoaderOptions
+  createManagedAssetLoader, type AssetLoaderInspection, type VerifiedAssetLoaderOptions
 } from './assets.js';
 import {
   assertValidatedDistribution, type DistributionCommand, type DistributionPackage
@@ -42,6 +42,8 @@ export interface PackagePreparationOptions {
 export interface ContainerPackageManagerOptions extends VerifiedAssetLoaderOptions {
   readonly capabilities?: readonly string[];
   readonly maxPreparations?: number;
+  /** Shared asset-load concurrency across preparations; defaults to 3, capped by loader limits. */
+  readonly maxConcurrentAssets?: number;
   /** Admission budget for concurrently preparing file copies plus command executable copies. */
   readonly maxPreparingBytes?: number;
 }
@@ -75,8 +77,9 @@ export function createContainerPackageManager(options: ContainerPackageManagerOp
   assertValidatedDistribution(options.distribution);
   const distribution = options.distribution;
   const maxPreparations = options.maxPreparations ?? 16;
+  const requestedConcurrentAssets = options.maxConcurrentAssets ?? 3;
   const maxPreparingBytes = options.maxPreparingBytes ?? 256 * 1024 * 1024;
-  for (const [key, value] of Object.entries({ maxPreparations, maxPreparingBytes })) {
+  for (const [key, value] of Object.entries({ maxPreparations, maxConcurrentAssets: requestedConcurrentAssets, maxPreparingBytes })) {
     if (!Number.isSafeInteger(value) || value <= 0) throw new ContainerError('INVALID_ARGUMENT', `Invalid package manager limit ${key}`);
   }
   if (options.capabilities !== undefined && (!Array.isArray(options.capabilities) || options.capabilities.length > 256 || options.capabilities.some((value) => typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$/u.test(value)))) {
@@ -85,7 +88,40 @@ export function createContainerPackageManager(options: ContainerPackageManagerOp
   const capabilities = new Set(options.capabilities ?? []);
   const packages = new Map(distribution.packages.map((pkg) => [pkg.id, pkg]));
   const commands = new Map(distribution.commands.map((command) => [command.name, command]));
-  const loader = createVerifiedAssetLoader(options);
+  const loader = createManagedAssetLoader(options, () => drainAssets());
+  const maxPendingAssets = options.maxPendingAssets ?? 8;
+  const maxConcurrentAssets = Math.min(requestedConcurrentAssets, maxPendingAssets, options.maxConsumers ?? 128);
+  const queuedAssets = new Set<() => void>();
+  let loadingAssets = 0;
+  const drainAssets = () => {
+    // A canceled consumer releases its semaphore slot before the loader has
+    // removed the old request. Wait for the loader's settlement notification.
+    while (loadingAssets < maxConcurrentAssets && loader.inspect().pendingRequests < maxPendingAssets && queuedAssets.size > 0) {
+      const next = queuedAssets.values().next().value!;
+      queuedAssets.delete(next);
+      next();
+    }
+  };
+  const loadAsset = (packageId: string, assetId: string, signal: AbortSignal): Promise<Uint8Array> => new Promise((resolve, reject) => {
+    const cancel = () => {
+      queuedAssets.delete(start);
+      signal.removeEventListener('abort', cancel);
+      reject(signal.reason);
+    };
+    const start = () => {
+      signal.removeEventListener('abort', cancel);
+      if (signal.aborted) { reject(signal.reason); return; }
+      loadingAssets++;
+      void loader.load(packageId, assetId, { signal }).then(resolve, reject).finally(() => {
+        loadingAssets--;
+        drainAssets();
+      });
+    };
+    queuedAssets.add(start);
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    drainAssets();
+  });
   const pending = new Set<PendingPreparation>();
   let preparingBytes = 0;
   let disposed = false;
@@ -149,9 +185,29 @@ export function createContainerPackageManager(options: ContainerPackageManagerOp
       for (const pkg of required) {
         const metadata = new Map(pkg.assets.map((asset) => [asset.id, asset]));
         const assets = new Map<string, Uint8Array>();
-        for (const asset of pkg.assets) {
-          controller.signal.throwIfAborted();
-          assets.set(asset.id, await loader.load(pkg.id, asset.id, { signal: controller.signal }));
+        const assetStop = new AbortController();
+        const cancelAssets = () => assetStop.abort(controller.signal.reason);
+        controller.signal.addEventListener('abort', cancelAssets, { once: true });
+        if (controller.signal.aborted) cancelAssets();
+        let nextAsset = 0;
+        const workers = Array.from({ length: Math.min(maxConcurrentAssets, pkg.assets.length) }, async () => {
+          try {
+            while (nextAsset < pkg.assets.length) {
+              assetStop.signal.throwIfAborted();
+              const asset = pkg.assets[nextAsset++]!;
+              assets.set(asset.id, await loadAsset(pkg.id, asset.id, assetStop.signal));
+            }
+          } catch (error) {
+            assetStop.abort(error);
+            throw error;
+          }
+        });
+        try {
+          // Observe every sibling's cancellation before releasing the preparation budget.
+          const settled = await Promise.allSettled(workers);
+          if (settled.some((result) => result.status === 'rejected')) throw assetStop.signal.reason;
+        } finally {
+          controller.signal.removeEventListener('abort', cancelAssets);
         }
         const files = pkg.files.map((file): PreparedPackageFile => {
           const asset = metadata.get(file.asset)!;

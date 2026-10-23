@@ -122,7 +122,13 @@ describe('worker bridge per-execution persistent policy', () => {
 				)
 		);
 		const finishes: Array<(value: Response) => void> = [];
-		storage.read.mockResolvedValue(undefined);
+		const reads = new Map<boolean, () => void>();
+		storage.read.mockImplementation(
+			({ cache }) =>
+				new Promise<undefined>((resolve) => {
+					reads.set(cache.enabled, () => resolve(undefined));
+				})
+		);
 		storage.write.mockResolvedValue(true);
 		vi.stubGlobal(
 			'fetch',
@@ -135,19 +141,32 @@ describe('worker bridge per-execution persistent policy', () => {
 		);
 		for (const bridge of bridges)
 			bridge.handleMessage({ data: { assetRequest: { id: 1, asset } } } as MessageEvent);
+		await vi.waitFor(() => expect(storage.read).toHaveBeenCalledTimes(2));
+		for (const enabled of [false, true])
+			expect(
+				storage.read.mock.calls.filter(([options]) => options.cache.enabled === enabled)
+			).toHaveLength(1);
+		// Start both policies' downloads in a known order, then complete them in reverse.
+		reads.get(false)!();
+		await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledOnce());
+		reads.get(true)!();
 		await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
-		expect(storage.read.mock.calls.map(([options]) => options.cache.enabled)).toEqual([
-			false,
-			true
-		]);
-		for (const finish of finishes) finish(new Response(bytes));
+		finishes[1](new Response(bytes));
+		await vi.waitFor(() => expect(messages[1]).toHaveBeenCalledOnce());
+		expect(messages[0]).not.toHaveBeenCalled();
+		expect(storage.write).toHaveBeenCalledOnce();
+		expect(storage.write.mock.calls[0][0].cache.enabled).toBe(true);
+		finishes[0](new Response(bytes));
 		await vi.waitFor(() => {
 			for (const postMessage of messages) expect(postMessage).toHaveBeenCalledOnce();
 		});
-		expect(storage.write.mock.calls.map(([options]) => options.cache.enabled)).toEqual([
-			false,
-			true
-		]);
+		expect(storage.write).toHaveBeenCalledTimes(2);
+		for (const enabled of [false, true])
+			expect(
+				storage.write.mock.calls.filter(([options]) => options.cache.enabled === enabled)
+			).toHaveLength(1);
+		for (const postMessage of messages)
+			expect(postMessage.mock.calls[0][0].assetResponse.ok).toBe(true);
 		for (const bridge of bridges) bridge.dispose();
 	});
 

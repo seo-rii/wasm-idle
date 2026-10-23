@@ -19,6 +19,8 @@ export interface MemFsOptions {
 	fetchImpl?: typeof fetch;
 	maxAssetBytes?: number;
 	trace?: (message: string) => void;
+	/** Check before decoding or formatting diagnostics, including forwarding callbacks. */
+	isTraceEnabled?: () => boolean;
 }
 
 const previewText = (text: string) =>
@@ -34,10 +36,13 @@ export default class MemFS {
 	stdin: () => string;
 	stdout: (str: string) => void;
 	trace: (message: string) => void;
+	private readonly isTraceEnabled?: () => boolean;
 	instance: WebAssembly.Instance = <any>null;
 	exports: any;
 	out = true;
 	private readonly filePaths = new Set<string>();
+	private readonly nativeFilePaths = new Set<string>();
+	private readonly deletedFilePaths = new Set<string>();
 	private readonly fileOverlays = new Map<string, Uint8Array>();
 	private readonly directoryPaths = new Set<string>();
 	private readonly outputDecoders = new Map<number, TextDecoder>();
@@ -47,6 +52,7 @@ export default class MemFS {
 		this.stdout = options.stdout;
 		this.stdinStr = options.stdinStr || '';
 		this.trace = options.trace || noopTrace;
+		this.isTraceEnabled = options.isTraceEnabled;
 
 		const env = bindNew(
 			this,
@@ -121,12 +127,16 @@ export default class MemFS {
 		const addr = this.exports.GetFileNodeAddress(inode);
 		this.mem.check();
 		this.mem.write(addr, contents);
+		this.fileOverlays.delete(this.normalizePath(path));
+		this.deletedFilePaths.delete(this.normalizePath(path));
 		this.filePaths.add(this.normalizePath(path));
+		this.nativeFilePaths.add(this.normalizePath(path));
 	}
 
 	setFile(path: string, contents: Uint8Array) {
 		const normalizedPath = this.normalizePath(path);
 		this.filePaths.add(normalizedPath);
+		this.deletedFilePaths.delete(normalizedPath);
 		this.fileOverlays.set(normalizedPath, Uint8Array.from(contents));
 	}
 
@@ -134,11 +144,57 @@ export default class MemFS {
 		return this.filePaths.has(this.normalizePath(path));
 	}
 
+	/** Metadata lookup does not copy a file (notably large archives and PCHs). */
+	getFileSize(path: string): number | undefined {
+		const normalizedPath = this.normalizePath(path);
+		if (!this.filePaths.has(normalizedPath)) return undefined;
+		const overlay = this.fileOverlays.get(normalizedPath);
+		if (overlay) return overlay.byteLength;
+		this.mem.check();
+		this.mem.write(this.exports.GetPathBuf(), normalizedPath);
+		return this.exports.GetFileNodeSize(this.exports.FindNode(normalizedPath.length));
+	}
+
+	/** Compiler output lives in owned JS buffers; unlink releases those buffers. */
+	removeFile(path: string): boolean {
+		const normalizedPath = this.normalizePath(path);
+		this.fileOverlays.delete(normalizedPath);
+		// Also hide an older native node. Compiler handles preserve their own read snapshot.
+		const existed = this.filePaths.delete(normalizedPath);
+		if (existed && this.nativeFilePaths.has(normalizedPath)) {
+			this.deletedFilePaths.add(normalizedPath);
+		}
+		return existed;
+	}
+
+	isFileDeleted(path: string) {
+		return this.deletedFilePaths.has(this.normalizePath(path));
+	}
+
+	renameFile(source: string, target: string): boolean {
+		const from = this.normalizePath(source);
+		const to = this.normalizePath(target);
+		if (!this.filePaths.has(from)) return false;
+		if (from === to) return true;
+		// Move an owned compiler buffer without allocating another full object copy.
+		const contents = this.fileOverlays.get(from) ?? Uint8Array.from(this.getFileContents(from));
+		this.fileOverlays.set(to, contents);
+		this.filePaths.add(to);
+		this.deletedFilePaths.delete(to);
+		this.removeFile(from);
+		return true;
+	}
+
+	private tracingEnabled() {
+		return this.trace !== noopTrace && this.isTraceEnabled?.() !== false;
+	}
+
 	private normalizePath(path: string) {
 		return path.replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, '');
 	}
 
 	getFileContents(path: string) {
+		if (!this.hasFile(path)) throw new Error(`File not found: ${path}`);
 		const overlay = this.fileOverlays.get(this.normalizePath(path));
 		if (overlay) return overlay;
 		this.mem.check();
@@ -173,7 +229,7 @@ export default class MemFS {
 			size += len;
 		}
 		this.hostMem_.write32(nwritten_out, size);
-		if (this.trace !== noopTrace) {
+		if (this.tracingEnabled()) {
 			this.trace(`host_write(fd=${fd}, bytes=${size}, data=${previewText(str)})`);
 		}
 		if (this.out && str) this.stdout(str);
@@ -220,7 +276,7 @@ export default class MemFS {
 				this.stdinOffset = 0;
 			}
 			size += lenToWrite;
-			if (this.trace !== noopTrace) {
+			if (this.tracingEnabled()) {
 				this.trace(
 					`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(textDecoder.decode(chunk))})`
 				);
@@ -228,12 +284,12 @@ export default class MemFS {
 			if (lenToWrite !== len) break;
 		}
 		this.hostMem_.write32(nread, size);
-		if (size === 0 && this.trace !== noopTrace) this.trace(`host_read(fd=${fd}, bytes=0)`);
+		if (size === 0 && this.tracingEnabled()) this.trace(`host_read(fd=${fd}, bytes=0)`);
 		return ESUCCESS;
 	}
 
 	memfs_log(buf: number, len: number) {
-		if (this.trace === noopTrace) return;
+		if (!this.tracingEnabled()) return;
 		this.mem.check();
 		const message = this.mem.readStr(buf, len);
 		this.trace(`memfs_log(${previewText(message)})`);

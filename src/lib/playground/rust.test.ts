@@ -347,7 +347,8 @@ describe('Rust sandbox', () => {
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		await expect(
 			sandbox.run(code, false, true, undefined, ['one', 'two'], {
-				rustTargetTriple: 'wasm32-wasip2'
+				rustTargetTriple: 'wasm32-wasip2',
+				rustOptimizationProfile: 'speed'
 			})
 		).resolves.toBe(true);
 		await expect(
@@ -388,6 +389,7 @@ describe('Rust sandbox', () => {
 				code,
 				args: ['one', 'two'],
 				targetTriple: 'wasm32-wasip2',
+				optimizationProfile: 'speed',
 				log: true
 			}),
 			[expect.any(MessagePort)]

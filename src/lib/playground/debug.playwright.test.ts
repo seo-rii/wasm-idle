@@ -370,6 +370,52 @@ int main() {
 		testId: 'cpp-composite'
 	},
 	{
+		activePath: 'stl.cpp',
+		backend: 'lldb',
+		breakpointLine: 11,
+		expectedWatch: { expression: 'labels[1].second', value: '"two"' },
+		expectedVariableTrees: [
+			{
+				parent: 'values',
+				variables: [
+					{ name: '[0]', value: '2' },
+					{ name: '[1]', value: '4' },
+					{ name: '[2]', value: '6' }
+				]
+			},
+			{
+				parent: 'unique',
+				variables: [
+					{ name: '[0]', value: '1' },
+					{ name: '[1]', value: '2' },
+					{ name: '[2]', value: '3' }
+				]
+			}
+		],
+		expectedPersistentVariable: 'values',
+		expectedOutput: 'lldb-stl=9',
+		expectedLocal: { name: 'ready', value: '4' },
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <vector>
+#include <map>
+#include <set>
+#include <string>
+#include <cstdio>
+int main() {
+    std::vector<int> values{2, 4, 6};
+    std::set<int> unique{3, 1, 2};
+    std::map<int, std::string> labels{{1, "one"}, {2, "two"}};
+    int ready = values[1];
+    std::printf("lldb-stl=%d\\n", ready + int(unique.size()) + int(labels.size()));
+    values[1] += 1;
+    std::printf("lldb-stl-changed=%d\\n", values[1]);
+    return 0;
+}`,
+		testId: 'cpp-stl-values'
+	},
+	{
 		activePath: 'data-breakpoint.cpp',
 		backend: 'lldb',
 		breakpointLine: 5,
@@ -2821,21 +2867,62 @@ describe('native-source browser debugging in Chromium', () => {
 									{ functionName: 'main', line: 8, sourcePath },
 									10_000
 								);
+								// Expansion persists, but each stop reloads only the first page
+								// through the current frame's references.
+								await expect
+									.poll(() => rows.count(), { timeout: 10_000 })
+									.toBe(testCase.expectedArrayPageSize);
+								expect(await rows.locator('.debug-key').allTextContents()).toEqual(
+									Array.from({ length: 50 }, (_, i) => `[${i}]`)
+								);
+								expect(
+									await rows.locator('.debug-value').allTextContents()
+								).toEqual(Array.from({ length: 50 }, (_, i) => String(i)));
+								expect(
+									await page
+										.getByRole('button', {
+											name: 'Collapse values',
+											exact: true
+										})
+										.getAttribute('aria-expanded')
+								).toBe('true');
 								const resumedState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
+								const resumedVariables = new Map<number, any[]>(
+									resumedState.variablesByReference
+								);
+								const resumedLocals = resumedState.scopes.flatMap(
+									(scope: { variablesReference: number; variables: any[] }) =>
+										resumedVariables.get(scope.variablesReference) ??
+										scope.variables
+								);
+								const resumedArray = resumedLocals.find(
+									(variable: any) => variable.name === 'values'
+								);
+								expect(resumedArray).toMatchObject({ indexedVariables: 1000 });
 								expect(
-									resumedState.variablesByReference.every(
-										([, variables]: [number, any[]]) =>
-											variables.every(
-												(variable: any) => !/^\[\d+\]$/u.test(variable.name)
-											)
+									resumedLocals.find((variable: any) => variable.name === 'ready')
+								).toMatchObject({ value: '1' });
+								const resumedChildren = resumedVariables.get(
+									resumedArray.variablesReference
+								);
+								expect(
+									resumedChildren?.map(
+										({ name, value }: { name: string; value: string }) => ({
+											name,
+											value
+										})
 									)
-								).toBe(true);
-								expect(await rows.count()).toBe(0);
+								).toEqual(
+									Array.from({ length: 50 }, (_, i) => ({
+										name: `[${i}]`,
+										value: String(i)
+									}))
+								);
 								await page
 									.getByRole('button', {
-										name: 'Load children for values',
+										name: 'Load more children for values',
 										exact: true
 									})
 									.waitFor({ state: 'visible', timeout: 10_000 });
@@ -3227,6 +3314,84 @@ describe('native-source browser debugging in Chromium', () => {
 									);
 									expect(variable?.value).toContain(expectedVariable.value);
 								}
+							}
+							if ('expectedPersistentVariable' in testCase) {
+								const scope = page.locator('details.debug-scope').filter({
+									has: page.locator('summary', { hasText: 'Locals' })
+								});
+								await scope
+									.getByRole('button', {
+										name: `Load children for ${testCase.expectedPersistentVariable}`,
+										exact: true
+									})
+									.click();
+								await expect
+									.poll(() =>
+										scope
+											.locator('.debug-variable-children .debug-value')
+											.allTextContents()
+									)
+									.toContain('4');
+								await scope
+									.getByRole('button', {
+										name: `Add watch for ${testCase.expectedPersistentVariable}`,
+										exact: true
+									})
+									.click();
+								await expect
+									.poll(() => page.locator('.debug-expression').allTextContents())
+									.toContain('values');
+								await page
+									.getByRole('button', {
+										name: 'Expand watch values',
+										exact: true
+									})
+									.click();
+								await page
+									.getByRole('button', { name: 'Next Line', exact: true })
+									.click();
+								await expect
+									.poll(
+										() =>
+											scope
+												.locator('.debug-entry--changed .debug-value')
+												.allTextContents(),
+										{ timeout: 30_000 }
+									)
+									.toContain('5');
+								expect(
+									await scope
+										.getByRole('button', {
+											name: 'Collapse values',
+											exact: true
+										})
+										.getAttribute('aria-expanded')
+								).toBe('true');
+								const liveLine = await readPausedLine(page);
+								await page.getByText(/^Recent stops \(/u).click();
+								await page
+									.getByRole('button', { name: /^#\d+ /u })
+									.first()
+									.click();
+								await expect
+									.poll(() =>
+										page
+											.getByText(
+												'Recorded values. Execution controls apply to the current stop.',
+												{
+													exact: true
+												}
+											)
+											.isVisible()
+									)
+									.toBe(true);
+								expect(await readPausedLine(page)).toBe(liveLine);
+								await page
+									.getByRole('button', {
+										name: 'Back to live values',
+										exact: true
+									})
+									.click();
 							}
 							const loadedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()

@@ -1,8 +1,18 @@
-import type { DebugSourceBreakpoints, ExecutionLimits, WorkspaceLimits } from '@wasm-idle/core';
+import type {
+	DebugSourceBreakpoints,
+	DebugSteppingOptions,
+	ExecutionLimits,
+	WorkspaceLimits
+} from '@wasm-idle/core';
 
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
+	DebugEvaluateOptions,
+	DebugEvaluateResult,
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugVariablePresentationHint,
 	DebugDataBreakpoint,
 	DebugDataBreakpointAccessType,
 	DebugDataBreakpointInfo,
@@ -34,6 +44,7 @@ export interface CompilerDiagnostic {
 	message: string;
 }
 
+export type RustOptimizationProfile = 'interactive' | 'speed' | 'size';
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 export type BrowserDebugMode = 'none' | 'trace' | 'lldb';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
@@ -57,6 +68,7 @@ export interface SandboxExecutionOptions {
 	interactive?: boolean;
 	breakpoints?: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	debugSteppingOptions?: DebugSteppingOptions;
 	pauseOnEntry?: boolean;
 	stdin?: string;
 	signal?: AbortSignal;
@@ -72,6 +84,8 @@ export interface SandboxExecutionOptions {
 	cppVersion?: string;
 	cVersion?: string;
 	rustTargetTriple?: RustTargetTriple;
+	/** Optimizes the Rust user program while retaining overflow checks and debug assertions. */
+	rustOptimizationProfile?: RustOptimizationProfile;
 	goTarget?: GoTarget;
 	tinygoTarget?: TinyGoTarget;
 	ocamlBackend?: OcamlBackend;

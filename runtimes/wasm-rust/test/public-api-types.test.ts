@@ -81,6 +81,10 @@ const artifact: NonNullable<BrowserRustCompilerResult['artifact']> = {
 };
 
 const compiler = await createRustCompiler();
+const checked = await compiler.check({ code: 'fn main() {}' });
+// @ts-expect-error checking never returns an executable artifact
+checked.artifact.wasm;
+await compiler.compile({ code: 'fn main() {}', optimizationProfile: 'speed' });
 await compiler.compile({
 	code: 'fn main() {}',
 	workerLimits

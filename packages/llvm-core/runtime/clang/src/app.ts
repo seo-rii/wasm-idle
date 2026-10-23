@@ -18,6 +18,7 @@ import { flushQueuedStdin, readBufferedStdin } from './stdin-buffer.js';
 
 const ESUCCESS = 0;
 const ENOENT = 44;
+const EEXIST = 20;
 const ENOTSUP = 58;
 const WASI_RIGHT_FD_READ = 1 << 1;
 const WASI_RIGHT_FD_SEEK = 1 << 2;
@@ -27,6 +28,7 @@ const WASI_RIGHT_FD_WRITE = 1 << 6;
 const WASI_RIGHT_FD_FILESTAT_GET = 1 << 21;
 const WASI_RIGHT_FD_FILESTAT_SET_SIZE = 1 << 22;
 const WASI_O_CREAT = 1 << 0;
+const WASI_O_EXCL = 1 << 2;
 const WASI_O_TRUNC = 1 << 3;
 const WASI_FILETYPE_REGULAR_FILE = 4;
 const WASI_SEEK_SET = 0;
@@ -87,6 +89,7 @@ export default class App {
 	instance: WebAssembly.Instance = <any>null;
 	exports: any;
 	trace: (message: string) => void = () => {};
+	isTraceEnabled?: () => boolean;
 	debugSession?: DebugSession;
 	useJsReadOverlay = false;
 	useJsSourceReadOverlay = false;
@@ -103,6 +106,7 @@ export default class App {
 		number,
 		{ path: string; contents: Uint8Array; position: number; size: number }
 	>();
+	private readonly temporaryOutputs = new Set<string>();
 
 	constructor(
 		module: WebAssembly.Module,
@@ -193,30 +197,34 @@ export default class App {
 
 	async run() {
 		await this.ready;
-		this.trace(
-			`start(argv=${JSON.stringify(this.argv)}, exports=${JSON.stringify(
-				Object.keys(this.exports || {})
-			)})`
-		);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`start(argv=${JSON.stringify(this.argv)}, exports=${JSON.stringify(
+					Object.keys(this.exports || {})
+				)})`
+			);
 		try {
 			this.exports._start();
 		} catch (exn: any) {
 			let writeStack = true;
 			if (exn instanceof ProcExit) {
-				this.trace(`proc_exit(code=${exn.code})`);
+				if (this.isTraceEnabled?.() !== false) this.trace(`proc_exit(code=${exn.code})`);
 				if (exn.code === RAF_PROC_EXIT_CODE) {
-					this.trace('allow_rAF_after_exit');
+					if (this.isTraceEnabled?.() !== false) this.trace('allow_rAF_after_exit');
 					return true;
 				}
 				this.memfs.flushOutput?.();
 				// Don't allow rAF unless you return the right code.
-				this.trace(`disallow_rAF_after_exit(code=${exn.code})`);
+				if (this.isTraceEnabled?.() !== false)
+					this.trace(`disallow_rAF_after_exit(code=${exn.code})`);
 				if (exn.code == 0) return false;
 				writeStack = false;
 			}
 			// Flush partial guest output before appending the host's error diagnostic.
 			this.memfs.flushOutput?.();
-			if (exn instanceof NotImplemented) this.trace(`not_implemented(${exn.message})`);
+			if (exn instanceof NotImplemented)
+				if (this.isTraceEnabled?.() !== false)
+					this.trace(`not_implemented(${exn.message})`);
 
 			// Write error message.
 			let msg = `\x1b[91mError: ${exn.message}`;
@@ -226,13 +234,18 @@ export default class App {
 
 			// Propagate error.
 			throw exn;
+		} finally {
+			// Some producer versions recover a closed output without completing rename.
+			// Retire only compiler-created temporaries, leaving the final output usable.
+			for (const path of this.temporaryOutputs ?? []) this.memfs.removeFile(path);
+			this.temporaryOutputs?.clear();
 		}
 		this.memfs.flushOutput?.();
-		this.trace('start() returned without proc_exit');
+		if (this.isTraceEnabled?.() !== false) this.trace('start() returned without proc_exit');
 	}
 
 	proc_exit(code: number) {
-		this.trace(`proc_exit_throw(code=${code})`);
+		if (this.isTraceEnabled?.() !== false) this.trace(`proc_exit_throw(code=${code})`);
 		throw new ProcExit(code);
 	}
 
@@ -374,9 +387,10 @@ export default class App {
 		const rights = this.toNumber(fsRightsBase);
 		const writesFile =
 			(rights & WASI_RIGHT_FD_WRITE) !== 0 || (oflags & (WASI_O_CREAT | WASI_O_TRUNC)) !== 0;
-		this.trace(
-			`path_open_request(path=${JSON.stringify(path)}, rights=${rights}, oflags=${oflags}, write=${writesFile})`
-		);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`path_open_request(path=${JSON.stringify(path)}, rights=${rights}, oflags=${oflags}, write=${writesFile})`
+			);
 		const overlayReadContents =
 			!writesFile && this.shouldUseJsReadForPath(path) && (rights & WASI_RIGHT_FD_READ) !== 0
 				? this.readMemfsFile(path)
@@ -387,16 +401,27 @@ export default class App {
 			(rights & WASI_RIGHT_FD_READ) !== 0 &&
 			!overlayReadContents
 		) {
-			this.trace(`path_open_read_missing(path=${JSON.stringify(path)})`);
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(`path_open_read_missing(path=${JSON.stringify(path)})`);
 			return ENOENT;
 		}
 		let result = ESUCCESS;
 		let fd: number;
-		if (this.useJsReadOverlay && (writesFile || overlayReadContents)) {
+		if (
+			(this.useJsReadOverlay || this.useJsSourceReadOverlay) &&
+			(writesFile || overlayReadContents)
+		) {
+			if (writesFile) {
+				const exists = this.memfs.hasFile(path);
+				if (!exists && (oflags & WASI_O_CREAT) === 0) return ENOENT;
+				if (exists && (oflags & WASI_O_CREAT) !== 0 && (oflags & WASI_O_EXCL) !== 0)
+					return EEXIST;
+			}
 			fd = this.nextHandle++;
 			this.syntheticFileHandles.add(fd);
 			this.writeU32(openedFd, fd);
-			this.trace(`path_open_overlay(fd=${fd}, path=${JSON.stringify(path)})`);
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(`path_open_overlay(fd=${fd}, path=${JSON.stringify(path)})`);
 		} else {
 			result = this.memfs.exports.path_open(
 				dirfd,
@@ -414,7 +439,7 @@ export default class App {
 		}
 		if (writesFile) {
 			const existing = (oflags & WASI_O_TRUNC) === 0 ? this.readMemfsFile(path) : null;
-			const contents = existing ? Uint8Array.from(existing) : new Uint8Array(0);
+			const contents = existing || new Uint8Array(0);
 			this.writeFileHandles.set(fd, {
 				path,
 				contents,
@@ -422,9 +447,10 @@ export default class App {
 				size: contents.length
 			});
 			this.readFileHandles.delete(fd);
-			this.trace(
-				`path_open_write(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
-			);
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(
+					`path_open_write(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
+				);
 			return result;
 		}
 		if (!this.shouldUseJsReadForPath(path) || (rights & WASI_RIGHT_FD_READ) === 0) {
@@ -435,9 +461,10 @@ export default class App {
 		if (!contents) return result;
 
 		this.readFileHandles.set(fd, { path, contents, position: 0 });
-		this.trace(
-			`path_open_read(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
-		);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`path_open_read(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
+			);
 		return result;
 	}
 
@@ -454,12 +481,14 @@ export default class App {
 			return this.memfs.exports.path_filestat_get(dirfd, flags, pathPtr, pathLen, statPtr);
 		}
 
-		const contents = this.readMemfsFile(path);
-		if (!contents) {
+		const size = this.memfs.getFileSize(path);
+		if (size === undefined) {
+			if (this.memfs.isFileDeleted(path)) return ENOENT;
 			return this.memfs.exports.path_filestat_get(dirfd, flags, pathPtr, pathLen, statPtr);
 		}
-		this.writeRegularFileStat(statPtr, contents.length, path);
-		this.trace(`path_filestat_get(path=${JSON.stringify(path)}, size=${contents.length})`);
+		this.writeRegularFileStat(statPtr, size, path);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`path_filestat_get(path=${JSON.stringify(path)}, size=${size})`);
 		return ESUCCESS;
 	}
 
@@ -485,7 +514,8 @@ export default class App {
 		this.mem.write8(fdstatPtr + 3, 0);
 		this.writeU64(fdstatPtr + 8, rights);
 		this.writeU64(fdstatPtr + 16, 0);
-		this.trace(`fd_fdstat_get(fd=${fd}, path=${JSON.stringify(handle.path)})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`fd_fdstat_get(fd=${fd}, path=${JSON.stringify(handle.path)})`);
 		return ESUCCESS;
 	}
 
@@ -497,7 +527,10 @@ export default class App {
 
 		const size = writeHandle ? writeHandle.size : readHandle?.contents.length || 0;
 		this.writeRegularFileStat(statPtr, size, handle.path);
-		this.trace(`fd_filestat_get(fd=${fd}, path=${JSON.stringify(handle.path)}, size=${size})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`fd_filestat_get(fd=${fd}, path=${JSON.stringify(handle.path)}, size=${size})`
+			);
 		return ESUCCESS;
 	}
 
@@ -510,7 +543,8 @@ export default class App {
 		if (nextSize > handle.size) handle.contents.fill(0, handle.size, nextSize);
 		handle.size = nextSize;
 		if (handle.position > nextSize) handle.position = nextSize;
-		this.trace(`fd_filestat_set_size(fd=${fd}, size=${nextSize})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`fd_filestat_set_size(fd=${fd}, size=${nextSize})`);
 		return ESUCCESS;
 	}
 
@@ -519,7 +553,8 @@ export default class App {
 		if (!handle) return this.memfs.exports.fd_read(fd, iovs, iovsLen, nread);
 		const result = this.copyFileToIovs(handle.contents, handle.position, iovs, iovsLen, nread);
 		handle.position = result.position;
-		this.trace(`fd_read(fd=${fd}, bytes=${result.copied})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`fd_read(fd=${fd}, bytes=${result.copied})`);
 		return ESUCCESS;
 	}
 
@@ -533,7 +568,10 @@ export default class App {
 			iovsLen,
 			nread
 		);
-		this.trace(`fd_pread(fd=${fd}, offset=${this.toNumber(offset)}, bytes=${result.copied})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`fd_pread(fd=${fd}, offset=${this.toNumber(offset)}, bytes=${result.copied})`
+			);
 		return ESUCCESS;
 	}
 
@@ -552,9 +590,10 @@ export default class App {
 			writeHandle.position = position;
 			this.mem.check();
 			this.writeU64(newOffset, writeHandle.position);
-			this.trace(
-				`fd_seek_write(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`
-			);
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(
+					`fd_seek_write(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`
+				);
 			return ESUCCESS;
 		}
 
@@ -570,7 +609,8 @@ export default class App {
 		handle.position = position;
 		this.mem.check();
 		this.writeU64(newOffset, handle.position);
-		this.trace(`fd_seek(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`fd_seek(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`);
 		return ESUCCESS;
 	}
 
@@ -583,7 +623,7 @@ export default class App {
 		}
 		this.mem.check();
 		this.writeU64(newOffset, position);
-		this.trace(`fd_tell(fd=${fd}, offset=${position})`);
+		if (this.isTraceEnabled?.() !== false) this.trace(`fd_tell(fd=${fd}, offset=${position})`);
 		return ESUCCESS;
 	}
 
@@ -609,19 +649,19 @@ export default class App {
 	) {
 		this.mem.check();
 		this.writeU32(bytesUsed, 0);
-		this.trace(
-			`path_readlink(path=${JSON.stringify(this.mem.readStr(pathPointer, pathLength))})`
-		);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`path_readlink(path=${JSON.stringify(this.mem.readStr(pathPointer, pathLength))})`
+			);
 		return ENOENT;
 	}
 
 	path_unlink_file(_fd: number, pathPointer: number, pathLength: number) {
 		this.mem.check();
 		const path = this.mem.readStr(pathPointer, pathLength);
-		this.trace(`path_unlink_file(path=${JSON.stringify(path)})`);
-		// The in-memory filesystem has no remove primitive. Build directories are unique, so
-		// retaining a compiler temporary is harmless and reporting success preserves cleanup flow.
-		return ESUCCESS;
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`path_unlink_file(path=${JSON.stringify(path)})`);
+		return this.memfs.removeFile(path) ? ESUCCESS : ENOENT;
 	}
 
 	fd_write(fd: number, iovs: number, iovsLen: number, nwritten: number) {
@@ -645,7 +685,7 @@ export default class App {
 			copied += length;
 		}
 		this.writeU32(nwritten, copied);
-		this.trace(`fd_write(fd=${fd}, bytes=${copied})`);
+		if (this.isTraceEnabled?.() !== false) this.trace(`fd_write(fd=${fd}, bytes=${copied})`);
 		return ESUCCESS;
 	}
 
@@ -654,7 +694,8 @@ export default class App {
 		if (this.readFileHandles.has(fd)) {
 			this.readFileHandles.delete(fd);
 			const closeResult = synthetic ? ESUCCESS : this.memfs.exports.fd_close(fd);
-			this.trace(`fd_close_read(fd=${fd}, close=${closeResult})`);
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(`fd_close_read(fd=${fd}, close=${closeResult})`);
 			return closeResult;
 		}
 		const writeHandle = this.writeFileHandles.get(fd);
@@ -664,10 +705,16 @@ export default class App {
 			const contents = writeHandle.contents.subarray(0, writeHandle.size);
 			this.storeFileContents(writeHandle.path, contents);
 			const target = this.atomicOutputTarget(writeHandle.path);
-			if (target) this.storeFileContents(target, contents);
-			this.trace(
-				`fd_close_write(fd=${fd}, path=${JSON.stringify(writeHandle.path)}, size=${writeHandle.size}, close=${closeResult}, target=${JSON.stringify(target)})`
-			);
+			if (target) {
+				this.storeFileContents(target, contents);
+				if (this.useJsReadOverlay || this.useJsSourceReadOverlay) {
+					this.temporaryOutputs.add(writeHandle.path);
+				}
+			}
+			if (this.isTraceEnabled?.() !== false)
+				this.trace(
+					`fd_close_write(fd=${fd}, path=${JSON.stringify(writeHandle.path)}, size=${writeHandle.size}, close=${closeResult}, target=${JSON.stringify(target)})`
+				);
 			return ESUCCESS;
 		}
 		if (synthetic) return ESUCCESS;
@@ -827,7 +874,8 @@ export default class App {
 		session.nextLineArmed = false;
 		session.nextLineDepth = 0;
 		session.stepOutArmed = false;
-		this.trace(`pause(function=${functionId}, line=${line}, reason=${reason})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`pause(function=${functionId}, line=${line}, reason=${reason})`);
 		const locals =
 			session.variableMetadata[functionId]?.flatMap((variable) => {
 				if (line < variable.fromLine || line > variable.toLine) return [];
@@ -1207,7 +1255,8 @@ export default class App {
 			line,
 			values: new Map()
 		});
-		this.trace(`enter(function=${functionId}, line=${line}, depth=${session.callDepth})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`enter(function=${functionId}, line=${line}, depth=${session.callDepth})`);
 		if (session.pauseOnEntry) {
 			return this.pauseDebugSession(session, functionId, line, 'entry');
 		}
@@ -1220,7 +1269,8 @@ export default class App {
 	__wasm_idle_debug_leave(functionId: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
-		this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
 		if (
 			session.nextLineArmed &&
 			functionId === session.nextLineFunctionId &&
@@ -1358,14 +1408,16 @@ export default class App {
 		}
 		this.mem.write32(environ_count_out, names.length);
 		this.mem.write32(environ_buf_size_out, size);
-		this.trace(`environ_sizes_get(count=${names.length}, bytes=${size})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`environ_sizes_get(count=${names.length}, bytes=${size})`);
 		return ESUCCESS;
 	}
 
 	environ_get(environ_ptrs: number, environ_buf: number) {
 		this.mem.check();
 		const names = Object.getOwnPropertyNames(this.environ);
-		this.trace(`environ_get(entries=${JSON.stringify(names)})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`environ_get(entries=${JSON.stringify(names)})`);
 		for (const name of names) {
 			this.mem.write32(environ_ptrs, environ_buf);
 			environ_ptrs += 4;
@@ -1382,13 +1434,15 @@ export default class App {
 		}
 		this.mem.write32(argc_out, this.argv.length);
 		this.mem.write32(argv_buf_size_out, size);
-		this.trace(`args_sizes_get(count=${this.argv.length}, bytes=${size})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`args_sizes_get(count=${this.argv.length}, bytes=${size})`);
 		return ESUCCESS;
 	}
 
 	args_get(argv_ptrs: number, argv_buf: number) {
 		this.mem.check();
-		this.trace(`args_get(argv=${JSON.stringify(this.argv)})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`args_get(argv=${JSON.stringify(this.argv)})`);
 		for (let arg of this.argv) {
 			this.mem.write32(argv_ptrs, argv_buf);
 			argv_ptrs += 4;
@@ -1408,7 +1462,8 @@ export default class App {
 			clockId === 1 && typeof performance !== 'undefined' ? performance.now() : Date.now();
 		const nanoseconds = BigInt(Math.floor(milliseconds * 1_000_000));
 		this.mem.view.setBigUint64(timeOut, nanoseconds, true);
-		this.trace(`clock_time_get(clock=${clockId}, ns=${nanoseconds})`);
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(`clock_time_get(clock=${clockId}, ns=${nanoseconds})`);
 		return ESUCCESS;
 	}
 
@@ -1417,32 +1472,32 @@ export default class App {
 	}
 
 	fd_filestat_set_times() {
-		this.trace('fd_filestat_set_times()');
+		if (this.isTraceEnabled?.() !== false) this.trace('fd_filestat_set_times()');
 		return ESUCCESS;
 	}
 
 	path_filestat_set_times() {
-		this.trace('path_filestat_set_times()');
+		if (this.isTraceEnabled?.() !== false) this.trace('path_filestat_set_times()');
 		return ESUCCESS;
 	}
 
 	sock_accept() {
-		this.trace('sock_accept() unsupported');
+		if (this.isTraceEnabled?.() !== false) this.trace('sock_accept() unsupported');
 		return ENOTSUP;
 	}
 
 	sock_recv() {
-		this.trace('sock_recv() unsupported');
+		if (this.isTraceEnabled?.() !== false) this.trace('sock_recv() unsupported');
 		return ENOTSUP;
 	}
 
 	sock_send() {
-		this.trace('sock_send() unsupported');
+		if (this.isTraceEnabled?.() !== false) this.trace('sock_send() unsupported');
 		return ENOTSUP;
 	}
 
 	sock_shutdown() {
-		this.trace('sock_shutdown() unsupported');
+		if (this.isTraceEnabled?.() !== false) this.trace('sock_shutdown() unsupported');
 		return ENOTSUP;
 	}
 
@@ -1456,9 +1511,18 @@ export default class App {
 		newPathLen: number
 	) {
 		this.mem.check();
-		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
-		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
-		this.trace(`path_link(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		const source = this.mem
+			.readStr(oldPath, oldPathLen)
+			.replace(/^\/+/, '')
+			.replace(/^\.\//, '');
+		const target = this.mem
+			.readStr(newPath, newPathLen)
+			.replace(/^\/+/, '')
+			.replace(/^\.\//, '');
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`path_link(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`
+			);
 		this.storeFileContents(target, new Uint8Array(this.memfs.getFileContents(source)));
 		return ESUCCESS;
 	}
@@ -1472,12 +1536,18 @@ export default class App {
 		newPathLen: number
 	) {
 		this.mem.check();
-		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
-		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
-		this.trace(
-			`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`
-		);
-		this.storeFileContents(target, new Uint8Array(this.memfs.getFileContents(source)));
-		return ESUCCESS;
+		const source = this.mem
+			.readStr(oldPath, oldPathLen)
+			.replace(/^\/+/, '')
+			.replace(/^\.\//, '');
+		const target = this.mem
+			.readStr(newPath, newPathLen)
+			.replace(/^\/+/, '')
+			.replace(/^\.\//, '');
+		if (this.isTraceEnabled?.() !== false)
+			this.trace(
+				`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`
+			);
+		return this.memfs.renameFile(source, target) ? ESUCCESS : ENOENT;
 	}
 }

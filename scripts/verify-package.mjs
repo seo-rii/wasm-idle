@@ -48,9 +48,9 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// The root install includes container execution modules and release metadata.
 		// Keep the bounded byte/package limits; shipped module/declaration pairs now
-		// total 438 root files (including Java output JS/types) + 265 dependency files
-		// + npm's installation metadata; CI measured 6,312,463 bytes across 704 files.
-		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 704, maxPackages: 6 },
+		// total 438 root files + 267 dependency files + npm's installation metadata,
+		// including the Java output and debug-configuration JS/declaration pairs.
+		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 706, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -125,7 +125,9 @@ export const scenarios = [
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		budget: { maxBytes: 38 * MiB, maxFiles: 3_250, maxPackages: 70 },
+		// Bounded allowance for the shared debugger trees, hover and breakpoint API.
+		// Full install measurement is 38.07 MiB; plugin and root byte limits stay fixed.
+		budget: { maxBytes: 38 * MiB + 128 * 1024, maxFiles: 3_250, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

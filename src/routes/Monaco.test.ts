@@ -2,7 +2,7 @@ import pageSource from './+page.svelte?raw';
 import source from './Monaco.svelte?raw';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { compile } from 'svelte/compiler';
+import { compile, parse } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 import {
 	editorDefaults,
@@ -174,12 +174,47 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
-		expect(source).toMatch(
-			/import \{ attachMonacoDebugActions, MonacoDebugView \} from '@wasm-idle\/debug\/editor';/
+		const debugEditorImports =
+			parse(source, { modern: true }).instance?.content.body.flatMap((statement) => {
+				if (
+					statement.type !== 'ImportDeclaration' ||
+					statement.source.value !== '@wasm-idle/debug/editor'
+				)
+					return [];
+				return statement.specifiers.flatMap((specifier) =>
+					specifier.type === 'ImportSpecifier'
+						? [
+								specifier.imported.type === 'Identifier'
+									? specifier.imported.name
+									: specifier.imported.value
+							]
+						: []
+				);
+			}) ?? [];
+		expect(debugEditorImports).toEqual(
+			expect.arrayContaining([
+				'attachMonacoDebugActions',
+				'attachMonacoDebugHover',
+				'MonacoDebugView',
+				'MonacoDebugHoverOptions'
+			])
 		);
 		expect(source).toMatch(/let debugActionBindings: \{ dispose\(\): void \} \| null = null;/);
-		expect(source).toMatch(
-			/debugActionBindings = attachMonacoDebugActions\(activeEditor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
+		const debugActionOptions = source.match(
+			/debugActionBindings\s*=\s*attachMonacoDebugActions\(\s*activeEditor,\s*\{([^}]*)\}\s*\)/s
+		)?.[1];
+		expect(debugActionOptions).toBeDefined();
+		expect(
+			debugActionOptions?.match(
+				/\b(?:onCursorLineChange|onRunToCursor|onAddWatch|onEditBreakpoint)\b/gu
+			)
+		).toEqual(
+			expect.arrayContaining([
+				'onCursorLineChange',
+				'onRunToCursor',
+				'onAddWatch',
+				'onEditBreakpoint'
+			])
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
 		expect(source).toMatch(
