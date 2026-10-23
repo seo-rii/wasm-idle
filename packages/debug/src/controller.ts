@@ -293,6 +293,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const breakpointErrorState = fromStore(breakpointErrorStore);
 
 	let watchRequestVersion = 0;
+	const watchEvaluations = new Map<string, Promise<DebugWatchValue>>();
 	let frameRequestVersion = 0;
 	let activeStopId: number | undefined;
 	let callStackComplete = true;
@@ -321,6 +322,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function invalidateVariableRequests() {
 		frameRequestVersion += 1;
 		watchRequestVersion += 1;
+		watchEvaluations.clear();
 		hoverRequestVersion += 1;
 		restoredPaths.clear();
 		variableRequests.clear();
@@ -647,6 +649,17 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		};
 	}
 
+	function requestWatchEvaluation(expression: string, evaluate: () => Promise<DebugWatchValue>) {
+		const existing = watchEvaluations.get(expression);
+		if (existing) return existing;
+		const request = evaluate();
+		watchEvaluations.set(expression, request);
+		void request.catch(() => {
+			if (watchEvaluations.get(expression) === request) watchEvaluations.delete(expression);
+		});
+		return request;
+	}
+
 	async function resolveValue(
 		expression: string,
 		context: 'watch' | 'hover',
@@ -662,21 +675,30 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		const structuredEvaluation =
 			context === 'hover' ? capabilities.evaluateForHovers : capabilities.evaluateValues;
 		if (terminal?.debugEvaluateValue && structuredEvaluation) {
-			const result = await terminal.debugEvaluateValue(expression, {
-				context,
-				...(get(frameIdStore) === null ? {} : { frameId: get(frameIdStore)! })
-			});
-			if (!isCurrent()) return null;
-			if (result.result !== '?') {
+			const frameId = get(frameIdStore);
+			const evaluate = async () => {
+				const result = await terminal.debugEvaluateValue!(expression, {
+					context,
+					...(frameId === null ? {} : { frameId })
+				});
 				const { result: value, ...metadata } = result;
 				return watchWithVariable(expression, { name: expression, value, ...metadata });
-			}
+			};
+			const result =
+				context === 'watch'
+					? await requestWatchEvaluation(expression, evaluate)
+					: await evaluate();
+			if (!isCurrent()) return null;
+			if (result.value !== '?') return result;
 		} else if (context === 'watch' && terminal?.debugEvaluate) {
 			// Trace watches retain their evaluator even when the Terminal exposes the new optional API.
 			// An LLDB runtime gates its legacy evaluator before the same safe-path fallback below.
-			const value = await terminal.debugEvaluate(expression);
+			const result = await requestWatchEvaluation(expression, async () => ({
+				expression,
+				value: await terminal.debugEvaluate!(expression)
+			}));
 			if (!isCurrent()) return null;
-			if (value !== '?') return { expression, value };
+			if (result.value !== '?') return result;
 		}
 		if (variablePath.kind !== 'path') return { expression, value: '?' };
 		const { root, segments } = variablePath;
@@ -766,7 +788,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return variable ? watchWithVariable(expression, variable) : { expression, value: '?' };
 	}
 
-	function refreshWatchValues() {
+	function refreshWatchValues(reuseEvaluations = false) {
+		// Scope hydration changes safe-path availability, not already evaluated target values.
+		// User changes and explicit refreshes always start a new evaluation generation.
+		if (!reuseEvaluations) watchEvaluations.clear();
 		const expressions = [...get(watchExpressionsStore)];
 		const adapter = get(adapterStore);
 		const localVariables = [...get(localsStore)];
@@ -1376,7 +1401,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 					(scope) => variablesByReference.get(scope.variablesReference) ?? scope.variables
 				)
 			);
-			refreshWatchValues();
+			refreshWatchValues(true);
 		}
 		return variables;
 	}
@@ -1608,10 +1633,12 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return null;
 		}
 		const terminal = get(terminalStore);
-		return (
+		const version = frameRequestVersion;
+		const result =
 			(await terminal?.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
-			null
-		);
+			null;
+		if (result && version === frameRequestVersion && get(pausedStore)) refreshWatchValues();
+		return result;
 	}
 
 	async function dataBreakpointInfo(
