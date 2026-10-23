@@ -1,7 +1,6 @@
 import type { DebugWorkerInboundMessage, LldbWorkerInitializeMessage } from '../types.js';
 import {
 	createByteOutput,
-	compiledModuleInstantiation,
 	createEmscriptenAssetUrls,
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
@@ -121,7 +120,6 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
 		if (disposed) return;
 		const module = await factory({
-			...compiledModuleInstantiation(message.assets.compiledModule),
 			noInitialRun: true,
 			wasmLldbSharedRingV1: registry,
 			mainScriptUrlOrBlob: assetUrls.worker,

@@ -198,8 +198,6 @@ export interface VerifiedDebugAssetBytes {
 	js: ArrayBuffer;
 	wasm: ArrayBuffer;
 	worker: ArrayBuffer;
-	/** Immutable code only; every worker creates a fresh instance and memory. */
-	compiledModule?: WebAssembly.Module;
 }
 
 export interface VerifiedDebugRuntimeAssets {
@@ -238,7 +236,11 @@ export interface LldbWorkerInitializeMessage {
 	dapOutput: SharedByteQueueDescriptor;
 	rspInput: SharedByteQueueDescriptor;
 	rspOutput: SharedByteQueueDescriptor;
-	assets: VerifiedDebugAssetBytes;
+	assets: {
+		js: ArrayBuffer;
+		wasm: ArrayBuffer;
+		worker: ArrayBuffer;
+	};
 }
 
 export interface TargetWorkerInitializeMessage {
@@ -253,7 +255,11 @@ export interface TargetWorkerInitializeMessage {
 	rspOutput: SharedByteQueueDescriptor;
 	stdout: SharedByteQueueDescriptor;
 	stderr: SharedByteQueueDescriptor;
-	assets: VerifiedDebugAssetBytes;
+	assets: {
+		js: ArrayBuffer;
+		wasm: ArrayBuffer;
+		worker: ArrayBuffer;
+	};
 	stdin?: SharedByteQueueDescriptor;
 }
 

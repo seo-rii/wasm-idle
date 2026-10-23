@@ -13,11 +13,13 @@ and cache hit is charged to the same 55,000,000-byte budget before hashing or al
 the owned chunk. Any failure aborts the other requests and settles their readers. All six
 manifest hashes must pass before workers are created.
 
-The built-in worker path keeps at most two immutable `WebAssembly.Module` promises, keyed by
-the verified runtime digest. It does not retain sessions, workers, queues, instances, memories
-or filesystems. Emscripten receives an `instantiateWasm` hook that creates a new Instance with
-the new factory's imports. Verified bytes and blob URLs remain subject to the existing
-integrity and CSP gates. Custom worker factories retain their existing loading policy.
+The current pinned LLDB glue explicitly rejects `Module.instantiateWasm`, and the WAMR glue
+omits that hook. Their `wasmBinary` constructor input is also unavailable. An actual pinned
+Chromium run caught this producer contract mismatch. Consequently this change preserves the
+existing verified blob loader and fresh workers/instances, without injecting a compiled Module
+or altering global WebAssembly functions. Immutable compiled-module reuse needs a producer
+release that explicitly supports the hook, matching receipts, and browser validation; it is
+not an optimization delivered by this consumer PR.
 
 Run the pinned browser regression after `prepare:test-assets -- clang` and
 `prepare:wasm-debug-release`:
@@ -29,5 +31,5 @@ node scripts/probe-lldb-first-pause.mjs --json /tmp/lldb-first-pause.json
 The probe compiles real C DWARF, stops at the bottom of a 120-level recursion, checks the
 one-frame initial pause and subsequent 100-frame stack, continues to successful output, then
 repeats with fresh workers. It enforces strict CSP and cross-origin isolation, and verifies
-that two relaunches share exactly two runtime compilations. Cold versus warm timing is
+correct top/caller locals on two fresh launches. Cold versus warm timing is
 descriptive evidence; browser tiering, network/cache state and host load also affect it.

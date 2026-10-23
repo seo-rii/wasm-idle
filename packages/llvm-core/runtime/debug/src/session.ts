@@ -1,7 +1,6 @@
 import { DapClient, resolveDapTimeout } from './dap-client.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
-import { compileVerifiedDebugModule } from './runtime-module-cache.js';
 import {
 	getArrayBufferKind,
 	normalizeUint8ArrayObject,
@@ -541,22 +540,6 @@ export class BrowserLldbSession {
 			)
 		);
 		this.assertActive();
-		// Custom worker factories retain ownership of their loading policy. Built-in
-		// workers clone immutable compiled code across fresh session instances.
-		if (workerFactory === defaultWorkerFactory) {
-			const [lldb, target] = await this.awaitWhileActive(
-				Promise.all([
-					compileVerifiedDebugModule(manifest.debugger.lldb.wasmSha256, assets.lldb.wasm),
-					compileVerifiedDebugModule(
-						manifest.debugger.targetRuntime.wasmSha256,
-						assets.targetRuntime.wasm
-					)
-				])
-			);
-			this.assertActive();
-			assets.lldb.compiledModule = lldb;
-			assets.targetRuntime.compiledModule = target;
-		}
 		try {
 			this.dapQueues.push(new SharedByteQueue(dapInput), new SharedByteQueue(dapOutput));
 			this.rspQueues.push(

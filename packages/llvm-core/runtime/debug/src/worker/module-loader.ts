@@ -162,23 +162,6 @@ export function createEmscriptenAssetUrls(
 	}
 }
 
-/** Reuse compiled code while Emscripten allocates fresh imported memory. */
-export function compiledModuleInstantiation(module?: WebAssembly.Module) {
-	if (!module) return {};
-	if (!(module instanceof WebAssembly.Module))
-		throw new TypeError('Invalid compiled debug module');
-	return {
-		instantiateWasm(
-			imports: WebAssembly.Imports,
-			receive: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void
-		) {
-			const instance = new WebAssembly.Instance(module, imports);
-			receive(instance, module);
-			return instance.exports;
-		}
-	};
-}
-
 export function validateDebugSessionGeneration(
 	generation: unknown
 ): asserts generation is DebugSessionGeneration {

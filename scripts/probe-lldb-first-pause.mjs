@@ -147,12 +147,6 @@ try {
 	const report = await page.evaluate(
 		async ({ manifest, debugProfile }) => {
 			const violations = [];
-			const nativeCompile = WebAssembly.compile;
-			let runtimeCompilations = 0;
-			WebAssembly.compile = (...args) => {
-				runtimeCompilations++;
-				return nativeCompile(...args);
-			};
 			document.addEventListener('securitypolicyviolation', (event) =>
 				violations.push(event.violatedDirective)
 			);
@@ -305,11 +299,13 @@ try {
 				}
 			}
 			if (violations.length) throw new Error(`CSP violations: ${violations.join(',')}`);
-			if (runtimeCompilations !== 2)
-				throw new Error(
-					`expected two shared runtime compilations, received ${runtimeCompilations}`
-				);
-			return { crossOriginIsolated, violations, runtimeCompilations, results };
+			return {
+				crossOriginIsolated,
+				violations,
+				immutableModuleReuse: false,
+				moduleReuseLimitation: 'Pinned LLDB/WAMR glue does not support instantiateWasm',
+				results
+			};
 		},
 		{ manifest, debugProfile }
 	);
