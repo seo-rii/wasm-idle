@@ -65,6 +65,33 @@ parsers, translators, emulators, or "subset" executors as language support. A la
 listed only after normal user code runs on that actual runtime and stdin/stdout behavior, or a
 documented stdin limitation, is covered by tests.
 
+## Compiler options
+
+Expand **Compile options** in the playground to configure each language independently. Settings
+are saved with the workspace and included in shared links and JSON backups. C and C++ expose
+optimization (`-O0` through `-O3`, `-Os`, `-Oz`), warning levels, warnings as errors, pedantic
+diagnostics, and GNU extensions. C supports C89 through C23 and the C2y draft; C++ supports C++98
+through the C++26 draft. The selected C-family flags also configure clangd, so definitions,
+include paths, warnings, and explicit standard overrides agree with execution.
+
+| Language                              | Additional compiler arguments                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| C / C++ / Objective-C / Objective-C++ | Clang flags such as `-DVALUE=42 -Iinclude -Wno-unused-variable`                       |
+| D                                     | LDC flags such as `-O2 -w -d-version=Example`                                         |
+| Zig                                   | `build-exe` flags such as `-O ReleaseFast`                                            |
+| V                                     | V frontend flags such as `-prod -d example`                                           |
+| COBOL                                 | GnuCOBOL flags such as `-Wall -std=cobol2014 -fixed`                                  |
+| Haskell                               | GHC flags such as `-O2 -Wall -XGHC2021`; separate program arguments are unavailable   |
+| Fortran (`FORTRAN`)                   | Clang flags for generated C, such as `-O2 -w`; these do not configure f2c or LFortran |
+
+Additional arguments follow the C-family selections, allowing explicit overrides. Space-separated
+arguments support single/double quotes and backslash escapes without shell expansion. GHC's
+string-based runtime rejects empty arguments and arguments containing spaces. The toolbar's
+**Program arguments** field passes runtime argv separately, including for C/C++. LLDB builds keep
+their required `-O0` and debug information. Rust, Go, and OCaml retain their existing structured
+profile, target, and backend controls. See the [Clang manual](https://clang.llvm.org/docs/UsersManual.html)
+for the meaning of Clang's compiler flags.
+
 ## Support matrix
 
 All execution entries run in the browser through real runtime, compiler, or interpreter
@@ -282,33 +309,6 @@ worker sidecars. The strict browser test covers real C, C++, and Rust breakpoint
 termination paths and rejects trace fallback or a missing debug asset. The Rust producer build is
 required for LLDB metadata; the historical split-runtime build intentionally lacks exact compiler
 provenance and is rejected instead of starting a potentially incompatible debugger.
-
-### Compiler options
-
-Expand **Compile options** in the playground to configure each language independently. Settings
-are saved with the workspace and included in shared links and JSON backups. C and C++ expose
-optimization (`-O0` through `-O3`, `-Os`, `-Oz`), warning levels, warnings as errors, pedantic
-diagnostics, and GNU extensions. C supports C89 through C23 and the C2y draft; C++ supports C++98
-through the C++26 draft. The selected C-family flags also configure clangd, so definitions,
-include paths, warnings, and explicit standard overrides agree with execution.
-
-| Language                              | Additional compiler arguments                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------- |
-| C / C++ / Objective-C / Objective-C++ | Clang flags such as `-DVALUE=42 -Iinclude -Wno-unused-variable`                       |
-| D                                     | LDC flags such as `-O2 -w -d-version=Example`                                         |
-| Zig                                   | `build-exe` flags such as `-O ReleaseFast`                                            |
-| V                                     | V frontend flags such as `-prod -d example`                                           |
-| COBOL                                 | GnuCOBOL flags such as `-Wall -std=cobol2014 -fixed`                                  |
-| Haskell                               | GHC flags such as `-O2 -Wall -XGHC2021`; separate program arguments are unavailable   |
-| Fortran (`FORTRAN`)                   | Clang flags for generated C, such as `-O2 -w`; these do not configure f2c or LFortran |
-
-Additional arguments follow the C-family selections, allowing explicit overrides. Space-separated
-arguments support single/double quotes and backslash escapes without shell expansion. GHC's
-string-based runtime rejects empty arguments and arguments containing spaces. The toolbar's
-**Program arguments** field passes runtime argv separately, including for C/C++. LLDB builds keep
-their required `-O0` and debug information. Rust, Go, and OCaml retain their existing structured
-profile, target, and backend controls. See the [Clang manual](https://clang.llvm.org/docs/UsersManual.html)
-for the meaning of Clang's compiler flags.
 
 ### Runtime details
 
