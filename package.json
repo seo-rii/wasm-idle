@@ -41,7 +41,7 @@
 		"test:swift-target-consumer": "node --test scripts/probe-swift-target-consumer.test.mjs",
 		"sync:pyodide": "node scripts/sync-pyodide.mjs",
 		"test:browser:clang-stdin": "WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
-		"test:browser:compiler-options": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_COMPILER_OPTIONS_BROWSER=1 pnpm exec vitest run src/routes/compiler-options.playwright.test.ts",
+		"test:browser:compiler-options": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS=1 pnpm exec vitest run src/routes/compiler-options.playwright.test.ts",
 		"test:browser:fortran": "WASM_IDLE_RUN_REAL_BROWSER_FORTRAN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:cobol": "WASM_IDLE_RUN_REAL_BROWSER_COBOL=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:v": "WASM_IDLE_RUN_REAL_BROWSER_V=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts -t \"V \"",
