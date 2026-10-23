@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { runInNewContext } from 'node:vm';
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
 import { BrowserLldbSession, DapProtocolError } from '../src/session.js';
@@ -334,6 +334,12 @@ class FakeWorker implements WorkerLike {
 }
 
 describe('BrowserLldbSession', () => {
+	beforeAll(async () => {
+		// Node's first Response use can compile Undici's llhttp Wasm. Initialize it
+		// before the spies so exact compile counts cover only debugger runtimes.
+		await new Response('initialize fetch globals').text();
+	});
+
 	it('gates compiled modules on the producer contract and creates fresh workers and queues', async () => {
 		const runtimeBytes = Uint8Array.of(...validWasmModule, 0, 2, 1, 77);
 		const wasmSha256 = createHash('sha256').update(runtimeBytes).digest('hex');
