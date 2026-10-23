@@ -15,6 +15,7 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'php'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
@@ -421,6 +422,7 @@ export const playgroundLanguageDescriptors: Readonly<
 	PHP: {
 		label: 'PHP',
 		editorLanguage: 'php',
+		runtimeLspCapability: 'php',
 		supportsArgs: true,
 		compilerDiagnostics: true
 	},

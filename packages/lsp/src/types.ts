@@ -57,6 +57,11 @@ export interface EditorLanguageServerRuntimeOptions {
 	python?: {
 		baseUrl?: string;
 	};
+	/** PHPantom's original WASI reactor. It does not currently publish diagnostics. */
+	php?: {
+		wasmUrl?: string;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	rust?: {
 		compilerUrl?: string;
 		expectedNetworkModuleUrls?: readonly string[];

@@ -134,7 +134,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | DuckDB         | DuckDB-Wasm                                  | Files | DuckDB LSP           | -     |
 | SQLite         | sql.js                                       | n/a   | syntax               | -     |
 | PostgreSQL     | PostgreSQL 18 / PGlite                       | Files | syntax               | -     |
-| PHP            | PHP 8.4 / php-wasm                           | Yes   | syntax               | -     |
+| PHP            | PHP 8.4 / php-wasm                           | Yes   | PHPantom LSP         | -     |
 
 ## Browser LLDB debug runtime
 

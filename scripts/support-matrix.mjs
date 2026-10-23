@@ -1015,7 +1015,7 @@ export const supportMatrixRows = [
 		ids: ['PHP'],
 		runtime: 'PHP 8.4 / php-wasm',
 		stdin: 'Yes',
-		editorSupport: 'syntax',
+		editorSupport: 'PHPantom LSP',
 		debug: '-',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',

@@ -5,6 +5,11 @@
 	"license": "MIT",
 	"type": "module",
 	"exports": {
+		"./php": {
+			"types": "./dist/php/index.d.ts",
+			"import": "./dist/php/index.js",
+			"default": "./dist/php/index.js"
+		},
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",

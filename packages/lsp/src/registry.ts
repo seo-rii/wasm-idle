@@ -28,6 +28,7 @@ import { getOcamlLanguageServer } from './ocaml/language-server.js';
 import { getOctaveLanguageServer } from './octave/language-server.js';
 import { getPascalLanguageServer } from './pascal/language-server.js';
 import { getPerlLanguageServer } from './perl/language-server.js';
+import { getPhpLanguageServer } from './php/language-server.js';
 import { getPrologLanguageServer } from './prolog/language-server.js';
 import { getPythonLanguageServer } from './python/language-server.js';
 import { getRLanguageServer } from './r/language-server.js';
@@ -56,6 +57,11 @@ export interface EditorLanguageServerProviderDescriptor {
 }
 
 const providerDefinitions = [
+	{
+		id: 'php',
+		languages: ['php', 'phpantom'],
+		create: (options) => getPhpLanguageServer(options)
+	},
 	{
 		id: 'clangd',
 		languages: ['c', 'cpp'],
