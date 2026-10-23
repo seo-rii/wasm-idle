@@ -1,7 +1,10 @@
 import {
+	assertDebugBreakpointSupport,
+	normalizeDebugSourceBreakpoints,
 	normalizeLanguageId,
 	normalizeWorkspacePath,
 	validateWorkspaceFiles,
+	type DebugSourceBreakpoint,
 	type ProgressLike,
 	type WorkspaceFile
 } from '@wasm-idle/core';
@@ -595,11 +598,31 @@ export class ContainerRuntimeAdapter {
 			'debugSetDataBreakpoints'
 		]);
 		if (!allowed.has(method)) throw new TypeError('Unknown debugger method');
+		const specifications =
+			method === 'setSourceBreakpoints'
+				? normalizeDebugSourceBreakpoints(args[0] as DebugSourceBreakpoint[])
+				: undefined;
+		const sourcePath = specifications ? args[1] : undefined;
+		if (sourcePath !== undefined && typeof sourcePath !== 'string')
+			throw new TypeError('Invalid debugger source path');
 		const sandbox = await this.session(language).sandbox;
 		const handler = sandbox[method];
+		if (
+			specifications &&
+			typeof handler !== 'function' &&
+			typeof sandbox.setBreakpoints === 'function'
+		) {
+			assertDebugBreakpointSupport(specifications, {});
+			return await sandbox.setBreakpoints(
+				specifications
+					.filter((value) => value.enabled !== false)
+					.map((value) => value.line),
+				sourcePath
+			);
+		}
 		if (typeof handler !== 'function')
 			throw new Error(`The ${language} runtime does not support ${method}`);
-		return await handler.apply(sandbox, args);
+		return await handler.apply(sandbox, specifications ? [specifications, sourcePath] : args);
 	}
 	inspect() {
 		return [...this.#jobs.values()].map((job) => ({
