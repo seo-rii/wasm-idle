@@ -20,7 +20,7 @@ export interface CompilerDiagnostic {
 }
 
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
-export type BrowserDebugMode = 'none' | 'trace' | 'lldb' | 'cdp' | 'mobdebug';
+export type BrowserDebugMode = 'none' | 'trace' | 'lldb' | 'cdp' | 'mobdebug' | 'tracepoint';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
