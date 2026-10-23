@@ -15,6 +15,7 @@ const editorOnlyLanguageIds = [
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
+	| 'rescript'
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
