@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { runInNewContext } from 'node:vm';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
 import { BrowserLldbSession, DapProtocolError } from '../src/session.js';
@@ -333,6 +334,187 @@ class FakeWorker implements WorkerLike {
 }
 
 describe('BrowserLldbSession', () => {
+	it('gates compiled modules on the producer contract and creates fresh workers and queues', async () => {
+		const runtimeBytes = Uint8Array.of(...validWasmModule, 0, 2, 1, 77);
+		const wasmSha256 = createHash('sha256').update(runtimeBytes).digest('hex');
+		const runtimeManifest = structuredClone(manifest);
+		for (const asset of [
+			runtimeManifest.debugger.lldb,
+			runtimeManifest.debugger.targetRuntime
+		]) {
+			asset.moduleInstantiation = 'emscripten-instantiate-wasm-v1';
+			asset.wasmSha256 = wasmSha256;
+		}
+		const sessions: BrowserLldbSession[] = [];
+		const workers: FakeWorker[] = [];
+		const createdAfter: number[] = [];
+		let fetches = 0;
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		try {
+			for (const cacheEnabled of [undefined, false, true, true]) {
+				const session = new BrowserLldbSession({
+					manifest: runtimeManifest,
+					compiledModuleCache: cacheEnabled,
+					runtimeBaseUrl: 'https://cdn.example/debug/',
+					module: validWasmModule.slice(),
+					sources: [],
+					fetchImpl: async (url) => {
+						fetches++;
+						return new Response(
+							String(url).endsWith('.wasm') ? runtimeBytes : 'debug-asset'
+						);
+					},
+					workerFactory: (kind) => {
+						createdAfter.push(fetches);
+						const worker = new FakeWorker(kind, []);
+						workers.push(worker);
+						return worker;
+					},
+					requestTimeoutMs: 1_000,
+					readyTimeoutMs: 1_000
+				});
+				sessions.push(session);
+				await session.initialize();
+				await session.dispose();
+			}
+			const initializations = workers.map((worker) =>
+				worker.received.find(
+					(message) =>
+						message.type === 'initialize-lldb' || message.type === 'initialize-target'
+				)!
+			);
+			const modules = initializations.map((message) =>
+				'compiledModule' in message ? message.compiledModule : undefined
+			);
+			expect(modules.slice(0, 4)).toEqual([undefined, undefined, undefined, undefined]);
+			expect(modules[4]).toBeInstanceOf(WebAssembly.Module);
+			expect(modules.slice(4).every((module) => module === modules[4])).toBe(true);
+			expect(compile).toHaveBeenCalledTimes(1);
+			expect(createdAfter).toEqual([6, 6, 12, 12, 18, 18, 24, 24]);
+			expect(new Set(workers).size).toBe(8);
+			const queues = initializations.map((message) =>
+				message.type === 'initialize-lldb'
+					? message.dapInput.data
+					: message.type === 'initialize-target'
+						? message.stdin!.data
+						: undefined
+			);
+			expect(new Set(queues).size).toBe(8);
+			for (const worker of workers) {
+				expect(
+					worker.transferLists.flat().some((value) => value instanceof WebAssembly.Module)
+				).toBe(false);
+			}
+		} finally {
+			compile.mockRestore();
+			await Promise.all(sessions.map((session) => session.dispose()));
+		}
+	});
+
+	it('does not compile unsupported legacy glue or bypass integrity after a module-cache hit', async () => {
+		const runtimeBytes = Uint8Array.of(...validWasmModule, 0, 2, 1, 78);
+		const runtimeManifest = structuredClone(manifest);
+		for (const asset of [
+			runtimeManifest.debugger.lldb,
+			runtimeManifest.debugger.targetRuntime
+		]) {
+			asset.wasmSha256 = createHash('sha256').update(runtimeBytes).digest('hex');
+		}
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const workers: FakeWorker[] = [];
+		try {
+			for (const mode of ['legacy', 'enabled', 'corrupt']) {
+				if (mode !== 'legacy')
+					for (const asset of [
+						runtimeManifest.debugger.lldb,
+						runtimeManifest.debugger.targetRuntime
+					])
+						asset.moduleInstantiation = 'emscripten-instantiate-wasm-v1';
+				const session = new BrowserLldbSession({
+					manifest: runtimeManifest,
+					compiledModuleCache: true,
+					runtimeBaseUrl: 'https://cdn.example/debug/',
+					module: validWasmModule.slice(),
+					sources: [],
+					fetchImpl: async (url) =>
+						new Response(
+							String(url).endsWith('.wasm')
+								? runtimeBytes
+								: mode === 'corrupt' && String(url).endsWith('wamr.worker.mjs')
+									? 'changed-worker'
+									: 'debug-asset'
+						),
+					workerFactory: (kind) => {
+						const worker = new FakeWorker(kind, []);
+						workers.push(worker);
+						return worker;
+					},
+					requestTimeoutMs: 1_000,
+					readyTimeoutMs: 1_000
+				});
+				try {
+					if (mode === 'corrupt')
+						await expect(session.initialize()).rejects.toThrow(/SHA-256 mismatch/u);
+					else await session.initialize();
+					if (mode === 'legacy') expect(compile).not.toHaveBeenCalled();
+				} finally {
+					await session.dispose();
+				}
+			}
+			expect(workers).toHaveLength(4);
+			expect(compile).toHaveBeenCalledTimes(1);
+		} finally {
+			compile.mockRestore();
+		}
+	});
+
+	it('does not create workers when disposal races a shared pending compile', async () => {
+		const runtimeBytes = Uint8Array.of(...validWasmModule, 0, 2, 1, 79);
+		const runtimeManifest = structuredClone(manifest);
+		for (const asset of [
+			runtimeManifest.debugger.lldb,
+			runtimeManifest.debugger.targetRuntime
+		]) {
+			asset.moduleInstantiation = 'emscripten-instantiate-wasm-v1';
+			asset.wasmSha256 = createHash('sha256').update(runtimeBytes).digest('hex');
+		}
+		let resolveCompile!: (module: WebAssembly.Module) => void;
+		let notifyCompile!: () => void;
+		const began = new Promise<void>((resolve) => {
+			notifyCompile = resolve;
+		});
+		const compile = vi.spyOn(WebAssembly, 'compile').mockImplementation(() => {
+			notifyCompile();
+			return new Promise((resolve) => {
+				resolveCompile = resolve;
+			});
+		});
+		const workerFactory = vi.fn((kind: 'lldb' | 'target') => new FakeWorker(kind, []));
+		const session = new BrowserLldbSession({
+			manifest: runtimeManifest,
+			compiledModuleCache: true,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [],
+			fetchImpl: async (url) =>
+				new Response(String(url).endsWith('.wasm') ? runtimeBytes : 'debug-asset'),
+			workerFactory
+		});
+		try {
+			const initializing = session.initialize();
+			const rejected = expect(initializing).rejects.toThrow(/disposed/u);
+			await began;
+			await session.dispose();
+			await rejected;
+			resolveCompile(new WebAssembly.Module(runtimeBytes));
+			await Promise.resolve();
+			expect(workerFactory).not.toHaveBeenCalled();
+		} finally {
+			compile.mockRestore();
+			await session.dispose();
+		}
+	});
+
 	it('keeps replacement session buffers isolated from delayed previous-session cleanup', async () => {
 		const sessions: BrowserLldbSession[] = [];
 		const queues: SharedByteQueueDescriptor[][] = [];

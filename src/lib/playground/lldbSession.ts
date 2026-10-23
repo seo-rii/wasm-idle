@@ -16,6 +16,7 @@ import {
 	createBrowserLldbSession,
 	DapProtocolError,
 	type BrowserLldbSession,
+	type BrowserLldbSessionOptions,
 	type DapEvent
 } from '@wasm-idle/llvm-core/debug';
 import { loadVerifiedDebugRuntimeManifest } from '$lib/playground/lldbManifest';
@@ -44,6 +45,9 @@ export interface LldbArtifactPayload {
 }
 
 export interface LldbSandboxSessionOptions {
+	/** Opt in to producer-gated immutable module reuse; disabled by default. */
+	compiledModuleCache?: boolean;
+	workerFactory?: BrowserLldbSessionOptions['workerFactory'];
 	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	manifestUrl: string;
 	manifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
@@ -338,6 +342,8 @@ export class LldbSandboxSession {
 		const configuredBreakpointVersion = this.breakpointVersion;
 		session = createBrowserLldbSession({
 			persistentCache: this.options.persistentCache,
+			compiledModuleCache: this.options.compiledModuleCache,
+			workerFactory: this.options.workerFactory,
 			manifest,
 			runtimeBaseUrl: this.options.runtimeBaseUrl,
 			module: this.options.artifact.bytes,

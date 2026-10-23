@@ -45,20 +45,28 @@ for (const name of [
 }
 const manifest = JSON.parse(files.get('/clang/runtime-manifest.v1.json'));
 manifest.compiler.sysroot.profiles = profiles;
-const { WASM_DEBUG_RUNTIME_PROFILE: debugProfile } = await tsModule(
+let { WASM_DEBUG_RUNTIME_PROFILE: debugProfile } = await tsModule(
 	'src/lib/playground/wasmDebugVersion.ts'
 );
-const debugManifestBytes = await readFile(
-	path.join(root, 'static/wasm-debug/runtime-manifest.v2.json')
-);
+const debugRoot = args.get('--debug-assets') || path.join(root, 'static/wasm-debug');
+const debugManifestBytes = await readFile(path.join(debugRoot, 'runtime-manifest.v2.json'));
+if (args.has('--debug-assets')) {
+	const expected = args.get('--debug-manifest-sha256');
+	const actual = createHash('sha256').update(debugManifestBytes).digest('hex');
+	if (!expected || actual !== expected)
+		throw new Error('Candidate manifest requires its exact --debug-manifest-sha256');
+	debugProfile = {
+		...debugProfile,
+		manifestReceipt: { sha256: actual, bytes: debugManifestBytes.length }
+	};
+}
+const cacheMode = args.get('--cache-mode') || 'off';
+if (!['off', 'on', 'both'].includes(cacheMode)) throw new Error('Invalid --cache-mode');
 const debugManifest = JSON.parse(debugManifestBytes);
 files.set('/wasm-debug/runtime-manifest.v2.json', debugManifestBytes);
 for (const group of [debugManifest.debugger.lldb, debugManifest.debugger.targetRuntime]) {
 	for (const kind of ['js', 'wasm', 'worker'])
-		files.set(
-			`/wasm-debug/${group[kind]}`,
-			await readFile(path.join(root, 'static/wasm-debug', group[kind]))
-		);
+		files.set(`/wasm-debug/${group[kind]}`, await readFile(path.join(debugRoot, group[kind])));
 }
 const bundle = async (entry, input) => {
 	const result = await build({
@@ -71,6 +79,35 @@ const bundle = async (entry, input) => {
 		platform: 'browser',
 		target: 'es2022',
 		logLevel: 'silent',
+		// Test-only observation at our loader boundary. Producer glue and global
+		// WebAssembly functions remain untouched.
+		plugins: [
+			{
+				name: 'observe-actual-instantiation',
+				setup(builder) {
+					builder.onLoad(
+						{
+							filter: /runtime\/debug\/src\/worker\/(module-loader|lldb-worker|target-worker)\.ts$/
+						},
+						async ({ path: filename }) => {
+							let contents = await readFile(filename, 'utf8');
+							const needle = filename.endsWith('module-loader.ts')
+								? 'const instance = new WebAssembly.Instance(module, imports);'
+								: "type: 'ready',";
+							if (contents.split(needle).length !== 2)
+								throw new Error('Probe loader instrumentation boundary changed');
+							const replacement = filename.endsWith('module-loader.ts')
+								? needle +
+									'\n(globalThis as any).__probeInstantiationCalls = ((globalThis as any).__probeInstantiationCalls || 0) + 1;'
+								: needle +
+									'\n__probeInstantiationCalls: (globalThis as any).__probeInstantiationCalls || 0,';
+							contents = contents.replace(needle, replacement);
+							return { contents, loader: 'ts' };
+						}
+					);
+				}
+			}
+		],
 		tsconfig: path.join(root, 'packages/llvm-core/tsconfig.json'),
 		alias: {
 			$lib: path.join(root, 'src/lib'),
@@ -145,7 +182,7 @@ try {
 	page.on('pageerror', (error) => process.stderr.write(`${error.message}\n`));
 	await page.goto(origin);
 	const report = await page.evaluate(
-		async ({ manifest, debugProfile }) => {
+		async ({ manifest, debugProfile, cacheMode, debugManifest }) => {
 			const violations = [];
 			document.addEventListener('securitypolicyviolation', (event) =>
 				violations.push(event.violatedDirective)
@@ -166,6 +203,14 @@ try {
 				worker.postMessage({ manifest, source });
 			});
 			const results = [];
+			const moduleIds = new WeakMap();
+			let nextModuleId = 1;
+			const seenWorkers = new Set();
+			const seenQueues = new Set();
+			const modes =
+				cacheMode === 'both'
+					? [false, false, true, true]
+					: [cacheMode === 'on', cacheMode === 'on'];
 			const timeout = async (promise, label) => {
 				let timer;
 				try {
@@ -179,7 +224,9 @@ try {
 					clearTimeout(timer);
 				}
 			};
-			for (let iteration = 0; iteration < 2; iteration++) {
+			for (let iteration = 0; iteration < modes.length; iteration++) {
+				const cachedModules = {};
+				const instantiationCalls = {};
 				let resolvePause, resolveStack, resolveScopes;
 				const pausePromise = new Promise((resolve) => {
 					resolvePause = resolve;
@@ -198,6 +245,73 @@ try {
 				let pause;
 				const lengths = [];
 				const session = new LldbSandboxSession({
+					compiledModuleCache: modes[iteration],
+					workerFactory: (kind) => {
+						const worker = new Worker(`/worker/${kind}-worker.js`, { type: 'module' });
+						if (seenWorkers.has(worker)) throw new Error('Reused a worker instance');
+						seenWorkers.add(worker);
+						const listenerWrappers = new Map();
+						return {
+							postMessage: (message, transfer) => {
+								if (message.type.startsWith('initialize-')) {
+									const runtime = message.compiledModule;
+									const expected =
+										modes[iteration] &&
+										debugManifest.debugger[
+											kind === 'lldb' ? 'lldb' : 'targetRuntime'
+										].moduleInstantiation === 'emscripten-instantiate-wasm-v1';
+									if (runtime instanceof WebAssembly.Module !== expected)
+										throw new Error('Incorrect module capability gate');
+									if (runtime && !moduleIds.has(runtime))
+										moduleIds.set(runtime, nextModuleId++);
+									cachedModules[kind] = runtime ? moduleIds.get(runtime) : null;
+									const queue =
+										kind === 'lldb'
+											? message.dapInput.data
+											: message.stdin.data;
+									if (seenQueues.has(queue))
+										throw new Error('Reused a session queue');
+									seenQueues.add(queue);
+								}
+								worker.postMessage(message, transfer);
+							},
+							addEventListener: (type, listener) => {
+								const wrapped =
+									type === 'message'
+										? (event) => {
+												if (event.data.type === 'ready') {
+													const expected =
+														modes[iteration] &&
+														debugManifest.debugger[
+															kind === 'lldb'
+																? 'lldb'
+																: 'targetRuntime'
+														].moduleInstantiation ===
+															'emscripten-instantiate-wasm-v1';
+													const count =
+														event.data.__probeInstantiationCalls;
+													if (count !== (expected ? 1 : 0))
+														throw new Error(
+															`${kind} instantiateWasm callback was not invoked exactly once`
+														);
+													instantiationCalls[kind] = count;
+												}
+												listener(event);
+											}
+										: listener;
+								listenerWrappers.set(listener, wrapped);
+								worker.addEventListener(type, wrapped);
+							},
+							removeEventListener: (type, listener) => {
+								worker.removeEventListener(
+									type,
+									listenerWrappers.get(listener) || listener
+								);
+								listenerWrappers.delete(listener);
+							},
+							terminate: worker.terminate.bind(worker)
+						};
+					},
 					manifestUrl: location.origin + '/wasm-debug/runtime-manifest.v2.json',
 					manifestReceipt: debugProfile.manifestReceipt,
 					runtimeBaseUrl: location.origin + '/wasm-debug/',
@@ -283,8 +397,13 @@ try {
 					await session.debugCommand('continue');
 					await timeout(completion, 'continue');
 					if (!output.includes('done')) throw new Error(`missing output: ${output}`);
+					if (Object.keys(instantiationCalls).length !== 2)
+						throw new Error('Missing actual runtime callback observations');
 					results.push({
 						iteration,
+						compiledModuleCache: modes[iteration],
+						cachedModules,
+						instantiationCalls,
 						firstPauseMs,
 						fullStackMs,
 						scopesMs,
@@ -298,16 +417,39 @@ try {
 					await session.disconnect();
 				}
 			}
+			const reusedModules = {};
+			for (const [kind, asset] of [
+				['lldb', debugManifest.debugger.lldb],
+				['target', debugManifest.debugger.targetRuntime]
+			]) {
+				const cached = results
+					.filter((result) => result.compiledModuleCache)
+					.map((result) => result.cachedModules[kind]);
+				const supported = asset.moduleInstantiation === 'emscripten-instantiate-wasm-v1';
+				reusedModules[kind] =
+					supported &&
+					cached.length >= 2 &&
+					cached.every((id) => id !== null && id === cached[0]);
+				if (supported && cached.length >= 2 && !reusedModules[kind])
+					throw new Error(`${kind} did not reuse the verified immutable module`);
+			}
+			if (seenWorkers.size !== modes.length * 2 || seenQueues.size !== modes.length * 2)
+				throw new Error('Missing fresh workers or session queues');
 			if (violations.length) throw new Error(`CSP violations: ${violations.join(',')}`);
 			return {
 				crossOriginIsolated,
 				violations,
-				immutableModuleReuse: false,
-				moduleReuseLimitation: 'Pinned LLDB/WAMR glue does not support instantiateWasm',
+				immutableModuleReuse: reusedModules,
+				timingInterpretation:
+					'Exploratory sequential samples in one Chromium context; engine warmup is not isolated.',
+				freshWorkers: seenWorkers.size,
+				freshQueues: seenQueues.size,
+				manifestReceipt: debugProfile.manifestReceipt,
+				runtimeAssets: debugManifest.debugger,
 				results
 			};
 		},
-		{ manifest, debugProfile }
+		{ manifest, debugProfile, cacheMode, debugManifest }
 	);
 	const output = JSON.stringify({ chromium: browser.version(), ...report }, null, 2) + '\n';
 	if (args.has('--json')) await writeFile(args.get('--json'), output);

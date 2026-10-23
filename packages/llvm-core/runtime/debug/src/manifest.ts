@@ -49,6 +49,12 @@ function expectBoolean(value: unknown, label: string) {
 
 function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 	const asset = expectObject(value, label);
+	if (
+		asset.moduleInstantiation !== undefined &&
+		asset.moduleInstantiation !== 'emscripten-instantiate-wasm-v1'
+	) {
+		throw new Error(`invalid ${label}.moduleInstantiation in wasm debug runtime manifest`);
+	}
 	const paths = {
 		js: expectString(asset.js, `${label}.js`),
 		wasm: expectString(asset.wasm, `${label}.wasm`),
@@ -87,6 +93,9 @@ function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 	}
 	return {
 		...paths,
+		...(asset.moduleInstantiation === 'emscripten-instantiate-wasm-v1'
+			? { moduleInstantiation: asset.moduleInstantiation }
+			: {}),
 		jsSha256: expectSha256(asset.jsSha256, `${label}.jsSha256`),
 		wasmSha256: expectSha256(asset.wasmSha256, `${label}.wasmSha256`),
 		workerSha256: expectSha256(asset.workerSha256, `${label}.workerSha256`)

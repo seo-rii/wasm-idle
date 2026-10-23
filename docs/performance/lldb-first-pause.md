@@ -13,13 +13,22 @@ and cache hit is charged to the same 55,000,000-byte budget before hashing or al
 the owned chunk. Any failure aborts the other requests and settles their readers. All six
 manifest hashes must pass before workers are created.
 
-The current pinned LLDB glue explicitly rejects `Module.instantiateWasm`, and the WAMR glue
-omits that hook. Their `wasmBinary` constructor input is also unavailable. An actual pinned
-Chromium run caught this producer contract mismatch. Consequently this change preserves the
-existing verified blob loader and fresh workers/instances, without injecting a compiled Module
-or altering global WebAssembly functions. Immutable compiled-module reuse needs a producer
-release that explicitly supports the hook, matching receipts, and browser validation; it is
-not an optimization delivered by this consumer PR.
+The pinned LLDB/WAMR glue does not support `Module.instantiateWasm`, so its verified blob
+loader remains unchanged. New producer assets may advertise the versioned
+`moduleInstantiation: "emscripten-instantiate-wasm-v1"` contract, bound to their receipts.
+With **both** that contract and `compiledModuleCache: true`, preflight first verifies all six
+assets and then compiles/reuses immutable Modules keyed by Wasm SHA-256 and byte length.
+The bounded LRU holds at most two Modules representing 55,000,000 source Wasm bytes. This
+is an input-size accounting bound, **not a bound on engine compiled-code RSS**.
+Every launch creates fresh workers, imports, memory, queues and WebAssembly instances;
+failed compiles are evicted and disposal prevents late compilation from creating workers.
+No generated glue or global WebAssembly function is patched.
+
+Module reuse is **opt-in and disabled by default**, including for new producer assets.
+The initial sequential candidate samples did not establish an end-to-end speedup, so
+producer support alone does not promote the cache into the default execution path.
+The current release pin is unchanged. A normal producer build, validated release receipts,
+and separate release/pin approval remain necessary before new deployed assets are selected.
 
 Run the pinned browser regression after `prepare:test-assets -- clang` and
 `prepare:wasm-debug-release`:
@@ -45,4 +54,33 @@ descriptive evidence; browser tiering, network/cache state and host load also af
 
 These clocks start before session startup and include preflight/runtime preparation. The first pause precedes complete stack details by 151.8 and 363.8 ms in these runs. This demonstrates progressive delivery in the new path, not a measured baseline speedup; additional paging requests and shared-host scheduling affect the later completion time. No cold/warm Module-cache claim is made. Gated unit tests separately verify that pending scopes/deep-stack responses cannot delay the initial pause or update a resumed/newer stop.
 
-The targeted pinned probe passed; the broader playground UI Playwright suite was updated to wait for progressive stack completion where appropriate but was not executed for this change.
+The preview playground UI also passed the actual C data-breakpoint, C++ data-breakpoint and C trap callbacks under strict CSP. The fixture waits for non-empty scopes on the observed stopped frame ID. Broader cases are left to remote CI; missing local Container assets and a dev-worker setup failure were excluded from passing evidence.
+
+## Producer-backed immutable Module experiment
+
+The optional `--debug-assets DIR --debug-manifest-sha256 SHA256 --cache-mode both` probe
+path consumes a locally assembled candidate with matching producer receipts. It uses the
+same candidate bytes for two cache-disabled sessions followed by two cache-enabled
+sessions. A test-only observation in our loader boundary counts successful
+`instantiateWasm` callbacks; generated Emscripten glue is unchanged. The probe asserts one
+callback per supported runtime on enabled launches, zero when disabled, identical Module
+IDs across enabled launches, eight fresh workers and eight fresh queues, stack/source/locals
+correctness, successful output and strict CSP. These sequential clocks are exploratory:
+Chromium internal code caching, tiering and shared-host load are not isolated.
+
+The LLDB candidate was derived through the pinned Emscripten 6.0.0 official experimental
+`--post-link` path from the verified release Wasm; it is not a full source rebuild and its
+Wasm bytes changed during reoptimization. WAMR was rebuilt from its pinned source and
+current patch set. The producer experiment receipt binds the original manifest, source
+Wasm digest, feature-recovery/post-link commands and generated output digests. Normal
+release assembly rejects an experimental derivation. Baseline correctness and candidate
+cache behavior are reported separately; no baseline-to-candidate timing delta is
+attributed to module caching.
+
+Final Chromium 153.0.8010.12 evidence:
+
+- [Pinned baseline](../../scripts/performance-results/lldb-module-cache-baseline-20261023.json): two successful fresh sessions, zero injected hook calls, four distinct workers/queues and no CSP violations.
+- [Identical candidate, cache off/on](../../scripts/performance-results/lldb-module-cache-candidate-20261023.json): four successful fresh sessions, zero hook calls in each disabled runtime and exactly one actual callback in each enabled runtime per launch; both Module IDs are reused across enabled launches, with eight distinct workers/queues and no CSP violations.
+
+The two producer runtimes remain disabled from Module caching by default. These results
+prove the supported callback and state isolation, not an end-to-end latency improvement.

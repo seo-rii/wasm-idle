@@ -74,6 +74,22 @@ function manifest() {
 }
 
 describe('debug runtime manifest', () => {
+	it('preserves only the supported producer module-instantiation contract', () => {
+		const candidate = manifest();
+		for (const asset of [candidate.debugger.lldb, candidate.debugger.targetRuntime])
+			Object.assign(asset, { moduleInstantiation: 'emscripten-instantiate-wasm-v1' });
+		const parsed = parseDebugRuntimeManifest(candidate);
+		expect(parsed.debugger.lldb.moduleInstantiation).toBe('emscripten-instantiate-wasm-v1');
+		expect(parsed.debugger.targetRuntime.moduleInstantiation).toBe(
+			'emscripten-instantiate-wasm-v1'
+		);
+		Object.assign(candidate.debugger.targetRuntime, { moduleInstantiation: 'unsupported' });
+		expect(() => parseDebugRuntimeManifest(candidate)).toThrow('moduleInstantiation');
+		expect(
+			parseDebugRuntimeManifest(manifest()).debugger.lldb.moduleInstantiation
+		).toBeUndefined();
+	});
+
 	it('parses pinned LLDB/WAMR assets and resolves their URLs', () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		expect(parsed.debugger.lldb.llvmVersion).toBe('22.1.8');

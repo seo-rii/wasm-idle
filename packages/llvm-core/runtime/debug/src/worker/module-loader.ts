@@ -97,6 +97,25 @@ export async function loadEmscriptenModuleFactory(url: string): Promise<Emscript
 	return candidate as EmscriptenModuleFactory;
 }
 
+export function compiledModuleFactoryOptions(module: WebAssembly.Module | undefined) {
+	if (module === undefined) return {};
+	if (!(module instanceof WebAssembly.Module)) {
+		throw new TypeError('Compiled debug runtime must be a WebAssembly.Module');
+	}
+	return {
+		instantiateWasm(
+			imports: WebAssembly.Imports,
+			receiveInstance: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void
+		) {
+			// Emscripten owns fresh memory/imports for this factory and distributes this
+			// immutable module to its own pthreads through the supported callback.
+			const instance = new WebAssembly.Instance(module, imports);
+			receiveInstance(instance, module);
+			return instance.exports;
+		}
+	};
+}
+
 export function createEmscriptenAssetUrls(
 	assets: VerifiedDebugAssetBytes,
 	options: { rewritePthreadMainModuleImport?: string } = {}
