@@ -18,8 +18,8 @@ Debug execution is exposed through one adapter contract:
   memory reads, output, and process lifecycle events.
 
 `LldbDapAdapter` does not infer conditional-breakpoint or logpoint support from LLDB's generic DAP
-advertisement. Those capabilities remain false because the public adapter contract cannot carry
-conditions or log messages. Data breakpoints are enabled only when both the pinned runtime manifest
+advertisement. Structured specifications can carry conditions, hit counts and log messages, but
+each operation requires the corresponding effective capability of the pinned runtime. Data breakpoints are enabled only when both the pinned runtime manifest
 and LLDB's initialize response advertise them. The adapter exposes `dataBreakpointInfo()` and the
 replace-all `setDataBreakpoints()` operation for read, write, and combined read/write access.
 
@@ -35,6 +35,48 @@ UTF-16 code units, and a fallback variable path is limited to 64 total segments 
 Expressions that exceed either bound and additions beyond the active-watch limit are rejected before
 calling the runtime evaluator or requesting lazy DAP variables. The playground input applies the same
 4,096-code-unit limit.
+
+`createDebugSessionController()` is also the headless state owner for application-specific debugger
+panels. `variableNodes` and `scopeNodes(scope)` expose lazy trees whose opaque `path` values survive
+new stop-local DAP references. Use `expandVariable(path, expanded)`, `loadMoreVariablePath(path)`, and
+`addWatchFromVariable(path)` instead of constructing paths in the UI. Expanded branches reload only
+their first page after a stop; collapsed branches stay lazy. Expansion preferences survive fresh
+sessions and retain the 512 most recently expanded paths,
+and a rendered tree is limited to 5,000 loaded nodes and 64 levels. The legacy `locals`, `scopes`,
+`variablesByReference` and raw child-loading APIs remain available.
+
+Each node supplies `changed` and an optional `previousValue`. Comparison covers only values actually
+loaded in both stops. Frame keys use function/source and caller stack locations, never persistent
+DAP frame IDs. A known step transition is required: Continue, an unknown activation, changed source,
+or a different session discards the comparison baseline. Recursive activations have separate paths.
+Frame selection alone does not compare the caller's variables against the callee's variables.
+
+Watch results keep their existing `expression` and `value` fields and add `variable`/`node` when
+expandable. `resolveHover(expression)` uses the same bounded variable-path resolver and returns
+`null` when unavailable. A runtime with structured evaluation may additionally supply typed child
+references; effective watch/hover capabilities gate calls to that evaluator. A safe path lookup does
+not enable arbitrary C/C++ calls, operators or assignments. Resume, a different stopped frame, or a
+superseding hover discards stale results.
+
+`history` contains immutable rendered stop snapshots; `selectHistory(id)` and
+`selectHistory(null)` select a snapshot and return to live inspection. `selectedHistory` is separate
+from the live execution state, so historical selection does not move the target or change command
+availability. Snapshots copy locals, loaded child pages, watches and stack locations and retain no
+live variable, memory or frame handles. Historical trees cannot fetch more children. The default
+limits are 20 stops, 500 variable nodes and 65,536 text characters per snapshot; `historyLimit`
+(0–100) and `snapshotVariableLimit` (1–5,000) configure these bounds. `truncated` reports omitted or
+shortened content. Starting a new session clears history; finishing a session preserves it.
+
+`watchVariable(path, accessType, options?)` discovers a supported data breakpoint using the node's current
+scope/parent reference and variable name, then updates the runtime's replace-all watchpoint set while
+preserving previously verified entries. Pass `{ replaceExisting: true }` for a single-watchpoint UI.
+The returned array contains only the result for the requested variable. A late discovery after resume/frame change or an explicit watchpoint replacement cannot install
+a watchpoint. `setStructuredBreakpoints(specifications, sourcePath?)` stores source-specific enabled,
+conditional, hit-count and logpoint settings. It returns `false` and supplies `breakpointError` when
+the active session cannot apply them. Numeric `setBreakpoints(lines)` retains settings on surviving
+lines; omitted specifications, including disabled entries, are removed. `structuredBreakpoints` and `sourceBreakpoints` supply launch/persistence state. Use
+`steppingOptions` with execution's `debugSteppingOptions`; `setSteppingOptions(options)` applies an
+available runtime policy directly. These controls must also check the current session capabilities.
 Adapter initialization snapshots its request arguments and explicit feature opt-ins before awaiting
 the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
 WebAssembly expression evaluation after the conservative capability decision has begun.

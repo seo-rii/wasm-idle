@@ -17,7 +17,17 @@ export {
 	rustDebugLanguageAdapter
 } from './language/index.js';
 export { createDebugSessionController } from './controller.js';
-export { MonacoDebugView, attachMonacoDebugActions } from './editor/index.js';
+export {
+	MonacoDebugView,
+	attachMonacoDebugActions,
+	attachMonacoDebugHover,
+	debugHoverExpression
+} from './editor/index.js';
+export type {
+	DebugSourceBreakpoint,
+	DebugSteppingOptions,
+	DebugEvaluateOptions
+} from '@wasm-idle/core';
 export type {
 	DapCapabilities,
 	DapEvent,
@@ -54,6 +64,16 @@ export type {
 	DebugSessionController,
 	DebugSessionControllerOptions,
 	DebugTerminalControl,
-	DebugWatchValue
+	DebugWatchValue,
+	DebugWatchVariableOptions
 } from './controller.js';
-export type { MonacoDebugActionsOptions } from './editor/index.js';
+export type {
+	DebugVariableNode,
+	DebugStopSnapshot,
+	DebugSnapshotVariable
+} from './variable-state.js';
+export type {
+	MonacoDebugActionsOptions,
+	DebugHoverValue,
+	MonacoDebugHoverOptions
+} from './editor/index.js';
