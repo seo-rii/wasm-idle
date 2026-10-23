@@ -480,6 +480,9 @@ class Rust implements Sandbox {
 			let limits;
 			let nonDebugResourceLimits;
 			let persistentCache: ResolvedRuntimeAssetCacheOptions;
+			let editorSourcePath: `/workspace/${string}`;
+			let initialBreakpointSpecifications: DebugSourceBreakpoint[] | undefined;
+			let lldbBreakpointLines: number[] = [];
 			try {
 				persistentCache = resolveRuntimeAssetCacheOptions(
 					this.persistentCacheBaseline,
@@ -488,6 +491,29 @@ class Rust implements Sandbox {
 				limits = resolveExecutionLimits(options.limits);
 				nonDebugResourceLimits =
 					debugMode === 'none' ? resolveRustNonDebugResourceLimits(limits) : undefined;
+				editorSourcePath = normalizeRustLldbSourcePath(
+					options.debugPath || options.activePath
+				);
+				if (debugMode === 'lldb') {
+					const requestedLines = [...(options.breakpoints || [])];
+					for (const sourceBreakpoints of options.sourceBreakpoints || []) {
+						if (
+							normalizeRustLldbSourcePath(sourceBreakpoints.sourcePath) ===
+							editorSourcePath
+						) {
+							requestedLines.push(...sourceBreakpoints.lines);
+							if (sourceBreakpoints.breakpoints)
+								initialBreakpointSpecifications = normalizeDebugSourceBreakpoints(
+									sourceBreakpoints.breakpoints
+								);
+						}
+					}
+					lldbBreakpointLines = initialBreakpointSpecifications
+						? initialBreakpointSpecifications
+								.filter((value) => value.enabled !== false)
+								.map((value) => value.line)
+						: normalizeRustBreakpointLines(requestedLines);
+				}
 			} catch (error) {
 				return reject(error);
 			}
@@ -649,34 +675,15 @@ class Rust implements Sandbox {
 				abortRun();
 				return;
 			}
-			const editorSourcePath = normalizeRustLldbSourcePath(
-				options.debugPath || options.activePath
-			);
 			this.lldbEditorSourcePath = editorSourcePath;
 			this.lldbBreakpoints.clear();
 			this.lldbBreakpointSpecifications.clear();
-			let lldbBreakpointLines: number[] = [];
 			if (debugMode === 'lldb') {
-				const requestedLines = [...(options.breakpoints || [])];
-				for (const sourceBreakpoints of options.sourceBreakpoints || []) {
-					if (
-						normalizeRustLldbSourcePath(sourceBreakpoints.sourcePath) ===
-						editorSourcePath
-					) {
-						requestedLines.push(...sourceBreakpoints.lines);
-						if (sourceBreakpoints.breakpoints)
-							this.lldbBreakpointSpecifications.set(
-								rustLldbSourcePath,
-								normalizeDebugSourceBreakpoints(sourceBreakpoints.breakpoints)
-							);
-					}
-				}
-				const specifications = this.lldbBreakpointSpecifications.get(rustLldbSourcePath);
-				lldbBreakpointLines = specifications
-					? specifications
-							.filter((value) => value.enabled !== false)
-							.map((value) => value.line)
-					: normalizeRustBreakpointLines(requestedLines);
+				if (initialBreakpointSpecifications)
+					this.lldbBreakpointSpecifications.set(
+						rustLldbSourcePath,
+						initialBreakpointSpecifications
+					);
 				this.lldbBreakpoints.set(rustLldbSourcePath, lldbBreakpointLines);
 			} else {
 				this.setBreakpoints([...(options.breakpoints || [])], editorSourcePath);

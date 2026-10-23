@@ -152,6 +152,42 @@ describe('Rust sandbox', () => {
 		}));
 	});
 
+	it('keeps the loaded compiler reusable after invalid structured breakpoint metadata', async () => {
+		const sandbox = new Rust();
+		sandbox.output = vi.fn();
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		const worker = workerInstances[0];
+		const signal = new AbortController();
+		const addAbortListener = vi.spyOn(signal.signal, 'addEventListener');
+		vi.useFakeTimers();
+		try {
+			await expect(
+				sandbox.run('fn main() {}', false, true, undefined, [], {
+					debugMode: 'lldb',
+					signal: signal.signal,
+					sourceBreakpoints: [
+						{
+							sourcePath: '/workspace/main.rs',
+							lines: [3],
+							breakpoints: [{ line: 3, hitCondition: '0' }]
+						}
+					]
+				})
+			).rejects.toThrow('hitCondition must be a positive decimal count');
+			const timersAfterValidation = vi.getTimerCount();
+			await expect(sandbox.run('fn main() {}', false)).resolves.toBe(true);
+			expect(timersAfterValidation).toBe(0);
+			expect(vi.getTimerCount()).toBe(0);
+			expect(addAbortListener).not.toHaveBeenCalled();
+			signal.abort();
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(sandbox.worker).toBe(worker);
+		} finally {
+			await sandbox.terminate();
+			vi.useRealTimers();
+		}
+	});
+
 	it.each([false, true])(
 		'forwards structured LLDB breakpoints, stepping and evaluation for a renamed file (edited=%s)',
 		async (edited) => {
