@@ -7,6 +7,8 @@ import {
 	type LanguageToolPersistentOptions
 } from '../persistent-assets.js';
 import { withPersistentPythonLspAssets } from './persistent-fetch.js';
+import { createPythonRequestQueue } from './request-queue.js';
+import { withPythonRuntimeModule } from './runtime-module.js';
 
 interface PythonLspWorkerScope {
 	addEventListener(
@@ -25,6 +27,34 @@ let bridge: PythonBridge | null = null;
 let initPromise: Promise<void> | null = null;
 let configuredPyodideBaseUrl: string | null = null;
 let persistentAssets: LanguageToolPersistentOptions = {};
+let runtimeModule: Promise<WebAssembly.Module | undefined> = Promise.resolve(undefined);
+let receiveRuntimeModule: ((module: WebAssembly.Module | undefined) => void) | undefined;
+let rejectRuntimeModule: ((reason: Error) => void) | undefined;
+const diagnosticTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const requests = createPythonRequestQueue(
+	(message) => bridge?.(JSON.stringify(message)),
+	(message) => self.postMessage(message)
+);
+
+function scheduleDiagnostics(uri: string, version: number | null, cancelled = false) {
+	const previous = diagnosticTimers.get(uri);
+	if (previous !== undefined) clearTimeout(previous);
+	if (cancelled) {
+		diagnosticTimers.delete(uri);
+		return;
+	}
+	diagnosticTimers.set(
+		uri,
+		setTimeout(() => {
+			diagnosticTimers.delete(uri);
+			requests.push({
+				jsonrpc: '2.0',
+				method: 'wasmIdle/publishDiagnostics',
+				params: { uri, version }
+			});
+		}, 120)
+	);
+}
 
 function toErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
@@ -63,9 +93,14 @@ async function bootstrapPythonBridge(pyodideBaseUrl: string) {
 		const { loadPyodide } = (await import(
 			/* @vite-ignore */ `${normalizeBaseUrl(pyodideBaseUrl)}pyodide.mjs`
 		)) as typeof import('pyodide');
-		pyodide = await loadPyodide({ indexURL: normalizeBaseUrl(pyodideBaseUrl) });
+		pyodide = await withPythonRuntimeModule(
+			normalizeBaseUrl(pyodideBaseUrl),
+			await runtimeModule,
+			() => loadPyodide({ indexURL: normalizeBaseUrl(pyodideBaseUrl) })
+		);
 		pyodide.registerJsModule('wasm_idle_lsp_bridge', {
-			emit: emitTransportMessage
+			emit: emitTransportMessage,
+			schedule_diagnostics: scheduleDiagnostics
 		});
 		self.postMessage({ type: 'progress', stage: 'load-jedi' });
 		try {
@@ -109,6 +144,16 @@ _wasm_idle_python_lsp_bridge = create_bridge()
 self.addEventListener('message', (event) => {
 	const payload = event.data as Record<string, unknown> | null;
 	if (!payload || typeof payload !== 'object') return;
+	if (payload.type === 'runtime-module') {
+		if (payload.module instanceof WebAssembly.Module) receiveRuntimeModule?.(payload.module);
+		else
+			rejectRuntimeModule?.(
+				new Error(String(payload.error || 'Python runtime module unavailable'))
+			);
+		receiveRuntimeModule = undefined;
+		rejectRuntimeModule = undefined;
+		return;
+	}
 	if (payload.type === 'init') {
 		if (typeof payload.pyodideBaseUrl !== 'string' || !payload.pyodideBaseUrl.trim()) {
 			self.postMessage({
@@ -118,6 +163,15 @@ self.addEventListener('message', (event) => {
 			return;
 		}
 		configuredPyodideBaseUrl = payload.pyodideBaseUrl.trim();
+		if (payload.runtimeModuleBridge === true) {
+			runtimeModule = new Promise((resolve, reject) => {
+				receiveRuntimeModule = resolve;
+				rejectRuntimeModule = reject;
+			});
+			// Observe rejection immediately while the JS loader is still importing.
+			void runtimeModule.catch(() => {});
+			self.postMessage({ type: 'runtime-module-request' });
+		}
 		if (payload.persistentAssets && typeof payload.persistentAssets === 'object') {
 			persistentAssets = payload.persistentAssets as LanguageToolPersistentOptions;
 			configureWorkerLanguageToolPersistentAssets(persistentAssets);
@@ -136,16 +190,14 @@ self.addEventListener('message', (event) => {
 		return;
 	}
 
-	const serialized = JSON.stringify(payload);
-
 	if (bridge) {
-		bridge(serialized);
+		requests.push(payload);
 		return;
 	}
 
 	void bootstrapPythonBridge(configuredPyodideBaseUrl)
 		.then(() => {
-			bridge?.(serialized);
+			requests.push(payload);
 		})
 		.catch((error) => {
 			console.error('Failed to forward LSP message to Python bridge', error);

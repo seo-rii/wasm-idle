@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	bufferedSequence,
 	flushBufferedEof,
@@ -9,6 +9,28 @@ import {
 } from './stdinBuffer';
 
 describe('stdinBuffer', () => {
+	it('aborts an inspection without consuming a later pause response', async () => {
+		vi.useFakeTimers();
+		try {
+			const buffer = new SharedArrayBuffer(64);
+			const controller = new AbortController();
+			const waiting = waitForBufferedSequenceChange(
+				buffer,
+				bufferedSequence(buffer),
+				5000,
+				controller.signal
+			);
+			controller.abort(new Error('resumed'));
+			await expect(waiting).rejects.toThrow('resumed');
+			expect(vi.getTimerCount()).toBe(0);
+			flushQueuedStdin(['next pause'], buffer);
+			vi.advanceTimersByTime(5000);
+			expect(readBufferedStdin(buffer)).toBe('next pause');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('preserves Unicode and EOF at every payload boundary', () => {
 		const unicode = ['한글', '😀', '𠀀', 'e\u0301', '👩‍👩‍👧‍👦'];
 		for (const size of [12, 16, 20, 32, 64, 1024]) {

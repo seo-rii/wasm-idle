@@ -3220,11 +3220,12 @@
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
 											{@const loadedScopeVariables =
-												scope.variables.length > 0
+												debug.variablesByReference.get(
+													scope.variablesReference
+												) ??
+												(scope.variables.length > 0
 													? scope.variables
-													: debug.variablesByReference.get(
-															scope.variablesReference
-														)}
+													: undefined)}
 											<details
 												class="debug-scope"
 												bind:open={

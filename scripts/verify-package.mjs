@@ -48,8 +48,8 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// The root install includes container execution modules and release metadata.
 		// Keep the bounded byte/package limits; shipped module/declaration pairs now
-		// total 438 root files (including Java output JS/types) + 265 dependency files
-		// + npm's installation metadata; CI measured 6,312,463 bytes across 704 files.
+		// Each performance dependency individually permits 704 files. The combined
+		// Java/Python installation is measured and adjusted in the follow-up PR.
 		budget: { maxBytes: 6 * MiB + 80 * 1024, maxFiles: 704, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',

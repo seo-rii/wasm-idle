@@ -1,6 +1,8 @@
 // @vitest-environment node
 
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { compile } from 'svelte/compiler';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { createServer, type ViteDevServer } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -45,6 +47,18 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 	const pageErrors: string[] = [];
 
 	beforeAll(async () => {
+		// Mount the actual scope markup, isolated from unrelated playground runtimes.
+		const pageSource = readFileSync(`${root}src/routes/+page.svelte`, 'utf8');
+		const scopeStart = pageSource.indexOf('<div class="debug-scopes">');
+		const scopeEnd = pageSource.indexOf('{:else if debug.locals.length}', scopeStart);
+		expect(scopeStart).toBeGreaterThan(0);
+		expect(scopeEnd).toBeGreaterThan(scopeStart);
+		const scopeView = compile(
+			`<script>let { debug } = $props(); let debugScopeOpen = $state({});</script>
+{#snippet debugVariableRows(variables)}{#each variables as variable (variable.name)}<li>{variable.name}: {variable.value}</li>{/each}{/snippet}
+${pageSource.slice(scopeStart, scopeEnd)}`,
+			{ generate: 'client', filename: 'PythonDebugScopes.svelte' }
+		).js.code;
 		// Exercise the actual adapter and Pyodide worker without building unrelated runtimes.
 		server = await createServer({
 			configFile: false,
@@ -59,6 +73,16 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 				}
 			},
 			plugins: [
+				{
+					name: 'python-debug-scope-fixture',
+					resolveId(id) {
+						if (id === 'virtual:python-scope') return '\0python-scope';
+					},
+					load(id) {
+						if (id === '\0python-scope')
+							return scopeView + `\nexport { mount } from 'svelte';`;
+					}
+				},
 				{
 					name: 'python-debug-test-page',
 					configureServer(vite) {
@@ -75,6 +99,7 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 				}
 			],
 			server: {
+				watch: null,
 				host: '127.0.0.1',
 				port: 0,
 				headers: {
@@ -98,6 +123,9 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 		page = await context.newPage();
 		page.setDefaultTimeout(30_000);
 		page.on('pageerror', (error) => pageErrors.push(error.message));
+		page.on('requestfailed', (request) =>
+			pageErrors.push(`${request.url()}: ${request.failure()?.errorText}`)
+		);
 		await page.goto(browserUrl);
 		await installBrowserRuntimeDelivery(page, browserUrl);
 		await page.addScriptTag({
@@ -105,14 +133,17 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 			content: `
 import Python from '/src/lib/playground/python.ts';
 import { createDebugSessionController } from '/packages/debug/src/controller.ts';
+import ScopeView, { mount } from '/@id/virtual:python-scope';
 const python = new Python();
 const session = createDebugSessionController({
     sourcePath: 'main.py',
     terminal: {
         setBreakpoints: async (lines) => python.setBreakpoints(lines),
-        debugCommand: async (command) => python.debugCommand(command)
+        debugCommand: async (command) => python.debugCommand(command),
+        debugVariables: (reference, start, count) => python.debugVariables(reference, start, count)
     }
 });
+mount(ScopeView, { target: document.body, props: { debug: session } });
 const fixture = globalThis.__pythonDebugFixture = {
     python, session, events: [], output: '', completed: false, failure: null,
     start(code, breakpoints, pauseOnEntry = false, options = {}) {
@@ -138,15 +169,28 @@ python.ondebug = (event) => {
     session.handleEvent(event);
 };
 python.output = (text) => { fixture.output += text; };
-await python.load({ python: { baseUrl: new URL('pyodide/', location.href).href } });
-fixture.worker = python.worker;
-python.worker.addEventListener('message', ({ data }) => {
-    if (data?.pythonDebugTestGate) fixture.gate = new Int32Array(data.pythonDebugTestGate);
-});
-fixture.ready = true;
+try {
+    await python.load({ python: { baseUrl: new URL('pyodide/', location.href).href } });
+    fixture.worker = python.worker;
+    python.worker.addEventListener('message', ({ data }) => {
+        if (data?.pythonDebugTestGate) fixture.gate = new Int32Array(data.pythonDebugTestGate);
+    });
+    fixture.ready = true;
+} catch (error) { fixture.failure = String(error); }
 `
 		});
-		await page.waitForFunction(() => (globalThis.__pythonDebugFixture as any)?.ready);
+		await page
+			.waitForFunction(
+				() =>
+					(globalThis.__pythonDebugFixture as any)?.ready ||
+					globalThis.__pythonDebugFixture?.failure,
+				undefined,
+				{ timeout: 90_000 }
+			)
+			.catch((error) => {
+				throw new Error(`${String(error)}; page errors: ${pageErrors.join('; ')}`);
+			});
+		expect(await page.evaluate(() => globalThis.__pythonDebugFixture.failure)).toBeNull();
 		expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
 	}, 120_000);
 
@@ -331,4 +375,126 @@ print("running=" + str(value))`,
 			await waitForCompletion('imported=15', [1, 3, 5]);
 		}
 	);
+
+	it(
+		'pages locals lazily and serializes watch inspection without leaking stale references',
+		browserTestOptions,
+		async () => {
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.start(
+					'def main():\n' +
+						Array.from(
+							{ length: 120 },
+							(_, index) => `    local_${index} = ${index}\n`
+						).join('') +
+						'    print("locals done")\nmain()',
+					[122]
+				)
+			);
+			await waitForPause(122);
+			await page.waitForFunction(
+				() => document.querySelectorAll('.debug-scopes li').length === 50
+			);
+			await page.getByRole('button', { name: 'Load more locals' }).click();
+			await page.waitForFunction(
+				() => document.querySelectorAll('.debug-scopes li').length === 100
+			);
+			expect(await page.locator('.debug-scopes li').last().textContent()).toBe(
+				'local_99: 99'
+			);
+			const inspected = await page.evaluate(async () => {
+				const fixture = globalThis.__pythonDebugFixture;
+				const pause = fixture.events.filter((event) => event.type === 'pause').at(-1)!;
+				const reference = pause.scopes![0].variablesReference;
+				const [second, watch, third] = await Promise.all([
+					fixture.python.debugVariables(reference, 50, 50),
+					fixture.python.debugEvaluate('local_119'),
+					fixture.python.debugVariables(reference, 100, 50)
+				]);
+				await fixture.session.sendCommand('continue');
+				return {
+					first: pause.locals,
+					second,
+					third,
+					watch,
+					stale: await fixture.python.debugVariables(reference, 50, 50)
+				};
+			});
+			expect(inspected.first).toHaveLength(50);
+			expect(inspected.second).toHaveLength(50);
+			expect(inspected.second[0]).toEqual({ name: 'local_50', value: '50' });
+			expect(inspected.third).toHaveLength(20);
+			expect(inspected.third.at(-1)).toEqual({ name: 'local_119', value: '119' });
+			expect(inspected.watch).toBe('119');
+			expect(inspected.stale).toEqual([]);
+			await waitForCompletion('locals done', [122]);
+		}
+	);
+
+	it(
+		'steps into, over and out of a function with current locals',
+		browserTestOptions,
+		async () => {
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.start(
+					'def add(value):\n    value += 1\n    return value\nvalue = 10\nresult = add(value)\nprint(f"stepped={result}")',
+					[4]
+				)
+			);
+			await waitForPause(4);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('nextLine')
+			);
+			await waitForPause(5);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('stepInto')
+			);
+			await waitForPause(2);
+			expect(
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+				)
+			).toBe('10');
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('nextLine')
+			);
+			await waitForPause(3);
+			expect(
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+				)
+			).toBe('11');
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('stepOut')
+			);
+			await waitForPause(6);
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('continue')
+			);
+			await waitForCompletion('stepped=11', [4, 5, 2, 3, 6]);
+		}
+	);
+
+	it('cancels a paused program after inspecting its locals', browserTestOptions, async () => {
+		await page.evaluate(() =>
+			globalThis.__pythonDebugFixture.start(
+				'def main():\n    value = 1\n    while True:\n        value += 1\nmain()',
+				[3]
+			)
+		);
+		await waitForPause(3);
+		await page.waitForFunction(
+			() => document.querySelectorAll('.debug-scopes li').length === 1
+		);
+		expect(await page.locator('.debug-scopes li').textContent()).toBe('value: 1');
+		await page.evaluate(async () => {
+			const fixture = globalThis.__pythonDebugFixture;
+			await fixture.python.debugEvaluate('value');
+			fixture.python.terminate('cancel debug test');
+		});
+		await page.waitForFunction(() => globalThis.__pythonDebugFixture.completed);
+		expect(await page.evaluate(() => globalThis.__pythonDebugFixture.failure)).toContain(
+			'cancel debug test'
+		);
+	});
 });

@@ -128,7 +128,7 @@ function workerFixture() {
 		async loadPackagesFromImports(source) { packageLoads.push(source); }, setInterruptBuffer() {},
 		async runPythonAsync(source) {
 			legacyRuns.push(source);
-			execFileSync('python', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<legacy-wrapper>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: source });
+			execFileSync(process.env.PYTHON ?? 'python3', ['-c', 'import ast,sys; compile(sys.stdin.read(), "<legacy-wrapper>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'], { input: source });
 		} });
 	const send = (data) => self.onmessage({ data: { buffer: new SharedArrayBuffer(64), debugBuffer: new SharedArrayBuffer(64),
 		watchBuffer: new SharedArrayBuffer(64), watchResultBuffer: new SharedArrayBuffer(64), interrupt: new SharedArrayBuffer(4), ...data } });
@@ -181,7 +181,7 @@ test('the actual debug wrapper gives user code its active filename', async () =>
 	assert.equal(f.messages.at(-1).results, true);
 	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
 bridge = types.ModuleType("js")
-bridge.__getattr__ = lambda name: lambda *args: None
+bridge.__getattr__ = lambda name: types.SimpleNamespace(version=0) if name.startswith("__wasm_idle_python_debug_breakpoint_state_") else lambda *args: None
 sys.modules["js"] = bridge
 asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
 `], { input: f.legacyRuns[0], encoding: 'utf8' });
@@ -200,7 +200,7 @@ print(__main__.value)`, activePath: 'main.py', debug: true });
 	assert.equal(f.messages.at(-1).results, true);
 	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
 bridge = types.ModuleType("js")
-bridge.__getattr__ = lambda name: lambda *args: None
+bridge.__getattr__ = lambda name: types.SimpleNamespace(version=0) if name.startswith("__wasm_idle_python_debug_breakpoint_state_") else lambda *args: None
 sys.modules["js"] = bridge
 original_main = sys.modules["__main__"]
 asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
@@ -210,7 +210,7 @@ assert sys.modules["__main__"] is original_main
 	await f.send({ code: 'raise ValueError("user failure")', activePath: 'failure.py', debug: true });
 	execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, sys, types
 bridge = types.ModuleType("js")
-bridge.__getattr__ = lambda name: lambda *args: None
+bridge.__getattr__ = lambda name: types.SimpleNamespace(version=0) if name.startswith("__wasm_idle_python_debug_breakpoint_state_") else lambda *args: None
 sys.modules["js"] = bridge
 original_main = sys.modules["__main__"]
 original_path = sys.path
@@ -231,7 +231,7 @@ test('the actual debug wrapper searches sibling and root modules and restores sy
 	const output = execFileSync(process.env.PYTHON ?? 'python3', ['-c', `import ast, asyncio, os, sys, types, tempfile
 from pathlib import Path
 bridge = types.ModuleType("js")
-bridge.__getattr__ = lambda name: lambda *args: None
+bridge.__getattr__ = lambda name: types.SimpleNamespace(version=0) if name.startswith("__wasm_idle_python_debug_breakpoint_state_") else lambda *args: None
 sys.modules["js"] = bridge
 original_cwd, original_path = os.getcwd(), sys.path
 original_entries = list(original_path)
