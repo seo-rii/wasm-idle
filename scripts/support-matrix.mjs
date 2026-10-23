@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { util as prettierUtil } from 'prettier';
 
 const SUPPORT_MATRIX_START = '## Support matrix';
 const SUPPORT_MATRIX_END = '## Monorepo layout';
@@ -301,7 +302,7 @@ export const supportMatrixRows = [
 		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: 'Trace',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
@@ -314,7 +315,7 @@ export const supportMatrixRows = [
 		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: '-',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/objectivecxx.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
@@ -379,7 +380,7 @@ export const supportMatrixRows = [
 		runtime: 'TeaVM',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'CDP (source)',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -730,7 +731,7 @@ export const supportMatrixRows = [
 		runtime: 'wasm-typescript / TypeScript service',
 		stdin: 'Yes',
 		editorSupport: 'TypeScript LSP',
-		debug: '-',
+		debug: 'CDP',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -743,7 +744,7 @@ export const supportMatrixRows = [
 		runtime: 'wasm-typescript / TypeScript service',
 		stdin: 'Yes',
 		editorSupport: 'TypeScript LSP',
-		debug: '-',
+		debug: 'CDP',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -795,7 +796,7 @@ export const supportMatrixRows = [
 		runtime: 'Wasmoon',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'MobDebug',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -860,7 +861,7 @@ export const supportMatrixRows = [
 		runtime: 'CRuby WASI',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'TracePoint',
 		browserTest: {
 			file: 'src/lib/playground/ruby.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_RUBY',
@@ -938,7 +939,7 @@ export const supportMatrixRows = [
 		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_V',
@@ -1955,7 +1956,7 @@ const runtimeDetailsByLanguage = new Map([
  * @param {number} width
  */
 function padCell(value, width) {
-	return String(value).padEnd(width);
+	return value + ' '.repeat(Math.max(0, width - prettierUtil.getStringWidth(value)));
 }
 
 /**
@@ -1971,7 +1972,10 @@ export function renderSupportMatrixTable(rows = supportMatrixRows) {
 		row.debug
 	]);
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2005,7 +2009,10 @@ export function renderRuntimeDetailsTable(rows = supportMatrixRows) {
 		];
 	});
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2035,7 +2042,10 @@ export function renderBlockedCandidatesTable(rows = blockedCandidateRows) {
 		row.requiredFollowUp
 	]);
 	const widths = headers.map((header, index) =>
-		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+		Math.max(
+			prettierUtil.getStringWidth(header),
+			...tableRows.map((row) => prettierUtil.getStringWidth(row[index]))
+		)
 	);
 	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
 	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
@@ -2056,16 +2066,21 @@ export function renderSupportMatrixSection(rows = supportMatrixRows) {
 
 All execution entries run in the browser through real runtime, compiler, or interpreter
 implementations. \`Editor support\` lists browser LSP/compiler diagnostics when wired; \`syntax\`
-means Monaco syntax highlighting only. C, C++, and \`wasm32-wasip1\` Rust use the browser LLDB/WAMR
-debug runtime; the remaining debug-enabled languages retain wasm-idle's trace controls.
+means Monaco syntax highlighting only. C, C++, Objective-C, Objective-C++, V, and
+\`wasm32-wasip1\` Rust use LLDB/WAMR. JavaScript, TypeScript, and Java use Chromium's native
+debugger through the [Native Debugger extension](extensions/debugger/README.md). Java currently
+supports source stops and mapped stacks without Java locals or expression evaluation. Lua uses
+the pinned MobDebug engine in its real VM; Ruby uses CRuby TracePoint and Binding without
+rewriting user source. See [language debugger details](docs/debugger-language-support.md)
+for verified operations and remaining producer requirements.
 
 ${renderSupportMatrixTable(rows)}
 
 ## Browser LLDB debug runtime
 
 Normal execution still compiles and instantiates the user module with the browser WebAssembly
-engine and the existing WASI host. C, C++, and \`wasm32-wasip1\` Rust debug sessions use a separate,
-lazy-loaded path:
+engine and the existing WASI host. C, C++, Objective-C, Objective-C++, V, and
+\`wasm32-wasip1\` Rust debug sessions use a separate, lazy-loaded path:
 
 \`\`\`text
 Monaco / debug UI

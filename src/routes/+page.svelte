@@ -14,8 +14,14 @@
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
 		goDebugLanguageAdapter,
+		javaDebugLanguageAdapter,
+		javascriptDebugLanguageAdapter,
+		luaDebugLanguageAdapter,
+		vDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
+		rubyDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
+		isBrowserCdpDebuggerAvailable,
 		type DebugLanguageAdapter
 	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
@@ -37,6 +43,7 @@
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
+		BrowserDebugMode,
 		DebugDataBreakpoint,
 		DebugDataBreakpointAccessType,
 		DebugDataBreakpointInfo,
@@ -171,22 +178,48 @@
 
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
-	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	const lldbDebugLanguages = new Set<PlaygroundLanguage>([
+		'C',
+		'CPP',
+		'RUST',
+		'OBJC',
+		'OBJECTIVECXX',
+		'V'
+	]);
+	const cdpDebugLanguages = new Set<PlaygroundLanguage>(['JAVA', 'JAVASCRIPT', 'TYPESCRIPT']);
+	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
+	const nativeDebuggerSetupUrl = `https://github.com/seo-rii/wasm-idle/tree/${
+		/^[0-9a-f]{7,40}$/u.test(__WASM_IDLE_BUILD__.commit) ? __WASM_IDLE_BUILD__.commit : 'main'
+	}/extensions/debugger`;
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
 		OBJC: cppDebugLanguageAdapter,
+		OBJECTIVECXX: cppDebugLanguageAdapter,
+		V: vDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
+		JAVA: javaDebugLanguageAdapter,
+		JAVASCRIPT: javascriptDebugLanguageAdapter,
+		TYPESCRIPT: javascriptDebugLanguageAdapter,
+		LUA: luaDebugLanguageAdapter,
+		RUBY: rubyDebugLanguageAdapter,
 		RUST: rustDebugLanguageAdapter,
 		PYTHON: pythonDebugLanguageAdapter
 	};
 	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
 		C: 'C · LLDB / WAMR',
 		CPP: 'C++ · LLDB / WAMR',
-		OBJC: 'Objective-C Trace',
+		OBJC: 'Objective-C · LLDB / WAMR',
+		OBJECTIVECXX: 'Objective-C++ · LLDB / WAMR',
+		V: 'V · LLDB / WAMR',
 		GO: 'Go Trace',
+		JAVA: 'Java · Chromium debugger',
+		JAVASCRIPT: 'JavaScript · Chromium debugger',
+		TYPESCRIPT: 'TypeScript · Chromium debugger',
+		LUA: 'Lua · MobDebug',
+		RUBY: 'Ruby · TracePoint',
 		RUST: 'Rust · LLDB / WAMR',
 		PYTHON: 'Pyodide Trace'
 	};
@@ -236,7 +269,8 @@
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
-		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
+		activeDebugBackend = $state<BrowserDebugMode | null>(null),
+		debugSetupError = $state(''),
 		progressVisible = $state(false),
 		progress = $state(0),
 		progressStage = $state(''),
@@ -506,7 +540,15 @@
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
-		lldbDebugLanguages.has(language) ? ('lldb' as const) : ('trace' as const)
+		lldbDebugLanguages.has(language)
+			? ('lldb' as const)
+			: cdpDebugLanguages.has(language)
+				? ('cdp' as const)
+				: language === 'LUA'
+					? ('mobdebug' as const)
+					: language === 'RUBY'
+						? ('tracepoint' as const)
+						: ('trace' as const)
 	);
 	const debugTargetAvailable = $derived(
 		language !== 'RUST' || rustTargetTriple === 'wasm32-wasip1'
@@ -516,7 +558,9 @@
 			? 'Debugging requires SharedArrayBuffer'
 			: !debugTargetAvailable
 				? 'Rust LLDB debugging currently supports wasm32-wasip1 only'
-				: 'Debug'
+				: selectedDebugMode === 'cdp'
+					? 'Enable the wasm-idle Native Debugger extension on this tab, then Debug'
+					: 'Debug'
 	);
 	let debugScopeOpen = $state<Record<string, boolean>>({});
 	const debug = createDebugSessionController({
@@ -2375,6 +2419,7 @@
 				: 'none';
 			runningMode = enableDebug ? 'debug' : 'run';
 			activeDebugBackend = enableDebug ? selectedDebugMode : null;
+			debugSetupError = '';
 			if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
 			if (enableDebug) {
 				invalidateMemoryInspector();
@@ -2413,6 +2458,11 @@
 					language,
 					files.map((file) => ({ ...file }))
 				);
+				if (executionDebugMode === 'cdp' && !(await isBrowserCdpDebuggerAvailable())) {
+					throw new Error(
+						'Enable the wasm-idle Native Debugger extension on this tab, then retry Debug.'
+					);
+				}
 				if (executionDebugMode === 'lldb') {
 					try {
 						progressSession.report?.({
@@ -2451,6 +2501,7 @@
 							progressOutcome = 'cancelled';
 							return;
 						}
+						if (!traceFallbackLanguages.has(language)) throw error;
 						executionDebugMode = 'trace';
 						activeDebugBackend = 'trace';
 						console.warn(
@@ -2498,6 +2549,9 @@
 				}
 			} catch (error) {
 				executionError = error;
+				if (enableDebug && !abortController.signal.aborted) {
+					debugSetupError = error instanceof Error ? error.message : String(error);
+				}
 				const executionWasCancelled = abortController.signal.aborted;
 				const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
 				progressOutcome = executionWasCancelled
@@ -2885,6 +2939,7 @@
 
 	$effect(() => {
 		if (!debugLspLanguages.has(language)) clangdRequested = false;
+		debugSetupError = '';
 		if (!debugLanguage) {
 			debug.setBreakpoints([]);
 			debug.setCursorLine(null);
@@ -3087,7 +3142,10 @@
 						<button
 							class="action-button debug-control"
 							onclick={() => debug.pause()}
-							disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
+							disabled={(activeDebugBackend !== 'lldb' &&
+								activeDebugBackend !== 'cdp') ||
+								!debug.active ||
+								debug.paused}
 							title="Pause"
 							aria-label="Pause"
 						>
@@ -3216,7 +3274,12 @@
 						</header>
 						{#if debugPanelOpen.variables}
 							<div class="debug-panel__body" id="debug-panel-variables">
-								{#if debug.scopes.length}
+								{#if language === 'JAVA'}
+									<p>
+										Local variables and expression evaluation are unavailable
+										for this Java runtime.
+									</p>
+								{:else if debug.scopes.length}
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
 											{@const loadedScopeVariables =
@@ -3946,6 +4009,14 @@
 						<span class="material-symbols-outlined" aria-hidden="true">bug_report</span>
 						<span>Debug</span>
 					</button>
+				{/if}
+				{#if cdpDebugLanguages.has(language)}
+					<a href={nativeDebuggerSetupUrl} target="_blank" rel="noreferrer"
+						>Native debugger setup</a
+					>
+				{/if}
+				{#if debugSetupError}
+					<span role="alert">{debugSetupError}</span>
 				{/if}
 				{#if runningMode === 'run'}
 					<button
