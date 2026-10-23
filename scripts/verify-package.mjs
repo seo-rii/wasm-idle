@@ -49,9 +49,9 @@ export const scenarios = [
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
-		// The archive has 464 root files + 271 dependency files + npm metadata;
-		// the measured install is 6,778,749 bytes without parser dependency packages.
-		budget: { maxBytes: 6 * MiB + 512 * 1024, maxFiles: 736, maxPackages: 6 },
+		// Ruby safe previews add a JS/declaration pair: 466 root files + 271 dependency
+		// files + npm metadata. The combined debugger install measures 6,798,650 bytes.
+		budget: { maxBytes: 6 * MiB + 512 * 1024, maxFiles: 738, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -187,10 +187,10 @@ void [shell, options, serve, result, binding.dispose()];
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
 		// Includes the public container package and all reviewed LSP providers.
-		// Compiler-option API, worker, and config changes add 10,510 bytes to the prior install.
-		// Measured 41,126,213 bytes / 3,257 files / 62 packages; 5,819 bytes headroom.
+		// Combined debugger fixes and evaluation caching add 19,007 bytes to the prior install.
+		// Measured 41,145,220 bytes / 3,259 files / 62 packages; 3,196 bytes headroom.
 		// Separate plugin budgets and the production-package limit stay unchanged.
-		budget: { maxBytes: 39 * MiB + 232 * 1024, maxFiles: 3_300, maxPackages: 70 },
+		budget: { maxBytes: 39 * MiB + 248 * 1024, maxFiles: 3_300, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
