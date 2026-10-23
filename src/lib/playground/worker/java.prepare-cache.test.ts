@@ -14,8 +14,21 @@ const compiled = ts.transpileModule(source, {
 
 function worker() {
 	const messages: any[] = [];
-	const counts = { compile: 0, bridgeCompile: 0, generate: 0, run: 0, initialize: 0 };
-	const failure = { compile: false, bridge: false, generate: false, output: false };
+	const counts = {
+		compile: 0,
+		bridgeCompile: 0,
+		generate: 0,
+		run: 0,
+		initialize: 0,
+		engineCompile: 0
+	};
+	const failure = {
+		compile: false,
+		bridge: false,
+		generate: false,
+		output: false,
+		engineCompile: false
+	};
 	let compilingBridge = false;
 	let onDiagnostic: ((diagnostic: any) => void) | undefined;
 	let handler!: (event: { data: any }) => Promise<void>;
@@ -72,7 +85,7 @@ function worker() {
 	};
 	const runtime = {
 		load: async (bytes: Uint8Array) => {
-			if (bytes[0] === 9)
+			if (bytes[0] === 9 || (bytes as any).app)
 				return {
 					exports: {
 						main: () => {
@@ -93,7 +106,16 @@ function worker() {
 		Int8Array,
 		Int32Array,
 		Error,
-		WebAssembly: { compile: async () => ({}) },
+		WebAssembly: {
+			compile: async (bytes: Uint8Array) => {
+				if (bytes[0] === 9) {
+					counts.engineCompile++;
+					if (failure.engineCompile) throw new Error('engine compilation failed');
+					return { app: true };
+				}
+				return {};
+			}
+		},
 		URL: { createObjectURL: () => 'blob:loader', revokeObjectURL() {} },
 		self: {
 			addEventListener: (_: string, listener: typeof handler) => {
@@ -143,7 +165,8 @@ function worker() {
 		counts,
 		failure,
 		messages,
-		load: (baseUrl = '/teavm/') => handler({ data: { load: true, assets: { baseUrl } } }),
+		load: (baseUrl = '/teavm/', streamCompiler = true) =>
+			handler({ data: { load: true, assets: { baseUrl, streamCompiler } } }),
 		run: (options: Record<string, unknown> = {}) => {
 			messages.length = 0;
 			return handler({
@@ -169,7 +192,8 @@ test('unchanged prepare requests compile only once and never execute the program
 		bridgeCompile: 1,
 		generate: 1,
 		run: 0,
-		initialize: 1
+		initialize: 1,
+		engineCompile: 1
 	});
 	assert.equal(w.messages.at(-1)?.results, true);
 });
@@ -209,7 +233,7 @@ test('changes to workspace contents invalidate a same-length file list', async (
 	assert.equal(w.counts.compile, 2);
 });
 
-for (const stage of ['compile', 'bridge', 'generate', 'output'] as const) {
+for (const stage of ['compile', 'bridge', 'generate', 'output', 'engineCompile'] as const) {
 	test(`a failed ${stage} cannot leave the previous artifact eligible for reuse`, async () => {
 		const w = worker();
 		await w.load();
@@ -270,3 +294,23 @@ for (const options of [{ stdin: 'changed input' }, { hasExplicitStdin: false }])
 		assert.equal(w.messages.at(-1)?.results, true);
 	});
 }
+
+test('pins one compiled module across warm runs and compiles again after source edits', async () => {
+	const w = worker();
+	await w.load();
+	await w.run();
+	await w.run({ prepare: false, stdin: 'one' });
+	await w.run({ prepare: false, stdin: 'two' });
+	assert.equal(w.counts.engineCompile, 1);
+	assert.equal(w.counts.run, 2);
+	await w.run({ code: 'class Main { int changed; }' });
+	assert.equal(w.counts.engineCompile, 2);
+});
+
+test('custom byte-only loaders retain their byte input contract', async () => {
+	const w = worker();
+	await w.load('/custom/', false);
+	await w.run({ prepare: false });
+	assert.equal(w.counts.engineCompile, 0);
+	assert.equal(w.counts.run, 1);
+});

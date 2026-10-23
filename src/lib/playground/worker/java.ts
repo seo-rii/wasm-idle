@@ -35,6 +35,8 @@ let compiledStdin = '';
 let compiledMainClass = '';
 let compiledExceptionFormatter = '';
 let compiledWasm: Uint8Array | null = null;
+let compiledModule: WebAssembly.Module | null = null;
+let acceptsCompiledModule = false;
 let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
@@ -97,7 +99,9 @@ self.addEventListener('message', async (event) => {
 								let runtimeSource = decoder.decode(
 									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
 								);
-								if (streamCompiler)
+								// Custom runtime loaders retain their original byte-input contract.
+								acceptsCompiledModule = streamCompiler;
+								if (acceptsCompiledModule)
 									runtimeSource = acceptCompiledTeaVmModule(runtimeSource);
 								const runtimeUrl = URL.createObjectURL(
 									new Blob([runtimeSource], {
@@ -161,6 +165,7 @@ self.addEventListener('message', async (event) => {
 				compiledMainClass = '';
 				compiledExceptionFormatter = '';
 				compiledWasm = null;
+				compiledModule = null;
 				compiledDiagnostics = [];
 				compiledActivePath = '';
 				compiledWorkspaceFiles = [];
@@ -216,6 +221,7 @@ self.addEventListener('message', async (event) => {
 		) {
 			// A failed rebuild must never leave a previous artifact eligible for reuse.
 			compiledWasm = null;
+			compiledModule = null;
 			compiledDiagnostics = [];
 			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
@@ -347,11 +353,21 @@ self.addEventListener('message', async (event) => {
 					diagnosticLines.join('\n') || 'TeaVM WebAssembly generation failed'
 				);
 			}
+			const nextWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			const nextModule = acceptsCompiledModule
+				? await (
+						WebAssembly.compile as (
+							bytes: BufferSource,
+							options: { builtins: string[] }
+						) => Promise<WebAssembly.Module>
+					)(nextWasm as BufferSource, { builtins: ['js-string'] })
+				: null;
 			compiledCode = code;
 			compiledStdin = stdinInjection.stdinCacheKey;
 			compiledMainClass = mainClass;
 			compiledExceptionFormatter = exceptionBridge.formatExport;
-			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			compiledWasm = nextWasm;
+			compiledModule = nextModule;
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
 			compiledDiagnostics = diagnosticMessages;
@@ -385,7 +401,7 @@ self.addEventListener('message', async (event) => {
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
 		workerGlobal.wasmIdleJavaStdin = stdinBridge;
 		try {
-			const module = await runtimeLoad(compiledWasm!, {
+			const module = await runtimeLoad(compiledModule ?? compiledWasm!, {
 				installImports(imports: any) {
 					imports.teavmConsole.putcharStdout = pushStdout;
 					imports.teavmConsole.putcharStderr = pushStderr;
