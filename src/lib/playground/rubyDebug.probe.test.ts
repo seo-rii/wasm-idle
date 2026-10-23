@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { executeRubyTracepoint } from './worker/rubyTracepoint';
+import { RUBY_DEBUG_PREVIEW } from './worker/rubyDebugPreview';
 import {
 	preflightRubySplitRuntimeAssets,
 	rewriteRubySplitRuntimeModule,
@@ -206,4 +207,96 @@ puts JSON.generate(result)
 		])
 	);
 	expect(output).toBe('22\n');
+	output = '';
+	const safePreviewSource = `
+$preview_calls = 0
+class DebugPreviewProbe
+  def inspect
+    $preview_calls += 1
+    'explicit inspection'
+  end
+  def class
+    raise 'automatic class override called'
+  end
+end
+value = DebugPreviewProbe.new
+puts $preview_calls
+`;
+	const safePreviewEvents: any[] = [];
+	const safePreviewResponses = new Map<number, string>();
+	await executeRubyTracepoint(
+		vm,
+		safePreviewSource,
+		{
+			path: 'preview.rb',
+			breakpoints: [safePreviewSource.split('\n').indexOf('puts $preview_calls') + 1],
+			pauseOnEntry: false,
+			files: []
+		},
+		(message) => {
+			if (message.response)
+				safePreviewResponses.set(message.response.id, message.response.value);
+			if (message.event?.type !== 'pause') return;
+			safePreviewEvents.push(message.event);
+			for (const [id, expression] of [
+				[201, '$preview_calls'],
+				[202, 'value.inspect']
+			])
+				commands.push(
+					JSON.stringify({
+						op: 'evaluate',
+						id,
+						expression,
+						frameId: message.event.frameId
+					})
+				);
+			commands.push(JSON.stringify({ op: 'control', command: 'continue' }));
+		},
+		(blocking) => commands.shift() ?? (blocking ? null : '')
+	);
+	expect(safePreviewEvents).toHaveLength(1);
+	expect(safePreviewEvents[0].locals).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				name: 'value',
+				value: '<DebugPreviewProbe object>',
+				type: 'DebugPreviewProbe'
+			})
+		])
+	);
+	expect(safePreviewResponses.get(201)).toBe('0');
+	expect(safePreviewResponses.get(202)).toBe('"explicit inspection"');
+	expect(output).toBe('1\n');
+	output = '';
+	vm.eval(`${RUBY_DEBUG_PREVIEW}
+values = [1 << 300, Array.new(8, 'a' * 200), {a: [1]}]
+originals = {
+  Integer => [:to_s, :bit_length, :+, :succ, :times, :>, :>=, :<=],
+  Float => [:to_s], Symbol => [:name],
+  String => [:to_s, :+, :<<, :length, :[], :byteslice, :bytesize, :encode, :inspect],
+  Array => [:length, :[], :<<, :join, :min], Hash => [:length, :each_pair],
+  Module => [:name], Kernel => [:class], BasicObject => [:equal?]
+}.flat_map { |type, names| names.map { |name| [type, name, type.instance_method(name)] } }
+calls = []
+append = Array.instance_method(:<<)
+previews = []
+begin
+  originals.each do |type, name, original|
+    type.define_method(name) do |*args, **kwargs, &block|
+      append.bind_call(calls, name)
+      original.bind_call(self, *args, **kwargs, &block)
+    end
+  end
+  values.each { |value| append.bind_call(previews, preview_value.call(value)) }
+ensure
+  originals.each { |type, name, original| type.define_method(name, original) }
+end
+puts JSON.generate({previews:previews,calls:calls})
+`);
+	const formattingPreview = JSON.parse(output.trim());
+	expect(formattingPreview.calls).toEqual([]);
+	expect(formattingPreview.previews[0]).toBe('<Integer: 301 bits>');
+	expect(formattingPreview.previews[1]).toHaveLength(512);
+	expect(formattingPreview.previews[1].endsWith('...')).toBe(true);
+	expect(formattingPreview.previews[2]).toBe('{:"a"=>[...]}');
 }, 30_000);
