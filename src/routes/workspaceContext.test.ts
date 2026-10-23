@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	createSharedWorkspaceUrl,
 	WORKSPACE_STORAGE_KEY,
@@ -6,6 +6,22 @@ import {
 } from './workspaceContext';
 
 describe('isolated shared workspace storage', () => {
+	it('generates distinct v4 identities without the secure-context randomUUID API', () => {
+		const getRandomValues = crypto.getRandomValues.bind(crypto);
+		vi.stubGlobal('crypto', { getRandomValues });
+		try {
+			const url = new URL('http://example.test/wasm-idle/');
+			const first = createSharedWorkspaceUrl(url);
+			const second = createSharedWorkspaceUrl(url);
+			expect(first.searchParams.get('workspace')).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+			);
+			expect(workspaceStorageKey(first)).not.toBe(WORKSPACE_STORAGE_KEY);
+			expect(workspaceStorageKey(second)).not.toBe(workspaceStorageKey(first));
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 	it('uses independent keys for imported shares and keeps that key after a reload', () => {
 		const original = new URL('https://example.test/wasm-idle/#workspace=source');
 		const first = createSharedWorkspaceUrl(original);

@@ -305,6 +305,7 @@
 		? resolveInitialWorkspace({
 				url: new URL(location.href),
 				readStorage: (key) => localStorage.getItem(key),
+				isolateStorage: !navigator.locks,
 				normalizeLanguage: normalizeRequestedLanguage,
 				languageForPath,
 				fallbackLanguage: 'CPP' as PlaygroundLanguage
@@ -373,9 +374,16 @@
 	});
 	let currentWorkspaceStorageKey = $state(initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY);
 	const workspaceStorage = createWorkspaceStorage(
-		(value) => localStorage.setItem(currentWorkspaceStorageKey, value),
+		(value, key) => localStorage.setItem(key, value),
 		(state) => {
 			workspaceSaveState = state;
+		},
+		{
+			read: (key) => localStorage.getItem(key),
+			initialStorageIdentity: initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY,
+			initialSnapshot: initialSelection?.storedSnapshot ?? null,
+			withLock: async (key, write) =>
+				navigator.locks ? await navigator.locks.request(key, write) : write()
 		}
 	);
 	let workspaceInitialized = $state(false);
@@ -1752,11 +1760,24 @@
 		saveStatus = message;
 	}
 
-	function saveWorkspace(showStatus = false) {
+	async function saveWorkspace(showStatus = false) {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return false;
-		const saved = workspaceStorage.save(workspaceSaveKey, currentWorkspaceStorageKey);
+		const saved = await workspaceStorage.save(workspaceSaveKey, currentWorkspaceStorageKey);
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
+	}
+
+	async function saveWorkspaceCopy() {
+		if (runningMode) return;
+		const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
+		currentWorkspaceStorageKey = workspaceStorageKey(copyUrl);
+		replaceState(copyUrl, page.state);
+		await saveWorkspace(true);
+	}
+
+	function handleWorkspaceStorageChange(event: StorageEvent) {
+		if (event.key === null || event.key === currentWorkspaceStorageKey)
+			workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 	}
 
 	function downloadWorkspaceBackup() {
@@ -1796,8 +1817,12 @@
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
 		if (!workspaceEditorInitialized) return;
 		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
+		workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
-		if (state.revision === state.savedRevision || saveWorkspace()) return;
+		if (state.phase === 'saved' && state.revision === state.savedRevision) return;
+		// An asynchronous cross-tab lock cannot finish reliably during unload.
+		// Keep the tab open until saving finishes, or let the user export its edits.
+		void saveWorkspace();
 		event.preventDefault();
 		event.returnValue = '';
 	}
@@ -1876,7 +1901,9 @@
 		const nextActivePath = importedFiles.some((file) => file.path === activePath)
 			? activePath
 			: importedFiles[0].path;
-		if (!saveWorkspace()) throw new Error('Save the current workspace before opening a ZIP');
+		if (!(await saveWorkspace()))
+			throw new Error('Save the current workspace before opening a ZIP');
+		destination.assertCurrent();
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
 		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
 		const importedWorkspace = {
@@ -1897,7 +1924,11 @@
 			saveStatus = 'Stop the running program before importing files';
 			return;
 		}
-		const destination = captureWorkspaceImportDestination(() => ({ language, files }));
+		const destination = captureWorkspaceImportDestination(() => ({
+			language,
+			files,
+			running: !!runningMode
+		}));
 		try {
 			const plan = await stageWorkspaceImport(fileList, {
 				extractZip: extractImportedZip,
@@ -3258,6 +3289,7 @@
 
 <svelte:window
 	onbeforeunload={warnUnsavedChanges}
+	onstorage={handleWorkspaceStorageChange}
 	onpointerdown={(event) => {
 		if (languageMenuOpen && !languagePicker?.contains(event.target as Node))
 			closeLanguageMenu();
@@ -4954,7 +4986,18 @@
 							</div>
 						</div>
 					{/if}
-					{#if workspaceSaveState.phase === 'error'}
+					{#if workspaceSaveState.phase === 'conflict'}
+						<div class="workspace-save-error" role="alert">
+							<span
+								>Another tab changed this workspace. Your edits are still in this
+								tab.</span
+							>
+							<button onclick={saveWorkspaceCopy} disabled={!!runningMode}
+								>Save a separate copy</button
+							>
+							<button onclick={downloadWorkspaceBackup}>Export workspace</button>
+						</div>
+					{:else if workspaceSaveState.phase === 'error'}
 						<div class="workspace-save-error" role="alert">
 							<span
 								>Not saved locally. Keep this tab open and retry or download a
@@ -6474,11 +6517,13 @@
 		background: var(--warning);
 	}
 
-	.save-state--error {
+	.save-state--error,
+	.save-state--conflict {
 		color: var(--danger);
 	}
 
-	.save-state--error i {
+	.save-state--error i,
+	.save-state--conflict i {
 		background: var(--danger);
 	}
 

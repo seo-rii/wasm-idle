@@ -1657,9 +1657,12 @@ describe('example route debug actions', () => {
 		)?.[0];
 		expect(saveState).toBeTruthy();
 		expect(saveState).not.toMatch(/role=|aria-live=/);
-		// Failed saves are still announced through the dedicated alert banner.
+		// Save failures and cross-tab conflicts are announced through dedicated alert banners.
 		expect(source).toMatch(
-			/\{#if workspaceSaveState\.phase === 'error'\}\s+<div class="workspace-save-error" role="alert">/
+			/\{(?:#if|:else if) workspaceSaveState\.phase === 'error'\}\s+<div class="workspace-save-error" role="alert">/
+		);
+		expect(source).toMatch(
+			/\{(?:#if|:else if) workspaceSaveState\.phase === 'conflict'\}\s+<div class="workspace-save-error" role="alert">/
 		);
 	});
 });

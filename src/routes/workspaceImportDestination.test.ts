@@ -5,6 +5,28 @@ import {
 } from './workspaceImportDestination';
 
 describe('asynchronous workspace import destination', () => {
+	it('cancels after a save lock wait if execution started without changing the files', async () => {
+		const files = [{ path: 'main.py', content: 'running source' }];
+		let running = false;
+		const destination = captureWorkspaceImportDestination(() => ({
+			language: 'PYTHON',
+			files,
+			running
+		}));
+		let release!: () => void;
+		const saving = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const importing = (async () => {
+			await saving;
+			destination.assertCurrent();
+			files[0].content = 'imported replacement';
+		})();
+		running = true;
+		release();
+		await expect(importing).rejects.toThrow('Stop the running program');
+		expect(files[0].content).toBe('running source');
+	});
 	it('cancels a delayed import after a language switch and leaves both workspaces untouched', async () => {
 		const cpp = [{ path: 'main.cpp', content: 'original C++' }];
 		const python = [{ path: 'main.py', content: 'original Python' }];

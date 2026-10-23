@@ -65,6 +65,145 @@ async function withWorkspacePage(
 }
 
 describe('workspace storage browser integration', () => {
+	it(
+		'preserves both tabs when a stale workspace conflicts and is saved as a separate copy',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const key = 'wasm-idle:example-workspace:v3';
+				await context.addInitScript((key) => {
+					if (localStorage.getItem(key) === null)
+						localStorage.setItem(
+							key,
+							JSON.stringify({
+								version: 6,
+								language: 'CPP',
+								activePath: 'notes.txt',
+								files: [{ path: 'notes.txt', content: 'original source' }],
+								lspEnabled: false
+							})
+						);
+				}, key);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				const second = await context.newPage();
+				try {
+					await second.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+					await second.locator('[data-workspace-save-state="saved"]').waitFor();
+					await page.evaluate(() =>
+						(window as any).__wasmIdleDebug.setEditorValue('new source from first tab')
+					);
+					await page.waitForFunction(
+						(key) =>
+							JSON.parse(localStorage.getItem(key)!).files[0].content ===
+							'new source from first tab',
+						key
+					);
+					await second
+						.getByRole('alert')
+						.filter({ hasText: 'Another tab changed' })
+						.waitFor();
+					await second
+						.getByRole('textbox', { name: 'Program arguments' })
+						.fill('--second-tab');
+					await second.getByRole('button', { name: 'Save', exact: true }).click();
+					await second.locator('[data-workspace-save-state="conflict"]').waitFor();
+					expect(
+						await second.evaluate(
+							(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+							key
+						)
+					).toBe('new source from first tab');
+					expect(
+						await second.evaluate(() =>
+							(window as any).__wasmIdleDebug.getEditorValue()
+						)
+					).toBe('original source');
+					// An unload must not silently discard the still-local stale-tab edits.
+					expect(
+						await second.evaluate(
+							() =>
+								!window.dispatchEvent(
+									new Event('beforeunload', { cancelable: true })
+								)
+						)
+					).toBe(true);
+					await second.getByRole('button', { name: 'Save a separate copy' }).click();
+					await second.locator('[data-workspace-save-state="saved"]').waitFor();
+					const copyKey = `${key}:${new URL(second.url()).searchParams.get('workspace')}`;
+					const copy = await second.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!),
+						copyKey
+					);
+					expect(copy.files[0].content).toBe('original source');
+					expect(copy.argsInput).toBe('--second-tab');
+					expect(
+						await page.evaluate(
+							(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+							key
+						)
+					).toBe('new source from first tab');
+				} finally {
+					await second.close();
+				}
+			});
+		}
+	);
+
+	it('isolates writable tabs when Web Locks are unavailable', browserOptions, async () => {
+		await withWorkspacePage(async (page, context, browserUrl) => {
+			const key = 'wasm-idle:example-workspace:v3';
+			await context.addInitScript((key) => {
+				Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+				if (localStorage.getItem(key) === null)
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							version: 6,
+							language: 'CPP',
+							activePath: 'notes.txt',
+							files: [{ path: 'notes.txt', content: 'shared original' }],
+							lspEnabled: false
+						})
+					);
+			}, key);
+			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+			await page.locator('[data-workspace-save-state="saved"]').waitFor();
+			const firstId = new URL(page.url()).searchParams.get('workspace');
+			expect(firstId).toBeTruthy();
+			const second = await context.newPage();
+			try {
+				await second.goto(page.url(), { waitUntil: 'domcontentloaded' });
+				await second.locator('[data-workspace-save-state="saved"]').waitFor();
+				expect(new URL(second.url()).searchParams.get('workspace')).not.toBe(firstId);
+				await second.evaluate(() =>
+					(window as any).__wasmIdleDebug.setEditorValue('second tab edit')
+				);
+				const secondKey = `${key}:${new URL(second.url()).searchParams.get('workspace')}`;
+				await second.waitForFunction(
+					(key) =>
+						JSON.parse(localStorage.getItem(key)!).files[0].content ===
+						'second tab edit',
+					secondKey
+				);
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+						`${key}:${firstId}`
+					)
+				).toBe('shared original');
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+						key
+					)
+				).toBe('shared original');
+			} finally {
+				await second.close();
+			}
+		});
+	});
+
 	it.each(['unavailable', 'denied'])(
 		'offers manual sharing when the clipboard is %s',
 		browserOptions,
@@ -444,6 +583,9 @@ describe('workspace storage browser integration', () => {
 						throw new DOMException('Quota full', 'QuotaExceededError');
 					};
 				});
+				await page
+					.getByRole('textbox', { name: 'Program arguments' })
+					.fill('--quota-probe');
 				await page.getByRole('button', { name: 'Save', exact: true }).click();
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
 				const [backupDownload] = await Promise.all([
@@ -522,6 +664,7 @@ describe('workspace storage browser integration', () => {
 							(window as any).__wasmIdleDebug.getEditorValue()
 						)
 					).toBe('int separate_shared_work = 1;');
+					await sharedPage.locator('[data-workspace-save-state="saved"]').waitFor();
 					await sharedPage
 						.getByRole('link', { name: 'Local workspace', exact: true })
 						.click();
@@ -644,6 +787,7 @@ describe('workspace storage browser integration', () => {
 				const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
 				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
 				expect(new URL(page.url()).hash).toBe('');
+				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
 				expect(
 					await page
 						.getByRole('alert')
