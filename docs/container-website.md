@@ -6,13 +6,72 @@ separate container page or iframe. The existing terminal starts actual GNU Bash
 when shared memory is available; typing while a program runs goes to that
 program, and idle input goes to Bash.
 
-`src/lib/playground/container/binding.ts` preserves the existing playground and
-Terminal interfaces. Its private versioned Worker channel carries operations,
+The optional public `wasm-idle/container` entry preserves the existing playground and
+Terminal interfaces. Its versioned Worker channel carries operations,
 stream bytes, progress, diagnostics and debugger events. The owner registers
 actual language-engine executions with the Container supervisor and owns their
 cancellation. The real existing LLDB and language-specific debug backends remain
 separate execution profiles; normal browser execution is not described as a
 debugger attach target.
+
+## Sharing the execution host
+
+Install `wasm-idle` and `@wasm-idle/container` together to use the optional entry.
+Ordinary `wasm-idle` consumers do not install the container, terminal, or Svelte
+packages automatically. Importing `wasm-idle/container` does not fetch assets,
+create Workers, or register message handlers. Bindings start their owner lazily.
+
+The application supplies its own module Worker so the bundler keeps its complete
+module graph on the application's origin:
+
+```ts
+import { createContainerPlaygroundBinding } from 'wasm-idle/container';
+
+const binding = createContainerPlaygroundBinding(runtimeAssets, {
+	applicationRootURL,
+	workspaceId,
+	workerFactory: () =>
+		new Worker(new URL('./container-owner.ts', import.meta.url), {
+			type: 'module'
+		})
+});
+
+// Release this binding when its owning editor or route is removed.
+await binding.dispose();
+```
+
+That application's `container-owner.ts` installs the shared protocol explicitly:
+
+```ts
+import { supportedLanguageIds } from '@wasm-idle/core';
+import { createPlaygroundBinding } from 'wasm-idle';
+import { serveContainerWorker } from 'wasm-idle/container';
+import { createBashConfiguration, shellCommands } from './container-release';
+
+serveContainerWorker({
+	languages: supportedLanguageIds,
+	createBinding: createPlaygroundBinding,
+	createBashConfiguration,
+	shellCommands
+});
+```
+
+`createBashConfiguration` resolves the host's pinned manifest, verified asset
+URLs, Worker URLs, and WASIX SDK. The host also chooses its BusyBox command list.
+These values come from trusted application configuration. Guest code and Worker
+requests cannot choose the release, host modules, or language registry.
+
+The shared entry owns transport, cancellation and teardown, Bash/Clang assembly,
+language adapters, input/output, prompt coordination, and workspace reconciliation.
+It also exports `createBashProfile` for a host that supplies its own owner protocol.
+The website's remaining `src/lib/playground/container/` files adapt its release
+and language registry; they are excluded from the published package.
+
+Applications retain their UI, routing, account identifiers, asset delivery policy,
+and persistence adapters. Application documents and legacy-source migration remain
+separate from the container SDK's persistent filesystem.
+Each mounted editor owns a fresh container; immutable assets may be cached across
+owners, while mutable executions and workspace state remain separate.
 
 Editor files publish into `/workspace/<LANGUAGE>/`. Existing language workspaces
 remain distinct within the shared filesystem; shell commands can access their

@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import type { Container, ContainerProcess } from '@wasm-idle/container';
-import { WebsiteClangRuntime } from './clang-runtime';
-import type { WebsiteRuntimeAdapter } from './runtime-adapter';
-import type { SandboxExecutionOptions } from '../options';
+import { WebsiteClangRuntime } from './clang-runtime.js';
+import type { WebsiteRuntimeAdapter } from './runtime-adapter.js';
+import type { SandboxExecutionOptions } from '../playground/options.js';
 
 function fixture(stderr: string[] = []) {
 	const files = new Map<string, Uint8Array>();
@@ -35,7 +35,7 @@ function fixture(stderr: string[] = []) {
 	});
 	const profile = {
 		container: { spawn, fs } as unknown as Container,
-		prepareCommand: vi.fn(async () => {})
+		prepareCommand: vi.fn(async (_invocation: unknown, _signal: AbortSignal) => {})
 	};
 	const adapter = {
 		directory: (language: string) => `/workspace/${language}`,
@@ -49,7 +49,7 @@ function fixture(stderr: string[] = []) {
 	const runtime = new WebsiteClangRuntime(profile, adapter, emit);
 	const prepare = (code: string, options: SandboxExecutionOptions = {}, language = 'CPP') =>
 		runtime.prepare(language, code, [], options, new AbortController().signal, progress, 1);
-	return { runtime, prepare, spawn, progress, codes, files, emit };
+	return { runtime, prepare, spawn, progress, codes, files, profile, emit };
 }
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
@@ -87,6 +87,74 @@ describe('website container Clang compilation', () => {
 		]);
 	});
 
+	it('cancels pending toolchain preparation before starting a compiler', async () => {
+		const { runtime, prepare, spawn, profile } = fixture();
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let signal!: AbortSignal;
+		profile.prepareCommand.mockImplementationOnce(async (_invocation, value) => {
+			signal = value;
+			await pending;
+		});
+		const preparation = prepare('int main() {}');
+		const cancelled = expect(preparation).rejects.toMatchObject({ name: 'AbortError' });
+		await runtime.stop('CPP');
+		const abortedWhenStopped = signal.aborted;
+		release();
+		await cancelled;
+		expect(abortedWhenStopped).toBe(true);
+		expect(spawn).not.toHaveBeenCalled();
+	});
+	it.each(['prepare', 'run'] as const)(
+		'terminates a %s command admitted while its spawn was being cancelled',
+		async (phase) => {
+			const { runtime, prepare, spawn } = fixture();
+			if (phase === 'run') await prepare('int main() {}');
+			spawn.mockClear();
+			let release!: (process: ContainerProcess) => void;
+			spawn.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						release = resolve;
+					})
+			);
+			const command =
+				phase === 'prepare'
+					? prepare('int main() {}')
+					: runtime.run(
+							'CPP',
+							'int main() {}',
+							[],
+							{},
+							new AbortController().signal,
+							undefined,
+							1
+						);
+			const cancelled = expect(command).rejects.toMatchObject({ name: 'AbortError' });
+			await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+			await runtime.stop('CPP');
+			const terminate = vi.fn(async () => {});
+			release({
+				stdin: new WritableStream(),
+				stdout: new ReadableStream({
+					start(controller) {
+						controller.close();
+					}
+				}),
+				stderr: new ReadableStream({
+					start(controller) {
+						controller.close();
+					}
+				}),
+				exited: Promise.resolve({ reason: 'exited', code: 0 }),
+				terminate
+			} as unknown as ContainerProcess);
+			await cancelled;
+			expect(terminate).toHaveBeenCalledOnce();
+		}
+	);
 	it('applies language-changing response files before the input and links C++ safely', async () => {
 		const { prepare, spawn } = fixture();
 		await prepare('int main() {}', { activePath: 'main.c', compileArgs: ['@flags.rsp'] }, 'C');

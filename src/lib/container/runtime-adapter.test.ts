@@ -1,13 +1,18 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createContainer, type Container } from '@wasm-idle/container';
-import { WebsiteRuntimeAdapter } from './runtime-adapter';
+import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
+
 const owned: Container[] = [];
 afterEach(async () => {
 	await Promise.all(owned.splice(0).map((container) => container.dispose()));
 });
 function fixture() {
-	const adapter = new WebsiteRuntimeAdapter({ runtimeAssets: '/wasm-idle/', emit: vi.fn() });
+	const adapter = new WebsiteRuntimeAdapter({
+		runtimeAssets: '/wasm-idle/',
+		emit: vi.fn(),
+		createBinding: vi.fn()
+	});
 	const container = createContainer({
 		adapters: [adapter.adapter],
 		commands: adapter.commands,
