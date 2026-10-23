@@ -3253,10 +3253,11 @@
 							<div class="debug-panel__body" id="debug-panel-variables">
 								{#if language === 'JAVA'}
 									<p>
-										Java debugging currently does not expose local variables or
-										expression evaluation.
+										Java shows local values and array elements for the currently
+										stopped frame. Other objects are shown by type and identity.
 									</p>
-								{:else if debug.scopes.length}
+								{/if}
+								{#if debug.scopes.length}
 									<div class="debug-scopes">
 										{#each debug.scopes as scope (scope.variablesReference)}
 											{@const loadedScopeVariables =

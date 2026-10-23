@@ -866,14 +866,14 @@ class Java implements Sandbox {
 	async debugEvaluate(_expression: string): Promise<string> {
 		throw new Error('Java expression evaluation is unavailable in the hook debugger');
 	}
-	async debugVariables(_reference: number, _start?: number, _count?: number) {
-		return [];
+	async debugVariables(reference: number, start?: number, count?: number) {
+		return this.debugSession?.variables(reference, start, count) ?? [];
 	}
-	async debugScopes(_frameId: number) {
-		return [];
+	async debugScopes(frameId: number) {
+		return this.debugSession?.scopes(frameId) ?? [];
 	}
-	async debugFrameScopes(_frameId: number) {
-		return [];
+	async debugFrameScopes(frameId: number) {
+		return this.debugSession?.scopes(frameId, false) ?? [];
 	}
 
 	kill() {

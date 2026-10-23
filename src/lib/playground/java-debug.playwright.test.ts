@@ -185,11 +185,19 @@ it(
 				'Helper.doubleValue',
 				'Main.main'
 			]);
-			expect(
-				result.pauses.every(
-					(pause: any) => pause.locals.length === 0 && pause.scopes.length === 0
-				)
-			).toBe(true);
+			expect(result.pauses.every((pause: any) => pause.scopes.length === 1)).toBe(true);
+			expect(result.pauses[0].locals).toContainEqual(
+				expect.objectContaining({ name: 'value', type: 'int', value: '7' })
+			);
+			expect(result.pauses[1].locals).toEqual([
+				expect.objectContaining({ name: 'value', type: 'int', value: '7' })
+			]);
+			expect(result.pauses[3].locals).toContainEqual(
+				expect.objectContaining({ name: 'result', type: 'int', value: '14' })
+			);
+			expect(result.pauses[5].locals).toContainEqual(
+				expect.objectContaining({ name: 'answer', type: 'int', value: '17' })
+			);
 			expect(result.breakpointEvents).toEqual(
 				expect.arrayContaining([
 					expect.objectContaining({

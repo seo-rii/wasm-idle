@@ -40,8 +40,126 @@ it('maps auxiliary workspace paths and verifies only actual hook locations', () 
 		sourcePath: '/workspace/Helper.java',
 		callStack: [{ sourcePath: '/workspace/Helper.java' }],
 		locals: [],
-		scopes: []
+		scopes: [{ name: 'Locals', variables: [], namedVariables: 0 }]
 	});
+});
+
+it('services Java-owned value queries and never reuses handles from an earlier pause', () => {
+	const events: DebugSessionEvent[] = [];
+	const replies: any[] = [];
+	const queued: object[] = [
+		{ op: 'scopes', id: 1, stopId: 1, frameId: 101 },
+		{ op: 'variables', id: 2, stopId: 1, reference: 100002, start: 1, count: 1 },
+		{ op: 'context', id: 3, stopId: 1, frameId: 101 },
+		{ op: 'control', command: 'nextLine' }
+	];
+	const runtime = createJavaDebugRuntime(
+		files,
+		{ activePath: 'Main.java', breakpoints: [], pauseOnEntry: true },
+		(event) => events.push(event),
+		(blocking) =>
+			blocking
+				? JSON.stringify(queued.shift() ?? { op: 'control', command: 'continue' })
+				: '',
+		(response) => replies.push(response)
+	);
+	const locals = JSON.stringify([
+		{
+			name: 'array',
+			value: 'int[] (2)',
+			type: 'int[]',
+			variablesReference: 1,
+			indexedVariables: 2
+		}
+	]);
+	expect(runtime.pause('Main.java', 2, 3, stack('Main', 2), 2, locals, 1)).toEqual({
+		op: 'variables',
+		id: 2,
+		stopId: 1,
+		reference: 1,
+		start: 1,
+		count: 1
+	});
+	expect(replies[0]).toMatchObject({
+		id: 1,
+		stopId: 1,
+		value: [{ variablesReference: 100001, variables: [{ variablesReference: 100002 }] }]
+	});
+	expect(
+		runtime.reply(
+			2,
+			1,
+			JSON.stringify([{ name: '[1]', value: '7', type: 'int', variablesReference: 0 }]),
+			null
+		)
+	).toEqual({ op: 'context', id: 3, stopId: 1 });
+	expect(replies[1]).toMatchObject({ id: 2, value: [{ name: '[1]', value: '7' }] });
+	expect(
+		runtime.reply(
+			3,
+			1,
+			'{"bindings":[{"name":"large","type":"long","value":"9007199254740993"}]}',
+			null
+		)
+	).toBeNull();
+	expect(replies[2]).toMatchObject({
+		id: 3,
+		value: { bindings: [{ value: '9007199254740993' }] }
+	});
+	queued.push(
+		{ op: 'variables', id: 4, stopId: 1, reference: 100002 },
+		{ op: 'variables', id: 5, stopId: 2, reference: 100002 },
+		{ op: 'context', id: 6, stopId: 2, frameId: 999 },
+		{ op: 'variables', id: 7, stopId: 2, reference: 200002, start: 0, count: 0 },
+		{ op: 'control', command: 'continue' }
+	);
+	expect(runtime.pause('Main.java', 3, 3, stack('Main', 3), 2, locals, 1)).toEqual({
+		op: 'variables',
+		id: 7,
+		stopId: 2,
+		reference: 1,
+		start: 0,
+		count: 0
+	});
+	expect(replies.slice(3).map((reply) => reply.error)).toEqual([
+		expect.stringMatching(/earlier stop/),
+		expect.stringMatching(/stale/),
+		expect.stringMatching(/currently stopped frame/)
+	]);
+	expect(runtime.reply(7, 2, '[]', null)).toBeNull();
+	expect(() => runtime.reply(2, 1, '[]', null)).toThrow(/earlier request/);
+	expect(
+		events
+			.filter((event) => event.type === 'pause')
+			.map((event) => event.scopes?.[0].variablesReference)
+	).toEqual([100001, 200001]);
+});
+
+it('keeps the target paused after an inspection error and rejects bad pages', () => {
+	const replies: any[] = [];
+	const queued = [
+		{ op: 'variables', id: 1, stopId: 1, reference: 100001, count: 1001 },
+		{ op: 'context', id: 2, stopId: 1, frameId: 101 },
+		{ op: 'scopes', id: 3, stopId: 1, frameId: 101 },
+		{ op: 'control', command: 'continue' }
+	];
+	const runtime = createJavaDebugRuntime(
+		files,
+		{ activePath: 'Main.java', breakpoints: [], pauseOnEntry: true },
+		() => {},
+		(blocking) => (blocking ? JSON.stringify(queued.shift()) : ''),
+		(response) => replies.push(response)
+	);
+	expect(runtime.pause('Main.java', 2, 3, stack('Main', 2), 1)).toMatchObject({
+		op: 'context',
+		id: 2
+	});
+	expect(runtime.reply(2, 1, null, 'Value could not be inspected')).toBeNull();
+	expect(replies).toEqual([
+		{ id: 1, stopId: 1, error: expect.stringMatching(/page/) },
+		{ id: 2, stopId: 1, error: 'Value could not be inspected' },
+		{ id: 3, stopId: 1, value: [expect.objectContaining({ name: 'Locals' })] }
+	]);
 });
 
 it('uses full Java depth for next and out beyond the 64 displayed frames, and skips same-line callbacks', () => {

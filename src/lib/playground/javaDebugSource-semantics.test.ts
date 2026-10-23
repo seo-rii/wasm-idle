@@ -11,8 +11,15 @@ import { instrumentJavaDebugSource } from './javaDebugSource';
 // TeaVM/JSO execution and debugger events have a separate browser qualification.
 const enabled = process.env.WASM_IDLE_RUN_JAVA_TRANSFORM_SEMANTICS === '1';
 const directories: string[] = [];
+const captureMethod = `public static Object capture(Object value) { return value; }`;
+const snapshotMethods = `
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return true; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) { hit(path, line, column); }
+`;
 const bridgeSource = `public final class WasmIdleDebugProbe {
     public static void hit(String sourcePath, int line, int column) {}
+    ${snapshotMethods}
 }`;
 
 function executeJava(source: string, directory: string, helperSource = bridgeSource) {
@@ -236,6 +243,43 @@ if (flag) bad();
 }`
 	},
 	{
+		name: 'empty records, nested class receivers, and uncaptured mutable lambda surroundings',
+		source: `public class Main {
+    record Item(int value) {}
+    int field = 3;
+    public static void main(String[] args) {
+        int mutable = 2;
+        java.util.function.IntUnaryOperator operation = (int input) -> { int result = input + 1; return result; };
+        mutable++;
+        class Local { int get() { int local = 4; return local; } }
+        Object object = new Object() { public String toString() { return "anonymous"; } };
+        System.out.print(operation.applyAsInt(mutable) + new Local().get() + new Item(5).value() + ":" + object);
+    }
+}`
+	},
+	{
+		name: 'constructor argument expressions, interface methods, and class initialization boundaries',
+		source: `public class Main {
+    int value;
+    interface Computation {
+        static int add(int input) { int result = input + 1; return result; }
+        default int twice(int input) { return input * 2; }
+    }
+    Main(int input) { this(switch(input) { case 0 -> 2; default -> 3; }, 0); }
+    Main(int input, int ignored) { super(); value = input; }
+    public static void main(String[] args) {
+        int mutable = 2;
+        Object anonymous = new Object() {
+            int field = switch(0) { case 0 -> 4; default -> 5; };
+            public String toString() { return "anonymous=" + field; }
+        };
+        class Local { int field = switch(0) { case 0 -> 6; default -> 7; }; }
+        mutable++;
+        System.out.print(new Main(0).value + new Local().field + Computation.add(mutable) + ":" + anonymous);
+    }
+}`
+	},
+	{
 		name: 'uncaught exception propagation and original stack line numbers',
 		source: `public class Main {
     static void fail() {
@@ -294,6 +338,7 @@ describe.skipIf(!enabled)('Java source debug instrumentation JVM semantics', () 
 				temporaryDirectory(),
 				`public final class WasmIdleDebugProbe {
     public static void hit(String path, int line, int column) { System.err.print(column + ","); }
+    ${snapshotMethods}
 }`
 			);
 			expect(output.status).toBe(0);
@@ -322,9 +367,100 @@ describe.skipIf(!enabled)('Java source debug instrumentation JVM semantics', () 
     public static void hit(String path, int line, int column) {
         if (++hits == 6) { System.out.print("polls=6"); System.exit(0); }
     }
+    ${snapshotMethods}
 }`
 			);
 			expect(output).toEqual({ status: 0, stdout: 'polls=6', stderr: '' });
+		}
+	);
+
+	it(
+		'captures actual parameters and initialized locals without calling user code',
+		{ timeout: 20_000 },
+		() => {
+			const source = `public class Main {
+    static class Poison { public String toString() { throw new AssertionError("toString called"); } }
+    static void run(int parameter, String... words) {
+        int value = parameter + 2;
+        int uninitialized;
+        if (parameter > 0) uninitialized = 10; else uninitialized = 20;
+        Poison poison = new Poison();
+        int[] values = {3, 5};
+        var inferred = 7L;
+        value++;
+        System.out.print(value + values[1] + inferred + uninitialized);
+    }
+    public static void main(String[] args) { run(4, "word"); }
+}`;
+			const transformed = instrumentJavaDebugSource(
+				source,
+				'Main.java',
+				'WasmIdleDebugProbe'
+			);
+			const helper = `public final class WasmIdleDebugProbe {
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return line == 11; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {
+        for (int i = 0; i < names.length; i++) {
+            if (names[i].equals("uninitialized")) throw new AssertionError("read path-sensitive local");
+            if (names[i].equals("parameter") && !values[i].equals(4)) throw new AssertionError("parameter");
+            if (names[i].equals("value") && !values[i].equals(7)) throw new AssertionError("updated local");
+            if (names[i].equals("words") && !((String[])values[i])[0].equals("word")) throw new AssertionError("varargs");
+            if (names[i].equals("poison") && !(values[i] instanceof Main.Poison)) throw new AssertionError("object identity");
+            if (names[i].equals("values") && ((int[])values[i])[1] != 5) throw new AssertionError("array");
+            if (names[i].equals("inferred") && !values[i].equals(7L)) throw new AssertionError("inferred");
+            System.err.print(names[i] + ",");
+        }
+    }
+}`;
+			expect(executeJava(transformed.code, temporaryDirectory(), helper)).toEqual({
+				status: 0,
+				stdout: '29',
+				stderr: 'parameter,words,value,poison,values,inferred,'
+			});
+		}
+	);
+
+	it(
+		'captures loop, catch, and resource bindings only inside their lexical scopes',
+		{ timeout: 20_000 },
+		() => {
+			const source = `public class Main {
+    static class Resource implements AutoCloseable { public void close() {} }
+    public static void main(String[] args) {
+        for (int index = 0; index < 1; index++) {
+            System.out.print(index);
+        }
+        for (int element : new int[]{2}) {
+            System.out.print(element);
+        }
+        try (var resource = new Resource()) {
+            throw new IllegalStateException("expected");
+        } catch (IllegalStateException failure) {
+            System.out.print(failure.getMessage());
+        }
+        System.out.print("done");
+    }
+}`;
+			const transformed = instrumentJavaDebugSource(
+				source,
+				'Main.java',
+				'WasmIdleDebugProbe'
+			);
+			const helper = `public final class WasmIdleDebugProbe {
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return line == 5 || line == 8 || line == 11 || line == 13 || line == 15; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {
+        System.err.print(line + ":");
+        for (int i = 0; i < names.length; i++) System.err.print(names[i] + ",");
+        System.err.print(";");
+    }
+}`;
+			expect(executeJava(transformed.code, temporaryDirectory(), helper)).toEqual({
+				status: 0,
+				stdout: '02expecteddone',
+				stderr: '5:args,index,;8:args,element,;11:args,resource,;13:args,failure,;15:args,;'
+			});
 		}
 	);
 });

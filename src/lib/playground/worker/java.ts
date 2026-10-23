@@ -491,12 +491,12 @@ self.addEventListener('message', async (event) => {
 						sourceBreakpoints: javaDebug.sourceBreakpoints,
 						pauseOnEntry: javaDebug.pauseOnEntry !== false
 					},
-					(event) => {
+					(event, stopId) => {
 						if (event.type === 'pause') {
 							flushStdout();
 							flushStderr();
 						}
-						self.postMessage({ javaDebug: { event } });
+						self.postMessage({ javaDebug: { event, stopId } });
 					},
 					(blocking) =>
 						readDebugCommand(
@@ -504,7 +504,8 @@ self.addEventListener('message', async (event) => {
 							blocking,
 							() => self.postMessage({ javaDebug: { consumed: true } }),
 							'Java'
-						)
+						),
+					(response) => self.postMessage({ javaDebug: { response } })
 				);
 			}
 			const module = await runtimeLoad(compiledWasm!, {
