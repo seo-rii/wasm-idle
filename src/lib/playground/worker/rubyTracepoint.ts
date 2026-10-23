@@ -52,7 +52,10 @@ read_command = ->(blocking) do
   text = bridge.call(:read, blocking).to_s
   text.empty? ? nil : JSON.parse(text)
 end
-display_path = ->(path) { path == settings['path'] ? (settings['debugPath'] || path) : path }
+display_path = ->(path) do
+  path = path == settings['path'] ? (settings['debugPath'] || path) : path
+  '/workspace/' + path.sub(%r{\A(?:/workspace/|/+)}, '')
+end
 known = settings['files'].to_h { |file| [file['path'], file['content']] }
 breakpoints = {}
 executable = {}
@@ -71,6 +74,7 @@ known.each do |path, content|
   end
 end
 set_breakpoints = ->(path, lines) do
+  path = display_path.call(path)
   available = executable[path] || []
   resolved = lines.uniq.map do |line|
     actual = available.find { |candidate| candidate >= line }

@@ -139,6 +139,11 @@ puts JSON.generate(result)
 		(blocking) => commands.shift() ?? (blocking ? null : '')
 	);
 	expect(pauses.map((pause) => pause.line)).toEqual([6, 2, 7]);
+	expect(pauses.map((pause) => pause.sourcePath)).toEqual([
+		'/workspace/main.rb',
+		'/workspace/main.rb',
+		'/workspace/main.rb'
+	]);
 	expect(pauses[1].callStack.map((frame: any) => frame.functionName)).toEqual([
 		'double',
 		'<main>'
@@ -149,4 +154,56 @@ puts JSON.generate(result)
 	expect(pauses[0].locals.some((variable: any) => variable.name === 'bridge')).toBe(false);
 	expect(evaluation).toBe('11');
 	expect(output).toBe('15\n');
+	output = '';
+	const nestedPauses: any[] = [];
+	const breakpointEvents: any[] = [];
+	const helper = 'def triple(value)\n  adjusted = value * 3\n  adjusted + 1\nend';
+	await executeRubyTracepoint(
+		vm,
+		`eval(${JSON.stringify(helper)}, TOPLEVEL_BINDING, 'lib/helper.rb', 1)\nvalue = 7\nanswer = triple(value)\nputs answer`,
+		{
+			path: 'src/main.rb',
+			debugPath: '/workspace/src/main.rb',
+			breakpoints: [3],
+			pauseOnEntry: false,
+			files: [{ path: 'lib/helper.rb', content: helper }]
+		},
+		(message) => {
+			if (message.event?.type === 'breakpoints') breakpointEvents.push(message.event);
+			if (message.event?.type !== 'pause') return;
+			nestedPauses.push(message.event);
+			if (nestedPauses.length === 1)
+				commands.push(
+					JSON.stringify({
+						op: 'breakpoints',
+						sourcePath: '/workspace/lib/helper.rb',
+						lines: [3]
+					})
+				);
+			commands.push(JSON.stringify({ op: 'control', command: 'continue' }));
+		},
+		(blocking) => commands.shift() ?? (blocking ? null : '')
+	);
+	expect(nestedPauses.map((pause) => [pause.sourcePath, pause.line])).toEqual([
+		['/workspace/src/main.rb', 3],
+		['/workspace/lib/helper.rb', 3]
+	]);
+	expect(nestedPauses[1].callStack.map((frame: any) => frame.sourcePath)).toEqual([
+		'/workspace/lib/helper.rb',
+		'/workspace/src/main.rb'
+	]);
+	expect(nestedPauses[1].locals).toEqual(
+		expect.arrayContaining([expect.objectContaining({ name: 'adjusted', value: '21' })])
+	);
+	expect(breakpointEvents).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				sourcePath: '/workspace/lib/helper.rb',
+				breakpoints: [
+					expect.objectContaining({ requestedLine: 3, line: 3, verified: true })
+				]
+			})
+		])
+	);
+	expect(output).toBe('22\n');
 }, 30_000);

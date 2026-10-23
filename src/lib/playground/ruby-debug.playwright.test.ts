@@ -46,7 +46,7 @@ it(
 				const sandbox = await binding.load('RUBY');
 				const source =
 					'def double(value)\n  result = value * 2\n  result + 1\nend\nvalue = STDIN.gets.to_i\nanswer = double(value)\nanswer += 2\nputs answer';
-				await binding.syncWorkspace('RUBY', [{ path: 'main.rb', content: source }]);
+				await binding.syncWorkspace('RUBY', [{ path: 'nested/main.rb', content: source }]);
 				const pauses: any[] = [];
 				let output = '',
 					evaluation = '',
@@ -68,24 +68,21 @@ it(
 							evaluation = await sandbox.debugEvaluate('value + 4');
 							await sandbox.debugCommand('stepInto');
 						} else if (pauses.length === 2) {
-							await sandbox.setBreakpoints([8]);
+							await sandbox.setBreakpoints([8], '/workspace/nested/main.rb');
 							await sandbox.debugCommand('stepOut');
-						} else
-							await sandbox.debugCommand(
-								pauses.length === 3 ? 'nextLine' : 'continue'
-							);
+						} else await sandbox.debugCommand('continue');
 					})().catch((error) => {
 						failure = String(error);
 						void sandbox.terminate();
 					});
 				};
 				try {
-					await sandbox.load(source, false, [], { activePath: 'main.rb' });
+					await sandbox.load(source, false, [], { activePath: 'nested/main.rb' });
 					await sandbox.run(source, false, false, undefined, [], {
 						debugMode: 'tracepoint',
 						pauseOnEntry: false,
 						breakpoints: [6],
-						activePath: 'main.rb',
+						activePath: 'nested/main.rb',
 						stdin: '7\n'
 					});
 					const stoppedSource = 'value = 1\nvalue += 1\nputs value';
@@ -133,6 +130,13 @@ it(
 			expect(result.failure).toBe('');
 			expect(result.evaluation).toBe('11');
 			expect(result.pauses.map((pause: any) => pause.line)).toEqual([6, 2, 7, 8]);
+			expect(result.pauses.map((pause: any) => pause.sourcePath)).toEqual([
+				'/workspace/nested/main.rb',
+				'/workspace/nested/main.rb',
+				'/workspace/nested/main.rb',
+				'/workspace/nested/main.rb'
+			]);
+			expect(result.pauses[3].reason).toBe('breakpoint');
 			expect(result.pauses[1].callStack.map((frame: any) => frame.functionName)).toEqual([
 				'double',
 				'<main>'
