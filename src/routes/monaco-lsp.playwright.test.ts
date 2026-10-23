@@ -1189,7 +1189,7 @@ async function waitForDiagnostics(page: Page, testCase: LspBrowserCase) {
 	);
 }
 
-async function waitForClangdDiagnosticsForCurrentVersion(page: Page) {
+async function waitForClangdDiagnosticsForCurrentVersion(page: Page, timeoutMs = 30_000) {
 	await page.waitForFunction(
 		() => {
 			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
@@ -1214,7 +1214,7 @@ async function waitForClangdDiagnosticsForCurrentVersion(page: Page) {
 			);
 		},
 		undefined,
-		{ timeout: 30_000 }
+		{ timeout: timeoutMs }
 	);
 	// Monaco consumes the same notification asynchronously after the transport records it.
 	await page.waitForTimeout(100);
@@ -1499,8 +1499,13 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource && testCase.language !== 'LEAN4') {
-		if (lspStatusKeyFor(testCase) === 'clangd')
-			await waitForClangdDiagnosticsForCurrentVersion(page);
+		if (lspStatusKeyFor(testCase) === 'clangd') {
+			// The first standard-library/SIMD preamble uses the case's startup budget.
+			await waitForClangdDiagnosticsForCurrentVersion(
+				page,
+				testCase.timeoutMs ?? browserTimeoutMs
+			);
+		}
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	await replaceEditorSource(page, testCase.source);
