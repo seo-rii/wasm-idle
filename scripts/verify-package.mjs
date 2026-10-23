@@ -50,7 +50,7 @@ export const scenarios = [
 		// Keep the bounded byte/package limits; shipped module/declaration pairs now
 		// total 438 root files + 271 dependency files + npm's installation metadata,
 		// including Java output, Python cache, debug configuration and compiled-module cache pairs.
-		// Combined integration measured 6,389,511 bytes; 104 KiB leaves 8,441 bytes.
+		// Combined integration measured 6,389,794 bytes; 104 KiB leaves 8,158 bytes.
 		budget: { maxBytes: 6 * MiB + 104 * 1024, maxFiles: 710, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
@@ -126,9 +126,9 @@ export const scenarios = [
 		packageNames: packages.map(([fileName]) =>
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
-		// Bounded allowance for the shared debugger trees, hover and breakpoint API.
-		// Full install measurement is 38.07 MiB; plugin and root byte limits stay fixed.
-		budget: { maxBytes: 38 * MiB + 128 * 1024, maxFiles: 3_250, maxPackages: 70 },
+		// Bounded allowance for shared debugger state and the current LSP/runtime graph.
+		// Combined integration measured 39,990,857 bytes; 152 KiB leaves 10,679 bytes.
+		budget: { maxBytes: 38 * MiB + 152 * 1024, maxFiles: 3_250, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

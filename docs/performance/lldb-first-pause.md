@@ -54,12 +54,12 @@ descriptive evidence; browser tiering, network/cache state and host load also af
 
 [Raw results](../../scripts/performance-results/lldb-first-pause-20261023.json) passed under Chromium 153.0.8010.12 with cross-origin isolation and no CSP violations. Both fresh sessions stopped at the correct `main.c:4` location with one frame, then published cumulative stack lengths 21/41/61/81/100. All 100 frame IDs were unique. Demand-loaded locals were `n = 0` for the top frame and `n = 1` for its caller, and both sessions continued to `done` and exit zero.
 
-| Fresh session | First pause (ms) | Scope metadata (ms) | Complete 100-frame stack (ms) |
-| ------------- | ---------------: | ------------------: | ----------------------------: |
-| 1             |          3,208.8 |             3,226.1 |                       3,360.6 |
-| 2             |          4,343.8 |             4,544.9 |                       4,707.5 |
+| Fresh session | First pause (ms) | Scope metadata (ms) | Capped 100-frame stack (ms) |
+| ------------- | ---------------: | ------------------: | --------------------------: |
+| 1             |          3,208.8 |             3,226.1 |                     3,360.6 |
+| 2             |          4,343.8 |             4,544.9 |                     4,707.5 |
 
-These clocks start before session startup and include preflight/runtime preparation. The first pause precedes complete stack details by 151.8 and 363.8 ms in these runs. This demonstrates progressive delivery in the new path, not a measured baseline speedup; additional paging requests and shared-host scheduling affect the later completion time. No cold/warm Module-cache claim is made. Gated unit tests separately verify that pending scopes/deep-stack responses cannot delay the initial pause or update a resumed/newer stop.
+These clocks start before session startup and include preflight/runtime preparation. The first pause precedes the capped stack details by 151.8 and 363.8 ms in these runs. This demonstrates progressive delivery in the new path, not a measured baseline speedup; additional paging requests and shared-host scheduling affect the later completion time. No cold/warm Module-cache claim is made. Gated unit tests separately verify that pending scopes/deep-stack responses cannot delay the initial pause or update a resumed/newer stop.
 
 The preview playground UI also passed the actual C data-breakpoint, C++ data-breakpoint and C trap callbacks under strict CSP. The fixture waits for non-empty scopes on the observed stopped frame ID. Broader cases are left to remote CI; missing local Container assets and a dev-worker setup failure were excluded from passing evidence.
 
@@ -91,3 +91,23 @@ Final Chromium 153.0.8010.12 evidence:
 
 The two producer runtimes remain disabled from Module caching by default. These results
 prove the supported callback and state isolation, not an end-to-end latency improvement.
+
+## Combined package installation size
+
+The current-main integration includes Java, Python, Rust and LLDB changes, along with the
+merged PostgreSQL LSP. Actual production npm installs measured the following unpacked
+sizes on 2026-10-23. These include dependency files and installation metadata; they do not
+measure compressed browser downloads or demonstrate network savings.
+
+| Installation                 |      Bytes | Files | Packages |
+| ---------------------------- | ---------: | ----: | -------: |
+| Root                         |  6,389,794 |   710 |        5 |
+| Terminal                     | 16,802,907 | 1,305 |       28 |
+| Debug                        |  7,294,907 | 1,144 |       21 |
+| LSP                          |  4,527,126 |   651 |        6 |
+| All public packages/adapters | 39,990,857 | 2,993 |       61 |
+
+The root guard remains limited to 710 files and six packages. Its 6 MiB + 104 KiB byte
+limit leaves 8,158 bytes of headroom. The aggregate guard uses 38 MiB + 152 KiB, leaving
+10,679 bytes of headroom; this is a bounded 24 KiB increase from the prior allowance.
+The separate plugin byte limits and aggregate file/package limits are unchanged.
