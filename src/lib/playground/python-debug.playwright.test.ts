@@ -55,7 +55,7 @@ describe.skipIf(!enabled)('real Python live breakpoints in Chromium', () => {
 		expect(scopeEnd).toBeGreaterThan(scopeStart);
 		const scopeView = compile(
 			`<script>let { debug } = $props(); let debugScopeOpen = $state({});</script>
-{#snippet debugVariableRows(variables)}{#each variables as variable (variable.name)}<li>{variable.name}: {variable.value}</li>{/each}{/snippet}
+{#snippet debugNodeRows(nodes)}{#each nodes as node (node.path)}<li>{node.variable.name}: {node.variable.value}</li>{/each}{/snippet}
 ${pageSource.slice(scopeStart, scopeEnd)}`,
 			{ generate: 'client', filename: 'PythonDebugScopes.svelte' }
 		).js.code;
