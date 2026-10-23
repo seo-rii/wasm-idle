@@ -21,6 +21,8 @@ export interface InitialWorkspaceSelection<Language extends string> {
 	source: 'share' | 'query' | 'snapshot' | 'legacy' | 'default';
 	snapshot: Record<string, unknown> | null;
 	storageKey: string;
+	/** Exact bytes read for this identity, used to detect changes before the first save. */
+	storedSnapshot: string | null;
 	/** Replace the visible URL only after the initial state has been applied. */
 	replacementUrl: URL | null;
 	overrides: InitialWorkspaceOverrides;
@@ -36,6 +38,8 @@ export interface InitialWorkspaceOptions<Language extends string> {
 	languageForPath?: (path: string) => Language | null;
 	fallbackLanguage: Language;
 	createWorkspaceId?: () => ReturnType<typeof crypto.randomUUID>;
+	/** Without cross-tab locks, each opening needs its own writable storage identity. */
+	isolateStorage?: boolean;
 }
 
 function decodeBase64Url(value: string | null) {
@@ -58,6 +62,20 @@ function decodeBase64Url(value: string | null) {
 export function resolveInitialWorkspace<Language extends string>(
 	options: InitialWorkspaceOptions<Language>
 ): InitialWorkspaceSelection<Language> {
+	const selection = selectInitialWorkspace(options);
+	if (!options.isolateStorage || selection.replacementUrl) return selection;
+	const replacementUrl = createSharedWorkspaceUrl(options.url, options.createWorkspaceId?.());
+	return {
+		...selection,
+		storageKey: workspaceStorageKey(replacementUrl),
+		storedSnapshot: null,
+		replacementUrl
+	};
+}
+
+function selectInitialWorkspace<Language extends string>(
+	options: InitialWorkspaceOptions<Language>
+): InitialWorkspaceSelection<Language> {
 	const { url, normalizeLanguage, fallbackLanguage } = options;
 	const emptyOverrides: InitialWorkspaceOverrides = {
 		code: null,
@@ -73,6 +91,7 @@ export function resolveInitialWorkspace<Language extends string>(
 		source: 'default',
 		snapshot: null,
 		storageKey: workspaceStorageKey(url),
+		storedSnapshot: null,
 		replacementUrl: null,
 		overrides: emptyOverrides,
 		unrestoredWorkspace: null,
@@ -143,6 +162,7 @@ export function resolveInitialWorkspace<Language extends string>(
 		}
 	};
 	const stored = read(base.storageKey);
+	base.storedSnapshot = stored;
 	if (stored !== null) {
 		try {
 			const snapshot: unknown = JSON.parse(stored);

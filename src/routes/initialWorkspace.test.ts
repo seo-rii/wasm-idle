@@ -16,7 +16,7 @@ function snapshot(language = 'CPP') {
 	const path = language === 'PYTHON' ? 'main.py' : 'main.cpp';
 	return { version: 6, language, activePath: path, files: [{ path, content: 'local source' }] };
 }
-function initial(href: string, values: Record<string, string> = {}) {
+function initial(href: string, values: Record<string, string> = {}, isolateStorage = false) {
 	const readStorage = vi.fn((key: string) => values[key] ?? null);
 	const selection = resolveInitialWorkspace({
 		url: new URL(href, 'https://example.test/wasm-idle/'),
@@ -24,7 +24,8 @@ function initial(href: string, values: Record<string, string> = {}) {
 		normalizeLanguage,
 		languageForPath: (path) => (path.endsWith('.py') ? 'PYTHON' : null),
 		fallbackLanguage: 'CPP' as Language,
-		createWorkspaceId: () => workspaceId
+		createWorkspaceId: () => workspaceId,
+		isolateStorage
 	});
 	return { selection, readStorage };
 }
@@ -36,6 +37,35 @@ function encoded(value: string) {
 }
 
 describe('initial workspace selection before the editor and container mount', () => {
+	it('forks restored work into a fresh identity when cross-tab locks are unavailable', () => {
+		const original = snapshot('PYTHON');
+		for (const href of ['', `?workspace=${previousWorkspaceId}`]) {
+			const key = href
+				? `${WORKSPACE_STORAGE_KEY}:${previousWorkspaceId}`
+				: WORKSPACE_STORAGE_KEY;
+			const { selection } = initial(href, { [key]: JSON.stringify(original) }, true);
+			expect(selection.snapshot).toEqual(original);
+			expect(selection.storageKey).toBe(`${WORKSPACE_STORAGE_KEY}:${workspaceId}`);
+			expect(selection.storedSnapshot).toBeNull();
+			expect(selection.replacementUrl?.searchParams.get('workspace')).toBe(workspaceId);
+		}
+	});
+
+	it('retains already isolated URL imports when locks are unavailable', () => {
+		const { selection, readStorage } = initial('?lang=python&code=print(1)', {}, true);
+		expect(selection.source).toBe('query');
+		expect(selection.storageKey).toBe(`${WORKSPACE_STORAGE_KEY}:${workspaceId}`);
+		expect(selection.overrides.code).toBe('print(1)');
+		expect(selection.storedSnapshot).toBeNull();
+		expect(readStorage).not.toHaveBeenCalled();
+	});
+	it('preserves the exact restored snapshot as the first-save conflict baseline', () => {
+		const raw = JSON.stringify(snapshot(), null, 2);
+		expect(initial('', { [WORKSPACE_STORAGE_KEY]: raw }).selection.storedSnapshot).toBe(raw);
+		expect(
+			initial('?lang=python', { [WORKSPACE_STORAGE_KEY]: raw }).selection.storedSnapshot
+		).toBeNull();
+	});
 	it('uses an explicit URL language before a previously saved C++ workspace', () => {
 		const { selection, readStorage } = initial('?lang=python', {
 			[WORKSPACE_STORAGE_KEY]: JSON.stringify(snapshot()),
