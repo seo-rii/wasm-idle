@@ -5,6 +5,7 @@ const TEST_RUNTIME_ASSETS = {
 	lua: { moduleUrl: '/wasm-lua/index.js' }
 } satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
+import { readLuaDebugCommand } from './luaDebug';
 
 const workerInstances: MockWorker[] = [];
 let suppressAutoLoadAck = false;
@@ -65,6 +66,123 @@ describe('Lua sandbox', () => {
 	afterEach(() => {
 		vi.useRealTimers();
 	});
+
+	it('keeps a native VM stop alive while paused and resumes the remaining execution deadline', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Lua();
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('local value = 7\nprint(value)', false, false, undefined, [], {
+			debugMode: 'mobdebug',
+			limits: { compileTimeoutMs: 100, runTimeoutMs: 100 }
+		});
+		const message = worker.postMessage.mock.lastCall![0];
+		const events: any[] = [];
+		sandbox.ondebug = (event) => events.push(event);
+		worker.onmessage?.({
+			data: {
+				luaDebug: {
+					type: 'pause',
+					line: 2,
+					sourcePath: 'main.lua',
+					reason: 'entry',
+					frames: [
+						{
+							functionName: '<main>',
+							sourcePath: 'main.lua',
+							line: 2,
+							locals: [{ name: 'value', type: 'number', value: '7' }]
+						}
+					]
+				}
+			}
+		} as MessageEvent<any>);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(events[0]).toMatchObject({
+			type: 'pause',
+			sourcePath: '/workspace/main.lua',
+			locals: [{ name: 'value', type: 'number', value: '7' }]
+		});
+		await expect(sandbox.debugVariables(1, 0, 1)).resolves.toEqual([
+			{ name: 'value', type: 'number', value: '7' }
+		]);
+		await expect(sandbox.debugVariables(1, 1, 1)).resolves.toEqual([]);
+		await expect(sandbox.debugFrameScopes(1)).resolves.toEqual([
+			expect.objectContaining({ namedVariables: 1 })
+		]);
+		sandbox.debugCommand('nextLine');
+		expect(readLuaDebugCommand(message.debugBuffer, false, () => {})).toBe('OVER\n');
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		expect(events.map((event) => event.type)).toEqual(['pause', 'resume', 'stop']);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('rejects an obsolete evaluation when execution resumes and ignores its late result', async () => {
+		const sandbox = new Lua();
+		await sandbox.load(TEST_RUNTIME_ASSETS);
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('print(7)', false, false, undefined, [], {
+			debugMode: 'mobdebug'
+		});
+		worker.onmessage?.({
+			data: {
+				luaDebug: {
+					type: 'pause',
+					line: 1,
+					sourcePath: 'main.lua',
+					reason: 'entry',
+					frames: []
+				}
+			}
+		} as MessageEvent<any>);
+		const evaluation = sandbox.debugEvaluate('7 + 1').catch((error) => error);
+		sandbox.debugCommand('continue');
+		await expect(evaluation).resolves.toMatchObject({ message: 'Lua debugger resumed.' });
+		worker.onmessage?.({
+			data: { luaDebug: { type: 'evaluate', id: 1, value: '8' } }
+		} as MessageEvent<any>);
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
+	it.each(['complete', 'cancel'])(
+		'settles %s even when the debugger stop listener throws',
+		async (outcome) => {
+			const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+			const sandbox = new Lua();
+			try {
+				await sandbox.load(TEST_RUNTIME_ASSETS);
+				const worker = workerInstances[0];
+				worker.postMessage.mockImplementationOnce(() => undefined);
+				const running = sandbox.run('print(7)', false, false, undefined, [], {
+					debugMode: 'mobdebug'
+				});
+				sandbox.ondebug = (event) => {
+					if (event.type === 'stop') throw new Error('listener failure');
+				};
+				if (outcome === 'cancel') {
+					const rejected = expect(running).rejects.toThrow('requested stop');
+					expect(() => sandbox.terminate(new Error('requested stop'))).not.toThrow();
+					await rejected;
+					expect(worker.terminate).toHaveBeenCalledOnce();
+					await sandbox.load(TEST_RUNTIME_ASSETS);
+				} else {
+					worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+					await expect(running).resolves.toBe(true);
+				}
+				await expect(sandbox.run('print(8)', false)).resolves.toBe(true);
+				expect(report).toHaveBeenCalledOnce();
+			} finally {
+				await sandbox.dispose();
+				report.mockRestore();
+			}
+		}
+	);
 
 	it('loads the Lua worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Lua();

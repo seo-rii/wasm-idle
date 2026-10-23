@@ -1,0 +1,7 @@
+{
+	"repository": "https://github.com/pkulchenko/MobDebug",
+	"revision": "4cf97f9555c8e30e189eb53034daf773bd619955",
+	"source": "https://raw.githubusercontent.com/pkulchenko/MobDebug/4cf97f9555c8e30e189eb53034daf773bd619955/src/mobdebug.lua",
+	"sha256": "57a3f1e519d82e994d0952b669a75bd3dc643db6b4348402b998df15f1e3cb2b",
+	"license": "MIT"
+}

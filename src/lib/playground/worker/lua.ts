@@ -1,4 +1,6 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { readLuaDebugCommand } from '$lib/playground/luaDebug';
+import type { LuaDebugEvent } from '../../../../runtimes/wasm-lua/src/mobdebug';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import {
 	buildFennelCompileChunk,
@@ -24,6 +26,12 @@ let runtimePromise: Promise<{
 			stdin?: () => string | null;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
+			debug?: {
+				breakpoints: number[];
+				pauseOnEntry: boolean;
+				readCommand: (blocking: boolean) => string | null;
+				onEvent: (event: LuaDebugEvent) => void;
+			};
 		}
 	) => Promise<{
 		exitCode: number | null;
@@ -202,8 +210,24 @@ self.onmessage = async (event: { data: any }) => {
 
 		const hasInitialStdin = typeof stdin === 'string';
 		let initialStdin: string | null = hasInitialStdin ? stdin : null;
+		if (event.data.debug && fennelSource)
+			throw new Error('Fennel source debugging is not supported.');
 		const execution = await runtime.executeBrowserLuaArtifact(compiledArtifact, {
 			args,
+			...(event.data.debug
+				? {
+						debug: {
+							breakpoints: event.data.breakpoints ?? [],
+							pauseOnEntry: event.data.pauseOnEntry !== false,
+							readCommand: (blocking: boolean) =>
+								readLuaDebugCommand(event.data.debugBuffer, blocking, () =>
+									postMessage({ debugCommandConsumed: true })
+								),
+							onEvent: (debugEvent: LuaDebugEvent) =>
+								postMessage({ luaDebug: debugEvent })
+						}
+					}
+				: {}),
 			onReady: () =>
 				postMessage({
 					progress: {
