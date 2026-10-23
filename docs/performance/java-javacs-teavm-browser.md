@@ -12,7 +12,7 @@ semantic results, including new documents without a source snapshot and Monaco's
 null-root initialization. The pinned producer recipe, native platform controls
 and XML documentation adapter are implemented. A clean build in a separate
 physical source directory reproduces the final five producer artifacts and all
-45 notice files byte for byte.
+46 notice files byte for byte.
 
 ## Source identities
 
@@ -127,13 +127,31 @@ handle.dispose();
 `initialFiles` is a source snapshot available to upstream javacs before
 `initialize` scans the workspace. Entries must be local `file:///workspace/`
 URIs. Canonical URI case preserves Java file names when a client lowercases a
-request URI. Ambiguous case and duplicate decoded paths are rejected. The total
+request URI. Ambiguous case and duplicate normalized decoded paths, including
+repeated slashes and equivalent percent encodings, are rejected before Worker
+creation. The first `didOpen` reserves its filename case for the session;
+conflicting later opens emit a type-1 `window/logMessage` notification (or
+`-32602` for requests), preserving the existing document and running Worker.
+Lowercased change/feature requests and reopening the same client URI continue
+to resolve to the original filename. The total
 source-text limit is 16 MiB of UTF-8 bytes. This snapshot also permits feature
 requests that a client sends before `didOpen`.
 
 Monaco's initialize request contains a null `rootUri` and no workspace folders.
 The profile requires the transport to supply its known `file:///workspace` root
 before invoking the unchanged upstream initialize handler.
+The playground includes all text Java sources in this snapshot, with the active
+model's latest contents taking precedence. Sibling changes, additions, removals
+and tab switches refresh the server snapshot; active-file edits retain normal
+LSP document synchronization.
+Monaco's marker conversion omits diagnostic metadata in code-action requests.
+The Worker retains the original published diagnostics and restores missing
+fields only for matching document, range, message and severity. Explicit client
+fields are preserved, and document changes invalidate old diagnostic snapshots.
+Diagnostics without a code that no longer match a current published diagnostic
+are excluded from the request context. This handles stale markers sent during
+rapid typing without guessing their old codes. The request range and other
+context fields still reach the original upstream code-action handler.
 
 The provider validates its HTTP(S) asset directory and receipts before starting
 the Worker. The delivery set is `javacs-runtime.mjs`, `javacs.wasm` and
@@ -203,9 +221,12 @@ The real browser gate is
 [`scripts/java-teavm-lsp.browser.test.mjs`](../../scripts/java-teavm-lsp.browser.test.mjs).
 It bundles the public SDK and its actual Worker, serves the prepared assets on
 loopback, and launches Chromium with the application strict CSP and COOP/COEP.
-The gate compares the native semantic results, exercises three isolated sessions
+The gate compares the native semantic results in three isolated sessions
 (including document creation without an initial source snapshot and Monaco's
-null workspace-root initialization), and checks
+null workspace-root initialization). A fourth session checks dynamic case
+collisions, lowercased snapshot opens, change/hover aliases and close/reopen
+ownership. Duplicate initial path aliases must create no Worker or asset fetch.
+The gate also checks
 verified-cache reuse, repeated disposal, startup cancellation/timeout,
 tampered Wasm rejection and complete Worker cleanup. It also requires zero JVM
 iframes and zero page errors. It is opt-in because it needs built native assets
@@ -216,9 +237,15 @@ WASM_IDLE_RUN_REAL_BROWSER_LSP=1 \
   node --test scripts/java-teavm-lsp.browser.test.mjs
 ```
 
-The strict public SDK gate passed again on the latest main baseline
-(`0fdc77e3`) on 2026-10-23 with Chromium `153.0.8010.12`. Its three sessions
-match all 19, 8 and 19 native result groups. The qualified delivery receipts are:
+The strict public SDK gate passed after the review fixes against main
+baseline `0fdc77e3` on 2026-10-23 with Chromium `153.0.8010.12`. Three sessions
+match all 19, 8 and 19 native result groups; a fourth checks URI ownership and
+diagnostic metadata. Both the original diagnostic and Monaco's reduced payload
+produce the native `Import 'java.util.UUID'` edit. An explicitly supplied client
+diagnostic code remains unchanged. Delayed uncoded markers after a source change
+or diagnostic clear still reach the original cursor handler with an empty
+diagnostic context and return no stale edit.
+The qualified delivery receipts are:
 
 | Asset                | Bytes      | SHA-256                                                            |
 | -------------------- | ---------- | ------------------------------------------------------------------ |
@@ -228,9 +255,10 @@ match all 19, 8 and 19 native result groups. The qualified delivery receipts are
 
 | Session                          | Native result groups | Asset requests | Startup | Protocol |
 | -------------------------------- | -------------------- | -------------- | ------- | -------- |
-| Project, initial source snapshot | 19                   | 3              | 5253 ms | 1635 ms  |
-| Default package, fresh Worker    | 8                    | 0              | 4155 ms | 1254 ms  |
-| New documents, Monaco null root  | 19                   | 0              | 3685 ms | 1278 ms  |
+| Project, initial source snapshot | 19                   | 3              | 3279 ms | 1577 ms  |
+| Default package, fresh Worker    | 8                    | 0              | 2314 ms | 467 ms   |
+| New documents, Monaco null root  | 19                   | 0              | 1549 ms | 659 ms   |
+| URI and metadata boundaries      | —                    | 0              | 1732 ms | 546 ms   |
 
 These are observations from one local run under the shared machine's load.
 Startup includes SDK validation, asset loading/cache reads, Wasm initialization
@@ -240,10 +268,14 @@ Every session has fresh compiler state despite verified-byte cache reuse.
 
 The same run passed pre-start and in-startup cancellation, a real silent-Worker
 250 ms startup timeout, a one-bit change to the real Wasm rejected by SHA-256,
-and repeated disposal. All six created Workers terminated, with zero live
+and repeated disposal. All seven created Workers terminated, with zero live
 Workers, page errors or JVM iframes at completion. The gate writes full JSON-RPC
 replies, receipts, timings and lifecycle evidence to
-`.cache/java-teavm-acceptance/browser/browser-evidence.json`.
+`.cache/java-teavm-acceptance/browser/browser-evidence.json`. The review-fix run
+is preserved as
+`browser-evidence-stale-diagnostics-20261023T145436Z.json` in the same
+directory. The focused source snapshot, dynamic URI and diagnostic metadata unit
+tests pass 80 cases, including 23 metadata restoration and invalidation cases.
 
 Native platform controls additionally pass 30 path/URI, directory and
 stream-transfer checks against JDK APIs. The bounded source-I/O comparison passes
@@ -258,6 +290,9 @@ keyboard, observes the original type diagnostic, uses keyboard undo to restore
 the source and clear markers, and displays `int answer` in Monaco's hover. It
 then disables LSP and verifies the disabled lifecycle state. The browser has a
 single frame, and the gate closes its Chromium, Workers and preview server.
+The Java case also checks cross-file `Helper.VALUE` completion, a sibling type
+change and restoration across tabs, and sibling deletion/recreation while
+`Main.java` stays open.
 This coverage is in
 [`monaco-lsp.playwright.test.ts`](../../src/routes/monaco-lsp.playwright.test.ts).
 
@@ -301,6 +336,12 @@ precompressed. This build wiring does not publish or deploy the page.
 The producer downloads its pinned Debian JDK and Gradle distribution into a
 private `.cache/javacs-teavm/` toolchain. It checks archive lengths and SHA-256,
 the actual JDK version, all seven input JDK modules and restored Gradle files.
+It replaces Debian's host-dependent `cacerts` link with a private truststore of
+142 Mozilla roots from a size/SHA-256-pinned Debian CA package. Missing links,
+external links and corrupt cached stores are repaired without reading or
+changing host certificates. Four truststore regressions pass, and strict TeaVM
+dependency resolution succeeds with empty Gradle user/project caches. The store
+serves build HTTPS transport and is excluded from the browser artifact receipts.
 SDK ZIP packaging also uses a private, authenticated Debian zlib 1.2.13 and
 checks its actual runtime version, keeping archive output independent of the
 host distribution's deflater.
@@ -324,12 +365,13 @@ A change to the producer, its inputs or the host CSP adapter requires a reviewed
 lock update. A successful build and asset sync remain separate from the strict
 SDK semantic gate and the independent rebuild comparison.
 
-The final independent build completed successfully in 2 min 23 s. Its clean
+The final independent build completed successfully in 2 min 22 s. Its clean
 physical source copy reproduced the raw loader, Wasm, JDK ZIP, JavaScript-body
-inventory and provenance, and all 45 notice files were identical. The final
-`provenance.json` is 11223 bytes with SHA-256
-`1a5228db84f0d8d2bad2851b13c43782f7dca64c0f4ac5c1c52fff9fc877f649`.
-The comparison evidence is `.cache/javacs-teavm/repro-evidence.json`; the raw
+inventory and provenance, and all 46 notice files were identical. The final
+`provenance.json` is 12633 bytes with SHA-256
+`3a5829d7c0b20ffe6c1f51b4576f05fcce9eff526112c371da4222675f88b837`.
+The comparison evidence is
+`.cache/javacs-teavm/repro-evidence-truststore-20261023.json`; the raw
 loader's receipt differs from the CSP-transformed delivery receipt above by
 design. This comparison uses the same pinned toolchain and reviewed recipe.
 
@@ -345,6 +387,8 @@ publishing prepared browser artifacts.
 TeaVM and the adapted TeaVM compiler-platform hooks are Apache-2.0. Gson is
 Apache-2.0. Protobuf and JZlib's Java inflater have BSD-3-Clause notices. Native
 zlib is a private build-only packaging dependency with its copyright supplied.
+The pinned Debian/Mozilla certificate copyright is also included; the generated
+build-transport truststore is excluded from the browser assets.
 The Worker XML
 adapter uses ISC-licensed `saxes` and MIT-licensed `@xmldom/xmldom`.
 
@@ -354,3 +398,9 @@ and the original OpenJDK StringJoiner source in `build/dist/notices/`. See
 [`THIRD_PARTY_NOTICES.md`](../../producers/javacs-teavm/THIRD_PARTY_NOTICES.md)
 for the source correspondence. Preserve that material with the separate asset
 distribution. The npm SDK remains code-only.
+All six fresh package-install scenarios pass, including the standalone
+container consumer's TypeScript check with Java runtime configuration and
+without installing `@wasm-idle/lsp`. Production install budgets are unchanged.
+After the diagnostic metadata change, the affected LSP and aggregate scenarios
+pass again at 5,418,922 bytes / 820 files / 9 packages and 41,808,289 bytes /
+3,313 files / 65 packages, respectively.
