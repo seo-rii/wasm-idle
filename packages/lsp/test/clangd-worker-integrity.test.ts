@@ -148,76 +148,105 @@ describe('clangd worker asset integrity', () => {
 		expect(scope.messages).not.toContainEqual(expect.objectContaining({ type: 'ready' }));
 	});
 
-	it('supplies the verified Module to pthread initialization and mounts all headers before main', async () => {
-		const module = await WebAssembly.compile(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
-		const headers = {
-			schemaVersion: 1,
-			version: 'fixture',
-			targetTriple: 'wasm32-wasi',
-			resourceDir: '/lib/clang/22',
-			files: {
-				'/usr/include/wasm32-wasi/stdio.h': 'C header',
-				'/usr/include/c++/v1/vector': 'C++ header',
-				'/usr/include/wasm32-wasi/noeh/c++/v1/__config_site': 'target configuration',
-				'/lib/clang/22/include/stddef.h': 'resource header'
-			}
-		};
-		const files = new Map<string, Uint8Array | string>();
-		const receiveInstance = vi.fn();
-		const runtime = {
-			FS: {
-				mkdirTree: vi.fn(),
-				analyzePath: (path: string) => ({ exists: files.has(path) }),
-				readFile: (path: string) => files.get(path),
-				writeFile: (path: string, contents: Uint8Array | string) =>
-					files.set(path, contents)
-			},
-			callMain: vi.fn(() => {
-				for (const [path, content] of Object.entries(headers.files))
-					expect(files.get(path)).toBe(content);
-				for (const document of String(files.get('/workspace/.clangd')).split('\n---\n')) {
-					const flags: string[] = JSON.parse(document).CompileFlags.Add;
-					expect(flags[flags.indexOf('-resource-dir') + 1]).toBe('/lib/clang/22');
+	it.each([
+		[
+			'pinned LLVM 22',
+			'f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c',
+			'/lib/clang/22',
+			true
+		],
+		['custom compiler', 'a'.repeat(64), '/lib/clang/22', false],
+		[
+			'custom header profile',
+			'f712eb98cba42f560121a09b655567a5fbc900e6568a29a9c6949d81a17fec5c',
+			'/lib/clang/17',
+			false
+		]
+	] as const)(
+		'supplies the verified Module and mounts matching %s headers before main',
+		async (_label, digest, resourceDir, expectedSimd) => {
+			const module = await WebAssembly.compile(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+			const headers = {
+				schemaVersion: 1,
+				version: 'fixture',
+				targetTriple: 'wasm32-wasi',
+				resourceDir,
+				files: {
+					'/usr/include/wasm32-wasi/stdio.h': 'C header',
+					'/usr/include/c++/v1/vector': 'C++ header',
+					'/usr/include/wasm32-wasi/noeh/c++/v1/__config_site': 'target configuration',
+					[`${resourceDir}/include/stddef.h`]: 'resource header'
 				}
-			})
-		};
-		const factory = vi.fn(
-			async (options: {
-				instantiateWasm: (
-					imports: WebAssembly.Imports,
-					receive: typeof receiveInstance
-				) => WebAssembly.Exports;
-			}) => {
-				const exports = options.instantiateWasm({}, receiveInstance);
-				expect(receiveInstance.mock.calls[0][0]).toBeInstanceOf(WebAssembly.Instance);
-				expect(receiveInstance.mock.calls[0][1]).toBe(module);
-				expect(exports).toBe(receiveInstance.mock.calls[0][0].exports);
-				return runtime;
-			}
-		);
-		vi.stubGlobal('__testClangdFactory', factory);
-		vi.mocked(URL.createObjectURL).mockReturnValue(
-			'data:text/javascript,export default async (options) => globalThis.__testClangdFactory(options);'
-		);
-		await scope.dispatch({
-			type: 'init',
-			baseUrl: 'https://assets.example.com/clangd/',
-			assets: {
-				clangdJs: new ArrayBuffer(0),
-				clangdModule: module,
-				clangdWasmBytes: 8,
-				clangdWasmSha256: 'a'.repeat(64),
-				clangdHeaders: headers
-			}
-		});
-		expect(factory).toHaveBeenCalledOnce();
-		expect(receiveInstance).toHaveBeenCalledOnce();
-		expect(runtime.callMain).toHaveBeenCalledWith([]);
-		expect(mocks.decompressGzip).not.toHaveBeenCalled();
-		expect(mocks.verifyRuntimeAssetIntegrity).not.toHaveBeenCalled();
-		expect(scope.messages).toContainEqual({ type: 'ready', value: 8 });
-		expect(scope.messages).not.toContainEqual(expect.objectContaining({ type: 'error' }));
-	});
+			};
+			const files = new Map<string, Uint8Array | string>();
+			const receiveInstance = vi.fn();
+			const runtime = {
+				FS: {
+					mkdirTree: vi.fn(),
+					analyzePath: (path: string) => ({ exists: files.has(path) }),
+					readFile: (path: string) => files.get(path),
+					writeFile: (path: string, contents: Uint8Array | string) =>
+						files.set(path, contents)
+				},
+				callMain: vi.fn(() => {
+					for (const [path, content] of Object.entries(headers.files))
+						expect(files.get(path)).toBe(content);
+					for (const document of String(files.get('/workspace/.clangd')).split(
+						'\n---\n'
+					)) {
+						const flags: string[] = JSON.parse(document).CompileFlags.Add;
+						expect(flags[flags.indexOf('-resource-dir') + 1]).toBe(resourceDir);
+						expect(flags.includes('-msimd128')).toBe(expectedSimd);
+					}
+					for (const header of ['immintrin.h', 'xmmintrin.h', 'wasm_simd128.h']) {
+						const contents = files.get(`/usr/include/wasm-idle/simd/${header}`);
+						if (expectedSimd) {
+							expect(contents).toBeInstanceOf(Uint8Array);
+							expect((contents as Uint8Array).byteLength).toBeGreaterThan(0);
+						} else {
+							expect(contents).toBeUndefined();
+						}
+					}
+				})
+			};
+			const factory = vi.fn(
+				async (options: {
+					instantiateWasm: (
+						imports: WebAssembly.Imports,
+						receive: typeof receiveInstance
+					) => WebAssembly.Exports;
+				}) => {
+					const exports = options.instantiateWasm({}, receiveInstance);
+					expect(receiveInstance.mock.calls[0][0]).toBeInstanceOf(WebAssembly.Instance);
+					expect(receiveInstance.mock.calls[0][1]).toBe(module);
+					expect(exports).toBe(receiveInstance.mock.calls[0][0].exports);
+					return runtime;
+				}
+			);
+			vi.stubGlobal('__testClangdFactory', factory);
+			vi.mocked(URL.createObjectURL).mockReturnValue(
+				'data:text/javascript,export default async (options) => globalThis.__testClangdFactory(options);'
+			);
+			await scope.dispatch({
+				type: 'init',
+				baseUrl: 'https://assets.example.com/clangd/',
+				assets: {
+					clangdJs: new ArrayBuffer(0),
+					clangdModule: module,
+					clangdWasmBytes: 8,
+					clangdWasmSha256: digest,
+					clangdHeaders: headers
+				}
+			});
+			expect(factory).toHaveBeenCalledOnce();
+			expect(receiveInstance).toHaveBeenCalledOnce();
+			expect(runtime.callMain).toHaveBeenCalledWith([]);
+			expect(mocks.decompressGzip).not.toHaveBeenCalled();
+			expect(mocks.verifyRuntimeAssetIntegrity).not.toHaveBeenCalled();
+			expect(scope.messages).toContainEqual({ type: 'ready', value: 8 });
+			expect(scope.messages).not.toContainEqual(expect.objectContaining({ type: 'error' }));
+		}
+	);
 
 	it.each([0, 128 * 1024 * 1024 + 1, 1.5])(
 		'rejects invalid verified Module metadata before importing JS: %s bytes',
@@ -296,7 +325,20 @@ describe('clangd worker asset integrity', () => {
 					writeFile: (path: string, contents: Uint8Array | string) =>
 						files.set(path, contents)
 				},
-				callMain: vi.fn()
+				callMain: vi.fn(() => {
+					for (const document of String(files.get('/workspace/.clangd')).split(
+						'\n---\n'
+					)) {
+						const flags: string[] = JSON.parse(document).CompileFlags.Add;
+						expect(flags.includes('-msimd128')).toBe(expectedOverlay);
+					}
+					expect(files.has('/usr/include/wasm-idle/simd/immintrin.h')).toBe(
+						expectedOverlay
+					);
+					expect(files.has('/usr/include/wasm-idle/simd/wasm_simd128.h')).toBe(
+						expectedOverlay
+					);
+				})
 			};
 			vi.stubGlobal('__testClangdRuntime', runtime);
 			vi.mocked(URL.createObjectURL).mockReturnValue(

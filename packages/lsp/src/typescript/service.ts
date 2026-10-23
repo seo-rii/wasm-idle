@@ -275,11 +275,23 @@ export function createTypeScriptWorkerService(
 						undefined,
 						entry.data
 					);
+					const replacementSpan = entry.replacementSpan ??
+						completions.optionalReplacementSpan ?? { start: offset, length: 0 };
 					return {
 						label: entry.name,
 						kind: completionKind(entry.kind),
 						sortText: entry.sortText,
 						insertText: entry.insertText,
+						textEdit: {
+							range: {
+								start: positionAt(document.text, replacementSpan.start),
+								end: positionAt(
+									document.text,
+									replacementSpan.start + replacementSpan.length
+								)
+							},
+							newText: entry.insertText ?? entry.name
+						},
 						detail: details ? displayParts(details.displayParts) : undefined,
 						documentation: details ? displayParts(details.documentation) : undefined
 					};

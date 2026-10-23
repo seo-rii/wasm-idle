@@ -212,14 +212,17 @@ export class ContainerRuntimeAdapter {
 		if (!this.#container) throw new Error('Container not attached');
 		return this.#container.fs;
 	}
-	directory(language: string) {
+	private directoryPath(language: string) {
 		if (
 			typeof language !== 'string' ||
 			!/^[A-Z][A-Z0-9_]{0,63}$/u.test(language) ||
 			!normalizeLanguageId(language)
 		)
 			throw new TypeError('Unsupported workspace language');
-		const path = `/workspace/${language}`;
+		return `/workspace/${language}`;
+	}
+	directory(language: string) {
+		const path = this.directoryPath(language);
 		this.fs.mkdir(path, { recursive: true });
 		return path;
 	}
@@ -263,7 +266,7 @@ export class ContainerRuntimeAdapter {
 		expectedBaseFiles?: readonly WorkspaceFile[],
 		project?: readonly ContainerWorkspaceFileMetadata[]
 	) {
-		const path = this.directory(language);
+		const path = this.directoryPath(language);
 		const validated = validateWorkspaceFiles(files, {
 			maxFiles: 2048,
 			maxFileBytes: 16 * 1024 * 1024,
@@ -351,33 +354,20 @@ export class ContainerRuntimeAdapter {
 						`Workspace changed before deleting ${file}`
 					);
 		}
-		for (const previous of deletions) {
-			try {
-				this.fs.unlink(previous, { root: path, cwd: path });
-			} catch (error) {
-				if ((error as { code?: string }).code !== 'ENOENT') throw error;
-			}
-		}
-		for (const file of validated) {
-			// An unchanged editor buffer must not overwrite a newer shell revision.
-			if (base?.has(file.path) && equal(base.get(file.path), asBytes(file.content))) continue;
-			const parent = file.path.split('/').slice(0, -1).join('/');
-			if (parent) this.fs.mkdir(parent, { recursive: true, root: path, cwd: path });
-			const bytes =
-				typeof file.content === 'string' ? encoder.encode(file.content) : file.content;
-			let previous: Uint8Array | undefined;
-			try {
-				previous = this.fs.readFile(file.path, { root: path, cwd: path });
-			} catch (error) {
-				if ((error as { code?: string }).code !== 'ENOENT') throw error;
-			}
-			if (
-				previous?.length === bytes.length &&
-				previous.every((byte, index) => byte === bytes[index])
-			)
-				continue;
-			this.fs.writeFile(file.path, bytes, { root: path, cwd: path });
-		}
+		this.fs.applyFileChanges(
+			{
+				remove: deletions,
+				write: validated
+					// Unchanged editor buffers must not overwrite newer shell revisions.
+					.filter(
+						(file) =>
+							!base?.has(file.path) ||
+							!equal(base.get(file.path), asBytes(file.content))
+					)
+					.map((file) => ({ path: file.path, bytes: asBytes(file.content) }))
+			},
+			{ root: path, cwd: path, createRoot: true }
+		);
 		this.#published.set(language, publishedNext);
 	}
 	readWorkspaceDelta(language: string, since?: number): ContainerWorkspaceDelta {

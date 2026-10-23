@@ -6,6 +6,15 @@ import {
 	OBJECTIVE_C_RUNTIME_FLAGS
 } from '@wasm-idle/llvm-core/core/clang-profile';
 
+const systemIncludePaths = (flags: string[]) =>
+	flags.flatMap((flag, index) =>
+		flag === '-isystem'
+			? [flags[index + 1]]
+			: flag.startsWith('-isystem')
+				? [flag.slice('-isystem'.length)]
+				: []
+	);
+
 describe('clangd compile profiles', () => {
 	it.each([
 		['C', 'main.c', 'c'],
@@ -59,6 +68,18 @@ describe('clangd compile profiles', () => {
 			const flags = createClangdCompileFlags(language, { compileArgs });
 			expect(flags).toEqual([...defaults, ...compileArgs]);
 			expect(flags.at(-1)).toBe(compileArgs.at(-1));
+		}
+	);
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'keeps user SIMD feature and macro overrides after the generated %s defaults',
+		(language) => {
+			const compileArgs = ['-mno-simd128', '-U__AVX2__', '-D__SSE2__=0'];
+			const flags = createClangdCompileFlags(language, { compileArgs });
+			expect(flags).toContain('-msimd128');
+			expect(flags).toContain('-D__AVX2__=1');
+			expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
+			expect(flags.indexOf('-msimd128')).toBeLessThan(flags.indexOf('-mno-simd128'));
+			expect(flags.indexOf('-D__AVX2__=1')).toBeLessThan(flags.indexOf('-U__AVX2__'));
 		}
 	);
 	it('preserves argument tokens through configuration serialization for every source language', () => {
@@ -160,9 +181,42 @@ describe('clangd compile profiles', () => {
 			flags.indexOf('-isystem/usr/include/wasm32-wasi')
 		);
 	});
+	it.each(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)(
+		'finds Wasm SIMD intrinsic implementations ahead of native headers for %s',
+		(language) => {
+			const flags = createClangdCompileFlags(language, { resourceDir: '/lib/clang/22' });
+			expect(flags).toContain('-msimd128');
+			expect(flags.join(' ')).toContain('-D__SSE__');
+			expect(flags.join(' ')).toContain('-D__AVX2__');
+			const compatibilityPath = flags.findIndex((flag) =>
+				flag.endsWith('/usr/include/wasm-idle/simd')
+			);
+			expect(compatibilityPath).toBeGreaterThanOrEqual(0);
+			expect(compatibilityPath).toBeLessThan(flags.indexOf('-isystem/lib/clang/22/include'));
+		}
+	);
+	it('retains the original target profile for custom clangd builds without compatible headers', () => {
+		const flags = createClangdCompileFlags('CPP', {
+			resourceDir: '/lib/clang/17',
+			simd: false
+		});
+		expect(flags).toContain('--target=wasm32-wasip1');
+		expect(flags).toContain('-isystem/lib/clang/17/include');
+		expect(flags).not.toContain('-msimd128');
+		expect(flags.join(' ')).not.toContain('/wasm-idle/simd');
+		expect(flags.join(' ')).not.toContain('-D__AVX2__');
+	});
 	it.each([
 		['-nostdinc', []],
-		['-nostdinc++', ['/lib/clang/22/include', '/usr/include/wasm32-wasi', '/usr/include']],
+		[
+			'-nostdinc++',
+			[
+				'/usr/include/wasm-idle/simd',
+				'/lib/clang/22/include',
+				'/usr/include/wasm32-wasi',
+				'/usr/include'
+			]
+		],
 		[
 			'-nobuiltininc',
 			[
@@ -172,7 +226,7 @@ describe('clangd compile profiles', () => {
 				'/usr/include'
 			]
 		],
-		['-nostdlibinc', ['/lib/clang/22/include']]
+		['-nostdlibinc', ['/usr/include/wasm-idle/simd', '/lib/clang/22/include']]
 	] as const)('honors %s without removing explicit user include paths', (suppression, paths) => {
 		const compileArgs = [
 			suppression,
@@ -185,9 +239,7 @@ describe('clangd compile profiles', () => {
 			resourceDir: '/lib/clang/22',
 			compileArgs
 		});
-		expect(
-			flags.slice(0, -compileArgs.length).filter((flag) => flag.startsWith('-isystem'))
-		).toEqual(paths.map((path) => `-isystem${path}`));
+		expect(systemIncludePaths(flags.slice(0, -compileArgs.length))).toEqual(paths);
 		expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
 	});
 	it.each([
@@ -197,15 +249,16 @@ describe('clangd compile profiles', () => {
 		['-isysroot/custom root'],
 		['-isysroot=/custom root']
 	])(
-		'lets the driver resolve user sysroot arguments %j without bundled /usr paths',
+		'uses user sysroot arguments %j while retaining compatible compiler headers',
 		(...sysrootArgs) => {
 			const compileArgs = [...sysrootArgs, '-I/custom header path'];
 			const flags = createClangdCompileFlags('CPP', {
 				resourceDir: '/lib/clang/22/',
 				compileArgs
 			});
-			expect(flags.filter((flag) => flag.startsWith('-isystem'))).toEqual([
-				'-isystem/lib/clang/22/include'
+			expect(systemIncludePaths(flags)).toEqual([
+				'/usr/include/wasm-idle/simd',
+				'/lib/clang/22/include'
 			]);
 			expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
 		}
@@ -223,6 +276,11 @@ describe('clangd compile profiles', () => {
 					compileArgs
 				});
 				expect(flags.some((flag) => flag.startsWith('-isystem'))).toBe(false);
+				expect(flags).toContain('-msimd128');
+				expect(flags).toContain('-D__AVX2__=1');
+				expect(flags[flags.indexOf('-include') + 1]).toBe(
+					'/usr/include/wasm-idle/simd/__wasm_idle_simd_target.h'
+				);
 				expect(flags.slice(-compileArgs.length)).toEqual(compileArgs);
 			}
 		}

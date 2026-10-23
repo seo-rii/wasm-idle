@@ -2017,8 +2017,8 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private rejectRun(id: string, reason: unknown) {
-		const activeRun = this.claimRun(id);
-		if (!activeRun) return;
+		const activeRun = this.activeRun;
+		if (!activeRun || activeRun.id !== id) return;
 		try {
 			this.reportRunSettled(
 				activeRun,
@@ -2032,6 +2032,10 @@ self.postMessage = (message, transferOrOptions) => {
 		} catch {
 			// Progress observers must not prevent a failed run from releasing its worker.
 		}
+		// Keep the run reserved through its observer, as on success. If that observer
+		// terminates and replaces the run, only the replacement may clean up its state.
+		if (this.activeRun !== activeRun) return;
+		if (this.claimRun(id) !== activeRun) return;
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.rejectStdinWaiters(reason);
