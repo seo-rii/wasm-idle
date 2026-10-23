@@ -2,10 +2,14 @@ export { WorkerSession, type WorkerOperation } from './worker-session.js';
 export { RuntimeAssetCache, type RuntimeAssetCacheConsumer } from './session-asset-cache.js';
 export {
 	createRuntimeWasmModuleService,
+	createPreparedRuntimeWasmModuleService,
 	serveRuntimeWasmModule,
 	requestRuntimeWasmModule,
+	requestPreparedRuntimeWasmModule,
 	type RuntimeWasmModuleReceipt,
 	type RuntimeWasmModuleServiceOptions,
+	type PreparedRuntimeWasmModuleServiceOptions,
+	type PreparedRuntimeWasmModuleRequestOptions,
 	type RuntimeWasmModuleService,
 	type RuntimeWasmModuleRequestOptions
 } from './runtime-wasm-module-service.js';

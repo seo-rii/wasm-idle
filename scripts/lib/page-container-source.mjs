@@ -109,6 +109,8 @@ export async function selectPageContainerSource({
 		packageRoot,
 		aliases,
 		entryPoints,
+		// The qualified legacy package predates owner module-service preparation.
+		clangModuleServices: selected === 'workspace',
 		identity: {
 			source: selected,
 			profile: selected === 'workspace' ? 'virtual-metadata-v1' : 'published-0.1.0',
