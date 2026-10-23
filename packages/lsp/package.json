@@ -145,6 +145,11 @@
 			"import": "./dist/sql/index.js",
 			"default": "./dist/sql/index.js"
 		},
+		"./bash": {
+			"types": "./dist/bash/index.d.ts",
+			"import": "./dist/bash/index.js",
+			"default": "./dist/bash/index.js"
+		},
 		"./graphql": {
 			"types": "./dist/graphql/index.d.ts",
 			"import": "./dist/graphql/index.js",

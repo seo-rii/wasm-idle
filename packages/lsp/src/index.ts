@@ -311,6 +311,12 @@ export {
 	type HaskellWorkerOptions
 } from './haskell/index.js';
 export {
+	getBashLanguageServer,
+	resolveBashLanguageServerModuleUrl,
+	type BashLanguageServerConfig,
+	type BashLanguageServerOptions
+} from './bash/index.js';
+export {
 	createSqlWorkerService,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,

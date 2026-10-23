@@ -2340,6 +2340,7 @@
 	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let bashLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2418,6 +2419,9 @@
 		duckDbLspModuleUrl?: string;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
+		bashLspEnabled?: boolean;
+		bashLspModuleUrl?: string;
+		bashLspFiles?: Readonly<Record<string, string>>;
 		prologLspEnabled?: boolean;
 		prologLspBaseUrl?: string;
 		prologLspWorkerUrl?: string;
@@ -2515,6 +2519,9 @@
 		duckDbLspModuleUrl,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
+		bashLspEnabled = false,
+		bashLspModuleUrl,
+		bashLspFiles,
 		prologLspEnabled = false,
 		prologLspBaseUrl,
 		prologLspWorkerUrl,
@@ -2674,6 +2681,8 @@
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
+			bashLspEnabled ? bashLspModuleUrl || '' : '',
+			bashLspEnabled ? JSON.stringify(bashLspFiles) : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
 			rubyLspEnabled ? JSON.stringify(rubyLspRuntime) : '',
@@ -2814,6 +2823,10 @@
 			case 'sql':
 				label = 'SQL LSP';
 				status = sqlLspStatus;
+				break;
+			case 'bash':
+				label = 'Bash LSP';
+				status = bashLspStatus;
 				break;
 			case 'prolog':
 				label = 'Prolog LSP';
@@ -3375,6 +3388,20 @@
 			}
 		},
 		{
+			languages: ['bash', 'shell', 'sh'],
+			isEnabled: () => bashLspEnabled && !!bashLspModuleUrl,
+			setStatus: (status) => (bashLspStatus = status),
+			load: async (currentUrl, signal) => {
+				const { getBashLanguageServer } = await import('@wasm-idle/lsp/bash');
+				return await getBashLanguageServer({
+					currentUrl,
+					signal,
+					bash: { moduleUrl: bashLspModuleUrl, files: $state.snapshot(bashLspFiles) },
+					onStatus: (status) => (bashLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['prolog'],
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
@@ -3617,6 +3644,7 @@
 			graphql: graphqlLspStatus,
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
+			bash: bashLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,

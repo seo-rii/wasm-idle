@@ -827,6 +827,18 @@ export function resolveDuckDbLanguageServerModuleUrl(
 	);
 }
 
+export function resolveBashLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.bash?.moduleUrl : undefined,
+		'/wasm-bash-lsp/runtime.mjs',
+		currentUrl
+	);
+}
+
 export function resolveFortranLanguageServerAnalyzerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

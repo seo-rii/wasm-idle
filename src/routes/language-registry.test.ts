@@ -116,6 +116,7 @@ describe('language registry', () => {
 		expect(typescriptLspLanguages.has('TYPESCRIPT')).toBe(true);
 		expect(lspLanguageOverrides.ASSEMBLYSCRIPT).toBe('assemblyscript');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
+		expect(lspLanguageOverrides.BASH).toBe('bash');
 	});
 
 	it('registers Bash with shell syntax and CLI args', () => {
@@ -169,6 +170,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
+		expect(runtimeLspCapabilities.BASH).toBe('bash');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');

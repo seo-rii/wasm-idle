@@ -33,6 +33,7 @@ const expectedLanguagesByProvider = {
 	haskell: ['haskell', 'hs'],
 	sql: ['sql', 'sqlite'],
 	duckdb: ['duckdb'],
+	bash: ['bash', 'shell', 'sh'],
 	graphql: ['graphql', 'gql'],
 	fortran: ['fortran', 'f90', 'f95'],
 	prolog: ['prolog', 'swipl'],

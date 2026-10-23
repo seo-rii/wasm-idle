@@ -41,6 +41,8 @@ static/wasm-d/runtime/toolchain/toolchain.tar
 static/wasm-lfortran/
 # Lean 4 assets are downloaded from the pinned wasm-llvm release, never committed.
 /static/wasm-lean4/
+# Original Bash LSP and parser binaries are built from the pinned producer dependencies.
+/static/wasm-bash-lsp/
 
 # Website container host graph and producer artifacts are prepared locally.
 /static/container-app/
