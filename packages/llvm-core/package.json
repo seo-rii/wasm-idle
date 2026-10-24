@@ -47,6 +47,10 @@
 			"default": "./dist/objective-c/src/index.js"
 		},
 		"./package.json": "./package.json",
+		"./cross-clang": {
+			"types": "./dist/clang/src/cross-clang.d.ts",
+			"import": "./dist/clang/src/cross-clang.js"
+		},
 		"./tool-host": {
 			"types": "./dist/clang/src/tool-host.d.ts",
 			"import": "./dist/clang/src/tool-host.js"
