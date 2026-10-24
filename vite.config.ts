@@ -1,16 +1,13 @@
 import { sveltekit } from '@sveltejs/kit/vite';
-import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 import { createReleasePreviewSecurityHeaders } from './scripts/content-security-policy.mjs';
 import { createBuildIdentity } from './scripts/build-identity.mjs';
+import { createCoreSourceAliases } from './scripts/core-source-aliases.mjs';
 import sveltekitConfig from './sveltekit.config.mjs';
 
-const wasmIdleCoreEntry = join(
-	dirname(fileURLToPath(import.meta.url)),
-	'packages/core/src/index.ts'
-);
+const root = fileURLToPath(new URL('.', import.meta.url));
 
 export const releasePreviewSecurityHeaders = createReleasePreviewSecurityHeaders();
 
@@ -32,9 +29,7 @@ export default defineConfig({
 	],
 	assetsInclude: [/\.dat$/, /\.wasm$/, /\.so$/, /\.la$/],
 	resolve: {
-		alias: {
-			'@wasm-idle/core': wasmIdleCoreEntry
-		}
+		alias: createCoreSourceAliases(root)
 	},
 	optimizeDeps: {
 		exclude: ['@seorii/monaco', '@seorii/monaco/workers', 'monaco-editor']

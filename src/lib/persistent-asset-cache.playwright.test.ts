@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createCoreSourceAliasMap } from '../../scripts/core-source-aliases.mjs';
 import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.mjs';
 import type {
 	RuntimeAssetCacheOptions,
@@ -64,7 +65,7 @@ describe.skipIf(!enabled)('persistent runtime assets in real Chromium', () => {
 			},
 			bundle: true,
 			alias: {
-				'@wasm-idle/core': resolve('packages/core/src/index.ts'),
+				...createCoreSourceAliasMap(process.cwd()),
 				$lib: resolve('src/lib')
 			},
 			platform: 'browser',
