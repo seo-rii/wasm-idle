@@ -43,6 +43,7 @@
 		"test:browser:clang-stdin": "WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:compiler-options": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_COMPILER_OPTIONS=1 pnpm exec vitest run src/routes/compiler-options.playwright.test.ts",
 		"test:browser:gcc-worker-contract": "WASM_IDLE_RUN_GCC_WORKER_BROWSER=1 node --test scripts/gcc-worker-contract.browser.test.mjs",
+		"fuzz:gcc-contract": "node scripts/gcc-contract-fuzz.mjs",
 		"test:browser:fortran": "WASM_IDLE_RUN_REAL_BROWSER_FORTRAN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:cobol": "WASM_IDLE_RUN_REAL_BROWSER_COBOL=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:v": "WASM_IDLE_RUN_REAL_BROWSER_V=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts -t \"V \"",
