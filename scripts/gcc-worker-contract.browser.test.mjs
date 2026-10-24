@@ -2,7 +2,7 @@
 // Synthetic transport/runtime test ONLY. The JS loaders below do not parse or
 // compile C/C++; the tiny Wasm only exports memory. Actual GCC qualification is
 // scripts/verify-x86-cross-gcc.mjs with a real producer bundle.
-// Run: node --test scripts/gcc-worker-contract.browser.test.mjs
+// Run: pnpm run test:browser:gcc-worker-contract
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -12,6 +12,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const enabled = process.env.WASM_IDLE_RUN_GCC_WORKER_BROWSER === '1';
 const encoder = new TextEncoder();
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const memoryOnlyWasm = Uint8Array.from([
@@ -103,7 +104,12 @@ export default async function(options) {
 
 test(
 	'synthetic Chromium GCC Worker transport, integrity and hard cancellation (not real GCC)',
-	{ timeout: 60_000 },
+	{
+		timeout: 60_000,
+		skip: enabled
+			? false
+			: 'Run pnpm run test:browser:gcc-worker-contract with Chromium installed'
+	},
 	async (t) => {
 		const [{ createServer }, { chromium }, { resolveChromiumExecutable }] = await Promise.all([
 			import('vite'),

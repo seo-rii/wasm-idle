@@ -123,6 +123,10 @@ existing Clang Run path.
 # Synthetic transport/filesystem/integrity tests; these are NOT evidence of a GCC port.
 pnpm --dir packages/llvm-core exec vitest run runtime/gcc/test
 
+# Required synthetic Chromium contract CI job (separate from Node-only workspace tests).
+pnpm exec playwright-core install chromium
+pnpm run test:browser:gcc-worker-contract
+
 # Actual Wasm GCC in Chromium, then known baseline ELF programs run by Linux x86-64.
 node scripts/verify-x86-cross-gcc.mjs \
   /path/to/gcc-toolchain.v1.json \
