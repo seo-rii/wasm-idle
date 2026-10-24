@@ -36,6 +36,11 @@ const cases = [
 		stdin: '123456789 987654321\n', stdout: '1111111110\n'
 	},
 	{
+		name: 'c-libm-stdin', language: 'c', emit: 'executable', cpu: 'x86-64',
+		code: '#include <stdio.h>\n#include <math.h>\nint main(void) { double x; if (scanf("%lf", &x) != 1) return 2; printf("%.6f\\n", sin(x)); }\n',
+		stdin: '0.5\n', stdout: '0.479426\n'
+	},
+	{
 		name: 'cpp-pbds-stdin', language: 'cpp', emit: 'executable', cpu: 'x86-64',
 		code: String.raw`#include <bits/stdc++.h>
 #include <ext/pb_ds/assoc_container.hpp>

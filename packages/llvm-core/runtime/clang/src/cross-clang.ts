@@ -198,6 +198,8 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	if (emit === 'executable') argv.push('-fuse-ld=lld', `--ld-path=${manifest.linkerPath}`, '--rtlib=libgcc', '--unwindlib=libgcc', '-static', '-fno-pie');
 	else argv.push(emit === 'object' ? '-c' : '-S');
 	argv.push(main, '-o', fileName);
+	// Unlike the C++ driver, Clang's C driver does not link the math library.
+	if (emit === 'executable' && language === 'c') argv.push('-lm');
 	return { cpu, emit, fileName, files, argv: Object.freeze(argv) };
 }
 
