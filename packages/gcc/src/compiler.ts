@@ -1,6 +1,6 @@
 import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
-import untar from '../../core/src/tar.js';
-import { readBuffer } from '../../core/src/wasm.js';
+import untar from '@wasm-idle/core/runtime-tar';
+import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import { gccAssetPaths, gccDigest, parseCrossGccManifest } from './manifest.js';
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';

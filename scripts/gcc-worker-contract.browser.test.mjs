@@ -133,8 +133,20 @@ test(
 			resolve: {
 				alias: [
 					{
+						find: /^@wasm-idle\/gcc$/,
+						replacement: path.join(root, 'packages/gcc/src/index.ts')
+					},
+					{
 						find: /^@wasm-idle\/core$/,
 						replacement: path.join(root, 'packages/core/src/index.ts')
+					},
+					{
+						find: /^@wasm-idle\/core\/runtime-asset-loader$/,
+						replacement: path.join(root, 'packages/core/src/runtime-asset-loader.ts')
+					},
+					{
+						find: /^@wasm-idle\/core\/runtime-tar$/,
+						replacement: path.join(root, 'packages/core/src/runtime-tar.ts')
 					}
 				]
 			},
@@ -195,7 +207,7 @@ test(
 			async ({ origin, manifestSha256 }) => {
 				const work = (async () => {
 					const { createCrossGccWorker } = await import(
-						`${origin}/packages/llvm-core/runtime/gcc/src/index.ts`
+						`${origin}/packages/gcc/src/index.ts`
 					);
 					let integrityRejected = false;
 					try {
@@ -294,7 +306,7 @@ test(
 			'the example keeps the submitted request while its inputs are edited',
 			async () => {
 				// Isolate the UI boundary with a delayed factory; no GCC is invoked by this subtest.
-				await page.route('**/packages/llvm-core/runtime/gcc/src/index.ts', (route) =>
+				await page.route('**/packages/gcc/src/index.ts', (route) =>
 					route.fulfill({
 						contentType: 'text/javascript',
 						body: `export async function createCrossGccWorker(options) {

@@ -14,7 +14,10 @@ const wasm = Uint8Array.of(
 	10, 6, 1, 4, 0, 65, 42, 11
 );
 const url = 'https://cdn.test/compile-buffer/tool.wasm';
-const source = readFileSync(new URL('../src/wasm.ts', import.meta.url), 'utf8');
+const source = readFileSync(
+	new URL('../../../../core/src/runtime-asset-loader.ts', import.meta.url),
+	'utf8'
+);
 const compiledSource = ts.transpileModule(source, {
 	compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
 }).outputText;

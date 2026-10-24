@@ -1,4 +1,4 @@
-import { createCrossGccWorker } from '../../packages/llvm-core/runtime/gcc/src/index.ts';
+import { createCrossGccWorker } from '@wasm-idle/gcc';
 
 const element = (id) => document.getElementById(id);
 let activeController, downloadUrl;

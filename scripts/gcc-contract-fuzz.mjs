@@ -631,9 +631,9 @@ function generated(rng, index, api) {
 try {
 	const built = await build({
 		stdin: {
-			contents: `export { parseCrossGccManifest } from './packages/llvm-core/runtime/gcc/src/manifest.ts';
-export { gccCompilePlan, gccRelativePath } from './packages/llvm-core/runtime/gcc/src/plan.ts';
-export { createCrossGccCompiler } from './packages/llvm-core/runtime/gcc/src/compiler.ts';`,
+			contents: `export { parseCrossGccManifest } from './packages/gcc/src/manifest.ts';
+export { gccCompilePlan, gccRelativePath } from './packages/gcc/src/plan.ts';
+export { createCrossGccCompiler } from './packages/gcc/src/compiler.ts';`,
 			resolveDir: root,
 			loader: 'ts'
 		},
@@ -642,7 +642,14 @@ export { createCrossGccCompiler } from './packages/llvm-core/runtime/gcc/src/com
 		platform: 'node',
 		format: 'esm',
 		logLevel: 'silent',
-		alias: { '@wasm-idle/core': path.join(root, 'packages/core/src/index.ts') }
+		alias: {
+			'@wasm-idle/core/runtime-asset-loader': path.join(
+				root,
+				'packages/core/src/runtime-asset-loader.ts'
+			),
+			'@wasm-idle/core/runtime-tar': path.join(root, 'packages/core/src/runtime-tar.ts'),
+			'@wasm-idle/core': path.join(root, 'packages/core/src/index.ts')
+		}
 	});
 	const api = await import(
 		`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].contents).toString('base64')}`

@@ -10,8 +10,20 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{
+				find: /^@wasm-idle\/gcc$/,
+				replacement: path.join(root, 'packages/gcc/src/index.ts')
+			},
+			{
 				find: /^@wasm-idle\/core$/,
 				replacement: path.join(root, 'packages/core/src/index.ts')
+			},
+			{
+				find: /^@wasm-idle\/core\/runtime-asset-loader$/,
+				replacement: path.join(root, 'packages/core/src/runtime-asset-loader.ts')
+			},
+			{
+				find: /^@wasm-idle\/core\/runtime-tar$/,
+				replacement: path.join(root, 'packages/core/src/runtime-tar.ts')
 			}
 		]
 	},

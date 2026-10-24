@@ -2,7 +2,8 @@
 
 `fuzz-x86-cross-gcc.mjs` replays the deterministic, generated corpus produced by
 `wasm-llvm/producer/gcc-browser` through the current public `createCrossGccWorker`
-API. It runs actual GCC Wasm modules in Chromium and checks the generated oracle.
+API from `@wasm-idle/gcc`. It loads the built package entry and emitted Worker,
+runs actual GCC Wasm modules in Chromium, and checks the generated oracle.
 The producer campaign additionally compares the same cases with native GCC.
 This is bounded generated testing, not a coverage-guided fuzzer or a proof of
 compiler correctness. Synthetic runtime/contract fuzzing is reported separately.
@@ -10,6 +11,8 @@ compiler correctness. Synthetic runtime/contract fuzzing is reported separately.
 From the consumer repository root:
 
 ```sh
+pnpm --filter @wasm-idle/core build
+pnpm --filter @wasm-idle/gcc build
 pnpm exec playwright-core install chromium
 node scripts/fuzz-x86-cross-gcc.mjs \
   /path/to/bundle/gcc-toolchain.v1.json \
@@ -51,7 +54,8 @@ the first failure stops the campaign. Each case retains its exact source,
 request, stdin, expected stdout, compiler diagnostics, produced artifact and
 SHA-256, stage arguments/timing/Wasm memory, and native output when applicable.
 Earlier successful results survive a later failure. The report records the seed,
-corpus/manifest/sysroot hashes, consumer revision and source-file hashes,
+corpus/manifest/sysroot hashes, consumer revision, source and emitted-module hashes
+for `@wasm-idle/gcc` and its shared `@wasm-idle/core` dependency,
 Chromium version, selected/omitted case counts, and an exact replay argv array.
 `nodeMaxRssKiB` measures the Node harness, not total Chromium RSS; stage linear
 memory likewise excludes JS and MEMFS allocations.

@@ -20,7 +20,8 @@ const usage = `Usage: node scripts/fuzz-x86-cross-gcc.mjs MANIFEST CORPUS NEW_OU
   --max-cases N         Replay the first N cases (default: 32, maximum: 256)
   --max-seconds N       Total campaign budget (default: 600, maximum: 3600)
   --case-seconds N      Initialization + compilation budget per case (default: 90)
-Requires a real GCC bundle, a wasm-llvm generated corpus, Chromium, and Linux x86-64.
+Requires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC bundle,
+a wasm-llvm generated corpus, Chromium, and Linux x86-64.
 Only baseline executable cases run in separate native Linux processes. A timeout
 or failed selected case exits nonzero and preserves all earlier case evidence.`;
 
@@ -315,13 +316,43 @@ export async function runCampaign(options) {
 		assert.ifError(revision.error);
 		assert.equal(revision.status, 0, revision.stderr);
 		report.consumerRevision = revision.stdout.trim();
-		report.consumerFiles = [];
+		report.consumerPackage = '@wasm-idle/gcc';
+		report.consumerModule = 'packages/gcc/dist/index.js';
 		for (const name of [
-			'scripts/fuzz-x86-cross-gcc.mjs',
-			...(await fs.readdir(path.join(root, 'packages/llvm-core/runtime/gcc/src')))
-				.filter((name) => name.endsWith('.ts'))
-				.map((name) => `packages/llvm-core/runtime/gcc/src/${name}`)
+			report.consumerModule,
+			'packages/gcc/dist/worker-entry.js',
+			'packages/core/dist/runtime-asset-loader.js',
+			'packages/core/dist/runtime-tar.js'
 		]) {
+			await fs.access(path.join(root, name)).catch(() => {
+				throw new Error(
+					`Missing ${name}; build @wasm-idle/core and @wasm-idle/gcc before real qualification`
+				);
+			});
+		}
+		report.consumerFiles = [];
+		const consumerFiles = [
+			'scripts/fuzz-x86-cross-gcc.mjs',
+			'packages/gcc/package.json',
+			'packages/core/package.json',
+			'pnpm-lock.yaml'
+		];
+		// Keep both authored sources and the emitted modules actually loaded by
+		// Chromium, including the shared archive/asset helpers and integrity code.
+		for (const [directory, extension] of [
+			['packages/gcc/src', '.ts'],
+			['packages/gcc/dist', '.js'],
+			['packages/core/src', '.ts'],
+			['packages/core/dist', '.js']
+		]) {
+			consumerFiles.push(
+				...(await fs.readdir(path.join(root, directory)))
+					.filter((name) => name.endsWith(extension))
+					.sort()
+					.map((name) => `${directory}/${name}`)
+			);
+		}
+		for (const name of consumerFiles) {
 			report.consumerFiles.push({
 				path: name,
 				sha256: hash(await fs.readFile(path.join(root, name)))
@@ -342,8 +373,20 @@ export async function runCampaign(options) {
 			resolve: {
 				alias: [
 					{
+						find: /^@wasm-idle\/gcc$/,
+						replacement: path.join(root, 'packages/gcc/dist/index.js')
+					},
+					{
 						find: /^@wasm-idle\/core$/,
-						replacement: path.join(root, 'packages/core/src/index.ts')
+						replacement: path.join(root, 'packages/core/dist/index.js')
+					},
+					{
+						find: /^@wasm-idle\/core\/runtime-asset-loader$/,
+						replacement: path.join(root, 'packages/core/dist/runtime-asset-loader.js')
+					},
+					{
+						find: /^@wasm-idle\/core\/runtime-tar$/,
+						replacement: path.join(root, 'packages/core/dist/runtime-tar.js')
 					}
 				]
 			},
@@ -455,7 +498,7 @@ export async function runCampaign(options) {
 							let compiler;
 							try {
 								const { createCrossGccWorker } = await import(
-									`${origin}/packages/llvm-core/runtime/gcc/src/index.ts`
+									`${origin}/packages/gcc/dist/index.js`
 								);
 								compiler = await createCrossGccWorker({
 									manifestUrl: `${origin}/gcc-bundle/${manifestName}`,
