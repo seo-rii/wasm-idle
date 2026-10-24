@@ -5,7 +5,8 @@ import { parseCrossGccManifest } from '../src/manifest.js';
 
 const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
-	mode: ''
+	mode: '',
+	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
 
 /** Deliberately synthetic host fixture. It does not compile C/C++ or validate GCC semantics. */
@@ -18,6 +19,13 @@ vi.mock('../src/module-loader.js', () => ({
 			(options.locateFile as Function)(
 				`${tool}${tool === 'as' || tool === 'ld' ? '-new' : ''}.wasm`
 			);
+			if (host.mode === `abort-factory-${tool}`) {
+				(options.print as Function)(`${tool} fixture stdout`);
+				(options.printErr as Function)(
+					`${tool}: internal compiler error during initialization`
+				);
+				throw host.failure;
+			}
 			const files = new Map<string, Uint8Array>();
 			let instance: WebAssembly.Instance;
 			(options.instantiateWasm as Function)({}, (value: WebAssembly.Instance) => {
@@ -39,8 +47,16 @@ vi.mock('../src/module-loader.js', () => ({
 				callMain(argv: string[]) {
 					host.calls.push({ tool, argv, files });
 					(options.print as Function)(`${tool} fixture stdout`);
-					if (host.mode === 'diagnostics')
+					if (host.mode === 'diagnostics') {
+						(options.printErr as Function)('retained diagnostic before limit');
 						(options.printErr as Function)('x'.repeat(4 * 1024 * 1024));
+					}
+					if (host.mode === `abort-main-${tool}`) {
+						(options.printErr as Function)(
+							`${tool}: internal compiler error during compilation`
+						);
+						throw host.failure;
+					}
 					const source = [...files.entries()].find(([path]) =>
 						/^\/workspace\/main\./u.test(path)
 					)?.[1];
@@ -158,6 +174,7 @@ function bundle(archivePath?: string) {
 beforeEach(() => {
 	host.calls.length = 0;
 	host.mode = '';
+	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -279,6 +296,56 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				host.mode = mode;
 				await expect(compiler.compile({ code: '' })).rejects.toThrow();
 			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it.each([
+		['factory', 'cc1plus'],
+		['factory', 'as'],
+		['factory', 'ld'],
+		['main', 'cc1plus'],
+		['main', 'as'],
+		['main', 'ld']
+	])(
+		'preserves diagnostics and the cause when %s aborts in %s, then can compile again',
+		async (phase, tool) => {
+			const compiler = await createCrossGccCompiler(bundle().options);
+			try {
+				expect((await compiler.compile({ code: '' })).artifact).toBeDefined();
+				host.mode = `abort-${phase}-${tool}`;
+				host.failure = new WebAssembly.RuntimeError('unreachable');
+				const error = await compiler
+					.compile({ code: '' })
+					.catch((reason: unknown) => reason);
+				expect(error).toBeInstanceOf(Error);
+				expect((error as Error).cause).toBe(host.failure);
+				expect((error as Error).message).toContain('unreachable');
+				expect((error as Error).message).toContain(`${tool} fixture stdout`);
+				expect((error as Error).message).toContain(`${tool}: internal compiler error`);
+				expect(error).not.toHaveProperty('artifact');
+				host.mode = '';
+				const retried = await compiler.compile({ code: '' });
+				expect(retried.artifact).toBeDefined();
+				expect(retried.stderr).not.toContain('internal compiler error');
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
+	it('retains only diagnostics accepted before the four-MiB limit when rejecting', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			host.mode = 'diagnostics';
+			const error = await compiler.compile({ code: '' }).catch((reason: unknown) => reason);
+			expect(error).toBeInstanceOf(Error);
+			expect((error as Error).message).toContain('GCC diagnostics exceeded four MiB');
+			expect((error as Error).message).toContain('retained diagnostic before limit');
+			expect((error as Error).message.length).toBeLessThan(1024);
+			host.mode = '';
+			expect((await compiler.compile({ code: '' })).artifact).toBeDefined();
 		} finally {
 			compiler.dispose();
 		}

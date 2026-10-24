@@ -317,6 +317,20 @@ export async function createCrossGccCompiler(
 						cpu: plan.cpu
 					}
 				};
+			} catch (error) {
+				// Worker transport forwards only the error message. Preserve diagnostics
+				// printed before an unexpected host abort, without turning it into a
+				// normal tool exit or allowing an artifact from a previous request.
+				throw new Error(
+					[
+						`GCC compilation failed: ${error instanceof Error ? error.message : String(error)}`,
+						stdout && `GCC stdout:\n${stdout}`,
+						stderr && `GCC stderr:\n${stderr}`
+					]
+						.filter(Boolean)
+						.join('\n'),
+					{ cause: error }
+				);
 			} finally {
 				active = false;
 			}
