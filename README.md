@@ -1138,9 +1138,39 @@ const result = await compilePython('print("Hello")', {
 
 Each request uses a dedicated Pyodide worker and disposes it on success, failure, or cancellation.
 It calls CPython's `py_compile` without executing user code or installing its imports, and leaves
-the playground workspace and active interpreter unchanged. The output uses checked-hash
-invalidation and the relative `fileName` in tracebacks. `fileName` defaults to `main.py`;
+the playground workspace and active interpreter unchanged. By default, the output uses checked-hash
+invalidation, which stores a source hash instead of a timestamp, and the relative `fileName` in
+tracebacks. With the same source, `fileName`, options, and CPython runtime version, repeated
+compilations produce identical bytes, regardless of the wall clock or temporary directory.
+Pin the runtime assets when comparing builds across machines or releases.
+`fileName` defaults to `main.py`;
 `optimize` accepts `0`, `1` (remove assertions), or `2` (also remove docstrings).
+
+The optional `invalidationMode` selects CPython's bytecode cache format:
+
+| Mode                     | Header and source validation                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `checked-hash` (default) | Stores a source hash; Python checks source content when validating the cache.           |
+| `unchecked-hash`         | Stores a source hash; Python normally trusts the cache without checking source content. |
+| `timestamp`              | Stores source modification time and encoded source byte length.                         |
+
+In `timestamp` mode, `timestamp` defaults to **0**, keeping this mode reproducible too.
+To choose another fixed time, supply an integer Unix timestamp from `0` to `4294967295`:
+
+```ts
+const result = await compilePython(source, {
+	fileName: 'pkg/main.py',
+	invalidationMode: 'timestamp',
+	timestamp: 1_700_000_000
+});
+```
+
+`timestamp` is accepted only with `invalidationMode: 'timestamp'`; hash modes have no timestamp
+field. To use the current time, explicitly pass `Math.floor(Date.now() / 1000)` in timestamp
+mode; the resulting bytes then depend on that time. When distributing a timestamp-based cache
+alongside source, its timestamp and encoded byte size must match the source file's metadata
+for Python to reuse the cache.
+
 The optional `progress` callback and `persistentCache` setting follow the runtime asset APIs.
 `limits` supports asset/startup/compile deadlines, `maxAssetBytes`, `maxWorkspaceBytes` for the
 source, and `maxOutputBytes` for the returned bytecode.

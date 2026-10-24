@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadPyodide, type PyodideInterface } from 'pyodide';
+import type { PythonCompileOptions } from '../pythonCompileOptions';
 import { compilePythonBytecode } from './pythonCompile';
 import { createPythonStdio } from './pythonStdio';
 
@@ -52,6 +53,227 @@ describe('Python bytecode on the pinned real Pyodide', () => {
 			expect(temporaryCompiles()).toEqual(before);
 		} finally {
 			packageLoader.mockRestore();
+		}
+	});
+
+	it.each([
+		['default', {}, 3, undefined],
+		['checked hash', { invalidationMode: 'checked-hash' }, 3, undefined],
+		['unchecked hash', { invalidationMode: 'unchecked-hash' }, 1, undefined],
+		['timestamp default', { invalidationMode: 'timestamp' }, 0, 0],
+		['timestamp zero', { invalidationMode: 'timestamp', timestamp: 0 }, 0, 0],
+		[
+			'timestamp custom',
+			{ invalidationMode: 'timestamp', timestamp: 1_700_000_123 },
+			0,
+			1_700_000_123
+		],
+		[
+			'timestamp uint32 maximum',
+			{ invalidationMode: 'timestamp', timestamp: 0xffffffff },
+			0,
+			0xffffffff
+		]
+	] as const)(
+		'writes the CPython header and executable payload for %s',
+		(_name, options, flags, timestamp) => {
+			const source = '# coding: latin-1\r\nvalue = "é"\r\n';
+			const artifact = compilePythonBytecode(
+				runtime,
+				source,
+				'encoding.py',
+				0,
+				limit,
+				options
+			);
+			const path = '/tmp/wasm-idle-bytecode-invalidation.pyc';
+			runtime.FS.writeFile(path, artifact.data);
+			const globals = runtime.toPy({ source, path });
+			try {
+				const expected = JSON.parse(
+					runtime.runPython(
+						`
+import importlib.util, json, runpy
+encoded = source.encode("latin-1")
+json.dumps({"hash": importlib.util.source_hash(encoded).hex(), "size": len(encoded),
+            "value": runpy.run_path(path)["value"]})
+`,
+						{ globals }
+					)
+				);
+				const header = new DataView(artifact.data.buffer, artifact.data.byteOffset, 16);
+				expect(header.getUint32(4, true)).toBe(flags);
+				if (timestamp === undefined) {
+					expect(Buffer.from(artifact.data.subarray(8, 16)).toString('hex')).toBe(
+						expected.hash
+					);
+				} else {
+					expect(header.getUint32(8, true)).toBe(timestamp);
+					expect(header.getUint32(12, true)).toBe(expected.size);
+					expect(expected.size).not.toBe(new TextEncoder().encode(source).byteLength);
+				}
+				expect(expected.value).toBe('é');
+			} finally {
+				globals.destroy();
+				runtime.FS.unlink(path);
+			}
+		}
+	);
+
+	it('is reproducible across independent runtimes, clocks, and SOURCE_DATE_EPOCH values', async () => {
+		const independent = await loadPyodide();
+		const interpreters = [runtime, independent];
+		const scopes = interpreters.map((interpreter, index) => {
+			const globals = interpreter.toPy({ epoch: String(1_500_000_000 + index) });
+			interpreter.runPython(
+				`
+import os
+previous_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+os.environ["SOURCE_DATE_EPOCH"] = epoch
+`,
+				{ globals }
+			);
+			return globals;
+		});
+		const clock = vi.spyOn(Date, 'now');
+		const source =
+			'def accepts(value):\n    return value in {"red", "green", "blue", "한글"}\n';
+		const options: Array<Pick<PythonCompileOptions, 'invalidationMode' | 'timestamp'>> = [
+			{},
+			{ invalidationMode: 'checked-hash' },
+			{ invalidationMode: 'unchecked-hash' },
+			{ invalidationMode: 'timestamp' },
+			{ invalidationMode: 'timestamp', timestamp: 1_700_000_123 }
+		];
+		try {
+			for (const option of options) {
+				clock.mockReturnValue(1_000_000_000_000);
+				const first = compilePythonBytecode(
+					runtime,
+					source,
+					'reproducible.py',
+					0,
+					limit,
+					option
+				);
+				clock.mockReturnValue(2_000_000_000_000);
+				const second = compilePythonBytecode(
+					independent,
+					source,
+					'reproducible.py',
+					0,
+					limit,
+					option
+				);
+				expect(second.data).toEqual(first.data);
+				const header = new DataView(first.data.buffer, first.data.byteOffset, 16);
+				expect(header.getUint32(4, true)).toBe(
+					option.invalidationMode === 'timestamp'
+						? 0
+						: option.invalidationMode === 'unchecked-hash'
+							? 1
+							: 3
+				);
+				if (option.invalidationMode === 'timestamp')
+					expect(header.getUint32(8, true)).toBe(option.timestamp ?? 0);
+			}
+		} finally {
+			clock.mockRestore();
+			for (const [index, interpreter] of interpreters.entries()) {
+				interpreter.runPython(
+					`
+if previous_epoch is None:
+    os.environ.pop("SOURCE_DATE_EPOCH", None)
+else:
+    os.environ["SOURCE_DATE_EPOCH"] = previous_epoch
+`,
+					{ globals: scopes[index] }
+				);
+				scopes[index].destroy();
+			}
+		}
+	}, 120_000);
+
+	it('validates invalidation options before allocating Python proxies or temporary files', () => {
+		const before = temporaryCompiles();
+		const toPy = vi.spyOn(runtime, 'toPy');
+		try {
+			for (const options of [
+				{ invalidationMode: 'unknown' },
+				{ invalidationMode: null },
+				{ timestamp: 0 },
+				{ invalidationMode: 'checked-hash', timestamp: 0 },
+				{ invalidationMode: 'unchecked-hash', timestamp: 0 },
+				{ invalidationMode: 'timestamp', timestamp: null },
+				{ invalidationMode: 'timestamp', timestamp: '123' },
+				{ invalidationMode: 'timestamp', timestamp: -1 },
+				{ invalidationMode: 'timestamp', timestamp: 0.5 },
+				{ invalidationMode: 'timestamp', timestamp: 0x100000000 },
+				{ invalidationMode: 'timestamp', timestamp: Number.NaN },
+				{ invalidationMode: 'timestamp', timestamp: Number.POSITIVE_INFINITY }
+			]) {
+				expect(() =>
+					compilePythonBytecode(
+						runtime,
+						'pass',
+						'main.py',
+						0,
+						limit,
+						options as Pick<PythonCompileOptions, 'invalidationMode' | 'timestamp'>
+					)
+				).toThrow();
+			}
+			expect(toPy).not.toHaveBeenCalled();
+			expect(temporaryCompiles()).toEqual(before);
+		} finally {
+			toPy.mockRestore();
+		}
+	});
+
+	it.each(['unchecked-hash', 'timestamp'] as const)(
+		'cleans failed %s compiles and recovers',
+		(invalidationMode) => {
+			const before = temporaryCompiles();
+			const options = { invalidationMode };
+			expect(() =>
+				compilePythonBytecode(runtime, 'if', 'error.py', 0, limit, options)
+			).toThrow('SyntaxError');
+			expect(() =>
+				compilePythonBytecode(runtime, 'pass', 'large.py', 0, 16, options)
+			).toThrowError(
+				expect.objectContaining({ code: 'output-limit', phase: 'compile', limit: 16 })
+			);
+			expect(temporaryCompiles()).toEqual(before);
+			expect(() =>
+				compilePythonBytecode(runtime, 'pass', 'recovery.py', 0, limit, options)
+			).not.toThrow();
+			expect(temporaryCompiles()).toEqual(before);
+		}
+	);
+
+	it('removes temporary files when setting the timestamp fails', () => {
+		const before = temporaryCompiles();
+		const globals = runtime.toPy({});
+		runtime.runPython(
+			`
+import os
+original_utime = os.utime
+def fail_utime(*args, **kwargs):
+    raise OSError("setting source timestamp failed")
+os.utime = fail_utime
+`,
+			{ globals }
+		);
+		try {
+			expect(() =>
+				compilePythonBytecode(runtime, 'pass', 'main.py', 0, limit, {
+					invalidationMode: 'timestamp'
+				})
+			).toThrow('setting source timestamp failed');
+			expect(temporaryCompiles()).toEqual(before);
+		} finally {
+			runtime.runPython('os.utime = original_utime', { globals });
+			globals.destroy();
 		}
 	});
 

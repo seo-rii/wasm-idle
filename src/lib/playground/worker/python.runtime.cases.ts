@@ -164,13 +164,63 @@ describe('Python worker runtime dispatch', () => {
 			optimize: 1, maxArtifactBytes: 4096, language: 'python'
 		} });
 		expect(compileBytecode).toHaveBeenCalledWith(
-			pyodide, 'import missing\nraise RuntimeError()', 'nested/main.py', 1, 4096
+			pyodide, 'import missing\nraise RuntimeError()', 'nested/main.py', 1, 4096,
+			{ invalidationMode: undefined, timestamp: undefined }
 		);
 		expect(postMessage).toHaveBeenCalledWith({ compiled }, [compiled.data.buffer]);
 		expect(pyodide.loadPackagesFromImports).not.toHaveBeenCalled();
 		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
 		expect(pyodide.FS.writeFile).not.toHaveBeenCalled();
 	});
+
+	it.each([
+		['checked hash', 'checked-hash', undefined],
+		['unchecked hash', 'unchecked-hash', undefined],
+		['default timestamp', 'timestamp', undefined],
+		['zero timestamp', 'timestamp', 0],
+		['custom timestamp', 'timestamp', 1_700_000_000],
+		['maximum timestamp', 'timestamp', 0xffff_ffff]
+	] as const)(
+		'forwards %s options to the bytecode compiler',
+		async (_label, invalidationMode, timestamp) => {
+			const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+			await onmessage({
+				data: {
+					load: true,
+					assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+				}
+			});
+			const compiled = {
+				path: 'main.pyc',
+				data: new Uint8Array([1, 2, 3]),
+				pythonVersion: '3.14.2',
+				cacheTag: 'cpython-314',
+				magicNumber: '2b0f0d0a'
+			};
+			compileBytecode.mockReturnValue(compiled);
+			await onmessage({
+				data: {
+					compile: true,
+					language: 'python',
+					code: 'pass',
+					fileName: 'main.py',
+					optimize: 0,
+					maxArtifactBytes: 4096,
+					invalidationMode,
+					timestamp
+				}
+			});
+			expect(compileBytecode).toHaveBeenCalledExactlyOnceWith(
+				pyodide,
+				'pass',
+				'main.py',
+				0,
+				4096,
+				{ invalidationMode, timestamp }
+			);
+			expect(postMessage).toHaveBeenCalledWith({ compiled }, [compiled.data.buffer]);
+		}
+	);
 
 	it.each(['hy', 'aheui', 'apecode', 'unrecognized'])('rejects bytecode requests for %s', async (language) => {
 		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();

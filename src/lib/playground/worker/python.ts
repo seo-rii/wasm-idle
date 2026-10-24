@@ -591,6 +591,8 @@ self.onmessage = async (event: any) => {
 		compile,
 		fileName,
 		optimize,
+		invalidationMode,
+		timestamp,
 		maxArtifactBytes,
 		prepare,
 		stdin,
@@ -636,16 +638,29 @@ self.onmessage = async (event: any) => {
 		}
 	} else if (compile) {
 		try {
-			if (language !== 'python') throw new Error('Bytecode compilation is supported only for Python');
+			if (language !== 'python')
+				throw new Error('Bytecode compilation is supported only for Python');
 			await loadPyodide(baseUrl);
 			postProgress(10, 'Compiling Python bytecode');
-			const compiled = compilePythonBytecode(pyodide, code, fileName, optimize, maxArtifactBytes);
+			const compiled = compilePythonBytecode(
+				pyodide,
+				code,
+				fileName,
+				optimize,
+				maxArtifactBytes,
+				{
+					invalidationMode,
+					timestamp
+				}
+			);
 			postProgress(100, 'Python bytecode ready');
 			self.postMessage({ compiled }, [compiled.data.buffer as ArrayBuffer]);
 		} catch (e: any) {
 			self.postMessage({
 				error: e.message || 'Unknown error',
-				...(e.code === 'output-limit' ? { outputLimit: { actual: e.actual, limit: e.limit } } : {})
+				...(e.code === 'output-limit'
+					? { outputLimit: { actual: e.actual, limit: e.limit } }
+					: {})
 			});
 		}
 	} else if (prepare) {

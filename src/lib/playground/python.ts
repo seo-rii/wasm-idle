@@ -436,7 +436,7 @@ class Python implements Sandbox {
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(operation, error));
 		}
-		const { fileName, optimize, limits } = request;
+		const { fileName, optimize, limits, invalidationMode, timestamp } = request;
 		const path = fileName.slice(0, -3) + '.pyc';
 		this.exit = false;
 		this.begin = Date.now();
@@ -512,6 +512,8 @@ class Python implements Sandbox {
 					code,
 					fileName,
 					optimize,
+					invalidationMode,
+					timestamp,
 					maxArtifactBytes: limits.maxOutputBytes
 				});
 			} catch (error) {

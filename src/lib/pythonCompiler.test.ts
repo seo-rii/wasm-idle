@@ -78,10 +78,55 @@ describe('compilePython', () => {
 				code: 'raise RuntimeError("never run")',
 				fileName: '패키지/main.py',
 				optimize: 2,
+				invalidationMode: 'checked-hash',
+				timestamp: undefined,
 				maxArtifactBytes: 64
 			}
 		]);
 		expect(workers[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it.each([
+		[{ invalidationMode: 'checked-hash' }, 'checked-hash', undefined],
+		[{ invalidationMode: 'unchecked-hash' }, 'unchecked-hash', undefined],
+		[{ invalidationMode: 'timestamp' }, 'timestamp', 0],
+		[{ invalidationMode: 'timestamp', timestamp: 0 }, 'timestamp', 0],
+		[{ invalidationMode: 'timestamp', timestamp: 1_700_000_000 }, 'timestamp', 1_700_000_000],
+		[{ invalidationMode: 'timestamp', timestamp: 0xffff_ffff }, 'timestamp', 0xffff_ffff]
+	] as const)(
+		'forwards resolved bytecode options to its worker: %j',
+		async (options, invalidationMode, timestamp) => {
+			await expect(compilePython('pass', options)).resolves.toEqual(result);
+			expect(workers[0].postMessage).toHaveBeenLastCalledWith(
+				expect.objectContaining({ compile: true, invalidationMode, timestamp })
+			);
+			expect(workers[0].terminate).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each([
+		['unknown mode', { invalidationMode: 'hash' }],
+		['numeric mode', { invalidationMode: 0 }],
+		['null mode', { invalidationMode: null }],
+		['timestamp without timestamp mode', { timestamp: 0 }],
+		['checked-hash timestamp', { invalidationMode: 'checked-hash', timestamp: 0 }],
+		['unchecked-hash timestamp', { invalidationMode: 'unchecked-hash', timestamp: 0 }],
+		['NaN timestamp', { invalidationMode: 'timestamp', timestamp: Number.NaN }],
+		[
+			'infinite timestamp',
+			{ invalidationMode: 'timestamp', timestamp: Number.POSITIVE_INFINITY }
+		],
+		['fractional timestamp', { invalidationMode: 'timestamp', timestamp: 1.5 }],
+		['negative timestamp', { invalidationMode: 'timestamp', timestamp: -1 }],
+		['out-of-range timestamp', { invalidationMode: 'timestamp', timestamp: 0x1_0000_0000 }],
+		['string timestamp', { invalidationMode: 'timestamp', timestamp: '0' }],
+		['null timestamp', { invalidationMode: 'timestamp', timestamp: null }],
+		['boolean timestamp', { invalidationMode: 'timestamp', timestamp: false }]
+	] as const)('rejects %s before creating a worker', async (_label, options) => {
+		await expect(compilePython('pass', options as PythonCompileOptions)).rejects.toMatchObject({
+			code: 'runtime-configuration'
+		});
+		expect(workers).toHaveLength(0);
 	});
 
 	it.each([
@@ -200,6 +245,31 @@ describe('compilePython', () => {
 		expect(values).toEqual([result, result]);
 		expect(workers).toHaveLength(2);
 		for (const worker of workers) expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('validates bytecode options at the direct adapter boundary and recovers', async () => {
+		const python = new Python();
+		try {
+			await python.load('/');
+			for (const options of [
+				{ invalidationMode: 'hash' },
+				{ invalidationMode: 'checked-hash', timestamp: 0 },
+				{ invalidationMode: 'timestamp', timestamp: -1 }
+			]) {
+				await expect(
+					python.compile('pass', options as PythonCompileOptions)
+				).rejects.toMatchObject({ code: 'runtime-configuration' });
+			}
+			expect(workers[0].postMessage).toHaveBeenCalledOnce();
+			await expect(
+				python.compile('pass', { invalidationMode: 'timestamp', timestamp: 0 })
+			).resolves.toEqual(result);
+			expect(workers[0].postMessage).toHaveBeenLastCalledWith(
+				expect.objectContaining({ invalidationMode: 'timestamp', timestamp: 0 })
+			);
+		} finally {
+			await python.dispose();
+		}
 	});
 
 	it('rejects overlapping direct adapter operations and recovers after compile failure', async () => {
