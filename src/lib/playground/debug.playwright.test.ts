@@ -2411,8 +2411,10 @@ describe('native-source browser debugging in Chromium', () => {
 							const transcript = await page
 								.locator('[data-testid="terminal-debug-output"]')
 								.textContent();
-							// WAMR's native module-name printf shares guest stdout. Removing it
-							// requires a producer fix; never filter the target's text here.
+							// The producer gates its native module-name diagnostic at -v=0.
+							expect(transcript).not.toContain(
+								'the module name is /workspace/program.wasm'
+							);
 							expect(transcript).not.toMatch(
 								/To get started with the debug console|Running attachCommands|Attached to process/
 							);

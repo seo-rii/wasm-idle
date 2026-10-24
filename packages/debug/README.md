@@ -74,10 +74,9 @@ For low-level `BrowserLldbSession` consumers, `onOutput(channel, data)` receives
 use the optional `onDebuggerOutput(channel, data)` for raw LLDB worker stdout/stderr. DAP console
 events remain available through `onEvent`.
 
-The pinned WAMR runtime still prints `the module name is /workspace/program.wasm` directly to the
-same native stdout used by guest code. Removing that line requires a producer patch in
-`wasm-llvm/producer/wamr-browser` and a new verified runtime receipt. The consumer preserves it:
-text filtering or suppressing output during attach can also hide genuine Wasm start-function output.
+The pinned WAMR producer routes its module-name announcement through the verbose logger, so the
+normal `-v=0` debug session does not print it. Guest stdout/stderr pass through unchanged, including
+output from Wasm start functions during attach. The consumer does not filter target text.
 
 Each node supplies `changed` and an optional `previousValue`. Comparison covers only values actually
 loaded in both stops. Frame keys use function/source and caller stack locations, never persistent

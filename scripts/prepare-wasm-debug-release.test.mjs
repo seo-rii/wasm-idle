@@ -390,10 +390,10 @@ test('the tracked release profile pins the qualified producer and manifest recei
 	const profile = JSON.parse(await readFile('scripts/wasm-debug-release.v2.json', 'utf8'));
 	assert.deepEqual(profile, {
 		schemaVersion: 1,
-		producerRevision: '14ea5ecbc514b0c87338aebf8f2b567020be5750',
+		producerRevision: '8abaac1bf647b8afcf14839cb479fa845abc6c34',
 		manifestReceipt: {
 			bytes: 2853,
-			sha256: 'd4b08c91cd9bc810d0862ea2a5ef5a092e52f6b22a6f3121499ec5d3df2086b5'
+			sha256: '78e65afcf84ed709c6d166f4ef55bf34e5e3b10c61155a3484547cb8b27bd3a1'
 		}
 	});
 });
