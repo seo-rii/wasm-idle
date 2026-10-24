@@ -89,6 +89,9 @@ module and sysroot archive is size bounded and SHA-256 verified before any loade
 The browser imports verified loader bytes through Blob URLs and instantiates the verified
 Wasm modules. Hosting CSP must permit module Workers and `blob:` modules. Relative asset
 paths are fixed by the manifest schema; archive paths cannot escape `/sysroot`.
+The runtime's downloaded-byte cache is scoped to each compiler initialization, even
+with a shared custom `fetchImpl`. Retrying after an integrity failure or supplying a
+new manifest digest at the same URL fetches and verifies the bundle again.
 
 Compilation has no result cache. Compiled Wasm modules are retained only in the current
 compiler instance, whose identity contains the manifest digest, GCC version, host, target
