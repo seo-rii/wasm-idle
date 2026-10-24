@@ -8,11 +8,14 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { gunzip as gunzipCallback } from 'node:zlib';
 
+import { createRuntimeAssetLock, renderRuntimeAssetLock } from './generate-runtime-asset-lock.mjs';
+
 const gunzip = promisify(gunzipCallback);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
 const RELEASE_PACKAGE_LOCATIONS = [
 	['wasm-idle', '.'],
+	['@wasm-idle/container', 'packages/container'],
 	['@wasm-idle/core', 'packages/core'],
 	['@wasm-idle/debug', 'packages/debug'],
 	['@wasm-idle/llvm-core', 'packages/llvm-core'],
@@ -36,10 +39,10 @@ const SEMVER_PATTERN =
 function usage() {
 	return `Usage:
   pnpm release:npm -- --version <version> [--publish] [--tag <tag>] [--access public|restricted]
-	    [--registry <url>] [--resume]
+    [--registry <url>] [--resume] [--container-version <version>] [--asset-root <dir>]
 
-The default run updates versions, verifies npm authentication and registry availability,
-builds every package, and validates packed tarballs without publishing them.
+The default run updates versions, checks registry availability, builds every package,
+and validates packed tarballs without publishing them. Publishing requires npm authentication.
 
 Options:
 	--publish           Publish verified tarballs in dependency order.
@@ -48,6 +51,11 @@ Options:
   --tag <tag>         npm dist-tag (default: latest).
   --access <access>   npm access level (default: public).
   --registry <url>    npm registry (default: ${DEFAULT_REGISTRY}).
+  --container-version <version>
+                      Release @wasm-idle/container independently (default: --version).
+  --asset-root <dir>   Read complete runtime assets from this directory instead of static/.
+                      The generated lock is written only into this release checkout.
+                      Every existing receipt path must remain present.
   --help              Show this help.
 `;
 }
@@ -92,7 +100,9 @@ export function parseReleaseArgs(argv) {
 		access: 'public',
 		registry: DEFAULT_REGISTRY,
 		help: false,
-		version: ''
+		version: '',
+		containerVersion: '',
+		assetRoot: ''
 	};
 
 	/** @param {number} index @param {string} flag */
@@ -111,6 +121,13 @@ export function parseReleaseArgs(argv) {
 		else if (argument === '--version') {
 			if (options.version) throw new Error('Target version was specified more than once.');
 			options.version = readOption(index++, '--version');
+		} else if (argument === '--container-version') {
+			if (options.containerVersion)
+				throw new Error('Container version was specified more than once.');
+			options.containerVersion = readOption(index++, '--container-version');
+		} else if (argument === '--asset-root') {
+			if (options.assetRoot) throw new Error('Asset root was specified more than once.');
+			options.assetRoot = path.resolve(readOption(index++, '--asset-root'));
 		} else if (argument === '--tag') options.tag = readOption(index++, '--tag');
 		else if (argument === '--access') options.access = readOption(index++, '--access');
 		else if (argument === '--registry') {
@@ -126,13 +143,19 @@ export function parseReleaseArgs(argv) {
 
 	if (options.help) return options;
 	assertTargetVersion(options.version);
+	if (options.containerVersion) assertTargetVersion(options.containerVersion);
 	if (!['public', 'restricted'].includes(options.access)) {
 		throw new Error('--access must be either public or restricted.');
 	}
 	if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(options.tag) || SEMVER_PATTERN.test(options.tag)) {
 		throw new Error(`Invalid npm dist-tag: ${options.tag}`);
 	}
-	if (options.version.split('+', 1)[0].includes('-') && options.tag === 'latest') {
+	if (
+		[options.version, options.containerVersion].some((version) =>
+			version.split('+', 1)[0].includes('-')
+		) &&
+		options.tag === 'latest'
+	) {
 		throw new Error('Prerelease versions require an explicit non-latest --tag, such as next.');
 	}
 	options.registry = normalizeRegistry(options.registry);
@@ -148,17 +171,23 @@ function isWasmIdlePackage(packageName) {
  * @param {Record<string, unknown>} manifest
  * @param {string} targetVersion
  * @param {Set<string>} releaseNames
+ * @param {Map<string, string>} [targetVersions]
  */
-export function synchronizeManifest(manifest, targetVersion, releaseNames) {
+export function synchronizeManifest(
+	manifest,
+	targetVersion,
+	releaseNames,
+	targetVersions = new Map()
+) {
 	const updated = structuredClone(manifest);
-	updated.version = targetVersion;
+	updated.version = targetVersions.get(manifest.name) ?? targetVersion;
 	for (const section of DEPENDENCY_SECTIONS) {
 		const dependencies = updated[section];
 		if (!dependencies || typeof dependencies !== 'object') continue;
 		for (const [dependencyName, currentRange] of Object.entries(dependencies)) {
 			if (!releaseNames.has(dependencyName)) continue;
 			if (section !== 'peerDependencies' && currentRange === 'workspace:*') continue;
-			dependencies[dependencyName] = targetVersion;
+			dependencies[dependencyName] = targetVersions.get(dependencyName) ?? targetVersion;
 		}
 	}
 	return updated;
@@ -167,8 +196,9 @@ export function synchronizeManifest(manifest, targetVersion, releaseNames) {
 /**
  * @param {Array<{name: string, manifest: Record<string, any>}>} packages
  * @param {string} targetVersion
+ * @param {Map<string, string>} [targetVersions]
  */
-export function validateSourceRelease(packages, targetVersion) {
+export function validateSourceRelease(packages, targetVersion, targetVersions = new Map()) {
 	const releaseNames = new Set(packages.map((pkg) => pkg.name));
 	if (releaseNames.size !== packages.length)
 		throw new Error('Release package names must be unique.');
@@ -176,9 +206,10 @@ export function validateSourceRelease(packages, targetVersion) {
 	for (const pkg of packages) {
 		if (pkg.manifest.name !== pkg.name)
 			throw new Error(`Manifest name mismatch for ${pkg.name}.`);
-		if (pkg.manifest.version !== targetVersion) {
+		const packageVersion = targetVersions.get(pkg.name) ?? targetVersion;
+		if (pkg.manifest.version !== packageVersion) {
 			throw new Error(
-				`${pkg.name} has version ${pkg.manifest.version}; expected ${targetVersion}.`
+				`${pkg.name} has version ${pkg.manifest.version}; expected ${packageVersion}.`
 			);
 		}
 		for (const section of DEPENDENCY_SECTIONS) {
@@ -190,9 +221,10 @@ export function validateSourceRelease(packages, targetVersion) {
 					);
 				}
 				const allowed = section !== 'peerDependencies' && range === 'workspace:*';
-				if (!allowed && range !== targetVersion) {
+				const dependencyVersion = targetVersions.get(dependencyName) ?? targetVersion;
+				if (!allowed && range !== dependencyVersion) {
 					throw new Error(
-						`${pkg.name} ${section}.${dependencyName} must be ${targetVersion} or workspace:*, received ${range}.`
+						`${pkg.name} ${section}.${dependencyName} must be ${dependencyVersion} or workspace:*, received ${range}.`
 					);
 				}
 			}
@@ -254,7 +286,7 @@ export function topologicallySortRelease(packages) {
 
 /**
  * @param {Record<string, any>} manifest
- * @param {{name: string, version: string, releaseNames: Set<string>}} expected
+ * @param {{name: string, version: string, releaseNames: Set<string>, targetVersions?: Map<string, string>}} expected
  */
 export function validatePackedManifest(manifest, expected) {
 	if (manifest.name !== expected.name) {
@@ -275,9 +307,11 @@ export function validatePackedManifest(manifest, expected) {
 					`${expected.name} packed ${section} references ${dependencyName}, which is not in this release.`
 				);
 			}
-			if (range !== expected.version) {
+			const dependencyVersion =
+				expected.targetVersions?.get(dependencyName) ?? expected.version;
+			if (range !== dependencyVersion) {
 				throw new Error(
-					`${expected.name} packed ${section}.${dependencyName} is ${range}; expected exact ${expected.version}.`
+					`${expected.name} packed ${section}.${dependencyName} is ${range}; expected exact ${dependencyVersion}.`
 				);
 			}
 		}
@@ -357,7 +391,7 @@ async function readJson(file) {
 	return JSON.parse(await readFile(file, 'utf8'));
 }
 
-async function discoverReleasePackages() {
+export async function discoverReleasePackages() {
 	const packages = [];
 	for (const [expectedName, relativeDir] of RELEASE_PACKAGE_LOCATIONS) {
 		const dir = path.join(REPO_ROOT, relativeDir);
@@ -384,7 +418,7 @@ function isBookkeepingPath(relativePath) {
 	);
 }
 
-async function assertReleaseWorktree(packages, targetVersion) {
+async function assertReleaseWorktree(packages, targetVersion, targetVersions) {
 	const status = await runCapture(
 		'git',
 		['status', '--porcelain=v1', '--untracked-files=all'],
@@ -421,12 +455,13 @@ async function assertReleaseWorktree(packages, targetVersion) {
 		const expected = synchronizeManifest(
 			JSON.parse(committed.stdout),
 			targetVersion,
-			releaseNames
+			releaseNames,
+			targetVersions
 		);
 		const current = manifestByPath.get(relativePath).manifest;
 		if (JSON.stringify(current) !== JSON.stringify(expected)) {
 			throw new Error(
-				`${relativePath} contains changes beyond the ${targetVersion} release version synchronization. Commit or stash them first.`
+				`${relativePath} contains changes beyond the ${expected.version} release version synchronization. Commit or stash them first.`
 			);
 		}
 	}
@@ -520,10 +555,12 @@ async function inspectTarball(tarballPath) {
 	throw new Error(`Tarball does not contain package/package.json: ${tarballPath}`);
 }
 
-async function packAndValidate(packages, version, tarballDir) {
+async function packAndValidate(packages, tarballDir) {
 	const releaseNames = new Set(packages.map((pkg) => pkg.name));
+	const targetVersions = new Map(packages.map((pkg) => [pkg.name, pkg.manifest.version]));
 	const artifacts = new Map();
 	for (const pkg of packages) {
+		const version = pkg.manifest.version;
 		const fileName = `${pkg.name.replace(/^@/u, '').replaceAll('/', '-')}-${version}.tgz`;
 		const tarballPath = path.join(tarballDir, fileName);
 		await run('pnpm', ['--dir', pkg.dir, 'pack', '--out', tarballPath], REPO_ROOT, {
@@ -535,7 +572,8 @@ async function packAndValidate(packages, version, tarballDir) {
 		validatePackedManifest(inspected.manifest, {
 			name: pkg.name,
 			version,
-			releaseNames
+			releaseNames,
+			targetVersions
 		});
 		artifacts.set(pkg.name, { ...inspected, path: tarballPath });
 	}
@@ -550,12 +588,12 @@ async function publishArtifacts(orderedPackages, artifacts, registryStates, opti
 	for (const pkg of orderedPackages) {
 		if (existing.has(pkg.name)) {
 			console.log(
-				`- ${pkg.name}@${options.version}: already published with matching integrity`
+				`- ${pkg.name}@${pkg.manifest.version}: already published with matching integrity`
 			);
 			continue;
 		}
 		const artifact = artifacts.get(pkg.name);
-		console.log(`\nPublishing ${pkg.name}@${options.version}`);
+		console.log(`\nPublishing ${pkg.name}@${pkg.manifest.version}`);
 		try {
 			await run(
 				'npm',
@@ -582,20 +620,65 @@ async function publishArtifacts(orderedPackages, artifacts, registryStates, opti
 	}
 }
 
+async function prepareRuntimeAssetLock(assetRoot) {
+	const output = path.join(REPO_ROOT, 'packages/core/src/runtime-asset-lock.generated.ts');
+	const source = await readFile(output, 'utf8');
+	// The generator renders the receipt object as JSON inside the typed module.
+	// Refuse an unrecognized format rather than treating it as an empty inventory.
+	const entries = source.match(/^\tassets: \{\n([\s\S]*?)^\t\}/mu)?.[1];
+	if (entries === undefined)
+		throw new Error('Cannot read the existing runtime asset receipt inventory.');
+	const existing = JSON.parse(`{${entries}}`);
+	const requiredPaths = Object.keys(existing);
+	if (requiredPaths.length === 0)
+		throw new Error('Existing runtime asset receipt inventory is empty.');
+	const candidate = await createRuntimeAssetLock({
+		rootDir: assetRoot || path.join(REPO_ROOT, 'static')
+	});
+	const missing = requiredPaths.filter(
+		(assetPath) => !Object.hasOwn(candidate.assets, assetPath)
+	);
+	if (missing.length > 0) {
+		throw new Error(
+			`Runtime asset root is incomplete: ${missing.length} existing receipt paths are missing (${missing.slice(0, 5).join(', ')}). The existing lock was not changed.`
+		);
+	}
+	await writeFile(output, renderRuntimeAssetLock(candidate));
+	console.log(
+		`Generated runtime asset lock ${candidate.version}: ${Object.keys(candidate.assets).length} receipts`
+	);
+}
+
 async function release(options) {
 	const discovered = await discoverReleasePackages();
 	const releaseNames = new Set(discovered.map((pkg) => pkg.name));
+	const targetVersions = new Map(
+		discovered.map((pkg) => [
+			pkg.name,
+			pkg.name === '@wasm-idle/container' && options.containerVersion
+				? options.containerVersion
+				: options.version
+		])
+	);
 	const packages = discovered.map((pkg) => ({
 		...pkg,
-		manifest: synchronizeManifest(pkg.manifest, options.version, releaseNames)
+		manifest: synchronizeManifest(pkg.manifest, options.version, releaseNames, targetVersions)
 	}));
-	validateSourceRelease(packages, options.version);
-	await assertReleaseWorktree(discovered, options.version);
+	validateSourceRelease(packages, options.version, targetVersions);
+	await assertReleaseWorktree(discovered, options.version, targetVersions);
+	if (options.assetRoot && !(await stat(options.assetRoot)).isDirectory()) {
+		throw new Error(`Asset root must be a directory: ${options.assetRoot}`);
+	}
+	console.log(
+		`Release plan: ${packages.map((pkg) => `${pkg.name}@${pkg.manifest.version}`).join(', ')}`
+	);
 
-	await verifyNpmAuthentication(options.registry);
+	if (options.publish) await verifyNpmAuthentication(options.registry);
 	const registryStates = [];
 	for (const pkg of packages) {
-		registryStates.push(await readRegistryState(pkg.name, options.version, options.registry));
+		registryStates.push(
+			await readRegistryState(pkg.name, pkg.manifest.version, options.registry)
+		);
 	}
 	assertRegistryAvailability(registryStates, options.resume);
 	console.log(
@@ -613,18 +696,18 @@ async function release(options) {
 		manifestsChanged = true;
 	}
 	if (manifestsChanged) {
-		console.log(`Synchronized public package versions to ${options.version}.`);
+		console.log('Synchronized public package versions to the release plan.');
 		await run('pnpm', ['install', '--lockfile-only', '--ignore-scripts'], REPO_ROOT);
 	} else {
-		console.log(`Public package versions are already synchronized at ${options.version}.`);
+		console.log('Public package versions already match the release plan.');
 	}
 
 	const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-npm-release-'));
 	try {
 		console.log('\nBuilding and running package install/import verification...');
-		await run('pnpm', ['run', 'assets:lock'], REPO_ROOT);
+		await prepareRuntimeAssetLock(options.assetRoot);
 		await run('pnpm', ['run', 'verify:package'], REPO_ROOT);
-		const artifacts = await packAndValidate(packages, options.version, tempRoot);
+		const artifacts = await packAndValidate(packages, tempRoot);
 		console.log(
 			`Validated ${artifacts.size} release tarballs and their internal dependency metadata.`
 		);
