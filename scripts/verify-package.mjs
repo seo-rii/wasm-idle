@@ -52,7 +52,8 @@ export const scenarios = [
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
 		// Ruby preview and the cross compiler each add JavaScript and a declaration.
 		// Three Python compiler modules add six JavaScript/declaration files.
-		budget: { maxBytes: 7 * MiB, maxFiles: 751, maxPackages: 6 },
+		// GCC adds eight JavaScript/declaration pairs and GCC_CROSS.md (17 files).
+		budget: { maxBytes: 7 * MiB, maxFiles: 768, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -74,6 +75,9 @@ export const scenarios = [
 			"await import('@wasm-idle/llvm-core/debug');",
 			"const crossClang = await import('@wasm-idle/llvm-core/cross-clang');",
 			"if (typeof crossClang.createCrossClangCompiler !== 'function' || typeof crossClang.parseCrossClangManifest !== 'function') throw new Error('Missing packaged x86 cross compiler API');",
+			"const gcc = await import('@wasm-idle/llvm-core/gcc');",
+			"for (const name of ['createCrossGccCompiler', 'createCrossGccWorker', 'parseCrossGccManifest']) if (typeof gcc[name] !== 'function') throw new Error(`Missing packaged GCC API: ${name}`);",
+			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/llvm-core/gcc')));",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');",
 			"const { instrumentJavaDebugSource } = await import(new URL('./playground/javaDebugSource.js', import.meta.resolve('wasm-idle')));",
 			"const captured = instrumentJavaDebugSource('class Main { void run() { int value = 7; value++; } }', 'Main.java', 'debug.Bridge');",
