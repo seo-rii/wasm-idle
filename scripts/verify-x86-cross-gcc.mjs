@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Real acceptance only: a producer bundle and the pinned producer qualification
-// suite are required. Small Wasm fixtures are tested separately in llvm-core.
+// suite are required. Small Wasm fixtures are tested separately in packages/gcc/test.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
 	console.log(
-		'Usage: node scripts/verify-x86-cross-gcc.mjs MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks.'
+		'Usage: node scripts/verify-x86-cross-gcc.mjs MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks.'
 	);
 	process.exit(0);
 }
@@ -58,6 +58,8 @@ const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'gcc-browser-qualifica
 const report = {
 	schemaVersion: 1,
 	kind: 'gcc-real-chromium-qualification',
+	consumerPackage: '@wasm-idle/gcc',
+	consumerModule: 'packages/gcc/dist/index.js',
 	manifestSha256,
 	compiler: manifest.compiler,
 	compilerHost: manifest.host,
@@ -69,6 +71,18 @@ const report = {
 };
 let browser, server;
 try {
+	for (const name of [
+		report.consumerModule,
+		'packages/gcc/dist/worker-entry.js',
+		'packages/core/dist/runtime-asset-loader.js',
+		'packages/core/dist/runtime-tar.js'
+	]) {
+		await fs.access(path.join(root, name)).catch(() => {
+			throw new Error(
+				`Missing ${name}; build @wasm-idle/core and @wasm-idle/gcc before real qualification`
+			);
+		});
+	}
 	const [{ createServer }, { chromium }, { resolveChromiumExecutable }] = await Promise.all([
 		import('vite'),
 		import('playwright-core'),
@@ -83,12 +97,24 @@ try {
 		resolve: {
 			alias: [
 				{
+					find: /^@wasm-idle\/gcc$/,
+					replacement: path.join(root, 'packages/gcc/dist/index.js')
+				},
+				{
 					find: /^@wasm-idle\/core$/,
-					replacement: path.join(root, 'packages/core/src/index.ts')
+					replacement: path.join(root, 'packages/core/dist/index.js')
+				},
+				{
+					find: /^@wasm-idle\/core\/runtime-asset-loader$/,
+					replacement: path.join(root, 'packages/core/dist/runtime-asset-loader.js')
+				},
+				{
+					find: /^@wasm-idle\/core\/runtime-tar$/,
+					replacement: path.join(root, 'packages/core/dist/runtime-tar.js')
 				}
 			]
 		},
-		server: { host: '127.0.0.1', port: 0, fs: { allow: [root] } },
+		server: { host: '127.0.0.1', port: 0, watch: null, fs: { allow: [root] } },
 		plugins: [
 			{
 				name: 'gcc-real-qualification',
@@ -150,9 +176,7 @@ try {
 	await page.goto(`${origin}/gcc-probe`);
 	const actual = await page.evaluate(
 		async ({ manifestUrl, manifestSha256, fixtures, origin }) => {
-			const { createCrossGccWorker } = await import(
-				`${origin}/packages/llvm-core/runtime/gcc/src/index.ts`
-			);
+			const { createCrossGccWorker } = await import(`${origin}/packages/gcc/dist/index.js`);
 			const initialization = new AbortController();
 			const initializationTimer = setTimeout(() => initialization.abort(), 300_000);
 			let compiler;

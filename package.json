@@ -255,6 +255,7 @@
 		"@typescript-eslint/parser": "^8.71.1",
 		"@wasm-idle/container": "workspace:*",
 		"@wasm-idle/debug": "workspace:*",
+		"@wasm-idle/gcc": "workspace:*",
 		"@wasm-idle/lsp": "workspace:*",
 		"@wasm-idle/terminal": "workspace:*",
 		"@wasmer/sdk": "0.10.0",

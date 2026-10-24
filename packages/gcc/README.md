@@ -1,10 +1,16 @@
-# GNU GCC in a browser Worker
+# @wasm-idle/gcc
 
-`@wasm-idle/llvm-core/gcc` runs the producer's real GCC 13.3.0 `cc1`/`cc1plus` and GNU
+`@wasm-idle/gcc` runs the producer's real GCC 13.3.0 `cc1`/`cc1plus` and GNU
 binutils `as`/`ld` as Emscripten WebAssembly modules. It returns Linux x86-64 assembly, ELF
 objects, or static ELF executables for download. The compiler host is
 `wasm32-emscripten`; the output target is `x86_64-linux-gnu`. No browser x86 executor is
 included and output ELF bytes never enter `WebAssembly.compile` or `instantiate`.
+
+This package contains only the MIT-licensed JavaScript/TypeScript host and depends on
+`@wasm-idle/core` for shared asset and archive helpers. It has no LLVM dependency. GCC,
+binutils, Emscripten modules and the GNU target sysroot are distributed separately by the
+producer, with their own source revisions, license notices and distribution obligations.
+The host package does not include those binaries or change their licenses.
 
 This API requires an independently built and qualified GCC bundle from `wasm-llvm`'s
 `producer/gcc-browser`. There is no implicit CDN, fallback compiler, or bundled binary.
@@ -12,7 +18,7 @@ An `unverified` producer manifest remains explicitly unverified; successfully lo
 that manifest does not establish that GCC can compile the acceptance suite.
 
 ```ts
-import { createCrossGccWorker } from '@wasm-idle/llvm-core/gcc';
+import { createCrossGccWorker } from '@wasm-idle/gcc';
 
 const controller = new AbortController();
 const compiler = await createCrossGccWorker({
@@ -149,9 +155,15 @@ headers if it is on another origin. For a local setup, put the bundle in the exa
 server's HTTP origin. This is an opt-in example and does not change the main playground's
 existing Clang Run path.
 
+Build the shared core and GCC host before running the following checks. The real
+Chromium qualification loads their emitted package modules and Worker entry.
+
 ```sh
+pnpm --dir packages/core build
+pnpm --dir packages/gcc build
+
 # Synthetic transport/filesystem/integrity tests; these are NOT evidence of a GCC port.
-pnpm --dir packages/llvm-core exec vitest run runtime/gcc/test
+pnpm --dir packages/gcc test
 
 # Required synthetic Chromium contract CI job (separate from Node-only workspace tests).
 pnpm exec playwright-core install chromium

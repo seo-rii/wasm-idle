@@ -18,6 +18,7 @@ const RELEASE_PACKAGE_LOCATIONS = [
 	['@wasm-idle/container', 'packages/container'],
 	['@wasm-idle/core', 'packages/core'],
 	['@wasm-idle/debug', 'packages/debug'],
+	['@wasm-idle/gcc', 'packages/gcc'],
 	['@wasm-idle/llvm-core', 'packages/llvm-core'],
 	['@wasm-idle/lsp', 'packages/lsp'],
 	['@wasm-idle/node', 'packages/node'],
