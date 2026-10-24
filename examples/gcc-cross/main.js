@@ -14,6 +14,15 @@ element('cancel').addEventListener('click', () => activeController?.abort());
 element('form').addEventListener('submit', async (event) => {
 	event.preventDefault();
 	if (activeController) return;
+	const manifestUrl = element('manifest').value.trim();
+	const manifestSha256 = element('sha256').value.trim();
+	const request = {
+		code: element('source').value,
+		language: element('language').value,
+		cpu: element('cpu').value,
+		emit: element('emit').value,
+		optimization: element('optimization').value
+	};
 	clearDownload();
 	element('diagnostics').hidden = true;
 	element('diagnostics').textContent = '';
@@ -25,22 +34,13 @@ element('form').addEventListener('submit', async (event) => {
 	try {
 		element('status').textContent = 'Verifying and loading the GCC bundle…';
 		compiler = await createCrossGccWorker({
-			manifestUrl: element('manifest').value.trim(),
-			manifestSha256: element('sha256').value.trim(),
+			manifestUrl,
+			manifestSha256,
 			signal: activeController.signal
 		});
 		element('status').textContent =
 			`Compiling with GCC ${compiler.identity.compilerVersion} (${compiler.manifest.qualification.status} producer qualification)…`;
-		const result = await compiler.compile(
-			{
-				code: element('source').value,
-				language: element('language').value,
-				cpu: element('cpu').value,
-				emit: element('emit').value,
-				optimization: element('optimization').value
-			},
-			{ signal: activeController.signal }
-		);
+		const result = await compiler.compile(request, { signal: activeController.signal });
 		element('diagnostics').textContent = [
 			result.stdout,
 			result.stderr,
