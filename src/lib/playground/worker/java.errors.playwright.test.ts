@@ -11,6 +11,7 @@ import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { TEAVM_RUNTIME_ASSET_NAMES } from '../../../../packages/core/src/teavm-runtime';
 import { addBrowserTestCookies } from '../../../../scripts/browser-test-cookies.mjs';
+import { createCoreSourceAliasMap } from '../../../../scripts/core-source-aliases.mjs';
 import { runWithBrowserProbeSessionLock } from '../../../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../../../scripts/rust-browser-probe-lib.mjs';
 import type Java from '../java';
@@ -67,7 +68,7 @@ describe('TeaVM Java errors in Chromium', () => {
 					write: false as const,
 					alias: {
 						$lib: resolve(repoRoot, 'src/lib'),
-						'@wasm-idle/core': resolve(repoRoot, 'packages/core/src/index.ts')
+						...createCoreSourceAliasMap(repoRoot)
 					}
 				};
 				const [host, worker] = await Promise.all([
