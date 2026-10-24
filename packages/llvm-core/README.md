@@ -372,7 +372,15 @@ output, memory, exit, or failure. Worker identity, channel, data, byte count, ex
 text must match the protocol; an invalid message becomes a `worker-error` and disposes the session
 instead of changing lifecycle state. A message carrying another well-formed generation remains
 ignored before its type-specific fields are inspected, preserving stale-session isolation.
-Consumer `onOutput`, `onMemory`, `onLifecycle`, and DAP event-listener exceptions are isolated from
+`onOutput(channel, data)` receives target runtime stdout/stderr. Raw LLDB worker diagnostics use the
+optional `onDebuggerOutput(channel, data)` callback; their stdout/stderr channel and chunk boundaries
+are preserved. DAP `output` events remain available through `onEvent` with their original category.
+Hosts should show debugger diagnostics separately from program output and keep important messages
+visible. Omitting the diagnostic callback does not suppress worker failures or DAP request errors.
+WAMR's native module-name announcement shares guest stdout in the pinned producer; it remains in
+target output until the producer removes or verbosity-gates that `printf`. The consumer does not
+filter target text or discard output during attach, since Wasm start functions may also print then.
+Consumer `onOutput`, `onDebuggerOutput`, `onMemory`, `onLifecycle`, and DAP event-listener exceptions are isolated from
 the byte transports and required session cleanup. Set `onCallbackError(error, callbackKind)` to
 observe the original exception. Exceptions thrown by that error hook are also contained so
 reporting code cannot terminate the debugger.

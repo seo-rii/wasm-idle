@@ -2407,6 +2407,24 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 						const entryLine = await readPausedLine(page);
 						expect(entryLine).toMatch(/^(?:—|L\d+)$/);
+						if ('testId' in testCase && testCase.testId === 'cpp-source-entry') {
+							const transcript = await page
+								.locator('[data-testid="terminal-debug-output"]')
+								.textContent();
+							// WAMR's native module-name printf shares guest stdout. Removing it
+							// requires a producer fix; never filter the target's text here.
+							expect(transcript).not.toMatch(
+								/To get started with the debug console|Running attachCommands|Attached to process/
+							);
+							const log = page.getByTestId('debugger-log');
+							await log.waitFor({ state: 'visible' });
+							expect(await log.getAttribute('open')).toBeNull();
+							await log.locator('summary').click();
+							expect(
+								await page.getByTestId('debugger-log-output').textContent()
+							).toContain('Running attachCommands');
+							await log.locator('summary').click();
+						}
 						if (requireLldbDebug && testCase.backend === 'lldb') {
 							expect(
 								(await page.locator('.debug-hero__copy h2').textContent())?.trim()

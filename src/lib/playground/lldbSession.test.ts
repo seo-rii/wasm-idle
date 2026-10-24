@@ -1,4 +1,4 @@
-import { ProtocolError } from '@wasm-idle/core';
+import { ProtocolError, type DebugSessionEvent } from '@wasm-idle/core';
 import { DapProtocolError } from '@wasm-idle/llvm-core/debug';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -661,6 +661,149 @@ describe('LldbSandboxSession', () => {
 		);
 	});
 
+	describe('output routing', () => {
+		async function startOutputSession(onDebugEvent?: (event: DebugSessionEvent) => void) {
+			const events: DebugSessionEvent[] = [];
+			const output: string[] = [];
+			loadManifest.mockResolvedValue({ manifestVersion: 2, debugger: { capabilities: {} } });
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => {
+					events.push(event);
+					onDebugEvent?.(event);
+				},
+				onOutput: (text) => output.push(text)
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			return { controller, completion, runtime: runtimeState.session!, events, output };
+		}
+
+		it('separates DAP diagnostics from stdout/stderr without filtering program text', async () => {
+			const { controller, completion, runtime, events, output } = await startOutputSession();
+			for (const category of [
+				'stdout',
+				'stderr',
+				'console',
+				'important',
+				undefined,
+				'custom'
+			]) {
+				runtime.emit({
+					event: 'output',
+					body: { category, output: `Running attachCommands: ${category}\n` }
+				});
+			}
+			runtime.emit({
+				event: 'output',
+				body: { category: 'telemetry', output: 'private stats' }
+			});
+			runtime.emit({
+				event: 'output',
+				body: {
+					category: 'console',
+					output: 'value=73\n',
+					source: { path: '/workspace/main.cpp' },
+					line: 8
+				}
+			});
+			expect(output).toEqual([
+				'Running attachCommands: stdout\n',
+				'Running attachCommands: stderr\n'
+			]);
+			expect(events.filter((event) => event.type === 'output')).toEqual([
+				{
+					type: 'output',
+					category: 'console',
+					output: 'Running attachCommands: console\n'
+				},
+				{
+					type: 'output',
+					category: 'important',
+					output: 'Running attachCommands: important\n'
+				},
+				{
+					type: 'output',
+					category: 'console',
+					output: 'Running attachCommands: undefined\n'
+				},
+				{ type: 'output', category: 'console', output: 'Running attachCommands: custom\n' },
+				{
+					type: 'output',
+					category: 'console',
+					output: 'value=73\n',
+					sourcePath: '/workspace/main.cpp',
+					line: 8
+				}
+			]);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('routes raw LLDB diagnostics separately and discards them after disconnect', async () => {
+			const { controller, completion, events, output } = await startOutputSession();
+			const report = runtimeState.options!.onDebuggerOutput as (
+				channel: string,
+				text: string
+			) => void;
+			const targetOutput = runtimeState.options!.onOutput as (
+				channel: string,
+				text: string
+			) => void;
+			report('stdout', 'the module name is /workspace/program.wasm\n');
+			report('stderr', 'adapter warning\n');
+			targetOutput('stderr', 'program error\n');
+			expect(output).toEqual(['program error\n']);
+			expect(events.filter((event) => event.type === 'output')).toEqual([
+				{
+					type: 'output',
+					category: 'console',
+					output: 'the module name is /workspace/program.wasm\n'
+				},
+				{ type: 'output', category: 'important', output: 'adapter warning\n' }
+			]);
+			await controller.disconnect();
+			await completion;
+			const previousEvents = [...events];
+			report('stderr', 'late warning\n');
+			expect(events).toEqual(previousEvents);
+		});
+
+		it('keeps the session usable when a diagnostics consumer throws', async () => {
+			const { controller, completion, runtime, events, output } = await startOutputSession(
+				(event) => {
+					if (event.type === 'output') throw new Error('diagnostics UI failed');
+				}
+			);
+			expect(() =>
+				runtime.emit({ event: 'output', body: { output: 'adapter ready\n' } })
+			).not.toThrow();
+			const report = runtimeState.options!.onDebuggerOutput as (
+				channel: string,
+				text: string
+			) => void;
+			expect(() => report('stderr', 'adapter warning\n')).not.toThrow();
+			runtime.emit({
+				event: 'output',
+				body: { category: 'stdout', output: 'program output\n' }
+			});
+			expect(output).toEqual(['program output\n']);
+			expect(events.some((event) => event.type === 'stop')).toBe(false);
+			await controller.pause();
+			expect(runtime.requests).toContainEqual({ command: 'pause', args: { threadId: 1 } });
+			await controller.disconnect();
+			await expect(completion).resolves.toBe(true);
+		});
+	});
+
 	describe('source entry', () => {
 		async function startEntry(
 			pauseAtMain = true,
@@ -926,7 +1069,12 @@ describe('LldbSandboxSession', () => {
 					.filter((request) => request.command === 'setFunctionBreakpoints')
 					.at(-1)?.args
 			).toEqual({ breakpoints: [] });
-			expect(output.join('')).toMatch(/main.*runtime entry/i);
+			expect(output).toEqual([]);
+			expect(events).toContainEqual({
+				type: 'output',
+				category: 'important',
+				output: expect.stringMatching(/main.*runtime entry/i)
+			});
 			await controller.disconnect();
 			await completion;
 		});
@@ -1780,7 +1928,7 @@ describe('LldbSandboxSession', () => {
 
 		runtimeState.session!.emit({
 			event: 'output',
-			body: { output: 'hello\n' }
+			body: { category: 'stdout', output: 'hello\n' }
 		});
 		expect(output).toEqual(['hello\n']);
 		runtimeState.session!.emit({ event: 'exited', body: { exitCode: 0 } });

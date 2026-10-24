@@ -53,6 +53,10 @@ const VARIABLE_PAGE_SIZE = 50;
 const MAX_AUTO_LOADED_SCOPES = 2;
 const MAX_AUTO_ARGUMENT_FRAMES = 8;
 const MAX_FRAME_ARGUMENTS = 6;
+const MAX_DEBUG_DIAGNOSTICS = 200;
+const MAX_DEBUG_DIAGNOSTIC_CODE_UNITS = 65_536;
+
+type DebugDiagnostic = Readonly<Extract<DebugSessionEvent, { type: 'output' }>>;
 
 type WatchVariablePathSegment = { name: string } | { index: number };
 type WatchVariablePathParseResult =
@@ -230,6 +234,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const scopeNodesStore = writable<ReadonlyMap<number, DebugVariableNode[]>>(new Map());
 	const watchNodesStore = writable<ReadonlyMap<string, DebugVariableNode>>(new Map());
 	const historyStore = writable<readonly DebugStopSnapshot[]>(Object.freeze([]));
+	const diagnosticsStore = writable<readonly DebugDiagnostic[]>(Object.freeze([]));
 	const selectedHistoryIdStore = writable<number | null>(null);
 	const steppingOptionsStore = writable(
 		normalizeDebugSteppingOptions(options.steppingOptions ?? { skipLibraryCode: false })
@@ -288,6 +293,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const scopeNodesState = fromStore(scopeNodesStore);
 	const watchNodesState = fromStore(watchNodesStore);
 	const historyState = fromStore(historyStore);
+	const diagnosticsState = fromStore(diagnosticsStore);
 	const selectedHistoryIdState = fromStore(selectedHistoryIdStore);
 	const steppingOptionsState = fromStore(steppingOptionsStore);
 	const structuredBreakpointsState = fromStore(structuredBreakpointsStore);
@@ -1035,6 +1041,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function begin() {
 		breakpointRequests.clear();
 		historyStore.set(Object.freeze([]));
+		clearDiagnostics();
 		selectedHistoryIdStore.set(null);
 		observedSessionId = undefined;
 		activeStore.set(true);
@@ -1045,7 +1052,46 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		syncBreakpoints();
 	}
 
+	function clearDiagnostics() {
+		diagnosticsStore.set(Object.freeze([]));
+	}
+
 	function handleEvent(event: DebugSessionEvent) {
+		if (event.type === 'output') {
+			if (!event.output) return;
+			let output = event.output.slice(-MAX_DEBUG_DIAGNOSTIC_CODE_UNITS);
+			// Do not split a Unicode surrogate pair when retaining the end of a large chunk.
+			if (output.length < event.output.length && /^[\uDC00-\uDFFF]/u.test(output))
+				output = output.slice(1);
+			diagnosticsStore.update((previous) => {
+				const diagnostic: DebugDiagnostic = Object.freeze({
+					type: 'output',
+					category: event.category,
+					output,
+					...(event.sourcePath !== undefined
+						? {
+								sourcePath: event.sourcePath.slice(
+									0,
+									MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS
+								)
+							}
+						: {}),
+					...(event.line !== undefined ? { line: event.line } : {})
+				});
+				const diagnostics = [...previous, diagnostic];
+				let codeUnits = diagnostics.reduce(
+					(total, entry) => total + entry.output.length,
+					0
+				);
+				while (
+					diagnostics.length > MAX_DEBUG_DIAGNOSTICS ||
+					codeUnits > MAX_DEBUG_DIAGNOSTIC_CODE_UNITS
+				)
+					codeUnits -= diagnostics.shift()!.output.length;
+				return Object.freeze(diagnostics);
+			});
+			return;
+		}
 		if (event.type === 'pauseDetails') {
 			if (
 				!get(pausedStore) ||
@@ -1773,6 +1819,16 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		get history() {
 			return historyState.current;
 		},
+		/** Latest 200 debugger output chunks, limited to 65,536 text code units in total. */
+		get diagnostics() {
+			return diagnosticsState.current;
+		},
+		get latestImportantDiagnostic() {
+			return (
+				diagnosticsState.current.filter((entry) => entry.category === 'important').at(-1) ??
+				null
+			);
+		},
 		get selectedHistoryId() {
 			return selectedHistoryIdState.current;
 		},
@@ -1890,6 +1946,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		},
 		begin,
 		reset,
+		clearDiagnostics,
 		handleEvent,
 		setTerminal,
 		setAdapter,
