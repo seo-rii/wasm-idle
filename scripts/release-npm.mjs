@@ -563,10 +563,15 @@ async function packAndValidate(packages, tarballDir) {
 		const version = pkg.manifest.version;
 		const fileName = `${pkg.name.replace(/^@/u, '').replaceAll('/', '-')}-${version}.tgz`;
 		const tarballPath = path.join(tarballDir, fileName);
-		await run('pnpm', ['--dir', pkg.dir, 'pack', '--out', tarballPath], REPO_ROOT, {
-			...process.env,
-			npm_config_ignore_scripts: 'true'
-		});
+		await run(
+			'pnpm',
+			['--dir', pkg.dir, '--config.ignore-scripts=true', 'pack', '--out', tarballPath],
+			REPO_ROOT,
+			{
+				...process.env,
+				npm_config_ignore_scripts: 'true'
+			}
+		);
 		await stat(tarballPath);
 		const inspected = await inspectTarball(tarballPath);
 		validatePackedManifest(inspected.manifest, {

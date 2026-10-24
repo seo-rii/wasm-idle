@@ -202,8 +202,12 @@ appendFileSync(process.env.RELEASE_TEST_TRACE, JSON.stringify({ command: '${comm
 if ('${command}' === 'pnpm') {
   if (process.env.RELEASE_TEST_PACK === '1') {
     if (args[0] === 'run' || args[0] === 'install') process.exit(0);
-    if (args[0] !== '--dir' || args[2] !== 'pack') throw new Error('Unexpected pack invocation');
+    if (args[0] !== '--dir' || !args.includes('pack')) throw new Error('Unexpected pack invocation');
     const manifest = JSON.parse(readFileSync(path.join(args[1], 'package.json'), 'utf8'));
+    // pnpm 12 ignores npm_config_ignore_scripts during pack without explicit CLI config.
+    if (manifest.scripts?.prepack && !args.includes('--config.ignore-scripts=true')) {
+      writeFileSync(path.join(process.cwd(), 'prepack-ran'), 'verified output changed');
+    }
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']) {
       for (const [name, range] of Object.entries(manifest[section] ?? {})) {
         if (range !== 'workspace:*') continue;
@@ -312,6 +316,11 @@ describe('release CLI', () => {
 			assert.equal(dryRun.status, 0, dryRun.stderr);
 			assert.match(dryRun.stdout, /Validated 11 release tarballs/u);
 			assert.match(dryRun.stdout, /Dry run complete/u);
+			await assert.rejects(
+				readFile(path.join(fixture, 'prepack-ran')),
+				{ code: 'ENOENT' },
+				'packing must preserve verified output without invoking prepack'
+			);
 			const calls = (await readFile(trace, 'utf8'))
 				.trim()
 				.split('\n')
@@ -325,7 +334,7 @@ describe('release CLI', () => {
 			);
 			assert.ok(!calls.some((call) => call.args[0] === 'publish'));
 			const packedNames = calls
-				.filter((call) => call.args[2] === 'pack')
+				.filter((call) => call.command === 'pnpm' && call.args.includes('pack'))
 				.map((call) => path.basename(call.args.at(-1)));
 			assert.equal(packedNames.length, packages.length);
 			assert.ok(packedNames.includes('wasm-idle-container-0.2.0.tgz'));
