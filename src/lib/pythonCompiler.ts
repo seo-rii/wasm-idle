@@ -21,6 +21,7 @@ export async function compilePython(
 		await compiler.load(request.runtimeAssets, '', false, [], request, request.progress);
 		return await compiler.compile(code, request);
 	} catch (error) {
+		if (request.signal?.aborted && error === request.signal.reason) throw error;
 		if (typeof error === 'string') throw new Error(error);
 		throw error;
 	} finally {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PythonCompileOptions, PythonCompileResult } from './pythonCompiler';
 
 const workers: CompilerWorker[] = [];
+let pendingLoad = false;
 let pendingCompilation = false;
 let loadError: string | undefined;
 let compileError: string | undefined;
@@ -14,7 +15,8 @@ class CompilerWorker {
 	terminate = vi.fn();
 	postMessage = vi.fn((message: Record<string, unknown>) => {
 		queueMicrotask(() => {
-			if (message.load) this.emit(loadError ? { error: loadError } : { load: true });
+			if (message.load && !pendingLoad)
+				this.emit(loadError ? { error: loadError } : { load: true });
 			else if (message.compile && !pendingCompilation) {
 				this.emit(compileError ? { error: compileError } : { compiled: result });
 			}
@@ -34,6 +36,7 @@ import Python from './playground/python';
 beforeEach(() => {
 	vi.stubGlobal('Worker', CompilerWorker);
 	workers.length = 0;
+	pendingLoad = false;
 	pendingCompilation = false;
 	loadError = compileError = undefined;
 	result = {
@@ -101,10 +104,36 @@ describe('compilePython', () => {
 		expect(workers).toHaveLength(0);
 	});
 
-	it.each(['load', 'compile'])('disposes on %s failure', async (phase) => {
+	it.each(['before startup', 'load', 'compile'])(
+		'preserves the original string cancellation reason during %s',
+		async (phase) => {
+			pendingLoad = phase === 'load';
+			pendingCompilation = phase === 'compile';
+			const controller = new AbortController();
+			const reason = `cancelled during ${phase}`;
+			if (phase === 'before startup') controller.abort(reason);
+			const compiling = compilePython('pass', { signal: controller.signal });
+			const rejection = expect(compiling).rejects.toBe(reason);
+			if (phase === 'before startup') {
+				await rejection;
+				expect(workers).toHaveLength(0);
+				return;
+			}
+			await vi.waitFor(() =>
+				expect(workers[0]?.postMessage).toHaveBeenCalledTimes(phase === 'load' ? 1 : 2)
+			);
+			controller.abort(reason);
+			await rejection;
+			expect(workers[0].terminate).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each(['load', 'compile'])('normalizes %s worker errors and disposes', async (phase) => {
 		if (phase === 'load') loadError = 'asset failed';
 		else compileError = 'SyntaxError: invalid syntax';
-		await expect(compilePython('if')).rejects.toThrow(loadError ?? compileError);
+		const compiling = compilePython('if');
+		await expect(compiling).rejects.toBeInstanceOf(Error);
+		await expect(compiling).rejects.toThrow(loadError ?? compileError);
 		expect(workers[0].terminate).toHaveBeenCalledOnce();
 	});
 
