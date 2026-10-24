@@ -221,8 +221,18 @@ export async function createCrossGccCompiler(
 							return instance.exports;
 						},
 						locateFile(path: string) {
-							if (path === `${stage.tool}.wasm`)
-								return new URL(path, manifestUrl).href;
+							// Binutils' generated loader keeps its build-time *-new filename
+							// after packaging. Both names resolve to the same pinned module.
+							if (
+								path === `${stage.tool}.wasm` ||
+								((stage.tool === 'as' || stage.tool === 'ld') &&
+									path === `${stage.tool}-new.wasm`)
+							) {
+								return new URL(
+									manifest.assets[`${stage.tool}Wasm`].path,
+									manifestUrl
+								).href;
+							}
 							throw new Error(`GCC requested an unverified asset: ${path}`);
 						},
 						print: print('stdout'),

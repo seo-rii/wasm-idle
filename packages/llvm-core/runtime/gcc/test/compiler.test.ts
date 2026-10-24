@@ -14,6 +14,10 @@ vi.mock('../src/module-loader.js', () => ({
 		revoke: vi.fn(),
 		factory: async (options: Record<string, unknown>) => {
 			const tool = new TextDecoder().decode(source).replace('synthetic-fixture:', '');
+			// Real binutils Emscripten loaders retain their pre-package names.
+			(options.locateFile as Function)(
+				`${tool}${tool === 'as' || tool === 'ld' ? '-new' : ''}.wasm`
+			);
 			const files = new Map<string, Uint8Array>();
 			let instance: WebAssembly.Instance;
 			(options.instantiateWasm as Function)({}, (value: WebAssembly.Instance) => {
