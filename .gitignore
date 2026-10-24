@@ -29,6 +29,7 @@ scripts/*.d.mts
 !scripts/sync-wasm-haskell.d.mts
 !scripts/c3-browser-probe.d.mts
 !scripts/sync-wasm-grain.d.mts
+runtimes/wasm-busybox/commands.d.mts
 src/routes/editor-defaults.d.ts
 static/wasm-d/runtime/bin/ldc2.wasm
 static/wasm-d/runtime/bin/lld.data
