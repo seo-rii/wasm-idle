@@ -13,9 +13,14 @@ def compile_bytecode(source, filename, optimization, byte_limit):
     import tempfile
     import tokenize
 
-    # The editor provides Unicode text. Honor its coding cookie when producing
-    # the source file so py_compile cannot silently reinterpret UTF-8 bytes.
-    encoding, _ = tokenize.detect_encoding(io.BytesIO(source.encode("utf-8")).readline)
+    # Coding cookies are ASCII. Probe without non-ASCII header text because
+    # detect_encoding also decodes those bytes using the declared codec.
+    # Preserve the BOM so CPython still rejects conflicting declarations.
+    encoding_probe = source.removeprefix("\ufeff").encode("ascii", "replace")
+    if source.startswith("\ufeff"):
+        encoding_probe = b"\xef\xbb\xbf" + encoding_probe
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(encoding_probe).readline)
+    # Encode the original text; py_compile validates the actual source bytes.
     encoded_source = source.removeprefix("\ufeff").encode(encoding)
 
     with tempfile.TemporaryDirectory(prefix="wasm-idle-pyc-") as directory:

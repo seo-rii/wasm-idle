@@ -107,7 +107,14 @@ describe('Python bytecode on the pinned real Pyodide', () => {
 
 	it.each([
 		['# coding: latin-1\nvalue = "é"', 'é'],
-		['\ufeff# coding: utf-8\nvalue = "한글🙂"', '한글🙂']
+		['\ufeff# coding: utf-8\nvalue = "한글🙂"', '한글🙂'],
+		['# 한글\n# coding: cp949\nvalue = "한글"', '한글'],
+		['# coding: cp949 한글\nvalue = "한글"', '한글'],
+		['# 日本語\n# coding: shift_jis\nvalue = "日本語"', '日本語'],
+		['# Á€\n# coding: cp1252\nvalue = "Á€"', 'Á€'],
+		['value = "한글"\n# coding: ascii', '한글'],
+		['# 한글\n# comment\n# coding: ascii\nvalue = "한글"', '한글'],
+		['\ufeffvalue = "한글🙂"', '한글🙂']
 	])('preserves Unicode source under its declared encoding: %s', (source, expected) => {
 		const artifact = compilePythonBytecode(runtime, source, 'encoding.py', 0, limit);
 		const path = '/tmp/wasm-idle-bytecode-encoding.pyc';
@@ -119,6 +126,17 @@ describe('Python bytecode on the pinned real Pyodide', () => {
 		} finally {
 			runtime.FS.unlink(path);
 		}
+	});
+
+	it.each([
+		['\ufeff# coding: cp949\nvalue = "한글"', 'encoding problem'],
+		['# coding: wasm_idle_unknown_encoding\npass', 'unknown encoding']
+	])('rejects an invalid encoding declaration: %s', (source, message) => {
+		const before = temporaryCompiles();
+		expect(() => compilePythonBytecode(runtime, source, 'encoding.py', 0, limit)).toThrow(
+			message
+		);
+		expect(temporaryCompiles()).toEqual(before);
 	});
 
 	it('rejects source characters that cannot be represented by its coding cookie', () => {
