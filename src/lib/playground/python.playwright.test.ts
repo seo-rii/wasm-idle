@@ -7,6 +7,7 @@ import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, describe, expect, it } from 'vitest';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../../scripts/browser-test-prewarm.mjs';
+import { prepareBrowserTestAssets } from '../../../scripts/prepare-browser-test-assets.mjs';
 import {
 	runBrowserPreparationScripts,
 	runWithBrowserProbeSessionLock,
@@ -136,6 +137,7 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 					close: async () => {}
 				};
 			}
+			await prepareBrowserTestAssets({ groups: ['container'] });
 			await runBrowserPreparationScripts(['build:preview'], { timeoutMs: 900_000 });
 			return await startBrowserPreviewServer({
 				origin: 'http://localhost:4593',
@@ -146,11 +148,7 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 	});
 }
 
-async function beginRun(page: Page, source: string) {
-	await page.locator('button.action-button--run').waitFor({ state: 'visible' });
-	const previousId = await page.evaluate(
-		() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
-	);
+async function setPythonSource(page: Page, source: string) {
 	for (let attempt = 0; attempt < 4; attempt += 1) {
 		const accepted = await page.evaluate(
 			async (code) => (globalThis as any).__wasmIdleDebug.setEditorValue(code),
@@ -168,6 +166,14 @@ async function beginRun(page: Page, source: string) {
 		}
 		if (attempt === 3) throw new Error('Python test source was overwritten before execution');
 	}
+}
+
+async function beginRun(page: Page, source: string) {
+	await page.locator('button.action-button--run').waitFor({ state: 'visible' });
+	const previousId = await page.evaluate(
+		() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
+	);
+	await setPythonSource(page, source);
 	await page.locator('button.action-button--run').click();
 	await page.waitForFunction(
 		(id) => (globalThis as any).__wasmIdleDebug.getExecutionState().id > id,
@@ -244,6 +250,84 @@ async function withPythonBrowser(
 }
 
 describe.skipIf(!enabled)('real Python 3.14 browser runtime', () => {
+	it(
+		'compiles the active Python file to a downloadable pyc without executing its code',
+		{ timeout: 1_200_000, meta: browserMeta },
+		async () => {
+			await withPythonBrowser(async (page, errors) => {
+				let downloadCount = 0;
+				page.on('download', () => (downloadCount += 1));
+				await setPythonSource(page, 'await missing_coroutine()\n');
+				await page.getByRole('button', { name: 'Compile .pyc', exact: true }).click();
+				await page.waitForFunction(() =>
+					document
+						.querySelector('.statusbar__message')
+						?.textContent?.startsWith('Python compilation failed:')
+				);
+				expect(await page.locator('.statusbar__message').textContent()).toContain(
+					'SyntaxError'
+				);
+				expect(downloadCount).toBe(0);
+				expect(await page.locator('#language-select').isEnabled()).toBe(true);
+				const source =
+					'print("pyc-result=한글")\nraise RuntimeError("compiled-code-ran")\n';
+				await setPythonSource(page, source);
+				const executionBefore = await page.evaluate(
+					() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
+				);
+				const [download] = await Promise.all([
+					page.waitForEvent('download'),
+					page.getByRole('button', { name: 'Compile .pyc', exact: true }).click()
+				]);
+				expect(download.suggestedFilename()).toBe('main.pyc');
+				expect(await download.failure()).toBeNull();
+				const downloadPath = await download.path();
+				expect(downloadPath).not.toBeNull();
+				const bytecode = await readFile(downloadPath!);
+				expect(bytecode.length).toBeGreaterThan(16);
+				expect([...bytecode.subarray(2, 4)]).toEqual([0x0d, 0x0a]);
+				expect(
+					await page.evaluate(
+						() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
+					)
+				).toBe(executionBefore);
+				expect(await page.locator('.statusbar__message').textContent()).toMatch(
+					/main\.pyc downloaded \(Python 3\.14\./u
+				);
+				await beginRun(
+					page,
+					`import base64, runpy
+from pathlib import Path
+path = Path("/tmp/downloaded.pyc")
+path.write_bytes(base64.b64decode(${JSON.stringify(bytecode.toString('base64'))}))
+try:
+    runpy.run_path(str(path), run_name="__main__")
+except RuntimeError as error:
+    print(f"caught={error}")`
+				);
+				await page.waitForFunction(
+					() => (globalThis as any).__wasmIdleDebug.getExecutionState().endedAt !== null
+				);
+				const execution = await page.evaluate(() =>
+					(globalThis as any).__wasmIdleDebug.getExecutionState()
+				);
+				const transcript = await page
+					.locator('[data-testid="terminal-debug-output"]')
+					.textContent();
+				expect(
+					execution,
+					JSON.stringify({ execution, transcript, errors }, null, 2)
+				).toMatchObject({
+					status: 'completed',
+					exitCode: 0
+				});
+				expect(transcript).toContain('pyc-result=한글');
+				expect(transcript).toContain('caught=compiled-code-ran');
+				expect(errors).toEqual([]);
+			});
+		}
+	);
+
 	it(
 		'executes Python 3.14 syntax, bundled standard libraries, and terminal stdin',
 		{ timeout: 1_200_000, meta: browserMeta },

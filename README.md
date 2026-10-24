@@ -1116,6 +1116,42 @@ external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Py
 `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
 `wasm-wat`, `wasm-lua`, Fennel, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.
 
+### Python bytecode compilation
+
+Choose a Python `.py` file and click **Compile .pyc** to download its compiled bytecode.
+The browser SDK exposes the same operation independently of playground sessions:
+
+```ts
+import { compilePython } from 'wasm-idle';
+
+const controller = new AbortController();
+const result = await compilePython('print("Hello")', {
+	fileName: 'main.py',
+	optimize: 0,
+	runtimeAssets: { rootUrl: 'https://cdn.example.com/repl' },
+	signal: controller.signal
+});
+// result.path: "main.pyc"
+// result.data: Uint8Array, suitable for a Blob or binary file storage
+// result.pythonVersion, result.cacheTag, result.magicNumber identify the compiler format.
+```
+
+Each request uses a dedicated Pyodide worker and disposes it on success, failure, or cancellation.
+It calls CPython's `py_compile` without executing user code or installing its imports, and leaves
+the playground workspace and active interpreter unchanged. The output uses checked-hash
+invalidation and the relative `fileName` in tracebacks. `fileName` defaults to `main.py`;
+`optimize` accepts `0`, `1` (remove assertions), or `2` (also remove docstrings).
+The optional `progress` callback and `persistentCache` setting follow the runtime asset APIs.
+`limits` supports asset/startup/compile deadlines, `maxAssetBytes`, `maxWorkspaceBytes` for the
+source, and `maxOutputBytes` for the returned bytecode.
+
+The generated file targets the loaded CPython bytecode version; it does not bundle imported
+modules. Standard `.pyc` compilation rejects top-level `await`, even though the playground's
+interactive execution supports it. Source-free files should be distributed as `module.pyc`
+beside other modules, rather than as orphaned `__pycache__` entries. Bytecode upload/execution
+is not a new playground input mode. See Python's [py_compile documentation](https://docs.python.org/3.14/library/py_compile.html)
+and [compiled module behavior](https://docs.python.org/3.14/tutorial/modules.html#compiled-python-files).
+
 ### Ruby split standard library
 
 The bundled Ruby runtime also provides a verified `ruby.splitStdlib: true` profile. It compiles the genuine Ruby core Wasm while fetching the complete standard library and bundled gems as a separate read-only filesystem pack. The web demo selects this profile; library consumers retain the embedded-stdlib profile unless they opt in. Custom trust profiles continue to use the embedded path.

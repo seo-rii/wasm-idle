@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
-	import { isSharedArrayBufferAvailable } from '$lib';
+	import { compilePython, isSharedArrayBufferAvailable } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
@@ -278,7 +278,7 @@
 		lspEnabled = $state(true),
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
-		runningMode = $state<'run' | 'debug' | null>(null),
+		runningMode = $state<'run' | 'debug' | 'compile' | null>(null),
 		activeDebugBackend = $state<BrowserDebugMode | null>(null),
 		progressVisible = $state(false),
 		progress = $state(0),
@@ -300,6 +300,12 @@
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
+	let pythonCompileAbortController: AbortController | undefined;
+	onDestroy(() => {
+		const controller = pythonCompileAbortController;
+		pythonCompileAbortController = undefined;
+		controller?.abort();
+	});
 
 	const initialSelection = browser
 		? resolveInitialWorkspace({
@@ -1882,6 +1888,51 @@
 		saveStatus = `${basename(file.path)} downloaded`;
 	}
 
+	async function compileActivePythonFile() {
+		const file = activeFile;
+		if (
+			!workspaceEditorReady ||
+			runningMode ||
+			language !== 'PYTHON' ||
+			!file ||
+			isBinaryWorkspaceFile(file) ||
+			extension(file.path) !== '.py'
+		)
+			return;
+		// Keep the source and filename paired even if the editor changes during compilation.
+		const fileName = file.path;
+		const source = file.content;
+		const controller = new AbortController();
+		pythonCompileAbortController = controller;
+		runningMode = 'compile';
+		saveStatus = `Compiling ${basename(fileName)}…`;
+		try {
+			const result = await compilePython(source, {
+				fileName,
+				runtimeAssets,
+				signal: controller.signal,
+				progress: loadingProgress.start('Loading Python compiler')
+			});
+			if (controller.signal.aborted || pythonCompileAbortController !== controller) return;
+			downloadBlob(
+				new Blob([Uint8Array.from(result.data)], { type: 'application/x-python-code' }),
+				basename(result.path)
+			);
+			saveStatus = `${basename(result.path)} downloaded (Python ${result.pythonVersion})`;
+		} catch (error) {
+			if (pythonCompileAbortController !== controller) return;
+			saveStatus = controller.signal.aborted
+				? 'Python compilation cancelled'
+				: `Python compilation failed: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			if (pythonCompileAbortController === controller) {
+				pythonCompileAbortController = undefined;
+				runningMode = null;
+				loadingProgress.reset();
+			}
+		}
+	}
+
 	async function runWorkspaceArchive(
 		request: WorkspaceArchiveRequest,
 		transfer: Transferable[] = []
@@ -2062,6 +2113,12 @@
 	}
 
 	async function stopExecution() {
+		if (runningMode === 'compile') {
+			pythonCompileAbortController?.abort(
+				new DOMException('Python compilation cancelled by the user', 'AbortError')
+			);
+			return;
+		}
 		if (!terminal || !runningMode || executionStopPending || restartDebugPending) return;
 		const stoppedMode = runningMode;
 		const previousExecution = activeExecution;
@@ -2118,7 +2175,7 @@
 	}
 
 	async function sendTerminalEof() {
-		if (!terminal || !runningMode) return;
+		if (!terminal || !runningMode || runningMode === 'compile') return;
 		await terminal.eof?.();
 	}
 
@@ -4495,6 +4552,38 @@
 			</button>
 			<span class="topbar__divider" aria-hidden="true"></span>
 			<div class="action-group">
+				{#if language === 'PYTHON'}
+					{#if runningMode === 'compile'}
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							title="Cancel Python compilation"
+							aria-label="Cancel Python compilation"
+						>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>stop_circle</span
+							>
+							<span>Cancel compilation</span>
+						</button>
+					{:else}
+						<button
+							class="action-button action-button--compile"
+							onclick={compileActivePythonFile}
+							disabled={!workspaceEditorReady ||
+								!!runningMode ||
+								!activeFile ||
+								isBinaryWorkspaceFile(activeFile) ||
+								extension(activeFile.path) !== '.py'}
+							title="Compile the active Python file and download .pyc"
+							aria-label="Compile .pyc"
+						>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>download</span
+							>
+							<span>Compile .pyc</span>
+						</button>
+					{/if}
+				{/if}
 				{#if runningMode === 'debug'}
 					<button
 						class="action-button action-button--debug-restart"
@@ -4543,7 +4632,7 @@
 					<button
 						class="action-button action-button--run"
 						onclick={() => exec(false)}
-						disabled={runningMode === 'debug' || !executionAvailable}
+						disabled={!!runningMode || !executionAvailable}
 					>
 						<span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
 						<span>Run</span>
@@ -4955,7 +5044,11 @@
 								class:run-indicator--debug={runningMode === 'debug'}
 							>
 								<i aria-hidden="true"></i>
-								{runningMode === 'debug' ? 'Debugging' : 'Running'}
+								{runningMode === 'debug'
+									? 'Debugging'
+									: runningMode === 'compile'
+										? 'Compiling'
+										: 'Running'}
 							</span>
 						{/if}
 					</div>
@@ -4963,7 +5056,7 @@
 						<button
 							class="action-button action-button--icon"
 							onclick={sendTerminalEof}
-							disabled={!runningMode}
+							disabled={!runningMode || runningMode === 'compile'}
 							title="Send EOF"
 							aria-label="Send EOF"
 						>
