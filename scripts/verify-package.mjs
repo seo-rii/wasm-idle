@@ -51,10 +51,9 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
-		// Ruby preview and the cross compiler each add JavaScript and a declaration.
-		// Three Python compiler modules add six JavaScript/declaration files.
-		// GCC is a separate install; shared asset/archive helpers now live in core.
-		budget: { maxBytes: 7 * MiB, maxFiles: 753, maxPackages: 6 },
+		// Main includes Ruby preview, Python compiler and the cross compiler in 751 files.
+		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
+		budget: { maxBytes: 7 * MiB, maxFiles: 757, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -244,8 +243,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 			fileName === 'wasm-idle' ? fileName : `@wasm-idle/${fileName}`
 		),
 		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
-		// Preserve the Java aggregate headroom while adding the reviewed SIMD payload.
-		budget: { maxBytes: 40 * MiB + 384 * 1024, maxFiles: 3_350, maxPackages: 70 },
+		// Preserve Java/SIMD headroom and allow 24 KiB for main's 23,009-byte
+		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
+		budget: { maxBytes: 40 * MiB + 408 * 1024, maxFiles: 3_352, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
