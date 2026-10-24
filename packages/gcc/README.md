@@ -86,7 +86,7 @@ The compiler's GMP/MPFR/MPC and Emscripten libraries are **host** dependencies i
 The GNU sysroot's glibc, libstdc++, libgcc and CRT are **target** ELF files; they are only
 read by the compiler/linker. Source revisions, file hashes and licenses belong to the
 producer bundle's provenance files. The common sysroot contract is shared with the
-separately stacked Clang PR, with GCC's own internal headers added by the GCC producer.
+Clang cross compiler, with GCC's own internal headers added by the GCC producer.
 
 ## Integrity, state and measurements
 
