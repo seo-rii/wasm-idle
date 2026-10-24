@@ -1,6 +1,6 @@
 {
 	"name": "wasm-idle",
-	"version": "1.1.2",
+	"version": "1.2.0",
 	"description": "A simple web app to run code in the browser",
 	"license": "MIT",
 	"type": "module",
@@ -290,7 +290,7 @@
 		"fflate": "0.8.3"
 	},
 	"peerDependencies": {
-		"@wasm-idle/container": "0.1.1"
+		"@wasm-idle/container": "0.2.0"
 	},
 	"peerDependenciesMeta": {
 		"@wasm-idle/container": {
