@@ -19,6 +19,11 @@ import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playg
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
+	resolvePythonCompileRequest,
+	type PythonCompileOptions,
+	type PythonCompileResult
+} from './pythonCompileOptions';
+import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
@@ -33,7 +38,7 @@ const outputEncoder = new TextEncoder();
 
 type PythonOperation = {
 	token: symbol;
-	phase: 'startup' | 'execute';
+	phase: 'startup' | 'compile' | 'execute';
 	cancelled: boolean;
 	cancellationReason?: unknown;
 	cleanedUp: boolean;
@@ -46,7 +51,7 @@ const abortReason = (signal: AbortSignal, phase: PythonOperation['phase'], label
 		: new DOMException(
 				phase === 'startup'
 					? `${label} runtime startup aborted`
-					: `${label} execution aborted`,
+					: `${label} ${phase === 'compile' ? 'compilation' : 'execution'} aborted`,
 				'AbortError'
 			);
 
@@ -228,7 +233,7 @@ class Python implements Sandbox {
 				this.cancelOperation(
 					operation,
 					new TimeoutError(
-						`${this.runtimeLabel} ${operation.phase === 'startup' ? 'startup' : 'execution'} timed out after ${timeoutMs} ms`,
+						`${this.runtimeLabel} ${operation.phase === 'startup' ? 'startup' : operation.phase === 'compile' ? 'compilation' : 'execution'} timed out after ${timeoutMs} ms`,
 						{
 							phase: operation.phase,
 							runtimeId: this.runtimeId,
@@ -406,6 +411,120 @@ class Python implements Sandbox {
 	eof() {
 		this.pendingEof = true;
 		this.flushPendingInput();
+	}
+
+	/** Used by compilePython's dedicated instance; never runs source or resolves its imports. */
+	compile(code: string, options: PythonCompileOptions = {}): Promise<PythonCompileResult> {
+		let operation: PythonOperation;
+		try {
+			operation = this.beginOperation('compile');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		let request: ReturnType<typeof resolvePythonCompileRequest>;
+		const worker = this.worker;
+		try {
+			if (this.workerLanguage !== 'python') {
+				throw new RuntimeConfigurationError(
+					'Bytecode compilation is only available for Python'
+				);
+			}
+			request = resolvePythonCompileRequest(code, options);
+			options.signal?.throwIfAborted();
+			if (!worker) throw new Error('Python worker not loaded');
+			this.assetBridge?.setExecutionPersistentCache(options.persistentCache);
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(operation, error));
+		}
+		const { fileName, optimize, limits } = request;
+		const path = fileName.slice(0, -3) + '.pyc';
+		this.exit = false;
+		this.begin = Date.now();
+		let handler: ((event: MessageEvent) => void) | undefined;
+		const compiling = new Promise<PythonCompileResult>((resolve, reject) => {
+			const workerOperation = this.workerSession.beginRun(worker, reject);
+			this.bindOperationTimeout(operation, limits.compileTimeoutMs);
+			this.bindAbortSignal(operation, options.signal);
+			if (!this.isOperationActive(operation)) return;
+			const finish = (result?: PythonCompileResult, error?: unknown) => {
+				if (!this.isOperationActive(operation)) return;
+				this.workerSession.complete(workerOperation);
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+				if (result) resolve(result);
+				else reject(error);
+			};
+			handler = (event) => {
+				if (!this.isOperationActive(operation) || this.worker !== worker) return;
+				try {
+					if (this.assetBridge?.handleMessage(event)) return;
+					reportWorkerProgress(options.progress, event.data?.progress);
+					if (!this.isOperationActive(operation)) return;
+					if (event.data?.error !== undefined) {
+						const outputLimit = event.data.outputLimit;
+						finish(
+							undefined,
+							outputLimit
+								? new OutputLimitError(String(event.data.error), {
+										runtimeId: 'PYTHON3',
+										phase: 'compile',
+										actual: outputLimit.actual,
+										limit: outputLimit.limit
+									})
+								: event.data.error
+						);
+						return;
+					}
+					if (event.data?.compiled === undefined) return;
+					const result = event.data.compiled as PythonCompileResult;
+					if (
+						!result ||
+						result.path !== path ||
+						!(result.data instanceof Uint8Array) ||
+						result.data.byteLength < 16 ||
+						typeof result.pythonVersion !== 'string' ||
+						typeof result.cacheTag !== 'string' ||
+						typeof result.magicNumber !== 'string' ||
+						!/^[0-9a-f]{8}$/.test(result.magicNumber)
+					)
+						throw new Error('Invalid Python bytecode result');
+					if (result.data.byteLength > limits.maxOutputBytes) {
+						throw new OutputLimitError(
+							'Python bytecode exceeds the configured byte limit',
+							{
+								runtimeId: 'PYTHON3',
+								phase: 'compile',
+								actual: result.data.byteLength,
+								limit: limits.maxOutputBytes
+							}
+						);
+					}
+					finish(result);
+				} catch (error) {
+					this.cancelOperation(operation, error);
+				}
+			};
+			worker!.onmessage = handler;
+			try {
+				worker!.postMessage({
+					compile: true,
+					language: 'python',
+					code,
+					fileName,
+					optimize,
+					maxArtifactBytes: limits.maxOutputBytes
+				});
+			} catch (error) {
+				finish(undefined, error);
+			}
+		});
+		return compiling.finally(() => {
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+			this.exit = true;
+			this.elapse = Date.now() - this.begin;
+			if (worker?.onmessage === handler) worker.onmessage = null;
+		});
 	}
 
 	private flushPendingInput() {

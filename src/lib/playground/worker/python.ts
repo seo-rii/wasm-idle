@@ -9,6 +9,7 @@ import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
 import { createPythonExecutionHelpers } from './pythonExecution';
+import { compilePythonBytecode } from './pythonCompile';
 import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
 import { createPythonWorkspaceFiles } from './pythonWorkspaceFiles';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
@@ -25,7 +26,7 @@ import {
 declare const self: {
 	document: any;
 	onmessage: (event: MessageEvent) => void;
-	postMessage: (message: any) => void;
+	postMessage: (message: any, transfer?: Transferable[]) => void;
 	prompt?: (output?: string) => string | null;
 	[key: string]: any;
 };
@@ -587,6 +588,10 @@ self.onmessage = async (event: any) => {
 		load,
 		interrupt,
 		assets,
+		compile,
+		fileName,
+		optimize,
+		maxArtifactBytes,
 		prepare,
 		stdin,
 		debug = false,
@@ -628,6 +633,20 @@ self.onmessage = async (event: any) => {
 			postMessage({ load: true });
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
+		}
+	} else if (compile) {
+		try {
+			if (language !== 'python') throw new Error('Bytecode compilation is supported only for Python');
+			await loadPyodide(baseUrl);
+			postProgress(10, 'Compiling Python bytecode');
+			const compiled = compilePythonBytecode(pyodide, code, fileName, optimize, maxArtifactBytes);
+			postProgress(100, 'Python bytecode ready');
+			self.postMessage({ compiled }, [compiled.data.buffer as ArrayBuffer]);
+		} catch (e: any) {
+			self.postMessage({
+				error: e.message || 'Unknown error',
+				...(e.code === 'output-limit' ? { outputLimit: { actual: e.actual, limit: e.limit } } : {})
+			});
 		}
 	} else if (prepare) {
 		preparedPackagesKey = undefined;

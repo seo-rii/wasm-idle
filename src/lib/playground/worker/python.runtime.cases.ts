@@ -13,8 +13,10 @@ const workerAssets = vi.hoisted(() => ({
 		async () => new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))
 	)
 }));
+const compileBytecode = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/playground/worker/assets', () => workerAssets);
+vi.mock('./pythonCompile', () => ({ compilePythonBytecode: compileBytecode }));
 
 afterEach(() => {
 	vi.resetModules();
@@ -25,6 +27,7 @@ afterEach(() => {
 	workerAssets.handleWorkerAssetMessage.mockReset().mockReturnValue(false);
 	workerAssets.loadWorkerRuntimeAsset.mockReset();
 	workerAssets.loadWorkerRuntimeModule.mockClear();
+	compileBytecode.mockReset();
 });
 
 const packageAsset = 'demo-1.0-py3-none-any.whl';
@@ -145,6 +148,72 @@ export async function loadPyodide(options) {
 }
 
 describe('Python worker runtime dispatch', () => {
+	it('returns transferable bytecode without preparing packages or executing source', async () => {
+		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+		await onmessage({ data: {
+			load: true,
+			assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+		} });
+		const compiled = {
+			path: 'nested/main.pyc', data: new Uint8Array([1, 2, 3]),
+			pythonVersion: '3.14.2', cacheTag: 'cpython-314', magicNumber: '2b0f0d0a'
+		};
+		compileBytecode.mockReturnValue(compiled);
+		await onmessage({ data: {
+			compile: true, code: 'import missing\nraise RuntimeError()', fileName: 'nested/main.py',
+			optimize: 1, maxArtifactBytes: 4096, language: 'python'
+		} });
+		expect(compileBytecode).toHaveBeenCalledWith(
+			pyodide, 'import missing\nraise RuntimeError()', 'nested/main.py', 1, 4096
+		);
+		expect(postMessage).toHaveBeenCalledWith({ compiled }, [compiled.data.buffer]);
+		expect(pyodide.loadPackagesFromImports).not.toHaveBeenCalled();
+		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+		expect(pyodide.FS.writeFile).not.toHaveBeenCalled();
+	});
+
+	it.each(['hy', 'aheui', 'apecode', 'unrecognized'])('rejects bytecode requests for %s', async (language) => {
+		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();
+		await onmessage({ data: {
+			compile: true, code: 'pass', fileName: 'main.py', optimize: 0,
+			maxArtifactBytes: 4096, language
+		} });
+		expect(compileBytecode).not.toHaveBeenCalled();
+		expect(runtimeOptions).toHaveLength(0);
+		expect(postMessage).toHaveBeenCalledWith({ error: 'Bytecode compilation is supported only for Python' });
+	});
+
+	it('preserves bytecode output-limit details across the worker boundary', async () => {
+		const { onmessage, postMessage } = await createRuntimeHarness();
+		await onmessage({ data: {
+			load: true,
+			assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+		} });
+		compileBytecode.mockImplementation(() => {
+			throw Object.assign(new Error('Bytecode too large'), { code: 'output-limit', actual: 200, limit: 16 });
+		});
+		await onmessage({ data: {
+			compile: true, code: 'pass', fileName: 'main.py', optimize: 0,
+			maxArtifactBytes: 16, language: 'python'
+		} });
+		expect(postMessage).toHaveBeenCalledWith({ error: 'Bytecode too large', outputLimit: { actual: 200, limit: 16 } });
+	});
+
+	it('returns compiler errors without running the source', async () => {
+		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+		await onmessage({ data: {
+			load: true,
+			assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+		} });
+		compileBytecode.mockImplementation(() => { throw new Error('SyntaxError: invalid source'); });
+		await onmessage({ data: {
+			compile: true, code: 'if', fileName: 'main.py', optimize: 0,
+			maxArtifactBytes: 4096, language: 'python'
+		} });
+		expect(postMessage).toHaveBeenCalledWith({ error: 'SyntaxError: invalid source' });
+		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+	});
+
 	it('rejects an asm module without the exported factory before initializing Python', async () => {
 		const { moduleSources, onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();
 		moduleSources['pyodide.asm.mjs'] = 'export const unrelated = true;';

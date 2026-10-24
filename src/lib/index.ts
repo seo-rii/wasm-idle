@@ -2,6 +2,11 @@ import playground, { createPlaygroundBinding } from '$lib/playground';
 
 export default playground;
 export { createPlaygroundBinding, playground };
+export {
+	compilePython,
+	type PythonCompileOptions,
+	type PythonCompileResult
+} from './pythonCompiler';
 export { createRuntimeSession } from '$lib/playground/runtimeSession';
 export {
 	configureRuntimeAssetCache,
