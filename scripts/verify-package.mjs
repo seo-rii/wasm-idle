@@ -11,6 +11,7 @@ const packages = [
 	['container', 'packages/container'],
 	['core', 'packages/core'],
 	['debug', 'packages/debug'],
+	['gcc', 'packages/gcc'],
 	['llvm-core', 'packages/llvm-core'],
 	['lsp', 'packages/lsp'],
 	['node', 'packages/node'],
@@ -51,7 +52,8 @@ export const scenarios = [
 		// Java debugger modules share a bundled upstream parser and complete notices.
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
 		// Ruby preview and the cross compiler each add JavaScript and a declaration.
-		budget: { maxBytes: 7 * MiB, maxFiles: 745, maxPackages: 6 },
+		// GCC is a separate install; shared asset/archive helpers now live in core.
+		budget: { maxBytes: 7 * MiB, maxFiles: 751, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -61,6 +63,7 @@ export const scenarios = [
 			'@lezer/rust',
 			'@wasm-idle/container',
 			'@wasm-idle/debug',
+			'@wasm-idle/gcc',
 			'@wasm-idle/lsp',
 			'@wasm-idle/terminal',
 			'@xterm/xterm',
@@ -73,6 +76,7 @@ export const scenarios = [
 			"await import('@wasm-idle/llvm-core/debug');",
 			"const crossClang = await import('@wasm-idle/llvm-core/cross-clang');",
 			"if (typeof crossClang.createCrossClangCompiler !== 'function' || typeof crossClang.parseCrossClangManifest !== 'function') throw new Error('Missing packaged x86 cross compiler API');",
+			"await (await import('node:assert/strict')).default.rejects(import('@wasm-idle/llvm-core/gcc'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');",
 			"const { instrumentJavaDebugSource } = await import(new URL('./playground/javaDebugSource.js', import.meta.resolve('wasm-idle')));",
 			"const captured = instrumentJavaDebugSource('class Main { void run() { int value = 7; value++; } }', 'Main.java', 'debug.Bridge');",
@@ -85,6 +89,38 @@ export const scenarios = [
 			"const javaNotices = await (await import('node:fs/promises')).readFile(new URL('./playground/java-debug-notices.txt', import.meta.resolve('wasm-idle')), 'utf8');",
 			"if (!javaNotices.includes('java-parser@3.0.1') || !javaNotices.includes('Apache License')) throw new Error('Packaged Java parser notices are missing');"
 		]
+	},
+	{
+		name: '@wasm-idle/gcc install',
+		packageNames: ['@wasm-idle/gcc', '@wasm-idle/core'],
+		budget: { maxBytes: 2.5 * MiB, maxFiles: 150, maxPackages: 3 },
+		absentPackageNames: [
+			'wasm-idle',
+			'@wasm-idle/llvm-core',
+			'@wasm-idle/container',
+			'@wasm-idle/lsp',
+			'@bjorn3/browser_wasi_shim',
+			'monaco-editor',
+			'svelte'
+		],
+		imports: [
+			'let workers = 0, requests = 0;',
+			"globalThis.Worker = class { constructor() { workers++; throw new Error('Unexpected Worker'); } };",
+			"globalThis.fetch = () => { requests++; throw new Error('Unexpected runtime fetch'); };",
+			"const gcc = await import('@wasm-idle/gcc');",
+			"for (const name of ['createCrossGccCompiler', 'createCrossGccWorker', 'parseCrossGccManifest']) if (typeof gcc[name] !== 'function') throw new Error(`Missing packaged GCC API: ${name}`);",
+			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/gcc')));",
+			"if (workers || requests) throw new Error('GCC import started a Worker or fetched assets');"
+		],
+		typeCheck: `import { createCrossGccWorker, type CrossGccCompileRequest, type CrossGccArtifact } from '@wasm-idle/gcc';
+const request: CrossGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'x86-64', emit: 'executable' };
+declare const artifact: CrossGccArtifact;
+const compiler: 'gcc' = artifact.compiler;
+const host: 'wasm32-emscripten' = artifact.compilerHost;
+const target: 'x86_64-linux-gnu' = artifact.target;
+const workerFactory: typeof createCrossGccWorker = createCrossGccWorker;
+void [request, compiler, host, target, workerFactory];
+`
 	},
 	{
 		name: 'wasm-idle/container install',
@@ -144,8 +180,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		// Allow 64 KiB above 16 MiB for the current xterm and Svelte dependency sizes.
-		budget: { maxBytes: 16 * MiB + 64 * 1024, maxFiles: 1_370, maxPackages: 32 },
+		// Existing 64 KiB headroom plus 832 KiB for core's shared loader and pinned fflate.
+		budget: { maxBytes: 16 * MiB + 896 * 1024, maxFiles: 1_370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -160,7 +196,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
-		budget: { maxBytes: 7 * MiB, maxFiles: 1_200, maxPackages: 25 },
+		// Shared loader/fflate costs 832 KiB; the existing file/package caps still fit.
+		budget: { maxBytes: 7 * MiB + 832 * 1024, maxFiles: 1_200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -211,6 +248,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
+			"await import('@wasm-idle/gcc');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/lsp');",
 			"await import('@wasm-idle/lsp/clangd');",

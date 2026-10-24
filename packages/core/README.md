@@ -68,6 +68,19 @@ created.
 The runtime-specific preflight and manifest helpers (`preflight*RuntimeAssets`, `snapshot*Profile`,
 and similar exports) are the verification contracts used by wasm-idle's own runtimes.
 
+## Runtime loading helpers
+
+Compiler hosts share bounded HTTP(S) asset loading and decompression through
+`@wasm-idle/core/runtime-asset-loader` (`readBuffer`, `fetchRuntimeJson`, `decompressGzip`, and
+WebAssembly compilation helpers). Cached buffers and modules are scoped to the supplied fetch
+provider; cancellable loads bypass those shared caches. Hosts still verify manifest and asset
+hashes before executing downloaded code.
+
+`@wasm-idle/core/runtime-tar` exports the default `untar` function and `TarFileSystem` type for
+installing regular files and directories into a host filesystem. Encoding helpers are available
+from `@wasm-idle/core/runtime-encode`. These modules are shared by the GCC and LLVM packages and
+contain no compiler binaries or target libraries.
+
 ## Documentation
 
 - [Runtime execution and cleanup contract](https://github.com/seo-rii/wasm-idle/blob/main/docs/runtime-execution-contract.md)

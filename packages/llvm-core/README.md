@@ -6,6 +6,9 @@ separately and supplied through explicit HTTP(S) URLs. Published tarballs omit g
 declaration maps because their TypeScript source tree is not part of the package; executable
 JavaScript, declarations, and every documented export remain available.
 
+The separate [`@wasm-idle/gcc`](../gcc/README.md) package hosts GNU GCC and binutils for
+Linux x86-64 compilation. Its compiler and Worker APIs are independent of this LLVM package.
+
 ```ts
 import { createClangCompiler } from '@wasm-idle/llvm-core/clang';
 
