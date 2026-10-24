@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
@@ -47,6 +49,13 @@ function tool(output = elf(), fileName = 'program.elf', noOutput = false): Uint8
 	];
 	const body = [0,
 		...constant(128), ...constant(64), ...call(4), 0x1a,
+		// Actual WASI libc's access(X_OK) needs preopen PATH_OPEN and inherited
+		// FD_READ rights. The shim's zero defaults hide the pinned linker.
+		...constant(3), ...constant(128), ...call(5), 0x1a,
+		...load(136), ...constant(8192), 0x71, 0x45, 0x04, 0x40,
+		...constant(126), ...call(3), 0x0b,
+		...load(144), ...constant(2), 0x71, 0x45, 0x04, 0x40,
+		...constant(126), ...call(3), 0x0b,
 		...pathOpen(256, sourcePath.length, 0, 2),
 		...store(80, 128), ...store(84, 1), ...load(64), ...constant(80), ...constant(1), ...constant(96), ...call(1), 0x1a,
 		...constant(128), 0x2d, 0, 0, ...constant(33), 0x46, 0x04, 0x40,
@@ -63,14 +72,15 @@ function tool(output = elf(), fileName = 'program.elf', noOutput = false): Uint8
 			0x60, 1, 0x7f, 0,
 			0x60, 2, 0x7f, 0x7f, 1, 0x7f,
 			0x60, 0, 0]),
-		...section(2, [5,
+		...section(2, [6,
 			...name('wasi_snapshot_preview1'), ...name('path_open'), 0, 0,
 			...name('wasi_snapshot_preview1'), ...name('fd_read'), 0, 1,
 			...name('wasi_snapshot_preview1'), ...name('fd_write'), 0, 1,
 			...name('wasi_snapshot_preview1'), ...name('proc_exit'), 0, 2,
-			...name('wasm_idle_process_v1'), ...name('initial_cwd'), 0, 3]),
+			...name('wasm_idle_process_v1'), ...name('initial_cwd'), 0, 3,
+			...name('wasi_snapshot_preview1'), ...name('fd_fdstat_get'), 0, 3]),
 		...section(3, [1, 4]), ...section(5, [1, 1, 1, 2]),
-		...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, 5]),
+		...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, 6]),
 		...section(10, [1, ...unsigned(body.length), ...body]),
 		...section(11, [1, 0, ...constant(0), 0x0b, ...unsigned(data.length), ...data])
 	]);
@@ -108,6 +118,31 @@ function bundle(options: { output?: Uint8Array; fileName?: string; archivePath?:
 afterEach(() => vi.restoreAllMocks());
 
 describe('compile-only x86-64 Clang host', () => {
+	it.skipIf(!process.env.WASM_IDLE_CLANG_HOST_FIXTURE_DIR)('actual pinned Clang discovers its linker before reporting its unavailable X86 backend', async () => {
+		// This older real compiler has the qualified exec/cwd ABI but only a Wasm
+		// backend. It proves host admission/driver discovery, not x86 codegen.
+		const fixture = bundle(), directory = process.env.WASM_IDLE_CLANG_HOST_FIXTURE_DIR!;
+		for (const [name, sha256] of [
+			['clang', 'e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3'],
+			['lld', '3da2fc3d37702d3d56bce834672912334e36d245efaf97fbdda7e4b5e810134a']
+		] as const) {
+			const bytes = new Uint8Array(await readFile(path.join(directory, `${name}.wasm`)));
+			expect(hash(bytes)).toBe(sha256);
+			fixture.files.set(`${name}.wasm`, bytes);
+			fixture.manifest.assets[name] = { path: `${name}.wasm`, sha256, bytes: bytes.length };
+		}
+		const manifestBytes = encoder.encode(JSON.stringify(fixture.manifest));
+		fixture.files.set('cross-toolchain.v1.json', manifestBytes);
+		const compiler = await createCrossClangCompiler({ ...fixture.options, manifestSha256: hash(manifestBytes) });
+		try {
+			const result = compiler.compile({ language: 'c', code: 'int main(void) { return 0; }' });
+			expect(result.exitCode).not.toBe(0);
+			expect(result.artifact).toBeUndefined();
+			expect(result.stderr).not.toContain('invalid linker name');
+			expect(result.stderr).toContain('No available targets are compatible with triple');
+		} finally { compiler.dispose(); }
+	}, 30_000);
+
 	it('pins all inputs, runs WASI file I/O, captures diagnostics, and returns ELF without compiling it as Wasm', async () => {
 		const fixture = bundle(), compile = vi.spyOn(WebAssembly, 'compile');
 		const compiler = await createCrossClangCompiler(fixture.options);

@@ -77,6 +77,29 @@ const fixedManifest = {
 	sysrootPath: '/sysroot', gccToolchain: '/sysroot/usr', compilerPath: '/bin/clang', linkerPath: '/bin/ld.lld'
 } as const;
 
+/** WASI libc derives access()/stat() permissions from a preopen's capabilities. */
+class CompilerRootDirectory extends PreopenDirectory {
+	override fd_fdstat_get() {
+		const result = super.fd_fdstat_get();
+		if (result.fdstat) {
+			const directories = BigInt(wasi.RIGHTS_PATH_OPEN | wasi.RIGHTS_PATH_FILESTAT_GET |
+				wasi.RIGHTS_FD_FILESTAT_GET | wasi.RIGHTS_FD_READDIR | wasi.RIGHTS_PATH_CREATE_DIRECTORY |
+				wasi.RIGHTS_PATH_CREATE_FILE | wasi.RIGHTS_PATH_LINK_SOURCE | wasi.RIGHTS_PATH_LINK_TARGET |
+				wasi.RIGHTS_PATH_RENAME_SOURCE | wasi.RIGHTS_PATH_RENAME_TARGET |
+				wasi.RIGHTS_PATH_REMOVE_DIRECTORY | wasi.RIGHTS_PATH_UNLINK_FILE);
+			result.fdstat.fs_rights_base = directories;
+			// The shim defaults both masks to zero despite supporting these operations.
+			// That makes Clang reject a mounted linker as non-executable. File.readonly
+			// still rejects write opens for compiler binaries and sysroot files.
+			result.fdstat.fs_rights_inherited = directories | BigInt(wasi.RIGHTS_FD_READ |
+				wasi.RIGHTS_FD_WRITE | wasi.RIGHTS_FD_SEEK | wasi.RIGHTS_FD_TELL |
+				wasi.RIGHTS_FD_FILESTAT_SET_SIZE | wasi.RIGHTS_FD_ALLOCATE |
+				wasi.RIGHTS_FD_SYNC | wasi.RIGHTS_FD_DATASYNC);
+		}
+		return result;
+	}
+}
+
 function record(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid cross Clang ${label}`);
 	return value as Record<string, unknown>;
@@ -257,7 +280,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 			});
 			const wasiHost = new WASI([...context.argv], Object.entries(context.env).map(([key, value]) => `${key}=${value}`), [
 				new File([]).path_open(0, BigInt(wasi.RIGHTS_FD_READ), 0).fd_obj,
-				output('stdout'), output('stderr'), new PreopenDirectory('/', run.root.contents)
+				output('stdout'), output('stderr'), new CompilerRootDirectory('/', run.root.contents)
 			], { debug: false });
 			let memory: WebAssembly.Memory | undefined;
 			return {
