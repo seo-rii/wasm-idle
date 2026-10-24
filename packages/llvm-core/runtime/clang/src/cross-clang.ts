@@ -260,7 +260,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	if (!seen.size) throw new Error('Cross Clang sysroot is empty');
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
-	const toolsDirectory = new Directory(new Map([
+	let toolsDirectory = new Directory(new Map([
 		['clang', new File(clang, { readonly: true })], ['ld.lld', new File(lld, { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
@@ -331,11 +331,16 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				const bytes = Uint8Array.from(output.data);
 				validateOutput(bytes, plan.emit);
 				return { ...captured, artifact: { target, format: plan.emit === 'assembly' ? 'assembly' : plan.emit === 'object' ? 'elf-object' : 'elf-executable', fileName: plan.fileName, bytes, cpu: plan.cpu } };
-			} finally { active = undefined; }
+			} finally {
+				// WASI preopens share this map, and reusable trees point back to it
+				// through the shim's parent links. Release all invocation mounts.
+				active.root.contents.clear();
+				active = undefined;
+			}
 		},
 		dispose() {
 			host?.dispose(); host = undefined;
-			sysroot = new Directory(new Map()); toolsDirectory.contents.clear();
+			sysroot = new Directory(new Map()); toolsDirectory = new Directory(new Map());
 		}
 	};
 }

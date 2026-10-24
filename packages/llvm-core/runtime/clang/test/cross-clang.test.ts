@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
 const encoder = new TextEncoder();
@@ -186,6 +186,32 @@ describe('compile-only x86-64 Clang host', () => {
 			try { const result = compiler.compile({ code: '', emit }); expect(result.artifact?.format).toBe(format); expect(result.argv).not.toContain('-static'); }
 			finally { compiler.dispose(); }
 		}
+	});
+
+	it.each(['success', 'failure', 'missing-output'] as const)('releases invocation mounts after %s', async outcome => {
+		const mounted: { root: Directory; sysroot: Directory; binaries: Directory }[] = [];
+		const fdstat = PreopenDirectory.prototype.fd_fdstat_get;
+		vi.spyOn(PreopenDirectory.prototype, 'fd_fdstat_get').mockImplementation(function (this: PreopenDirectory) {
+			mounted.push({ root: this.dir, sysroot: this.dir.contents.get('sysroot') as Directory, binaries: this.dir.contents.get('bin') as Directory });
+			return fdstat.call(this);
+		});
+		const compiler = await createCrossClangCompiler(bundle({ noOutput: outcome === 'missing-output' }).options);
+		try {
+			if (outcome === 'missing-output') {
+				expect(() => compiler.compile({ code: 'int main() {}' })).toThrow('without producing the requested output');
+			} else {
+				const result = compiler.compile({ code: outcome === 'failure' ? '!invalid' : 'int main() {}' });
+				expect(result.exitCode).toBe(outcome === 'failure' ? 9 : 0);
+			}
+			expect(mounted.length).toBeGreaterThan(0);
+			for (const { root, sysroot, binaries } of mounted) {
+				// Inspect the real WASI mounts: parent roots must release their mounts
+				// while the compiler's immutable trees remain usable for the next run.
+				expect(sysroot).toBeInstanceOf(Directory); expect(binaries).toBeInstanceOf(Directory);
+				expect(sysroot.contents.size).toBeGreaterThan(0); expect(binaries.contents.size).toBe(2);
+				expect(root.contents.size).toBe(0);
+			}
+		} finally { compiler.dispose(); }
 	});
 
 	it('rejects wrong architecture, wrong output type, empty assembly, and success without output', async () => {
