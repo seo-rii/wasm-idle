@@ -3,24 +3,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { build as buildWithEsbuild } from 'esbuild';
 import { build, loadConfigFromFile } from 'vite';
+import { createCoreSourceAliasMap } from './core-source-aliases.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-for (const configName of ['vite.config.ts', 'scripts/performance-vite.config.mjs']) {
+for (const configName of ['vite.config.ts', 'scripts/performance-vite.config.mjs', 'esbuild']) {
 	test(`${configName} builds core source imports in main and Worker bundles`, async (t) => {
 		await fs.mkdir(path.join(root, '.cache'), { recursive: true });
 		const temporary = await fs.mkdtemp(path.join(root, '.cache/core-source-aliases-'));
 		t.after(() => fs.rm(temporary, { recursive: true, force: true }));
-		const loaded = await loadConfigFromFile(
-			{ command: 'build', mode: 'production' },
-			path.join(root, configName),
-			root,
-			'silent',
-			undefined,
-			'runner'
-		);
-		assert(loaded);
 		const llvm = path.join(root, 'packages/llvm-core/runtime/core/src');
 		await fs.writeFile(
 			path.join(temporary, 'shared.mjs'),
@@ -56,29 +49,58 @@ export function makeWorker() {
 self.postMessage(checkIdentity());
 `
 		);
-		const result = await build({
-			configFile: false,
-			root,
-			base: './',
-			publicDir: false,
-			cacheDir: path.join(temporary, 'vite'),
-			logLevel: 'silent',
-			resolve: loaded.config.resolve,
-			worker: { format: 'es' },
-			build: {
-				outDir: path.join(temporary, 'dist'),
-				minify: false,
-				lib: { entry: path.join(temporary, 'main.mjs'), formats: ['es'], fileName: 'main' }
-			}
-		});
-		const output = (Array.isArray(result) ? result[0] : result).output;
-		const entry = output.find((item) => item.type === 'chunk' && item.isEntry);
-		assert(entry);
-		const main = await import(pathToFileURL(path.join(temporary, 'dist', entry.fileName)));
+		let entryFile;
+		if (configName === 'esbuild') {
+			await buildWithEsbuild({
+				entryPoints: [path.join(temporary, 'main.mjs'), path.join(temporary, 'worker.mjs')],
+				outdir: path.join(temporary, 'dist'),
+				outExtension: { '.js': '.mjs' },
+				bundle: true,
+				platform: 'browser',
+				format: 'esm',
+				alias: createCoreSourceAliasMap(root),
+				logLevel: 'silent'
+			});
+			entryFile = 'main.mjs';
+		} else {
+			const loaded = await loadConfigFromFile(
+				{ command: 'build', mode: 'production' },
+				path.join(root, configName),
+				root,
+				'silent',
+				undefined,
+				'runner'
+			);
+			assert(loaded);
+			const result = await build({
+				configFile: false,
+				root,
+				base: './',
+				publicDir: false,
+				cacheDir: path.join(temporary, 'vite'),
+				logLevel: 'silent',
+				resolve: loaded.config.resolve,
+				worker: { format: 'es' },
+				build: {
+					outDir: path.join(temporary, 'dist'),
+					minify: false,
+					lib: {
+						entry: path.join(temporary, 'main.mjs'),
+						formats: ['es'],
+						fileName: 'main'
+					}
+				}
+			});
+			const output = (Array.isArray(result) ? result[0] : result).output;
+			const entry = output.find((item) => item.type === 'chunk' && item.isEntry);
+			assert(entry);
+			entryFile = entry.fileName;
+		}
+		const main = await import(pathToFileURL(path.join(temporary, 'dist', entryFile)));
 		assert.equal(main.checkIdentity(), 15);
 
 		// Evaluate the emitted Worker module's import identities without starting a
-		// browser or claiming compiler qualification. Worker JavaScript is bundled by Vite.
+		// browser or claiming compiler qualification. Both bundlers emit real Worker JavaScript.
 		const originalWorker = globalThis.Worker;
 		const originalSelf = globalThis.self;
 		let workerUrl, workerResult;

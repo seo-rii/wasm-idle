@@ -10,6 +10,7 @@ import type { DebugSessionEvent } from '@wasm-idle/core';
 import type { DebugSessionController } from '../../../packages/debug/src/controller';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
+import { createCoreSourceAliases } from '../../../scripts/core-source-aliases.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import type { SandboxExecutionOptions } from './options';
 import type Python from './python';
@@ -67,10 +68,10 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 			cacheDir: `${root}.cache/python-debug-browser-vite`,
 			optimizeDeps: { noDiscovery: true },
 			resolve: {
-				alias: {
-					$lib: `${root}src/lib`,
-					'@wasm-idle/core': `${root}packages/core/src/index.ts`
-				}
+				alias: [
+					{ find: '$lib', replacement: `${root}src/lib` },
+					...createCoreSourceAliases(root)
+				]
 			},
 			plugins: [
 				{
