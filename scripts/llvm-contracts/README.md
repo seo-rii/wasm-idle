@@ -31,6 +31,10 @@ V and COBOL synchronization applies the stricter archive and acceptance contract
 publication. Lean synchronization separately requires its runtime, checks library ranges
 and complete module parts, and bounds decompression.
 
+The debugger assets now use `wasm-llvm` revision `8abaac1bf647b8afcf14839cb479fa845abc6c34`,
+which gates WAMR's module-name announcement through the verbose logger. Normal `-v=0` sessions
+omit that diagnostic while preserving all guest output, including Wasm start-function output.
+
 Clang compiler bytes remain at the existing consumer profile. Copying and validating a build
 receipt does not qualify a new compiler release: the producer still owns clean source builds,
 independent reproducibility and real compiler acceptance. Producer-only CI and cache changes

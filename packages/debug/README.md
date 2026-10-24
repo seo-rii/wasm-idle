@@ -54,6 +54,30 @@ sessions and retain the 512 most recently expanded paths,
 and a rendered tree is limited to 5,000 loaded nodes and 64 levels. The legacy `locals`, `scopes`,
 `variablesByReference` and raw child-loading APIs remain available.
 
+LLDB startup messages and debugger console output travel through `ondebug` as
+`{ type: 'output', category: 'console' | 'important', output, sourcePath?, line? }`.
+They do not enter the program terminal or consume its output budget. Program stdout/stderr,
+including DAP output explicitly marked `stdout` or `stderr`, still use the normal output callback.
+Missing or unknown DAP categories mean `console`; telemetry is not displayed. Console logpoints
+retain their text and available source location. Raw LLDB worker stderr is an `important` diagnostic;
+worker failures and unsuccessful DAP requests retain their normal error handling.
+
+The controller exposes `diagnostics` (up to 200 chunks and 65,536 text code units) and
+`latestImportantDiagnostic`. The playground keeps ordinary messages in a collapsed **Debugger log**
+and displays important messages immediately. Logs survive Stop and clear at `begin()`;
+hosts can also call `clearDiagnostics()`. Custom panels should handle these events without changing
+the debugger's paused/running state. Update `wasm-idle`, `@wasm-idle/core`, `@wasm-idle/debug`,
+`@wasm-idle/llvm-core`, and other installed SDK packages together when integrating this event in
+an existing application; older debug controllers do not recognize it.
+
+For low-level `BrowserLldbSession` consumers, `onOutput(channel, data)` receives target runtime output;
+use the optional `onDebuggerOutput(channel, data)` for raw LLDB worker stdout/stderr. DAP console
+events remain available through `onEvent`.
+
+The pinned WAMR producer routes its module-name announcement through the verbose logger, so the
+normal `-v=0` debug session does not print it. Guest stdout/stderr pass through unchanged, including
+output from Wasm start functions during attach. The consumer does not filter target text.
+
 Each node supplies `changed` and an optional `previousValue`. Comparison covers only values actually
 loaded in both stops. Frame keys use function/source and caller stack locations, never persistent
 DAP frame IDs. A known step transition is required: Continue, an unknown activation, changed source,

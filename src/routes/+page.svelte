@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
+	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
 	import { isSharedArrayBufferAvailable } from '$lib';
@@ -2705,6 +2706,7 @@
 				debug.begin();
 			} else {
 				debug.reset();
+				debug.clearDiagnostics();
 			}
 			compilerDiagnostics = [];
 			compilerDiagnosticRun = {
@@ -4206,6 +4208,10 @@
 				</div>
 			</section>
 		{/if}
+		<DebuggerLog
+			diagnostics={debug.diagnostics}
+			importantDiagnostic={debug.latestImportantDiagnostic}
+		/>
 		<div class="terminal-shell">
 			<Terminal
 				bind:terminal

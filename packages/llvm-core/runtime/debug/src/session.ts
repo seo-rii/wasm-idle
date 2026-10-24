@@ -1135,9 +1135,15 @@ export class BrowserLldbSession {
 			}
 			if (!message) return;
 			if (message.type === 'output') {
-				this.invokeConsumerCallback('output', () =>
-					this.options.onOutput?.(message.channel, message.data)
-				);
+				if (kind === 'lldb') {
+					this.invokeConsumerCallback('debugger-output', () =>
+						this.options.onDebuggerOutput?.(message.channel, message.data)
+					);
+				} else {
+					this.invokeConsumerCallback('output', () =>
+						this.options.onOutput?.(message.channel, message.data)
+					);
+				}
 			}
 			if (message.type === 'memory') {
 				this.invokeConsumerCallback('memory', () =>

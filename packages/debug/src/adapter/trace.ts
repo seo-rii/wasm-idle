@@ -263,6 +263,16 @@ export class TraceDebugAdapter implements DebugAdapter {
 	}
 
 	handleEvent(event: DebugSessionEvent) {
+		if (event.type === 'output') {
+			this.#events.emit({
+				type: 'output',
+				category: event.category,
+				output: event.output,
+				...(event.sourcePath ? { source: { path: event.sourcePath } } : {}),
+				...(event.line !== undefined ? { line: event.line } : {})
+			});
+			return;
+		}
 		if (event.type === 'pauseDetails') return;
 		if (event.type === 'pause') {
 			this.#active = true;

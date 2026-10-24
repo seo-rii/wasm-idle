@@ -237,7 +237,8 @@ export interface DebugBreakpointConfiguration {
 }
 
 export type DebugWorkerKind = 'lldb' | 'target';
-export type BrowserLldbCallbackKind = 'event' | 'lifecycle' | 'memory' | 'output';
+export type BrowserLldbCallbackKind =
+	'event' | 'lifecycle' | 'memory' | 'output' | 'debugger-output';
 
 export interface SharedByteQueueDescriptor {
 	control: SharedArrayBuffer;
@@ -367,7 +368,10 @@ export interface BrowserLldbSessionOptions {
 	fetchImpl?: typeof fetch;
 	/** Persistent verified runtime bytes; false bypasses reads and writes. */
 	persistentCache?: RuntimeAssetCacheOptions;
+	/** Receives the target runtime's stdout and stderr, excluding LLDB worker diagnostics. */
 	onOutput?: (channel: 'stdout' | 'stderr', data: string) => void;
+	/** Opt in to raw LLDB worker diagnostics, separate from target program output. */
+	onDebuggerOutput?: (channel: 'stdout' | 'stderr', data: string) => void;
 	onMemory?: (worker: DebugWorkerKind, bytes: number) => void;
 	onLifecycle?: (
 		event:
