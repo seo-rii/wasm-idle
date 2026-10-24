@@ -51,6 +51,11 @@
 			"types": "./dist/clang/src/cross-clang.d.ts",
 			"import": "./dist/clang/src/cross-clang.js"
 		},
+		"./gcc": {
+			"types": "./dist/gcc/src/index.d.ts",
+			"import": "./dist/gcc/src/index.js",
+			"default": "./dist/gcc/src/index.js"
+		},
 		"./tool-host": {
 			"types": "./dist/clang/src/tool-host.d.ts",
 			"import": "./dist/clang/src/tool-host.js"
@@ -63,6 +68,7 @@
 		"!dist/**/*.map",
 		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
 		"README.md",
+		"GCC_CROSS.md",
 		"TOOL_HOST.md"
 	],
 	"publishConfig": {
