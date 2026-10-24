@@ -4,6 +4,7 @@ import type { PythonCompileResult } from '../pythonCompileOptions';
 
 const PYTHON_COMPILE = String.raw`
 def compile_bytecode(source, filename, optimization, byte_limit):
+    import codecs
     import importlib.util
     import io
     import os
@@ -13,15 +14,30 @@ def compile_bytecode(source, filename, optimization, byte_limit):
     import tempfile
     import tokenize
 
-    # Coding cookies are ASCII. Probe without non-ASCII header text because
-    # detect_encoding also decodes those bytes using the declared codec.
-    # Preserve the BOM so CPython still rejects conflicting declarations.
-    encoding_probe = source.removeprefix("\ufeff").encode("ascii", "replace")
+    source_text = source.removeprefix("\ufeff")
+    encoding = "utf-8"
+    # Read only the coding-cookie metadata. detect_encoding also validates
+    # header bytes, which do not yet exist in the declared encoding.
+    # Universal newlines apply only to this scan, preserving the source hash.
+    with io.StringIO(source_text, newline=None) as lines:
+        for _ in range(2):
+            header = lines.readline().encode("ascii", "replace")
+            cookie = tokenize.cookie_re.match(header)
+            if cookie:
+                encoding = tokenize._get_normal_name(cookie.group(1).decode("ascii"))
+                try:
+                    codecs.lookup(encoding)
+                except LookupError:
+                    raise SyntaxError("unknown encoding: " + encoding) from None
+                break
+            if not tokenize.blank_re.match(header):
+                break
     if source.startswith("\ufeff"):
-        encoding_probe = b"\xef\xbb\xbf" + encoding_probe
-    encoding, _ = tokenize.detect_encoding(io.BytesIO(encoding_probe).readline)
+        if encoding != "utf-8":
+            raise SyntaxError("encoding problem: utf-8")
+        encoding = "utf-8-sig"
     # Encode the original text; py_compile validates the actual source bytes.
-    encoded_source = source.removeprefix("\ufeff").encode(encoding)
+    encoded_source = source_text.encode(encoding)
 
     with tempfile.TemporaryDirectory(prefix="wasm-idle-pyc-") as directory:
         source_path = os.path.join(directory, "main.py")

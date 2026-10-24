@@ -129,7 +129,60 @@ describe('Python bytecode on the pinned real Pyodide', () => {
 	});
 
 	it.each([
+		['LF second-line cookie', '\n# coding: latin-1\nvalue = "é"', 'latin-1', 'é'],
+		['CRLF second-line cookie', '\r\n# coding: latin-1\r\nvalue = "é"', 'latin-1', 'é'],
+		['CR second-line cookie', '\r# coding: latin-1\rvalue = "é"', 'latin-1', 'é'],
+		[
+			'CR ignored third-line cookie',
+			'# comment\r# comment\r# coding: ascii\rvalue = "é"',
+			'utf-8',
+			'é'
+		],
+		['UTF-7 C++ header', '# C++\n# coding: utf-7\nvalue = "é"', 'utf-7', 'é'],
+		[
+			'CR UTF-8 BOM and second-line cookie',
+			'\ufeff\r# coding: utf-8\rvalue = "한글🙂"',
+			'utf-8',
+			'한글🙂'
+		],
+		[
+			'UTF-8 BOM and normalized UTF_8 cookie',
+			'\ufeff# coding: UTF_8\nvalue = "한글🙂"',
+			'utf-8',
+			'한글🙂'
+		]
+	])('preserves encoding and exact source hash for %s', (_name, source, encoding, expected) => {
+		const artifact = compilePythonBytecode(runtime, source, 'encoding.py', 0, limit);
+		const path = '/tmp/wasm-idle-bytecode-encoding-hash.pyc';
+		runtime.FS.writeFile(path, artifact.data);
+		const globals = runtime.toPy({ source, encoding, path });
+		try {
+			const metadata = JSON.parse(
+				runtime.runPython(
+					`
+import importlib.util, json, runpy
+json.dumps({
+    "value": runpy.run_path(path)["value"],
+    "sourceHash": importlib.util.source_hash(source.encode(encoding)).hex(),
+})
+`,
+					{ globals }
+				)
+			);
+			expect(metadata.value).toBe(expected);
+			expect(Buffer.from(artifact.data.subarray(8, 16)).toString('hex')).toBe(
+				metadata.sourceHash
+			);
+		} finally {
+			globals.destroy();
+			runtime.FS.unlink(path);
+		}
+	});
+
+	it.each([
 		['\ufeff# coding: cp949\nvalue = "한글"', 'encoding problem'],
+		['\ufeff\r# coding: latin-1\rvalue = "é"', 'encoding problem'],
+		['\ufeff# coding: utf8\nvalue = "한글🙂"', 'encoding problem'],
 		['# coding: wasm_idle_unknown_encoding\npass', 'unknown encoding']
 	])('rejects an invalid encoding declaration: %s', (source, message) => {
 		const before = temporaryCompiles();
