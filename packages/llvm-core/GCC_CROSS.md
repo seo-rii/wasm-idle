@@ -129,6 +129,10 @@ the first failure. PR/main CI uses a fixed seed; scheduled CI uses its run numbe
 seed. Both save the report even on failure. Keep this report separate from real GCC fuzzing
 and qualification reports.
 
+For generated programs executed by actual Wasm GCC, use `pnpm run fuzz:gcc-browser`
+with the producer's immutable corpus and pinned bundle. See
+[Chromium corpus replay](../../scripts/GCC_FUZZ.md) for commands, evidence and limits.
+
 ## Connected example and qualification
 
 From the repository root, run:
