@@ -290,5 +290,83 @@ test(
 				...result
 			})
 		);
+		await t.test(
+			'the example keeps the submitted request while its inputs are edited',
+			async () => {
+				// Isolate the UI boundary with a delayed factory; no GCC is invoked by this subtest.
+				await page.route('**/packages/llvm-core/runtime/gcc/src/index.ts', (route) =>
+					route.fulfill({
+						contentType: 'text/javascript',
+						body: `export async function createCrossGccWorker(options) {
+  const call = {
+    manifestUrl: options.manifestUrl,
+    manifestSha256: options.manifestSha256,
+    requests: []
+  };
+  (globalThis.gccUiCalls ??= []).push(call);
+  await new Promise(resolve => { call.finishInitialization = resolve; });
+  return {
+    identity: { compilerVersion: 'synthetic UI fixture' },
+    manifest: { qualification: { status: 'unverified' } },
+    async compile(request) {
+      call.requests.push(request);
+      return { exitCode: 1, stdout: '', stderr: 'Synthetic UI fixture; no GCC invoked', stages: [] };
+    },
+    dispose() {}
+  };
+}`
+					})
+				);
+				await page.goto(`${origin}/examples/gcc-cross/`);
+				const submitted = {
+					manifestUrl: `${origin}/first/gcc-toolchain.v1.json`,
+					manifestSha256: 'a'.repeat(64),
+					code: 'int main(void) { return 7; }',
+					language: 'c',
+					cpu: 'x86-64',
+					emit: 'assembly',
+					optimization: '0'
+				};
+				const edited = {
+					manifestUrl: `${origin}/second/gcc-toolchain.v1.json`,
+					manifestSha256: 'b'.repeat(64),
+					code: 'int main() { return 19; }',
+					language: 'cpp',
+					cpu: 'avx2-fma',
+					emit: 'object',
+					optimization: '3'
+				};
+				async function editInputs(values) {
+					await page.locator('#manifest').fill(values.manifestUrl);
+					await page.locator('#sha256').fill(values.manifestSha256);
+					await page.locator('#source').fill(values.code);
+					for (const name of ['language', 'cpu', 'emit', 'optimization']) {
+						await page.locator(`#${name}`).selectOption(values[name]);
+					}
+				}
+				async function completeSubmission(index, values) {
+					await page.evaluate(
+						(index) => globalThis.gccUiCalls[index].finishInitialization(),
+						index
+					);
+					await page.waitForFunction(() => !document.getElementById('compile').disabled);
+					const actual = await page.evaluate((index) => {
+						const { manifestUrl, manifestSha256, requests } =
+							globalThis.gccUiCalls[index];
+						return { manifestUrl, manifestSha256, requests };
+					}, index);
+					const { manifestUrl, manifestSha256, ...request } = values;
+					assert.deepEqual(actual, { manifestUrl, manifestSha256, requests: [request] });
+				}
+				await editInputs(submitted);
+				await page.locator('#compile').click();
+				await page.waitForFunction(() => globalThis.gccUiCalls?.length === 1);
+				await editInputs(edited);
+				await completeSubmission(0, submitted);
+				await page.locator('#compile').click();
+				await page.waitForFunction(() => globalThis.gccUiCalls.length === 2);
+				await completeSubmission(1, edited);
+			}
+		);
 	}
 );
