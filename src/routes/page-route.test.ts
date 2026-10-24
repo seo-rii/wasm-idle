@@ -277,7 +277,20 @@ describe('example route debug actions', () => {
 				/<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending \|\| restartDebugPending\}/s
 			);
 			expect(source).toMatch(/<span>Stop Debug<\/span>/);
-			expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
+			const runDisabled = source.match(
+				/<button\s+class="action-button action-button--run"[\s\S]*?disabled=\{([^}]+)\}/
+			)?.[1];
+			expect(runDisabled).toBeTruthy();
+			for (const [runningMode, executionAvailable, disabled] of [
+				[null, true, false],
+				[null, false, true],
+				['debug', true, true],
+				['compile', true, true]
+			] as const) {
+				expect(runInNewContext(runDisabled!, { runningMode, executionAvailable })).toBe(
+					disabled
+				);
+			}
 			expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
 			expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
 			expect(source).toMatch(/title="Send EOF"/);
@@ -302,24 +315,27 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/import Terminal, \{ type TerminalControl \} from '@wasm-idle\/terminal';/
 		);
-		expect(source).toMatch(/import \{ isSharedArrayBufferAvailable \} from '\$lib';/);
-		const debugImports =
+		const namedImports =
 			parse(source, { modern: true }).instance?.content.body.flatMap((statement) => {
-				if (
-					statement.type !== 'ImportDeclaration' ||
-					statement.source.value !== '@wasm-idle/debug'
-				)
-					return [];
+				if (statement.type !== 'ImportDeclaration') return [];
 				return statement.specifiers.flatMap((specifier) =>
 					specifier.type === 'ImportSpecifier'
 						? [
-								specifier.imported.type === 'Identifier'
-									? specifier.imported.name
-									: specifier.imported.value
+								{
+									from: statement.source.value,
+									name:
+										specifier.imported.type === 'Identifier'
+											? specifier.imported.name
+											: specifier.imported.value
+								}
 							]
 						: []
 				);
 			}) ?? [];
+		expect(namedImports).toContainEqual({ from: '$lib', name: 'isSharedArrayBufferAvailable' });
+		const debugImports = namedImports
+			.filter(({ from }) => from === '@wasm-idle/debug')
+			.map(({ name }) => name);
 		expect(debugImports).toEqual(
 			expect.arrayContaining([
 				'createDebugSessionController',
