@@ -80,7 +80,10 @@ export async function createCrossGccCompiler(
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024)
 		throw new Error('Invalid GCC asset byte limit');
-	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis),
+	// readBuffer caches by fetch identity before callers verify SHA-256. Scope that
+	// cache to this initialization, including when a caller reuses a custom fetch,
+	// so a retry or repinned bundle cannot inherit rejected or obsolete bytes.
+	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis),
 		signal = options.signal;
 	const manifestBytes = new Uint8Array(
 		await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl)

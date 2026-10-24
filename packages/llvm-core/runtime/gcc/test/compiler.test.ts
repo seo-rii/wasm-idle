@@ -343,6 +343,56 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		expect(compileWasm).not.toHaveBeenCalled();
 	});
 
+	it.each(['gcc-toolchain.v1.json', 'cc1plus.mjs', 'as.wasm', 'sysroot.tar'])(
+		'refetches %s after an integrity failure when the same fetch provider is reused',
+		async (path) => {
+			const fixture = bundle(),
+				original = Uint8Array.from(fixture.files.get(path)!);
+			fixture.files.get(path)![9] ^= 1;
+			await expect(createCrossGccCompiler(fixture.options)).rejects.toThrow(
+				'SHA-256 mismatch'
+			);
+			fixture.files.set(path, original);
+			const compiler = await createCrossGccCompiler(fixture.options);
+			try {
+				expect((await compiler.compile({ code: '' })).exitCode).toBe(0);
+				expect(
+					vi
+						.mocked(fixture.options.fetchImpl)
+						.mock.calls.filter(([url]) => String(url).endsWith(`/${path}`))
+				).toHaveLength(2);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
+	it('loads a repinned bundle at the same URLs with the same fetch provider and asset sizes', async () => {
+		const fixture = bundle(),
+			first = await createCrossGccCompiler(fixture.options);
+		first.dispose();
+		const sysroot = Uint8Array.from(fixture.files.get('sysroot.tar')!);
+		sysroot[512] = 42;
+		fixture.files.set('sysroot.tar', sysroot);
+		fixture.manifest.assets.sysroot.sha256 = hash(sysroot);
+		const manifest = encoder.encode(JSON.stringify(fixture.manifest));
+		expect(manifest.length).toBe(fixture.files.get('gcc-toolchain.v1.json')!.length);
+		fixture.files.set('gcc-toolchain.v1.json', manifest);
+		const compiler = await createCrossGccCompiler({
+			...fixture.options,
+			manifestSha256: hash(manifest)
+		});
+		try {
+			expect(compiler.identity.sysrootSha256).toBe(hash(sysroot));
+			expect((await compiler.compile({ code: '' })).exitCode).toBe(0);
+			expect(host.calls[0].files.get('/sysroot/usr/include/stdio.h')).toEqual(
+				Uint8Array.of(42)
+			);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('rejects asset/extraction limits and path traversal, and freezes a manifest snapshot', async () => {
 		await expect(
 			createCrossGccCompiler({ ...bundle().options, maxAssetBytes: 1024 })
