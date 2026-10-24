@@ -7,6 +7,7 @@ import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
 import { BrowserLldbSession, DapProtocolError } from '../src/session.js';
 import { SharedByteQueue } from '../src/shared-byte-queue.js';
 import type {
+	BrowserLldbCallbackKind,
 	BrowserLldbSessionOptions,
 	DapRequest,
 	DapResponse,
@@ -21,6 +22,11 @@ import type {
 const hash = 'a'.repeat(64);
 const assetHash = 'a647260c0a2f386cdb893fdc303169041dcf2955da1fa881501863ec8b968785';
 const validWasmModule = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+const debuggerStartupOutput = [
+	{ channel: 'stdout', data: 'the module name is /workspace/program.wasm\n' },
+	{ channel: 'stderr', data: 'LLDB diagnostic: ' },
+	{ channel: 'stderr', data: 'starting adapter\n' }
+] as const;
 const manifest: RuntimeManifestV2 = {
 	manifestVersion: 2,
 	version: 'test',
@@ -139,6 +145,9 @@ class FakeWorker implements WorkerLike {
 		}
 		if (message.type === 'initialize-lldb') {
 			if (!this.suppressReady) {
+				for (const output of debuggerStartupOutput) {
+					this.emit({ type: 'output', ...output, generation: message.generation });
+				}
 				this.emit({
 					type: 'memory',
 					worker: 'lldb',
@@ -1426,6 +1435,99 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
+	it.each([false, true])(
+		'keeps LLDB diagnostics separate from target output with a diagnostic listener: %s',
+		async (captureDiagnostics) => {
+			const workers: FakeWorker[] = [];
+			const output: Array<{ channel: 'stdout' | 'stderr'; data: string }> = [];
+			const diagnostics: Array<{ channel: 'stdout' | 'stderr'; data: string }> = [];
+			const lifecycle: unknown[] = [];
+			const session = new BrowserLldbSession({
+				manifest,
+				runtimeBaseUrl: 'https://cdn.example/debug/',
+				module: validWasmModule.slice(),
+				sources: [],
+				fetchImpl: async () => new Response('debug-asset'),
+				workerFactory: (kind) => {
+					const worker = new FakeWorker(kind, []);
+					workers.push(worker);
+					return worker;
+				},
+				onOutput: (channel, data) => output.push({ channel, data }),
+				onDebuggerOutput: captureDiagnostics
+					? (channel, data) => diagnostics.push({ channel, data })
+					: undefined,
+				onLifecycle: (event) => lifecycle.push(event),
+				requestTimeoutMs: 1_000,
+				readyTimeoutMs: 1_000
+			});
+
+			try {
+				await session.initialize();
+				await expect
+					.poll(() => output)
+					.toEqual([{ channel: 'stdout', data: 'target output\n' }]);
+				expect(diagnostics).toEqual(captureDiagnostics ? debuggerStartupOutput : []);
+
+				const lldbWorker = workers.find((worker) => worker.kind === 'lldb');
+				const targetWorker = workers.find((worker) => worker.kind === 'target');
+				if (!lldbWorker || !targetWorker) throw new Error('workers were not initialized');
+				const targetOutput = [
+					{ channel: 'stdout', data: 'Running attachCommands:\n' },
+					{ channel: 'stderr', data: 'program error\n' }
+				] as const;
+				for (const chunk of targetOutput) {
+					targetWorker.emitRaw({
+						type: 'output',
+						...chunk,
+						generation: session.generation
+					});
+				}
+				expect(output).toEqual([
+					{ channel: 'stdout', data: 'target output\n' },
+					...targetOutput
+				]);
+				expect(diagnostics).toEqual(captureDiagnostics ? debuggerStartupOutput : []);
+
+				for (const worker of workers) {
+					worker.emitRaw({
+						type: 'output',
+						channel: 'stderr',
+						data: 'stale output\n',
+						generation: 'stale-generation'
+					});
+				}
+				expect(lifecycle).toEqual([]);
+				lldbWorker.emitRaw({
+					type: 'error',
+					worker: 'lldb',
+					message: 'adapter failed',
+					generation: session.generation
+				});
+				expect(lifecycle).toEqual([
+					{ type: 'worker-error', worker: 'lldb', message: 'adapter failed' }
+				]);
+				await session.dispose();
+				expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+				for (const worker of workers) {
+					worker.emitRaw({
+						type: 'output',
+						channel: 'stderr',
+						data: 'disposed output\n',
+						generation: session.generation
+					});
+				}
+				expect(output).toEqual([
+					{ channel: 'stdout', data: 'target output\n' },
+					...targetOutput
+				]);
+				expect(diagnostics).toEqual(captureDiagnostics ? debuggerStartupOutput : []);
+			} finally {
+				await session.dispose();
+			}
+		}
+	);
+
 	it('isolates consumer callback exceptions from the debug session lifecycle', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
@@ -1444,16 +1546,16 @@ describe('BrowserLldbSession', () => {
 			onOutput: () => {
 				throw new Error('output callback failed');
 			},
+			onDebuggerOutput: () => {
+				throw new Error('debugger output callback failed');
+			},
 			onMemory: (worker) => {
 				throw new Error(`${worker} memory callback failed`);
 			},
 			onLifecycle: (event) => {
 				throw new Error(`${event.type} callback failed`);
 			},
-			onCallbackError: (
-				error: unknown,
-				callback: 'event' | 'lifecycle' | 'memory' | 'output'
-			) => {
+			onCallbackError: (error: unknown, callback: BrowserLldbCallbackKind) => {
 				callbackErrors.push({
 					callback,
 					message: error instanceof Error ? error.message : String(error)
@@ -1471,6 +1573,7 @@ describe('BrowserLldbSession', () => {
 				.toEqual(
 					expect.arrayContaining([
 						{ callback: 'output', message: 'output callback failed' },
+						{ callback: 'debugger-output', message: 'debugger output callback failed' },
 						{ callback: 'memory', message: 'target memory callback failed' },
 						{ callback: 'memory', message: 'lldb memory callback failed' }
 					])

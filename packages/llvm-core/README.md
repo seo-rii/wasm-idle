@@ -448,7 +448,15 @@ output, memory, exit, or failure. Worker identity, channel, data, byte count, ex
 text must match the protocol; an invalid message becomes a `worker-error` and disposes the session
 instead of changing lifecycle state. A message carrying another well-formed generation remains
 ignored before its type-specific fields are inspected, preserving stale-session isolation.
-Consumer `onOutput`, `onMemory`, `onLifecycle`, and DAP event-listener exceptions are isolated from
+`onOutput(channel, data)` receives target runtime stdout/stderr. Raw LLDB worker diagnostics use the
+optional `onDebuggerOutput(channel, data)` callback; their stdout/stderr channel and chunk boundaries
+are preserved. DAP `output` events remain available through `onEvent` with their original category.
+Hosts should show debugger diagnostics separately from program output and keep important messages
+visible. Omitting the diagnostic callback does not suppress worker failures or DAP request errors.
+The pinned WAMR producer gates its native module-name announcement through the verbose logger,
+so it is silent in normal `-v=0` debug sessions. Guest stdout/stderr remain unchanged, including
+output from Wasm start functions during attach; the consumer does not filter target text.
+Consumer `onOutput`, `onDebuggerOutput`, `onMemory`, `onLifecycle`, and DAP event-listener exceptions are isolated from
 the byte transports and required session cleanup. Set `onCallbackError(error, callbackKind)` to
 observe the original exception. Exceptions thrown by that error hook are also contained so
 reporting code cannot terminate the debugger.
@@ -517,7 +525,7 @@ step, not an application-start preload.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `14ea5ecbc514b0c87338aebf8f2b567020be5750` for C, C++, and Rust. The V2
+`wasm-llvm` commit `8abaac1bf647b8afcf14839cb479fa845abc6c34` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their

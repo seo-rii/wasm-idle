@@ -439,6 +439,14 @@ export class LldbSandboxSession {
 			},
 			fetchImpl: this.options.fetchImpl,
 			onOutput: (_channel, output) => this.options.onOutput(output),
+			onDebuggerOutput: (channel, output) => {
+				if (lifecycleVersion !== this.lifecycleVersion || this.session !== session) return;
+				this.publishDebuggerOutput({
+					type: 'output',
+					category: channel === 'stderr' ? 'important' : 'console',
+					output
+				});
+			},
 			onLifecycle: (event) => {
 				if (lifecycleVersion !== this.lifecycleVersion || this.session !== session) {
 					return;
@@ -1366,8 +1374,34 @@ export class LldbSandboxSession {
 
 	private handleDapEvent(event: DapEvent) {
 		if (event.event === 'output') {
-			const body = event.body as { output?: unknown } | undefined;
-			if (typeof body?.output === 'string') this.options.onOutput(body.output);
+			const body = event.body as
+				| {
+						output?: unknown;
+						category?: unknown;
+						source?: { path?: unknown };
+						line?: unknown;
+				  }
+				| undefined;
+			if (typeof body?.output !== 'string') return;
+			if (body.category === 'stdout' || body.category === 'stderr') {
+				this.options.onOutput(body.output);
+			} else if (body.category !== 'telemetry') {
+				// DAP defaults missing or unknown categories to debugger console output.
+				// Keep console logpoints and their source location available to host UIs.
+				this.publishDebuggerOutput({
+					type: 'output',
+					category: body.category === 'important' ? 'important' : 'console',
+					output: body.output,
+					...(typeof body.source?.path === 'string'
+						? { sourcePath: body.source.path }
+						: {}),
+					...(typeof body.line === 'number' &&
+					Number.isSafeInteger(body.line) &&
+					body.line > 0
+						? { line: body.line }
+						: {})
+				});
+			}
 			return;
 		}
 		if (event.event === 'stopped') {
@@ -1587,9 +1621,11 @@ export class LldbSandboxSession {
 					this.pauseRequested = false;
 					reason = 'pause';
 				} else {
-					this.options.onOutput(
-						`LLDB could not resolve ${this.options.entryFunctionName ?? 'main'}; paused at runtime entry.\n`
-					);
+					this.publishDebuggerOutput({
+						type: 'output',
+						category: 'important',
+						output: `LLDB could not resolve ${this.options.entryFunctionName ?? 'main'}; paused at runtime entry.\n`
+					});
 				}
 			}
 		} else if (this.entryPhase === 'seeking-main') {
@@ -1875,6 +1911,15 @@ export class LldbSandboxSession {
 			this.options.onDebugEvent({ type: 'stop' });
 		} catch {
 			// Consumer callbacks cannot interrupt target teardown or completion settlement.
+		}
+	}
+
+	private publishDebuggerOutput(event: Extract<DebugSessionEvent, { type: 'output' }>) {
+		if (!event.output) return;
+		try {
+			this.options.onDebugEvent(event);
+		} catch {
+			// A diagnostics consumer must not interrupt target execution or teardown.
 		}
 	}
 

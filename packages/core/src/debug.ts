@@ -166,6 +166,14 @@ export interface DebugSourceBreakpoints {
 
 export type DebugSessionEvent =
 	| {
+			/** Debugger messages are separate from the program's stdout and stderr. */
+			type: 'output';
+			category: 'console' | 'important';
+			output: string;
+			sourcePath?: string;
+			line?: number;
+	  }
+	| {
 			type: 'pause';
 			/** IDs are scoped to one runtime session and one real stop. */
 			sessionId?: string;

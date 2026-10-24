@@ -8,6 +8,55 @@ import {
 } from '../../src/adapter/index.js';
 
 describe('TraceDebugAdapter', () => {
+	it('forwards diagnostic output without terminating or clearing the current stop', async () => {
+		const adapter = createTraceDebugAdapter({
+			control: {
+				debugCommand: vi.fn(async () => undefined),
+				setBreakpoints: vi.fn(async () => undefined),
+				stop: vi.fn(async () => undefined)
+			},
+			launch: vi.fn(async () => undefined)
+		});
+		const events: DebugAdapterEvent[] = [];
+		adapter.onEvent((event) => events.push(event));
+		adapter.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [{ name: 'x', value: '42' }],
+			callStack: [{ functionName: 'main', line: 3 }]
+		});
+		const frames = await adapter.stackTrace(1);
+		const scopes = await adapter.scopes(frames[0].id);
+		adapter.handleEvent({
+			type: 'output',
+			category: 'console',
+			output: 'x = 42\n',
+			sourcePath: '/workspace/main.cpp',
+			line: 3
+		});
+		adapter.handleEvent({
+			type: 'output',
+			category: 'important',
+			output: 'Debugger warning\n'
+		});
+		expect(events.slice(1)).toEqual([
+			{
+				type: 'output',
+				category: 'console',
+				output: 'x = 42\n',
+				source: { path: '/workspace/main.cpp' },
+				line: 3
+			},
+			{ type: 'output', category: 'important', output: 'Debugger warning\n' }
+		]);
+		await expect(adapter.threads()).resolves.toEqual([{ id: 1, name: 'Main Thread' }]);
+		await expect(adapter.stackTrace(1)).resolves.toEqual(frames);
+		await expect(adapter.variables(scopes[0].variablesReference)).resolves.toEqual([
+			{ name: 'x', value: '42', variablesReference: 0 }
+		]);
+	});
+
 	it('reports trace limitations and maps launch, breakpoint, command, and stop calls', async () => {
 		const debugCommand = vi.fn(async (_command: DebugCommand) => undefined);
 		const setBreakpoints = vi.fn(async (_lines: number[]) => undefined);

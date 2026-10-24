@@ -51,7 +51,8 @@ export const scenarios = [
 		// Java debugger modules share a bundled upstream parser and complete notices.
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
 		// Ruby preview and the cross compiler each add JavaScript and a declaration.
-		budget: { maxBytes: 7 * MiB, maxFiles: 745, maxPackages: 6 },
+		// Three Python compiler modules add six JavaScript/declaration files.
+		budget: { maxBytes: 7 * MiB, maxFiles: 751, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',

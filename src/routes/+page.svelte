@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
+	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
-	import { isSharedArrayBufferAvailable } from '$lib';
+	import { compilePython, isSharedArrayBufferAvailable, type PythonCompileOptions } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
@@ -278,7 +279,7 @@
 		lspEnabled = $state(true),
 		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
-		runningMode = $state<'run' | 'debug' | null>(null),
+		runningMode = $state<'run' | 'debug' | 'compile' | null>(null),
 		activeDebugBackend = $state<BrowserDebugMode | null>(null),
 		progressVisible = $state(false),
 		progress = $state(0),
@@ -300,6 +301,25 @@
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
 	const executionPreflight = createExecutionPreflightGate();
+	let pythonCompileAbortController: AbortController | undefined;
+	let pythonInvalidationMode =
+		$state<NonNullable<PythonCompileOptions['invalidationMode']>>('checked-hash');
+	let pythonTimestampInput = $state('0');
+	const pythonTimestamp = $derived(Number(pythonTimestampInput));
+	const pythonCompileOptionError = $derived(
+		pythonInvalidationMode === 'timestamp' &&
+			(!pythonTimestampInput.trim() ||
+				!Number.isInteger(pythonTimestamp) ||
+				pythonTimestamp < 0 ||
+				pythonTimestamp > 0xffffffff)
+			? 'Timestamp must be a whole number from 0 to 4294967295.'
+			: null
+	);
+	onDestroy(() => {
+		const controller = pythonCompileAbortController;
+		pythonCompileAbortController = undefined;
+		controller?.abort();
+	});
 
 	const initialSelection = browser
 		? resolveInitialWorkspace({
@@ -1882,6 +1902,59 @@
 		saveStatus = `${basename(file.path)} downloaded`;
 	}
 
+	async function compileActivePythonFile() {
+		const file = activeFile;
+		if (
+			!workspaceEditorReady ||
+			runningMode ||
+			language !== 'PYTHON' ||
+			!file ||
+			isBinaryWorkspaceFile(file) ||
+			extension(file.path) !== '.py'
+		)
+			return;
+		if (pythonCompileOptionError) {
+			saveStatus = pythonCompileOptionError;
+			return;
+		}
+		// Keep the source, filename, and options paired if the editor changes during compilation.
+		const fileName = file.path;
+		const source = file.content;
+		const invalidationMode = pythonInvalidationMode;
+		const timestamp = pythonTimestamp;
+		const controller = new AbortController();
+		pythonCompileAbortController = controller;
+		runningMode = 'compile';
+		saveStatus = `Compiling ${basename(fileName)}…`;
+		try {
+			const result = await compilePython(source, {
+				fileName,
+				invalidationMode,
+				...(invalidationMode === 'timestamp' ? { timestamp } : {}),
+				runtimeAssets,
+				signal: controller.signal,
+				progress: loadingProgress.start('Loading Python compiler')
+			});
+			if (controller.signal.aborted || pythonCompileAbortController !== controller) return;
+			downloadBlob(
+				new Blob([Uint8Array.from(result.data)], { type: 'application/x-python-code' }),
+				basename(result.path)
+			);
+			saveStatus = `${basename(result.path)} downloaded (Python ${result.pythonVersion})`;
+		} catch (error) {
+			if (pythonCompileAbortController !== controller) return;
+			saveStatus = controller.signal.aborted
+				? 'Python compilation cancelled'
+				: `Python compilation failed: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			if (pythonCompileAbortController === controller) {
+				pythonCompileAbortController = undefined;
+				runningMode = null;
+				loadingProgress.reset();
+			}
+		}
+	}
+
 	async function runWorkspaceArchive(
 		request: WorkspaceArchiveRequest,
 		transfer: Transferable[] = []
@@ -2062,6 +2135,12 @@
 	}
 
 	async function stopExecution() {
+		if (runningMode === 'compile') {
+			pythonCompileAbortController?.abort(
+				new DOMException('Python compilation cancelled by the user', 'AbortError')
+			);
+			return;
+		}
 		if (!terminal || !runningMode || executionStopPending || restartDebugPending) return;
 		const stoppedMode = runningMode;
 		const previousExecution = activeExecution;
@@ -2118,7 +2197,7 @@
 	}
 
 	async function sendTerminalEof() {
-		if (!terminal || !runningMode) return;
+		if (!terminal || !runningMode || runningMode === 'compile') return;
 		await terminal.eof?.();
 	}
 
@@ -2705,6 +2784,7 @@
 				debug.begin();
 			} else {
 				debug.reset();
+				debug.clearDiagnostics();
 			}
 			compilerDiagnostics = [];
 			compilerDiagnosticRun = {
@@ -4206,6 +4286,10 @@
 				</div>
 			</section>
 		{/if}
+		<DebuggerLog
+			diagnostics={debug.diagnostics}
+			importantDiagnostic={debug.latestImportantDiagnostic}
+		/>
 		<div class="terminal-shell">
 			<Terminal
 				bind:terminal
@@ -4495,6 +4579,39 @@
 			</button>
 			<span class="topbar__divider" aria-hidden="true"></span>
 			<div class="action-group">
+				{#if language === 'PYTHON'}
+					{#if runningMode === 'compile'}
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							title="Cancel Python compilation"
+							aria-label="Cancel Python compilation"
+						>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>stop_circle</span
+							>
+							<span>Cancel compilation</span>
+						</button>
+					{:else}
+						<button
+							class="action-button action-button--compile"
+							onclick={compileActivePythonFile}
+							disabled={!workspaceEditorReady ||
+								!!runningMode ||
+								!!pythonCompileOptionError ||
+								!activeFile ||
+								isBinaryWorkspaceFile(activeFile) ||
+								extension(activeFile.path) !== '.py'}
+							title="Compile the active Python file and download .pyc"
+							aria-label="Compile .pyc"
+						>
+							<span class="material-symbols-outlined" aria-hidden="true"
+								>download</span
+							>
+							<span>Compile .pyc</span>
+						</button>
+					{/if}
+				{/if}
 				{#if runningMode === 'debug'}
 					<button
 						class="action-button action-button--debug-restart"
@@ -4543,7 +4660,7 @@
 					<button
 						class="action-button action-button--run"
 						onclick={() => exec(false)}
-						disabled={runningMode === 'debug' || !executionAvailable}
+						disabled={!!runningMode || !executionAvailable}
 					>
 						<span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
 						<span>Run</span>
@@ -4553,6 +4670,62 @@
 		</div>
 	</header>
 	<div class="workspace-configuration">
+		{#if language === 'PYTHON'}
+			<details class="python-bytecode-options">
+				<summary>Python bytecode options</summary>
+				<div class="python-bytecode-options__body">
+					<div class="python-bytecode-options__field">
+						<label for="python-bytecode-mode">Bytecode invalidation mode</label>
+						<select
+							id="python-bytecode-mode"
+							bind:value={pythonInvalidationMode}
+							disabled={!!runningMode}
+							aria-describedby="python-bytecode-help"
+						>
+							<option value="checked-hash">Checked hash (reproducible default)</option
+							>
+							<option value="unchecked-hash">Unchecked hash</option>
+							<option value="timestamp">Timestamp</option>
+						</select>
+					</div>
+					{#if pythonInvalidationMode === 'timestamp'}
+						<div class="python-bytecode-options__field">
+							<label for="python-bytecode-timestamp">Timestamp (Unix seconds)</label>
+							<input
+								id="python-bytecode-timestamp"
+								type="number"
+								min="0"
+								max="4294967295"
+								step="1"
+								required
+								value={pythonTimestampInput}
+								oninput={(event) =>
+									(pythonTimestampInput = event.currentTarget.value)}
+								disabled={!!runningMode}
+								aria-invalid={!!pythonCompileOptionError}
+								aria-describedby={pythonCompileOptionError
+									? 'python-bytecode-help python-bytecode-error'
+									: 'python-bytecode-help'}
+							/>
+						</div>
+					{/if}
+					<p id="python-bytecode-help">
+						{#if pythonInvalidationMode === 'checked-hash'}
+							Checks the source hash on import. The same source, options, and Python
+							version produce identical .pyc files.
+						{:else if pythonInvalidationMode === 'unchecked-hash'}
+							Stores a source hash without checking it on import.
+						{:else}
+							Checks the chosen timestamp and source size on import. The default
+							timestamp is 0.
+						{/if}
+					</p>
+					{#if pythonCompileOptionError}
+						<p id="python-bytecode-error" role="alert">{pythonCompileOptionError}</p>
+					{/if}
+				</div>
+			</details>
+		{/if}
 		{#if compilerArgumentConfig[language]}
 			<CompilerOptions
 				language={compilerSourceLanguage}
@@ -4955,7 +5128,11 @@
 								class:run-indicator--debug={runningMode === 'debug'}
 							>
 								<i aria-hidden="true"></i>
-								{runningMode === 'debug' ? 'Debugging' : 'Running'}
+								{runningMode === 'debug'
+									? 'Debugging'
+									: runningMode === 'compile'
+										? 'Compiling'
+										: 'Running'}
 							</span>
 						{/if}
 					</div>
@@ -4963,7 +5140,7 @@
 						<button
 							class="action-button action-button--icon"
 							onclick={sendTerminalEof}
-							disabled={!runningMode}
+							disabled={!runningMode || runningMode === 'compile'}
 							title="Send EOF"
 							aria-label="Send EOF"
 						>
@@ -6312,6 +6489,55 @@
 		min-width: 0;
 		max-height: 40dvh;
 		overflow: auto;
+	}
+
+	.python-bytecode-options {
+		border-bottom: 1px solid var(--line);
+		background: var(--surface);
+		color: var(--text);
+	}
+
+	.python-bytecode-options summary {
+		cursor: pointer;
+		padding: 8px 18px;
+		font-weight: 600;
+	}
+
+	.python-bytecode-options__body {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px 18px;
+		padding: 4px 18px 14px;
+	}
+
+	.python-bytecode-options__field {
+		display: grid;
+		gap: 5px;
+		max-width: 100%;
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.python-bytecode-options select,
+	.python-bytecode-options input {
+		min-width: 0;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: var(--fill);
+		color: var(--text);
+		padding: 6px 8px;
+		font: inherit;
+	}
+
+	.python-bytecode-options p {
+		flex-basis: 100%;
+		margin: 0;
+		color: var(--text-3);
+		font-size: 12px;
+	}
+
+	.python-bytecode-options p[role='alert'] {
+		color: var(--danger-text);
 	}
 
 	.workspace-save-error {
