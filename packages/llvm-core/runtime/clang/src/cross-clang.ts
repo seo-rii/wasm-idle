@@ -278,7 +278,14 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				if (run.diagnosticBytes > maxDiagnosticsBytes) throw new Error('Cross Clang diagnostics exceeded four MiB');
 				run[stream] += decoders[stream].decode(bytes, { stream: true });
 			});
-			const wasiHost = new WASI([...context.argv], Object.entries(context.env).map(([key, value]) => `${key}=${value}`), [
+			// The pinned multicall driver may prepend its "clang" subcommand even
+			// when realpath resolves argv[0] to /bin/clang, which already selects
+			// Clang. Adapt that exact child form here; keep the tool-host packet intact.
+			const argv = context.argv;
+			const wasiArgv = context.depth === 2 && context.executable === 'clang' &&
+				argv[0] === manifest.compilerPath && argv[1] === 'clang' && (argv[2] === '-cc1' || argv[2] === '-cc1as')
+				? [argv[0], ...argv.slice(2)] : [...argv];
+			const wasiHost = new WASI(wasiArgv, Object.entries(context.env).map(([key, value]) => `${key}=${value}`), [
 				new File([]).path_open(0, BigInt(wasi.RIGHTS_FD_READ), 0).fd_obj,
 				output('stdout'), output('stderr'), new CompilerRootDirectory('/', run.root.contents)
 			], { debug: false });

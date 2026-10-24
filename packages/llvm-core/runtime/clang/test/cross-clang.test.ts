@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
 const encoder = new TextEncoder();
@@ -118,9 +119,20 @@ function bundle(options: { output?: Uint8Array; fileName?: string; archivePath?:
 afterEach(() => vi.restoreAllMocks());
 
 describe('compile-only x86-64 Clang host', () => {
-	it.skipIf(!process.env.WASM_IDLE_CLANG_HOST_FIXTURE_DIR)('actual pinned Clang discovers its linker before reporting its unavailable X86 backend', async () => {
+	it.skipIf(!process.env.WASM_IDLE_CLANG_HOST_FIXTURE_DIR).each([false, true])('actual pinned Clang reaches its backend with resolved compiler path=%s', async resolveCompilerPath => {
 		// This older real compiler has the qualified exec/cwd ABI but only a Wasm
 		// backend. It proves host admission/driver discovery, not x86 codegen.
+		if (resolveCompilerPath) {
+			// The memory filesystem has no symlinks. EINVAL lets WASI libc's
+			// realpath resolve /bin/clang; the shim's default ENOSYS otherwise
+			// makes LLVM emit an empty self path and masks the resolved-path case.
+			vi.spyOn(PreopenDirectory.prototype, 'path_readlink').mockReturnValue({ ret: wasi.ERRNO_INVAL, data: null });
+		}
+		const launchedArgv: string[][] = [], start = WASI.prototype.start;
+		vi.spyOn(WASI.prototype, 'start').mockImplementation(function (this: WASI, instance) {
+			launchedArgv.push([...this.args]);
+			return start.call(this, instance);
+		});
 		const fixture = bundle(), directory = process.env.WASM_IDLE_CLANG_HOST_FIXTURE_DIR!;
 		for (const [name, sha256] of [
 			['clang', 'e0b548b70e13ad9620c1f47a1ef3f552b74cea586866ef1d8dcc0558c87f50e3'],
@@ -139,7 +151,9 @@ describe('compile-only x86-64 Clang host', () => {
 			expect(result.exitCode).not.toBe(0);
 			expect(result.artifact).toBeUndefined();
 			expect(result.stderr).not.toContain('invalid linker name');
+			expect(result.stderr).not.toContain("unknown argument: '-cc1'");
 			expect(result.stderr).toContain('No available targets are compatible with triple');
+			expect(launchedArgv[1]?.slice(0, resolveCompilerPath ? 2 : 3)).toEqual(resolveCompilerPath ? ['/bin/clang', '-cc1'] : ['', 'clang', '-cc1']);
 		} finally { compiler.dispose(); }
 	}, 30_000);
 
