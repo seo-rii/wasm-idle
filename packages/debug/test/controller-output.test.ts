@@ -139,4 +139,24 @@ describe('debugger diagnostics', () => {
 		});
 		expect(controller.diagnostics[0].output).toBe('a'.repeat(65_535));
 	});
+
+	it.each([0, 70_000])(
+		'preserves UTF-16 text when copying diagnostics with %i padding',
+		(padding) => {
+			const controller = createDebugSessionController();
+			const text = '\uFEFF😀\uD800middle\uDC00\0';
+			controller.handleEvent({
+				type: 'output',
+				category: 'console',
+				output: `${'x'.repeat(padding)}${text}`,
+				sourcePath: `${text}${'p'.repeat(padding)}`
+			});
+			expect(controller.diagnostics[0].output).toBe(
+				`${'x'.repeat(padding ? 65_536 - text.length : 0)}${text}`
+			);
+			expect(controller.diagnostics[0].sourcePath).toBe(
+				`${text}${'p'.repeat(padding ? 4_096 - text.length : 0)}`
+			);
+		}
+	);
 });

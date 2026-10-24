@@ -1063,6 +1063,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			// Do not split a Unicode surrogate pair when retaining the end of a large chunk.
 			if (output.length < event.output.length && /^[\uDC00-\uDFFF]/u.test(output))
 				output = output.slice(1);
+			// Detach UTF-16 code units from potentially large backing strings, even when
+			// the sender already sliced them. UTF-8 conversion would alter lone surrogates.
+			output = output.split('').join('');
 			diagnosticsStore.update((previous) => {
 				const diagnostic: DebugDiagnostic = Object.freeze({
 					type: 'output',
@@ -1070,10 +1073,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 					output,
 					...(event.sourcePath !== undefined
 						? {
-								sourcePath: event.sourcePath.slice(
-									0,
-									MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS
-								)
+								sourcePath: event.sourcePath
+									.slice(0, MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS)
+									.split('')
+									.join('')
 							}
 						: {}),
 					...(event.line !== undefined ? { line: event.line } : {})
