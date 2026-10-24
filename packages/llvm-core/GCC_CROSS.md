@@ -7,7 +7,7 @@ objects, or static ELF executables for download. The compiler host is
 included and output ELF bytes never enter `WebAssembly.compile` or `instantiate`.
 
 This API requires an independently built and qualified GCC bundle from `wasm-llvm`'s
-`producers/gcc-browser`. There is no implicit CDN, fallback compiler, or bundled binary.
+`producer/gcc-browser`. There is no implicit CDN, fallback compiler, or bundled binary.
 An `unverified` producer manifest remains explicitly unverified; successfully loading
 that manifest does not establish that GCC can compile the acceptance suite.
 
@@ -126,7 +126,7 @@ pnpm --dir packages/llvm-core exec vitest run runtime/gcc/test
 # Actual Wasm GCC in Chromium, then known baseline ELF programs run by Linux x86-64.
 node scripts/verify-x86-cross-gcc.mjs \
   /path/to/gcc-toolchain.v1.json \
-  /path/to/wasm-llvm/producers/gcc-browser/qualification \
+  /path/to/wasm-llvm/producer/gcc-browser/qualification \
   /path/to/new-results-directory
 ```
 
