@@ -107,6 +107,32 @@ jobs:
             - run: go test ./...
               working-directory: runtimes/wasm-tinygo
 
+    gcc-api-contract-fuzz:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            # Seeded API properties and inert asset integrity inputs; no compiler execution.
+            - name: Fuzz GCC API boundaries
+              env:
+                  FUZZ_SEED: ${{ github.event_name == 'schedule' && github.run_number || '20261024' }}
+              run: pnpm run fuzz:gcc-contract --seed "$FUZZ_SEED" --iterations 10000 --out .cache/gcc-contract-fuzz
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: gcc-api-contract-fuzz
+                  path: .cache/gcc-contract-fuzz/report.json
+                  if-no-files-found: error
+                  retention-days: 7
+
     gcc-worker-browser-contract:
         runs-on: ubuntu-latest
         timeout-minutes: 15

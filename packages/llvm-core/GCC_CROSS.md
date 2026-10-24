@@ -106,6 +106,29 @@ stage's linear-memory maximum. This metric excludes JavaScript and MEMFS allocat
 it is not total browser process RSS. ELF validation checks ELF64, little endian, x86-64,
 the requested output kind and, for executables, loadable segments without an interpreter.
 
+## Seeded API contract fuzzing
+
+`pnpm run fuzz:gcc-contract` runs 10,000 deterministic cases against the actual manifest
+parser, request planner, path checks and asset-integrity loader. It covers option/profile
+combinations, source-byte preservation, copied file buffers, traversal and file/directory
+collisions, reserved outputs, malformed manifests, size/UTF-8 boundaries and corrupted
+manifest/asset bytes. It uses inert download bytes and does **not** execute GCC or establish
+compiler correctness. This is seeded property fuzzing, not coverage-guided fuzzing.
+
+```sh
+pnpm run fuzz:gcc-contract --seed 20261024 --iterations 50000 --out .cache/gcc-contract-fuzz
+# A failure reports the seed, zero-based case index, input payload and this replay command:
+pnpm run fuzz:gcc-contract --seed 20261024 --case 1234 --out .cache/gcc-contract-replay
+```
+
+Each case has an independently derived RNG, so replay does not need preceding cases.
+The output directory must be new; the default uses a timestamp and PID to preserve evidence.
+The first cases always exercise resource boundaries; subsequent cases mutate generated
+valid inputs. `report.json` records source identity, seed, coverage groups, elapsed time and
+the first failure. PR/main CI uses a fixed seed; scheduled CI uses its run number as the
+seed. Both save the report even on failure. Keep this report separate from real GCC fuzzing
+and qualification reports.
+
 ## Connected example and qualification
 
 From the repository root, run:
