@@ -1119,6 +1119,8 @@ external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Py
 ### Python bytecode compilation
 
 Choose a Python `.py` file and click **Compile .pyc** to download its compiled bytecode.
+**Python bytecode options** lets you change the invalidation mode and, in timestamp mode,
+set the source timestamp in Unix seconds.
 The browser SDK exposes the same operation independently of playground sessions:
 
 ```ts

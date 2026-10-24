@@ -136,6 +136,158 @@ describe('shared workspace refresh scheduling', () => {
 	});
 });
 
+describe('Python bytecode options', () => {
+	const actionStart = source.indexOf('async function compileActivePythonFile()');
+	const action = source.slice(
+		actionStart,
+		source.indexOf('\n\tasync function runWorkspaceArchive(', actionStart)
+	);
+	const errorPrefix = 'const pythonCompileOptionError = $derived(';
+	const errorStart = source.indexOf(errorPrefix) + errorPrefix.length;
+	const errorExpression = source.slice(errorStart, source.indexOf('\n\t);', errorStart));
+
+	function fixture() {
+		const compilePython = vi.fn(async (_code: string, _options: Record<string, unknown>) => ({
+			path: 'main.pyc',
+			data: new Uint8Array(16),
+			pythonVersion: '3.14.2'
+		}));
+		const context = {
+			workspaceEditorReady: true,
+			runningMode: null as string | null,
+			language: 'PYTHON',
+			activeFile: { path: 'main.py', content: 'value = 1' },
+			isBinaryWorkspaceFile: () => false,
+			extension: (path: string) => path.slice(path.lastIndexOf('.')),
+			basename: (path: string) => path.split('/').at(-1),
+			pythonInvalidationMode: 'checked-hash',
+			pythonTimestampInput: '0',
+			get pythonTimestamp() {
+				return Number(this.pythonTimestampInput);
+			},
+			get pythonCompileOptionError(): string | null {
+				return runInNewContext(errorExpression, {
+					pythonInvalidationMode: this.pythonInvalidationMode,
+					pythonTimestampInput: this.pythonTimestampInput,
+					pythonTimestamp: this.pythonTimestamp
+				});
+			},
+			pythonCompileAbortController: undefined,
+			saveStatus: 'Ready',
+			runtimeAssets: {},
+			compilePython,
+			loadingProgress: { start: vi.fn(() => ({})), reset: vi.fn() },
+			downloadBlob: vi.fn(),
+			AbortController,
+			Blob,
+			Uint8Array,
+			Error
+		};
+		const compileActive = runInNewContext(
+			`${action}\ncompileActivePythonFile`,
+			context
+		) as () => Promise<void>;
+		return { context, compilePython, compileActive };
+	}
+
+	it.each(['checked-hash', 'unchecked-hash'])(
+		'compiles %s bytecode without forwarding the timestamp field',
+		async (mode) => {
+			const { context, compilePython, compileActive } = fixture();
+			context.pythonInvalidationMode = mode;
+			context.pythonTimestampInput = '';
+			await compileActive();
+			expect(compilePython).toHaveBeenCalledWith(
+				'value = 1',
+				expect.objectContaining({ fileName: 'main.py', invalidationMode: mode })
+			);
+			expect(compilePython.mock.calls[0][1]).not.toHaveProperty('timestamp');
+			expect(context.downloadBlob).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each(['0', '1700000000', '4294967295'])(
+		'forwards the explicit timestamp %s as integer Unix seconds',
+		async (value) => {
+			const { context, compilePython, compileActive } = fixture();
+			context.pythonInvalidationMode = 'timestamp';
+			context.pythonTimestampInput = value;
+			await compileActive();
+			expect(compilePython).toHaveBeenCalledWith(
+				'value = 1',
+				expect.objectContaining({ invalidationMode: 'timestamp', timestamp: Number(value) })
+			);
+		}
+	);
+
+	it.each(['', ' ', '1.5', '-1', '4294967296', 'Infinity', 'invalid'])(
+		'blocks invalid timestamp %j and recovers after correction',
+		async (value) => {
+			const { context, compilePython, compileActive } = fixture();
+			context.pythonInvalidationMode = 'timestamp';
+			context.pythonTimestampInput = value;
+			await compileActive();
+			expect(compilePython).not.toHaveBeenCalled();
+			expect(context.saveStatus).toContain('Timestamp must be a whole number');
+			expect(context.runningMode).toBeNull();
+			context.pythonTimestampInput = '0';
+			await compileActive();
+			expect(compilePython).toHaveBeenCalledOnce();
+			expect(context.pythonCompileOptionError).toBeNull();
+		}
+	);
+
+	it('keeps the source, path, and header options from the initiating click', async () => {
+		const { context, compilePython, compileActive } = fixture();
+		context.pythonInvalidationMode = 'timestamp';
+		context.pythonTimestampInput = '123';
+		const pending = compileActive();
+		context.activeFile = { path: 'other.py', content: 'value = 2' };
+		context.pythonInvalidationMode = 'unchecked-hash';
+		context.pythonTimestampInput = '456';
+		await pending;
+		expect(compilePython).toHaveBeenCalledWith(
+			'value = 1',
+			expect.objectContaining({
+				fileName: 'main.py',
+				invalidationMode: 'timestamp',
+				timestamp: 123
+			})
+		);
+	});
+
+	it('disables compilation for invalid options and locks settings during active work', () => {
+		const disabled = source.match(
+			/class="action-button action-button--compile"[\s\S]*?disabled=\{([^}]+)\}/
+		)?.[1];
+		expect(disabled).toBeTruthy();
+		const { context } = fixture();
+		context.pythonInvalidationMode = 'timestamp';
+		context.pythonTimestampInput = '';
+		expect(runInNewContext(disabled!, context)).toBe(true);
+		context.pythonTimestampInput = '0';
+		expect(runInNewContext(disabled!, context)).toBe(false);
+		const controls = source.slice(
+			source.indexOf('<details class="python-bytecode-options">'),
+			source.indexOf('{#if compilerArgumentConfig[language]}')
+		);
+		expect(controls).toMatch(
+			/<label for="python-bytecode-mode">Bytecode invalidation mode<\/label>\s*<select\s+id="python-bytecode-mode"/
+		);
+		expect(controls).toMatch(
+			/<label for="python-bytecode-timestamp">Timestamp \(Unix seconds\)<\/label>\s*<input\s+id="python-bytecode-timestamp"/
+		);
+		const locks = [...controls.matchAll(/disabled=\{([^}]+)\}/g)].map((match) => match[1]);
+		expect(locks).toHaveLength(2);
+		for (const expression of locks) {
+			for (const runningMode of ['run', 'debug', 'compile']) {
+				expect(runInNewContext(expression, { runningMode })).toBe(true);
+			}
+			expect(runInNewContext(expression, { runningMode: null })).toBe(false);
+		}
+	});
+});
+
 describe('example route debug actions', () => {
 	it('preserves an armed watchpoint when variable discovery cannot replace it', async () => {
 		const begin = source.indexOf('async function watchDebugVariable(');

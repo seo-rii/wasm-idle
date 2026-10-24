@@ -251,14 +251,29 @@ async function withPythonBrowser(
 
 describe.skipIf(!enabled)('real Python 3.14 browser runtime', () => {
 	it(
-		'compiles the active Python file to a downloadable pyc without executing its code',
+		'compiles reproducible Python bytecode with configurable headers without executing its code',
 		{ timeout: 1_200_000, meta: browserMeta },
 		async () => {
 			await withPythonBrowser(async (page, errors) => {
 				let downloadCount = 0;
 				page.on('download', () => (downloadCount += 1));
+				const compileButton = page.getByRole('button', {
+					name: 'Compile .pyc',
+					exact: true
+				});
+				const downloadBytecode = async () => {
+					const [download] = await Promise.all([
+						page.waitForEvent('download'),
+						compileButton.click()
+					]);
+					expect(download.suggestedFilename()).toBe('main.pyc');
+					expect(await download.failure()).toBeNull();
+					const downloadPath = await download.path();
+					expect(downloadPath).not.toBeNull();
+					return await readFile(downloadPath!);
+				};
 				await setPythonSource(page, 'await missing_coroutine()\n');
-				await page.getByRole('button', { name: 'Compile .pyc', exact: true }).click();
+				await compileButton.click();
 				await page.waitForFunction(() =>
 					document
 						.querySelector('.statusbar__message')
@@ -275,17 +290,45 @@ describe.skipIf(!enabled)('real Python 3.14 browser runtime', () => {
 				const executionBefore = await page.evaluate(
 					() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
 				);
-				const [download] = await Promise.all([
-					page.waitForEvent('download'),
-					page.getByRole('button', { name: 'Compile .pyc', exact: true }).click()
-				]);
-				expect(download.suggestedFilename()).toBe('main.pyc');
-				expect(await download.failure()).toBeNull();
-				const downloadPath = await download.path();
-				expect(downloadPath).not.toBeNull();
-				const bytecode = await readFile(downloadPath!);
+				await page.getByText('Python bytecode options', { exact: true }).click();
+				const mode = page.getByLabel('Bytecode invalidation mode', { exact: true });
+				expect(await mode.inputValue({ timeout: 10_000 })).toBe('checked-hash');
+				const bytecode = await downloadBytecode();
 				expect(bytecode.length).toBeGreaterThan(16);
 				expect([...bytecode.subarray(2, 4)]).toEqual([0x0d, 0x0a]);
+				expect(bytecode.readUInt32LE(4)).toBe(3);
+				// Every click creates and disposes its own compiler worker.
+				expect(await downloadBytecode()).toEqual(bytecode);
+
+				await mode.selectOption('timestamp');
+				const timestamp = page.getByLabel('Timestamp (Unix seconds)', { exact: true });
+				expect(await timestamp.inputValue({ timeout: 10_000 })).toBe('0');
+				for (const invalid of ['', '1.5', '-1', '4294967296']) {
+					await timestamp.fill(invalid);
+					expect(await compileButton.isDisabled()).toBe(true);
+					expect(await timestamp.getAttribute('aria-invalid')).toBe('true');
+					expect(await page.locator('#python-bytecode-error').textContent()).toContain(
+						'Timestamp must be a whole number'
+					);
+				}
+				expect(downloadCount).toBe(2);
+				await timestamp.fill('1700000000');
+				expect(await compileButton.isEnabled()).toBe(true);
+				const timestampBytecode = await downloadBytecode();
+				expect(timestampBytecode.readUInt32LE(4)).toBe(0);
+				expect(timestampBytecode.readUInt32LE(8)).toBe(1700000000);
+				expect(timestampBytecode.readUInt32LE(12)).toBe(Buffer.byteLength(source, 'utf8'));
+				expect(timestampBytecode.subarray(16)).toEqual(bytecode.subarray(16));
+
+				await timestamp.fill('');
+				expect(await compileButton.isDisabled()).toBe(true);
+				await mode.selectOption('unchecked-hash');
+				expect(await timestamp.count()).toBe(0);
+				expect(await compileButton.isEnabled()).toBe(true);
+				const uncheckedBytecode = await downloadBytecode();
+				expect(uncheckedBytecode.readUInt32LE(4)).toBe(1);
+				expect(uncheckedBytecode.subarray(8)).toEqual(bytecode.subarray(8));
+				expect(downloadCount).toBe(4);
 				expect(
 					await page.evaluate(
 						() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
