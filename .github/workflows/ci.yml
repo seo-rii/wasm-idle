@@ -149,6 +149,8 @@ jobs:
             - run: pnpm exec playwright-core install --with-deps chromium
             # Synthetic host/transport coverage; real GCC qualification runs in the producer CI.
             - run: pnpm run test:browser:gcc-worker-contract
+            - name: Validate generated corpus replay gates (synthetic inputs)
+              run: node --test scripts/fuzz-x86-cross-gcc.test.mjs
 
     changed-runtimes:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
