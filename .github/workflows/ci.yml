@@ -107,6 +107,23 @@ jobs:
             - run: go test ./...
               working-directory: runtimes/wasm-tinygo
 
+    gcc-worker-browser-contract:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright-core install --with-deps chromium
+            # Synthetic host/transport coverage; real GCC qualification runs in the producer CI.
+            - run: pnpm run test:browser:gcc-worker-contract
+
     changed-runtimes:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         runs-on: ubuntu-latest
