@@ -50,8 +50,8 @@ export const scenarios = [
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
 		// Java debugger modules share a bundled upstream parser and complete notices.
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
-		// The preview adds its JavaScript and declaration to main's 741-file install.
-		budget: { maxBytes: 7 * MiB, maxFiles: 743, maxPackages: 6 },
+		// Ruby preview and the cross compiler each add JavaScript and a declaration.
+		budget: { maxBytes: 7 * MiB, maxFiles: 745, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -71,6 +71,8 @@ export const scenarios = [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/llvm-core/debug');",
+			"const crossClang = await import('@wasm-idle/llvm-core/cross-clang');",
+			"if (typeof crossClang.createCrossClangCompiler !== 'function' || typeof crossClang.parseCrossClangManifest !== 'function') throw new Error('Missing packaged x86 cross compiler API');",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');",
 			"const { instrumentJavaDebugSource } = await import(new URL('./playground/javaDebugSource.js', import.meta.resolve('wasm-idle')));",
 			"const captured = instrumentJavaDebugSource('class Main { void run() { int value = 7; value++; } }', 'Main.java', 'debug.Bridge');",
