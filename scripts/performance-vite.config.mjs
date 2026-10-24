@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createCoreSourceAliases } from './core-source-aliases.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // A local probe server can serve test modules outside SvelteKit's application roots.
@@ -16,10 +17,10 @@ export default defineConfig({
 		})
 	},
 	resolve: {
-		alias: {
-			$lib: path.join(repo, 'src/lib'),
-			'@wasm-idle/core': path.join(repo, 'packages/core/src/index.ts')
-		}
+		alias: [
+			{ find: '$lib', replacement: path.join(repo, 'src/lib') },
+			...createCoreSourceAliases(repo)
+		]
 	},
 	optimizeDeps: {
 		noDiscovery: true,
