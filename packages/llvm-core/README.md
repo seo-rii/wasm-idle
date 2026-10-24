@@ -58,6 +58,82 @@ raw gzip bytes continue to verify both the compressed delivery and decoded runti
 manifest is pinned directly, so the compiler cannot consume unverified metadata before loading an
 otherwise verified binary.
 
+## x86-64 cross compilation
+
+`@wasm-idle/llvm-core/cross-clang` provides a separate, opt-in compiler for Linux x86-64
+artifacts. The compiler and linker run as WebAssembly in a Worker. Their output is native
+assembly, an ELF object, or a static ELF executable returned as bytes for download. This API
+has no native execution method and does not pass ELF output to `WebAssembly.compile`.
+
+```ts
+// Run inside a dedicated Worker; terminate the Worker to cancel compilation.
+import { createCrossClangCompiler } from '@wasm-idle/llvm-core/cross-clang';
+
+const compiler = await createCrossClangCompiler({
+	manifestUrl: 'https://cdn.example.com/llvm/x86/cross-toolchain.v1.json',
+	manifestSha256: trustedManifestSha256
+});
+try {
+	const result = compiler.compile({
+		language: 'cpp',
+		code: '#include <bits/stdc++.h>\nint main() { std::cout << 42; }',
+		cpu: 'x86-64-v3',
+		standard: 'gnu++20',
+		optimization: '2',
+		emit: 'executable'
+	});
+	if (result.artifact) {
+		postMessage(result, [result.artifact.bytes.buffer]);
+	} else {
+		postMessage(result); // Nonzero exitCode and captured compiler diagnostics.
+	}
+} finally {
+	compiler.dispose();
+}
+```
+
+The `wasm-llvm` cross producer supplies the separately deployed `clang.wasm`, `lld.wasm`,
+and `sysroot.tar`. This requires a compiler with the X86 backend and an ELF-capable LLD;
+the default WASI compiler bundle cannot be reused. The GNU/Linux sysroot supplies real
+glibc, GCC runtime and libstdc++ headers/libraries, including `bits/stdc++.h` and PBDS.
+All assets and the manifest require exact SHA-256 pins. Raw asset paths are relative to
+the manifest. Per-asset and extracted-sysroot limits default to 512 MiB and are configurable.
+The manifest's `qualification.status` is producer metadata; release qualification must
+also bind the manifest digest to evidence from the actual browser compiler bundle.
+
+`cpu: 'x86-64'` selects the baseline x86-64 instruction set, including SSE2. The explicit
+`'x86-64-v3'` profile enables AVX2/FMA and requires a compatible CPU when the downloaded
+program is run. Compilation does not depend on the browser machine's CPU features.
+`emit: 'object'` and `'assembly'` return `program.o` and `program.s`; executable builds
+return a checked little-endian x86-64 ELF `program.elf`. C defaults to GNU17 and C++ to
+GNU++20. Additional headers/data can be supplied as `files` with relative workspace paths.
+The main file (`main.c` / `main.cpp`) and selected output filename are reserved. Workspaces
+are limited to 16 MiB and 1,024 additional files; captured diagnostics are limited to 4 MiB.
+Each invocation gets a fresh workspace and new tool instances, so failed compilation cannot
+return an earlier artifact. No compiled-output cache is shared with the WASI runtime.
+
+This is Clang with GNU libraries. GCC-specific optimization/target pragmas retain Clang's
+semantics; use the explicit CPU and optimization profiles. LTO, arbitrary driver flags,
+multiple translation units, native execution, and debugger integration are outside this API.
+`compiler.identity` exposes the manifest/compiler/linker/sysroot digests, and each result
+includes the complete driver `argv` for application cache keys and reproducibility records.
+
+To qualify a real bundle, run from the wasm-idle repository root:
+
+```sh
+pnpm exec playwright-core install chromium
+node scripts/verify-x86-cross-clang.mjs /path/to/bundle/cross-toolchain.v1.json out/x86-qualification
+```
+
+The output directory must be empty. The probe compiles C and GNU C++/PBDS programs in
+a Chromium Worker, checks AVX2 assembly/object output, and verifies that a failed compile
+does not return stale bytes. On Linux x64 it also runs the generated baseline executables
+with stdin and checks stdout. It writes the artifacts and `qualification.json`, including
+input/output hashes, timings, and whether native execution was checked. Host-contract unit
+tests use small WASI I/O fixtures and are not evidence that the X86 compiler itself works.
+This opt-in API does not install a compiler bundle or enable an x86 playground target;
+promotion requires the producer build and this browser qualification to pass.
+
 ## Wasm SIMD compatibility
 
 The pinned Clang 22.1.8 runtime enables Wasm SIMD for normal C and C++ builds. Alongside
