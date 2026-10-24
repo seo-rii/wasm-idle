@@ -176,6 +176,21 @@ try {
 						result = await compiler.compile(fixture.request, {
 							signal: deadline.signal
 						});
+					} catch (error) {
+						// Return completed cases before reporting this host failure. Throwing
+						// out of page.evaluate would discard their artifacts and prevent
+						// the native stdin/stdout checks from running on valid earlier ELF.
+						return {
+							results,
+							identity: compiler.identity,
+							cancellation: 'not-run-after-compilation-error',
+							failure: {
+								kind: 'compilation-host-error',
+								id: fixture.id,
+								elapsedMs: performance.now() - start,
+								error: String(error?.stack || error)
+							}
+						};
 					} finally {
 						clearTimeout(timer);
 					}
@@ -235,6 +250,7 @@ try {
 	assert.equal(actual.identity.sysrootSha256, manifest.assets.sysroot.sha256);
 	report.identity = actual.identity;
 	report.cancellation = actual.cancellation;
+	if (actual.failure) report.failure = actual.failure;
 	for (const [index, result] of actual.results.entries()) {
 		const fixture = fixtures[index];
 		assert.equal(result.id, fixture.id);
@@ -308,7 +324,24 @@ try {
 				entry.nativeStdout = execution.stdout;
 			}
 		}
+		entry.passed = true;
 		report.cases.push(entry);
+	}
+	if (actual.failure) {
+		const failedFixture = fixtures[actual.results.length];
+		assert.equal(actual.failure.id, failedFixture.id);
+		await fs.writeFile(
+			path.join(output, `${failedFixture.id}.host-error.json`),
+			`${JSON.stringify(actual.failure, null, 2)}\n`
+		);
+		report.cases.push({
+			...actual.failure,
+			passed: false,
+			expectedFailure: Boolean(failedFixture.expectFailure),
+			nativeRun: 'not-run',
+			disassembly: 'not-run'
+		});
+		throw new Error(`${actual.failure.id}: ${actual.failure.error}`);
 	}
 	report.success = true;
 	report.qualification = 'actual-gcc-chromium-worker-and-native-linux-io';
