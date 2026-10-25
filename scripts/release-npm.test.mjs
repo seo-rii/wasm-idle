@@ -39,6 +39,7 @@ describe('release package discovery', () => {
 		}));
 		validateSourceRelease(packages, '2.0.0');
 		const orderedNames = topologicallySortRelease(packages).map((pkg) => pkg.name);
+		assert.ok(orderedNames.indexOf('@wasm-idle/core') < orderedNames.indexOf('@wasm-idle/gcc'));
 		assert.ok(
 			orderedNames.indexOf('@wasm-idle/core') < orderedNames.indexOf('@wasm-idle/container')
 		);
@@ -314,7 +315,7 @@ describe('release CLI', () => {
 			const flags = ['--container-version', '0.2.0', '--asset-root', assetRoot];
 			const dryRun = invoke(flags, { RELEASE_TEST_PACK: '1' });
 			assert.equal(dryRun.status, 0, dryRun.stderr);
-			assert.match(dryRun.stdout, /Validated 11 release tarballs/u);
+			assert.match(dryRun.stdout, /Validated 12 release tarballs/u);
 			assert.match(dryRun.stdout, /Dry run complete/u);
 			await assert.rejects(
 				readFile(path.join(fixture, 'prepack-ran')),

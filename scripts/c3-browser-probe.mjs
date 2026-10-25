@@ -8,6 +8,7 @@ import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 import { installBrowserRuntimeDelivery } from './browser-runtime-delivery.mjs';
+import { createCoreSourceAliases } from './core-source-aliases.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export async function runC3BrowserProbe() {
@@ -17,10 +18,10 @@ export async function runC3BrowserProbe() {
 		publicDir: 'static',
 		cacheDir: path.join(root, '.cache/c3-browser-vite'),
 		resolve: {
-			alias: {
-				$lib: path.join(root, 'src/lib'),
-				'@wasm-idle/core': path.join(root, 'packages/core/src/index.ts')
-			}
+			alias: [
+				{ find: '$lib', replacement: path.join(root, 'src/lib') },
+				...createCoreSourceAliases(root)
+			]
 		},
 		plugins: [
 			{

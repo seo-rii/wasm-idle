@@ -590,7 +590,8 @@ export async function runStdinBrowserProbe(options) {
 		/** @type {unknown} */
 		let stdinDeliveryError = null;
 		let stdinDelivery = Promise.resolve();
-		if (!usePreloadedStdin) {
+		// Output-only runs need no input handoff, which may be disposed as soon as they exit.
+		if (!usePreloadedStdin && (stdinText || sendEof)) {
 			stdinDelivery = (async () => {
 				// Run first clears the terminal and prepares the compiler. Input sent during
 				// that reset is discarded; wait for this execution's runtime readiness.
@@ -629,12 +630,14 @@ export async function runStdinBrowserProbe(options) {
 						{ polling: 50, timeout: runTimeoutMs }
 					);
 				}
-				await page.evaluate(async (text) => {
-					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
-						text,
-						false
-					);
-				}, stdinText);
+				if (stdinText) {
+					await page.evaluate(async (text) => {
+						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
+							text,
+							false
+						);
+					}, stdinText);
+				}
 				if (sendEof) {
 					await page.waitForTimeout(500);
 					await page.evaluate(async () => {

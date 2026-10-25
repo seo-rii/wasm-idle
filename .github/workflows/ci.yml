@@ -49,6 +49,7 @@ jobs:
             - run: pnpm run check:packages
             - run: pnpm --dir packages/debug test
             - run: pnpm --dir packages/llvm-core test
+            - run: pnpm --dir packages/gcc test
             - run: pnpm --dir packages/lsp test
             - run: pnpm --dir packages/terminal test
             - run: pnpm --dir runtimes/wasm-go test
@@ -58,6 +59,7 @@ jobs:
             - run: pnpm exec vitest run src/lib/compress-static-runtime-assets.test.ts src/lib/static-asset-sizes.test.ts src/lib/build-layered-runtime-assets.test.ts src/lib/compressed-runtime-service-worker.test.ts src/lib/package-scripts.test.ts src/lib/playground/static-runtime-assets.test.ts src/lib/playground/support-matrix.test.ts
             - run: node --test runtimes/wasm-awk/scripts/build.test.mjs
             - run: pnpm --dir packages/llvm-core run verify:package-boundary
+            - run: pnpm --dir packages/gcc run verify:package-boundary
             - run: pnpm run verify:package
 
     workspace-unit:
@@ -106,6 +108,51 @@ jobs:
               working-directory: runtimes/wasm-awk
             - run: go test ./...
               working-directory: runtimes/wasm-tinygo
+
+    gcc-api-contract-fuzz:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            # Seeded API properties and inert asset integrity inputs; no compiler execution.
+            - name: Fuzz GCC API boundaries
+              env:
+                  FUZZ_SEED: ${{ github.event_name == 'schedule' && github.run_number || '20261024' }}
+              run: pnpm run fuzz:gcc-contract --seed "$FUZZ_SEED" --iterations 10000 --out .cache/gcc-contract-fuzz
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: gcc-api-contract-fuzz
+                  path: .cache/gcc-contract-fuzz/report.json
+                  if-no-files-found: error
+                  retention-days: 7
+
+    gcc-worker-browser-contract:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12.9.1
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright-core install --with-deps chromium
+            # Synthetic host/transport coverage; real GCC qualification runs in the producer CI.
+            - run: pnpm run test:browser:gcc-worker-contract
+            - name: Validate generated corpus replay gates (synthetic inputs)
+              run: node --test scripts/fuzz-x86-cross-gcc.test.mjs
 
     changed-runtimes:
         if: github.event_name == 'pull_request' || github.event_name == 'push'

@@ -5,6 +5,7 @@ import { createServer } from 'vite';
 import { expect, it } from 'vitest';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
+import { createCoreSourceAliases } from '../../../scripts/core-source-aliases.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 
 const enabled =
@@ -32,7 +33,7 @@ it(
 			resolve: {
 				alias: [
 					{ find: '$lib', replacement: `${root}src/lib` },
-					{ find: '@wasm-idle/core', replacement: `${root}packages/core/src/index.ts` },
+					...createCoreSourceAliases(root),
 					{
 						find: /^@wasm-idle\/llvm-core$/,
 						replacement: `${root}packages/llvm-core/runtime/core/src/index.ts`

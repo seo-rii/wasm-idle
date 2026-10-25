@@ -14,6 +14,7 @@ import {
 } from 'vscode-jsonrpc/node';
 import { expect, it } from 'vitest';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import { createCoreSourceAliasMap } from '../../../scripts/core-source-aliases.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { cobolFixtureFiles, exerciseCobolProtocol } from './fixtures/cobol-protocol.js';
 
@@ -114,7 +115,7 @@ it(
 				write: false,
 				target: 'es2022',
 				tsconfig: path.join(root, 'packages/lsp/tsconfig.json'),
-				alias: { '@wasm-idle/core': path.join(root, 'packages/core/src/index.ts') }
+				alias: createCoreSourceAliasMap(root)
 			};
 			const client = (
 				await build({
