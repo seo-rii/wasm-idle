@@ -13,12 +13,12 @@
 		"test": "node --test scripts/*.test.mjs"
 	},
 	"dependencies": {
-		"@php-wasm/universal": "3.1.57",
-		"@php-wasm/web-8-4": "3.1.57"
+		"@php-wasm/universal": "3.1.60",
+		"@php-wasm/web-8-4": "3.1.60"
 	},
 	"devDependencies": {
 		"esbuild": "0.28.2",
-		"vite": "8.3.3"
+		"vite": "8.3.5"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
