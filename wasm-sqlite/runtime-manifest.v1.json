@@ -2,13 +2,13 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "sql.js": "^1.14.2"
+    "sql.js": "^1.15.1"
   },
   "files": [
     {
-      "path": "assets/sql-wasm-DfANybxk.wasm",
-      "bytes": 658410,
-      "sha256": "38c14f6e379210bc942bdc4ebca44e7bfdb4318ecc1c72ca666a28fdce96670a"
+      "path": "assets/sql-wasm-C1D_RJuy.wasm",
+      "bytes": 684897,
+      "sha256": "f3aaaa47b7957d084f0a70037fb780b5465d7bfb6e58a5bd485d6f23a9576b74"
     },
     {
       "path": "LICENSE.txt",
@@ -17,8 +17,8 @@
     },
     {
       "path": "runtime.mjs",
-      "bytes": 40832,
-      "sha256": "3b2318870ea6cb5eef1613949b09476e1220723b278b460c9c16248d1a93fe61"
+      "bytes": 40838,
+      "sha256": "713af5aec30f98caf6667cecd3ca5a910dad36461a625bc67bddb414645459d7"
     }
   ]
 }

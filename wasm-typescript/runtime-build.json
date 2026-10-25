@@ -1,6 +1,6 @@
 {
   "format": "wasm-typescript-runtime-build-v2",
-  "fingerprint": "e48868a1d3851320",
+  "fingerprint": "ddfaeea8f8b111b0",
   "producer": {
     "format": "wasm-typescript-producer-build-v1",
     "additionalArtifacts": {
@@ -11,12 +11,12 @@
     },
     "source": {
       "format": "wasm-typescript-source-inputs-v1",
-      "sha256": "0e71cc4816b8f5b47e349336596b01739e74d86fb3ae549303a83d8ef5e95a32",
+      "sha256": "2bdd270bcbae18c8aa957500b1b743240aa7c0d1421841b45472cd6ce9cd2401",
       "files": [
         {
           "path": "package.json",
           "bytes": 746,
-          "sha256": "f040d16b7ddd7a59d1a73c45bdb9d2fa076c3d05e156ce7d75cb29fb9f45a04a"
+          "sha256": "312a644446a171608b48aeedcdbcfa94d48cad679145e6222aa8f92b2436b883"
         },
         {
           "path": "scripts/build.mjs",
@@ -51,7 +51,7 @@
       ]
     },
     "toolchain": {
-      "@swc/wasm-typescript": "1.16.13",
+      "@swc/wasm-typescript": "1.16.20",
       "acorn": "8.19.0",
       "buffer": "6.0.3",
       "esbuild": "0.28.2",
@@ -59,14 +59,14 @@
     },
     "artifact": {
       "path": "index.js",
-      "bytes": 3882154,
-      "sha256": "df071064e3d1e8ce1c5bae87853db00021681d069b3ef046a884b95fa58eadfe"
+      "bytes": 3892294,
+      "sha256": "2af0cb095c0b02689e6676a576202b71ea87dd6d3e14e4c1e54c21a848eb33b7"
     }
   },
   "assets": {
     "index.js": {
-      "bytes": 3882154,
-      "sha256": "df071064e3d1e8ce1c5bae87853db00021681d069b3ef046a884b95fa58eadfe"
+      "bytes": 3892294,
+      "sha256": "2af0cb095c0b02689e6676a576202b71ea87dd6d3e14e4c1e54c21a848eb33b7"
     },
     "javascript.js": {
       "bytes": 158899,

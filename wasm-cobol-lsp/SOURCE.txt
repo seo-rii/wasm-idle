@@ -1,0 +1,6 @@
+Original SuperBOL Studio OSS 0.3.0
+https://github.com/OCamlPro/superbol-studio-oss/tree/bf5491727e140334a1ec437ff1a3c3363f7bbe4e
+https://github.com/OCamlPro/superbol-studio-oss/archive/bf5491727e140334a1ec437ff1a3c3363f7bbe4e.tar.gz
+Original universal build: make vsix-release TARGET_PLAT=universal (see upstream Makefile.vsix-rules and its opam dependency manifests).
+Bundled GnuCOBOL configuration source: https://github.com/OCamlPro/gnucobol/tree/5a8666888fada0fdbbc904269ef809629fd93fbb/config
+The raw original server and dialect configuration bytes are unmodified. The browser runtime changes only js_of_ocaml 5.3's caml_callback trampoline stack budget from 40 to 4 to fit browser workers; every COBOL parser/handler byte is preserved. Original runtime source: https://github.com/ocsigen/js_of_ocaml/blob/5.3.0/runtime/jslib.js Browser-only filesystem/stdio adapters: scripts/runtime-workers/cobol-lsp-host.mjs and packages/lsp/src/cobol in wasm-idle.

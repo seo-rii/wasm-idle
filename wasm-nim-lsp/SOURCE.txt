@@ -1,0 +1,22 @@
+Original nimlsp 0.4.7 (5fa2846f04600c2cf1173625976e037389db4489)
+https://github.com/nim-lang/Nim/tree/f7145dd26efeeeb6eeae6fff649db244d81b212d
+Archive: https://nim-lang.org/download/nim-2.2.4-linux_x64.tar.xz
+SHA-256: 791802138aaf19c8579232c50b4998ce2ae2928b791127ce5b4ef3c7af53fb46
+https://github.com/PMunch/nimlsp/tree/5fa2846f04600c2cf1173625976e037389db4489
+Archive: https://codeload.github.com/PMunch/nimlsp/tar.gz/5fa2846f04600c2cf1173625976e037389db4489
+SHA-256: 2fab29d246e8f3daf60cf39264a6cab523384948ba56f89c1039e8385d93b38e
+https://github.com/PMunch/jsonschema/tree/7b41c03e3e1a487d5a8f6b940ca8e764dc2cbabf
+Archive: https://codeload.github.com/PMunch/jsonschema/tar.gz/7b41c03e3e1a487d5a8f6b940ca8e764dc2cbabf
+SHA-256: f934fe08e5786a885ca9cc6c1d2425ec51c6d8c3ea92c1220a443c89c1ffe1d9
+https://github.com/cheatfate/asynctools/tree/a1a17d06713727d97810cad291e29dd7c672738f
+Archive: https://codeload.github.com/cheatfate/asynctools/tar.gz/a1a17d06713727d97810cad291e29dd7c672738f
+SHA-256: ece236e36ab7042ae25444b3ad245f439d317f9a162861f153a31135578b668c
+https://github.com/nim-lang/ast-pattern-matching/tree/eb8b99d595517fd5d41ccc954edb896267f2db78
+Archive: https://codeload.github.com/nim-lang/ast-pattern-matching/tar.gz/eb8b99d595517fd5d41ccc954edb896267f2db78
+SHA-256: d7a47f8b3ab82348be4ef08c9715c2d7da2e2001ca0ff6e38ca5aa2e65091e1e
+https://github.com/emscripten-core/emscripten/tree/6.0.0
+Archive: https://storage.googleapis.com/webassembly/emscripten-releases-builds/linux/772bb4648be4a897ca062d6adc65bc70223d2703/wasm-binaries.tar.xz
+SHA-256: b5ed0963521f1d35b8967f20b1776327980bcfd5133166b40e018f27f2380e89
+Build: python3 producers/nim-lsp/build.py (Linux x86_64 bootstrap; Emscripten 6.0.0, SOURCE_DATE_EPOCH=0, jobs=2, bwrap private canonical build paths).
+The original Nim compiler/nimsuggest parser and nimlsp handlers are preserved. Browser adaptations select the existing synchronous stdio branch, reject unavailable asynchronous subprocess waits, and use the official ORC/malloc runtime for WebAssembly. Private Linux mount namespaces expose the original inputs at /tmp/nim-lsp-build so the original compiler generates deterministic assertion paths and type signature hashes without any generated C modification. No language analysis is implemented by the adapter.
+Filesystem/stdin/stdout adapter: packages/lsp/src/nim in wasm-idle.

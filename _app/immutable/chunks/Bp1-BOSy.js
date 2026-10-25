@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../workers/fortran-sQnII2gr.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

@@ -1,0 +1,47 @@
+{
+	"version": "0.0.6",
+	"sources": {
+		"server": {
+			"repository": "https://github.com/vlang/v-analyzer",
+			"commit": "925d4570d1668746762a2cdf0ecb9a25be704a67",
+			"url": "https://codeload.github.com/vlang/v-analyzer/tar.gz/925d4570d1668746762a2cdf0ecb9a25be704a67",
+			"bytes": 1109705,
+			"sha256": "d8ae532649813e6668b1bbeb5101fe16583cd4eb8b537bac29940d21054937a6"
+		},
+		"treeSitter": {
+			"repository": "https://github.com/tree-sitter/tree-sitter",
+			"commit": "cd4b6e2ef996d4baca12caadb78dffc8b55bc869",
+			"url": "https://codeload.github.com/tree-sitter/tree-sitter/tar.gz/cd4b6e2ef996d4baca12caadb78dffc8b55bc869",
+			"bytes": 901235,
+			"sha256": "40421cbc0f3610779e8968d9e14bb2b2f6cf2e7c41151f249a3376144aad3574"
+		}
+	},
+	"patchSha256": "efd8474e6d7445a734e510edb94fae95ab8f1290be9715f7ea4ba297fdbac430",
+	"compiler": {
+		"version": "0.5.1",
+		"reportedVersion": "V 0.5.1 0c3183c",
+		"url": "https://github.com/vlang/v/releases/download/0.5.1/v_linux.zip",
+		"bytes": 19746693,
+		"sha256": "0c35c79343b308e0415619d8e6d8da340c6a24c18331123553cc686ffb18abf4"
+	},
+	"emscripten": {
+		"version": "6.0.0",
+		"url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/linux/772bb4648be4a897ca062d6adc65bc70223d2703/wasm-binaries.tar.xz",
+		"bytes": 269920796,
+		"sha256": "b5ed0963521f1d35b8967f20b1776327980bcfd5133166b40e018f27f2380e89"
+	},
+	"assets": {
+		"v_analyzer.mjs": {
+			"bytes": 75647,
+			"sha256": "99a2447cc8040f3af1ce4570f32fa852a2a58d75c890d1a4d02862ea0071fb7e"
+		},
+		"v_analyzer.wasm": {
+			"bytes": 2919935,
+			"sha256": "76278f3933137eef0685dbfd0f3d7e32dee682ff759e8ac80758a663a6445d88"
+		},
+		"stdlib.json.gz.bin": {
+			"bytes": 2731779,
+			"sha256": "7098b54f1a246619c8414b937742a0ab2634c9b8948d08ad8f9466c8e23225e3"
+		}
+	}
+}

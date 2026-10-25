@@ -1,3 +1,40 @@
+/* wasm-idle compact runtime aliases v1 */
+const compactRuntimeAliases = new Map([["wasm-awk/goawk.wasm.gz","wasm-awk/goawk.wasm.gz.bin"],["wasm-bash/bash.webc.gz","wasm-bash/bash.webc.gz.bin"],["wasm-bash/sdk/wasmer_js_bg.wasm.gz","wasm-bash/sdk/wasmer_js_bg.wasm.gz.bin"],["wasm-bqn/BQN.wasm.gz","wasm-bqn/BQN.wasm.gz.bin"],["wasm-clojurescript/compiler.js.gz","wasm-clojurescript/compiler.js.gz.bin"],["wasm-j/jamalgam.wasm.gz","wasm-j/jamalgam.wasm.gz.bin"],["wasm-janet/janet.wasm.gz","wasm-janet/janet.wasm.gz.bin"],["wasm-julia/julia.data.gz","wasm-julia/julia.data.gz.bin"],["wasm-julia/julia.js.gz","wasm-julia/julia.js.gz.bin"],["wasm-julia/julia.wasm.gz","wasm-julia/julia.wasm.gz.bin"],["wasm-nim/clang/clang.wasm.gz","wasm-nim/clang/clang.wasm.gz.bin"],["wasm-nim/clang/lld.wasm.gz","wasm-nim/clang/lld.wasm.gz.bin"],["wasm-nim/clang/memfs.wasm.gz","wasm-nim/clang/memfs.wasm.gz.bin"],["wasm-nim/clang/sysroot.tar.gz","wasm-nim/clang/sysroot.tar.gz.bin"],["wasm-nim/nim/nim-bundle.js.gz","wasm-nim/nim/nim-bundle.js.gz.bin"],["wasm-nim/nim/nim.wasm.gz","wasm-nim/nim/nim.wasm.gz.bin"],["wasm-pascal/compiler.js.gz","wasm-pascal/compiler.js.gz.bin"],["wasm-perl/emperl.data.gz","wasm-perl/emperl.data.gz.bin"],["wasm-perl/emperl.js.gz","wasm-perl/emperl.js.gz.bin"],["wasm-perl/emperl.wasm.gz","wasm-perl/emperl.wasm.gz.bin"],["wasm-prolog/swipl-web.data.gz","wasm-prolog/swipl-web.data.gz.bin"],["wasm-prolog/swipl-web.wasm.gz","wasm-prolog/swipl-web.wasm.gz.bin"],["wasm-ruby/assets/ruby_stdlib-D8-A_OuU.wasm.gz","wasm-ruby/assets/ruby_stdlib-D8-A_OuU.wasm.gz.bin"],["wasm-tcl/tcl/wacl-library.data.gz","wasm-tcl/tcl/wacl-library.data.gz.bin"],["wasm-tcl/tcl/wacl.wasm.gz","wasm-tcl/tcl/wacl.wasm.gz.bin"]]);
+
+function compactRuntimeAliasUrl(url) {
+	const scope = new URL(self.registration.scope);
+	if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return null;
+	const target = compactRuntimeAliases.get(url.pathname.slice(scope.pathname.length));
+	if (!target) return null;
+	const result = new URL(target, scope);
+	result.search = url.search;
+	return result;
+}
+
+async function fetchCompactRuntimeAlias(request, url) {
+	if (request.method !== 'GET' && request.method !== 'HEAD') return null;
+	const target = compactRuntimeAliasUrl(url);
+	if (!target) return null;
+	const response = await fetch(target, {
+		method: request.method,
+		cache: request.cache,
+		credentials: request.credentials,
+		headers: request.headers,
+		mode: request.mode === 'navigate' ? 'same-origin' : request.mode,
+		redirect: request.redirect,
+		referrer: request.referrer,
+		referrerPolicy: request.referrerPolicy,
+		signal: request.signal
+	});
+	const headers = new Headers(response.headers);
+	headers.set('content-type', 'application/gzip');
+	return new Response(request.method === 'HEAD' ? null : response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers
+	});
+}
+
 self.addEventListener('install', function () {
 	self.skipWaiting();
 });
@@ -22,15 +59,15 @@ const exactResponseUrlAssetPaths = new Set([
 const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/asset-url.js.bin', '0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a'],
 	['wasm-rust/browser-component-tools.js.bin', '7860e2c261bb3d40daacc3c4dfefa18fb8e558ce56f4f0527b50f3134ce15be3'],
-	['wasm-rust/browser-execution.js.bin', '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'],
+	['wasm-rust/browser-execution.js.bin', 'b18798a82090629e5f86524476d757932de74af580431874c2eeebf6b704cb0f'],
 	['wasm-rust/browser-linker.js.bin', 'e01a93da60e7901416a57dfdbd71b299f92aa42382ded5371bf1a9ff8a33d009'],
 	['wasm-rust/browser-stdin.js.bin', '52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5'],
 	['wasm-rust/compiler-preload.js.bin', '644aa8d25bd4adbb190d07a0bc23923149a912dee7b511e25809fb67312c89a9'],
 	['wasm-rust/compiler-runtime.js.bin', '86f2b34128ce97c050f8c9245781b211e229073cef6a3ed4c6cfef92652902c7'],
-	['wasm-rust/compiler-support.js.bin', '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'],
-	['wasm-rust/compiler-worker.js.bin', '72cd8fe5c7999ffa6e144b3d6ea3691686843063dc8405274c2573f1ea8356a2'],
-	['wasm-rust/compiler.js.bin', '82e10d23d19eee77c662ccae5ae3fe946191bcc5aee8e7528317c59add549321'],
-	['wasm-rust/index.js.bin', 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'],
+	['wasm-rust/compiler-support.js.bin', '8933c8f043fb3dbee28d4f61d8a3ea16a372b2c833b1071a6531071388fed730'],
+	['wasm-rust/compiler-worker.js.bin', 'fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa'],
+	['wasm-rust/compiler.js.bin', 'd948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52'],
+	['wasm-rust/index.js.bin', 'c3ee4682af8d8b9f338f1258fdff5701754f72753aa1b5385b7848bff1ff3e8d'],
 	['wasm-rust/module-worker.js.bin', '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'],
 	['wasm-rust/retryable-failure-kind.js.bin', '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'],
 	['wasm-rust/runtime-asset-cache-service.js.bin', '10b01ffd98193be3e7506586fc8886f881b7a3459cbbbc4311b51e1485f4f917'],
@@ -551,7 +588,7 @@ async function fetchCompressedRuntimeAsset(request, url) {
 	}
 	const compressedUrl = new URL(url);
 	compressedUrl.pathname = `${compressedUrl.pathname}.gz`;
-	const compressedResponse = await fetch(compressedUrl, {
+	const compressedResponse = await fetch(compactRuntimeAliasUrl(compressedUrl) || compressedUrl, {
 		cache: request.cache,
 		credentials: request.credentials,
 		headers: request.headers,
@@ -646,6 +683,7 @@ self.addEventListener('fetch', function (event) {
 				try {
 					localResponse =
 						(await fetchDynamicModule(event.request, url)) ||
+					(await fetchCompactRuntimeAlias(event.request, url)) ||
 						(await fetchRuntimeAssetAlias(event.request, url)) ||
 						(await fetchLayeredRuntimeAsset(event.request, url)) ||
 						(await fetchCompressedRuntimeAsset(event.request, url));

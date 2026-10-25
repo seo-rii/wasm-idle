@@ -1,0 +1,62 @@
+{
+  "name": "@postgres-language-server/wasm",
+  "version": "0.28.2",
+  "description": "WebAssembly bindings for the Postgres Language Server",
+  "keywords": [
+    "language-server",
+    "linter",
+    "postgres",
+    "sql",
+    "wasm"
+  ],
+  "bugs": "https://github.com/supabase-community/postgres-language-server/issues",
+  "license": "MIT",
+  "author": "Supabase Community",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/supabase-community/postgres-language-server.git",
+    "directory": "packages/@postgres-language-server/wasm"
+  },
+  "files": [
+    "dist/",
+    "wasm/",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "import": "./dist/workspace.js"
+    },
+    "./lsp": {
+      "types": "./dist/lsp.d.ts",
+      "import": "./dist/lsp.js"
+    }
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "scripts": {
+    "build": "bun run build:wasm && bun run build:ts",
+    "build:wasm": "../../../crates/pgls_wasm/build-wasm.sh --release && mkdir -p wasm && cp ../../../crates/pgls_wasm/dist/pgls.js ../../../crates/pgls_wasm/dist/pgls.wasm ./wasm/",
+    "gen:schema-types": "cargo run -p xtask_codegen -- schema-types",
+    "build:ts": "bun run gen:schema-types && tsc -p tsconfig.build.json && cp src/schema-cache.d.ts dist/schema-cache.d.ts && cp wasm/pgls.wasm wasm/pgls.js dist/",
+    "build:ts:release-assets": "tsc -p tsconfig.build.json && cp src/schema-cache.d.ts dist/schema-cache.d.ts && cp wasm/pgls.wasm wasm/pgls.js dist/",
+    "build:types": "bun run gen:schema-types && tsc --declaration --emitDeclarationOnly --outDir dist && cp src/schema-cache.d.ts dist/schema-cache.d.ts",
+    "test": "bun test",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "typescript": "^5.0.0"
+  }
+}

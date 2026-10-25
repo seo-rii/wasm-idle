@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "7fffb6c5929fe02c52e1c823ae990bad2b540ad1",
+  "teavmVersion": "0.16.0",
+  "target": "wasm-gc",
+  "optimization": "NONE",
+  "javaVersion": "openjdk version \"17.0.20.1\" 2026-08-18\nOpenJDK Runtime Environment (build 17.0.20.1+1-1-deb12u1-Debian)\nOpenJDK 64-Bit Server VM (build 17.0.20.1+1-1-deb12u1-Debian, mixed mode, sharing)",
+  "gradleVersion": "9.7.1",
+  "inputs": {
+    "schemaVersion": 1,
+    "javacs": {
+      "version": "0.2.38",
+      "revision": "7fffb6c5929fe02c52e1c823ae990bad2b540ad1",
+      "url": "https://codeload.github.com/georgewfraser/java-language-server/tar.gz/7fffb6c5929fe02c52e1c823ae990bad2b540ad1",
+      "bytes": 6538580,
+      "sha256": "fb7e94a7594f2e6bc9031b328ac38841d28270043a3dd9cb1f1f23ab7bc46674"
+    },
+    "teavm": {
+      "version": "0.16.0",
+      "repository": "https://github.com/konsoletyper/teavm",
+      "tag": "0.16.0"
+    },
+    "jdk": {
+      "version": "17.0.20.1+1-1~deb12u1",
+      "vendor": "Debian OpenJDK",
+      "javaHome": "usr/lib/jvm/java-17-openjdk-amd64",
+      "packages": [
+        {
+          "path": "openjdk-17-jdk-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/o/openjdk-17/openjdk-17-jdk-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+          "bytes": 71714748,
+          "sha256": "d28519dfabf0b6234bd6f3bf25de5e372524c2c93d93983f8363117e539f7b15"
+        },
+        {
+          "path": "openjdk-17-jre-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/o/openjdk-17/openjdk-17-jre-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+          "bytes": 43925216,
+          "sha256": "c80b1542f0f0bd45c9362de990732d780bc7deff046ca4a16c3afd3a787978c7"
+        }
+      ],
+      "modules": [
+        {
+          "path": "jmods/jdk.compiler.jmod",
+          "bytes": 9256386,
+          "sha256": "12ce7dcffc762642ca081add644fd2241e473c36ce1f05337624ee13f1c64c73"
+        },
+        {
+          "path": "jmods/java.base.jmod",
+          "bytes": 22181792,
+          "sha256": "a507ad895479f1ef8784c3b844765e8d52e144ecaebfd3ff12944427f8ba1025"
+        },
+        {
+          "path": "jmods/java.logging.jmod",
+          "bytes": 128180,
+          "sha256": "eac1990d35a8d95ce23edbee0b5b4e554d2cceb7a3135822650e62e9b6049214"
+        },
+        {
+          "path": "jmods/java.compiler.jmod",
+          "bytes": 130711,
+          "sha256": "695fbec9878c191e7858aee2f5c9f4ac1ce2d0b8fb96caa840e49b09c4793f7f"
+        },
+        {
+          "path": "jmods/java.sql.jmod",
+          "bytes": 83694,
+          "sha256": "b7c8471572e53b0a99c3c2326ff6d4c20459318c7d70b5a55b0bf4a59bc2c093"
+        },
+        {
+          "path": "jmods/java.xml.jmod",
+          "bytes": 5235161,
+          "sha256": "4281dc330657c1d387f7a72cd0a7f862ad6496c63d03f6eaa3e9dc7a0f402a75"
+        },
+        {
+          "path": "jmods/java.transaction.xa.jmod",
+          "bytes": 11689,
+          "sha256": "4c1114f555ddcec2168d69428113c6038f45b91c2ddaa4726bf3af8a2cad35ab"
+        }
+      ]
+    },
+    "gson": {
+      "version": "2.8.5",
+      "sourceUrl": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.8.5/gson-2.8.5-sources.jar",
+      "sourceBytes": 156280,
+      "sourceSha256": "512b4bf6927f4864acc419b8c5109c23361c30ed1f5798170248d33040de068e"
+    },
+    "stringJoiner": {
+      "repository": "https://github.com/openjdk/jdk8u",
+      "tag": "jdk8u462-b08",
+      "url": "https://raw.githubusercontent.com/openjdk/jdk8u/jdk8u462-b08/jdk/src/share/classes/java/util/StringJoiner.java",
+      "bytes": 10629,
+      "sha256": "14282396b179f13608d02c6918fb534aa0fbc90f0ac482c5c202f3d7f011e888"
+    },
+    "gradle": {
+      "version": "9.7.1",
+      "path": "gradle-9.7.1-bin.zip",
+      "url": "https://services.gradle.org/distributions/gradle-9.7.1-bin.zip",
+      "bytes": 151433392,
+      "sha256": "acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a"
+    },
+    "licenses": [
+      {
+        "path": "licenses/TeaVM-APACHE-2.0.txt",
+        "url": "https://raw.githubusercontent.com/konsoletyper/teavm/0.16.0/LICENSE",
+        "bytes": 11358,
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "licenses/Gson-APACHE-2.0.txt",
+        "url": "https://raw.githubusercontent.com/google/gson/gson-parent-2.8.5/LICENSE",
+        "bytes": 11358,
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "licenses/protobuf-BSD-3-Clause.txt",
+        "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf/v3.9.1/LICENSE",
+        "bytes": 1732,
+        "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+      },
+      {
+        "path": "licenses/JZlib-BSD-3-Clause.txt",
+        "url": "https://repo.maven.apache.org/maven2/com/jcraft/jzlib/1.1.3/jzlib-1.1.3-sources.jar",
+        "sourceEntry": "com/jcraft/jzlib/Inflate.java license header",
+        "sourceSha256": "35ebd67941ce7024e6e7d80b60a4252a9687fa0f909a7079ac904bef6c1658cf",
+        "bytes": 1624,
+        "sha256": "196ed509bb0fdadac146d556d20a1d211c3d591af94a4db80d7ae0650cabdfc5"
+      },
+      {
+        "path": "licenses/Debian-ca-certificates-copyright.txt",
+        "url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+        "sourceEntry": "usr/share/doc/ca-certificates/copyright",
+        "sourceSha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed",
+        "bytes": 18940,
+        "sha256": "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"
+      }
+    ],
+    "zlib": {
+      "version": "1.2.13",
+      "package": {
+        "path": "zlib1g_1.2.13.dfsg-1_amd64.deb",
+        "url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g_1.2.13.dfsg-1_amd64.deb",
+        "bytes": 86684,
+        "sha256": "d7dd1d1411fedf27f5e27650a6eff20ef294077b568f4c8c5e51466dc7c08ce4"
+      },
+      "library": {
+        "path": "lib/x86_64-linux-gnu/libz.so.1.2.13",
+        "bytes": 121280,
+        "sha256": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68"
+      }
+    },
+    "certificates": {
+      "version": "20230311+deb12u1",
+      "package": {
+        "path": "ca-certificates_20230311+deb12u1_all.deb",
+        "url": "https://deb.debian.org/debian/pool/main/c/ca-certificates/ca-certificates_20230311+deb12u1_all.deb",
+        "bytes": 155260,
+        "sha256": "0d5f444f594e48c1e16a41d8fc628a09b24c658916a1274025c2330f2a802bed"
+      },
+      "directory": "usr/share/ca-certificates/mozilla",
+      "count": 142
+    }
+  },
+  "recipe": [
+    {
+      "path": ".gitignore",
+      "bytes": 32,
+      "sha256": "afc040134c4593ca2a2d9e9930e05768c8d7b0985584a40c82e00ea7370b13dd"
+    },
+    {
+      "path": "BuildTrustStore.java",
+      "bytes": 2091,
+      "sha256": "18f1bb6353e9ae0e328bbe533d9fc09427c1f90578854e426cfef2ceb31397cb"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7039,
+      "sha256": "ed109f7ba668eeb5f92d220a9c1ae22704971642a01c5887e9355d9011fa3c93"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "bytes": 3346,
+      "sha256": "54841bd109aabdb4b4083c149cec1d1883e5b9fe8d2d03f6e87a91b24bc6c2a1"
+    },
+    {
+      "path": "browser-platform.patch",
+      "bytes": 15644,
+      "sha256": "f295e61eb600facade14ecd90fed32476a537b9f7aa78261f91f7947d70fc6e3"
+    },
+    {
+      "path": "build.gradle",
+      "bytes": 1720,
+      "sha256": "d0d3667e0e6091b206cc2d333a65257d10931446596cf9c215f780bc1b61504b"
+    },
+    {
+      "path": "build.py",
+      "bytes": 4672,
+      "sha256": "6183bb1781250f7cf8e46b070c655f758d29cb73f23cc69f5522c1f8bfd633c1"
+    },
+    {
+      "path": "collect-bodies.mjs",
+      "bytes": 1922,
+      "sha256": "bd5d4efd56a244b0b2113b66004af1415fbdb6b336f0c56e7c584cf686e76394"
+    },
+    {
+      "path": "gradle/verification-metadata.xml",
+      "bytes": 50959,
+      "sha256": "d27a3f0812b017480df1b4602b37a7197b39457e5de8fccc2a6aaefd2cf57105"
+    },
+    {
+      "path": "inputs.lock.json",
+      "bytes": 6005,
+      "sha256": "215fe44cb41e1445e5b8adc7e42d7f78367b06f9989d551ef904acea1ffaf47e"
+    },
+    {
+      "path": "java/org/javacs/BrowserFileManager.java",
+      "bytes": 11459,
+      "sha256": "6be596665f545227f04d9a3e10ab41444207bb9434a7016ffacf62042d412e57"
+    },
+    {
+      "path": "java/org/javacs/BrowserJavacs.java",
+      "bytes": 6926,
+      "sha256": "829da1bd1de24fc7cb730188535e4fca867cee1e021a9862c68ae1c62cd91cab"
+    },
+    {
+      "path": "java/org/wasmidle/javacs/BrowserPlatformIO.java",
+      "bytes": 2061,
+      "sha256": "9d1720d5c44b7419d75f474b255c2e69d83f178bc75bf0240d226fd87f94cbfd"
+    },
+    {
+      "path": "java/org/wasmidle/javacs/CompilerPlatform.java",
+      "bytes": 6014,
+      "sha256": "1c66d83fbe4ead96b15b3ef667751cfd630b5fe5502cebc83fd0eeea3d5d5129"
+    },
+    {
+      "path": "java/org/wasmidle/javacs/ProtocolReflection.java",
+      "bytes": 1803,
+      "sha256": "0fe1c7eadf56ca3ba21262dc431cf9d9d9d3248f8c3ea628be4ad4882671a972"
+    },
+    {
+      "path": "jso-bodies.expected.json",
+      "bytes": 453,
+      "sha256": "f2642e0d089515f62a0d59af055b268c1b58e723bd0257af9040e78ac62fe6e3"
+    },
+    {
+      "path": "licenses/Debian-ca-certificates-copyright.txt",
+      "bytes": 18940,
+      "sha256": "e85e1bcad3a915dc7e6f41412bc5bdeba275cadd817896ea0451f2140a93967c"
+    },
+    {
+      "path": "licenses/Gson-APACHE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "licenses/JZlib-BSD-3-Clause.txt",
+      "bytes": 1624,
+      "sha256": "196ed509bb0fdadac146d556d20a1d211c3d591af94a4db80d7ae0650cabdfc5"
+    },
+    {
+      "path": "licenses/TeaVM-APACHE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "licenses/protobuf-BSD-3-Clause.txt",
+      "bytes": 1732,
+      "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+    },
+    {
+      "path": "prepare.py",
+      "bytes": 18973,
+      "sha256": "cc4f0b4dd1237065e00a18bd2b669a08e618b4e271b2d91c417382076f6fc55e"
+    },
+    {
+      "path": "resources/META-INF/services/java.util.ResourceBundle",
+      "bytes": 113,
+      "sha256": "a9eff31ba25ae425ec6286720bcaf407d5ec94c0c8fbe4b17fd6fd60d76aa73e"
+    },
+    {
+      "path": "resources/META-INF/services/javax.tools.JavaCompiler",
+      "bytes": 34,
+      "sha256": "0d3f63114cde4b4a5c2ac8de74d7d403892e0477fd4993fcf0753bf1d27db587"
+    },
+    {
+      "path": "resources/META-INF/services/org.teavm.classlib.ReflectionSupplier",
+      "bytes": 39,
+      "sha256": "c93a31e70e29b9d0a589e1be13a92ab512fbc7d9f0bcec84537e92c7aeb44fa4"
+    },
+    {
+      "path": "resources/META-INF/services/org.teavm.vm.spi.TeaVMPlugin",
+      "bytes": 37,
+      "sha256": "f81679bfc550aba0e7cfed69fde7950d15e13eaf64d9f36afbac8025e2a8eda5"
+    },
+    {
+      "path": "settings.gradle",
+      "bytes": 123,
+      "sha256": "fb63acb1be5a81dcaefaeb258c40809d44a49b539604bc69660be78a1aa27a58"
+    },
+    {
+      "path": "test_toolchain.py",
+      "bytes": 3019,
+      "sha256": "0ef64efff72c4e8e4d8d84aef03580ef8cda460730ca3931ebd7851b4b8ff482"
+    },
+    {
+      "path": "toolchain.py",
+      "bytes": 6476,
+      "sha256": "2cde711c662c77b50218d946ea81312de0bed86d12a4bb0bce6012988428f523"
+    },
+    {
+      "path": "tools/GenerateProtocolAdapters.java",
+      "bytes": 13619,
+      "sha256": "fd8c80b9123fe8d917b9125d9ae0476e46fe49aede2913e2d5edca54bbce698b"
+    },
+    {
+      "path": "tools/VerifyPlatformIO.java",
+      "bytes": 3001,
+      "sha256": "825cec55d1f32688460b100f6fc6a55af19014132289ac792a658587b5a642ad"
+    },
+    {
+      "path": "tools/VerifyProtocolAdapters.java",
+      "bytes": 5586,
+      "sha256": "6412bff8f9a5488e1e47272d0e7dcb692372dfdd4eab08707919c2266e111cf8"
+    }
+  ],
+  "assets": [
+    {
+      "path": "javacs-runtime.mjs",
+      "bytes": 16425,
+      "sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08"
+    },
+    {
+      "path": "javacs.wasm",
+      "bytes": 6193326,
+      "sha256": "1f1d92aaaf988d8379407b03851925861c1c6b8d858b314c4f8b848fdc9400f9"
+    },
+    {
+      "path": "jdk-platform.zip",
+      "bytes": 18004088,
+      "sha256": "7fa8f015e179b1ca89edfc6e6a67db37c613b8f6cc3679834323d711c3036d96"
+    },
+    {
+      "path": "jso-bodies.json",
+      "bytes": 454,
+      "sha256": "bf3ff3f4265b8d5e66fc4a7607550e5689cd6c1c056d0672a5b69c028b17c771"
+    }
+  ]
+}

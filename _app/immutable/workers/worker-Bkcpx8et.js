@@ -1,0 +1,3 @@
+const e=e=>import(
+/* @vite-ignore */
+e);function t(t=globalThis,n=e){let r=!1;t.addEventListener(`message`,({data:e})=>{e&&typeof e==`object`&&e.type===`init`&&!r&&(r=!0,(async()=>{let r=e.options;if(!r?.moduleUrl)throw Error(`Bash LSP module URL is required`);t.postMessage({type:`progress`,stage:`load-bash-language-server`,loaded:0,total:1});let i=await n(r.moduleUrl);if(typeof i.startBashLanguageServer!=`function`)throw Error(`Bash LSP module does not export startBashLanguageServer`);await i.startBashLanguageServer({scope:t,files:r.files}),t.postMessage({type:`ready`})})().catch(e=>t.postMessage({type:`error`,message:e instanceof Error?e.message:String(e)})))})}t();

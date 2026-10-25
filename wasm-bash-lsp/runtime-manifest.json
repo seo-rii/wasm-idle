@@ -1,0 +1,27 @@
+{
+	"format": "wasm-idle-bash-lsp-v1",
+	"upstreamVersion": "5.8.1",
+	"upstreamRevision": "dd90f3d2c10ddce889b456a9ac4a1d0f079a9558",
+	"assets": {
+		"runtime.mjs": {
+			"bytes": 745694,
+			"sha256": "7c9d49108cd70f9fb1f62f079ccbb9bb70b98fd92fa59583ec1f4f525a9470f7"
+		},
+		"tree-sitter-bash.wasm": {
+			"bytes": 1358679,
+			"sha256": "1c14dc240687e25a1cd8a11ae5135a6c780986d724c488d74d3dd83c20954511"
+		},
+		"web-tree-sitter.wasm": {
+			"bytes": 209613,
+			"sha256": "c03bccdc3b448a32848f5ae327e209c982bbb0840d43eec8bc2d5759544a1ed3"
+		},
+		"one_ini_bg.wasm": {
+			"bytes": 89224,
+			"sha256": "154532f2ed51973a0d75a97fa0b19240c9dfa837375a2cf82d57574060c0cb3a"
+		},
+		"THIRD_PARTY_NOTICES.txt": {
+			"bytes": 98715,
+			"sha256": "24412eff9c38c8fac4a342bb74597027cb3751940c7dd92d65ee2cd438a0feca"
+		}
+	}
+}

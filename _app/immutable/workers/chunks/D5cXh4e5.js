@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../objectivec-D2C9MN0l.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
