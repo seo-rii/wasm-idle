@@ -25,9 +25,9 @@
 		"buffer": "^6.0.3"
 	},
 	"devDependencies": {
-		"@types/node": "^24.19.1",
+		"@types/node": "^24.19.2",
 		"esbuild": "^0.28.2",
 		"typescript": "^6.0.3",
-		"vitest": "^5.0.3"
+		"vitest": "^5.0.5"
 	}
 }
