@@ -22,6 +22,35 @@ const cpp = {
 	sources: ['nested/helper.cpp', 'bias.cpp']
 };
 
+const stl = {
+	language: 'cpp',
+	cpu: 'x86-64',
+	standard: 'c++17',
+	emit: 'executable',
+	files: [
+		{
+			path: 'shared/api.h',
+			contents:
+				'#pragma once\n#include <vector>\ninline int initializer_order = 0;\ntemplate<typename T> T sum(const std::vector<T>& values) {\n    T result = 0; for (T value : values) result += value; return result;\n}\nint first(const std::vector<int>&);\nint second(int);\n'
+		},
+		{
+			path: 'left/same.cpp',
+			contents:
+				'#include "../shared/api.h"\nstatic struct LeftRegistration { LeftRegistration() { initializer_order = initializer_order * 10 + 1; } } registration;\nint first(const std::vector<int>& values) { return sum(values) + 1; }\n'
+		},
+		{
+			path: 'right/same.cpp',
+			contents:
+				'#include "../shared/api.h"\n#include <stdexcept>\nstatic struct RightRegistration { RightRegistration() { initializer_order = initializer_order * 10 + 2; } } registration;\nint second(int value) { if (value < 0) throw std::invalid_argument("negative"); return value * 3; }\n'
+		}
+	],
+	sources: ['left/same.cpp', 'right/same.cpp']
+};
+const maximumFiles = Array.from({ length: 63 }, (_, index) => ({
+	path: `part-${index}.cpp`,
+	contents: `int part_${index}() { return ${index + 1}; }\n`
+}));
+
 export const cases = [
 	{
 		id: 'cpp-separate-units',
@@ -115,5 +144,43 @@ export const cases = [
 		stdin: '',
 		stdout: '7\n',
 		stageCount: 5
+	},
+	{
+		id: 'stl-inline-template-and-ctors',
+		fixture: 'stl.cpp',
+		request: stl,
+		stdin: '1 2 3\n',
+		stdout: '21 12\n',
+		stageCount: 7
+	},
+	{
+		id: 'stl-cross-unit-exception',
+		fixture: 'stl.cpp',
+		request: stl,
+		stdin: '-5 0 0\n',
+		stdout: 'negative 12\n',
+		stageCount: 7
+	},
+	{
+		id: 'stl-reversed-link-order',
+		fixture: 'stl.cpp',
+		request: { ...stl, sources: [...stl.sources].reverse() },
+		stdin: '1 2 3\n',
+		stdout: '21 21\n',
+		stageCount: 7
+	},
+	{
+		id: 'maximum-64-translation-units',
+		fixture: 'maximum.cpp',
+		request: {
+			language: 'cpp',
+			cpu: 'x86-64',
+			emit: 'executable',
+			files: maximumFiles,
+			sources: maximumFiles.map((file) => file.path)
+		},
+		stdin: '20\n',
+		stdout: '2036\n',
+		stageCount: 129
 	}
 ];

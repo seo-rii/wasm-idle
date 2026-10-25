@@ -218,18 +218,24 @@ try {
 					} finally {
 						clearTimeout(timer);
 					}
+					const { artifact, ...details } = result;
+					let encodedArtifact;
+					if (artifact) {
+						const { bytes, ...metadata } = artifact;
+						// CDP expands numeric arrays per byte. Base64 keeps large ELF
+						// results compact without changing their binary contents.
+						const chunks = [];
+						for (let offset = 0; offset < bytes.length; offset += 32_768)
+							chunks.push(
+								String.fromCharCode(...bytes.subarray(offset, offset + 32_768))
+							);
+						encodedArtifact = { ...metadata, bytesBase64: btoa(chunks.join('')) };
+					}
 					results.push({
 						id: fixture.id,
-						...result,
+						...details,
 						elapsedMs: performance.now() - start,
-						...(result.artifact
-							? {
-									artifact: {
-										...result.artifact,
-										bytes: Array.from(result.artifact.bytes)
-									}
-								}
-							: {})
+						...(encodedArtifact ? { artifact: encodedArtifact } : {})
 					});
 				}
 				// A real synchronous compiler main() cannot be interrupted by an event
@@ -278,6 +284,10 @@ try {
 	for (const [index, result] of actual.results.entries()) {
 		const fixture = fixtures[index];
 		assert.equal(result.id, fixture.id);
+		if (result.artifact) {
+			const { bytesBase64, ...metadata } = result.artifact;
+			result.artifact = { ...metadata, bytes: Buffer.from(bytesBase64, 'base64') };
+		}
 		assertCaseResult(fixture, result);
 		await fs.writeFile(path.join(output, `${fixture.id}.stdout`), result.stdout);
 		await fs.writeFile(path.join(output, `${fixture.id}.stderr`), result.stderr);
@@ -291,7 +301,7 @@ try {
 			disassembly: 'not-applicable'
 		};
 		if (result.artifact) {
-			const bytes = Buffer.from(result.artifact.bytes);
+			const bytes = result.artifact.bytes;
 			const extension =
 				fixture.request.emit === 'assembly'
 					? 's'
