@@ -1,4 +1,4 @@
-export type CrossGccCpu = 'x86-64' | 'avx2-fma';
+export type CrossGccCpu = 'x86-64' | 'avx2' | 'avx2-fma';
 export type CrossGccEmit = 'assembly' | 'object' | 'executable';
 export type CrossGccTool = 'cc1' | 'cc1plus' | 'as' | 'ld';
 export type CrossGccAssetName =
@@ -24,6 +24,7 @@ export interface CrossGccManifest {
 	readonly host: 'wasm32-emscripten';
 	readonly target: 'x86_64-linux-gnu';
 	readonly compiler: Readonly<{ family: 'gcc'; version: '13.3.0' }>;
+	/** Producer v1 capabilities; the request-only `avx2` profile is a subset of `avx2-fma`. */
 	readonly cpuProfiles: readonly ['x86-64', 'avx2-fma'];
 	readonly linkMode: 'static';
 	readonly sysrootPath: '/sysroot';
