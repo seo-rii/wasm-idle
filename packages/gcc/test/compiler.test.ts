@@ -243,6 +243,30 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		await expect(compiler.compile({ code: '' })).rejects.toThrow('disposed');
 	});
 
+	it.each(['c', 'cpp'] as const)(
+		'links the math library after the %s object and before its runtime dependencies',
+		async (language) => {
+			const compiler = await createCrossGccCompiler(bundle().options);
+			try {
+				const result = await compiler.compile({ code: 'int main() {}', language });
+				const linker = result.stages.find((stage) => stage.tool === 'ld')!;
+				expect(linker.argv.filter((argument) => argument.startsWith('-l'))).toEqual(
+					language === 'cpp'
+						? ['-lstdc++', '-lm', '-lgcc', '-lgcc_eh', '-lc']
+						: ['-lm', '-lgcc', '-lgcc_eh', '-lc']
+				);
+				expect(linker.argv.indexOf('/workspace/program.o')).toBeLessThan(
+					linker.argv.indexOf('-lm')
+				);
+				expect(linker.argv.indexOf('-lm')).toBeLessThan(
+					linker.argv.indexOf('--start-group')
+				);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
 	it('supports C, preprocessed .ii, AVX2/FMA and each requested output without adding later stages', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {

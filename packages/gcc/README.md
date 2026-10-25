@@ -62,7 +62,7 @@ compatibility layer. Their availability must be confirmed by the real producer s
 The front ends use `-nostdinc` plus explicit GNU C, C++, GCC internal and glibc include
 directories from the pinned sysroot. C++ also gets the GNU driver's `_GNU_SOURCE` define
 and exception support. GCC emits assembly, GNU `as --64` emits an ELF object, and GNU
-`ld -static` receives the GNU CRT, libstdc++ (C++), libm (C++), libgcc, libgcc_eh and
+`ld -static` receives the GNU CRT, libstdc++ (C++), libm (C and C++), libgcc, libgcc_eh and
 glibc in their required order. Each stage uses a fresh module and MEMFS to reset GCC
 global state. The JavaScript Worker orchestrates these stages without `fork` or `exec`.
 
