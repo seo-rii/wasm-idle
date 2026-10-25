@@ -229,6 +229,7 @@ test(
 						for (const emit of ['assembly', 'object', 'executable']) {
 							const compiled = await compiler.compile({
 								code: 'Synthetic fixture',
+								cpu: 'avx2',
 								emit
 							});
 							if (compiled.exitCode !== 0 || !compiled.artifact)
@@ -236,6 +237,8 @@ test(
 							outputs.push({
 								emit,
 								format: compiled.artifact.format,
+								cpu: compiled.artifact.cpu,
+								argv: compiled.stages[0].argv,
 								stageCount: compiled.stages.length,
 								bytes: compiled.artifact.bytes.length
 							});
@@ -295,6 +298,11 @@ test(
 			result.outputs.map((output) => output.format),
 			['assembly', 'elf-object', 'elf-executable']
 		);
+		for (const output of result.outputs) {
+			assert.equal(output.cpu, 'avx2');
+			assert(output.argv.includes('-mavx2') && output.argv.includes('-mno-fma'));
+			assert(!output.argv.includes('-mfma'));
+		}
 		t.diagnostic(
 			JSON.stringify({
 				kind: 'synthetic-chromium-worker-contract-only',
@@ -344,7 +352,7 @@ test(
 					manifestSha256: 'b'.repeat(64),
 					code: 'int main() { return 19; }',
 					language: 'cpp',
-					cpu: 'avx2-fma',
+					cpu: 'avx2',
 					emit: 'object',
 					optimization: '3'
 				};

@@ -295,6 +295,31 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it.each(['c', 'cpp'] as const)(
+		'supports AVX2 without FMA for %s with existing producer metadata',
+		async (language) => {
+			const fixture = bundle();
+			const compiler = await createCrossGccCompiler(fixture.options);
+			try {
+				const result = await compiler.compile({
+					code: 'int main() {}',
+					language,
+					cpu: 'avx2'
+				});
+				expect(result.exitCode).toBe(0);
+				expect(result.artifact?.cpu).toBe('avx2');
+				expect(result.stages[0].tool).toBe(language === 'c' ? 'cc1' : 'cc1plus');
+				expect(result.stages[0].argv).toEqual(
+					expect.arrayContaining(['-march=x86-64', '-mavx2', '-mno-fma'])
+				);
+				expect(result.stages[0].argv).not.toContain('-mfma');
+				expect(compiler.manifest.cpuProfiles).toEqual(['x86-64', 'avx2-fma']);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
 	it('never returns stale output after front end, assembler or linker failures and can compile again', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {

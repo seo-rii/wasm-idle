@@ -196,7 +196,7 @@ function request(rng) {
 	return {
 		code: source(rng),
 		language,
-		cpu: rng.pick(['x86-64', 'avx2-fma']),
+		cpu: rng.pick(['x86-64', 'avx2', 'avx2-fma']),
 		emit: rng.pick(['assembly', 'object', 'executable']),
 		optimization: rng.pick(['0', '1', '2', '3', 's']),
 		standard: rng.pick(standards[language]),
@@ -266,7 +266,8 @@ function checkPlan(input, parsed, api) {
 	assert.equal(plan.stages[0].tool, language === 'c' ? 'cc1' : 'cc1plus');
 	const cc = plan.stages[0].argv;
 	assert(cc.includes('-march=x86-64') && !cc.some((arg) => arg.includes('native')));
-	assert.equal(cc.includes('-mavx2'), cpu === 'avx2-fma');
+	assert.equal(cc.includes('-mavx2'), cpu === 'avx2' || cpu === 'avx2-fma');
+	assert.equal(cc.includes('-mno-fma'), cpu === 'avx2');
 	assert.equal(cc.includes('-mfma'), cpu === 'avx2-fma');
 	assert.equal(cc.includes('-fexceptions'), language === 'cpp');
 	assert.equal(cc.includes('-fpreprocessed'), preprocessed);
