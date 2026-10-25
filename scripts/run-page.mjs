@@ -60,8 +60,12 @@ export function createPagePlan(scripts, environment = process.env) {
 			tasks.push({ command: pnpm, args: tokens.slice(1) });
 		}
 	}
-	if (!skipVerification)
-		tasks.push({ command: pnpm, args: ['run', 'test:browser:audit:full', '--use-build'] });
+	if (!skipVerification) {
+		tasks.push({ command: pnpm, args: ['run', 'verify:page-assets'] });
+		tasks.push({ command: pnpm, args: ['run', 'test:browser:page-smoke'] });
+		if (environment.WASM_IDLE_PAGE_FULL_AUDIT === '1')
+			tasks.push({ command: pnpm, args: ['run', 'test:browser:audit:full', '--use-build'] });
+	}
 	tasks.push({ command: process.execPath, args: ['gh-pages.js'] });
 	return tasks;
 }
@@ -74,7 +78,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
 		);
 		if (shouldSkipAssetVerification())
 			console.log(
-				'Skipping deployment asset verification and full browser audit for this invocation.'
+				'Skipping deployment asset verification and browser checks for this invocation.'
+			);
+		else
+			console.log(
+				process.env.WASM_IDLE_PAGE_FULL_AUDIT === '1'
+					? 'Verifying deployment assets, browser delivery and the opt-in full runtime audit.'
+					: 'Verifying deployment asset hashes and browser delivery without repeating runtime qualification.'
 			);
 		if (process.env.WASM_IDLE_PAGE_REUSE_ASSETS === '1')
 			console.log(

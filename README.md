@@ -460,6 +460,13 @@ toolchains can be consumed from pinned external runtime repositories:
   `static/wasm-janet`: bundled browser runtime and compiler assets synced from upstream asset
   builds rather than local workspace packages.
 
+`pnpm run page` builds and deploys GitHub Pages after verifying the built assets
+against their receipts (`verify:page-assets`) and running a short browser smoke test
+(`test:browser:page-smoke`). Use `WASM_IDLE_PAGE_REUSE_ASSETS=1 pnpm run page` to
+reuse prepared runtime assets while retaining the asset and page checks. Full runtime
+execution tests belong to asset generation and change CI; request the complete browser
+audit during deployment with `WASM_IDLE_PAGE_FULL_AUDIT=1 pnpm run page` when needed.
+
 Deployment builds retain both legacy `.gz` and canonical `.gz.bin` URLs by default.
 After building and compressing the page, `pnpm run compact:build-runtimes` reports
 byte-identical duplicates without changing files. Add `--drop-legacy-aliases` to
