@@ -15,6 +15,8 @@ import { WASM_PASCAL_RUNTIME_BUNDLE } from './wasmPascalVersion';
 const prologStdinSource = `:- use_module(library(readutil)).
 
 main :-
+    current_prolog_flag(version, Version),
+    format("swipl=~w~n", [Version]),
     format("value?~n", []),
     read_line_to_string(user_input, Line),
     number_string(N, Line),
@@ -210,6 +212,7 @@ describe('wasm-idle static worker language browser integrations', () => {
 					expect(summary.activeState.sharedArrayBuffer).toBe(true);
 					expect(summary.activeState.serviceWorkerControlled).toBe(true);
 					expect(summary.pageErrors).toEqual([]);
+					expect(summary.transcript).toContain('swipl=100119');
 					expect(summary.transcript).toContain('main=73');
 					expect(summary.transcript).toContain('Process finished after');
 					const runtimePaths = summary.runtimeRequests.map(
