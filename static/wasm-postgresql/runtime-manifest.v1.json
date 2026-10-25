@@ -2,23 +2,23 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "@electric-sql/pglite": "0.5.8"
+    "@electric-sql/pglite": "0.5.11"
   },
   "files": [
     {
-      "path": "assets/initdb-DwLcS450.wasm",
+      "path": "assets/initdb-D3nwUMsW.wasm",
       "bytes": 395242,
-      "sha256": "4c8988dca3b2f0bbfd23a0714023e4822a2909ead01804f37acffd9ff3ca9f8a"
+      "sha256": "985d9b6f0715e9850efb5798ce51f64e7fd8629d70970fd1a61e75d7bae0bde7"
     },
     {
-      "path": "assets/pglite-DgipwPsY.wasm",
-      "bytes": 10088161,
-      "sha256": "356b89f6fcb2ab3a397bec4128327b67b7137ec2a900b13251dade81bcbc0ef0"
+      "path": "assets/pglite-CKQGo6A1.wasm",
+      "bytes": 10123263,
+      "sha256": "6b290789f89aabf0052a975eee03cf97430f2a082938fe18137b246aaf1136b5"
     },
     {
-      "path": "assets/pglite-n8RDJ3Sw.data",
-      "bytes": 6295316,
-      "sha256": "c574cc331d96e33311470ec57bf58c579d972c111dbd9c0ab54bb42d79ec4c0d"
+      "path": "assets/pglite-k6Y9avCD.data",
+      "bytes": 6291000,
+      "sha256": "47ff29bdadf0dfd8af60bb01313c7f918c22518ee48772fc40ed49028a81ccc4"
     },
     {
       "path": "chunks/__vite-browser-external-BqTOPsad.mjs",
@@ -26,19 +26,19 @@
       "sha256": "96fc50b6105c0a7a1ea05492920e66bcf06fdadcd0cc1144822d3858b8f4051b"
     },
     {
-      "path": "chunks/dist-CBe8LYV9.mjs",
-      "bytes": 606928,
-      "sha256": "47e27a78d70015cacb686635f1c1028e70d7b488470d428132e88e44f494e45c"
+      "path": "chunks/dist-DC_kI-_d.mjs",
+      "bytes": 623642,
+      "sha256": "b304625a866dc0f1412f47cc932c26d42e6a5499d0508eb334b1c9cd87a9cd81"
     },
     {
-      "path": "chunks/nodefs-Lavu35aH.mjs",
-      "bytes": 544,
-      "sha256": "79858b804d87411352bd039da3e7cdb04a6ceac4de997b76ac841b56bc99bec3"
+      "path": "chunks/nodefs-BZWY4MyD.mjs",
+      "bytes": 548,
+      "sha256": "3035ead2e099bacf99ba89febb35b209463002dbf5dd63ba056432f3a1fbdc51"
     },
     {
-      "path": "chunks/opfs-ahp-CWXvZC5u.mjs",
-      "bytes": 10009,
-      "sha256": "bb2724c9ef9265c4792d516cd2892746ac856e5c233ed89d67f0155e90613033"
+      "path": "chunks/opfs-ahp-BRjkEk8U.mjs",
+      "bytes": 9930,
+      "sha256": "be1a9da88e45f68eef7b35e31320cc14bbd172b6c7d4eb2852ce373e42039a41"
     },
     {
       "path": "chunks/preload-helper-CGPSMADP.mjs",
@@ -63,7 +63,7 @@
     {
       "path": "runtime.mjs",
       "bytes": 583,
-      "sha256": "5807d24d5e07cc79b96452f2cd31c8d787dca19491a9aec6af72b21febfe7a81"
+      "sha256": "3ec1c134df75015f93adc24ffde834b489c814da3429d911c46c9520f52cc315"
     }
   ]
 }

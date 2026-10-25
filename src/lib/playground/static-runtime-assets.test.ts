@@ -66,7 +66,7 @@ const staticRuntimeModules = [
 	},
 	{
 		directory: 'wasm-php',
-		packages: { '@php-wasm/web-8-4': '3.1.57', '@php-wasm/universal': '3.1.57' }
+		packages: { '@php-wasm/web-8-4': '3.1.60', '@php-wasm/universal': '3.1.60' }
 	},
 	{
 		directory: 'wasm-ruby',
@@ -76,8 +76,8 @@ const staticRuntimeModules = [
 			'@ruby/wasm-wasi': '2.10.1'
 		}
 	},
-	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.8' } },
-	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.14.2' } },
+	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.11' } },
+	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.15.1' } },
 	{ directory: 'wasm-bash/sdk', packages: { '@wasmer/sdk': '0.10.0' } }
 ] as const;
 
@@ -108,9 +108,9 @@ describe('static language runtime assets', () => {
 		);
 
 		expect(producerPackage.private).toBe(true);
-		expect(producerPackage.dependencies?.['@php-wasm/web-8-4']).toBe('3.1.57');
-		expect(producerPackage.dependencies?.['@php-wasm/universal']).toBe('3.1.57');
-		expect(producerPackage.devDependencies?.vite).toBe('8.3.3');
+		expect(producerPackage.dependencies?.['@php-wasm/web-8-4']).toBe('3.1.60');
+		expect(producerPackage.dependencies?.['@php-wasm/universal']).toBe('3.1.60');
+		expect(producerPackage.devDependencies?.vite).toBe('8.3.5');
 		expect(producerPackage.scripts?.build).toBeTruthy();
 		expect(producerPackage.scripts?.verify).toBeTruthy();
 		expect(pageBuilder).not.toContain('scripts/runtime-modules/php.ts');
@@ -124,7 +124,7 @@ describe('static language runtime assets', () => {
 			validatePhpRuntimeAssets(path.join(staticRoot, 'wasm-php'), { allowCompressed: true })
 		).resolves.toMatchObject({
 			runtimeModule: 'runtime.mjs',
-			packages: { '@php-wasm/web-8-4': '3.1.57', '@php-wasm/universal': '3.1.57' }
+			packages: { '@php-wasm/web-8-4': '3.1.60', '@php-wasm/universal': '3.1.60' }
 		});
 	});
 

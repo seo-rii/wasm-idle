@@ -162,23 +162,25 @@ async function readInputLock(lockFilePath) {
 			`wasm-prolog input lock is not valid JSON: ${error instanceof Error ? error.message : error}`
 		);
 	}
+	// Release gitHead and toolchain: the npm 8.2.5 metadata and upstream
+	// build-config.json at a633668fc459e0fd4ec5f993443d07b0c933aa2a.
 	if (
 		!isObject(value) ||
 		value.schemaVersion !== 1 ||
-		value.profileId !== 'swipl-wasm-8.2.1-swipl-10.1.15' ||
+		value.profileId !== 'swipl-wasm-8.2.5-swipl-10.1.19' ||
 		!isObject(value.package) ||
 		value.package.name !== 'swipl-wasm' ||
-		value.package.version !== '8.2.1' ||
+		value.package.version !== '8.2.5' ||
 		value.package.repository !== 'https://github.com/SWI-Prolog/npm-swipl-wasm.git' ||
-		value.package.revision !== '85167290994ede92eab1aa5e399007c031e6cb82' ||
-		value.package.tarball !== 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz' ||
+		value.package.revision !== 'a633668fc459e0fd4ec5f993443d07b0c933aa2a' ||
+		value.package.tarball !== 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.5.tgz' ||
 		value.package.integrity !==
-			'sha512-zRdeD+3aFuXFwQqRkBWOENDP3fCSnwErqNDt8yD42OApkui2dRcomqRtxt0tZYfB+uH2Elc4K6cZrUBla6ljRQ==' ||
+			'sha512-wV0VBcuAQToNJzMU86uSKBNPBTfnlRcCA7hbF/8jh+WBNU/R9yY4fwjI/wQ/mLsTa9W27iOrAFBWSnuQyzRdPA==' ||
 		!isObject(value.toolchain) ||
-		value.toolchain.swiplVersion !== '10.1.15' ||
-		value.toolchain.swiplRevision !== '5db27168f89b15186745ea401fbb99a017413788' ||
-		value.toolchain.emsdkVersion !== '6.0.11' ||
-		value.toolchain.emsdkRevision !== 'dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72' ||
+		value.toolchain.swiplVersion !== '10.1.19' ||
+		value.toolchain.swiplRevision !== '724df2b54cf1dda6fb3327d9167db2ae750c460e' ||
+		value.toolchain.emsdkVersion !== '6.0.13' ||
+		value.toolchain.emsdkRevision !== '35659964bc2762fffec0d257997fb61475f765b7' ||
 		value.toolchain.zlibVersion !== '1.3.2' ||
 		value.toolchain.pcre2Version !== '10.49.0' ||
 		value.toolchain.pcre2Revision !== '6f9d7c1373262c541324a16a358785b33ef116cf' ||

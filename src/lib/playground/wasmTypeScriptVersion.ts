@@ -1,8 +1,8 @@
-export const WASM_TYPESCRIPT_ASSET_VERSION = 'e48868a1d3851320';
+export const WASM_TYPESCRIPT_ASSET_VERSION = 'ddfaeea8f8b111b0';
 
 export const WASM_TYPESCRIPT_MODULE_RECEIPT = Object.freeze({
-	bytes: 3882154,
-	sha256: 'df071064e3d1e8ce1c5bae87853db00021681d069b3ef046a884b95fa58eadfe'
+	bytes: 3892294,
+	sha256: '2af0cb095c0b02689e6676a576202b71ea87dd6d3e14e4c1e54c21a848eb33b7'
 });
 
 export const WASM_JAVASCRIPT_MODULE_RECEIPT = Object.freeze({

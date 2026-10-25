@@ -54,7 +54,7 @@ the repository root and participate in the normal application test suite.
 
 ## Native debugger capability
 
-The shipped PHP 8.4.25 engine from `@php-wasm/web-8-4` 3.1.57 does not contain Xdebug.
+The shipped PHP 8.4.25 engine from `@php-wasm/web-8-4` 3.1.60 does not contain Xdebug.
 The [runtime receipt](docs/debug-capabilities-20261023.json) records actual
 `extension_loaded('xdebug')`, `function_exists('xdebug_break')` and `ini_get('xdebug.mode')`
 results, the loaded Wasm SHA-256, and a successful stdin `7` to stdout `12` control.

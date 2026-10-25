@@ -2,8 +2,8 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "@php-wasm/web-8-4": "3.1.57",
-    "@php-wasm/universal": "3.1.57"
+    "@php-wasm/web-8-4": "3.1.60",
+    "@php-wasm/universal": "3.1.60"
   },
   "files": [
     {
@@ -27,34 +27,34 @@
       "sha256": "88e14ad0b66c7ea6860cab6ecbf24ca32a25967be96af56c2bdd17e62be4fe1c"
     },
     {
-      "path": "chunks/__vite-browser-external-Bsloc-A9.mjs",
-      "bytes": 626,
-      "sha256": "5fab1c02b4e1be1ab9e33536275fd723e51315bee0573e062a4fc4bedcf4e8a1"
+      "path": "chunks/__vite-browser-external-Fg0A4L8b.mjs",
+      "bytes": 636,
+      "sha256": "1ca373f8e4293d2f76f422768d085e5b32d4652d207adc36a25b2774b47b5f13"
     },
     {
-      "path": "chunks/php_8_4-BZTUBSMV.mjs",
-      "bytes": 196813,
-      "sha256": "b43d90eb320b851faa6f49cc15ccfdafd6f6ca88350d200cae4aca53aecfa4a1"
+      "path": "chunks/php_8_4-BeAc5oTJ.mjs",
+      "bytes": 151914,
+      "sha256": "c48f160fd78c3e7e01bafefdea0518b1da8916f88a6bd4912072fc5597571e13"
     },
     {
-      "path": "chunks/php_8_4-HOoIUeaQ.mjs",
-      "bytes": 151753,
-      "sha256": "d0d47718089130bf204d9d45c1689e3c6d1bff985577e1bb9fbe0392a53985d6"
+      "path": "chunks/php_8_4-DDkJCjMV.mjs",
+      "bytes": 196974,
+      "sha256": "59679d902677099a2dedcf8545bf25d6397fc080a06bb0e446915d02d818be6e"
     },
     {
-      "path": "chunks/startup-runtime-api-eKcsJJIE.mjs",
+      "path": "chunks/startup-runtime-api-D4hiY0zU.mjs",
       "bytes": 90,
-      "sha256": "a754a1dee5bb0d5f07c1b3333fc57150bafedb3af3618034fb2e6397e8654ace"
+      "sha256": "19cf08429b4de91c2befec5cb59e6fd5a4c77ade9fd929723f9cc5ebc353ffc4"
     },
     {
-      "path": "chunks/universal-_N6DxJ-J.mjs",
-      "bytes": 120573,
-      "sha256": "698ef411b67ff67f293f8ab461dcdc23990d4b06c4d13757e0117ebde47a5a33"
+      "path": "chunks/universal-DFV8KgFU.mjs",
+      "bytes": 120734,
+      "sha256": "6bc190dc72122b021885cd7789feefcfaa59d09c1d06bce138c905d9e6925c5b"
     },
     {
-      "path": "chunks/web-8-4-2Jcoi3JW.mjs",
-      "bytes": 1799,
-      "sha256": "5b8fc16bdf1248155869273cbc18de4ae6b310d318594a7492b3bae320849cff"
+      "path": "chunks/web-8-4-DqKm8ZAD.mjs",
+      "bytes": 1937,
+      "sha256": "9f625520696734729b18efb8fc64663e2c938462a5fcc4634849d0bd66f5cfbe"
     },
     {
       "path": "LICENSE.txt",
@@ -64,12 +64,12 @@
     {
       "path": "runtime.mjs",
       "bytes": 447,
-      "sha256": "f44db0308c6eb80e3846850f7057430be82a949496ff2ab3ed57a22ca9971d4d"
+      "sha256": "b433369caa9227640ef92a9942e8cdd9651d119307ec7a3248b26d8327a3a64d"
     },
     {
       "path": "startup.mjs",
       "bytes": 4474,
-      "sha256": "cc5acc22f20dd1422a49e20cd5820b7f8b628d1342fc6a17252d27161364b922"
+      "sha256": "b6ae4618bd2e742b086f1da5c378d52686d008cf4c574babab1955d6dd747f14"
     }
   ]
 }

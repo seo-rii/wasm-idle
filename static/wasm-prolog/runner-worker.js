@@ -32,20 +32,20 @@ const manifestKeys = Object.freeze([
 ]);
 const expectedPackage = Object.freeze({
 	integrity:
-		'sha512-zRdeD+3aFuXFwQqRkBWOENDP3fCSnwErqNDt8yD42OApkui2dRcomqRtxt0tZYfB+uH2Elc4K6cZrUBla6ljRQ==',
+		'sha512-wV0VBcuAQToNJzMU86uSKBNPBTfnlRcCA7hbF/8jh+WBNU/R9yY4fwjI/wQ/mLsTa9W27iOrAFBWSnuQyzRdPA==',
 	name: 'swipl-wasm',
 	repository: 'https://github.com/SWI-Prolog/npm-swipl-wasm.git',
-	revision: '85167290994ede92eab1aa5e399007c031e6cb82',
-	tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz',
-	version: '8.2.1'
+	revision: 'a633668fc459e0fd4ec5f993443d07b0c933aa2a',
+	tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.5.tgz',
+	version: '8.2.5'
 });
 const expectedToolchain = Object.freeze({
-	emsdkRevision: 'dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72',
-	emsdkVersion: '6.0.11',
+	emsdkRevision: '35659964bc2762fffec0d257997fb61475f765b7',
+	emsdkVersion: '6.0.13',
 	pcre2Revision: '6f9d7c1373262c541324a16a358785b33ef116cf',
 	pcre2Version: '10.49.0',
-	swiplRevision: '5db27168f89b15186745ea401fbb99a017413788',
-	swiplVersion: '10.1.15',
+	swiplRevision: '724df2b54cf1dda6fb3327d9167db2ae750c460e',
+	swiplVersion: '10.1.19',
 	zlibVersion: '1.3.2'
 });
 const expectedAssets = Object.freeze({
