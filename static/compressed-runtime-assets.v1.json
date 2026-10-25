@@ -361,7 +361,7 @@
     "wasm-tinygo/tools/upstream/lld.wasm": 20795796,
     "wasm-tinygo/tools/upstream/tinygo-compiler.wasm": 54057556,
     "wasm-tinygo/tools/upstream/tinygo-package-graph.wasm": 25870831,
-    "wasm-typescript/index.js": 3882154,
+    "wasm-typescript/index.js": 3892294,
     "wasm-uhmlang/uhmlang.wasm": 3017206,
     "wasm-v/v.wasm": 5490280,
     "wasm-wat/index.js": 920134,

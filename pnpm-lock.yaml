@@ -826,8 +826,8 @@ importers:
   runtimes/wasm-typescript:
     dependencies:
       '@swc/wasm-typescript':
-        specifier: ^1.16.13
-        version: 1.16.13
+        specifier: ^1.16.20
+        version: 1.16.20
       acorn:
         specifier: 8.19.0
         version: 8.19.0
@@ -2177,8 +2177,8 @@ packages:
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
-  '@swc/wasm-typescript@1.16.13':
-    resolution: {integrity: sha512-dVDs9DuC7KwCiGOK1l5qHodiotst71bAA+X1rXS10ePDZHyNok8RwJvyaByoju1BWQLmPECUeggm+cRMx5nTGQ==}
+  '@swc/wasm-typescript@1.16.20':
+    resolution: {integrity: sha512-mV0FJoObtHNEJ6OrxOosC8O3lGkk1O4HUVg4t5a20GE4jNGB75yy/xIViQ8BG/koAUoS9Sb/moZroTJSKqsu0A==}
 
   '@swmansion/popcorn@0.3.3':
     resolution: {integrity: sha512-G/CDGt3TEeIVAAQnM0inBmzKixXUBLA0vUfsA3mfaASw1QKJNNesX/CikWFUerw68eZDKki3RVUufeQQAOD04w==}
@@ -5352,7 +5352,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@swc/wasm-typescript@1.16.13': {}
+  '@swc/wasm-typescript@1.16.20': {}
 
   '@swmansion/popcorn@0.3.3(esbuild@0.28.2)(vite@8.3.3(@types/node@24.19.2)(esbuild@0.28.2)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.1))':
     optionalDependencies:
