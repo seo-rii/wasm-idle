@@ -76,8 +76,8 @@ const staticRuntimeModules = [
 			'@ruby/wasm-wasi': '2.10.1'
 		}
 	},
-	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.8' } },
-	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.14.2' } },
+	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.11' } },
+	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.15.1' } },
 	{ directory: 'wasm-bash/sdk', packages: { '@wasmer/sdk': '0.10.0' } }
 ] as const;
 
