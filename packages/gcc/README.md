@@ -53,8 +53,11 @@ already own a Worker; terminating that Worker is the cancellation mechanism.
 
 ## Supported compilation contract
 
-One request compiles one C or C++ translation unit, with optional local header/data files
-under `/workspace`. Source text reaches the GNU front end unchanged. GCC's `target` and
+One request compiles its primary `code` as C or C++, with optional local header/data files
+under `/workspace`. For executable output, `sources` explicitly selects additional files
+to compile as separate translation units and link in the listed order. Every unit uses
+the request's language, standard, CPU, optimization and preprocessing settings. Source
+text reaches the GNU front end unchanged. GCC's `target` and
 `optimize` pragmas, `push_options`/`pop_options`, PBDS, intrinsic headers and exception
 handling are implemented by the actual compiler and GNU headers, not by a JavaScript
 compatibility layer. Their availability must be confirmed by the real producer suite.
@@ -75,9 +78,31 @@ global state. The JavaScript Worker orchestrates these stages without `fork` or 
 | `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects; defaults `gnu17`/`gnu++20` |
 | `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default              |
 | `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                  |
+| `sources`      | Up to 63 additional translation unit paths from `files`; executable output only          |
+
+```ts
+const result = await compiler.compile({
+	code: '#include "math.h"\nint main() { return twice(21) == 42 ? 0 : 1; }',
+	language: 'cpp',
+	files: [
+		{ path: 'math.h', contents: 'int twice(int value);' },
+		{ path: 'math.cpp', contents: '#include "math.h"\nint twice(int value) { return value * 2; }' }
+	],
+	sources: ['math.cpp']
+});
+```
+
+Only paths listed in `sources` are compiled in addition to `code`; an unlisted `.cpp`
+in `files` remains an ordinary workspace file. Each translation unit gets a fresh front
+end and assembler, so file-local symbols and macros remain independent. The static
+linker receives all objects after every unit succeeds. Any failing stage stops the request
+without an artifact. Missing/duplicate source paths and intermediate-output collisions
+are rejected before compilation. Additional outputs reserve `program.N.s` and
+`program.N.o` in the workspace, where N starts at 1. Multiple-unit assembly/object output
+is rejected; use separate requests to obtain those individual artifacts.
 
 No `-march=native`, arbitrary driver arguments, PCH, plugin, LTO, shared/dynamic linking,
-OpenMP, multi-translation-unit linking, or process spawning is supported. The option
+OpenMP or process spawning is supported. The option
 allowlist rejects unknown request fields. A CPU profile describes the generated program's
 requirements; it does not detect the browser host CPU. Source pragmas can enable additional
 instructions, just as with native GCC. Choose execution hardware accordingly.
@@ -102,6 +127,7 @@ new manifest digest at the same URL fetches and verifies the bundle again.
 Compilation has no result cache. Compiled Wasm modules are retained only in the current
 compiler instance, whose identity contains the manifest digest, GCC version, host, target
 and sysroot digest. A consumer adding its own result cache must also key source/files,
+the ordered additional `sources` list,
 language/standard, preprocessing, output kind, optimization and CPU profile. Failed
 compilations never return an artifact from an earlier request. The connected example
 removes the previous download at the start of every compile.
@@ -174,6 +200,12 @@ node scripts/verify-x86-cross-gcc.mjs \
   /path/to/gcc-toolchain.v1.json \
   /path/to/wasm-llvm/producer/gcc-browser/qualification \
   /path/to/new-results-directory
+
+# Focused C/C++ multi-source suite: separate units, nested headers, failures and recovery.
+node scripts/verify-x86-cross-gcc.mjs \
+  /path/to/gcc-toolchain.v1.json \
+  packages/gcc/test/multiple-sources \
+  /path/to/new-multiple-source-results-directory
 ```
 
 The real acceptance path exercises `.ii`, ordinary C/C++, `bits/stdc++.h`, PBDS order
