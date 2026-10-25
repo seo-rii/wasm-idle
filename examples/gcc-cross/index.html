@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>GCC · Linux x86-64 compiler</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+				font-family: system-ui, sans-serif;
+			}
+			body {
+				max-width: 960px;
+				margin: 3rem auto;
+				padding: 0 1.5rem;
+			}
+			h1 {
+				margin-bottom: 0.4rem;
+			}
+			p {
+				line-height: 1.6;
+			}
+			label {
+				display: grid;
+				gap: 0.45rem;
+				margin: 1rem 0;
+			}
+			input,
+			select,
+			textarea,
+			button {
+				font: inherit;
+				padding: 0.65rem;
+				border-radius: 0.35rem;
+				border: 1px solid #888;
+			}
+			textarea {
+				box-sizing: border-box;
+				width: 100%;
+				min-height: 21rem;
+				font: 14px/1.5 monospace;
+				tab-size: 2;
+			}
+			.profiles {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1rem;
+			}
+			.profiles label {
+				flex: 1;
+				min-width: 150px;
+			}
+			.actions {
+				display: flex;
+				align-items: center;
+				gap: 1rem;
+			}
+			button {
+				cursor: pointer;
+			}
+			button:disabled {
+				cursor: default;
+				opacity: 0.5;
+			}
+			#compile {
+				background: #1757ad;
+				color: white;
+				border-color: #1757ad;
+			}
+			pre {
+				white-space: pre-wrap;
+				overflow-wrap: anywhere;
+				padding: 1rem;
+				background: light-dark(#f4f5f7, #202329);
+			}
+			.muted {
+				color: light-dark(#555, #bbb);
+			}
+		</style>
+	</head>
+	<body>
+		<h1>GCC · Linux x86-64 compiler</h1>
+		<p>
+			Compile C and C++ with GNU GCC in a browser Worker. Download assembly, an ELF object, or
+			a static Linux executable. Run downloaded executables separately on Linux x86-64.
+		</p>
+		<p class="muted">
+			Compiler host: WebAssembly / Emscripten. Output target: Linux x86-64. This example
+			requires a GCC producer bundle and its independently obtained manifest hash.
+		</p>
+		<form id="form">
+			<label
+				>Compiler
+				<select id="compiler">
+					<option value="gcc">GNU GCC 13.3.0 (WebAssembly host)</option>
+				</select></label
+			>
+			<label
+				>Bundle manifest URL
+				<input
+					id="manifest"
+					type="url"
+					placeholder="https://your-host/gcc/gcc-toolchain.v1.json"
+					required
+			/></label>
+			<label
+				>Trusted manifest SHA-256
+				<input
+					id="sha256"
+					pattern="[a-f0-9]{64}"
+					minlength="64"
+					maxlength="64"
+					placeholder="64 lowercase hexadecimal characters from the build receipt"
+					required
+					spellcheck="false"
+			/></label>
+			<div class="profiles">
+				<label
+					>Language
+					<select id="language">
+						<option value="cpp">GNU C++20</option>
+						<option value="c">GNU C17</option>
+					</select></label
+				>
+				<label
+					>CPU
+					<select id="cpu">
+						<option value="x86-64">x86-64 baseline</option>
+						<option value="avx2-fma">x86-64 + AVX2 + FMA</option>
+					</select></label
+				>
+				<label
+					>Output
+					<select id="emit">
+						<option value="executable">Static ELF executable</option>
+						<option value="object">ELF object</option>
+						<option value="assembly">Assembly</option>
+					</select></label
+				>
+				<label
+					>Optimization
+					<select id="optimization">
+						<option value="2">-O2</option>
+						<option value="0">-O0</option>
+						<option value="1">-O1</option>
+						<option value="3">-O3</option>
+						<option value="s">-Os</option>
+					</select></label
+				>
+			</div>
+			<label
+				>Source
+				<textarea id="source" spellcheck="false" aria-label="C or C++ source">
+#include &lt;bits/stdc++.h&gt;
+#include &lt;ext/pb_ds/assoc_container.hpp&gt;
+#include &lt;ext/pb_ds/tree_policy.hpp&gt;
+using namespace __gnu_pbds;
+int main() {
+  tree&lt;int, null_type, std::less&lt;int&gt;, rb_tree_tag,
+       tree_order_statistics_node_update&gt; values;
+  int n, x;
+  if (!(std::cin &gt;&gt; n)) return 2;
+  while (n-- &gt; 0 &amp;&amp; std::cin &gt;&gt; x) values.insert(x);
+  try {
+    if (values.empty()) throw std::runtime_error("No values");
+    std::cout &lt;&lt; *values.find_by_order(values.size() / 2) &lt;&lt; '\n';
+  } catch (const std::exception &amp;e) {
+    std::cerr &lt;&lt; e.what() &lt;&lt; '\n';
+    return 1;
+  }
+}
+</textarea>
+			</label>
+			<div class="actions">
+				<button id="compile" type="submit">Compile and prepare download</button
+				><button id="cancel" type="button" disabled>Cancel</button
+				><a id="download" hidden>Download artifact</a>
+			</div>
+		</form>
+		<p id="status" role="status">Ready to load a verified GCC bundle.</p>
+		<pre id="diagnostics" aria-label="Compiler diagnostics" hidden></pre>
+		<p class="muted">
+			GCC pragmas and intrinsic headers are passed unchanged to GCC. PCH, plugins, LTO,
+			dynamic linking, multiple translation units, arbitrary driver flags, and
+			<code>-march=native</code> are outside this API. See the
+			<a href="../../packages/gcc/README.md">@wasm-idle/gcc API documentation</a>.
+		</p>
+		<script type="module" src="./main.js"></script>
+	</body>
+</html>

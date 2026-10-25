@@ -1,0 +1,41 @@
+{
+	"name": "@wasm-idle/gcc",
+	"version": "1.2.0",
+	"description": "Browser Worker host for GNU GCC and Linux x86-64 cross compilation",
+	"license": "MIT",
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.map",
+		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public",
+		"tag": "latest"
+	},
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"prepack": "pnpm run build && pnpm run verify:package-boundary",
+		"test": "vitest run",
+		"verify:package-boundary": "node scripts/verify-package-boundary.mjs"
+	},
+	"dependencies": {
+		"@wasm-idle/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^24.19.2",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5"
+	}
+}

@@ -8,6 +8,7 @@ import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
+import { createCoreSourceAliasMap } from './core-source-aliases.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const args = new Map();
@@ -115,7 +116,7 @@ const bundle = async (entry, input) => {
 				root,
 				'packages/llvm-core/runtime/debug/src/index.ts'
 			),
-			'@wasm-idle/core': path.join(root, 'packages/core/src/index.ts')
+			...createCoreSourceAliasMap(root)
 		}
 	});
 	return Buffer.from(result.outputFiles[0].contents);

@@ -14,6 +14,21 @@
 			"types": "./dist/runtime-wasm-module-service.d.ts",
 			"import": "./dist/runtime-wasm-module-service.js",
 			"default": "./dist/runtime-wasm-module-service.js"
+		},
+		"./runtime-asset-loader": {
+			"types": "./dist/runtime-asset-loader.d.ts",
+			"import": "./dist/runtime-asset-loader.js",
+			"default": "./dist/runtime-asset-loader.js"
+		},
+		"./runtime-tar": {
+			"types": "./dist/runtime-tar.d.ts",
+			"import": "./dist/runtime-tar.js",
+			"default": "./dist/runtime-tar.js"
+		},
+		"./runtime-encode": {
+			"types": "./dist/runtime-encode.d.ts",
+			"import": "./dist/runtime-encode.js",
+			"default": "./dist/runtime-encode.js"
 		}
 	},
 	"files": [
@@ -27,6 +42,9 @@
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.json",
 		"check": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"fflate": "0.8.3"
 	},
 	"devDependencies": {
 		"typescript": "^6.0.3"
