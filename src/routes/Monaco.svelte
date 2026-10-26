@@ -16,6 +16,7 @@
 	import type {
 		IMonacoInputEvent,
 		IMonacoLspProvider,
+		IMonacoLspProviderContext,
 		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
@@ -68,9 +69,6 @@
 		text: string;
 		title: string;
 		progressPercent: number | null;
-	};
-	type MonacoLspProviderContext = {
-		signal?: AbortSignal;
 	};
 	interface LspRoute {
 		languages: readonly string[];
@@ -3902,7 +3900,7 @@
 		for (const route of lspRoutes) route.setStatus({ state: 'disabled' });
 	}
 	const resolveLspConnection = $derived<IMonacoLspProvider>(
-		((key) => async (_providerLanguage: string, context?: MonacoLspProviderContext) => {
+		((key) => async (_providerLanguage: string, context: IMonacoLspProviderContext) => {
 			if (context?.signal?.aborted || key !== lspConnectionKey) return null;
 			const currentUrl = globalThis.location?.href || '';
 			if (!lspEnabled) {
@@ -3918,6 +3916,8 @@
 				return null;
 			}
 			try {
+				// This connection owns one model, including while startup is pending.
+				const sessionModel = context.model;
 				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
 				const connection = await route.load(currentUrl, context?.signal);
 				if (context?.signal?.aborted || key !== lspConnectionKey) {
@@ -3925,16 +3925,12 @@
 					return null;
 				}
 				adaptMonacoFullDocumentSync(connection, (uri) => {
-					const document = Monaco?.editor
-						.getModels()
-						.find(
-							(candidate) =>
-								!candidate.isDisposed() &&
-								candidate.uri.toString(true).toLowerCase() === uri.toLowerCase()
-						);
-					return document
-						? { uri: document.uri.toString(true), text: document.getValue() }
-						: undefined;
+					if (
+						sessionModel.isDisposed() ||
+						sessionModel.uri.toString(true).toLowerCase() !== uri.toLowerCase()
+					)
+						return undefined;
+					return { uri: sessionModel.uri.toString(true), text: sessionModel.getValue() };
 				});
 				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
