@@ -45,9 +45,11 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		cpu = request.cpu ?? 'x86-64';
 	const emit = request.emit ?? 'executable',
 		optimization = request.optimization ?? '2';
+	// AVX2 without FMA is a subset of the existing producer v1 capability.
+	// Keep accepting the pinned manifest unchanged; do not invent producer metadata.
 	if (
 		!['c', 'cpp'].includes(language) ||
-		!manifest.cpuProfiles.includes(cpu) ||
+		!manifest.cpuProfiles.includes(cpu === 'avx2' ? 'avx2-fma' : cpu) ||
 		!['assembly', 'object', 'executable'].includes(emit) ||
 		!['0', '1', '2', '3', 's'].includes(optimization)
 	)
@@ -134,7 +136,8 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		'-fasynchronous-unwind-tables',
 		'-fdiagnostics-color=never'
 	];
-	if (cpu === 'avx2-fma') cc.push('-mavx2', '-mfma');
+	if (cpu === 'avx2') cc.push('-mavx2', '-mno-fma');
+	else if (cpu === 'avx2-fma') cc.push('-mavx2', '-mfma');
 	if (language === 'cpp') cc.push('-fexceptions');
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
@@ -195,7 +198,8 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 				`-L${lib}`,
 				'-L/sysroot/lib/x86_64-linux-gnu',
 				...objects,
-				...(language === 'cpp' ? ['-lstdc++', '-lm'] : []),
+				...(language === 'cpp' ? ['-lstdc++'] : []),
+				'-lm',
 				'--start-group',
 				'-lgcc',
 				'-lgcc_eh',

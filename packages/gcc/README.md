@@ -65,20 +65,20 @@ compatibility layer. Their availability must be confirmed by the real producer s
 The front ends use `-nostdinc` plus explicit GNU C, C++, GCC internal and glibc include
 directories from the pinned sysroot. C++ also gets the GNU driver's `_GNU_SOURCE` define
 and exception support. GCC emits assembly, GNU `as --64` emits an ELF object, and GNU
-`ld -static` receives the GNU CRT, libstdc++ (C++), libm (C++), libgcc, libgcc_eh and
+`ld -static` receives the GNU CRT, libstdc++ (C++), libm (C and C++), libgcc, libgcc_eh and
 glibc in their required order. Each stage uses a fresh module and MEMFS to reset GCC
 global state. The JavaScript Worker orchestrates these stages without `fork` or `exec`.
 
-| Request field  | Supported values                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| `language`     | `c`, `cpp` (default)                                                                     |
-| `cpu`          | `x86-64` (baseline default), `avx2-fma` (`-march=x86-64 -mavx2 -mfma`)                   |
-| `emit`         | `assembly`, `object`, `executable` (static default)                                      |
-| `optimization` | `0`, `1`, `2` (default), `3`, `s`                                                        |
-| `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects; defaults `gnu17`/`gnu++20` |
-| `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default              |
-| `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                  |
-| `sources`      | Up to 63 additional translation unit paths from `files`; executable output only          |
+| Request field  | Supported values                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `language`     | `c`, `cpp` (default)                                                                                          |
+| `cpu`          | `x86-64` (baseline default), `avx2` (`-mavx2 -mno-fma`), `avx2-fma` (`-mavx2 -mfma`); all use `-march=x86-64` |
+| `emit`         | `assembly`, `object`, `executable` (static default)                                                           |
+| `optimization` | `0`, `1`, `2` (default), `3`, `s`                                                                             |
+| `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects; defaults `gnu17`/`gnu++20`                      |
+| `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default                                   |
+| `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                                       |
+| `sources`      | Up to 63 additional translation unit paths from `files`; executable output only                               |
 
 ```ts
 const result = await compiler.compile({
@@ -86,7 +86,10 @@ const result = await compiler.compile({
 	language: 'cpp',
 	files: [
 		{ path: 'math.h', contents: 'int twice(int value);' },
-		{ path: 'math.cpp', contents: '#include "math.h"\nint twice(int value) { return value * 2; }' }
+		{
+			path: 'math.cpp',
+			contents: '#include "math.h"\nint twice(int value) { return value * 2; }'
+		}
 	],
 	sources: ['math.cpp']
 });
@@ -106,6 +109,13 @@ OpenMP or process spawning is supported. The option
 allowlist rejects unknown request fields. A CPU profile describes the generated program's
 requirements; it does not detect the browser host CPU. Source pragmas can enable additional
 instructions, just as with native GCC. Choose execution hardware accordingly.
+
+`avx2` enables AVX2 without enabling FMA instructions or FMA contraction of multiply-add
+expressions. Use `avx2-fma` when FMA is intended and supported by the execution host.
+The producer v1 manifest still lists `['x86-64', 'avx2-fma']`: the consumer derives the
+AVX2-only request as a subset of that existing capability, without changing the manifest
+or its integrity digest. `artifact.cpu` records the requested profile, including `avx2`.
+Source target pragmas and attributes can override the requested CPU settings.
 
 The compiler's GMP/MPFR/MPC and Emscripten libraries are **host** dependencies in Wasm.
 The GNU sysroot's glibc, libstdc++, libgcc and CRT are **target** ELF files; they are only
@@ -206,6 +216,13 @@ node scripts/verify-x86-cross-gcc.mjs \
   /path/to/gcc-toolchain.v1.json \
   packages/gcc/test/multiple-sources \
   /path/to/new-multiple-source-results-directory
+
+# Focused consumer CPU-profile regression suite using the same real Chromium Worker.
+# Checks C/C++ feature macros, AVX2 integer SIMD, vectorization and FMA separation.
+node scripts/verify-x86-cross-gcc.mjs \
+  /path/to/gcc-toolchain.v1.json \
+  packages/gcc/test/cpu-profiles \
+  /path/to/new-cpu-profile-results-directory
 ```
 
 The real acceptance path exercises `.ii`, ordinary C/C++, `bits/stdc++.h`, PBDS order
