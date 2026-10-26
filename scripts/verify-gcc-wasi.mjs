@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createGzip } from 'node:zlib';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	digest,
 	inspectWasm,
@@ -15,7 +15,7 @@ import {
 	readBundleFile,
 	runNodeWasi
 } from './gcc-wasi-artifact.mjs';
-import { cases, selectCases } from './gcc-wasi-fixtures.mjs';
+import { cases as defaultCases, selectCases } from './gcc-wasi-fixtures.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const options = {};
@@ -33,13 +33,15 @@ for (let index = 2; index < process.argv.length; index++) {
 	}
 	if (key === '--help') {
 		console.log(
-			'Usage: node scripts/verify-gcc-wasi.mjs (--manifest BUNDLE.json [--save-intermediates] | --programs DIR --provenance RECEIPT.json [--reference-clang]) [--cases ID,...] [--output NEW_DIR]\nCases: ' +
-				cases.map((fixture) => fixture.id).join(',')
+			'Usage: node scripts/verify-gcc-wasi.mjs (--manifest BUNDLE.json [--save-intermediates] | --programs DIR --provenance RECEIPT.json [--reference-clang]) [--suite TRUSTED_LOCAL_MODULE.mjs] [--cases ID,...] [--output NEW_DIR]\nDefault cases: ' +
+				defaultCases.map((fixture) => fixture.id).join(',')
 		);
 		process.exit(0);
 	}
 	assert(
-		['--manifest', '--programs', '--provenance', '--cases', '--output'].includes(key),
+		['--manifest', '--programs', '--provenance', '--suite', '--cases', '--output'].includes(
+			key
+		),
 		`Unknown argument ${key}`
 	);
 	assert(!Object.hasOwn(options, key.slice(2)), `Duplicate argument ${key}`);
@@ -60,7 +62,31 @@ assert(
 	'--reference-clang is only for precompiled Clang reference artifacts'
 );
 assert(!options.saveIntermediates || options.manifest, '--save-intermediates requires --manifest');
-const fixtures = selectCases(options.cases);
+// A suite is executable local test code, just like this harness. Its complete
+// fixture values and file identity are recorded in the qualification receipt.
+const suitePath = options.suite ? await fs.realpath(options.suite) : undefined;
+const suite = suitePath ? await import(pathToFileURL(suitePath)) : undefined;
+assert(!suite || Array.isArray(suite.cases), 'Suite must export a cases array');
+assert(
+	!suite?.disabledCases || Array.isArray(suite.disabledCases),
+	'disabledCases must be an array'
+);
+const cases = suite ? [...suite.cases, ...(suite.disabledCases || [])] : defaultCases;
+assert(Array.isArray(cases) && cases.length, 'Suite must export a nonempty cases array');
+assert.equal(
+	new Set(cases.map((fixture) => fixture.id)).size,
+	cases.length,
+	'Duplicate fixture id'
+);
+for (const fixture of cases) {
+	assert(/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(fixture.id), 'Unsafe fixture id');
+	assert(fixture.request && typeof fixture.request.code === 'string', 'Missing fixture source');
+	assert(
+		typeof fixture.stdin === 'string' && typeof fixture.stdout === 'string',
+		'Missing fixture IO'
+	);
+}
+const fixtures = selectCases(options.cases, cases);
 const output = path.resolve(options.output || `out/gcc-wasi-qualification-${Date.now()}`);
 await fs.mkdir(path.dirname(output), { recursive: true });
 await fs.mkdir(output);
@@ -92,6 +118,10 @@ const report = {
 	success: false
 };
 report.harness = [];
+if (suitePath) {
+	const bytes = await fs.readFile(suitePath);
+	report.suite = { path: suitePath, bytes: bytes.length, sha256: digest(bytes) };
+}
 for (const name of [
 	'verify-gcc-wasi.mjs',
 	'gcc-wasi-fixtures.mjs',
@@ -338,14 +368,17 @@ try {
 		await Promise.all(pendingTransfers);
 		report.initializationTransfers = [...transfers];
 		report.initializationServerTransfers = [...serverTransfers];
-		const object = await page.evaluate(async (request) => {
-			const result = await globalThis.gccWasiQualification.compile(
-				{ ...request, emit: 'object' },
-				{ signal: AbortSignal.timeout(600_000) }
-			);
-			const { artifact, ...compilation } = result;
-			return { compilation, ...(artifact ? { bytes: [...artifact.bytes] } : {}) };
-		}, cases[0].request);
+		const object = await page.evaluate(
+			async (request) => {
+				const result = await globalThis.gccWasiQualification.compile(
+					{ ...request, emit: 'object' },
+					{ signal: AbortSignal.timeout(600_000) }
+				);
+				const { artifact, ...compilation } = result;
+				return { compilation, ...(artifact ? { bytes: [...artifact.bytes] } : {}) };
+			},
+			{ ...fixtures[0].request, sources: undefined }
+		);
 		assert.equal(
 			object.compilation.exitCode,
 			0,
@@ -356,7 +389,7 @@ try {
 			artifact: inspectWasm(objectBytes, { object: true }),
 			compilation: object.compilation
 		};
-		await fs.writeFile(path.join(output, 'c-hello.o'), objectBytes);
+		await fs.writeFile(path.join(output, 'object-milestone.o'), objectBytes);
 	}
 	for (const fixture of fixtures) {
 		const entry = report.cases.find((candidate) => candidate.id === fixture.id);
@@ -492,6 +525,22 @@ try {
 						.every((stage) => stage.argv.includes(`-D${define}`)),
 					`Macro ${define} was not passed to every GCC frontend invocation`
 				);
+			if (manifest.capabilities.simd) {
+				const flag = fixture.request.simd ? '-msimd128' : '-mno-simd128';
+				assert(
+					actual.compilation.stages
+						.filter((stage) => /^cc1/.test(stage.tool))
+						.every((stage) => stage.argv.includes(flag)),
+					`${fixture.id}: ${flag} was not passed to every GCC frontend invocation`
+				);
+			}
+			entry.sdkInspection = actual.artifact.wasm;
+			if (fixture.request.simd !== undefined)
+				assert.equal(
+					actual.artifact.wasm?.features?.simd128,
+					fixture.request.simd,
+					`${fixture.id}: SIMD instructions/types do not match the requested fixture profile`
+				);
 			bytes = Buffer.from(actual.artifact.base64, 'base64');
 			execution = actual.execution;
 		} else {
@@ -554,40 +603,43 @@ try {
 		console.log(JSON.stringify({ case: fixture.id, passed: true, bytes: bytes.length }));
 	}
 	if (manifest) {
-		report.unsupportedFeatures = await page.evaluate(async (request) => {
-			const compiler = globalThis.gccWasiQualification;
-			const results = [];
-			for (const feature of [
-				'exceptions',
-				'rtti',
-				'threads',
-				'dynamicLinking',
-				'simd',
-				'cpu'
-			]) {
-				let diagnostic = '';
-				try {
-					await compiler.compile({
-						...request,
-						[feature]: feature === 'cpu' ? 'avx2-fma' : true
-					});
-				} catch (error) {
-					diagnostic = String(error?.message || error);
+		report.unsupportedFeatures = await page.evaluate(
+			async ({ request, simdSupported }) => {
+				const compiler = globalThis.gccWasiQualification;
+				const results = [];
+				for (const feature of [
+					'exceptions',
+					'rtti',
+					'threads',
+					'dynamicLinking',
+					...(simdSupported ? [] : ['simd']),
+					'cpu'
+				]) {
+					let diagnostic = '';
+					try {
+						await compiler.compile({
+							...request,
+							[feature]: feature === 'cpu' ? 'avx2-fma' : true
+						});
+					} catch (error) {
+						diagnostic = String(error?.message || error);
+					}
+					results.push({ feature, rejected: diagnostic.length > 0, diagnostic });
 				}
-				results.push({ feature, rejected: diagnostic.length > 0, diagnostic });
-			}
-			const pragma = await compiler.compile({
-				...request,
-				emit: 'assembly',
-				code: '#pragma GCC target("avx2")\nint add(int n) { return n + 1; }\n'
-			});
-			results.push({
-				feature: 'x86-target-pragma',
-				rejected: pragma.exitCode !== 0 && !pragma.artifact,
-				diagnostic: pragma.stderr
-			});
-			return results;
-		}, cases[0].request);
+				const pragma = await compiler.compile({
+					...request,
+					emit: 'assembly',
+					code: '#pragma GCC target("avx2")\nint add(int n) { return n + 1; }\n'
+				});
+				results.push({
+					feature: 'x86-target-pragma',
+					rejected: pragma.exitCode !== 0 && !pragma.artifact,
+					diagnostic: pragma.stderr
+				});
+				return results;
+			},
+			{ request: defaultCases[0].request, simdSupported: manifest.capabilities.simd }
+		);
 		assert(
 			report.unsupportedFeatures.every((feature) => feature.rejected && feature.diagnostic),
 			'Unsupported feature was silently accepted'
@@ -652,6 +704,12 @@ try {
 			digest(await fs.readFile(path.join(root, input.path))),
 			input.sha256,
 			`${input.path}: qualification input changed while running`
+		);
+	if (report.suite)
+		assert.equal(
+			digest(await fs.readFile(report.suite.path)),
+			report.suite.sha256,
+			'Suite changed while qualification was running'
 		);
 	report.success = true;
 } catch (error) {

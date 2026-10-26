@@ -11,6 +11,9 @@ the companion wasm-llvm `docs/gcc-wasi-validation.md` and `.json`.
 The local full receipt is `out/gcc-wasi-final-worker-20261026/qualification.json`.
 These recorded results qualify an experimental profile; the limitations below
 and the package README still apply.
+The subsequent backend review and SIMD/ABI results are recorded separately in
+wasm-llvm `docs/gcc-wasi-backend-review.md`; the numbers above identify the
+original scalar bundle rather than a later rebuild.
 
 These tools distinguish the compiler's **host** from its **output target**.
 `verify-gcc-wasi.mjs --manifest ...` loads real GCC into a Chromium Worker,
@@ -40,6 +43,36 @@ translation unit's GCC WAT and assembled object alongside the final program.
 These extra compilations help isolate GCC code generation from assembler/linker
 behavior when native and Wasm compiler hosts disagree.
 
+The optional `--suite /path/to/TRUSTED_LOCAL_MODULE.mjs` imports executable local
+test code exporting `cases` and optional `disabledCases` arrays. Both arrays are
+included in selection and the report. Every case carries its original source,
+request, stdin and expected stdout. The receipt records the module identity and
+each serialized fixture, and rejects changes to the suite during qualification.
+Use the producer's focused suites for the reviewed backend:
+
+```sh
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/simd-fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-simd-browser
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/abi-interop-cases.mjs \
+  --output out/gcc-wasi-abi-browser
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/atomic-libcall-fixtures.mjs \
+  --output out/gcc-wasi-atomic-abi-browser
+```
+
+SIMD qualification checks enabled and disabled requests, every frontend's
+`-msimd128`/`-mno-simd128` argument, and the SDK's instruction/type-derived
+`features.simd128`. GNU vector expressions are compiled by GCC; x86 intrinsics
+are not translated. Browser ABI tests use GCC for all source units; the separate
+producer native suite additionally checks bidirectional Clang interoperability
+and raw narrow-integer Wasm exports. Atomic fixtures use explicit test-only
+single-threaded providers to inspect libcall arguments, not an atomic runtime.
+
 The shared fixture set covers integer/floating-point operations, control flow,
 calls/function pointers, globals, structures, allocation, libc I/O, dynamic-input
 libm, C/C++ translation units and headers, static initialization/destruction,
@@ -51,9 +84,11 @@ they do not replace build provenance.
 
 Compiler qualification records stage arguments, diagnostic text, output hashes,
 imports/exports, memory limits, Node output and Chromium output. It also rejects
-requests for exceptions, RTTI, threads, dynamic linking, Wasm SIMD, and an x86
+requests for exceptions, RTTI, threads, dynamic linking, and an x86
 AVX2/FMA CPU profile, and checks that an x86 target pragma is diagnosed. An x86
 intrinsic or target pragma is not evidence of Wasm SIMD support.
+SIMD requests are also rejected for the original scalar manifest. A new capable
+manifest accepts explicit `simd: true`; it does not enable SIMD by default.
 
 For native-produced GCC programs, provide the same fixtures' `.wasm` artifacts
 and a source/build receipt:

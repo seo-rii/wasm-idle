@@ -337,12 +337,12 @@ export const cases = [
 	})
 ];
 
-export function selectCases(selection) {
-	if (!selection || selection === 'all') return cases;
+export function selectCases(selection, available = cases) {
+	if (!selection || selection === 'all') return available;
 	const ids = selection.split(',');
 	if (new Set(ids).size !== ids.length) throw new Error('Case selection contains duplicates');
 	return ids.map((id) => {
-		const fixture = cases.find((entry) => entry.id === id);
+		const fixture = available.find((entry) => entry.id === id);
 		if (!fixture) throw new Error(`Unknown GCC WASI qualification case: ${id}`);
 		return fixture;
 	});
