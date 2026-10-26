@@ -16,6 +16,7 @@
 	import type {
 		IMonacoInputEvent,
 		IMonacoLspProvider,
+		IMonacoLspProviderContext,
 		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
@@ -68,9 +69,6 @@
 		text: string;
 		title: string;
 		progressPercent: number | null;
-	};
-	type MonacoLspProviderContext = {
-		signal?: AbortSignal;
 	};
 	interface LspRoute {
 		languages: readonly string[];
@@ -2379,6 +2377,7 @@
 		language: any;
 		lspLanguage?: string;
 		filePath?: string;
+		workspacePaths?: readonly string[];
 		value?: string;
 		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
@@ -2512,6 +2511,7 @@
 		language,
 		lspLanguage,
 		filePath,
+		workspacePaths,
 		value,
 		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
@@ -3900,7 +3900,7 @@
 		for (const route of lspRoutes) route.setStatus({ state: 'disabled' });
 	}
 	const resolveLspConnection = $derived<IMonacoLspProvider>(
-		((key) => async (_providerLanguage: string, context?: MonacoLspProviderContext) => {
+		((key) => async (_providerLanguage: string, context: IMonacoLspProviderContext) => {
 			if (context?.signal?.aborted || key !== lspConnectionKey) return null;
 			const currentUrl = globalThis.location?.href || '';
 			if (!lspEnabled) {
@@ -3916,6 +3916,8 @@
 				return null;
 			}
 			try {
+				// This connection owns one model, including while startup is pending.
+				const sessionModel = context.model;
 				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
 				const connection = await route.load(currentUrl, context?.signal);
 				if (context?.signal?.aborted || key !== lspConnectionKey) {
@@ -3923,16 +3925,12 @@
 					return null;
 				}
 				adaptMonacoFullDocumentSync(connection, (uri) => {
-					const document = Monaco?.editor
-						.getModels()
-						.find(
-							(candidate) =>
-								!candidate.isDisposed() &&
-								candidate.uri.toString(true).toLowerCase() === uri.toLowerCase()
-						);
-					return document
-						? { uri: document.uri.toString(true), text: document.getValue() }
-						: undefined;
+					if (
+						sessionModel.isDisposed() ||
+						sessionModel.uri.toString(true).toLowerCase() !== uri.toLowerCase()
+					)
+						return undefined;
+					return { uri: sessionModel.uri.toString(true), text: sessionModel.getValue() };
 				});
 				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
@@ -3946,26 +3944,61 @@
 		})(lspConnectionKey)
 	);
 
+	// Models own undo history; retain them while their files remain in this workspace.
+	// Keep resource caches outside effect dependencies; the active model is reactive.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const workspaceModels = new Map<string, monaco.editor.ITextModel>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const modelViewStates = new Map<monaco.editor.ITextModel, monaco.editor.ICodeEditorViewState>();
+
 	$effect(() => {
 		const monacoApi = Monaco;
+		const path = normalizedFilePath;
+		const modelLanguage = language;
 		if (!monacoApi) return;
-		const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
-		const initialValue = untrack(() => value ?? defaultValue);
-		let nextModel = monacoApi.editor.getModel(uri) as monaco.editor.ITextModel | null;
-		if (!nextModel) {
-			nextModel = monacoApi.editor.createModel(initialValue, language, uri);
-		} else {
-			monacoApi.editor.setModelLanguage(nextModel, language);
-			if (nextModel.getValue() !== initialValue) nextModel.setValue(initialValue);
-		}
-		model = nextModel;
-		return () => {
-			if (!nextModel?.isDisposed()) {
-				monacoApi.editor.setModelMarkers(nextModel, 'wasm-idle-compiler', []);
-				nextModel.dispose();
+		untrack(() => {
+			const activeEditor = editor;
+			const previousModel = activeEditor?.getModel();
+			const previousView = activeEditor?.saveViewState();
+			if (previousModel && previousView) modelViewStates.set(previousModel, previousView);
+			let nextModel = workspaceModels.get(path);
+			if (!nextModel || nextModel.isDisposed()) {
+				const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
+				const initialValue = value ?? defaultValue;
+				nextModel = monacoApi.editor.createModel(initialValue, modelLanguage, uri);
+				// Monaco can restore a disposed model's history by URI, even for equal text.
+				// A newly owned model must start with fresh history; cached tabs keep theirs.
+				nextModel.setValue(initialValue);
+				workspaceModels.set(path, nextModel);
+			} else if (nextModel.getLanguageId() !== modelLanguage) {
+				monacoApi.editor.setModelLanguage(nextModel, modelLanguage);
 			}
-			if (model === nextModel) model = undefined;
-		};
+			model = nextModel;
+			if (activeEditor && previousModel !== nextModel) {
+				activeEditor.setModel(nextModel);
+				const view = modelViewStates.get(nextModel);
+				if (view) activeEditor.restoreViewState(view);
+			}
+		});
+	});
+
+	$effect(() => {
+		if (!workspacePaths) return;
+		// Temporary membership index for this effect run.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const paths = new Set(workspacePaths);
+		// The empty workspace still displays an editable placeholder model.
+		paths.add(normalizedFilePath);
+		for (const [path, cachedModel] of workspaceModels) {
+			if (paths.has(path)) continue;
+			modelViewStates.delete(cachedModel);
+			workspaceModels.delete(path);
+			if (!cachedModel.isDisposed()) cachedModel.dispose();
+		}
+	});
+
+	$effect(() => {
+		if (Monaco) void monacoLanguageContributionLoaders[language]?.();
 	});
 
 	$effect(() => {
@@ -4054,7 +4087,7 @@
 	});
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
-		if (!applyingValue) onChange?.(event.value);
+		if (!applyingValue && event.model === model) onChange?.(event.value);
 	};
 
 	$effect(() => {
@@ -4066,6 +4099,7 @@
 	$effect(() => {
 		const monacoApi = Monaco;
 		const activeEditor = editor;
+		void model;
 		if (!monacoApi || !activeEditor || (!debugViewLanguages.has(language) && !debugLanguage))
 			return;
 		untrack(() => {
@@ -4447,7 +4481,11 @@
 			testGlobal.__wasmIdleMonacoApi = null;
 			testGlobal.__wasmIdleMonacoLspStatus = null;
 			lspStatus = null;
-			if (!model?.isDisposed()) model?.dispose();
+			for (const cachedModel of workspaceModels.values()) {
+				if (!cachedModel.isDisposed()) cachedModel.dispose();
+			}
+			workspaceModels.clear();
+			modelViewStates.clear();
 			model = undefined;
 			editor = null;
 		};

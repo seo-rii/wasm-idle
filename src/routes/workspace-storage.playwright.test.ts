@@ -912,3 +912,233 @@ describe('workspace storage browser integration', () => {
 		}
 	);
 });
+
+describe('workspace editor model lifetime', () => {
+	it(
+		'discards retained redo history when resetting from another file',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await context.addInitScript((source) => {
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'JAVASCRIPT',
+							activePath: 'main.js',
+							lspEnabled: false,
+							files: [
+								{ path: 'main.js', content: source },
+								{ path: 'second.js', content: 'const second = 2;' }
+							],
+							openTabs: ['main.js', 'second.js']
+						})
+					);
+				}, editorDefaults.javascript);
+				const url = new URL(browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				await page.goto(url.toString(), {
+					waitUntil: 'domcontentloaded',
+					timeout: 120_000
+				});
+				await page.waitForFunction(
+					(source) => (window as any).__wasmIdleMonacoEditor?.getValue() === source,
+					editorDefaults.javascript,
+					{ timeout: 120_000 }
+				);
+				const before = await page.evaluate(async () => {
+					const target = window as any;
+					const editor = target.__wasmIdleMonacoEditor;
+					target.__resetPreviousModel = editor.getModel();
+					editor.pushUndoStop();
+					editor.executeEdits('regression', [
+						{
+							range: {
+								startLineNumber: 1,
+								startColumn: 1,
+								endLineNumber: 1,
+								endColumn: 1
+							},
+							text: '// discarded edit\n'
+						}
+					]);
+					editor.pushUndoStop();
+					await editor.getModel().undo();
+					return { value: editor.getValue(), canRedo: editor.getModel().canRedo() };
+				});
+				expect(before).toEqual({ value: editorDefaults.javascript, canRedo: true });
+				await page
+					.getByRole('navigation', { name: 'Open files' })
+					.getByRole('button', { name: 'second.js', exact: true })
+					.click();
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleMonacoEditor?.getValue() === 'const second = 2;'
+				);
+				expect(
+					await page.evaluate(() => (window as any).__resetPreviousModel.isDisposed())
+				).toBe(false);
+				const showFiles = page.getByRole('button', { name: 'Show files', exact: true });
+				if (await showFiles.isVisible()) await showFiles.click();
+				page.once('dialog', (dialog) => void dialog.accept());
+				await page.getByRole('button', { name: 'Reset', exact: true }).click();
+				await page.waitForFunction(
+					(source) => (window as any).__wasmIdleMonacoEditor?.getValue() === source,
+					editorDefaults.javascript
+				);
+				const after = await page.evaluate(async () => {
+					const target = window as any;
+					const editor = target.__wasmIdleMonacoEditor;
+					const model = editor.getModel();
+					const history = {
+						sameModel: model === target.__resetPreviousModel,
+						previousDisposed: target.__resetPreviousModel.isDisposed(),
+						canUndo: model.canUndo(),
+						canRedo: model.canRedo()
+					};
+					await model.redo();
+					return { ...history, value: editor.getValue() };
+				});
+				expect(after).toEqual({
+					sameModel: false,
+					previousDisposed: true,
+					canUndo: false,
+					canRedo: false,
+					value: editorDefaults.javascript
+				});
+			});
+		}
+	);
+
+	it(
+		'retains undo, selection, scroll and the editor when switching tabs',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await context.addInitScript(() => {
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'JAVASCRIPT',
+							activePath: 'first.js',
+							lspEnabled: false,
+							files: [
+								{
+									path: 'first.js',
+									content: Array.from(
+										{ length: 160 },
+										(_, i) => `// line ${i + 1}`
+									).join('\n')
+								},
+								{ path: 'second.js', content: 'const second = 2;' }
+							],
+							openTabs: ['first.js', 'second.js']
+						})
+					);
+				});
+				const url = new URL(browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.waitForFunction(
+					() =>
+						(window as any).__wasmIdleMonacoEditor
+							?.getModel()
+							?.getValue()
+							.startsWith('// line 1'),
+					undefined,
+					{ timeout: 120_000 }
+				);
+				const before = await page.evaluate(() => {
+					const target = window as any;
+					const editor = target.__wasmIdleMonacoEditor;
+					target.__retainedEditor = editor;
+					target.__retainedModel = editor.getModel();
+					editor.pushUndoStop();
+					editor.executeEdits('regression', [
+						{
+							range: {
+								startLineNumber: 1,
+								startColumn: 1,
+								endLineNumber: 1,
+								endColumn: 1
+							},
+							text: '// edited\n'
+						}
+					]);
+					editor.pushUndoStop();
+					editor.setSelection({
+						startLineNumber: 80,
+						startColumn: 2,
+						endLineNumber: 81,
+						endColumn: 5
+					});
+					editor.setScrollTop(1200, 1);
+					return {
+						selection: { ...editor.getSelection() },
+						scrollTop: editor.getScrollTop(),
+						value: editor.getValue()
+					};
+				});
+				const tabs = page.getByRole('navigation', { name: 'Open files' });
+				await tabs.getByRole('button', { name: 'second.js', exact: true }).click();
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleMonacoEditor?.getValue() === 'const second = 2;'
+				);
+				await tabs.getByRole('button', { name: 'first.js', exact: true }).click();
+				await page.waitForFunction(() =>
+					(window as any).__wasmIdleMonacoEditor?.getValue().startsWith('// edited')
+				);
+				const after = await page.evaluate(() => {
+					const target = window as any;
+					const editor = target.__wasmIdleMonacoEditor;
+					return {
+						sameEditor: editor === target.__retainedEditor,
+						sameModel: editor.getModel() === target.__retainedModel,
+						selection: { ...editor.getSelection() },
+						scrollTop: editor.getScrollTop(),
+						value: editor.getValue(),
+						canUndo: editor.getModel().canUndo()
+					};
+				});
+				expect(after).toMatchObject({
+					...before,
+					sameEditor: true,
+					sameModel: true,
+					canUndo: true
+				});
+				await page.evaluate(() => (window as any).__wasmIdleMonacoEditor.getModel().undo());
+				await page.waitForFunction(() =>
+					(window as any).__wasmIdleMonacoEditor.getValue().startsWith('// line 1')
+				);
+				// Restoring another workspace with the same path must discard the old history.
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'replacement.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(
+						JSON.stringify({
+							format: WORKSPACE_BACKUP_FORMAT,
+							snapshot: {
+								version: 6,
+								language: 'JAVASCRIPT',
+								activePath: 'first.js',
+								files: [{ path: 'first.js', content: 'const replacement = 3;' }],
+								lspEnabled: false
+							}
+						})
+					)
+				});
+				await page.waitForFunction(
+					() =>
+						(window as any).__wasmIdleMonacoEditor?.getValue() ===
+						'const replacement = 3;'
+				);
+				expect(
+					await page.evaluate(() => ({
+						disposed: (window as any).__retainedModel.isDisposed(),
+						canUndo: (window as any).__wasmIdleMonacoEditor.getModel().canUndo()
+					}))
+				).toEqual({ disposed: true, canUndo: false });
+			});
+		}
+	);
+});

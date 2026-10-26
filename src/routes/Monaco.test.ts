@@ -241,7 +241,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/if \(!lspEnabled\) \{\s+disableAllLspStatuses\(\);/);
 		expect(source).toMatch(/const route = lspRoutes\.find/);
 		expect(source).toMatch(
-			/async \(_providerLanguage: string, context\?: MonacoLspProviderContext\)/
+			/async \(_providerLanguage: string, context: IMonacoLspProviderContext\)/
 		);
 		expect(source).toMatch(/context\?\.signal\?\.aborted \|\| key !== lspConnectionKey/);
 		expect(source).toMatch(
