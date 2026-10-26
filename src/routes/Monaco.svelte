@@ -2379,6 +2379,7 @@
 		language: any;
 		lspLanguage?: string;
 		filePath?: string;
+		workspacePaths?: readonly string[];
 		value?: string;
 		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
@@ -2512,6 +2513,7 @@
 		language,
 		lspLanguage,
 		filePath,
+		workspacePaths,
 		value,
 		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
@@ -3946,26 +3948,52 @@
 		})(lspConnectionKey)
 	);
 
+	// Models own undo history; retain them while their files remain in this workspace.
+	const workspaceModels = new Map<string, monaco.editor.ITextModel>();
+	const modelViewStates = new Map<monaco.editor.ITextModel, monaco.editor.ICodeEditorViewState>();
+
 	$effect(() => {
 		const monacoApi = Monaco;
+		const path = normalizedFilePath;
+		const modelLanguage = language;
 		if (!monacoApi) return;
-		const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
-		const initialValue = untrack(() => value ?? defaultValue);
-		let nextModel = monacoApi.editor.getModel(uri) as monaco.editor.ITextModel | null;
-		if (!nextModel) {
-			nextModel = monacoApi.editor.createModel(initialValue, language, uri);
-		} else {
-			monacoApi.editor.setModelLanguage(nextModel, language);
-			if (nextModel.getValue() !== initialValue) nextModel.setValue(initialValue);
-		}
-		model = nextModel;
-		return () => {
-			if (!nextModel?.isDisposed()) {
-				monacoApi.editor.setModelMarkers(nextModel, 'wasm-idle-compiler', []);
-				nextModel.dispose();
+		untrack(() => {
+			const activeEditor = editor;
+			const previousModel = activeEditor?.getModel();
+			const previousView = activeEditor?.saveViewState();
+			if (previousModel && previousView) modelViewStates.set(previousModel, previousView);
+			let nextModel = workspaceModels.get(path);
+			if (!nextModel || nextModel.isDisposed()) {
+				const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
+				nextModel = monacoApi.editor.createModel(value ?? defaultValue, modelLanguage, uri);
+				workspaceModels.set(path, nextModel);
+			} else if (nextModel.getLanguageId() !== modelLanguage) {
+				monacoApi.editor.setModelLanguage(nextModel, modelLanguage);
 			}
-			if (model === nextModel) model = undefined;
-		};
+			model = nextModel;
+			if (activeEditor && previousModel !== nextModel) {
+				activeEditor.setModel(nextModel);
+				const view = modelViewStates.get(nextModel);
+				if (view) activeEditor.restoreViewState(view);
+			}
+		});
+	});
+
+	$effect(() => {
+		if (!workspacePaths) return;
+		const paths = new Set(workspacePaths);
+		// The empty workspace still displays an editable placeholder model.
+		paths.add(normalizedFilePath);
+		for (const [path, cachedModel] of workspaceModels) {
+			if (paths.has(path)) continue;
+			modelViewStates.delete(cachedModel);
+			workspaceModels.delete(path);
+			if (!cachedModel.isDisposed()) cachedModel.dispose();
+		}
+	});
+
+	$effect(() => {
+		if (Monaco) void monacoLanguageContributionLoaders[language]?.();
 	});
 
 	$effect(() => {
@@ -4054,7 +4082,7 @@
 	});
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
-		if (!applyingValue) onChange?.(event.value);
+		if (!applyingValue && event.model === model) onChange?.(event.value);
 	};
 
 	$effect(() => {
@@ -4066,6 +4094,7 @@
 	$effect(() => {
 		const monacoApi = Monaco;
 		const activeEditor = editor;
+		void model;
 		if (!monacoApi || !activeEditor || (!debugViewLanguages.has(language) && !debugLanguage))
 			return;
 		untrack(() => {
@@ -4447,7 +4476,11 @@
 			testGlobal.__wasmIdleMonacoApi = null;
 			testGlobal.__wasmIdleMonacoLspStatus = null;
 			lspStatus = null;
-			if (!model?.isDisposed()) model?.dispose();
+			for (const cachedModel of workspaceModels.values()) {
+				if (!cachedModel.isDisposed()) cachedModel.dispose();
+			}
+			workspaceModels.clear();
+			modelViewStates.clear();
 			model = undefined;
 			editor = null;
 		};
