@@ -64,6 +64,8 @@ interface Job {
 	args: string[];
 	options: SandboxExecutionOptions;
 	signal: AbortSignal;
+	controller: AbortController;
+	finished: Promise<void>;
 	progress?: ProgressLike;
 	result?: boolean | string;
 	error?: unknown;
@@ -135,7 +137,7 @@ export class ContainerRuntimeAdapter {
 							'RESOURCE_LIMIT',
 							'Runtime output exceeds the container limit'
 						);
-						void this.stop(job.language).catch(() => {});
+						job.controller.abort(job.error);
 						return;
 					}
 					if (chunk.byteLength) output.enqueue(chunk);
@@ -474,6 +476,7 @@ export class ContainerRuntimeAdapter {
 		progress?: ProgressLike,
 		requestId = 0
 	) {
+		signal.throwIfAborted();
 		const session = this.session(language);
 		if (session.active)
 			throw new ContainerError(
@@ -481,6 +484,12 @@ export class ContainerRuntimeAdapter {
 				`${language} already has an active runtime job`
 			);
 		const source = this.inputs(language, code, options);
+		const controller = new AbortController();
+		signal = AbortSignal.any([signal, controller.signal]);
+		let finish!: () => void;
+		const finished = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
 		const job: Job = {
 			id: String(++this.#nextJob),
 			language,
@@ -490,6 +499,8 @@ export class ContainerRuntimeAdapter {
 			args: [...args],
 			options: source.options,
 			signal,
+			controller,
+			finished,
 			progress,
 			requestId
 		};
@@ -502,6 +513,10 @@ export class ContainerRuntimeAdapter {
 				signal
 			});
 			job.process = process;
+			if (signal.aborted) {
+				await process.terminate();
+				signal.throwIfAborted();
+			}
 			const drain = async (stream: ReadableStream<Uint8Array>) => {
 				const reader = stream.getReader(),
 					text = new TextDecoder();
@@ -529,9 +544,13 @@ export class ContainerRuntimeAdapter {
 			if (job.error) throw job.error;
 			if (result.reason !== 'exited') throw new Error(`Runtime ended with ${result.reason}`);
 			return method === 'load' ? undefined : (job.result ?? result.code === 0);
+		} catch (error) {
+			signal.throwIfAborted();
+			throw error;
 		} finally {
 			if (session.active === job) session.active = undefined;
 			this.#jobs.delete(job.id);
+			finish();
 		}
 	}
 	private async flushInput(session: Session, sandbox: EngineSandbox) {
@@ -565,10 +584,20 @@ export class ContainerRuntimeAdapter {
 		session.pendingInput.length = 0;
 		session.pendingBytes = 0;
 		session.pendingEof = false;
-		await Promise.all([
-			session.active?.process?.terminate(),
-			session.sandbox.then((sandbox) => sandbox.terminate()).catch(() => {})
-		]);
+		const job = session.active;
+		if (job) {
+			job.controller.abort(new DOMException('Runtime cancelled', 'AbortError'));
+			// Admission may not have returned a process handle yet. Its signal owns
+			// cleanup, and Stop completes only after this exact job releases ownership.
+			await job.finished;
+			return;
+		}
+		await session.sandbox
+			.then((sandbox) => {
+				if (this.#sessions.get(language) === session && !session.active)
+					return sandbox.terminate();
+			})
+			.catch(() => {});
 	}
 	async clear(language: string) {
 		await (await this.session(language).sandbox).clear();
@@ -636,9 +665,10 @@ export class ContainerRuntimeAdapter {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		await Promise.allSettled(
-			[...this.#sessions.values()].map(async (session) => {
-				await session.active?.process?.terminate();
-				await session.binding.dispose?.();
+			[...this.#sessions].map(async ([language, session]) => {
+				const stopping = session.active ? this.stop(language) : Promise.resolve();
+				// Disposing the binding can release a sandbox load that job cleanup awaits.
+				await Promise.all([stopping, session.binding.dispose?.()]);
 			})
 		);
 		this.#sessions.clear();

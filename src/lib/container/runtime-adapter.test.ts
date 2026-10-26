@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createContainer, type Container } from '@wasm-idle/container';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
+import type { PlaygroundBinding } from '../playground/sandbox.js';
 
 const owned: Container[] = [];
 afterEach(async () => {
@@ -26,6 +27,197 @@ function fixture(limits: { maxBytes?: number; maxInodes?: number } = {}) {
 const f = (path: string, content: string) => ({ path, content });
 const read = (container: Container, path: string) =>
 	new TextDecoder().decode(container.fs.readFile(path));
+
+function runtimeGate<T = void>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((done) => {
+		resolve = done;
+	});
+	return { promise, resolve };
+}
+
+function executionFixture(limits: { maxOutputBytes?: number } = {}) {
+	const sandbox = {
+		output: undefined as ((data: string) => void) | undefined,
+		load: vi.fn(async () => {}),
+		run: vi.fn(async () => true),
+		terminate: vi.fn(async () => {}),
+		clear: vi.fn(),
+		write: vi.fn(),
+		eof: vi.fn()
+	};
+	const binding = { load: vi.fn(async () => sandbox), dispose: vi.fn(async () => {}) };
+	const adapter = new WebsiteRuntimeAdapter({
+		runtimeAssets: '/',
+		emit: vi.fn(),
+		createBinding: () => binding as unknown as PlaygroundBinding
+	});
+	const container = createContainer({
+		adapters: [adapter.adapter],
+		commands: adapter.commands,
+		...limits
+	});
+	adapter.attach(container);
+	owned.push(container);
+	return {
+		adapter,
+		container,
+		sandbox,
+		binding,
+		run: (signal = new AbortController().signal) =>
+			adapter.execute('run', 'PYTHON', 'print(1)', true, [], {}, signal)
+	};
+}
+
+describe('container runtime admission cancellation', () => {
+	it('cancels an immediate Stop before the sandbox starts and remains reusable', async () => {
+		const f = executionFixture();
+		const result = f.run();
+		const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+		await f.adapter.stop('PYTHON');
+		await rejected;
+		expect(f.sandbox.run).not.toHaveBeenCalled();
+		expect(f.adapter.inspect()).toEqual([]);
+		expect((await f.container.inspect()).processes).toEqual([]);
+		await expect(f.run()).resolves.toBe(true);
+		expect(f.sandbox.run).toHaveBeenCalledOnce();
+	});
+	it('keeps Stop pending until delayed admission releases its original job', async () => {
+		const f = executionFixture(),
+			admission = runtimeGate(),
+			spawn = f.container.spawn.bind(f.container);
+		vi.spyOn(f.container, 'spawn').mockImplementationOnce(async (...args) => {
+			await admission.promise;
+			return await spawn(...args);
+		});
+		const result = f.run();
+		const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+		const stopped = f.adapter.stop('PYTHON');
+		let settled = false;
+		void stopped.then(() => {
+			settled = true;
+		});
+		try {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(settled).toBe(false);
+			await expect(f.run()).rejects.toMatchObject({ code: 'RESOURCE_LIMIT' });
+		} finally {
+			admission.resolve();
+			await stopped;
+			await rejected;
+		}
+		expect(f.sandbox.run).not.toHaveBeenCalled();
+		expect((await f.container.inspect()).processes).toEqual([]);
+		await expect(f.run()).resolves.toBe(true);
+	});
+	it('retires a delayed handle without letting its old signal stop a replacement run', async () => {
+		const f = executionFixture(),
+			admitted = runtimeGate(),
+			admission = runtimeGate(),
+			first = runtimeGate<boolean>(),
+			second = runtimeGate<boolean>(),
+			caller = new AbortController(),
+			spawn = f.container.spawn.bind(f.container);
+		f.sandbox.run
+			.mockImplementationOnce(() => first.promise)
+			.mockImplementationOnce(() => second.promise);
+		f.sandbox.terminate.mockImplementation(async () => {
+			first.resolve(false);
+		});
+		vi.spyOn(f.container, 'spawn').mockImplementationOnce(async (...args) => {
+			const process = await spawn(...args);
+			admitted.resolve();
+			await admission.promise;
+			return process;
+		});
+		const result = f.run(caller.signal);
+		const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+		try {
+			await admitted.promise;
+			const stopped = f.adapter.stop('PYTHON');
+			admission.resolve();
+			await stopped;
+			await rejected;
+			expect(caller.signal.aborted).toBe(false);
+			const terminated = f.sandbox.terminate.mock.calls.length;
+			const replacement = f.run();
+			await vi.waitFor(() => expect(f.sandbox.run).toHaveBeenCalledTimes(2));
+			caller.abort();
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(f.sandbox.terminate).toHaveBeenCalledTimes(terminated);
+			expect(f.adapter.inspect()).toHaveLength(1);
+			second.resolve(true);
+			await expect(replacement).resolves.toBe(true);
+			expect((await f.container.inspect()).processes).toEqual([]);
+		} finally {
+			admission.resolve();
+			first.resolve(false);
+			second.resolve(false);
+		}
+	});
+	it('does not let an idle Stop terminate a newly admitted job while binding load completes', async () => {
+		const f = executionFixture(),
+			ready = runtimeGate<typeof f.sandbox>();
+		f.binding.load.mockImplementationOnce(() => ready.promise);
+		await f.adapter.write('PYTHON', 'queued input');
+		const stopped = f.adapter.stop('PYTHON');
+		const result = f.run();
+		ready.resolve(f.sandbox);
+		await stopped;
+		await expect(result).resolves.toBe(true);
+		expect(f.sandbox.terminate).not.toHaveBeenCalled();
+		expect(f.sandbox.write).not.toHaveBeenCalled();
+	});
+	it('disposes an owner whose active job is still waiting for admission', async () => {
+		const f = executionFixture(),
+			admission = runtimeGate(),
+			spawn = f.container.spawn.bind(f.container);
+		vi.spyOn(f.container, 'spawn').mockImplementationOnce(async (...args) => {
+			await admission.promise;
+			return await spawn(...args);
+		});
+		const result = f.run();
+		const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+		const disposed = f.adapter.dispose();
+		admission.resolve();
+		await disposed;
+		await rejected;
+		expect(f.sandbox.run).not.toHaveBeenCalled();
+		expect(f.binding.dispose).toHaveBeenCalledOnce();
+		expect(f.adapter.inspect()).toEqual([]);
+		expect((await f.container.inspect()).processes).toEqual([]);
+		await expect(f.run()).rejects.toThrow(/disposed/);
+	});
+	it('disposes the binding before waiting for an unfinished sandbox load', async () => {
+		const f = executionFixture(),
+			ready = runtimeGate<typeof f.sandbox>();
+		f.binding.load.mockImplementationOnce(() => ready.promise);
+		f.binding.dispose.mockImplementation(async () => {
+			ready.resolve(f.sandbox);
+		});
+		await f.adapter.write('PYTHON', 'queued input');
+		const disposed = f.adapter.dispose();
+		try {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(f.binding.dispose).toHaveBeenCalledOnce();
+		} finally {
+			ready.resolve(f.sandbox);
+			await disposed;
+		}
+		expect(f.sandbox.terminate).not.toHaveBeenCalled();
+	});
+	it('keeps output quota failures distinct from a user cancellation', async () => {
+		const f = executionFixture({ maxOutputBytes: 4 });
+		f.sandbox.run.mockImplementation(async () => {
+			f.sandbox.output?.('too much output');
+			return true;
+		});
+		await expect(f.run()).rejects.toMatchObject({ code: 'RESOURCE_LIMIT' });
+		expect((await f.container.inspect()).processes).toEqual([]);
+		expect(f.adapter.inspect()).toEqual([]);
+	});
+});
+
 describe('container shared editor input boundary', () => {
 	it.each([{ maxBytes: 4 }, { maxInodes: 13 }])(
 		'preserves the complete namespace when the first publication exceeds %j',
