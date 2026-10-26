@@ -64,7 +64,10 @@ export async function runGccWasiArtifact(
 	);
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable');
 	for (const entry of inspection.imports)
-		if (typeof wasi.wasiImport[entry.name] !== 'function')
+		if (
+			!Object.hasOwn(wasi.wasiImport, entry.name) ||
+			typeof wasi.wasiImport[entry.name] !== 'function'
+		)
 			throw new Error(`Unsupported WASI Preview 1 function: ${entry.name}`);
 	let memory: WebAssembly.Memory;
 	// Shim 0.4.2 counts JS code units for argv allocation; WASI strings are UTF-8 bytes.

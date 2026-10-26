@@ -551,6 +551,33 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 		).rejects.toThrow('without a WebAssembly start section');
 	});
 
+	it.each(['constructor', 'toString'])(
+		'rejects the inherited WASI import %s',
+		async (importName) => {
+			const body = [0, 0x10, 0, 0x1a, 0x0b]; // Call () -> i32 and drop its result.
+			const bytes = Uint8Array.from([
+				0,
+				97,
+				115,
+				109,
+				1,
+				0,
+				0,
+				0,
+				...section(1, [2, 0x60, 0, 0, 0x60, 0, 1, 0x7f]),
+				...section(2, [1, ...name('wasi_snapshot_preview1'), ...name(importName), 0, 1]),
+				...section(3, [1, 0]),
+				...section(5, [1, 0, 1]),
+				...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, 1]),
+				...section(10, [1, ...uleb(body.length), ...body])
+			]);
+			expect(WebAssembly.validate(bytes)).toBe(true);
+			await expect(runGccWasiArtifact(artifact(bytes))).rejects.toThrow(
+				`Unsupported WASI Preview 1 function: ${importName}`
+			);
+		}
+	);
+
 	it('requires a void entry point and resolves its type after imported functions', async () => {
 		for (const importedFunction of [false, true]) {
 			await expect(
