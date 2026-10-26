@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -13,6 +13,7 @@ import { createRuntimeAssetLock, renderRuntimeAssetLock } from './generate-runti
 const gunzip = promisify(gunzipCallback);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
+const RUNTIME_ASSET_LOCK_PATH = 'packages/core/src/runtime-asset-lock.generated.ts';
 const RELEASE_PACKAGE_LOCATIONS = [
 	['wasm-idle', '.'],
 	['@wasm-idle/container', 'packages/container'],
@@ -419,7 +420,7 @@ function isBookkeepingPath(relativePath) {
 	);
 }
 
-async function assertReleaseWorktree(packages, targetVersion, targetVersions) {
+async function assertReleaseWorktree(packages, targetVersion, targetVersions, assetRoot) {
 	const status = await runCapture(
 		'git',
 		['status', '--porcelain=v1', '--untracked-files=all'],
@@ -438,6 +439,7 @@ async function assertReleaseWorktree(packages, targetVersion, targetVersions) {
 		(relativePath) =>
 			!isBookkeepingPath(relativePath) &&
 			relativePath !== 'pnpm-lock.yaml' &&
+			relativePath !== RUNTIME_ASSET_LOCK_PATH &&
 			!manifestByPath.has(relativePath)
 	);
 	if (unexpectedPaths.length > 0) {
@@ -470,6 +472,31 @@ async function assertReleaseWorktree(packages, targetVersion, targetVersions) {
 		throw new Error(
 			'pnpm-lock.yaml is dirty without matching release manifest changes. Commit or stash it first.'
 		);
+	}
+	if (dirtyPaths.includes(RUNTIME_ASSET_LOCK_PATH)) {
+		const output = path.join(REPO_ROOT, RUNTIME_ASSET_LOCK_PATH);
+		if (!(await lstat(output)).isFile())
+			throw new Error(
+				`Release runtime asset lock must be a regular file: ${RUNTIME_ASSET_LOCK_PATH}`
+			);
+		const committed = await runCapture(
+			'git',
+			['show', `HEAD:${RUNTIME_ASSET_LOCK_PATH}`],
+			REPO_ROOT
+		);
+		if (committed.code !== 0)
+			throw new Error('Could not validate release-only changes in the runtime asset lock.');
+		// Use the committed inventory: a dirty lock cannot remove required receipts.
+		const candidate = await createReleaseRuntimeAssetLock(
+			assetRoot,
+			targetVersion,
+			committed.stdout
+		);
+		if ((await readFile(output, 'utf8')) !== renderRuntimeAssetLock(candidate)) {
+			throw new Error(
+				`${RUNTIME_ASSET_LOCK_PATH} contains changes beyond the generated ${targetVersion} release lock for this asset root. Commit or stash them first.`
+			);
+		}
 	}
 }
 
@@ -626,9 +653,7 @@ async function publishArtifacts(orderedPackages, artifacts, registryStates, opti
 	}
 }
 
-async function prepareRuntimeAssetLock(assetRoot) {
-	const output = path.join(REPO_ROOT, 'packages/core/src/runtime-asset-lock.generated.ts');
-	const source = await readFile(output, 'utf8');
+async function createReleaseRuntimeAssetLock(assetRoot, targetVersion, source) {
 	// The generator renders the receipt object as JSON inside the typed module.
 	// Refuse an unrecognized format rather than treating it as an empty inventory.
 	const entries = source.match(/^\tassets: \{\n([\s\S]*?)^\t\}/mu)?.[1];
@@ -641,6 +666,8 @@ async function prepareRuntimeAssetLock(assetRoot) {
 	const candidate = await createRuntimeAssetLock({
 		rootDir: assetRoot || path.join(REPO_ROOT, 'static')
 	});
+	// The source manifests may not have been synchronized yet during worktree validation.
+	candidate.version = targetVersion;
 	const missing = requiredPaths.filter(
 		(assetPath) => !Object.hasOwn(candidate.assets, assetPath)
 	);
@@ -649,6 +676,16 @@ async function prepareRuntimeAssetLock(assetRoot) {
 			`Runtime asset root is incomplete: ${missing.length} existing receipt paths are missing (${missing.slice(0, 5).join(', ')}). The existing lock was not changed.`
 		);
 	}
+	return candidate;
+}
+
+async function prepareRuntimeAssetLock(assetRoot, targetVersion) {
+	const output = path.join(REPO_ROOT, RUNTIME_ASSET_LOCK_PATH);
+	const candidate = await createReleaseRuntimeAssetLock(
+		assetRoot,
+		targetVersion,
+		await readFile(output, 'utf8')
+	);
 	await writeFile(output, renderRuntimeAssetLock(candidate));
 	console.log(
 		`Generated runtime asset lock ${candidate.version}: ${Object.keys(candidate.assets).length} receipts`
@@ -671,10 +708,10 @@ async function release(options) {
 		manifest: synchronizeManifest(pkg.manifest, options.version, releaseNames, targetVersions)
 	}));
 	validateSourceRelease(packages, options.version, targetVersions);
-	await assertReleaseWorktree(discovered, options.version, targetVersions);
 	if (options.assetRoot && !(await stat(options.assetRoot)).isDirectory()) {
 		throw new Error(`Asset root must be a directory: ${options.assetRoot}`);
 	}
+	await assertReleaseWorktree(discovered, options.version, targetVersions, options.assetRoot);
 	console.log(
 		`Release plan: ${packages.map((pkg) => `${pkg.name}@${pkg.manifest.version}`).join(', ')}`
 	);
@@ -711,7 +748,7 @@ async function release(options) {
 	const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-npm-release-'));
 	try {
 		console.log('\nBuilding and running package install/import verification...');
-		await prepareRuntimeAssetLock(options.assetRoot);
+		await prepareRuntimeAssetLock(options.assetRoot, options.version);
 		await run('pnpm', ['run', 'verify:package'], REPO_ROOT);
 		const artifacts = await packAndValidate(packages, tempRoot);
 		console.log(
