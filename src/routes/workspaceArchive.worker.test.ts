@@ -165,7 +165,7 @@ describe('workspace archive worker', () => {
 		const content = `beforePK\u0003\u0004${'\0'.repeat(40)}after`;
 		const [file] = extractWorkspaceArchive(entryArchive([['nested.zip', content]]));
 
-		expect(workspaceFileBytes(file)).toEqual(strToU8(content));
+		expect(Array.from(workspaceFileBytes(file))).toEqual(Array.from(strToU8(content)));
 	});
 
 	it('rejects a truncated payload even when its central directory is complete', () => {
