@@ -10,7 +10,8 @@ const requestKeys = new Set([
 	'optimization',
 	'standard',
 	'preprocessed',
-	'files'
+	'files',
+	'sources'
 ]);
 const reservedNames = new Set([
 	'main.c',
@@ -55,6 +56,20 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		throw new Error('Invalid GCC compilation profile');
 	if (request.preprocessed !== undefined && typeof request.preprocessed !== 'boolean')
 		throw new Error('Invalid GCC preprocessed option');
+	if (
+		request.sources !== undefined &&
+		(!Array.isArray(request.sources) || request.sources.length > 63)
+	)
+		throw new Error('GCC supports at most 63 additional translation units');
+	const sources = (request.sources ?? []).map(gccRelativePath);
+	if (new Set(sources).size !== sources.length) throw new Error('Duplicate GCC translation unit');
+	if (sources.length && emit !== 'executable')
+		throw new Error('Additional GCC translation units require executable output');
+	const reserved = new Set(reservedNames);
+	for (let i = 1; i <= sources.length; i++) {
+		reserved.add(`program.${i}.s`);
+		reserved.add(`program.${i}.o`);
+	}
 	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
 	const standards =
 		language === 'c'
@@ -90,8 +105,7 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 	const paths = new Set<string>();
 	for (const file of request.files ?? []) {
 		const path = gccRelativePath(file.path);
-		if (reservedNames.has(path.split('/')[0]))
-			throw new Error('GCC input/output path is reserved');
+		if (reserved.has(path.split('/')[0])) throw new Error('GCC input/output path is reserved');
 		if (paths.has(path)) throw new Error('Duplicate GCC workspace file');
 		for (const existing of paths) {
 			if (existing.startsWith(`${path}/`) || path.startsWith(`${existing}/`))
@@ -107,6 +121,9 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		totalBytes += contents.length;
 		if (totalBytes > maxWorkspaceBytes) throw new Error('GCC workspace exceeds its limit');
 		files.push({ path: `/workspace/${path}`, contents });
+	}
+	for (const source of sources) {
+		if (!paths.has(source)) throw new Error(`Missing GCC translation unit: ${source}`);
 	}
 	const cc = [
 		'-quiet',
@@ -142,16 +159,26 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		);
 		for (const include of includes) cc.push('-isystem', include);
 	}
-	cc.push(`/workspace/${main}`, '-o', '/workspace/program.s');
-	const stages: { tool: CrossGccTool; argv: string[]; output: string }[] = [
-		{ tool: language === 'c' ? 'cc1' : 'cc1plus', argv: cc, output: '/workspace/program.s' }
-	];
-	if (emit !== 'assembly')
+	const stages: { tool: CrossGccTool; argv: string[]; output: string }[] = [];
+	const objects: string[] = [];
+	for (const [index, source] of [main, ...sources].entries()) {
+		const stem = index === 0 ? 'program' : `program.${index}`;
+		const assembly = `/workspace/${stem}.s`;
 		stages.push({
-			tool: 'as',
-			argv: ['--64', '-o', '/workspace/program.o', '/workspace/program.s'],
-			output: '/workspace/program.o'
+			tool: language === 'c' ? 'cc1' : 'cc1plus',
+			argv: [...cc, `/workspace/${source}`, '-o', assembly],
+			output: assembly
 		});
+		if (emit !== 'assembly') {
+			const object = `/workspace/${stem}.o`;
+			stages.push({
+				tool: 'as',
+				argv: ['--64', '-o', object, assembly],
+				output: object
+			});
+			objects.push(object);
+		}
+	}
 	if (emit === 'executable') {
 		const gcc = manifest.gccInstallation,
 			lib = '/sysroot/usr/lib/x86_64-linux-gnu';
@@ -170,7 +197,7 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 				`-L${gcc}`,
 				`-L${lib}`,
 				'-L/sysroot/lib/x86_64-linux-gnu',
-				'/workspace/program.o',
+				...objects,
 				...(language === 'cpp' ? ['-lstdc++'] : []),
 				'-lm',
 				'--start-group',

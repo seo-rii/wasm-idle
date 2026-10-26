@@ -57,9 +57,9 @@ vi.mock('../src/module-loader.js', () => ({
 						);
 						throw host.failure;
 					}
-					const source = [...files.entries()].find(([path]) =>
-						/^\/workspace\/main\./u.test(path)
-					)?.[1];
+					const source = tool.startsWith('cc1')
+						? files.get(argv[argv.indexOf('-o') - 1])
+						: undefined;
 					if (source?.[0] === 33 || host.mode === `fail-${tool}`) {
 						(options.printErr as Function)('synthetic failure');
 						return 9;
@@ -338,6 +338,102 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it('compiles only explicitly selected additional units and links their distinct objects in order', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		const helper = encoder.encode('#include "local.h"\nint helper() { return LOCAL; }');
+		try {
+			const result = await compiler.compile({
+				code: 'int helper(); int other(); int main() { return helper() + other(); }',
+				files: [
+					{ path: 'lib/helper.cpp', contents: helper },
+					{ path: 'other.cpp', contents: 'int other() { return 3; }' },
+					{ path: 'lib/local.h', contents: '#define LOCAL 4' },
+					{ path: 'unselected.cpp', contents: '!not selected for compilation' }
+				],
+				sources: ['other.cpp', 'lib/helper.cpp']
+			});
+			expect(result.exitCode).toBe(0);
+			expect(result.artifact?.format).toBe('elf-executable');
+			expect(result.stages.map((stage) => stage.tool)).toEqual([
+				'cc1plus',
+				'as',
+				'cc1plus',
+				'as',
+				'cc1plus',
+				'as',
+				'ld'
+			]);
+			const frontends = host.calls.filter((call) => call.tool === 'cc1plus');
+			expect(frontends.map((call) => call.argv[call.argv.indexOf('-o') - 1])).toEqual([
+				'/workspace/main.cpp',
+				'/workspace/other.cpp',
+				'/workspace/lib/helper.cpp'
+			]);
+			expect(frontends[2].files.get('/workspace/lib/helper.cpp')).toEqual(helper);
+			expect(frontends[2].files.get('/workspace/lib/local.h')).toEqual(
+				encoder.encode('#define LOCAL 4')
+			);
+			const link = host.calls.at(-1)!;
+			expect(
+				link.argv.filter((arg) => arg.startsWith('/workspace/') && arg.endsWith('.o'))
+			).toEqual(['/workspace/program.o', '/workspace/program.1.o', '/workspace/program.2.o']);
+			for (const object of ['program.o', 'program.1.o', 'program.2.o'])
+				expect(link.files.get(`/workspace/${object}`)).toEqual(elf(1));
+			expect(new Set(host.calls.map((call) => call.files)).size).toBe(7);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('stops at a failed additional unit without linking or returning an earlier artifact', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			expect((await compiler.compile({ code: 'int main() {}' })).artifact).toBeDefined();
+			host.calls.length = 0;
+			const result = await compiler.compile({
+				code: 'int main() {}',
+				files: [{ path: 'broken.cpp', contents: '!synthetic secondary failure' }],
+				sources: ['broken.cpp']
+			});
+			expect(result.exitCode).toBe(9);
+			expect(result.artifact).toBeUndefined();
+			expect(result.stages.map((stage) => stage.tool)).toEqual(['cc1plus', 'as', 'cc1plus']);
+			expect(host.calls.some((call) => call.tool === 'ld')).toBe(false);
+			const next = await compiler.compile({ code: 'int main() {}' });
+			expect(next.exitCode).toBe(0);
+			expect(next.artifact).toBeDefined();
+			expect(next.stderr).not.toContain('synthetic secondary failure');
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it.each([
+		['c', false, 'helper.c', 'cc1'],
+		['cpp', true, 'helper.ii', 'cc1plus']
+	] as const)(
+		'uses the same %s preprocessing contract for every unit',
+		async (language, preprocessed, path, tool) => {
+			const compiler = await createCrossGccCompiler(bundle().options);
+			try {
+				const result = await compiler.compile({
+					code: 'int main() {}',
+					language,
+					preprocessed,
+					files: [{ path, contents: 'int helper() { return 1; }' }],
+					sources: [path]
+				});
+				expect(result.exitCode).toBe(0);
+				const frontends = result.stages.filter((stage) => stage.tool === tool);
+				expect(frontends).toHaveLength(2);
+				for (const frontend of frontends)
+					expect(frontend.argv.includes('-fpreprocessed')).toBe(preprocessed);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
 	it('rejects missing output, another ELF architecture, dynamic linkage, and oversized diagnostics', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {
@@ -408,6 +504,31 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				{ code: '', flags: ['-flto'] },
 				{ code: '', standard: 'gnu++20 -fplugin=bad' },
 				{ code: '', preprocessed: 1 },
+				{ code: '', sources: 'helper.cpp' },
+				{ code: '', sources: null },
+				{ code: '', sources: [1] },
+				{ code: '', sources: ['../helper.cpp'] },
+				{ code: '', sources: ['missing.cpp'] },
+				{
+					code: '',
+					files: [{ path: 'helper.cpp', contents: '' }],
+					sources: ['helper.cpp', 'helper.cpp']
+				},
+				{ code: '', sources: Array.from({ length: 64 }, (_, i) => `helper${i}.cpp`) },
+				...['assembly', 'object'].map((emit) => ({
+					code: '',
+					emit,
+					files: [{ path: 'helper.cpp', contents: '' }],
+					sources: ['helper.cpp']
+				})),
+				...['program.1.s', 'program.1.o/header.h'].map((path) => ({
+					code: '',
+					sources: ['helper.cpp'],
+					files: [
+						{ path: 'helper.cpp', contents: '' },
+						{ path, contents: '' }
+					]
+				})),
 				...[
 					'../outside',
 					'/outside',

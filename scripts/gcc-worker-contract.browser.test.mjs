@@ -50,7 +50,7 @@ export default async function(options) {
       readFile(path) { if (!files.has(path)) throw Error('Synthetic missing output'); return files.get(path); }
     },
     callMain(argv) {
-      const input = [...files.entries()].find(([path]) => path.startsWith('/workspace/main.'))?.[1];
+      const input = ${JSON.stringify(tool)}.startsWith('cc1') ? files.get(argv[argv.indexOf('-o') - 1]) : undefined;
       if (input?.[0] === 66) { while (true) {} } // Terminate must interrupt synchronous work.
       if (input?.[0] === 33) { options.printErr('Synthetic diagnostic failure'); options.onExit?.(9); return 9; }
       const output = argv[argv.indexOf('-o') + 1], tool = ${JSON.stringify(tool)};
@@ -243,6 +243,34 @@ test(
 								bytes: compiled.artifact.bytes.length
 							});
 						}
+						const multiple = await compiler.compile({
+							code: 'Synthetic primary fixture',
+							files: [
+								{ path: 'helper.cpp', contents: 'Synthetic secondary fixture' }
+							],
+							sources: ['helper.cpp']
+						});
+						if (
+							multiple.exitCode !== 0 ||
+							!multiple.artifact ||
+							multiple.stages.length !== 5
+						)
+							throw Error('Multiple-unit Worker request did not reach every stage');
+						const secondaryFailure = await compiler.compile({
+							code: 'Synthetic primary fixture',
+							files: [
+								{ path: 'helper.cpp', contents: '! synthetic secondary failure' }
+							],
+							sources: ['helper.cpp']
+						});
+						if (
+							secondaryFailure.exitCode !== 9 ||
+							secondaryFailure.artifact ||
+							secondaryFailure.stages.length !== 3
+						)
+							throw Error(
+								'Failed secondary unit returned stale output or reached the linker'
+							);
 						const failure = await compiler.compile({
 							code: '! synthetic failure',
 							emit: 'executable'
@@ -272,6 +300,7 @@ test(
 						if (!disposed) throw Error('Terminated Worker accepted another request');
 						return {
 							outputs,
+							multipleUnitsPassed: true,
 							integrityRejected,
 							staleArtifactRejected: true,
 							cancellationMs: performance.now() - start,

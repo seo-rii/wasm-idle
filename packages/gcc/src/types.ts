@@ -56,6 +56,8 @@ export interface CrossGccCompileRequest {
 	/** Already preprocessed .i/.ii input. Ordinary source is the default. */
 	readonly preprocessed?: boolean;
 	readonly files?: readonly { readonly path: string; readonly contents: string | Uint8Array }[];
+	/** Additional translation unit paths in files, in link order. Executable output only. */
+	readonly sources?: readonly string[];
 }
 
 export interface CrossGccIdentity {
