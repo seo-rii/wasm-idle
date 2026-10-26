@@ -94,8 +94,9 @@ export const scenarios = [
 		name: '@wasm-idle/gcc install',
 		packageNames: ['@wasm-idle/gcc', '@wasm-idle/core'],
 		// WASI adds eight GCC JavaScript/declaration files and the pinned, 26-file shim.
-		// The existing byte budget still covers the measured production install.
-		budget: { maxBytes: 2.5 * MiB, maxFiles: 184, maxPackages: 4 },
+		// ABI/SIMD checks add 14,739 installed bytes without new files or dependencies.
+		// The measured 2,628,057-byte install needs 7 KiB above the previous cap.
+		budget: { maxBytes: 2.5 * MiB + 7 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -117,20 +118,27 @@ export const scenarios = [
 			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/gcc')));",
 			"if (workers || requests) throw new Error('GCC import started a Worker or fetched assets');"
 		],
-		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccArtifact, type WasiGccWorker } from '@wasm-idle/gcc';
+		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest } from '@wasm-idle/gcc';
 const request: CrossGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'x86-64', emit: 'executable' };
 declare const artifact: CrossGccArtifact;
 const compiler: 'gcc' = artifact.compiler;
 const host: 'wasm32-emscripten' = artifact.compilerHost;
 const target: 'x86_64-linux-gnu' = artifact.target;
 const workerFactory: typeof createCrossGccWorker = createCrossGccWorker;
-const wasiRequest: WasiGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'wasm32', emit: 'executable', defines: ['ONLINE_JUDGE=1'] };
+const wasiRequest: WasiGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'wasm32', emit: 'executable', defines: ['ONLINE_JUDGE=1'], simd: true };
 declare const wasiArtifact: WasiGccArtifact;
+declare const wasiManifest: WasiGccManifest;
 const wasiTarget: 'wasm32-wasi' = wasiArtifact.target;
+const simdFeature: boolean | undefined = wasiArtifact.wasm?.features.simd128;
+const simdCapability: boolean = wasiManifest.capabilities.simd;
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 // @ts-expect-error Wasm output cannot select an x86 CPU profile.
 const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
-void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, wasiWorkerFactory, invalidWasiCpu];
+// @ts-expect-error Wasm SIMD is a boolean opt-in, not an x86 feature name.
+const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
+// @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
+const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
+void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, wasiWorkerFactory, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
 	{
@@ -258,7 +266,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI adds eight files; this aggregate already installs the WASI shim.
 		// Its measured 42,394,510-byte install needs 33 KiB above the previous cap.
-		budget: { maxBytes: 40 * MiB + 441 * 1024, maxFiles: 3_360, maxPackages: 70 },
+		// GCC ABI/SIMD checks add 14,739 bytes, requiring another 15 KiB of budget.
+		budget: { maxBytes: 40 * MiB + 456 * 1024, maxFiles: 3_360, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
