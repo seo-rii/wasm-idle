@@ -51,7 +51,12 @@ export async function createGccWorker(
 		nextId = 0;
 	const pending = new Map<
 		number,
-		{ resolve(message: WorkerMessage): void; reject(error: unknown): void; cleanup(): void }
+		{
+			expected: WorkerMessage['type'];
+			resolve(message: WorkerMessage): void;
+			reject(error: unknown): void;
+			cleanup(): void;
+		}
 	>();
 	function stop(error: Error) {
 		if (disposed) return;
@@ -64,8 +69,29 @@ export async function createGccWorker(
 		pending.clear();
 	}
 	worker.onmessage = ({ data }: MessageEvent<WorkerMessage>) => {
+		if (disposed) return;
+		if (
+			!data ||
+			typeof data !== 'object' ||
+			!Number.isSafeInteger(data.id) ||
+			data.id < 0 ||
+			!['ready', 'result', 'run-result', 'error'].includes(data.type)
+		) {
+			stop(new Error('GCC Worker returned an invalid response'));
+			return;
+		}
 		const request = pending.get(data.id);
 		if (!request) return;
+		if (
+			(data.type !== 'error' && data.type !== request.expected) ||
+			(data.type === 'error' && typeof data.message !== 'string') ||
+			(data.type === 'ready' && (!data.manifest || !data.identity)) ||
+			((data.type === 'result' || data.type === 'run-result') &&
+				(!data.result || typeof data.result !== 'object'))
+		) {
+			stop(new Error('GCC Worker returned an invalid response'));
+			return;
+		}
 		pending.delete(data.id);
 		request.cleanup();
 		if (data.type === 'error') request.reject(new Error(data.message));
@@ -73,14 +99,23 @@ export async function createGccWorker(
 	};
 	worker.onerror = (event) => stop(new Error(`GCC Worker failed: ${event.message}`));
 	worker.onmessageerror = () => stop(new Error('GCC Worker returned an unreadable response'));
-	function send(message: object, signal?: AbortSignal): Promise<WorkerMessage> {
+	function send(
+		message: { type: 'initialize' | 'compile' | 'run'; [key: string]: unknown },
+		signal?: AbortSignal
+	): Promise<WorkerMessage> {
 		if (disposed) return Promise.reject(new Error('GCC Worker is disposed'));
 		signal?.throwIfAborted();
 		const id = nextId++;
 		return new Promise((resolve, reject) => {
 			const abort = () => stop(new DOMException('GCC compilation cancelled', 'AbortError'));
 			const cleanup = () => signal?.removeEventListener('abort', abort);
-			pending.set(id, { resolve, reject, cleanup });
+			const expected =
+				message.type === 'initialize'
+					? 'ready'
+					: message.type === 'compile'
+						? 'result'
+						: 'run-result';
+			pending.set(id, { expected, resolve, reject, cleanup });
 			signal?.addEventListener('abort', abort, { once: true });
 			try {
 				worker.postMessage({ ...message, id });

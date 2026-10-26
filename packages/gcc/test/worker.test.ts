@@ -44,6 +44,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it.each([
+		null,
+		{ id: 1, type: 'unknown' },
+		{ id: 1, type: 'run-result', result: {} },
+		{ id: 1, type: 'result' }
+	])('terminates and settles pending work on malformed Worker response %j', async (data) => {
+		const compiler = await createCrossGccWorker(options),
+			transport = FixtureWorker.instances[0];
+		const pending = compiler.compile({ code: 'source' });
+		const rejected = expect(pending).rejects.toThrow('invalid response');
+		expect(() => transport.onmessage?.({ data })).not.toThrow();
+		await rejected;
+		expect(transport.terminate).toHaveBeenCalledOnce();
+		await expect(compiler.compile({ code: 'again' })).rejects.toThrow('disposed');
+	});
 	it('terminates synchronous compiler work on AbortSignal and rejects reuse', async () => {
 		const compiler = await createCrossGccWorker(options),
 			transport = FixtureWorker.instances[0];
