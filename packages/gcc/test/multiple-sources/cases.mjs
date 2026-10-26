@@ -53,6 +53,30 @@ const maximumFiles = Array.from({ length: 63 }, (_, index) => ({
 
 export const cases = [
 	{
+		id: 'default-request-executable',
+		fixture: 'standalone.cpp',
+		request: {},
+		stdin: '41\n',
+		stdout: '42\n',
+		stageCount: 3
+	},
+	{
+		id: 'default-output-executable',
+		fixture: 'standalone.cpp',
+		request: { language: 'cpp', cpu: 'x86-64' },
+		stdin: '41\n',
+		stdout: '42\n',
+		stageCount: 3
+	},
+	{
+		id: 'default-cpu-executable',
+		fixture: 'standalone.cpp',
+		request: { language: 'cpp', emit: 'executable' },
+		stdin: '41\n',
+		stdout: '42\n',
+		stageCount: 3
+	},
+	{
 		id: 'cpp-separate-units',
 		fixture: 'main.c',
 		request: cpp,

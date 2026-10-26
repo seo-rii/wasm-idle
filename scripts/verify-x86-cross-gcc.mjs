@@ -301,13 +301,9 @@ try {
 			disassembly: 'not-applicable'
 		};
 		if (result.artifact) {
+			const emit = fixture.request.emit ?? 'executable';
 			const bytes = result.artifact.bytes;
-			const extension =
-				fixture.request.emit === 'assembly'
-					? 's'
-					: fixture.request.emit === 'object'
-						? 'o'
-						: 'elf';
+			const extension = emit === 'assembly' ? 's' : emit === 'object' ? 'o' : 'elf';
 			const file = path.join(output, `${fixture.id}.${extension}`);
 			await fs.writeFile(file, bytes, { mode: 0o700 });
 			entry.artifact = {
@@ -316,7 +312,7 @@ try {
 				sha256: digest(bytes),
 				format: result.artifact.format
 			};
-			if (fixture.request.emit === 'object') {
+			if (emit === 'object') {
 				assert(
 					process.platform === 'linux' && process.arch === 'x64',
 					'Real object qualification requires native Linux x86-64 objdump'
@@ -335,13 +331,13 @@ try {
 				}
 				entry.disassembly = 'passed';
 			}
-			if (fixture.request.emit === 'executable') {
+			if (emit === 'executable') {
 				assert(
 					process.platform === 'linux' && process.arch === 'x64',
 					'Native stdin/stdout qualification requires Linux x86-64'
 				);
 				assert.equal(
-					fixture.request.cpu,
+					fixture.request.cpu ?? 'x86-64',
 					'x86-64',
 					'Only baseline fixtures are executed natively'
 				);
