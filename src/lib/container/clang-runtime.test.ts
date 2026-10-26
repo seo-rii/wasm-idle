@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { MemoryFileSystem, type Container, type ContainerProcess } from '@wasm-idle/container';
+import {
+	createContainer,
+	MemoryFileSystem,
+	type Container,
+	type ContainerProcess,
+	type LiveCommandAdapter
+} from '@wasm-idle/container';
 import { clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
+import { createLiveIo } from '../../../packages/container/src/adapters/wasi-live/io.js';
+import { Operation } from '../../../packages/container/src/transport/rpc.js';
 import { WebsiteClangRuntime } from './clang-runtime.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
@@ -131,6 +139,180 @@ function fixture(
 }
 
 const source = '// PCH probe\n#include <bits/stdc++.h>\nint main() {}';
+
+function completionGate() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((done) => {
+		resolve = done;
+	});
+	return { promise, resolve };
+}
+
+async function liveStdinFixture(
+	program: (
+		io: ReturnType<typeof createLiveIo>,
+		request: Parameters<LiveCommandAdapter['start']>[0]
+	) => Promise<{ code: number }>,
+	maxInputBytes = 1024
+) {
+	const adapter: LiveCommandAdapter = {
+		id: 'stdin-test',
+		filesystem: 'live',
+		async start(request) {
+			const io = createLiveIo(
+				request.fs as unknown as Parameters<typeof createLiveIo>[0],
+				request.limits,
+				4,
+				() => {}
+			);
+			return {
+				stdin: io.stdin,
+				stdout: io.stdout,
+				stderr: io.stderr,
+				async dispose() {
+					io.dispose();
+				},
+				async run() {
+					if (request.invocation.command !== 'clang') return await program(io, request);
+					const args = request.invocation.args,
+						path = args[args.indexOf('-o') + 1];
+					request.fs.writeFile(path, Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
+					request.fs.grantExecutable(request.fs.captureFileVersion(path));
+					return { code: 0 };
+				}
+			};
+		}
+	};
+	const container = createContainer({
+		adapters: [adapter],
+		commands: { clang: { adapter: adapter.id, bytes: new Uint8Array() } },
+		artifactAdapter: adapter.id,
+		maxInputBytes
+	});
+	const files = new WebsiteRuntimeAdapter({
+		runtimeAssets: '/',
+		emit: vi.fn(),
+		createBinding: vi.fn()
+	});
+	files.attach(container);
+	const emit = vi.fn();
+	const runtime = new WebsiteClangRuntime(
+		{ container, prepareCommand: async () => {} },
+		files,
+		emit
+	);
+	const code = 'int main() { return 0; }';
+	await runtime.prepare('C', code, [], {}, new AbortController().signal, undefined, 1);
+	return {
+		container,
+		runtime,
+		emit,
+		run: (options: SandboxExecutionOptions = {}, signal = new AbortController().signal) =>
+			runtime.run('C', code, [], options, signal, undefined, 2),
+		async dispose() {
+			await runtime.dispose();
+			await container.dispose();
+		}
+	};
+}
+
+describe('container Clang stdin completion', () => {
+	it.each([
+		{ consumed: 0, queued: false, code: 0 },
+		{ consumed: 1, queued: false, code: 0 },
+		{ consumed: 0, queued: true, code: 0 },
+		{ consumed: 1, queued: true, code: 0 },
+		{ consumed: 1, queued: false, code: 7 }
+	])('waits for exit and both output streams after early stdin close: %j', async (test) => {
+		const closed = completionGate(),
+			finish = completionGate(),
+			input = 'input larger than the bounded pipe';
+		const f = await liveStdinFixture(async (io) => {
+			if (test.consumed)
+				await io.dispatch(Operation.Stdin, [test.consumed], new Uint8Array());
+			await io.dispatch(Operation.StdioClose, [0], new Uint8Array());
+			closed.resolve();
+			await finish.promise;
+			await io.dispatch(Operation.Stdout, [1], new TextEncoder().encode('done'));
+			await io.dispatch(Operation.Stdout, [2], new TextEncoder().encode('warn'));
+			return { code: test.code };
+		});
+		try {
+			if (test.queued) {
+				await f.runtime.write('C', input);
+				await f.runtime.eof('C');
+			}
+			const result = f.run(test.queued ? {} : { stdin: input });
+			let settled = false;
+			void result.then(
+				() => {
+					settled = true;
+				},
+				() => {
+					settled = true;
+				}
+			);
+			await closed.promise;
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(settled).toBe(false);
+			finish.resolve();
+			await expect(result).resolves.toBe(test.code === 0);
+			expect(f.emit.mock.calls.map(([event]) => event.data)).toEqual(['done', 'warn']);
+			expect((await f.container.inspect()).processes).toEqual([]);
+		} finally {
+			finish.resolve();
+			await f.dispose();
+		}
+	});
+	it.each(['stop', 'signal'])(
+		'preserves %s cancellation while stdin is blocked',
+		async (cancel) => {
+			const started = completionGate();
+			const f = await liveStdinFixture(async (_io, request) => {
+				started.resolve();
+				await new Promise<void>((resolve) =>
+					request.signal.addEventListener('abort', () => resolve(), { once: true })
+				);
+				return { code: 0 };
+			});
+			try {
+				const signal = new AbortController();
+				const result = f.run(
+					{ stdin: 'input larger than the bounded pipe' },
+					signal.signal
+				);
+				const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+				await started.promise;
+				if (cancel === 'stop') await f.runtime.stop('C');
+				else signal.abort();
+				await rejected;
+				expect((await f.container.inspect()).processes).toEqual([]);
+			} finally {
+				await f.dispose();
+			}
+		}
+	);
+	it('retires the process and preserves unexpected stdin failures', async () => {
+		let signal: AbortSignal | undefined;
+		const f = await liveStdinFixture(async (_io, request) => {
+			signal = request.signal;
+			await new Promise<void>((resolve) =>
+				request.signal.addEventListener('abort', () => resolve(), { once: true })
+			);
+			return { code: 0 };
+		}, 8);
+		try {
+			await expect(f.run({ stdin: 'input exceeds its quota' })).rejects.toMatchObject({
+				code: 'RESOURCE_LIMIT'
+			});
+			expect(signal?.aborted).toBe(true);
+			expect((await f.container.inspect()).processes).toEqual([]);
+		} finally {
+			await f.dispose();
+		}
+	});
+});
+
 describe('website container Clang compilation', () => {
 	it.each(['C', 'CPP'])(
 		'forwards the shared SIMD profile to %s compilation before user overrides',
