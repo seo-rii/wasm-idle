@@ -3945,7 +3945,10 @@
 	);
 
 	// Models own undo history; retain them while their files remain in this workspace.
+	// Keep resource caches outside effect dependencies; the active model is reactive.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const workspaceModels = new Map<string, monaco.editor.ITextModel>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const modelViewStates = new Map<monaco.editor.ITextModel, monaco.editor.ICodeEditorViewState>();
 
 	$effect(() => {
@@ -3961,7 +3964,11 @@
 			let nextModel = workspaceModels.get(path);
 			if (!nextModel || nextModel.isDisposed()) {
 				const uri = createWorkspaceModelUri(monacoApi.Uri, normalizedFilePath);
-				nextModel = monacoApi.editor.createModel(value ?? defaultValue, modelLanguage, uri);
+				const initialValue = value ?? defaultValue;
+				nextModel = monacoApi.editor.createModel(initialValue, modelLanguage, uri);
+				// Monaco can restore a disposed model's history by URI, even for equal text.
+				// A newly owned model must start with fresh history; cached tabs keep theirs.
+				nextModel.setValue(initialValue);
 				workspaceModels.set(path, nextModel);
 			} else if (nextModel.getLanguageId() !== modelLanguage) {
 				monacoApi.editor.setModelLanguage(nextModel, modelLanguage);
@@ -3977,6 +3984,8 @@
 
 	$effect(() => {
 		if (!workspacePaths) return;
+		// Temporary membership index for this effect run.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const paths = new Set(workspacePaths);
 		// The empty workspace still displays an editable placeholder model.
 		paths.add(normalizedFilePath);

@@ -2090,6 +2090,7 @@
 		if (runningMode) return;
 		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
 		const nextWorkspace = createDefaultWorkspace(language);
+		editorWorkspaceRevision += 1;
 		languageWorkspaces = {
 			...languageWorkspaces,
 			[language]: cloneWorkspace(nextWorkspace)
