@@ -1,14 +1,15 @@
 import { gccCompileInputs } from './plan.js';
+import { supportsGccWasmSimd } from './wasm-output.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
-const unavailableFeatures = ['exceptions', 'rtti', 'threads', 'dynamicLinking', 'simd'] as const;
+const unavailableFeatures = ['exceptions', 'rtti', 'threads', 'dynamicLinking'] as const;
 
 /** GCC emits WAT; patched WABT emits relocatable Wasm; LLVM is used only as the linker. */
 export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: WasiGccManifest) {
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', ...unavailableFeatures],
+			['cpu', 'simd', ...unavailableFeatures],
 			[
 				'program.wat',
 				'program.wasm',
@@ -20,6 +21,14 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	for (const feature of unavailableFeatures)
 		if (request[feature] !== undefined && request[feature] !== false)
 			throw new Error(`GCC wasm32-wasi does not support ${feature}`);
+	if (request.simd !== undefined && typeof request.simd !== 'boolean')
+		throw new Error('Invalid GCC WASI SIMD option');
+	if (request.simd) {
+		if (!manifest.capabilities.simd)
+			throw new Error('This GCC wasm32-wasi bundle does not support Wasm SIMD');
+		if (!supportsGccWasmSimd())
+			throw new Error('This WebAssembly engine does not support Wasm SIMD');
+	}
 	if (language === 'cpp' && !manifest.capabilities.cpp)
 		throw new Error('This GCC wasm32-wasi bundle does not support C++');
 	if (emit === 'executable' && (!manifest.capabilities.libc || !manifest.capabilities.libm))
@@ -34,6 +43,8 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		'-D__GCC_WASI_SINGLE_THREAD__=1',
 		...definitions
 	];
+	// Legacy scalar bundles do not recognize either flag; leave their argv unchanged.
+	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
 	if (language === 'cpp')
 		cc.push('-fno-exceptions', '-fno-rtti', '-fuse-cxa-atexit', '-fno-threadsafe-statics');
 	if (request.preprocessed) cc.push('-fpreprocessed');

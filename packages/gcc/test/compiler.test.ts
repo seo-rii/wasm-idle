@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCrossGccCompiler } from '../src/compiler.js';
+import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
 
 const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
 	mode: '',
+	output: undefined as Uint8Array | undefined,
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
 
@@ -72,11 +73,12 @@ vi.mock('../src/module-loader.js', () => ({
 							? new TextEncoder().encode(
 									'# Synthetic assembly fixture, not GCC output\n.text\n'
 								)
-							: elf(
-									tool === 'as' ? 1 : 2,
-									host.mode === 'wrong-machine' ? 183 : 62,
-									host.mode === 'dynamic'
-								)
+							: (host.output ??
+									elf(
+										tool === 'as' ? 1 : 2,
+										host.mode === 'wrong-machine' ? 183 : 62,
+										host.mode === 'dynamic'
+									))
 					);
 					if (host.mode === 'exit-status') throw { name: 'ExitStatus', status: 0 };
 					return 0;
@@ -171,14 +173,153 @@ function bundle(archivePath?: string) {
 	};
 }
 
+// These byte fixtures exercise host boundaries only, never real GCC code generation.
+function wasiCommand(simd = false) {
+	const body = [0, ...(simd ? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a] : []), 0x0b];
+	return Uint8Array.from([
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		1,
+		4,
+		1,
+		0x60,
+		0,
+		0,
+		3,
+		2,
+		1,
+		0,
+		5,
+		3,
+		1,
+		0,
+		1,
+		7,
+		19,
+		2,
+		6,
+		...encoder.encode('memory'),
+		2,
+		0,
+		6,
+		...encoder.encode('_start'),
+		0,
+		0,
+		10,
+		body.length + 2,
+		1,
+		body.length,
+		...body
+	]);
+}
+
+function wasiBundle(linker = wasiCommand()) {
+	const fixture = bundle();
+	fixture.files.delete('gcc-toolchain.v1.json');
+	fixture.files.delete('ld.mjs');
+	fixture.files.set('ld.wasm', linker);
+	const revision = (family: string) => ({
+		family,
+		repository: `https://example.test/${family}`,
+		version: '17.0.0',
+		commit: 'a'.repeat(40)
+	});
+	const manifest = {
+		schemaVersion: 2,
+		kind: 'gcc-wasm32-wasi',
+		host: 'wasm32-emscripten',
+		target: 'wasm32-wasi',
+		compiler: revision('gcc'),
+		assembler: revision('wabt'),
+		linker: { ...revision('lld'), host: 'wasm32-wasi' },
+		sysroot: revision('wasi-libc'),
+		abi: 'wasm32-wasi-preview1',
+		linkMode: 'static',
+		sysrootPath: '/sysroot',
+		gccInstallation: '/sysroot/lib/gcc/wasm32-wasi/17.0.0',
+		resourceDir: '/sysroot/lib/gcc/wasm32-wasi/17.0.0/include',
+		runtimeLibraries: ['/sysroot/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a'],
+		capabilities: {
+			c: true,
+			cpp: true,
+			libc: true,
+			libm: true,
+			libstdcxx: false,
+			staticInitialization: false,
+			exceptions: false,
+			rtti: false,
+			threads: false,
+			dynamicLinking: false,
+			simd: true
+		},
+		qualification: { status: 'unverified' },
+		assets: Object.fromEntries(
+			[...fixture.files].map(([path, bytes]) => [
+				path === 'sysroot.tar'
+					? 'sysroot'
+					: path.replace('.mjs', 'Js').replace('.wasm', 'Wasm'),
+				{ path, sha256: hash(bytes), bytes: bytes.length }
+			])
+		)
+	};
+	const manifestBytes = encoder.encode(JSON.stringify(manifest));
+	fixture.files.set('gcc-toolchain.v2.json', manifestBytes);
+	return {
+		...fixture.options,
+		target: 'wasm32-wasi' as const,
+		manifestUrl: 'https://example.test/gcc/gcc-toolchain.v2.json',
+		manifestSha256: hash(manifestBytes)
+	};
+}
+
 beforeEach(() => {
 	host.calls.length = 0;
 	host.mode = '';
+	host.output = undefined;
 	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it('validates the pinned WASI linker command ABI during loading', async () => {
+		await expect(createGccCompiler(wasiBundle(wasm))).rejects.toThrow(
+			'must export memory and _start'
+		);
+	});
+
+	it('refuses unrequested SIMD in assembled output and permits the explicit capable-bundle opt-in', async () => {
+		host.output = Uint8Array.from([
+			...wasiCommand(true),
+			0,
+			9,
+			7,
+			...encoder.encode('linking'),
+			2
+		]);
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			await expect(
+				compiler.compile({ code: 'fixture', language: 'c', emit: 'object' })
+			).rejects.toThrow('SIMD without an enabled SIMD compilation request');
+			const result = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				emit: 'object',
+				simd: true
+			});
+			expect(result.artifact?.wasm?.features).toEqual({ simd128: true });
+			expect(result.stages[0].argv).toContain('-msimd128');
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('runs separate front end, assembler and static linker with real GNU paths and untouched source', async () => {
 		const fixture = bundle(),
 			compileWasm = vi.spyOn(WebAssembly, 'compile');

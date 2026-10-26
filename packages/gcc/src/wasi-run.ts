@@ -1,5 +1,5 @@
 import { ConsoleStdout, File, OpenFile, WASI } from '@bjorn3/browser_wasi_shim';
-import { inspectGccWasm } from './wasm-output.js';
+import { compileGccWasm } from './wasm-output.js';
 import type { WasiGccArtifact, WasiGccRunOptions, WasiGccRunResult } from './types.js';
 
 const encoder = new TextEncoder();
@@ -62,7 +62,7 @@ export async function runGccWasiArtifact(
 		[new OpenFile(new File(stdin, { readonly: true })), output(0), output(1)],
 		{ debug: false }
 	);
-	const inspection = await inspectGccWasm(artifact.bytes, 'executable');
+	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable');
 	for (const entry of inspection.imports)
 		if (typeof wasi.wasiImport[entry.name] !== 'function')
 			throw new Error(`Unsupported WASI Preview 1 function: ${entry.name}`);
@@ -78,7 +78,6 @@ export async function runGccWasiArtifact(
 		);
 		return 0;
 	};
-	const module = await WebAssembly.compile(Uint8Array.from(artifact.bytes));
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasi.wasiImport
 	});

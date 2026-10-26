@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createGccCompiler } from '../src/compiler.js';
 import { gccAssetPaths, parseCrossGccManifest, parseWasiGccManifest } from '../src/manifest.js';
 import { gccCompilePlan } from '../src/plan.js';
@@ -151,6 +151,71 @@ function artifact(bytes = echoFixture()): WasiGccArtifact {
 	};
 }
 
+function commandFixture(result: 'void' | 'i32', importedFunction = false) {
+	const body = result === 'void' ? [0, 0x0b] : [0, 0x41, 42, 0x0b];
+	return Uint8Array.from([
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		...section(1, [2, 0x60, 0, 0, 0x60, 0, 1, 0x7f]),
+		...(importedFunction
+			? section(2, [1, ...name('wasi_snapshot_preview1'), ...name('sched_yield'), 0, 1])
+			: []),
+		...section(3, [1, result === 'void' ? 0 : 1]),
+		...section(5, [1, 0, 1]),
+		...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, importedFunction ? 1 : 0]),
+		...section(10, [1, ...uleb(body.length), ...body])
+	]);
+}
+
+function instructionFixture(
+	instructions: number[],
+	options: {
+		types?: number[][];
+		locals?: number[];
+		globals?: number[];
+		dataSegments?: number[][];
+		start?: boolean;
+		closed?: boolean;
+	} = {}
+) {
+	const types = [[0x60, 0, 0], ...(options.types ?? [])];
+	const body = [
+		...(options.locals ?? [0]),
+		...instructions,
+		...(options.closed === false ? [] : [0x0b])
+	];
+	return Uint8Array.from([
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		...section(1, [...uleb(types.length), ...types.flat()]),
+		...section(3, [1, 0]),
+		...section(5, [1, 0, 1]),
+		...(options.globals ? section(6, options.globals) : []),
+		...section(7, [2, ...name('memory'), 2, 0, ...name('_start'), 0, 0]),
+		...(options.start ? section(8, [0]) : []),
+		...(options.dataSegments ? section(12, uleb(options.dataSegments.length)) : []),
+		...section(10, [1, ...uleb(body.length), ...body]),
+		...(options.dataSegments
+			? section(11, [
+					...uleb(options.dataSegments.length),
+					...options.dataSegments.flatMap((data) => [1, ...uleb(data.length), ...data])
+				])
+			: [])
+	]);
+}
+
 describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', () => {
 	it('requires a separate pinned output manifest and preserves source revisions', () => {
 		const source = manifestFixture(),
@@ -169,9 +234,38 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 			{ compiler: { ...source.compiler, commit: 'main' } },
 			{ linker: { ...source.linker, host: 'wasm32-emscripten' } },
 			{ runtimeLibraries: ['/sysroot/lib/../bad.a'] },
-			{ capabilities: { ...source.capabilities, simd: true } }
+			{ capabilities: { ...source.capabilities, simd: 'simd128' } }
 		])
 			expect(() => parseWasiGccManifest({ ...source, ...update })).toThrow();
+	});
+
+	it('opts into SIMD only with a capable bundle and a real engine feature probe', () => {
+		const legacy = parseWasiGccManifest(manifestFixture());
+		const source = manifestFixture();
+		source.capabilities.simd = true;
+		const capable = parseWasiGccManifest(source);
+		for (const language of ['c', 'cpp'] as const) {
+			const oldPlan = wasiGccCompilePlan({ code: '', language }, legacy);
+			expect(oldPlan.stages[0].argv).not.toContain('-mno-simd128');
+			expect(wasiGccCompilePlan({ code: '', language }, capable).stages[0].argv).toContain(
+				'-mno-simd128'
+			);
+			expect(
+				wasiGccCompilePlan({ code: '', language, simd: true }, capable).stages[0].argv
+			).toContain('-msimd128');
+		}
+		expect(() => wasiGccCompilePlan({ code: '', simd: true }, legacy)).toThrow(
+			'bundle does not support Wasm SIMD'
+		);
+		const validate = vi.spyOn(WebAssembly, 'validate').mockReturnValue(false);
+		try {
+			expect(() => wasiGccCompilePlan({ code: '', simd: true }, capable)).toThrow(
+				'engine does not support Wasm SIMD'
+			);
+			expect(validate).toHaveBeenCalledOnce();
+		} finally {
+			validate.mockRestore();
+		}
 	});
 
 	it('schedules actual GCC, relocatable WABT and wasm-ld with real -D options for each unit', () => {
@@ -320,6 +414,211 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 });
 
 describe('WASI runner and binary validation with hand-encoded Wasm fixtures', () => {
+	it('distinguishes SIMD instructions from FD bytes in integer, floating point and data immediates', async () => {
+		const bytes = instructionFixture(
+			[
+				0x41,
+				0xfd,
+				1,
+				0x1a, // i32.const 253
+				0x42,
+				0xfd,
+				1,
+				0x1a, // i64.const 253
+				0x43,
+				0xfd,
+				0,
+				0,
+				0,
+				0x1a,
+				0x44,
+				0xfd,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0,
+				0x1a
+			],
+			{ dataSegments: [[0xfd, 0x0c, ...Array<number>(16).fill(0)]] }
+		);
+		await expect(inspectGccWasm(bytes, 'executable')).resolves.toMatchObject({
+			features: { simd128: false }
+		});
+		const vector = instructionFixture([0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a]);
+		const inspected = await inspectGccWasm(vector, 'executable');
+		expect(inspected.features).toEqual({ simd128: true });
+		expect(Object.isFrozen(inspected.features)).toBe(true);
+	});
+
+	it('detects SIMD types, locals and globals without relying on opcode or target_features metadata', async () => {
+		for (const options of [
+			{ types: [[0x60, 1, 0x7b, 0]] },
+			{ locals: [1, 1, 0x7b] },
+			{ globals: [1, 0x7b, 0, 0xfd, 0x0c, ...Array<number>(16).fill(0), 0x0b] }
+		])
+			await expect(
+				inspectGccWasm(instructionFixture([], options), 'executable')
+			).resolves.toMatchObject({ features: { simd128: true } });
+	});
+
+	it('decodes signed block types and type indices containing FD without confusing them with instructions', async () => {
+		const scalar = instructionFixture(
+			[
+				0x02,
+				0x7f,
+				0x41,
+				1,
+				0x0b,
+				0x1a, // block (result i32)
+				0x02,
+				0xfd,
+				1,
+				0x0b // block (type 253)
+			],
+			{ types: Array.from({ length: 253 }, () => [0x60, 0, 0]) }
+		);
+		await expect(inspectGccWasm(scalar, 'executable')).resolves.toMatchObject({
+			features: { simd128: false }
+		});
+		const vector = instructionFixture([
+			0x02,
+			0x7b,
+			0xfd,
+			0x0c,
+			...Array<number>(16).fill(0),
+			0x0b,
+			0x1a
+		]);
+		await expect(inspectGccWasm(vector, 'executable')).resolves.toMatchObject({
+			features: { simd128: true }
+		});
+	});
+
+	it('skips bulk-memory indices and validates numeric instruction semantics in the engine', async () => {
+		const zeros = [0x41, 0, 0x41, 0, 0x41, 0];
+		const bytes = instructionFixture(
+			[
+				...zeros,
+				0xfc,
+				8,
+				0xfd,
+				1,
+				0, // memory.init 253 0
+				0xfc,
+				9,
+				0xfd,
+				1, // data.drop 253
+				...zeros,
+				0xfc,
+				10,
+				0,
+				0, // memory.copy
+				...zeros,
+				0xfc,
+				11,
+				0 // memory.fill
+			],
+			{ dataSegments: Array.from({ length: 254 }, () => [0xfd]) }
+		);
+		await expect(inspectGccWasm(bytes, 'executable')).resolves.toMatchObject({
+			features: { simd128: false }
+		});
+		await expect(
+			inspectGccWasm(instructionFixture([0x6a]), 'executable')
+		).rejects.toBeInstanceOf(WebAssembly.CompileError);
+	});
+
+	it.each([
+		{ code: [0xfd, 0x0c], error: 'Truncated GCC WebAssembly instruction immediate' },
+		{ code: [0xfd], error: 'Truncated GCC WebAssembly section' },
+		{ code: [0xfc], error: 'Truncated GCC WebAssembly section' },
+		{ code: [0xfd, ...uleb(0x9a)], error: 'Unsupported GCC WebAssembly opcode: 0xfd 9a' },
+		{ code: [0xfc, 18], error: 'Unsupported GCC WebAssembly opcode: 0xfc 12' },
+		{ code: [0xfd, ...uleb(0x100)], error: 'GCC WASI does not support relaxed SIMD' },
+		{ code: [0xfe, 0], error: 'GCC WASI does not support atomic instructions or threads' }
+	])('rejects malformed or unsupported instructions: $error ($code)', async ({ code, error }) => {
+		await expect(
+			inspectGccWasm(instructionFixture(code, { closed: false }), 'executable')
+		).rejects.toThrow(error);
+	});
+
+	it('rejects an implicit Wasm start section before instantiation', async () => {
+		await expect(
+			runGccWasiArtifact(artifact(instructionFixture([], { start: true })))
+		).rejects.toThrow('without a WebAssembly start section');
+	});
+
+	it('requires a void entry point and resolves its type after imported functions', async () => {
+		for (const importedFunction of [false, true]) {
+			await expect(
+				inspectGccWasm(commandFixture('i32', importedFunction), 'executable')
+			).rejects.toThrow('_start must have type () -> ()');
+			await expect(
+				inspectGccWasm(commandFixture('void', importedFunction), 'executable')
+			).resolves.toMatchObject({ memory: { initialPages: 1 } });
+		}
+	});
+
+	it('checks imported object memory flags as well as defined executable memory', async () => {
+		for (const flags of [3, 5]) {
+			const bytes = Uint8Array.from([
+				0,
+				97,
+				115,
+				109,
+				1,
+				0,
+				0,
+				0,
+				...section(2, [1, ...name('env'), ...name('memory'), 2, flags, 1, 1]),
+				...section(0, [...name('linking'), 2])
+			]);
+			await expect(inspectGccWasm(bytes, 'object')).rejects.toThrow(
+				'shared memory, threads or memory64'
+			);
+		}
+		const bytes = Uint8Array.from([
+			0,
+			97,
+			115,
+			109,
+			1,
+			0,
+			0,
+			0,
+			...section(2, [1, ...name('env'), ...name('memory'), 2, 1, 1, 2]),
+			...section(0, [...name('linking'), 2])
+		]);
+		await expect(inspectGccWasm(bytes, 'object')).resolves.toMatchObject({
+			memory: { initialPages: 1, maximumPages: 2, shared: false }
+		});
+	});
+
+	it('requires one current linking metadata section for relocatable objects', async () => {
+		for (const linking of [
+			section(0, [...name('linking'), 1]),
+			[...section(0, [...name('linking'), 2]), ...section(0, [...name('linking'), 2])]
+		])
+			await expect(
+				inspectGccWasm(Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0, ...linking]), 'object')
+			).rejects.toThrow('Unsupported GCC Wasm object linking metadata');
+	});
+
+	it('inspects and runs the original byte snapshot when the caller mutates its buffer', async () => {
+		const bytes = echoFixture();
+		const pending = runGccWasiArtifact(artifact(bytes), { stdin: 'snapshot' });
+		const exitInstruction = bytes.findIndex(
+			(byte, i) =>
+				byte === 0x41 && bytes[i + 1] === 7 && bytes[i + 2] === 0x10 && bytes[i + 3] === 2
+		);
+		expect(exitInstruction).toBeGreaterThan(0);
+		bytes[exitInstruction + 1] = 9;
+		await expect(pending).resolves.toMatchObject({ exitCode: 7, stdout: 'snapshot' });
+	});
+
 	it('executes actual Wasm stdin/stdout with Preview 1 proc_exit and reports the memory ABI', async () => {
 		const result = await runGccWasiArtifact(artifact(), { stdin: 'input 42 한글\n' });
 		expect(result).toMatchObject({

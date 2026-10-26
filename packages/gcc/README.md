@@ -78,13 +78,17 @@ Definitions with preprocessed `.i`/`.ii` input are rejected because GCC would no
 ordinary preprocessing to that input. Additional `sources` use the existing multi-unit
 contract below. The new output kinds are `wasm-object` and `wasm-executable`; assembly
 output is a `.wat` file. Each binary artifact includes inspected imports, exports,
-linking metadata, and memory limits.
+linking metadata, memory limits, and `wasm.features.simd128` detected from its actual
+instructions and value types. Custom metadata is not required for SIMD detection.
 
 The output uses wasm32, little endian, WASI Preview 1 with an exported memory and `_start`.
 Pointers and `long` are 32-bit, unlike the existing Linux x86-64 target. A Wasm object
 must have linking metadata; an executable may import only Preview 1 functions. The
 loader rejects ELF bytes, unexpected host imports, imported/shared memory, memory64,
-and executables missing their entry point. SHA-256 pins establish asset identity;
+implicit Wasm start sections, and executables whose `_start` is not `() -> ()`. Object
+memory imports are also checked for shared memory and memory64. The runner inspects
+a private byte snapshot and executes that exact compiled module, even if the caller
+later mutates the artifact's buffer. SHA-256 pins establish asset identity;
 compiler correctness still requires the producer's real native and Chromium tests.
 
 The experimental GCC port is not fully ABI-compatible with the LLVM-built WASI sysroot.
@@ -107,7 +111,7 @@ interfaces. Their use fails at compilation or linking; no fallback implementatio
 provided. Basic STL and iostream support must pass the producer's actual runtime
 qualification before a bundle advertises `libstdcxx`.
 
-Exceptions, RTTI, threads, dynamic linking and Wasm SIMD are unsupported by this SDK
+Exceptions, RTTI, threads, dynamic linking and relaxed SIMD are unsupported by this SDK
 contract. Requests enabling them fail explicitly. C++ uses `-fno-exceptions -fno-rtti`
 and `-fuse-cxa-atexit -fno-threadsafe-statics` to preserve static object destruction
 in this single-threaded environment.
@@ -118,6 +122,17 @@ storage and rejects `_REENTRANT`; it does not implement TLS or enable threads.
 Unsupported target pragmas/attributes are diagnosed by GCC with
 `-Werror=pragmas -Werror=attributes`, preserving the original source text. Existing x86
 pragmas, intrinsic headers, libm and libstdc++ behavior remain under the x86 bundle.
+
+Wasm SIMD requires both a producer bundle with `capabilities.simd: true` and an explicit
+`simd: true` compile request. The SDK probes real `v128` support in the current Wasm
+engine before passing `-msimd128` to GCC. A capable bundle defaults to `-mno-simd128`;
+legacy manifests with `simd: false` retain their original compiler arguments. An object
+or executable containing SIMD without the requested opt-in is rejected.
+The experimental backend profile targets GNU `__attribute__((vector_size(16)))` vectors
+with i8x16, i16x8, i32x4, i64x2, f32x4 and f64x2 lanes. This does not promise automatic
+vectorization, the full `wasm_simd128.h` intrinsic API, or Clang-compatible vector calling
+conventions. The producer's native and real browser tests determine which operations
+are qualified before it advertises this capability.
 
 `run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (four MiB by default, combined
 stdout/stderr), and returns the exit code, output, runtime and final linear-memory

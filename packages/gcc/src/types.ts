@@ -154,7 +154,8 @@ export interface WasiGccManifest {
 		rtti: false;
 		threads: false;
 		dynamicLinking: false;
-		simd: false;
+		/** True only for a producer bundle qualified with the GCC simd128 backend patch. */
+		simd: boolean;
 	}>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
 }
@@ -171,7 +172,8 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly rtti?: false;
 	readonly threads?: false;
 	readonly dynamicLinking?: false;
-	readonly simd?: false;
+	/** Opt in to the bundle's qualified baseline Wasm SIMD operations; never selects x86 AVX. */
+	readonly simd?: boolean;
 }
 
 export interface WasiGccIdentity extends Omit<CrossGccIdentity, 'target' | 'compilerVersion'> {
@@ -184,6 +186,8 @@ export interface GccWasmInspection {
 	readonly imports: readonly WebAssembly.ModuleImportDescriptor[];
 	readonly exports: readonly WebAssembly.ModuleExportDescriptor[];
 	readonly hasLinkingMetadata: boolean;
+	/** Detected from validated instructions and types, independently of optional custom metadata. */
+	readonly features: Readonly<{ simd128: boolean }>;
 	readonly memory?: Readonly<{ initialPages: number; maximumPages?: number; shared: false }>;
 }
 

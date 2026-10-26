@@ -5,7 +5,7 @@ import { gccDigest, parseCrossGccManifest, parseWasiGccManifest } from './manife
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
-import { inspectGccWasm } from './wasm-output.js';
+import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
 import { runWasiGccLinker } from './wasi-linker.js';
 import type {
@@ -189,18 +189,11 @@ export async function createGccCompiler(
 			const bytes = assets.get(`${tool}Wasm`)!;
 			if (bytes[0] !== 0 || bytes[1] !== 97 || bytes[2] !== 115 || bytes[3] !== 109)
 				throw new Error(`GCC ${tool} host asset is not WebAssembly`);
-			const wasm = await WebAssembly.compile(Uint8Array.from(bytes));
 			if (manifest.target === 'wasm32-wasi' && tool === 'ld') {
-				const imports = WebAssembly.Module.imports(wasm);
-				if (
-					imports.some(
-						(entry) =>
-							entry.module !== 'wasi_snapshot_preview1' || entry.kind !== 'function'
-					)
-				)
-					throw new Error('GCC wasm-ld host asset is not a WASI Preview 1 command');
+				const { module: wasm } = await compileGccWasm(bytes, 'executable');
 				factories.set(tool, { revoke() {}, wasm });
 			} else {
+				const wasm = await WebAssembly.compile(Uint8Array.from(bytes));
 				const loader = await loadGccModuleFactory(assets.get(`${tool}Js`)!);
 				factories.set(tool, { ...loader, wasm });
 			}
@@ -234,6 +227,18 @@ export async function createGccCompiler(
 			const workspace = new Map(plan.files.map((file) => [file.path, file.contents]));
 			const stages: CrossGccStageResult[] = [];
 			let wasmInspection: GccWasmInspection | undefined;
+			const simdEnabled =
+				manifest.target === 'wasm32-wasi' &&
+				manifest.capabilities.simd &&
+				(request as WasiGccCompileRequest).simd === true;
+			async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
+				const inspection = await inspectGccWasm(bytes, emit);
+				if (inspection.features.simd128 && !simdEnabled)
+					throw new Error(
+						'GCC produced Wasm SIMD without an enabled SIMD compilation request'
+					);
+				return inspection;
+			}
 			let stdout = '',
 				stderr = '',
 				diagnosticBytes = 0;
@@ -268,7 +273,7 @@ export async function createGccCompiler(
 						});
 						if (linked.exitCode !== 0)
 							return { exitCode: linked.exitCode, stdout, stderr, stages };
-						wasmInspection = await inspectGccWasm(linked.output!, 'executable');
+						wasmInspection = await inspectOutput(linked.output!, 'executable');
 						workspace.set(stage.output, linked.output!);
 						continue;
 					}
@@ -355,7 +360,7 @@ export async function createGccCompiler(
 					if (exitCode !== 0) return { exitCode, stdout, stderr, stages };
 					const output = Uint8Array.from(module.FS.readFile(stage.output));
 					if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
-						wasmInspection = await inspectGccWasm(output, 'object');
+						wasmInspection = await inspectOutput(output, 'object');
 					else
 						validateOutput(
 							output,
