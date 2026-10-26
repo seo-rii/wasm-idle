@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest';
+import { strToU8, zipSync } from 'fflate';
 import { createWorkspaceArchive, extractWorkspaceArchive } from './workspaceArchive.worker';
 import { serializeWorkspaceBackup } from './workspaceBackup';
 import { captureWorkspaceImportDestination } from './workspaceImportDestination';
@@ -38,6 +39,27 @@ describe('workspace import staging', () => {
 		await expect(importing).rejects.toThrow();
 		expect(commit).not.toHaveBeenCalled();
 	});
+
+	it.each(['CRC mismatch', 'truncated directory'])(
+		'never commits a partial selection when a readable ZIP has a %s',
+		async (damage) => {
+			const commit = vi.fn();
+			let zip = zipSync({ 'main.txt': strToU8('original') }, { level: 0 });
+			const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+			if (damage === 'CRC mismatch') {
+				zip[30 + view.getUint16(26, true) + view.getUint16(28, true)] ^= 1;
+			} else {
+				zip = zip.slice(0, view.getUint32(zip.length - 22 + 16, true));
+			}
+			const importing = stageWorkspaceImport(
+				[new File(['first'], 'first.txt'), new File([zip], 'broken.zip')],
+				{ extractZip, assertDestination: () => {} }
+			).then(commit);
+
+			await expect(importing).rejects.toThrow();
+			expect(commit).not.toHaveBeenCalled();
+		}
+	);
 
 	it('never commits preceding files when a later file read rejects', async () => {
 		const commit = vi.fn();
