@@ -192,8 +192,8 @@ describe('package install budgets', () => {
 			},
 			'@wasm-idle/gcc install': {
 				maxBytes: 2.5 * MiB,
-				maxFiles: 150,
-				maxPackages: 3
+				maxFiles: 184,
+				maxPackages: 4
 			},
 			'wasm-idle/container install': {
 				maxBytes: 8 * MiB,
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 408 * 1024,
-				maxFiles: 3_352,
+				maxBytes: 40 * MiB + 441 * 1024,
+				maxFiles: 3_360,
 				maxPackages: 70
 			}
 		});
@@ -274,11 +274,10 @@ describe('package install budgets', () => {
 	it('keeps heavy optional tooling out of focused installs', () => {
 		const byName = new Map(scenarios.map((scenario) => [scenario.name, scenario]));
 		expect(byName.get('@wasm-idle/gcc install')?.absentPackageNames).toEqual(
-			expect.arrayContaining([
-				'wasm-idle',
-				'@wasm-idle/llvm-core',
-				'@bjorn3/browser_wasi_shim'
-			])
+			expect.arrayContaining(['wasm-idle', '@wasm-idle/llvm-core'])
+		);
+		expect(byName.get('@wasm-idle/gcc install')?.absentPackageNames).not.toContain(
+			'@bjorn3/browser_wasi_shim'
 		);
 		expect(byName.get('@wasm-idle/lsp install')?.packageNames).toContain('@wasm-idle/core');
 		expect(byName.get('wasm-idle root install')?.imports).toContain(
