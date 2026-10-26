@@ -1,21 +1,131 @@
 # @wasm-idle/gcc
 
-`@wasm-idle/gcc` runs the producer's real GCC 13.3.0 `cc1`/`cc1plus` and GNU
-binutils `as`/`ld` as Emscripten WebAssembly modules. It returns Linux x86-64 assembly, ELF
-objects, or static ELF executables for download. The compiler host is
-`wasm32-emscripten`; the output target is `x86_64-linux-gnu`. No browser x86 executor is
-included and output ELF bytes never enter `WebAssembly.compile` or `instantiate`.
+`@wasm-idle/gcc` runs the producer's real GCC front ends and code-generation backends
+in a browser Worker. `createGccWorker({ target: 'x86_64-linux-gnu', ... })` uses the
+existing GCC 13.3.0/GNU binutils bundle; `target: 'wasm32-wasi'` selects a separately
+built experimental GCC 17 Wasm backend. The original `createCrossGccWorker` and
+`createCrossGccCompiler` APIs remain the GCC 13 x86 APIs.
+
+Both GCC compiler hosts are `wasm32-emscripten`. That host does not determine the
+output target: x86 produces assembly/ELF for download, while Wasm produces WAT,
+relocatable Wasm objects, or linked WASI Preview 1 executables. No browser x86 executor
+is included; ELF bytes never enter `WebAssembly.compile` or `instantiate`.
 
 This package contains only the MIT-licensed JavaScript/TypeScript host and depends on
-`@wasm-idle/core` for shared asset and archive helpers. It has no LLVM dependency. GCC,
+`@wasm-idle/core` for shared asset and archive helpers, and
+`@bjorn3/browser_wasi_shim` 0.4.2 for WASI execution. It has no LLVM compiler-package dependency. GCC,
 binutils, Emscripten modules and the GNU target sysroot are distributed separately by the
 producer, with their own source revisions, license notices and distribution obligations.
 The host package does not include those binaries or change their licenses.
 
 This API requires an independently built and qualified GCC bundle from `wasm-llvm`'s
-`producer/gcc-browser`. There is no implicit CDN, fallback compiler, or bundled binary.
+`producer/gcc-browser` for x86 or `producer/gcc-wasi` for Wasm output. There is no implicit
+CDN, fallback compiler, or bundled binary.
 An `unverified` producer manifest remains explicitly unverified; successfully loading
 that manifest does not establish that GCC can compile the acceptance suite.
+
+## Explicit WebAssembly output
+
+The Wasm bundle uses a separate v2 manifest (`kind: gcc-wasm32-wasi`) and a separate
+GCC source revision. It does not replace or upgrade the existing x86 compiler. The
+producer records exact GCC, patched WABT assembler, LLVM linker and wasi-libc source
+revisions. Each asset, including the WASI sysroot and linker, has a pinned size and
+SHA-256 digest. The consumer also requires an independently obtained manifest digest.
+
+```ts
+import { createGccWorker } from '@wasm-idle/gcc';
+
+const compiler = await createGccWorker({
+	target: 'wasm32-wasi',
+	manifestUrl: 'https://your-host/gcc-wasi/gcc-toolchain.v2.json',
+	manifestSha256: trustedBuildReceipt.manifestSha256
+});
+try {
+	const compiled = await compiler.compile({
+		language: 'c',
+		code: '#include <stdio.h>\nint main(void) { int n; if (scanf("%d", &n) != 1) return 1; printf("%d\\n", n + 1); }',
+		defines: ['ONLINE_JUDGE=1'],
+		emit: 'executable'
+	});
+	if (compiled.exitCode !== 0) throw new Error(compiled.stderr);
+	const executed = await compiler.run(compiled.artifact!, { stdin: '41\n' });
+	console.log(executed.stdout); // 42\n, when this producer bundle passes qualification
+} finally {
+	compiler.dispose();
+}
+```
+
+`createGccCompiler` provides the same explicit target selector for callers that own
+their Worker. `runGccWasiArtifact` can run a linked artifact independently without
+loading the compiler. Both low-level APIs run synchronous tool/guest instructions in
+their caller's thread. Use `createGccWorker` and its `AbortSignal` or `cancel()` to
+interrupt compilation or a nonterminating guest. Cancellation terminates that Worker.
+
+The Wasm pipeline is:
+
+1. GCC `cc1`/`cc1plus`, hosted by Emscripten, emits WAT directly from the original source.
+2. The producer's patched WABT `wat2wasm -r --enable-annotations` emits a relocatable
+   Wasm object. Stock WABT is not interchangeable with this pinned assembler.
+3. LLVM `wasm-ld`, itself hosted as a WASI Preview 1 command, links the object(s),
+   `crt1-command.o`, wasi-libc/libm, and the exact runtime archives listed in the manifest.
+   LLVM is used for linking; it never receives the user's C/C++ source.
+4. The linked module runs with WASI Preview 1 buffered stdin/stdout/stderr. EOF follows
+   `stdin`. The runner does not preopen the host filesystem or provide network access.
+
+Every translation unit gets a fresh GCC/assembler instance. `defines` are passed as
+actual `-DNAME`/`-DNAME=value` arguments to each front end; source text is not rewritten.
+Definitions with preprocessed `.i`/`.ii` input are rejected because GCC would not apply
+ordinary preprocessing to that input. Additional `sources` use the existing multi-unit
+contract below. The new output kinds are `wasm-object` and `wasm-executable`; assembly
+output is a `.wat` file. Each binary artifact includes inspected imports, exports,
+linking metadata, and memory limits.
+
+The output uses wasm32, little endian, WASI Preview 1 with an exported memory and `_start`.
+Pointers and `long` are 32-bit, unlike the existing Linux x86-64 target. A Wasm object
+must have linking metadata; an executable may import only Preview 1 functions. The
+loader rejects ELF bytes, unexpected host imports, imported/shared memory, memory64,
+and executables missing their entry point. SHA-256 pins establish asset identity;
+compiler correctness still requires the producer's real native and Chromium tests.
+
+The experimental GCC port is not fully ABI-compatible with the LLVM-built WASI sysroot.
+Its `long double` is 64-bit rather than WASI libc's 128-bit, and singleton-aggregate
+function signatures differ across the compilers. Calls crossing those ABI boundaries
+are unsupported. Linking uses `--fatal-warnings`, so signature mismatches fail instead
+of producing the trapping stubs that `wasm-ld` otherwise permits. This check does not
+establish compatibility for every data-layout boundary.
+
+The experimental bundle's `capabilities` records C++, libc, libm, libstdc++, and static
+initialization availability independently. A bundle without `cpp` rejects C++ requests.
+A bundle with `cpp` but without `libstdcxx` can compile core C++ constructs when they do
+not require unavailable library support; it does not promise STL or iostream. Global
+and function-local static construction/destruction depend on `staticInitialization`
+and can be supported independently of libstdc++. The manifest's `qualification.status`
+is not upgraded by the SDK.
+The GNU runtime recipe excludes the timezone database, C++26 debugger functions, and
+the prebuilt `std` modules. Their atomics/signals require unsupported backend/runtime
+interfaces. Their use fails at compilation or linking; no fallback implementations are
+provided. Basic STL and iostream support must pass the producer's actual runtime
+qualification before a bundle advertises `libstdcxx`.
+
+Exceptions, RTTI, threads, dynamic linking and Wasm SIMD are unsupported by this SDK
+contract. Requests enabling them fail explicitly. C++ uses `-fno-exceptions -fno-rtti`
+and `-fuse-cxa-atexit -fno-threadsafe-statics` to preserve static object destruction
+in this single-threaded environment.
+The compiler profile also defines `__GCC_WASI_SINGLE_THREAD__=1` for the producer's
+ported `errno` header. That header references the existing single-thread WASI libc
+storage and rejects `_REENTRANT`; it does not implement TLS or enable threads.
+`cpu` can only be `wasm32`; x86 `avx2`/`avx2-fma` profiles do not select Wasm SIMD.
+Unsupported target pragmas/attributes are diagnosed by GCC with
+`-Werror=pragmas -Werror=attributes`, preserving the original source text. Existing x86
+pragmas, intrinsic headers, libm and libstdc++ behavior remain under the x86 bundle.
+
+`run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (four MiB by default, combined
+stdout/stderr), and returns the exit code, output, runtime and final linear-memory
+capacity. File I/O requiring a preopened directory, threads and dynamic linking are not
+provided by this runner. Traps remain errors, and failed compilation never yields an
+artifact to execute.
+
+## Existing GCC 13 x86 API
 
 ```ts
 import { createCrossGccWorker } from '@wasm-idle/gcc';
@@ -79,6 +189,7 @@ global state. The JavaScript Worker orchestrates these stages without `fork` or 
 | `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default                                   |
 | `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                                       |
 | `sources`      | Up to 63 additional translation unit paths from `files`; executable output only                               |
+| `defines`      | Up to 256 object-like macro definitions, e.g. `ONLINE_JUDGE=1`, passed directly as GCC `-D` options           |
 
 ```ts
 const result = await compiler.compile({
@@ -138,7 +249,7 @@ Compilation has no result cache. Compiled Wasm modules are retained only in the 
 compiler instance, whose identity contains the manifest digest, GCC version, host, target
 and sysroot digest. A consumer adding its own result cache must also key source/files,
 the ordered additional `sources` list,
-language/standard, preprocessing, output kind, optimization and CPU profile. Failed
+language/standard, preprocessing, macro definitions, output kind, optimization and CPU profile. Failed
 compilations never return an artifact from an earlier request. The connected example
 removes the previous download at the start of every compile.
 
