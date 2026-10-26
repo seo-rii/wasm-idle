@@ -181,8 +181,9 @@ int main() {
 		<p id="status" role="status">Ready to load a verified GCC bundle.</p>
 		<pre id="diagnostics" aria-label="Compiler diagnostics" hidden></pre>
 		<p class="muted">
-			GCC pragmas and intrinsic headers are passed unchanged to GCC. PCH, plugins, LTO,
-			dynamic linking, multiple translation units, arbitrary driver flags, and
+			GCC pragmas and intrinsic headers are passed unchanged to GCC. The API supports multiple
+			translation units for executable output. PCH, plugins, LTO, dynamic linking, arbitrary
+			driver flags, and
 			<code>-march=native</code> are outside this API. See the
 			<a href="../../packages/gcc/README.md">@wasm-idle/gcc API documentation</a>.
 		</p>
