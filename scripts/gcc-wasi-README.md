@@ -1,0 +1,185 @@
+# GCC WebAssembly qualification
+
+The 2026-10-26 qualification passed all 17 actual Wasm-host GCC cases in
+Chromium Worker and independent Node WASI, including GNU STL and iostream at
+`-O0` and `-O2`. Host GCC references passed 17/17, Clang/WASI references passed
+16/16, unsupported diagnostics passed 7/7, and existing GCC 13.3 x86 regressions
+passed 20/20. The exact final manifest SHA-256 is
+`d1eb6cfde2ae54de253171b1bcbbc1abb75c605434fa74a23fd25fe02872443a`.
+Full source/asset/artifact identities and loading measurements are recorded in
+the companion wasm-llvm `docs/gcc-wasi-validation.md` and `.json`.
+The local full receipt is `out/gcc-wasi-final-worker-20261026/qualification.json`.
+These recorded results qualify an experimental profile; the limitations below
+and the package README still apply.
+
+These tools distinguish the compiler's **host** from its **output target**.
+`verify-gcc-wasi.mjs --manifest ...` loads real GCC into a Chromium Worker,
+checks its WebAssembly object, compiles each requested program, executes it in
+the SDK's WASI Worker, and independently executes the downloaded program with
+Node's WASI Preview 1 implementation. It does not fall back to Clang.
+
+Build `@wasm-idle/core` and `@wasm-idle/gcc` before browser compiler qualification:
+
+```sh
+node node_modules/typescript/bin/tsc -p packages/core/tsconfig.json
+node node_modules/typescript/bin/tsc -p packages/gcc/tsconfig.json
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --output out/gcc-wasi-browser
+```
+
+The script needs Chromium and the workspace's Vite/Playwright dependencies.
+`WASM_IDLE_CHROMIUM_EXECUTABLE` can select an installed Chromium executable.
+The test server uses an isolated loopback origin with no application credentials.
+Each compiler request has a ten-minute deadline; each program has a thirty-second
+deadline. A failed or missing case fails qualification. Use `--cases c-hello`
+for the first milestone; omitted cases remain explicitly untested in the report.
+Do not present a selected subset as full C/C++ qualification.
+Use `--save-intermediates` with a compiler manifest to preserve the main
+translation unit's GCC WAT and assembled object alongside the final program.
+These extra compilations help isolate GCC code generation from assembler/linker
+behavior when native and Wasm compiler hosts disagree.
+
+The shared fixture set covers integer/floating-point operations, control flow,
+calls/function pointers, globals, structures, allocation, libc I/O, dynamic-input
+libm, C/C++ translation units and headers, static initialization/destruction,
+libstdc++ iostreams, STL, and real
+`-D` arguments. The ABI fixture expects wasm32 pointers and `long` to occupy four
+bytes. The x86 reference expects eight bytes for those types. Source-level
+`__GNUC__`/`__clang__` checks supplement the producer's pinned source/build receipts;
+they do not replace build provenance.
+
+Compiler qualification records stage arguments, diagnostic text, output hashes,
+imports/exports, memory limits, Node output and Chromium output. It also rejects
+requests for exceptions, RTTI, threads, dynamic linking, Wasm SIMD, and an x86
+AVX2/FMA CPU profile, and checks that an x86 target pragma is diagnosed. An x86
+intrinsic or target pragma is not evidence of Wasm SIMD support.
+
+For native-produced GCC programs, provide the same fixtures' `.wasm` artifacts
+and a source/build receipt:
+
+```sh
+node scripts/verify-gcc-wasi.mjs \
+  --programs /path/to/native-output \
+  --provenance /path/to/native-output/receipt.json \
+  --cases c-hello,c-core,c-libm \
+  --output out/gcc-wasi-native
+```
+
+The native receipt has `target: "wasm32-wasi"`,
+`compiler: { "family": "gcc", "version": "...", "commit": "<40 hex digits>" }`,
+and `programs` keyed by fixture id. Each program receipt contains a relative
+`path`, `sha256`, and optional `bytes`. An optional nested `object` receipt binds
+its relocatable Wasm object, whose linking metadata is checked separately.
+Include compiler configure/build commands, source/patch identities, assembler,
+linker and sysroot versions in that receipt; all receipt fields are retained.
+This mode executes already-built programs and cannot establish that a browser
+compiler works.
+
+To repeat native qualification at another optimization level, or to check real
+GCC unsupported-feature diagnostics, reuse the producer's successful native
+receipt. The helper verifies the built GCC binary hashes, keeps all producer
+receipts intact, and uses a new output directory:
+
+```sh
+node scripts/gcc-wasi-native-checks.mjs \
+  --provenance /path/to/native-programs/provenance.json \
+  --build-receipt /path/to/work/native-build.json \
+  --optimization 2 \
+  --cases c-hello,c-core,c-libm,c-multiple,c-defines,c-wasm32-abi,cpp-core,cpp-static-lifecycle \
+  --output out/gcc-wasi-native-o2
+node scripts/gcc-wasi-native-checks.mjs \
+  --provenance /path/to/native-programs/provenance.json \
+  --build-receipt /path/to/work/native-build.json \
+  --mode diagnostics --output out/gcc-wasi-native-diagnostics
+```
+
+Native program mode checks relocatable objects, linked program format, and Node
+WASI output. Pass its output and `provenance.json` to `verify-gcc-wasi.mjs` for
+Chromium execution as well. The helper inherits native sysroot/linker arguments
+from the baseline receipt, so a baseline without libstdc++ cannot qualify STL.
+It applies the SDK's C++ `-fuse-cxa-atexit -fno-threadsafe-statics` configuration
+and linker `--fatal-warnings` so a mismatched runtime ABI fails the check. It
+also passes `-D__GCC_WASI_SINGLE_THREAD__=1`, matching the SDK's explicit
+single-thread WASI libc header configuration. `c-errno` verifies that compiled
+code reads the same `errno` storage that libc updates on `strtol` overflow;
+the expected output compares with `ERANGE` instead of assuming its ABI-specific
+numeric value.
+`cpp-static-lifecycle` verifies global construction before `main`, one-time
+function-local static construction, and local/global destruction in reverse
+order at program exit. No source-level destructor workaround is used.
+`cpp-typedef-void-o0` and `cpp-typedef-void-o2` cover direct and indirect calls to
+functions returning a typedef of `void`, including an explicit `return;`. These
+exercise the backend's return-label fix at both browser compilation optimization
+levels. The native helper's `--optimization` deliberately overrides each selected
+fixture's optimization, so run it once per optimization when checking that fix.
+`c-wide-integers-o0` and `c-wide-integers-o2` verify signed and unsigned constants
+larger than 32 bits, arithmetic, division, and libc's 64-bit varargs ABI. They
+exercise host-width-safe WAT formatting in both GCC compilation configurations.
+GNU iostream and multiple-source STL fixtures also run at both `-O0` and `-O2`,
+the SDK's default optimization level. The compiler harness checks every frontend
+invocation's actual optimization argument, alongside its output.
+
+`initialAssets` measures every manifest execution payload plus the manifest,
+both uncompressed and at gzip level 9. The server actually delivers bundle files
+with gzip. It also records SDK module bytes and the actual complete initial
+response payload. `network` counts server response writes and retains Chromium's
+body/header measurements separately: Chromium sometimes reports zero bytes for
+a Worker entry script. Every manifest asset must appear in the server transfer
+log. The isolated Vite server serves SDK modules without compression; the report
+states that delivery configuration explicitly. Source/license receipts are
+provenance material, not initial compiler execution downloads.
+
+Reference and test-host validation are deliberately separate:
+
+```sh
+node --test scripts/gcc-wasi-artifact.test.mjs
+WASM_IDLE_RUN_GCC_WASI_WORKER_CONTRACT=1 \
+  node --test scripts/gcc-wasi-worker-contract.browser.test.mjs
+node scripts/verify-gcc-wasi-references.mjs \
+  /path/to/wasi-sdk/bin/clang out/gcc-wasi-references
+node scripts/verify-gcc-wasi.mjs \
+  --programs out/gcc-wasi-references \
+  --provenance out/gcc-wasi-references/clang-reference-provenance.json \
+  --reference-clang \
+  --cases c-hello,c-core,c-libm,c-multiple,c-wasm32-abi,cpp-core,cpp-stl-multiple \
+  --output out/gcc-wasi-clang-reference-browser
+```
+
+The unit tests use synthetic Wasm only to test format validation and the Node
+host. The reference script validates fixture semantics with host GCC and Clang
+WASI, records the compiler identities, and excludes the intentionally GCC-only
+macro case from Clang comparison. Neither result establishes GCC Wasm output.
+An optional final comma-separated case list selects a focused reference check.
+The synthetic Worker test deliberately prevents source compilation. It verifies
+repeated execution with fresh state, recovery after a trap, already-aborted
+requests, concurrent-request rejection, and termination of an unbounded guest.
+
+The standalone linker host check uses Clang objects to isolate the real WASI
+`wasm-ld` filesystem adapter, archive loading, libc/libm and multiple objects:
+
+```sh
+node scripts/verify-gcc-wasi-linker.mjs \
+  /path/to/ld.wasm /path/to/wasi-sdk-33 out/gcc-wasi-linker-host
+```
+
+That report explicitly identifies the Clang reference inputs and cannot qualify
+GCC code generation. GCC-produced objects are checked by the native/compiler
+qualification paths above.
+
+Preserve the existing GCC 13.3 x86 behavior with the producer's real suite and
+three additional libc/libm and C/C++ multiple-source cases:
+
+```sh
+node scripts/gcc-wasi-x86-regression-suite.mjs \
+  ../wasm-llvm/producer/gcc-browser/qualification out/gcc-x86-suite
+node scripts/verify-x86-cross-gcc.mjs \
+  /path/to/existing-gcc-x86/gcc-toolchain.v1.json \
+  out/gcc-x86-suite out/gcc-x86-regression
+```
+
+All output directories must be new. Keep compiler sources and built SDK modules
+fixed while qualification runs. Reports retain the exact fixture and manifest
+identities, SDK/runtime JavaScript hashes, and distinguish partial, failed,
+unsupported and successful work. Input hashes are rechecked before success is
+reported, so rebuilding the SDK during qualification invalidates that run.
