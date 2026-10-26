@@ -393,6 +393,7 @@
 		error: null
 	});
 	let currentWorkspaceStorageKey = $state(initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY);
+	let editorWorkspaceRevision = $state(0);
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
 		(state) => {
@@ -703,6 +704,7 @@
 	const activeDebugSourcePath = $derived(
 		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
 	);
+	const editorFilePaths = $derived(files.map((file) => file.path));
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
@@ -1761,6 +1763,7 @@
 				value?.version
 			);
 		}
+		editorWorkspaceRevision += 1;
 		languageWorkspaces = nextWorkspaces;
 		language = nextLanguage;
 		activateWorkspace(nextWorkspaces[nextLanguage]);
@@ -2087,6 +2090,7 @@
 		if (runningMode) return;
 		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
 		const nextWorkspace = createDefaultWorkspace(language);
+		editorWorkspaceRevision += 1;
 		languageWorkspaces = {
 			...languageWorkspaces,
 			[language]: cloneWorkspace(nextWorkspace)
@@ -4904,11 +4908,12 @@
 					{/each}
 				</nav>
 				<div class="editor-surface">
-					{#key `${language}:${activePath}`}
+					{#key `${currentWorkspaceStorageKey}:${language}:${editorWorkspaceRevision}`}
 						<Monaco
 							language={editorLanguage}
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath}
+							workspacePaths={editorFilePaths}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}
 							bind:editor
