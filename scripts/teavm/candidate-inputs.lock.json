@@ -60,7 +60,8 @@
 			"Rebase deterministic TypeSet and TagRegistry on TeaVM 0.16.0",
 			"Use the 0.16.0 reflection and ServiceLoader body-intrinsic APIs",
 			"Remove obsolete enum/annotation listeners and numeric supplements now supplied upstream",
-			"Support the now-final TString when injecting String supplements"
+			"Support the now-final TString when injecting String supplements",
+			"Close inline debug scopes at every generated Wasm function boundary to retain source stack traces"
 		],
 		"runtimeOverlay": {
 			"classlibSourceJarSha256": "da6f83c1436c87a9ad683b6143aaa9c172b08c3974c9a7d5741a479d0d60092e",
@@ -117,13 +118,42 @@
 			"Independent byte-reproducibility comparison",
 			"Browser Java stdin/stdout, formatting, reflection, annotation, clone, and ServiceLoader regressions",
 			"Review observed dependency checksums and output receipts before publishing"
-		]
+		],
+		"compilerOverrides": {
+			"version": "0.16.0",
+			"sourceJar": {
+				"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.16.0/teavm-core-0.16.0-sources.jar",
+				"bytes": 1670879,
+				"sha256": "687cabf23e0d17a15be30fbc070809c2931714340aca224120fe31579f95519b"
+			},
+			"sources": [
+				{
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"upstreamSha256": "a15d251d9fc1bd7e2a9668677c3e45e6604d4072d2c631408d0c4b2f0fb60b46",
+					"bytes": 25905,
+					"sha256": "52c766f5027cc9b96c7bdd8138d1b81a313061dde369c6bd9dd0e692a2dbeb25"
+				},
+				{
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"upstreamSha256": "3ca9b19463d6013216d0b41f2d7a59cf3f91629c2abf77b66c8835cee9dd3d62",
+					"bytes": 43454,
+					"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
+				}
+			]
+		}
 	},
 	"sourcePatches": [
 		{
 			"path": "patches/teavm-javac-0.16.0-compat.patch",
 			"bytes": 187792,
 			"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
+		},
+		{
+			"path": "patches/teavm-javac-0.16.0-debug-scopes.patch",
+			"bytes": 71924,
+			"sha256": "275d03e912c1cfa4754af0e1a026726b7d6289150f0d85fb6db5e2b7e2c5ad0a"
 		}
 	]
 }
