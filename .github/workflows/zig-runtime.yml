@@ -12,6 +12,7 @@ on:
             - src/lib/playground/*Zig*
             - src/lib/playground/worker/zig*
             - src/routes/editor-defaults.ts
+            - src/lib/test-fixtures/zig-stdin.zig
             - packages/lsp/src/zig/**
     push:
         branches: [main]
@@ -24,6 +25,7 @@ on:
             - src/lib/playground/*Zig*
             - src/lib/playground/worker/zig*
             - src/routes/editor-defaults.ts
+            - src/lib/test-fixtures/zig-stdin.zig
             - packages/lsp/src/zig/**
     workflow_dispatch:
 

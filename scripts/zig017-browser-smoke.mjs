@@ -144,7 +144,11 @@ try {
 	page.on('pageerror', (error) => browserMessages.push(`pageerror: ${error.message}`));
 	// This is an isolated loopback fixture server with no protected origin or WAF.
 	await page.goto(origin);
-	const result = await page.evaluate(async () => {
+	const sharedStdinSource = await readFile(
+		path.join(root, 'src/lib/test-fixtures/zig-stdin.zig'),
+		'utf8'
+	);
+	const result = await page.evaluate(async (sharedStdinSource) => {
 		const [{ default: createZigBinding }, { editorDefaults }] = await Promise.all([
 			import('/client.js'),
 			import('/starters.js')
@@ -174,6 +178,8 @@ try {
 			await runtime.load();
 			const loadDurationMs = Math.round(performance.now() - loadStarted);
 			await execute(editorDefaults.zig, { stdin: '6\n' });
+			// The global page/terminal stdin suite imports this exact fixture too.
+			await execute(sharedStdinSource, {}, '68\n');
 			const code = String.raw`const std = @import("std");
 const arithmetic = @import("nested/arithmetic.zig");
 pub fn main(init: std.process.Init) !void {
@@ -215,9 +221,10 @@ pub fn main(init: std.process.Init) !void {
 		} finally {
 			await runtime.dispose();
 		}
-	});
+	}, sharedStdinSource);
 	assert.deepEqual(result.outputs, [
 		'fibonacci=16\n',
+		'main=73\n',
 		'quotient=6148914691236517205;sum=42\n',
 		'quotient=7;sum=42\n',
 		'fibonacci=11\n'
@@ -232,6 +239,7 @@ pub fn main(init: std.process.Init) !void {
 				fingerprint: receipt.fingerprint,
 				checks: [
 					'editor starter',
+					'shared page/terminal stdin fixture',
 					'explicit stdin/stdout',
 					'nested import',
 					'u128 compiler_rt',
