@@ -49,6 +49,7 @@ import {
 	resolveBuildArtifactNames
 } from './workspace.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
+import { resolveWasmMemoryLimit } from './memory-limit.js';
 import {
 	PRECOMPILED_HEADER_PATH,
 	STDCPP_HEADER_PATH,
@@ -69,6 +70,7 @@ export {
 const defaultClangResourceDir = '/lib/clang/8.0.1';
 const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
+const bitcodeCompilations = new WeakSet<object>();
 const printscanLongDoublePath = 'lib/wasm32-wasi/libc-printscan-long-double.a';
 const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
@@ -1658,6 +1660,89 @@ class Clang {
 				return null;
 			}
 			throw error;
+		}
+	}
+
+	/** Lower frontend-owned LLVM bitcode and link its WASI entry point without a C CRT. */
+	async compileBitcodeArtifact(
+		bitcode: Uint8Array | readonly Uint8Array[],
+		options: { maxWasmMemoryBytes?: number } = {}
+	): Promise<Uint8Array> {
+		if (bitcodeCompilations.has(this)) {
+			throw new Error(
+				'Concurrent LLVM bitcode compilation on one Clang runtime is unsupported'
+			);
+		}
+		bitcodeCompilations.add(this);
+		try {
+			const inputs = bitcode instanceof Uint8Array ? [bitcode] : [...bitcode];
+			if (
+				!inputs.length ||
+				inputs.some((input) => !(input instanceof Uint8Array) || !input.byteLength)
+			) {
+				throw new TypeError('At least one nonempty LLVM bitcode module is required');
+			}
+			const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
+			await this.ready;
+			const clang = await this.getModule(this.assetUrls.clang);
+			const directory = `${internalBuildRoot}/bitcode`;
+			this.memfs.addDirectory(internalBuildRoot);
+			this.memfs.addDirectory(directory);
+			const objects: string[] = [];
+			for (const [index, input] of inputs.entries()) {
+				const source = `${directory}/${index}.bc`;
+				const object = `${directory}/${index}.o`;
+				this.memfs.addFile(source, new Uint8Array(input));
+				// Clear previous outputs before every stage so a failed command cannot publish stale bytes.
+				this.memfs.addFile(object, new Uint8Array());
+				await this.run(
+					clang,
+					this.log,
+					'clang',
+					'-cc1',
+					'-triple',
+					'wasm32-unknown-wasip1',
+					'-emit-obj',
+					'-x',
+					'ir',
+					'-O0',
+					source,
+					'-o',
+					object
+				);
+				if (!this.memfs.getFileContents(object).byteLength) {
+					throw new Error('Clang did not emit an object from LLVM bitcode');
+				}
+				objects.push(object);
+			}
+			const output = `${directory}/output.wasm`;
+			this.memfs.addFile(output, new Uint8Array());
+			const lld = await this.getModule(this.assetUrls.lld);
+			const runtimeLibDir =
+				this.compilerConfig?.compilerRuntimeLibDir || defaultCompilerRuntimeLibDir;
+			await this.run(
+				lld,
+				this.log,
+				'wasm-ld',
+				'--export-dynamic',
+				'-z',
+				'stack-size=1048576',
+				...objects,
+				'-Llib/wasm32-wasi',
+				'-lc',
+				'-lm',
+				`-L${runtimeLibDir}`,
+				'-lclang_rt.builtins-wasm32',
+				...(memoryLimit === undefined ? [] : [`--max-memory=${memoryLimit}`]),
+				'-o',
+				output
+			);
+			const bytes = Uint8Array.from(this.memfs.getFileContents(output));
+			if (!bytes.byteLength)
+				throw new Error('LLD did not emit a WASI module from LLVM bitcode');
+			return bytes;
+		} finally {
+			bitcodeCompilations.delete(this);
 		}
 	}
 
