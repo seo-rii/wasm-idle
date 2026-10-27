@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
 
+interface FixtureNode {
+	mode: number;
+	node_ops: {
+		readdir(node: FixtureNode): string[];
+		lookup(node: FixtureNode, name: string): FixtureNode;
+		getattr(node: FixtureNode): { size: number };
+	};
+	stream_ops: {
+		read(stream: object, bytes: Uint8Array, offset: number, length: number, at: number): number;
+	};
+}
+
 const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
 	mode: '',
@@ -42,6 +54,33 @@ vi.mock('../src/module-loader.js', () => ({
 					readFile(path: string) {
 						if (!files.has(path)) throw new Error('fixture output missing');
 						return files.get(path)!;
+					},
+					ErrnoError: class {
+						constructor(readonly errno: number) {}
+					},
+					createNode: (_parent: unknown, name: string, mode: number) => ({ name, mode }),
+					// Record mounted files by reading them through the mount's own operations.
+					mount(type: { mount(mount: object): FixtureNode }, _: object, path: string) {
+						const visit = (node: FixtureNode, directory: string) => {
+							for (const name of node.node_ops.readdir(node).slice(2)) {
+								const child = node.node_ops.lookup(node, name);
+								if (child.mode & 0o40000) visit(child, `${directory}/${name}`);
+								else {
+									const bytes = new Uint8Array(
+										child.node_ops.getattr(child).size
+									);
+									child.stream_ops.read(
+										{ node: child },
+										bytes,
+										0,
+										bytes.length,
+										0
+									);
+									files.set(`${directory}/${name}`, bytes);
+								}
+							}
+						};
+						visit(type.mount({}), path);
 					}
 				},
 				callMain(argv: string[]) {

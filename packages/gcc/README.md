@@ -68,8 +68,10 @@ The front ends use `-nostdinc` plus explicit GNU C, C++, GCC internal and glibc 
 directories from the pinned sysroot. C++ also gets the GNU driver's `_GNU_SOURCE` define
 and exception support. GCC emits assembly, GNU `as --64` emits an ELF object, and GNU
 `ld -static` receives the GNU CRT, libstdc++ (C++), libm (C and C++), libgcc, libgcc_eh and
-glibc in their required order. Each stage uses a fresh module and MEMFS to reset GCC
-global state. The JavaScript Worker orchestrates these stages without `fork` or `exec`.
+glibc in their required order. Each stage uses a fresh module and MEMFS workspace to reset
+GCC global state. The verified sysroot is extracted once and mounted read-only at `/sysroot`
+in every stage instead of being copied into each MEMFS; a tool only touches the files it
+looks up. The JavaScript Worker orchestrates these stages without `fork` or `exec`.
 
 | Request field  | Supported values                                                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------- |

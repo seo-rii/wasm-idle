@@ -47,7 +47,10 @@ export default async function(options) {
     FS: {
       mkdirTree() {}, chdir() {},
       writeFile(path, bytes) { files.set(path, Uint8Array.from(bytes)); },
-      readFile(path) { if (!files.has(path)) throw Error('Synthetic missing output'); return files.get(path); }
+      readFile(path) { if (!files.has(path)) throw Error('Synthetic missing output'); return files.get(path); },
+      mount(type) { type.mount({}); },
+      createNode(parent, name, mode) { return { name, mode }; },
+      ErrnoError: class { constructor(errno) { this.errno = errno; } }
     },
     callMain(argv) {
       const input = ${JSON.stringify(tool)}.startsWith('cc1') ? files.get(argv[argv.indexOf('-o') - 1]) : undefined;
