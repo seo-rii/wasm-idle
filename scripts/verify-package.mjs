@@ -248,7 +248,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// Zig's LLVM debug Worker/adapter bring the measured aggregate to
 		// 42,388,306 bytes and 3,358 files; keep the package-count cap unchanged.
-		budget: { maxBytes: 40 * MiB + 440 * 1024, maxFiles: 3_358, maxPackages: 70 },
+		// GCC's read-only sysroot mount adds 5,578 bytes and two files (42,397,771 measured).
+		budget: { maxBytes: 40 * MiB + 448 * 1024, maxFiles: 3_360, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
