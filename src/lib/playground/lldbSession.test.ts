@@ -661,6 +661,115 @@ describe('LldbSandboxSession', () => {
 		);
 	});
 
+	describe('WASI proc_exit unwinding', () => {
+		async function startWasiExitSession() {
+			const events: DebugSessionEvent[] = [];
+			loadManifest.mockResolvedValue({ manifestVersion: 2, debugger: { capabilities: {} } });
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: false,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			return { controller, completion, runtime: runtimeState.session!, events };
+		}
+
+		it.each([0, 23])(
+			'resumes the exact exit sentinel and waits for authoritative exit code %i',
+			async (exitCode) => {
+				const { completion, runtime, events } = await startWasiExitSession();
+				let settled = false;
+				void completion.then(
+					() => {
+						settled = true;
+					},
+					() => {
+						settled = true;
+					}
+				);
+				runtime.emit({
+					event: 'stopped',
+					body: {
+						reason: 'exception',
+						description: 'Exception: wasi proc exit',
+						threadId: 17
+					}
+				});
+				await vi.waitFor(() =>
+					expect(runtime.requests).toContainEqual({
+						command: 'continue',
+						args: { threadId: 17 }
+					})
+				);
+				expect(
+					runtime.requests.some(
+						({ command }) => command === 'stackTrace' || command === 'scopes'
+					)
+				).toBe(false);
+				expect(events.some((event) => event.type === 'pause')).toBe(false);
+				expect(settled).toBe(false);
+				// A DAP exit notification alone must not synthesize successful completion.
+				runtime.emit({ event: 'exited', body: { exitCode: 0 } });
+				await Promise.resolve();
+				expect(settled).toBe(false);
+				runtime.emitLifecycle({ type: 'target-exit', exitCode });
+				if (exitCode === 0) await expect(completion).resolves.toBe(true);
+				else await expect(completion).rejects.toThrow('Debug target exited with code 23.');
+			}
+		);
+
+		it.each([
+			{ reason: 'exception', description: 'Exception: unreachable' },
+			{ reason: 'exception', description: 'Exception: wasi proc exit with additional text' },
+			{ reason: 'breakpoint', description: 'Exception: wasi proc exit' }
+		])('preserves an actual trap or nonmatching stop: $reason $description', async (body) => {
+			const { controller, completion, runtime, events } = await startWasiExitSession();
+			runtime.emit({ event: 'stopped', body: { ...body, threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', stoppedReason: body.reason })
+				)
+			);
+			expect(runtime.requests.some(({ command }) => command === 'continue')).toBe(false);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('does not repeatedly resume a duplicate exit sentinel', async () => {
+			const { controller, completion, runtime, events } = await startWasiExitSession();
+			const stop = {
+				event: 'stopped',
+				body: { reason: 'exception', description: 'Exception: wasi proc exit', threadId: 7 }
+			};
+			runtime.emit(stop);
+			await vi.waitFor(() =>
+				expect(
+					runtime.requests.filter(({ command }) => command === 'continue')
+				).toHaveLength(1)
+			);
+			runtime.emit(stop);
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', stoppedReason: 'exception' })
+				)
+			);
+			expect(runtime.requests.filter(({ command }) => command === 'continue')).toHaveLength(
+				1
+			);
+			await controller.disconnect();
+			await completion;
+		});
+	});
+
 	describe('output routing', () => {
 		async function startOutputSession(onDebugEvent?: (event: DebugSessionEvent) => void) {
 			const events: DebugSessionEvent[] = [];

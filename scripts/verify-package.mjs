@@ -53,7 +53,8 @@ export const scenarios = [
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
 		// Main includes Ruby preview, Python compiler and the cross compiler in 751 files.
 		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
-		budget: { maxBytes: 7 * MiB, maxFiles: 757, maxPackages: 6 },
+		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
+		budget: { maxBytes: 7 * MiB, maxFiles: 759, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -266,10 +267,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
 		// Preserve Java/SIMD headroom and allow 24 KiB for main's 23,009-byte
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
-		// GCC WASI adds eight files; this aggregate already installs the WASI shim.
-		// Its baseline ABI/SIMD changes retain the existing 48 KiB allowance.
-		// Preserve main's separate 8 KiB increase for Zig 0.17 host/library receipts.
-		budget: { maxBytes: 40 * MiB + 464 * 1024, maxFiles: 3_360, maxPackages: 70 },
+		// GCC WASI retains its existing 48 KiB / eight-file allowance.
+		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
+		budget: { maxBytes: 40 * MiB + 488 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

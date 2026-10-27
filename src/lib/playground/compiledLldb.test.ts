@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SandboxExecutionOptions } from './options';
+import type { DebugSessionEvent, SandboxExecutionOptions } from './options';
 import type { LldbSandboxSessionOptions } from './lldbSession';
 
 const { sessions } = vi.hoisted(() => ({ sessions: [] as any[] }));
@@ -17,7 +17,14 @@ vi.mock('$lib/playground/lldbSession', () => ({
 		}
 		finish() {
 			this.resolveStart?.(true);
+			try {
+				this.options.onDebugEvent({ type: 'stop' });
+			} catch {
+				// LLDB teardown also isolates consumer stop callbacks.
+			}
 		}
+		disconnect = vi.fn(async () => this.finish());
+		debugCommand = vi.fn();
 		setBreakpoints = vi.fn(async () => undefined);
 		setSourceBreakpoints = vi.fn(async () => undefined);
 		setSteppingOptions = vi.fn(async () => undefined);
@@ -43,6 +50,9 @@ class Fixture extends CompiledLldbSandbox {
 			[],
 			false
 		);
+	}
+	stop() {
+		return this.stopLldb();
 	}
 }
 
@@ -141,5 +151,114 @@ describe('compiled LLDB wrapper', () => {
 			'LLDB session'
 		);
 		await expect(sandbox.debugEvaluateValue('n')).rejects.toThrow('LLDB is not running');
+	});
+
+	it('publishes one stop immediately while explicit disconnect is still pending', async () => {
+		const sandbox = new Fixture();
+		const events: DebugSessionEvent[] = [];
+		sandbox.ondebug = (event) => events.push(event);
+		sandbox.prepare({});
+		const run = sandbox.start({});
+		const session = sessions[0];
+		let finishDisposal!: () => void;
+		session.disconnect.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishDisposal = () => {
+						session.finish();
+						resolve();
+					};
+				})
+		);
+
+		const stopping = sandbox.stop();
+		expect(events).toEqual([{ type: 'stop' }]);
+		expect(sandbox.stop()).toBeUndefined();
+		expect(session.disconnect).toHaveBeenCalledOnce();
+		session.options.onDebugEvent({ type: 'resume', command: 'continue' });
+		session.options.onDebugEvent({ type: 'stop' });
+		expect(events).toEqual([{ type: 'stop' }]);
+		finishDisposal();
+		await stopping;
+		await run;
+		expect(events).toEqual([{ type: 'stop' }]);
+	});
+
+	it('publishes a natural stop once and ignores completed session events', async () => {
+		const sandbox = new Fixture();
+		const events: DebugSessionEvent[] = [];
+		sandbox.ondebug = (event) => events.push(event);
+		sandbox.prepare({});
+		const run = sandbox.start({});
+		const session = sessions[0];
+		session.finish();
+		session.options.onDebugEvent({ type: 'stop' });
+		session.options.onDebugEvent({ type: 'resume', command: 'continue' });
+		await run;
+		expect(sandbox.stop()).toBeUndefined();
+		expect(session.disconnect).not.toHaveBeenCalled();
+		expect(events).toEqual([{ type: 'stop' }]);
+	});
+
+	it('does not deliver an old session stop or clear its replacement during delayed disposal', async () => {
+		const sandbox = new Fixture();
+		const events: DebugSessionEvent[] = [];
+		sandbox.ondebug = (event) => events.push(event);
+		sandbox.prepare({});
+		const firstRun = sandbox.start({});
+		const firstSession = sessions[0];
+		let finishDisposal!: () => void;
+		firstSession.disconnect.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishDisposal = resolve;
+				})
+		);
+		const stopping = sandbox.stop();
+		sandbox.prepare({});
+		const secondRun = sandbox.start({});
+		const secondSession = sessions[1];
+		firstSession.options.onDebugEvent({ type: 'resume', command: 'continue' });
+		firstSession.finish();
+		finishDisposal();
+		await stopping;
+		await firstRun;
+		secondSession.options.onDebugEvent({ type: 'resume', command: 'continue' });
+		sandbox.debugCommand('nextLine');
+		expect(secondSession.debugCommand).toHaveBeenCalledWith('nextLine');
+		expect(events).toEqual([{ type: 'stop' }, { type: 'resume', command: 'continue' }]);
+		secondSession.finish();
+		await secondRun;
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
+	});
+
+	it('finishes disconnect when a stop listener reenters, starts a replacement, and throws', async () => {
+		const sandbox = new Fixture();
+		const events: DebugSessionEvent[] = [];
+		let secondRun: Promise<true> | undefined;
+		sandbox.ondebug = (event) => {
+			events.push(event);
+			if (event.type === 'stop' && !secondRun) {
+				expect(sandbox.stop()).toBeUndefined();
+				sandbox.prepare({});
+				secondRun = sandbox.start({});
+				throw new Error('stop listener failed');
+			}
+		};
+		sandbox.prepare({});
+		const firstRun = sandbox.start({});
+		const firstSession = sessions[0];
+		await expect(sandbox.stop()).resolves.toBeUndefined();
+		await firstRun;
+		expect(firstSession.disconnect).toHaveBeenCalledOnce();
+		expect(secondRun).toBeDefined();
+		const secondSession = sessions[1];
+		firstSession.options.onDebugEvent({ type: 'stop' });
+		sandbox.debugCommand('nextLine');
+		expect(secondSession.debugCommand).toHaveBeenCalledWith('nextLine');
+		expect(events).toEqual([{ type: 'stop' }]);
+		secondSession.finish();
+		await secondRun;
+		expect(events).toEqual([{ type: 'stop' }, { type: 'stop' }]);
 	});
 });
