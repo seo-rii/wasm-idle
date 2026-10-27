@@ -161,6 +161,60 @@ export async function buildTeaVmCandidate(prepared, jdkArchivePath) {
 		sourceDir,
 		env
 	);
+	return packageTeaVmCandidate(prepared, env.GRADLE_RO_DEP_CACHE);
+}
+
+/** Package completed build outputs, including the deobfuscator omitted by TeaVM 0.16's dist ZIP. */
+export async function packageTeaVmCandidate(prepared, readOnlyDependencyCache) {
+	const { target, sourceDir, lock } = prepared;
+	const deobfuscator = lock.deobfuscator;
+	const jarName = `teavm-wasm-gc-deobfuscator-${lock.teavmVersion}.jar`;
+	if (
+		deobfuscator?.artifact?.name !== jarName ||
+		deobfuscator?.resource?.path !== 'org/teavm/backend/wasm/deobfuscator.wasm'
+	) {
+		throw new Error('Invalid TeaVM candidate deobfuscator input lock');
+	}
+	let deobfuscatorJar;
+	for (const cache of [path.join(target, 'gradle-home/caches'), readOnlyDependencyCache]) {
+		if (!cache) continue;
+		const versionDir = path.join(
+			cache,
+			'modules-2/files-2.1/org.teavm/teavm-wasm-gc-deobfuscator',
+			lock.teavmVersion
+		);
+		const entries = await readdir(versionDir, { withFileTypes: true }).catch((error) => {
+			if (error.code === 'ENOENT') return [];
+			throw error;
+		});
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			const candidate = path.join(versionDir, entry.name, jarName);
+			const found = await stat(candidate).catch((error) => {
+				if (error.code === 'ENOENT') return null;
+				throw error;
+			});
+			if (!found?.isFile()) continue;
+			await verify(candidate, deobfuscator.artifact);
+			deobfuscatorJar = candidate;
+			break;
+		}
+		if (deobfuscatorJar) break;
+	}
+	if (!deobfuscatorJar)
+		throw new Error('TeaVM candidate deobfuscator dependency was not resolved');
+	const { stdout: deobfuscatorBytes } = await execFile(
+		'unzip',
+		['-p', deobfuscatorJar, deobfuscator.resource.path],
+		{ encoding: 'buffer', maxBuffer: 1024 * 1024 }
+	);
+	if (
+		deobfuscatorBytes.length !== deobfuscator.resource.bytes ||
+		createHash('sha256').update(deobfuscatorBytes).digest('hex') !==
+			deobfuscator.resource.sha256
+	) {
+		throw new Error('TeaVM candidate deobfuscator resource differs from its lock');
+	}
 	const distDir = path.join(target, 'dist');
 	await mkdir(distDir);
 	await command(
@@ -168,12 +222,13 @@ export async function buildTeaVmCandidate(prepared, jdkArchivePath) {
 		[
 			'-q',
 			path.join(sourceDir, 'compiler/build/distributions/dist.zip'),
-			...logicalAssets,
+			...logicalAssets.filter((asset) => asset !== 'compiler.wasm-deobfuscator.wasm'),
 			'-d',
 			distDir
 		],
 		target
 	);
+	await writeFile(path.join(distDir, 'compiler.wasm-deobfuscator.wasm'), deobfuscatorBytes);
 	const outputs = [];
 	for (const asset of logicalAssets) {
 		const filePath = path.join(distDir, asset);

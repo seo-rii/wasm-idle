@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
-import { prepareTeaVmCandidate } from './prepare-wasm-teavm-candidate.mjs';
+import { packageTeaVmCandidate, prepareTeaVmCandidate } from './prepare-wasm-teavm-candidate.mjs';
 
 const execFile = promisify(execFileCallback);
 const revision = '6c48f4ed707bf0b15f9b6098de30db8aae6fa40f';
@@ -139,4 +139,112 @@ test('a correctly hashed patch that cannot apply never records a prepared candid
 		await readFile(path.join(inputs.workDir, 'source/compiler/marker.txt'), 'utf8'),
 		'upstream\n'
 	);
+});
+
+async function completedBuild(t, { readOnly = false } = {}) {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'teavm-candidate-package-test-'));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const target = path.join(root, 'candidate');
+	const sourceDir = path.join(target, 'source');
+	const archiveSource = path.join(root, 'dist-input');
+	await mkdir(archiveSource, { recursive: true });
+	await mkdir(path.join(sourceDir, 'compiler/build/distributions'), { recursive: true });
+	await mkdir(path.join(sourceDir, 'gradle'), { recursive: true });
+	await writeFile(
+		path.join(sourceDir, 'gradle/verification-metadata.xml'),
+		'<verification-metadata/>'
+	);
+	for (const asset of [
+		'compiler.wasm-runtime.js',
+		'compiler.wasm',
+		'compile-classlib-teavm.bin',
+		'runtime-classlib-teavm.bin'
+	]) {
+		await writeFile(path.join(archiveSource, asset), `built ${asset}`);
+	}
+	await execFile(
+		'zip',
+		['-qr', path.join(sourceDir, 'compiler/build/distributions/dist.zip'), '.'],
+		{
+			cwd: archiveSource
+		}
+	);
+	const cache = readOnly
+		? path.join(root, 'read-only-cache')
+		: path.join(target, 'gradle-home/caches');
+	const jarRoot = path.join(root, 'jar-input');
+	const resourcePath = 'org/teavm/backend/wasm/deobfuscator.wasm';
+	const resourceBytes = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
+	await mkdir(path.dirname(path.join(jarRoot, resourcePath)), { recursive: true });
+	await writeFile(path.join(jarRoot, resourcePath), resourceBytes);
+	const jarName = 'teavm-wasm-gc-deobfuscator-0.16.0.jar';
+	const jarPath = path.join(
+		cache,
+		'modules-2/files-2.1/org.teavm/teavm-wasm-gc-deobfuscator/0.16.0/test-digest',
+		jarName
+	);
+	await mkdir(path.dirname(jarPath), { recursive: true });
+	await execFile('zip', ['-qr', jarPath, '.'], { cwd: jarRoot });
+	const lock = {
+		profileId: 'test-built-candidate',
+		teavmVersion: '0.16.0',
+		deobfuscator: {
+			artifact: { name: jarName, ...receipt(await readFile(jarPath)) },
+			resource: { path: resourcePath, ...receipt(resourceBytes) }
+		},
+		compatibility: { status: 'browser-validation-pending' }
+	};
+	await writeFile(path.join(target, 'candidate-inputs.lock.json'), JSON.stringify(lock));
+	return {
+		prepared: { target, sourceDir, lock },
+		jarPath,
+		resourceBytes,
+		readOnlyCache: readOnly ? cache : undefined
+	};
+}
+
+test('packaging reconstructs the omitted deobfuscator from a pinned dependency in either Gradle cache', async (t) => {
+	for (const readOnly of [false, true]) {
+		const { prepared, jarPath, resourceBytes, readOnlyCache } = await completedBuild(t, {
+			readOnly
+		});
+		const originalJar = await readFile(jarPath);
+		const result = await packageTeaVmCandidate(prepared, readOnlyCache);
+		assert.equal(result.state, 'built-unvalidated');
+		assert.equal(result.published, false);
+		assert.equal(result.outputs.length, 5);
+		assert.deepEqual(
+			await readFile(path.join(prepared.target, 'dist/compiler.wasm-deobfuscator.wasm')),
+			resourceBytes
+		);
+		assert.deepEqual(await readFile(jarPath), originalJar);
+		assert.deepEqual(
+			result.outputs.find((output) => output.path === 'compiler.wasm-deobfuscator.wasm'),
+			{ path: 'compiler.wasm-deobfuscator.wasm', ...receipt(resourceBytes) }
+		);
+	}
+});
+
+test('packaging rejects changed dependency bytes or resource pins before writing outputs', async (t) => {
+	for (const changed of ['artifact', 'resource']) {
+		const { prepared, jarPath, readOnlyCache } = await completedBuild(t);
+		if (changed === 'artifact') await writeFile(jarPath, 'corrupt JAR');
+		else prepared.lock.deobfuscator.resource.sha256 = '0'.repeat(64);
+		await assert.rejects(
+			packageTeaVmCandidate(prepared, readOnlyCache),
+			/differs from its lock/u
+		);
+		await assert.rejects(access(path.join(prepared.target, 'dist')));
+		await assert.rejects(access(path.join(prepared.target, 'candidate-status.json')));
+	}
+});
+
+test('packaging rejects an unresolved deobfuscator dependency', async (t) => {
+	const { prepared, jarPath, readOnlyCache } = await completedBuild(t);
+	await rm(jarPath);
+	await assert.rejects(
+		packageTeaVmCandidate(prepared, readOnlyCache),
+		/dependency was not resolved/u
+	);
+	await assert.rejects(access(path.join(prepared.target, 'dist')));
 });

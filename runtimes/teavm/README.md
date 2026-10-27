@@ -56,7 +56,11 @@ node scripts/prepare-wasm-teavm-candidate.mjs /path/to/208d4c97a602ba0df055f16e6
 The build uses an isolated Gradle cache, verifies the downloaded OpenJDK source archive, builds
 the patched compiler and both class libraries, and writes the five logical assets under `dist/`
 with observed hashes in `candidate-status.json`. It also collects dependency verification metadata
-for review. Allow several GiB of disk and build memory; this invokes the upstream compiler build
+for review. TeaVM 0.16.0 does not include the stack deobfuscator in its distribution ZIP, so the
+candidate packages the resource from the resolved `teavm-wasm-gc-deobfuscator-0.16.0.jar`, verifying
+both the complete JAR and its Wasm resource against the candidate lock. Dependency lookup supports
+the isolated Gradle cache and an optional `GRADLE_RO_DEP_CACHE` directory containing `modules-2`.
+Allow several GiB of disk and build memory; this invokes the upstream compiler build
 and downloads dependencies. Run long builds with a private background log as required by the
 workspace instructions.
 
