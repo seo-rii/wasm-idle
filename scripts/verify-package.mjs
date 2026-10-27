@@ -96,7 +96,8 @@ export const scenarios = [
 		// WASI adds eight GCC JavaScript/declaration files and the pinned, 26-file shim.
 		// ABI/SIMD checks add 14,739 installed bytes without new files or dependencies.
 		// The measured 2,628,057-byte install needs 7 KiB above the previous cap.
-		budget: { maxBytes: 2.5 * MiB + 7 * 1024, maxFiles: 184, maxPackages: 4 },
+		// The read-only sysroot mount adds 5,578 bytes and two files (2,631,299 measured).
+		budget: { maxBytes: 2.5 * MiB + 11 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
