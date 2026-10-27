@@ -64,12 +64,25 @@ Allow several GiB of disk and build memory; this invokes the upstream compiler b
 and downloads dependencies. Run long builds with a private background log as required by the
 workspace instructions.
 
-Preparation and focused Java compatibility checks have passed. A full compiler build, independent
-reproducibility comparison, and browser Java regression suite are still required before publishing.
-The candidate command never changes `static/teavm/`, consumer receipts, or the existing 0.13.1
-producer lock. Do not pass the candidate to `sync:wasm-teavm`, which intentionally still reproduces
-the shipped generation. Promote a complete verified receipt set and corresponding producer only
-after those checks pass.
+The isolated candidate was qualified on 2026-10-27. Two fresh native compiler builds produced
+byte-identical copies of all five assets and identical dependency verification metadata. Chromium
+153.0.8010.12 passed all 24 compile-and-run cases on both bundles: 15 existing application Java
+regressions, including UTF-8 stdin in seven-byte chunks, and nine enabled upstream cases. The
+receipts and exact coverage are recorded in `scripts/teavm/candidate-qualification.json`; observed
+dependency checksums are preserved in `scripts/teavm/candidate-gradle-verification-metadata.xml`.
+
+With the repository dependencies and Playwright Chromium installed, repeat the browser check with:
+
+```bash
+node scripts/probe-wasm-teavm-candidate.mjs /path/to/new-build /path/to/browser-report.json
+```
+
+The probe serves only the isolated candidate and uses the application stdin helpers. Publication
+producer migration, enforcement of the observed dependency checksums, and actual Java Worker
+integration remain release gates. The input lock and generated build status preserve their original
+validation-pending state; the separate qualification receipt records the completed checks. The
+candidate command never changes `static/teavm/`, consumer receipts, or the existing 0.13.1 producer
+lock. `sync:wasm-teavm` still reproduces that shipped generation.
 
 Run the preparation checks without downloading or building a compiler:
 

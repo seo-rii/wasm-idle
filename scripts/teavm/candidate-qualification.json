@@ -1,0 +1,270 @@
+{
+	"format": "wasm-idle-teavm-candidate-qualification-v1",
+	"profileId": "teavm-javac-0.16.0-208d4c9-wasm-idle-candidate",
+	"date": "2026-10-27",
+	"published": false,
+	"inputs": {
+		"path": "scripts/teavm/candidate-inputs.lock.json",
+		"bytes": 5575,
+		"sha256": "543db58488d31bf4fd49fad39db683b2398b92cbdcbce3150823efd311d8e806"
+	},
+	"source": {
+		"repository": "https://github.com/konsoletyper/teavm-javac",
+		"revision": "208d4c97a602ba0df055f16e6882059fb69d0122",
+		"archive": {
+			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/208d4c97a602ba0df055f16e6882059fb69d0122",
+			"bytes": 99644,
+			"sha256": "ad893ca727081e72ab7ffb9f270956c76d4222b09c6bd1196a13c58c7f81ad2e"
+		}
+	},
+	"sourcePatches": [
+		{
+			"path": "patches/teavm-javac-0.16.0-compat.patch",
+			"bytes": 187792,
+			"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
+		}
+	],
+	"jdk": {
+		"version": "25.0.5+8",
+		"archive": {
+			"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz",
+			"sha256": "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+		},
+		"release": {
+			"JAVA_VERSION": "25.0.5",
+			"JAVA_RUNTIME_VERSION": "25.0.5+8-LTS",
+			"IMPLEMENTOR_VERSION": "Temurin-25.0.5+8",
+			"OS_ARCH": "x86_64",
+			"OS_NAME": "Linux"
+		}
+	},
+	"gradleVerification": {
+		"path": "scripts/teavm/candidate-gradle-verification-metadata.xml",
+		"bytes": 132259,
+		"sha256": "c3779dda8a80c0b28355f2e656f24ec424d2641d275e432e70c02ab7b02674ba",
+		"identicalAcrossBuilds": true,
+		"components": 290,
+		"artifacts": 505,
+		"enforcedDuringBuild": false
+	},
+	"builds": [
+		{
+			"id": "first",
+			"nativeBuildRecipeCommit": "476f7ac49ec1324033c7d0e5c906acb57dc991dd",
+			"packagingRecipeCommit": "3617aa53445fc11a326340bbad584565ef102eb0",
+			"gradleExitCode": 0,
+			"initialCommandExitCode": 1,
+			"packagingExitCode": 0,
+			"note": "The first Gradle build succeeded; packaging was rerun after fixing the absent upstream deobfuscator asset. The native source patch was unchanged."
+		},
+		{
+			"id": "independent",
+			"recipeCommit": "3617aa53445fc11a326340bbad584565ef102eb0",
+			"commandExitCode": 0
+		}
+	],
+	"reproducibility": {
+		"freshSourceDirectories": true,
+		"freshJdkDirectories": true,
+		"freshGradleUserHomes": true,
+		"sharedCompilationOutputs": false,
+		"readOnlyDependencyCacheReused": true,
+		"outputsByteIdentical": true,
+		"outputs": [
+			{
+				"path": "compiler.wasm-runtime.js",
+				"bytes": 16425,
+				"sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08"
+			},
+			{
+				"path": "compiler.wasm",
+				"bytes": 4746189,
+				"sha256": "b74eff164a089958fef78a98b9f889e3a7b12afa56bdcf007f9b2a631b200bf2"
+			},
+			{
+				"path": "compiler.wasm-deobfuscator.wasm",
+				"bytes": 48410,
+				"sha256": "d64d18b9d003c0ced4191133fadb870be4b532f54a2de25f094bc0de61223654"
+			},
+			{
+				"path": "compile-classlib-teavm.bin",
+				"bytes": 215642,
+				"sha256": "bbf8f130a711847df4822c7f8de88e622e25d5f6b89530d2f441096cebc617ed"
+			},
+			{
+				"path": "runtime-classlib-teavm.bin",
+				"bytes": 2300137,
+				"sha256": "05896413a99b04c70e818a5616b94e9ac3cc39a9d87de99c79661f164cff86d1"
+			}
+		]
+	},
+	"browser": {
+		"engine": "chromium",
+		"version": "153.0.8010.12",
+		"command": "node scripts/probe-wasm-teavm-candidate.mjs <candidate-dir> <report.json>",
+		"probeSha256": "a0efb6cd5c85a0e70ad43ff9914074c97b9c726fde531a08c579655e75f2e6d6",
+		"fixtureSource": {
+			"path": "src/lib/playground/java.integration.test.ts",
+			"sha256": "54a2c79d4bd33364dfc9c49a76d38bba62aa91bd18aec843b4361169e21ac8a9"
+		},
+		"helperSources": {
+			"src/lib/playground/javaStdin.ts": "f1cbbea894115699946f885bc9f60054c02a8d83cb58ecf4ec46ca60f09f71c8",
+			"src/lib/playground/javaRuntimeStdin.ts": "60567d91890de2456a0e98e3b610204226eb893d2be601823e10555fc1d7c51e"
+		},
+		"runs": 2,
+		"casesPerRun": 24,
+		"pageErrors": [],
+		"stdinChunkBytes": 7,
+		"cases": [
+			{
+				"name": "BufferedReader with StringTokenizer",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "BufferedReader lines until EOF with UTF-8 input",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "StreamTokenizer over BufferedReader",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "BufferedWriter and PrintWriter flushes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "Formatter line separator and escaped percent",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "cloned objects and floating-point formatting",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "Formatter half-up rounding",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "System.out byte writes across flushes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "exception methods, getClass and collection clone",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "enum reflection",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "annotations with element values",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "primitive array clone",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "runtime annotations and ServiceLoader",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "class library methods missing from TeaVM 0.13.1",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "typed NIO buffers",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/collections-streams",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/exceptions",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/get-class",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/hello-world",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/inner-classes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/modern-java",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/multi-file",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/renamed-methods",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			},
+			{
+				"name": "upstream/strings",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": ""
+			}
+		]
+	},
+	"remaining": [
+		"Enforce the observed dependency metadata in the publication producer",
+		"Migrate and validate the transactional publication producer and complete consumer receipt set",
+		"Run the actual Java Worker integration, including streaming input and exception deobfuscation"
+	]
+}
