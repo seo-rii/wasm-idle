@@ -418,6 +418,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			});
 			const runtime = await binding.load('ZIG');
 			const runs = [];
+			const terminalCases = [];
 			const options = {
 				debugMode: 'lldb',
 				pauseOnEntry: true,
@@ -569,6 +570,79 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 					record.durationMs = Math.round(performance.now() - started);
 				}
 			}
+			async function terminalCase(name, code, trap) {
+				await reportStage(`case:${name}:start`);
+				if (binding.syncWorkspace)
+					await binding.syncWorkspace('ZIG', [{ path: name, content: code }]);
+				const record = {
+					name,
+					trap,
+					output: '',
+					events: [],
+					outcome: null,
+					settledBeforeCancel: false
+				};
+				terminalCases.push(record);
+				let resolvePause;
+				const paused = new Promise((resolve) => {
+					resolvePause = resolve;
+				});
+				runtime.output = (chunk) => (record.output += chunk);
+				runtime.ondebug = (event) => {
+					record.events.push(event);
+					if (event.type === 'pause') resolvePause(event);
+				};
+				let settled = false;
+				const finished = runtime
+					.run(code, false, false, progress, [], {
+						...options,
+						activePath: name,
+						workspaceFiles: [],
+						breakpoints: [],
+						pauseOnEntry: false,
+						stdin: ''
+					})
+					.then(
+						(completed) => {
+							settled = true;
+							record.outcome = { completed };
+							return record.outcome;
+						},
+						(error) => {
+							settled = true;
+							record.outcome = { error: String(error) };
+							return record.outcome;
+						}
+					);
+				if (trap) {
+					let timer;
+					try {
+						record.pause = await Promise.race([
+							paused,
+							finished.then((value) => {
+								throw new Error(
+									`@trap finished without a real pause: ${JSON.stringify(value)}`
+								);
+							}),
+							new Promise((_, reject) => {
+								timer = setTimeout(
+									() =>
+										reject(new Error('Timed out waiting for genuine Zig trap')),
+									90_000
+								);
+							})
+						]);
+						await new Promise((resolve) => setTimeout(resolve, 250));
+						record.settledBeforeCancel = settled;
+					} finally {
+						clearTimeout(timer);
+						await runtime.terminate();
+						await finished;
+					}
+				} else await finished;
+				await reportStage(`case:${name}:finished`);
+				return record;
+			}
 			try {
 				if (binding.syncWorkspace)
 					await binding.syncWorkspace('ZIG', [
@@ -583,7 +657,13 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 				await execute(true);
 				// No explicit reload: the public instance must recover after retiring/cancelling Workers.
 				await execute(false);
-				return { runs };
+				await terminalCase(
+					'exit.zig',
+					'const std = @import("std");\npub fn main() void { std.os.wasi.proc_exit(23); }\n',
+					false
+				);
+				await terminalCase('trap.zig', 'pub fn main() void {\n    @trap();\n}\n', true);
+				return { runs, terminalCases };
 			} finally {
 				await runtime.dispose();
 				await binding.dispose();
@@ -695,6 +775,24 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 		true,
 		'Cancelled run must not report successful execution'
 	);
+	assert.equal(result.terminalCases?.length, 2, 'Expected nonzero exit and real trap cases');
+	const exited = result.terminalCases.find((value) => value.name === 'exit.zig');
+	assert.match(
+		exited.outcome.error,
+		/exited with code 23/,
+		'Real nonzero target exit must be preserved'
+	);
+	assert.notEqual(exited.outcome.completed, true);
+	const trapped = result.terminalCases.find((value) => value.name === 'trap.zig');
+	assert.equal(trapped.pause.stoppedReason, 'exception');
+	assert.equal(trapped.pause.sourcePath, '/workspace/trap.zig');
+	assert.equal(trapped.pause.line, 2);
+	assert.equal(
+		trapped.settledBeforeCancel,
+		false,
+		'A genuine Zig trap must remain paused until cancellation'
+	);
+	assert.notEqual(trapped.outcome.completed, true);
 	assert(requests.includes('/wasm-zig/std.tar.gz'));
 	assert(requests.includes('/clang/runtime-manifest.v1.json'));
 	assert(requests.some((entry) => entry.includes('clang.wasm')));
