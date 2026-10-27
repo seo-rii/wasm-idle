@@ -58,6 +58,7 @@ export default [
 			'package-lock.json',
 			'yarn.lock',
 			'static/',
+			'artifacts/ocaml-browser/*/wasm-of-js-of-ocaml/',
 			'runtimes/*/dist/',
 			'runtimes/*/node_modules/',
 			'runtimes/*/.cache/',

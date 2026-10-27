@@ -62,7 +62,7 @@
 				{
 					"fixture": "unicode-and-eof",
 					"target": "js",
-					"output": "\uc785\ub825:\uc548\ub155\nEOF\n",
+					"output": "입력:안녕\nEOF\n",
 					"milliseconds": 1431,
 					"diagnostics": []
 				},
@@ -76,7 +76,7 @@
 				{
 					"fixture": "unicode-and-eof",
 					"target": "wasm",
-					"output": "\uc785\ub825:\uc548\ub155\nEOF\n",
+					"output": "입력:안녕\nEOF\n",
 					"milliseconds": 3128,
 					"diagnostics": []
 				}
@@ -206,5 +206,74 @@
 			"sha256": "676304cff571a81a5d9da6d2bc71a799ac0614d8c184d1cd227a0f346efb4bb4"
 		}
 	],
-	"totalBytes": 33374384
+	"totalBytes": 33374384,
+	"consumer": {
+		"artifactCommit": "7462f1dbe82663a908e27fe5d1cf0ee9bf838e0c",
+		"artifactBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/7462f1dbe82663a908e27fe5d1cf0ee9bf838e0c/artifacts/ocaml-browser/5.5.2-6.5.0/",
+		"sourceInputs": {
+			"scripts/browser-test-assets.v1.json": "ae89358877b4c30f214f9593a5ced0d9c763750db62ad7af68358ab40e292aab",
+			"scripts/static-asset-budgets.v1.json": "fd3953d0ee0b21939201af1d113e8183f9b41cb7ea06d693cf2b8eb68308048f",
+			"src/lib/playground/wasmOcamlVersion.ts": "8ab4420b2c8a4a7ac31a471936da38d02b0615b3823ffd39bc7143d4580af480",
+			"static/compressed-runtime-assets.v1.json": "a7405a72984c5a75e62bf6bbf11650170eb3150c4bda95952a3a3f10b97fba81",
+			"packages/core/src/runtime-asset-lock.generated.ts": "fddb72f4b550fc9209337e1399989193628554b1c32b0e5415e282bf02c05695",
+			"src/lib/playground/worker/ocaml.ts": "a2a81e1ce34cb645dd1a06d56ee9e1a4d6ee811b7822224216f3047708352ecb"
+		},
+		"download": {
+			"downloaded": 24,
+			"reused": 0,
+			"bundleFingerprintVerified": true
+		},
+		"focusedUnitTests": {
+			"passed": 34
+		},
+		"appWorker": {
+			"artifactCommit": "7462f1dbe82663a908e27fe5d1cf0ee9bf838e0c",
+			"consumerFingerprint": "c8f8c435d39a1c0666be2e1fd99eab2780b3614fe3ebdaa5c7bcf48e13448bc0",
+			"transport": "receipt-verified cold GitHub download; compressed static delivery",
+			"browser": "153.0.8010.12",
+			"moduleReceipt": {
+				"bytes": 1892,
+				"sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
+			},
+			"manifestReceipt": {
+				"bytes": 62221,
+				"sha256": "12059feaaa9fb6c89c429162aa40454f82ede1600ed053ac3a9539eff75f5992"
+			},
+			"appWorkerReceipt": {
+				"bytes": 675398,
+				"sha256": "cbbc0248b781b36a4e9b71a0c2c17cfe75e34eb44518f675920920c26b881af2"
+			},
+			"results": [
+				{
+					"fixture": "stdin-sum",
+					"target": "js",
+					"output": "21\n",
+					"milliseconds": 2316,
+					"diagnostics": []
+				},
+				{
+					"fixture": "unicode-and-eof",
+					"target": "js",
+					"output": "입력:안녕\nEOF\n",
+					"milliseconds": 1482,
+					"diagnostics": []
+				},
+				{
+					"fixture": "stdin-sum",
+					"target": "wasm",
+					"output": "21\n",
+					"milliseconds": 3463,
+					"diagnostics": []
+				},
+				{
+					"fixture": "unicode-and-eof",
+					"target": "wasm",
+					"output": "입력:안녕\nEOF\n",
+					"milliseconds": 2766,
+					"diagnostics": []
+				}
+			],
+			"errors": []
+		}
+	}
 }

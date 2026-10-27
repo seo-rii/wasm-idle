@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1148750000,
+		"maxBytes": 1151750000,
 		"maxFiles": 1977
 	},
 	"directories": {
@@ -196,7 +196,7 @@
 			"maxFiles": 1250
 		},
 		"wasm-of-js-of-ocaml": {
-			"maxBytes": 31000000,
+			"maxBytes": 34000000,
 			"maxFiles": 30,
 			"optional": true
 		},
