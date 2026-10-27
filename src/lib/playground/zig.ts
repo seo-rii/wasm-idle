@@ -496,13 +496,8 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		const debugDisposal = this.debugDisposal;
-		if (debugDisposal) {
-			this.requireOperationIdle();
-			await debugDisposal;
-			if (this.debugDisposal === debugDisposal) this.debugDisposal = undefined;
-		}
 		// LLDB owns a separate Worker; reload the pinned compiler after its predecessor retires.
+		// load() reserves a cancellable operation before waiting for debugger disposal.
 		if (!this.worker && this.loadedIntegrity && !this.disposed) {
 			this.requireOperationIdle();
 			const assets = this.loadedRuntimeAssets;

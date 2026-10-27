@@ -214,4 +214,90 @@ describe('Zig LLDB lifecycle', () => {
 			await sandbox.dispose();
 		}
 	);
+
+	it.each(['terminate', 'abort', 'clear', 'dispose'] as const)(
+		'cancels a restart waiting for debugger retirement through %s',
+		async (action) => {
+			const sandbox = new Zig();
+			await sandbox.load(assets);
+			const previous = sandbox.run(code, false, false, undefined, [], { debugMode: 'lldb' });
+			const previousOutcome = previous.catch((error) => error);
+			handoff();
+			let finishCleanup!: () => void;
+			const cleanup = new Promise<void>((resolve) => {
+				finishCleanup = resolve;
+			});
+			sessions[0].disconnect.mockImplementation(() => {
+				sessions[0].reject(new Error('disconnected'));
+				return cleanup;
+			});
+			void sandbox.terminate('previous run');
+			await previousOutcome;
+			const controller = new AbortController();
+			const next = sandbox.run(code, false, false, undefined, [], {
+				signal: controller.signal
+			});
+			const outcome = next.then(
+				(value) => ({ value }),
+				(error) => ({ error })
+			);
+			const reason = new Error('cancel pending restart');
+			if (action === 'terminate') void sandbox.terminate(reason);
+			else if (action === 'abort') controller.abort(reason);
+			else if (action === 'clear') await sandbox.clear();
+			else void sandbox.dispose();
+			expect(workers).toHaveLength(1);
+			if (action === 'dispose') {
+				await expect(outcome).resolves.toMatchObject({ error: { code: 'cancelled' } });
+			} else {
+				await expect(outcome).resolves.toEqual({
+					error: action === 'clear' ? 'Process terminated' : reason
+				});
+			}
+			finishCleanup();
+			expect(workers).toHaveLength(1);
+			expect(workers[0].postMessage).toHaveBeenCalledTimes(2);
+			if (action !== 'dispose') {
+				await expect(sandbox.run(code, false)).resolves.toBe(true);
+				expect(workers).toHaveLength(2);
+			}
+			await sandbox.dispose();
+		}
+	);
+
+	it('reserves startup ownership and its deadline while waiting for debugger retirement', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Zig();
+		await sandbox.load(assets);
+		const previous = sandbox.run(code, false, false, undefined, [], { debugMode: 'lldb' });
+		const previousOutcome = previous.catch((error) => error);
+		handoff();
+		let finishCleanup!: () => void;
+		const cleanup = new Promise<void>((resolve) => {
+			finishCleanup = resolve;
+		});
+		sessions[0].disconnect.mockImplementation(() => {
+			sessions[0].reject(new Error('disconnected'));
+			return cleanup;
+		});
+		void sandbox.terminate('previous run');
+		await previousOutcome;
+		const pending = sandbox.run(code, false, false, undefined, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const outcome = pending.catch((error) => error);
+		await expect(sandbox.run(code, false)).rejects.toMatchObject({ code: 'busy' });
+		await expect(sandbox.load(assets)).rejects.toMatchObject({ code: 'busy' });
+		await vi.advanceTimersByTimeAsync(5);
+		await expect(outcome).resolves.toMatchObject({
+			code: 'timeout',
+			phase: 'startup',
+			timeoutMs: 5
+		});
+		expect(workers).toHaveLength(1);
+		finishCleanup();
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		expect(workers).toHaveLength(2);
+		await sandbox.dispose();
+	});
 });
