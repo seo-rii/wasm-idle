@@ -22,6 +22,7 @@ import {
 	type ZigExecutionAssetReceipts
 } from '$lib/playground/zigAssets';
 import { fetchRuntimeAssetBytes, resolveRuntimeAssetUrl } from './runtimeAssetFetch';
+import type { ZigDebugBackend, ZigLldbArtifact } from './zigDebug';
 
 declare var self: any;
 
@@ -49,7 +50,7 @@ let loadedAssets: LoadedZigAssets | null = null;
 let loadingAssets: { key: string; promise: Promise<LoadedZigAssets> } | null = null;
 let assetIntegrity: ZigExecutionAssetReceipts | null = null;
 let runtimeMaxAssetBytes = 0;
-let compiledArtifact: Uint8Array | null = null;
+let compiledArtifact: { bytes: Uint8Array; debug?: ZigLldbArtifact } | null = null;
 let compiledCacheKey = '';
 
 // std.Io first attempts positional I/O, then switches to streaming on ESPIPE.
@@ -597,6 +598,7 @@ async function compileZig({
 	workspaceFiles,
 	targetTriple,
 	compileArgs,
+	debugBackend,
 	log
 }: {
 	code: string;
@@ -604,8 +606,9 @@ async function compileZig({
 	workspaceFiles: SandboxWorkspaceFile[];
 	targetTriple: ZigTargetTriple;
 	compileArgs: string[];
+	debugBackend?: ZigDebugBackend;
 	log: boolean;
-}) {
+}): Promise<{ bytes: Uint8Array; debug?: ZigLldbArtifact }> {
 	if (!assetIntegrity) throw new Error('Zig runtime assets are not loaded');
 	const { compilerModule, libDirectory } = await loadAssets(
 		compilerUrl,
@@ -614,69 +617,108 @@ async function compileZig({
 		runtimeMaxAssetBytes
 	);
 	const { root, entryPath } = buildWorkspaceRoot(code, activePath, workspaceFiles);
-	let compilerOutput = '';
-	const outputDecoder = new TextDecoder();
-	const errorDecoder = new TextDecoder();
-	const outputFd = new ZigStdout((chunk) => {
-		compilerOutput += outputDecoder.decode(chunk, { stream: true });
-	});
-	const errorFd = new ZigStdout((chunk) => {
-		compilerOutput += errorDecoder.decode(chunk, { stream: true });
-	});
-	const args = [
-		'zigc.wasm',
-		'build-exe',
-		entryPath,
-		'-target',
-		targetTriple,
-		'-fno-llvm',
-		'-fno-lld',
-		'-O',
-		'fast',
-		'-femit-bin=output.wasm',
-		...compileArgs
-	];
-	const zigWasi = new WASI(
-		args,
-		['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
-		[
-			new OpenFile(new File([])),
-			outputFd,
-			errorFd,
-			new PreopenDirectory('.', root.contents),
-			new PreopenDirectory('/lib', libDirectory.contents),
-			new PreopenDirectory('/cache', new Map())
-		],
-		{ debug: false }
-	);
-	if (log) {
+	const cache = new Map();
+	const emit = async (args: string[], outputPath: string) => {
+		let compilerOutput = '';
+		const outputDecoder = new TextDecoder();
+		const errorDecoder = new TextDecoder();
+		const outputFd = new ZigStdout((chunk) => {
+			compilerOutput += outputDecoder.decode(chunk, { stream: true });
+		});
+		const errorFd = new ZigStdout((chunk) => {
+			compilerOutput += errorDecoder.decode(chunk, { stream: true });
+		});
+		const zigWasi = new WASI(
+			['zigc.wasm', ...args],
+			['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
+			[
+				new OpenFile(new File([])),
+				outputFd,
+				errorFd,
+				new PreopenDirectory('.', root.contents),
+				new PreopenDirectory('/lib', libDirectory.contents),
+				new PreopenDirectory('/cache', cache)
+			],
+			{ debug: false }
+		);
+		const instance = instantiateResult(
+			await WebAssembly.instantiate(compilerModule, {
+				wasi_snapshot_preview1: zigWasi.wasiImport
+			})
+		);
+		const exitCode = zigWasi.start(
+			instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
+		);
+		compilerOutput += outputDecoder.decode() + errorDecoder.decode();
+		if (compilerOutput) postMessage({ output: compilerOutput });
+		if (exitCode !== 0)
+			throw new Error(compilerOutput || `Zig compilation failed with code ${exitCode}`);
+		const outputFile = getFile(root, outputPath);
+		if (!outputFile?.data?.byteLength)
+			throw new Error(`Zig compiler did not emit ${outputPath}`);
+		return new Uint8Array(outputFile.data);
+	};
+	if (log)
 		console.log(
 			`[wasm-idle:zig-worker] compile start target=${targetTriple} activePath=${entryPath} bytes=${code.length}`
 		);
-	}
-	const instance = instantiateResult(
-		await WebAssembly.instantiate(compilerModule, {
-			wasi_snapshot_preview1: zigWasi.wasiImport
-		})
-	);
-	const exitCode = zigWasi.start(
-		instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
-	);
-	compilerOutput += outputDecoder.decode() + errorDecoder.decode();
-	if (compilerOutput) postMessage({ output: compilerOutput });
-	if (exitCode !== 0) {
-		throw new Error(compilerOutput || `Zig compilation failed with code ${exitCode}`);
-	}
-	const outputFile = getFile(root, 'output.wasm');
-	if (!outputFile?.data?.byteLength) {
-		throw new Error('Zig compiler did not emit output.wasm');
-	}
-	if (log) {
-		console.log(
-			`[wasm-idle:zig-worker] compile complete artifactBytes=${outputFile.data.byteLength}`
+	if (!debugBackend) {
+		const bytes = await emit(
+			[
+				'build-exe',
+				entryPath,
+				'-target',
+				targetTriple,
+				'-fno-llvm',
+				'-fno-lld',
+				'-O',
+				'fast',
+				'-femit-bin=output.wasm',
+				...compileArgs
+			],
+			'output.wasm'
 		);
+		return { bytes };
 	}
-	return new Uint8Array(outputFile.data);
+	const flags = [
+		'-target',
+		'wasm32-wasi',
+		'-mcpu=mvp',
+		'-O',
+		'debug',
+		'-fllvm',
+		'-fno-libllvm',
+		'-fno-lld',
+		'-fno-emit-bin',
+		'-fno-compiler-rt'
+	];
+	const bitcode = await emit(
+		['build-exe', entryPath, ...flags, '-femit-llvm-bc=output.bc'],
+		'output.bc'
+	);
+	// Zig's IR-only mode has no implicit compiler_rt link. Supply its matching real implementation.
+	const compilerRt = await emit(
+		['build-obj', '/lib/compiler_rt.zig', ...flags, '-femit-llvm-bc=compiler_rt.bc'],
+		'compiler_rt.bc'
+	);
+	const sources = new Map<string, string>();
+	for (const file of workspaceFiles) {
+		if (file && typeof file.path === 'string' && typeof file.content === 'string') {
+			sources.set(normalizeWorkspacePath(file.path), file.content);
+		}
+	}
+	sources.set(entryPath, code);
+	const { compileZigDebugArtifact } = await import('./zigDebug');
+	const debug = await compileZigDebugArtifact({
+		bitcode: [bitcode, compilerRt],
+		sources: [...sources]
+			.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+			.map(([path, content]) => ({ path: `/workspace/${path}`, content })),
+		zigReceipts: assetIntegrity,
+		backend: debugBackend,
+		log
+	});
+	return { bytes: debug.bytes, debug };
 }
 
 async function runZigArtifact({
@@ -753,6 +795,10 @@ self.onmessage = async (event: { data: any }) => {
 		prepare,
 		args = [],
 		compileArgs = [],
+		debugMode = 'none',
+		debugClangPath,
+		debugClangIntegrity,
+		maxWasmMemoryBytes,
 		stdin,
 		activePath = 'main.zig',
 		workspaceFiles = [],
@@ -777,13 +823,31 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		if (debugMode !== 'none' && debugMode !== 'lldb')
+			throw new Error(`Unsupported Zig debug mode: ${String(debugMode)}`);
+		let debugBackend: ZigDebugBackend | undefined;
+		if (debugMode === 'lldb') {
+			if (targetTriple !== 'wasm32-wasi')
+				throw new Error('Zig LLDB debugging requires wasm32-wasi');
+			if (compileArgs.length)
+				throw new Error('Zig LLDB debugging does not accept compiler argument overrides');
+			const { snapshotZigDebugBackend } = await import('./zigDebug');
+			debugBackend = snapshotZigDebugBackend(
+				debugClangPath,
+				debugClangIntegrity,
+				runtimeMaxAssetBytes,
+				maxWasmMemoryBytes
+			);
+		}
 		stdinBufferZig = new Int32Array(buffer);
 		const compileCacheKey = JSON.stringify({
 			targetTriple,
 			activePath,
 			code,
 			workspaceFiles,
-			compileArgs
+			compileArgs,
+			debugMode,
+			debugBackend
 		});
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			compiledArtifact = await compileZig({
@@ -792,6 +856,7 @@ self.onmessage = async (event: { data: any }) => {
 				workspaceFiles,
 				targetTriple,
 				compileArgs,
+				debugBackend,
 				log
 			});
 			compiledCacheKey = compileCacheKey;
@@ -802,8 +867,14 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		if (debugMode === 'lldb') {
+			if (!compiledArtifact.debug)
+				throw new Error('Zig compiler did not return an LLDB artifact');
+			postMessage({ lldbArtifact: compiledArtifact.debug });
+			return;
+		}
 		await runZigArtifact({
-			artifact: compiledArtifact,
+			artifact: compiledArtifact.bytes,
 			args,
 			stdin,
 			log
