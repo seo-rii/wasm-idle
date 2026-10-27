@@ -3,9 +3,55 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+
+import { patchWasmOfOcamlSystemBridge } from '../scripts/wasm-of-ocaml-system-bridge.mjs';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(testDir, '..');
+
+test('Binaryen command bridge accepts the actual 6.3 and 6.5 minified call shapes', () => {
+	for (const [version, name, command, expectedCommand] of [
+		['6.3', 'px', 'd+b', 'command input'],
+		['6.5', 'rQ', 'b+a', 'inputfile'],
+		['renamed identifiers', '$sys', 'prefix+command', 'wasm-merge']
+	]) {
+		const source =
+			`var fallback=-1;function\n${name}(a){return fallback}\n` +
+			`globalThis.run=function(a,b,d,prefix,command){return ${name}(${command})!==0?1:0}`;
+		const patched = patchWasmOfOcamlSystemBridge(source);
+		assert.equal(patched.systemFunctionName, name, version);
+		assert.equal(patched.alreadyPatched, false);
+		const context = vm.createContext({});
+		vm.runInContext(patched.source, context);
+		assert.equal(context.run('file', 'input', 'command ', 'wasm-', 'merge'), 1);
+		const commands = [];
+		context.__wasm_of_js_system_command = (value) => {
+			commands.push(value);
+			return 0;
+		};
+		assert.equal(context.run('file', 'input', 'command ', 'wasm-', 'merge'), 0);
+		assert.deepEqual(commands, [expectedCommand]);
+		context.__wasm_of_js_system_command = () => 17;
+		assert.equal(context.run('file', 'input', 'command ', 'wasm-', 'merge'), 1);
+		assert.deepEqual(patchWasmOfOcamlSystemBridge(patched.source), {
+			...patched,
+			alreadyPatched: true
+		});
+	}
+});
+
+test('Binaryen command bridge rejects missing and ambiguous primitive stubs', () => {
+	assert.throws(() => patchWasmOfOcamlSystemBridge('function run(){return 0}'), /found 0/);
+	assert.throws(
+		() =>
+			patchWasmOfOcamlSystemBridge(
+				'function x(a){return failure}function y(a){return failure}' +
+					'function run(a,b){return x(a+b)!==0?1:0}function other(a,b){return y(a+b)!==0?1:0}'
+			),
+		/found 2/
+	);
+});
 
 test('browser-native worker runs static Binaryen tools without the Binaryen API bridge', async () => {
 	const workerSource = await readFile(

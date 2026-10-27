@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createGzip } from 'node:zlib';
 
 import { DEFAULT_JS_OF_OCAML_VERSION, DEFAULT_SWITCH_NAME } from './toolchain-defaults.mjs';
+import { patchWasmOfOcamlSystemBridge } from './wasm-of-ocaml-system-bridge.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
@@ -355,50 +356,11 @@ let () = send dyn
 	};
 }
 
-function detectWasmOfOcamlSystemStub(source) {
-	const commandCallMatch = source.match(/([A-Za-z$_][\w$]*)\(d\+b\)!==0\?1:0/);
-	if (!commandCallMatch || !commandCallMatch[1]) {
-		throw new Error('failed to locate Binaryen system command call');
-	}
-	const systemFunctionName = commandCallMatch[1];
-	const patchedPattern = new RegExp(
-		`function\\s*\\n?${systemFunctionName}\\(([^)]*)\\)\\{if\\(globalThis\\.__wasm_of_js_system_command\\)return globalThis\\.__wasm_of_js_system_command\\(\\1\\);return ([A-Za-z$_][\\w$]*)\\}`
-	);
-	const patchedMatch = source.match(patchedPattern);
-	if (patchedMatch && patchedMatch[1] && patchedMatch[2]) {
-		return {
-			systemFunctionName,
-			argumentName: patchedMatch[1],
-			fallbackValue: patchedMatch[2],
-			alreadyPatched: true,
-			pattern: patchedPattern
-		};
-	}
-	const rawPattern = new RegExp(
-		`function\\s*\\n?${systemFunctionName}\\(([^)]*)\\)\\{return ([A-Za-z$_][\\w$]*)\\}`
-	);
-	const rawMatch = source.match(rawPattern);
-	if (rawMatch && rawMatch[1] && rawMatch[2]) {
-		return {
-			systemFunctionName,
-			argumentName: rawMatch[1],
-			fallbackValue: rawMatch[2],
-			alreadyPatched: false,
-			pattern: rawPattern
-		};
-	}
-	throw new Error(`failed to locate Binaryen system stub ${systemFunctionName}`);
-}
-
 async function patchWasmOfOcamlBrowserTool(toolPath) {
 	const original = await readFile(toolPath, 'utf8');
 	const sourceSha256 = sha256(original);
-	const detectedStub = detectWasmOfOcamlSystemStub(original);
-	const patchedSystemFunction = `function
-${detectedStub.systemFunctionName}(${detectedStub.argumentName}){if(globalThis.__wasm_of_js_system_command)return globalThis.__wasm_of_js_system_command(${detectedStub.argumentName});return ${detectedStub.fallbackValue}}`;
-	const patched = detectedStub.alreadyPatched
-		? original
-		: original.replace(detectedStub.pattern, patchedSystemFunction);
+	const detectedStub = patchWasmOfOcamlSystemBridge(original);
+	const patched = detectedStub.source;
 	if (!patched.includes('globalThis.__wasm_of_js_system_command')) {
 		throw new Error(`failed to inject Binaryen system bridge into ${toolPath}`);
 	}
