@@ -49,6 +49,11 @@ alongside the JavaScript compiler. Build inputs and existing browser assets have
 lifetimes: regenerate the full browser bundle and its manifest before syncing a new compiler
 generation into the app.
 
+OCaml 5.5 currently requires `ocamlfind 1.9.9~preview`: upstream opam metadata
+excludes OCaml 5.5 from the stable `ocamlfind 1.9.8` package. Keep the exported
+opam switch with qualification evidence so this compatibility dependency and
+the other resolved package versions remain reviewable.
+
 ```sh
 npm run bootstrap:host-tools
 PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER=1 npm run toolchain:bootstrap
