@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { RUNTIME_ASSET_LOCK } from '../../packages/core/src/runtime-asset-lock.generated';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './playground/wasmZigVersion';
 
 type Receipt = {
@@ -20,6 +21,14 @@ type ZigRuntimeBuild = {
 		releaseBaseUrl: string;
 		allowedRedirectOrigins: string[];
 		inputs: Record<string, Receipt>;
+		producerReceipt: {
+			producerId: string;
+			version: string;
+			target: string;
+			wasi: string;
+			assets: Record<string, Receipt>;
+			validation: { passed: boolean };
+		};
 	};
 	assets: Record<string, Receipt>;
 };
@@ -77,8 +86,12 @@ describe('checked-in Zig execution asset receipts', () => {
 			)
 		]);
 
-		expect(lock.schemaVersion).toBe(2);
-		expect(runtimeBuild.schemaVersion).toBe(2);
+		expect(lock.schemaVersion).toBe(3);
+		expect(runtimeBuild.schemaVersion).toBe(3);
+		expect(lock.profileId).toBe('zigc-wasm-0.17.0');
+		expect(lock.releaseBaseUrl).toMatch(
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-llvm\/[a-f0-9]{40}\/artifacts\/zig-browser$/u
+		);
 		expect(runtimeBuild.profileId).toBe(lock.profileId);
 		expect(runtimeBuild.upstream.lockSchemaVersion).toBe(lock.schemaVersion);
 		expect(runtimeBuild.upstream.releaseBaseUrl).toBe(lock.releaseBaseUrl);
@@ -86,10 +99,29 @@ describe('checked-in Zig execution asset receipts', () => {
 		expect(runtimeBuild.upstream.inputs).toEqual(lock.inputs);
 		expect(Object.keys(runtimeBuild.assets).sort()).toEqual(['std.tar.gz', 'zig_small.wasm']);
 		expect(runtimeBuild.assets).toEqual(WASM_ZIG_ASSET_RECEIPTS);
+		expect(runtimeBuild.upstream.producerReceipt).toMatchObject({
+			producerId: 'wasm-llvm/zig-browser',
+			version: '0.17.0',
+			target: 'wasm32-wasi',
+			wasi: 'preview1',
+			validation: { passed: true }
+		});
+		expect(runtimeBuild.upstream.producerReceipt.assets['zig.wasm']).toEqual(
+			runtimeBuild.assets['zig_small.wasm']
+		);
+		expect(runtimeBuild.upstream.producerReceipt.assets['lib.tar.gz']).toEqual(
+			runtimeBuild.assets['std.tar.gz']
+		);
 
 		const compiler = await readLogicalAsset('zig_small.wasm');
 		const stdlibArchive = await readFile('static/wasm-zig/std.tar.gz');
 		const stdlibTar = gunzipSync(stdlibArchive);
+		const license = await readFile('static/wasm-zig/LICENSE');
+		expect({ bytes: license.byteLength, sha256: sha256(license) }).toEqual(lock.inputs.LICENSE);
+		const module = await WebAssembly.compile(compiler);
+		expect([
+			...new Set(WebAssembly.Module.imports(module).map((entry) => entry.module))
+		]).toEqual(['wasi_snapshot_preview1']);
 		expect({ bytes: compiler.byteLength, sha256: sha256(compiler) }).toEqual(
 			runtimeBuild.assets['zig_small.wasm']
 		);
@@ -99,6 +131,24 @@ describe('checked-in Zig execution asset receipts', () => {
 			uncompressedBytes: stdlibTar.byteLength,
 			uncompressedSha256: sha256(stdlibTar)
 		}).toEqual(runtimeBuild.assets['std.tar.gz']);
+		expect(RUNTIME_ASSET_LOCK.assets['wasm-zig/zig_small.wasm']).toMatchObject({
+			...runtimeBuild.assets['zig_small.wasm'],
+			deliveryPath: 'wasm-zig/zig_small.wasm.gz'
+		});
+		expect(RUNTIME_ASSET_LOCK.assets['wasm-zig/std.tar.gz']).toMatchObject(
+			runtimeBuild.assets['std.tar.gz']
+		);
+		for (const asset of [
+			'wasm-zig/zig_small.wasm.gz',
+			'wasm-zig/runtime-build.json',
+			'compressed-runtime-assets.v1.json'
+		]) {
+			const bytes = await readFile(`static/${asset}`);
+			expect(RUNTIME_ASSET_LOCK.assets[asset]).toMatchObject({
+				bytes: bytes.byteLength,
+				sha256: sha256(bytes)
+			});
+		}
 
 		const fingerprint = fingerprintReceipts(runtimeBuild.profileId, runtimeBuild.assets);
 		expect(runtimeBuild.fingerprint).toBe(fingerprint);

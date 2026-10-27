@@ -267,7 +267,7 @@
 			"maxFiles": 3
 		},
 		"wasm-zig": {
-			"maxBytes": 5000000,
+			"maxBytes": 33000000,
 			"maxFiles": 5
 		},
 		"webr": {

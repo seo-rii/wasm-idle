@@ -267,9 +267,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Preserve Java/SIMD headroom and allow 24 KiB for main's 23,009-byte
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI adds eight files; this aggregate already installs the WASI shim.
-		// Its measured 42,394,510-byte install needs 33 KiB above the previous cap.
-		// GCC ABI/SIMD checks add 14,739 bytes, requiring another 15 KiB of budget.
-		budget: { maxBytes: 40 * MiB + 456 * 1024, maxFiles: 3_360, maxPackages: 70 },
+		// Its baseline ABI/SIMD changes retain the existing 48 KiB allowance.
+		// Preserve main's separate 8 KiB increase for Zig 0.17 host/library receipts.
+		budget: { maxBytes: 40 * MiB + 464 * 1024, maxFiles: 3_360, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
