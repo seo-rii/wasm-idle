@@ -92,11 +92,10 @@ later mutates the artifact's buffer. SHA-256 pins establish asset identity;
 compiler correctness still requires the producer's real native and Chromium tests.
 
 The experimental GCC port is not fully ABI-compatible with the LLVM-built WASI sysroot.
-Its `long double` is 64-bit rather than WASI libc's 128-bit, and singleton-aggregate
-function signatures differ across the compilers. Calls crossing those ABI boundaries
-are unsupported. Linking uses `--fatal-warnings`, so signature mismatches fail instead
-of producing the trapping stubs that `wasm-ld` otherwise permits. This check does not
-establish compatibility for every data-layout boundary.
+Its `long double` is 64-bit rather than WASI libc's 128-bit; long-double library and
+variadic interfaces are unsupported. Producer patch `0004` corrects scalar singleton
+aggregate calls. Linking uses `--fatal-warnings` to reject signature mismatches.
+This cannot detect mismatched variadic layouts or establish complete ABI compatibility.
 
 The experimental bundle's `capabilities` records C++, libc, libm, libstdc++, and static
 initialization availability independently. A bundle without `cpp` rejects C++ requests.
@@ -129,10 +128,13 @@ engine before passing `-msimd128` to GCC. A capable bundle defaults to `-mno-sim
 legacy manifests with `simd: false` retain their original compiler arguments. An object
 or executable containing SIMD without the requested opt-in is rejected.
 The experimental backend profile targets GNU `__attribute__((vector_size(16)))` vectors
-with i8x16, i16x8, i32x4, i64x2, f32x4 and f64x2 lanes. This does not promise automatic
-vectorization, the full `wasm_simd128.h` intrinsic API, or Clang-compatible vector calling
-conventions. The producer's native and real browser tests determine which operations
-are qualified before it advertises this capability.
+with i8x16, i16x8, i32x4, i64x2, f32x4 and f64x2 lanes. Producer patch `0006` adds scalar-count
+shifts, comparisons, conditional selection and constant shuffles. Patch `0007` enables
+direct `v128` calls and singleton vector aggregates, qualified against pinned Clang
+with SIMD enabled on both sides. Disabled profiles retain indirect vector calls.
+Check the bundle's pinned patches and native/browser qualification; older SIMD bundles
+have fewer operations. Automatic vectorization, `wasm_simd128.h`, relaxed SIMD and
+arbitrary external object inputs are not promised.
 
 `run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (four MiB by default, combined
 stdout/stderr), and returns the exit code, output, runtime and final linear-memory

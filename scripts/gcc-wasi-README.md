@@ -14,6 +14,8 @@ and the package README still apply.
 The subsequent backend review and SIMD/ABI results are recorded separately in
 wasm-llvm `docs/gcc-wasi-backend-review.md`; the numbers above identify the
 original scalar bundle rather than a later rebuild.
+Further SIMD operations and direct vector ABI work are recorded in wasm-llvm
+`docs/gcc-wasi-simd-extension.md`, with distinct compiler and bundle identities.
 
 These tools distinguish the compiler's **host** from its **output target**.
 `verify-gcc-wasi.mjs --manifest ...` loads real GCC into a Chromium Worker,
@@ -63,6 +65,14 @@ node scripts/verify-gcc-wasi.mjs \
   --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
   --suite /path/to/wasm-llvm/producer/gcc-wasi/atomic-libcall-fixtures.mjs \
   --output out/gcc-wasi-atomic-abi-browser
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/simd-extended-fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-simd-extended-browser
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/vector-abi-cases.mjs \
+  --output out/gcc-wasi-vector-abi-browser
 ```
 
 SIMD qualification checks enabled and disabled requests, every frontend's
@@ -72,6 +82,12 @@ are not translated. Browser ABI tests use GCC for all source units; the separate
 producer native suite additionally checks bidirectional Clang interoperability
 and raw narrow-integer Wasm exports. Atomic fixtures use explicit test-only
 single-threaded providers to inspect libcall arguments, not an atomic runtime.
+The extended SIMD suite includes NaNs, unsigned i64 comparisons, defined shift
+counts, GNU C++ vector conditions, and constant shuffles. Run the producer's
+`verify-simd-worker.mjs --suite .../simd-extended-fixtures.mjs` on its saved
+qualification to verify actual WAT and object instructions. The vector ABI suite
+uses multiple GCC translation units in Chromium; its separate native matrix
+additionally verifies both Clang directions and exact exported function types.
 
 The shared fixture set covers integer/floating-point operations, control flow,
 calls/function pointers, globals, structures, allocation, libc I/O, dynamic-input
