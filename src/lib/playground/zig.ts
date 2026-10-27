@@ -1,12 +1,14 @@
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
+	type DebugSessionEvent,
 	type SandboxExecutionOptions,
 	type ZigTargetTriple
 } from '$lib/playground/options';
 import {
 	resolveZigCompilerUrl,
 	resolveZigStdlibUrl,
+	resolveRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
 import { snapshotZigExecutionAssetReceipts } from '$lib/playground/zigAssets';
@@ -29,7 +31,8 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+import { CompiledLldbSandbox } from '$lib/playground/compiledLldb';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
@@ -53,7 +56,8 @@ const abortReason = (signal: AbortSignal, phase: ZigOperation['phase']) =>
 				'AbortError'
 			);
 
-class Zig implements Sandbox {
+class Zig extends CompiledLldbSandbox implements Sandbox {
+	protected lldbEntryFunction = 'main.main';
 	// The public binding must preserve this runtime's full lib/ archive budget.
 	readonly defaultExecutionLimits = Object.freeze({ maxAssetBytes: 256 * 1024 * 1024 });
 	output: any = null;
@@ -71,6 +75,10 @@ class Zig implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: ZigOperation | null = null;
+	private loadedRuntimeAssets: string | PlaygroundRuntimeAssets = '';
+	private loadedIntegrity?: ReturnType<typeof snapshotZigExecutionAssetReceipts>;
+	private debugTimeout?: { pause(): void; resume(): void };
+	private debugDisposal?: Promise<void>;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('Zig sandbox disposed', {
@@ -217,9 +225,10 @@ class Zig implements Sandbox {
 	private bindOperationTimeout(operation: ZigOperation, timeoutMs: number) {
 		if (!this.isOperationActive(operation)) return;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
-		operation.cleanups.push(() => {
+		const cancel = () => {
 			if (timeout !== undefined) clearTimeout(timeout);
-		});
+		};
+		operation.cleanups.push(cancel);
 		try {
 			timeout = setTimeout(() => {
 				if (!this.isOperationActive(operation)) return;
@@ -237,6 +246,7 @@ class Zig implements Sandbox {
 		} catch (error) {
 			this.cancelOperation(operation, error);
 		}
+		return cancel;
 	}
 
 	private resetExplicitStdinState() {
@@ -302,6 +312,7 @@ class Zig implements Sandbox {
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
 			const resolveLoad = () => {
 				if (!this.releaseOperation(activeOperation)) return;
+				this.loadedRuntimeAssets = runtimeAssets;
 				resolve();
 				this.cleanupOperation(activeOperation);
 			};
@@ -311,6 +322,7 @@ class Zig implements Sandbox {
 				this.cleanupOperation(activeOperation);
 			};
 			try {
+				if (this.debugDisposal) await this.debugDisposal;
 				if (!this.isOperationActive(activeOperation)) return;
 				this.pendingInput = [];
 				this.waitingForInput = false;
@@ -368,6 +380,7 @@ class Zig implements Sandbox {
 				this.compilerUrl = nextCompilerUrl;
 				this.stdlibUrl = nextStdlibUrl;
 				this.assetKey = nextAssetKey;
+				this.loadedIntegrity = nextIntegrity;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -443,6 +456,10 @@ class Zig implements Sandbox {
 
 	write(input: string) {
 		if (this.disposed) return;
+		if (this.lldbSession) {
+			void this.lldbSession.write(input);
+			return;
+		}
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
@@ -450,6 +467,10 @@ class Zig implements Sandbox {
 
 	eof() {
 		if (this.disposed) return;
+		if (this.lldbSession) {
+			void this.lldbSession.eof();
+			return;
+		}
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -467,7 +488,44 @@ class Zig implements Sandbox {
 		}
 	}
 
-	run(
+	async run(
+		code: string,
+		prepare: boolean,
+		log = true,
+		progress?: SandboxProgress,
+		args: string[] = [],
+		options: SandboxExecutionOptions = {}
+	): Promise<boolean | string> {
+		const debugDisposal = this.debugDisposal;
+		if (debugDisposal) {
+			this.requireOperationIdle();
+			await debugDisposal;
+			if (this.debugDisposal === debugDisposal) this.debugDisposal = undefined;
+		}
+		// LLDB owns a separate Worker; reload the pinned compiler after its predecessor retires.
+		if (!this.worker && this.loadedIntegrity && !this.disposed) {
+			this.requireOperationIdle();
+			const assets = this.loadedRuntimeAssets;
+			await this.load(
+				{
+					...(typeof assets === 'string' ? { rootUrl: assets } : assets),
+					zig: {
+						compilerUrl: this.compilerUrl,
+						stdlibUrl: this.stdlibUrl,
+						integrity: this.loadedIntegrity
+					}
+				},
+				'',
+				log,
+				[],
+				options,
+				progress
+			);
+		}
+		return this.runLoaded(code, prepare, log, progress, args, options);
+	}
+
+	private runLoaded(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -493,6 +551,8 @@ class Zig implements Sandbox {
 		let targetTriple: ZigTargetTriple;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
+		let debugMode: 'none' | 'lldb';
+		let debugClang: ReturnType<typeof resolveRuntimeAssetConfig> | undefined;
 		try {
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
@@ -502,12 +562,11 @@ class Zig implements Sandbox {
 				);
 			}
 			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('ZIG', args, options));
-			const debugMode = options.debugMode ?? (options.debug ? 'trace' : 'none');
-			if (debugMode !== 'none') {
-				throw new RuntimeConfigurationError(
-					'Zig source debugging is unavailable: the current Wasm compiler does not emit DWARF.'
-				);
+			const requestedDebugMode = options.debugMode ?? (options.debug ? 'lldb' : 'none');
+			if (requestedDebugMode !== 'none' && requestedDebugMode !== 'lldb') {
+				throw new RuntimeConfigurationError('Zig debugging requires debugMode: lldb.');
 			}
+			debugMode = requestedDebugMode;
 			limits = resolveExecutionLimits({ ...this.defaultExecutionLimits, ...options.limits });
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.zig';
@@ -524,6 +583,33 @@ class Zig implements Sandbox {
 				)
 			});
 			targetTriple = options.zigTargetTriple || 'wasm32-wasi';
+			if (debugMode === 'lldb') {
+				requireSharedArrayBuffer('Zig debugging');
+				if (targetTriple !== 'wasm32-wasi') {
+					throw new RuntimeConfigurationError('Zig LLDB debugging requires wasm32-wasi.');
+				}
+				debugClang = resolveRuntimeAssetConfig(
+					'clang',
+					this.loadedRuntimeAssets,
+					typeof window !== 'undefined' ? window.location.href : ''
+				);
+				if (!this.isOperationActive(activeOperation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(activeOperation, 'Zig execution cancelled')
+					);
+				}
+				if (debugClang.useAssetBridge && debugClang.loader) {
+					throw new RuntimeConfigurationError(
+						'Zig debugging requires URL-based Clang assets.'
+					);
+				}
+				this.configureLldb(this.loadedRuntimeAssets, options);
+				this.prepareLldb(options, workspace.activePath);
+				this.lldbEntryFunction = `${workspace.activePath
+					.split('/')
+					.pop()!
+					.replace(/\.zig$/, '')}.main`;
+			}
 			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
@@ -552,19 +638,20 @@ class Zig implements Sandbox {
 			const operation = this.workerSession.beginRun(worker, reject);
 			const timeoutMs = Math.min(
 				2_147_483_647,
-				limits.compileTimeoutMs + limits.runTimeoutMs
+				limits.compileTimeoutMs + (debugMode === 'lldb' ? 0 : limits.runTimeoutMs)
 			);
-			this.bindOperationTimeout(activeOperation, timeoutMs);
+			const cancelCompileTimeout = this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
+			let handedOff = false;
 			const ownsRun = () =>
 				this.isOperationActive(activeOperation) &&
-				this.worker === worker &&
-				worker.onmessage === handler &&
+				(handedOff || (this.worker === worker && worker.onmessage === handler)) &&
 				_uid === this.uid;
 			const claimRun = () => {
 				if (!ownsRun()) return false;
+				this.lldbPending = false;
 				this.finishExplicitStdin(activeOperation);
 				this.elapse = Date.now() - this.begin;
 				this.exit = true;
@@ -590,9 +677,61 @@ class Zig implements Sandbox {
 				reject(error);
 			};
 			handler = (event: Event & { data: any }) => {
-				if (!ownsRun()) return;
+				if (handedOff || !ownsRun()) return;
 				try {
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const { output, results, error, buffer, diagnostic, progress, lldbArtifact } =
+						event.data;
+					if (lldbArtifact) {
+						if (debugMode !== 'lldb' || prepare || handedOff) {
+							throw new RuntimeConfigurationError(
+								'Unexpected Zig debugger artifact.'
+							);
+						}
+						cancelCompileTimeout?.();
+						handedOff = true;
+						this.bindDebugTimeout(activeOperation, limits.runTimeoutMs);
+						const completion = this.startLldb(
+							lldbArtifact,
+							options,
+							programArgs,
+							this.pendingInput,
+							this.pendingEof,
+							(text) => {
+								if (!ownsRun()) return;
+								const actual = outputBytes + OUTPUT_ENCODER.encode(text).byteLength;
+								if (actual > limits.maxOutputBytes) {
+									failRun(
+										new OutputLimitError(
+											`Zig output exceeded ${limits.maxOutputBytes} bytes`,
+											{
+												actual,
+												limit: limits.maxOutputBytes,
+												phase: 'execute',
+												runtimeId: 'ZIG'
+											}
+										),
+										true
+									);
+									return;
+								}
+								outputBytes = actual;
+								try {
+									this.output?.(text);
+								} catch (error) {
+									failRun(error, true);
+								}
+							}
+						);
+						this.pendingEof = false;
+						if (this.workerSession.release(worker)) delete this.worker;
+						void completion.then(
+							(result) => {
+								if (claimRun()) resolve(result);
+							},
+							(error) => failRun(error)
+						);
+						return;
+					}
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
@@ -671,6 +810,14 @@ class Zig implements Sandbox {
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
 					targetTriple,
+					debugMode,
+					...(debugClang
+						? {
+								debugClangPath: debugClang.baseUrl,
+								debugClangIntegrity: debugClang.integrity,
+								maxWasmMemoryBytes: limits.maxWasmMemoryBytes
+							}
+						: {}),
 					log: _log
 				});
 			} catch (error) {
@@ -688,6 +835,7 @@ class Zig implements Sandbox {
 
 	private cancelOperation(operation: ZigOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
+		this.retireDebugger();
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
 		this.activeOperation = null;
@@ -705,17 +853,19 @@ class Zig implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		this.retireDebugger();
 		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
-			return;
+			return this.debugDisposal;
 		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		this.workerSession.terminate(reason);
 		this.exit = true;
+		return this.debugDisposal;
 	}
 
 	async clear() {
@@ -734,13 +884,19 @@ class Zig implements Sandbox {
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
 		this.disposed = true;
-		this.disposePromise = Promise.resolve();
+		this.disposePromise = Promise.resolve().then(async () => {
+			await this.debugDisposal;
+		});
+		this.retireDebugger();
 
 		const activeOperation = this.activeOperation;
 		delete this.worker;
 		this.compilerUrl = '';
 		this.stdlibUrl = '';
 		this.assetKey = '';
+		this.loadedRuntimeAssets = '';
+		this.loadedIntegrity = undefined;
+		this.ondebug = undefined;
 		this.output = null;
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();
@@ -752,6 +908,73 @@ class Zig implements Sandbox {
 			this.exit = true;
 		}
 		return this.disposePromise;
+	}
+
+	private retireDebugger() {
+		try {
+			const disconnecting = this.stopLldb();
+			if (!disconnecting) return;
+			// Shutdown may outlive cancellation; keep the exact caller reason and wait
+			// for target Workers to retire before disposal or a replacement execution.
+			const cleanup = Promise.resolve(disconnecting).catch(() => undefined);
+			this.debugDisposal = Promise.all([this.debugDisposal, cleanup]).then(() => undefined);
+		} catch {
+			// Cleanup must not replace the caller's cancellation or disposal outcome.
+		}
+	}
+
+	protected onLldbEvent(event: DebugSessionEvent) {
+		const operation = this.activeOperation;
+		if (!operation || !this.isOperationActive(operation)) return;
+		try {
+			if (event.type === 'pause') this.debugTimeout?.pause();
+			else if (event.type === 'resume') this.debugTimeout?.resume();
+			super.onLldbEvent(event);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private bindDebugTimeout(operation: ZigOperation, timeoutMs: number) {
+		let remaining = timeoutMs;
+		let started = Date.now();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let paused = true;
+		const clear = () => {
+			if (timer !== undefined) clearTimeout(timer);
+			timer = undefined;
+		};
+		const control = {
+			pause: () => {
+				if (paused) return;
+				remaining = Math.max(0, remaining - Math.max(0, Date.now() - started));
+				paused = true;
+				clear();
+			},
+			resume: () => {
+				if (!paused || !this.isOperationActive(operation)) return;
+				paused = false;
+				started = Date.now();
+				timer = setTimeout(
+					() =>
+						this.cancelOperation(
+							operation,
+							new TimeoutError(`Zig execution timed out after ${timeoutMs} ms`, {
+								phase: 'execute',
+								runtimeId: 'ZIG',
+								timeoutMs
+							})
+						),
+					Math.min(2_147_483_647, remaining)
+				);
+			}
+		};
+		this.debugTimeout = control;
+		operation.cleanups.push(() => {
+			clear();
+			if (this.debugTimeout === control) this.debugTimeout = undefined;
+		});
+		control.resume();
 	}
 }
 

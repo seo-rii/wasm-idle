@@ -115,7 +115,9 @@ export class CompiledLldbSandbox {
 			entryFunctionName: this.lldbEntryFunction,
 			programArgs,
 			stdin: options.stdin,
-			onDebugEvent: (event) => this.ondebug?.(event),
+			onDebugEvent: (event) => {
+				if (this.lldbSession === session) this.onLldbEvent(event);
+			},
 			onOutput
 		});
 		this.lldbSession = session;
@@ -134,6 +136,10 @@ export class CompiledLldbSandbox {
 		this.lldbSession = undefined;
 		this.lldbPending = false;
 		return session?.disconnect();
+	}
+
+	protected onLldbEvent(event: DebugSessionEvent) {
+		this.ondebug?.(event);
 	}
 
 	private sourcePath(path: string): `/workspace/${string}` {
