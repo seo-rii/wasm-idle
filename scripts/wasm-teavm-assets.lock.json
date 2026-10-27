@@ -88,8 +88,8 @@
 			"sourcePath": "scripts/teavm/THIRD_PARTY_NOTICES.md",
 			"targetPath": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 39712,
-			"sha256": "e530088dfb09c1d7649a42911f3b2a0c427b3add96928ba7a1e272d6b26ccd47"
+			"bytes": 39892,
+			"sha256": "4d3f36434500a0875cb7db49cf5ba414bc208161c37871ef088f078aabfd6e6c"
 		}
 	],
 	"build": {
@@ -138,6 +138,11 @@
 				"path": "scripts/teavm/patches/teavm-javac-0.16.0-compat.patch",
 				"bytes": 187792,
 				"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
+			},
+			{
+				"path": "scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch",
+				"bytes": 72491,
+				"sha256": "10459fdf93377e71aedb250135d7816e32aa9c5eb6738eeb1a3ffb64be50af14"
 			}
 		],
 		"commands": [
@@ -251,6 +256,31 @@
 					}
 				]
 			}
+		},
+		"compilerOverrides": {
+			"version": "0.16.0",
+			"sourceJar": {
+				"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.16.0/teavm-core-0.16.0-sources.jar",
+				"bytes": 1670879,
+				"sha256": "687cabf23e0d17a15be30fbc070809c2931714340aca224120fe31579f95519b"
+			},
+			"sources": [
+				{
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"upstreamSha256": "a15d251d9fc1bd7e2a9668677c3e45e6604d4072d2c631408d0c4b2f0fb60b46",
+					"bytes": 25905,
+					"sha256": "52c766f5027cc9b96c7bdd8138d1b81a313061dde369c6bd9dd0e692a2dbeb25"
+				},
+				{
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"upstreamSha256": "3ca9b19463d6013216d0b41f2d7a59cf3f91629c2abf77b66c8835cee9dd3d62",
+					"bytes": 43454,
+					"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
+				}
+			],
+			"classpath": "main output precedes dependency JARs in generateWasmGC"
 		}
 	},
 	"producer": {
@@ -283,13 +313,13 @@
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4746189,
-			"sha256": "b74eff164a089958fef78a98b9f889e3a7b12afa56bdcf007f9b2a631b200bf2",
+			"bytes": 4746215,
+			"sha256": "96291b9bf94d3ff3422ed35ff2305ec7c9d8052c9150f5a41b8ea6bc63bbd0de",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1850458,
-				"sha256": "93c1c9f3ca9a9b5d1edc21ec5616f74f53a89a3935179d5b24cb1afe3eb636e6"
+				"bytes": 1850481,
+				"sha256": "85516bce089fe6eea631f17c5b528972b3915d6679fdc10b5a2968a2bb64a438"
 			}
 		},
 		{

@@ -10,7 +10,9 @@ Corresponding source references and byte receipts are recorded in
 Formatter, reflection, annotation, cloning, ServiceLoader and class-library supplement sources.
 It includes modified `TypeSet` and `TagRegistry` classes used only by the build to make compiler
 output reproducible. The runtime overlays are compiled and assembled inside the Gradle source
-set. `TIllegalFormatWidthException` is a wasm-idle addition. No warranty is provided.
+set. `teavm-javac-0.16.0-debug-scopes.patch` carries modified TeaVM `WasmBinaryRenderer` and
+`WasmBinaryRenderingVisitor` sources that close inline debug scopes at function boundaries.
+`TIllegalFormatWidthException` is a wasm-idle addition. No warranty is provided.
 
 ## TeaVM and teavm-javac
 
