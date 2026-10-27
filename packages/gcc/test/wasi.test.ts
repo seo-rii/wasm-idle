@@ -268,6 +268,43 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 		}
 	});
 
+	it('links the binary128 print/scan extension before libc only for qualified bundles', () => {
+		const source = manifestFixture();
+		const legacy = parseWasiGccManifest(source);
+		expect(legacy.capabilities.longDouble).toBe(false);
+		const explicitlyDisabled = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, longDouble: false }
+		});
+		const capable = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, longDouble: true }
+		});
+		for (const language of ['c', 'cpp'] as const) {
+			for (const emit of ['assembly', 'object', 'executable'] as const)
+				expect(
+					wasiGccCompilePlan({ code: '', language, emit }, explicitlyDisabled)
+				).toEqual(wasiGccCompilePlan({ code: '', language, emit }, legacy));
+			const oldLink = wasiGccCompilePlan({ code: '', language }, legacy).stages.at(-1)!.argv;
+			const link = wasiGccCompilePlan({ code: '', language }, capable).stages.at(-1)!.argv;
+			expect(oldLink).not.toContain('-lc-printscan-long-double');
+			expect(link.indexOf('-lc-printscan-long-double')).toBeGreaterThan(0);
+			expect(link.indexOf('-lc-printscan-long-double')).toBeLessThan(link.indexOf('-lc'));
+			expect(link.filter((arg) => arg !== '-lc-printscan-long-double')).toEqual(oldLink);
+		}
+		for (const update of [
+			{ longDouble: 'binary128' },
+			{ longDouble: true, libc: false },
+			{ longDouble: true, libm: false }
+		])
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					capabilities: { ...source.capabilities, ...update }
+				})
+			).toThrow(/longDouble/);
+	});
+
 	it('schedules actual GCC, relocatable WABT and wasm-ld with real -D options for each unit', () => {
 		const code = '#include "local.h"\nint helper(void); int main(void) { return helper(); }';
 		const manifest = parseWasiGccManifest(manifestFixture());

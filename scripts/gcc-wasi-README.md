@@ -89,6 +89,26 @@ qualification to verify actual WAT and object instructions. The vector ABI suite
 uses multiple GCC translation units in Chromium; its separate native matrix
 additionally verifies both Clang directions and exact exported function types.
 
+For a bundle advertising `capabilities.longDouble`, qualify IEEE binary128
+arithmetic, C/C++ calls, varargs, formatted I/O, libm and GNU iostreams with:
+
+```sh
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite /path/to/wasm-llvm/producer/gcc-wasi/long-double-fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-long-double-browser
+```
+
+All 42 cases include their own O0/O2 request and actual `ONLINE_JUDGE=1`
+compiler option. Forty cases use the scalar profile; two mix binary128 with
+explicit SIMD vector arguments. The native producer matrix additionally links
+GCC and Clang objects in both directions. The SDK keeps Clang outside its
+compilation path. Old manifests omit the capability and retain their original
+link command; their binary64 long-double runtime limitation still applies.
+The print/scan extension is part of `sysroot.tar` and its loading measurements.
+Saved intermediate WAT/objects cover the main translation unit; the executable
+contains all requested translation units.
+
 The shared fixture set covers integer/floating-point operations, control flow,
 calls/function pointers, globals, structures, allocation, libc I/O, dynamic-input
 libm, C/C++ translation units and headers, static initialization/destruction,

@@ -150,6 +150,8 @@ export interface WasiGccManifest {
 		libm: boolean;
 		libstdcxx: boolean;
 		staticInitialization: boolean;
+		/** Qualified IEEE binary128 ABI, arithmetic and WASI long-double library interfaces. */
+		longDouble?: boolean;
 		exceptions: false;
 		rtti: false;
 		threads: false;

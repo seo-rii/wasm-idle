@@ -77,11 +77,11 @@ object memory imports also reject shared memory/memory64. Execution uses the exa
 private byte snapshot inspected, protecting against later caller mutations.
 Digests establish asset identity; native and Chromium tests qualify the compiler.
 
-The experimental GCC port is not fully ABI-compatible with the LLVM-built WASI sysroot.
-Its `long double` is 64-bit rather than WASI libc's 128-bit; long-double library and
-variadic interfaces are unsupported. Producer patch `0004` corrects scalar singleton
-aggregate calls. Linking uses `--fatal-warnings` to reject signature mismatches.
-This cannot detect mismatched variadic layouts or establish complete ABI compatibility.
+`capabilities.longDouble` identifies bundles qualified for IEEE binary128, including
+WASI math and formatted I/O. The SDK links their `libc-printscan-long-double.a`
+before libc. Older manifests default to `false`: their 64-bit `long double` is
+incompatible with WASI long-double library and variadic interfaces. Linking uses
+`--fatal-warnings`; execution tests are also needed to detect variadic ABI errors.
 
 Bundle `capabilities` separately records `cpp`, `libc`, `libm`, `libstdcxx` and
 `staticInitialization`. Without `cpp`, C++ requests fail; without `libstdcxx`, only

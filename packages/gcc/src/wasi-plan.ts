@@ -95,6 +95,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				`-L${manifest.gccInstallation}`,
 				...objects,
 				...(language === 'cpp' && manifest.capabilities.libstdcxx ? ['-lstdc++'] : []),
+				...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
 				'-lm',
 				'-lc',
 				...manifest.runtimeLibraries

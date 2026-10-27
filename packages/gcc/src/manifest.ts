@@ -177,6 +177,11 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;
+	if (capabilityInput.longDouble !== undefined && typeof capabilityInput.longDouble !== 'boolean')
+		throw new Error('Invalid GCC WASI capability: longDouble');
+	capabilities.longDouble = capabilityInput.longDouble ?? false;
+	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
+		throw new Error('GCC WASI longDouble requires libc and libm');
 	if (!Array.isArray(input.runtimeLibraries) || input.runtimeLibraries.length > 16)
 		throw new Error('Invalid GCC WASI runtime libraries');
 	const runtimeLibraries = input.runtimeLibraries.map((path: unknown) => {

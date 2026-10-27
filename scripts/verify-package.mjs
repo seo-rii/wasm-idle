@@ -131,6 +131,7 @@ declare const wasiManifest: WasiGccManifest;
 const wasiTarget: 'wasm32-wasi' = wasiArtifact.target;
 const simdFeature: boolean | undefined = wasiArtifact.wasm?.features.simd128;
 const simdCapability: boolean = wasiManifest.capabilities.simd;
+const longDoubleCapability: boolean | undefined = wasiManifest.capabilities.longDouble;
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 // @ts-expect-error Wasm output cannot select an x86 CPU profile.
 const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
@@ -138,7 +139,7 @@ const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
 const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
 // @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
 const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
-void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, wasiWorkerFactory, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
+void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, wasiWorkerFactory, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
 	{
