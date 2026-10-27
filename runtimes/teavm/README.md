@@ -1,235 +1,117 @@
 # TeaVM Runtime Package
 
-`@wasm-idle/runtime-teavm` wraps the TeaVM browser compiler/runtime assets with reusable asset
-manifests, URL resolution, and fetch helpers.
+`@wasm-idle/runtime-teavm` wraps the TeaVM browser compiler and class libraries with reusable
+asset manifests, URL resolution, and fetch helpers. Java integration lives in
+`src/lib/playground/worker/java.ts` and uses the real TeaVM compiler in a browser Worker.
 
-Java execution uses TeaVM's browser compiler/runtime assets from `static/teavm/`:
+The checked-in generation uses TeaVM 0.16.0 and `konsoletyper/teavm-javac` revision
+`208d4c97a602ba0df055f16e6882059fb69d0122`, built with Eclipse Temurin 25.0.5+8 for Linux x64
+and Gradle 9.1.0. The javac source is independently pinned to OpenJDK revision
+`6c48f4ed707bf0b15f9b6098de30db8aae6fa40f`.
 
-- `compiler.wasm`
+All five logical assets in `static/teavm/` belong to one generation:
+
 - `compiler.wasm-runtime.js`
+- `compiler.wasm`
 - `compiler.wasm-deobfuscator.wasm`
 - `compile-classlib-teavm.bin`
 - `runtime-classlib-teavm.bin`
 
-The checked-in generation is reproduced from `konsoletyper/teavm-javac` revision
-`7e4a44cf521694a4e326e33850dd8aec165eb5c9`, TeaVM 0.13.1, and the Eclipse Temurin
-25.0.3+9 Linux x64 JDK archive. Java-specific integration code lives in
-`src/lib/playground/worker/java.ts` and `src/lib/playground/javaStdin.ts`.
-
-The wrapper and browser application pin all five logical assets to the same exact byte counts and
-SHA-256 receipts. `static/teavm/runtime-manifest.v2.json` binds those receipts to source, JDK,
-Gradle, dependency-verification, local-overlay, storage, and license metadata. A custom base URL or
-loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
+`scripts/wasm-teavm-assets.lock.json` pins source inputs, compatibility patches, JDK/Node/Gradle
+identities, observed dependency checksums, logical and compressed output hashes, and notices.
+`static/teavm/runtime-manifest.v2.json` and both generated consumer modules bind exactly the same
+receipts. Custom asset URLs are mirrors for that generation unless the caller provides a complete
 replacement receipt set.
 
-## TeaVM 0.16.0 build candidate
+## Reproduce the shipped generation
 
-The next build inputs are locked separately in `scripts/teavm/candidate-inputs.lock.json`:
-TeaVM 0.16.0, teavm-javac revision `208d4c97a602ba0df055f16e6882059fb69d0122`,
-Temurin 25.0.5+8 for Linux x64, and Gradle 9.1.0. The real javac source remains the
-upstream-selected OpenJDK revision `6c48f4ed707bf0b15f9b6098de30db8aae6fa40f`.
-Updating the host JDK does not change that independently pinned javac source.
-
-Download the source archive named in that candidate lock, then prepare a fresh directory:
+Check out the exact teavm-javac revision above and download the JDK archive named in the lock.
+Use the locked Node version, then run:
 
 ```bash
-node scripts/prepare-wasm-teavm-candidate.mjs /path/to/208d4c97a602ba0df055f16e6882059fb69d0122.tar.gz /path/to/new-candidate
+pnpm run sync:wasm-teavm /path/to/teavm-javac /path/to/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz
 ```
 
-This verifies the source and compatibility-patch hashes, checks and applies
-`teavm-javac-0.16.0-compat.patch`, and pins the Gradle distribution checksum. It needs no
-JDK or dependency downloads. The patch migrates reflection and `ServiceLoader` registration to
-the 0.16 API, rebases the two deterministic compiler classes, keeps the annotation and array-clone
-fixes, and removes numeric supplements now supplied upstream. The remaining eight supplement
-classes compile against 0.16; the string supplement accommodates the now-final `TString`.
-Runtime byte I/O and formatting overlays are rebased on the 0.16 source JAR and compiled as a
-separate source set. Archive assembly checks all 11 replacement targets and appends the missing
-format-width exception. Source correspondence hashes are recorded in the candidate lock.
+The producer requires a clean checkout from the pinned remote. It exports that commit into a fresh
+build directory, checks and applies the compatibility patch, verifies every integrated overlay
+source, checks JDK identity, and invokes Gradle with `--dependency-verification strict`. The
+checked-in dependency metadata was observed identically in two independent builds; publication
+never regenerates it. Gradle and OpenJDK downloads are hash checked. An optional
+`GRADLE_RO_DEP_CACHE` may point to a cache directory containing `modules-2`; writes stay isolated.
 
-To prepare and build in one invocation, also supply the exact JDK archive named in the lock;
-the output directory must not already exist:
+TeaVM 0.16's distribution ZIP omits the stack deobfuscator. The producer extracts its unmodified
+Wasm resource from the resolved, hash-pinned `teavm-wasm-gc-deobfuscator-0.16.0.jar`. The final
+five outputs must match the independently reproduced receipts before the producer transactionally
+replaces the static tree and both generated modules. Third-party notices and source references
+are included in `static/teavm/THIRD_PARTY_NOTICES.md`.
+
+Reserve several GiB of temporary disk and memory for this build. The Gradle coordinator is limited
+to one worker and a 512 MiB heap; TeaVM's compiler daemon needs additional memory. Long builds
+should use a private background log and recorded exit status according to the workspace rules.
+`TMPDIR` selects the build scratch filesystem.
+
+## Compatibility changes
+
+`scripts/teavm/patches/teavm-javac-0.16.0-compat.patch` migrates the existing browser fixes to
+0.16's reflection and ServiceLoader APIs. Upstream now supplies the SDK method-renaming fix and
+several numeric methods, so those old backports are omitted. Eight remaining supplement classes
+are compiled once and injected into both class libraries. Supplement insertion rejects collisions.
+
+Byte I/O, typed NIO buffers, and Formatter overlays are now a Gradle source set. Archive assembly
+verifies all 11 replacement classes and appends the missing format-width exception. The fixes
+preserve UTF-8 across flush boundaries, advance long byte writes correctly, avoid unsupported
+JavaScript typed-array views, and retain `%n`, `%%`, scientific notation, and decimal rounding
+behavior. The overlay's original and modified source hashes are recorded in the input lock.
+
+Compiler-side annotation and array-clone fixes remain. Deterministic copies of `TypeSet` and
+`TagRegistry` stabilize class traversal and numbering during the native build. These two classes
+are build inputs only. Reflective field/method invocation remains outside TeaVM Wasm GC support.
+
+`teavm-javac-0.16.0-debug-scopes.patch` fixes an upstream 0.16 debug-information regression:
+an inlined final instruction left its scopes open, hiding later functions from stack deobfuscation.
+Two source copies from the pinned `teavm-core` source JAR explicitly finish locations at each
+function boundary. Original and modified hashes are recorded in `build.compilerOverrides`.
+The compiler task puts these outputs before dependency JARs so the source overrides take effect.
+`scripts/teavm/DebugScopesRegression.java` fails against the original 0.16 emitter and passes
+against these overrides, checking balanced scopes, subsequent functions, and nested source frames.
+
+## Validation
+
+Two isolated native builds produced byte-identical copies of all five assets and identical Gradle
+verification metadata. Chromium passed all 24 direct compiler cases on the reproduced bundle, including
+UTF-8 stdin, formatting, typed buffers, reflection/enums, annotation values, primitive/object clone,
+and ServiceLoader. The exact inputs, outputs, and cases are in
+`scripts/teavm/candidate-qualification.json`.
+Every generated program is also checked for balanced inline/function debug scopes.
+
+To exercise the actual application Worker with the shipped assets, including shared-buffer stdin,
+UTF-8 EOF, preparation, diagnostics, exception source stacks, and recovery, run:
 
 ```bash
-node scripts/prepare-wasm-teavm-candidate.mjs /path/to/208d4c97a602ba0df055f16e6882059fb69d0122.tar.gz /path/to/new-build /path/to/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz
+WASM_IDLE_TEAVM_WORKER_RECEIPT=/path/to/worker-report.json node scripts/probe-teavm-worker.mjs
 ```
 
-The build uses an isolated Gradle cache, verifies the downloaded OpenJDK source archive, builds
-the patched compiler and both class libraries, and writes the five logical assets under `dist/`
-with observed hashes in `candidate-status.json`. It also collects dependency verification metadata
-for review. TeaVM 0.16.0 does not include the stack deobfuscator in its distribution ZIP, so the
-candidate packages the resource from the resolved `teavm-wasm-gc-deobfuscator-0.16.0.jar`, verifying
-both the complete JAR and its Wasm resource against the candidate lock. Dependency lookup supports
-the isolated Gradle cache and an optional `GRADLE_RO_DEP_CACHE` directory containing `modules-2`.
-Allow several GiB of disk and build memory; this invokes the upstream compiler build
-and downloads dependencies. Run long builds with a private background log as required by the
-workspace instructions.
+The probe uses Chromium and checks both buffered and streaming compiler loading. It verifies every
+stored and logical asset before serving it on an isolated loopback origin. The streaming adapter
+accepts a compiled module only at the exact verified 0.16 runtime-loader boundary.
+Buffered and custom loaders receive verified deobfuscator bytes; the adapted streaming loader can
+reuse its compiled module. Both paths validate the deobfuscator before acknowledging startup.
+Exception checks require the original throw location and reject raw placeholder frames. TeaVM 0.16
+can omit an inlined caller from the optimized launcher stack: the tested exception retains
+`Main.fail(Main.java:2)` but omits `Main.main(Main.java:3)`, which the previous 0.13.1 bundle retained.
 
-The isolated candidate was qualified on 2026-10-27. Two fresh native compiler builds produced
-byte-identical copies of all five assets and identical dependency verification metadata. Chromium
-153.0.8010.12 passed all 24 compile-and-run cases on both bundles: 15 existing application Java
-regressions, including UTF-8 stdin in seven-byte chunks, and nine enabled upstream cases. The
-receipts and exact coverage are recorded in `scripts/teavm/candidate-qualification.json`; observed
-dependency checksums are preserved in `scripts/teavm/candidate-gradle-verification-metadata.xml`.
-
-With the repository dependencies and Playwright Chromium installed, repeat the browser check with:
+The isolated candidate preparer remains available for future input migrations without publishing:
 
 ```bash
-node scripts/probe-wasm-teavm-candidate.mjs /path/to/new-build /path/to/browser-report.json
+node scripts/prepare-wasm-teavm-candidate.mjs /path/to/source.tar.gz /path/to/new-candidate /path/to/jdk.tar.gz
+node scripts/probe-wasm-teavm-candidate.mjs /path/to/new-candidate /path/to/browser-report.json
 ```
 
-The probe serves only the isolated candidate and uses the application stdin helpers. Publication
-producer migration, enforcement of the observed dependency checksums, and actual Java Worker
-integration remain release gates. The input lock and generated build status preserve their original
-validation-pending state; the separate qualification receipt records the completed checks. The
-candidate command never changes `static/teavm/`, consumer receipts, or the existing 0.13.1 producer
-lock. `sync:wasm-teavm` still reproduces that shipped generation.
+That preparer records newly observed dependencies and does not replace the strict publication
+producer. Its original validation-pending input metadata is complemented by the separate observed
+qualification receipt.
 
-Run the preparation checks without downloading or building a compiler:
-
-```bash
-node --test scripts/prepare-wasm-teavm-candidate.test.mjs
-```
-
-## Shipped TeaVM 0.13.1 generation
-
-The stack deobfuscator is the unmodified `org/teavm/backend/wasm/deobfuscator.wasm` resource from
-the pinned `teavm-wasm-gc-deobfuscator` 0.13.1 JAR. It resolves the debug metadata already embedded
-in compiled programs to Java class, method, file, and line information, including calls to
-`Throwable.printStackTrace()`.
-
-The compiler is built from that revision with source patches. The first,
-`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`, addresses TeaVM issue #1322:
-TeaVM skips `@PluggableDependency` dependency plugins when TeaVM itself is compiled by TeaVM, as it
-is in the browser compiler, so `Object.clone()` results lost their types: `String.format("%.2f", x)`
-and virtual calls on other cloned objects trapped with "dereferencing a null pointer". The patch
-registers a dependency listener that applies the declared plugins. Only `compiler.wasm` changes;
-the producer applies the patch with `git apply` before the Gradle build, and `upstreamOutputs`
-records the receipts of that patched build.
-
-A second source patch, `scripts/teavm/patches/teavm-javac-stdlib-rename.patch`, backports upstream
-teavm-javac commit `199bed0` ("When converting TeaVM's class library methods, apply `@Rename`
-annotation properly"). Without it the javac SDK (`compile-classlib-teavm.bin`) exposed TeaVM's
-implementation names (`Throwable.getMessage0`, `Object.getClass0`, `ArrayList.clone0`), so
-`e.getMessage()`, `x.getClass()` and `list.clone()` did not compile. It changes only
-`compile-classlib-teavm.bin`.
-
-A third source patch, `scripts/teavm/patches/teavm-javac-enum-constants.patch`, restores enum
-reflection. TeaVM 0.13.1's `PlatformPlugin` installs `EnumDependencySupport` only when TeaVM is not
-compiled by TeaVM, so the browser compiler never linked `values()` for enums reached through
-`Class.getEnumConstants()`: it returned an empty array, and `Enum.valueOf`, `EnumSet` and `EnumMap`
-trapped or printed `Main$Color@...`. The patch registers an equivalent listener that matches
-`ClassSupport.getEnumConstants` by name, because the original refers to
-`org.teavm.platform.Platform`, which the Wasm GC target does not support. It changes only
-`compiler.wasm`.
-
-A fourth source patch, `scripts/teavm/patches/teavm-javac-annotation-classlib.patch`, repairs
-annotations in the javac SDK. TeaVM declares `TAnnotation` as an `@interface`, so after renaming the
-SDK's `java.lang.annotation.Annotation` extended itself; javac does not check class files for cyclic
-inheritance and `Types.rank()` recursed until the stack overflowed whenever it resolved an
-annotation element, as in `@SuppressWarnings("unchecked")`. TeaVM's `SuppressWarnings` also has no
-`value()` element. The patch drops self-referencing interfaces in `StdlibConverter` and adds a
-`SuppressWarnings` with `value()` to teavm-javac's class-library emulation sources. It changes only
-`compile-classlib-teavm.bin` and must be applied after the `199bed0` backport.
-
-A fifth source patch, `scripts/teavm/patches/teavm-javac-array-clone.patch`, makes cloning primitive
-arrays work. TeaVM 0.13.1 dependency analysis only connects a cloned array to `Object.clone()` when
-the array variable escapes its method, and the Wasm GC backend installs a primitive array class's
-clone function only for types that reach `Object.clone()`; so `int[] b = a.clone();` followed by
-local use trapped with "dereferencing a null pointer". This is TeaVM behaviour, not specific to the
-browser compiler. The patch registers a listener that infers the static type of cloned arrays in
-reached methods and propagates primitive array types to `Object.clone()`. It changes only
-`compiler.wasm`.
-
-A sixth source patch, `scripts/teavm/patches/teavm-javac-reproducible-wasm.patch`, makes the
-`compiler.wasm` build byte-reproducible. TeaVM 0.13.1 keeps dependency-node domains in a `HashSet`
-of identity-hashed nodes (`TypeSet`), so the order in which classes are reached differs between JVM
-runs, and `TagRegistry` numbers the class tags used by `Class.isInstance`/`isAssignableFrom` range
-checks in that order; builds of identical sources produced `compiler.wasm` files that differed only
-in those `i32.const` tags. The patch puts copies of both classes with deterministic iteration (a
-`LinkedHashSet` domain and sorted class names) first on the classpath of the out-of-process TeaVM
-build daemon. They are not part of the compiled program, and the build fails if the TeaVM version
-changes.
-
-A seventh source patch, `scripts/teavm/patches/teavm-javac-bootstrap-services.patch`, installs the
-`ServiceLoader` and runtime-annotation support that TeaVM's `JCLPlugin` skips when TeaVM itself is
-compiled by TeaVM, as the browser compiler is. Without it, `ServiceLoader.load(...)` failed with
-"Method is not annotated with {{c0}}" and `Class.getAnnotation` of a `RUNTIME` annotation crashed
-code generation. TeaVM 0.13.1's Wasm GC annotation support also propagates no type for `String` and
-`String[]` element values, so using such a value, as in `tag.value() + "!"`, dereferenced a null
-pointer even in JVM-hosted TeaVM; the patch adds a listener that propagates `String` to those
-fields. Reflective field and method access stays unsupported, as in TeaVM's Wasm GC backend. It
-changes only `compiler.wasm`.
-
-An eighth source patch, `scripts/teavm/patches/teavm-javac-classlib-supplements.patch`, adds
-`java.*` methods that the TeaVM 0.13.1 class library lacks. Small supplement classes compiled once
-against that library carry the methods; teavm-javac copies them into the target classes both when it
-converts the javac SDK and when it packs the runtime class library, so the two always declare the
-same API, and the build fails if a supplement would replace an existing method. It adds
-`PrintStream.print(boolean)`, `print(float)`, `println(char[])` and `writeBytes(byte[])`; without the
-float and `char[]` overloads, javac picked `print(double)` and `println(Object)`, so
-`System.out.print(0.1f)` printed `0.10000000149011612` and `System.out.println(chars)` printed
-`[C@…`. It also adds `Integer.sum`, `toUnsignedLong` and `parseUnsignedInt`, `Long.sum`, `max`, `min`
-and `parseUnsignedLong`, `Double` and `Float` `sum`, `max` and `min`, `Math.multiplyHigh` and
-`multiplyFull`, `Character.toString(int)`, `Collection.parallelStream()` (sequential, like every
-TeaVM stream), `Stream.ofNullable`, and `String.lines()` and `transform`. `Long::sum` also makes
-`Collectors.counting()` work. It changes `compile-classlib-teavm.bin` and the canonical runtime class
-library, not `compiler.wasm`.
-
-The runtime class library intentionally carries one wasm-idle compatibility overlay for character
-and byte stream I/O under Wasm GC. Starting from the pinned TeaVM 0.13.1 source JAR, it changes
-exactly two `allocate`/`wrap` calls in each of `TByteBuffer`, `TCharBuffer`, `TShortBuffer`,
-`TIntBuffer`, `TLongBuffer`, `TFloatBuffer`, and `TDoubleBuffer` from the typed array's
-`fromJavaArray` to `copyFromJavaArray`. Those calls sit in JavaScript-backend branches that never
-run under Wasm GC, but TeaVM 0.13.1 still rejects their `@JSByRef` parameters while generating Wasm
-GC code. Without the overlay, any program reaching `CharBuffer` (for example `InputStreamReader`,
-`BufferedReader`, `OutputStreamWriter`, `PrintWriter`, or `String.getBytes(Charset)`) fails before
-it runs.
-
-It also repairs two defects in the Wasm GC `System.out`/`System.err` byte path,
-`JsConsolePrintStream`: `flush()` cleared its pending action before invoking it, trapping with a
-null dereference on the first flush after a byte write (for example `BufferedWriter.flush()`), and
-`write(byte[], off, len)` never advanced `off`, repeating the first 32 bytes of longer writes. Its
-`ByteEncoder.flush()` also decoded pending bytes as the end of input, so the next byte write threw
-`IllegalStateException` and a UTF-8 character split across a flush was replaced; it now keeps an
-incomplete sequence pending until the rest arrives.
-
-`TFormatter` handles `%n` and `%%` without consuming an argument, as `java.util.Formatter` does
-(TeaVM issue #1317): `%n` emits the line separator instead of throwing
-`UnknownFormatConversionException`, and `%%` no longer shifts later arguments. The overlay adds
-`TIllegalFormatWidthException`, which TeaVM 0.13.1 lacks, for the `%5n` case; the producer appends
-it to the archive and rejects an archive that already contains it. `%f` also rounds half up on the
-shortest decimal representation, as `java.util.Formatter` does, instead of `DecimalFormat`'s default
-half-even (TeaVM issue #1323): `"%.1f"` of `0.25` is `0.3` and `"%.2f"` of `1.005` is `1.01`.
-`%e` and `%E`, which TeaVM 0.13.1 rejects as unknown conversions, format the same way in scientific
-notation with the `-`, `#`, `+`, space, `0` and `(` flags. They round the digits by hand because
-TeaVM 0.13.1's `BigDecimal.round` leaves a value unchanged when it would drop exactly one digit.
-
-The producer verifies each original source entry, transform occurrence count, transformed source,
-JDK 25 `javac --release 17` output (including nested classes), canonical 2,141-entry archive,
-appended entries, and final byte receipts before publication. Do not broaden this overlay while
-performing a provenance-only refresh.
-
-To reproduce and publish the generation, check out the revision above, download the exact JDK
-archive recorded in `scripts/wasm-teavm-assets.lock.json`, and run:
-
-```bash
-pnpm run sync:wasm-teavm /path/to/teavm-javac /path/to/OpenJDK25U-jdk_x64_linux_hotspot_25.0.3_9.tar.gz
-```
-
-The producer uses a fresh isolated Gradle cache, injects the checked-in SHA-256 dependency
-verification metadata, verifies the Gradle and OpenJDK downloads, applies the locked overlay, and
-transactionally replaces the static tree and both generated consumer receipt modules. It rejects
-source, dependency, toolchain, intermediate, overlay, logical-output, or compressed-storage drift.
-Third-party license texts and source correspondence are shipped in
-`static/teavm/THIRD_PARTY_NOTICES.md`.
-
-Build and type-check the wrapper package with:
-
-```bash
-pnpm --dir runtimes/teavm run build
-pnpm --dir runtimes/teavm run check
-```
-
-For generic runtime-dispatch integration, `wasm-teavm` is registered as a manual,
-source-required producer. Set `WASM_IDLE_TEAVM_JDK_ARCHIVE` to the pinned JDK archive before using
+Build and type-check the wrapper with `pnpm --dir runtimes/teavm run build` and
+`pnpm --dir runtimes/teavm run check`. The generic runtime dispatcher registers `wasm-teavm` as a
+manual source-required producer; set `WASM_IDLE_TEAVM_JDK_ARCHIVE` before invoking
 `scripts/sync-runtime.mjs wasm-teavm <sourceDir> [targetDir]`.

@@ -7,6 +7,7 @@ import { readFile, writeFile, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 import vm from 'node:vm';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -181,7 +182,7 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}/`;
-const browserTmp = await mkdtemp('/tmp/tv-');
+const browserTmp = await mkdtemp(path.join(os.tmpdir(), 'teavm-candidate-browser-'));
 let browser;
 let watchdog;
 try {
@@ -256,8 +257,43 @@ try {
 					},
 					stackDeobfuscator: { enabled: false }
 				});
+				const sections = WebAssembly.Module.customSections(app.module, 'teavm_line');
+				if (sections.length !== 1) throw Error('Missing embedded Java source locations');
+				const lines = new Uint8Array(sections[0]);
+				let cursor = 0,
+					depth = 0,
+					starts = 0,
+					ends = 0;
+				while (cursor < lines.length) {
+					const op = lines[cursor++];
+					if (op === 0) {
+						depth++;
+						starts++;
+					}
+					if (op === 1) {
+						depth--;
+						ends++;
+					}
+					if (depth < 0) throw Error('Java debug scope ended without a start');
+					if (op === 0 || op === 2 || op === 3 || op === 4) {
+						let byte;
+						do {
+							if (cursor >= lines.length) throw Error('Truncated Java debug operand');
+							byte = lines[cursor++];
+						} while (byte & 128);
+					} else if (op !== 1 && op < 10) throw Error('Unknown Java debug opcode');
+				}
+				if (depth || !starts)
+					throw Error(`Unbalanced Java debug scopes: ${starts} starts, ${ends} ends`);
 				await app.exports.main([]);
-				return { status: 'ok', stdout, stderr, diagnostics, stdinBytes: position };
+				return {
+					status: 'ok',
+					stdout,
+					stderr,
+					diagnostics,
+					stdinBytes: position,
+					debugScopes: { starts, ends }
+				};
 			} catch (error) {
 				return {
 					status: 'runtime-failed',
