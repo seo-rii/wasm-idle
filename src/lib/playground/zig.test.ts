@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlaygroundRuntimeAssets } from './assets';
+import { createPlaygroundBinding } from '@wasm-idle/core';
 
 const TEST_RUNTIME_ASSETS = {
 	zig: { compilerUrl: '/wasm-zig/zig_small.wasm', stdlibUrl: '/wasm-zig/std.tar.gz' }
@@ -133,7 +134,7 @@ describe('Zig sandbox', () => {
 				compileArgs: ['-O', 'Debug'],
 				activePath: 'src/main.zig',
 				workspaceFiles: [helperFile],
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: true
 			})
 		);
@@ -145,12 +146,37 @@ describe('Zig sandbox', () => {
 				args: ['one'],
 				stdin: '5\n',
 				activePath: 'main.zig',
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: true
 			})
 		);
 		expect(progressValues).toContain(1);
 		expect(outputs).toEqual(['zig artifact ready\n', 'zig-ok\n']);
+	});
+
+	it('preserves the full library budget through the public binding and honors explicit limits', async () => {
+		const binding = createPlaygroundBinding(TEST_RUNTIME_ASSETS, async () => new Zig());
+		try {
+			const sandbox = await binding.load('ZIG');
+			await sandbox.load('', false, []);
+			expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					load: true,
+					maxAssetBytes: 256 * 1024 * 1024
+				})
+			);
+			const limitedSandbox = await binding.load('ZIG');
+			await expect(
+				limitedSandbox.load('', false, [], {
+					limits: {
+						maxAssetBytes: WASM_ZIG_ASSET_RECEIPTS['std.tar.gz'].uncompressedBytes - 1
+					}
+				})
+			).rejects.toThrow('byte limit');
+			expect(workerInstances).toHaveLength(1);
+		} finally {
+			await binding.dispose();
+		}
 	});
 
 	it('rejects malformed or over-limit receipts before creating a worker', async () => {
@@ -1290,7 +1316,7 @@ describe('Zig sandbox', () => {
 			get zigTargetTriple() {
 				targetReads += 1;
 				if (targetReads > 1) throw new Error('Zig target was read more than once');
-				return 'wasm64-wasi' as const;
+				return 'wasm32-wasi' as const;
 			},
 			get stdin() {
 				stdinReads += 1;
@@ -1307,7 +1333,7 @@ describe('Zig sandbox', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				stdin: 'captured input\n',
-				targetTriple: 'wasm64-wasi'
+				targetTriple: 'wasm32-wasi'
 			})
 		);
 	});

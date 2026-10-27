@@ -1,9 +1,11 @@
-import { gzipSync } from 'node:zlib';
+// @vitest-environment node
+import { gzipSync, gunzipSync } from 'node:zlib';
+import { readFile } from 'node:fs/promises';
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createZigWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
-import { loadZigStdDirectory } from '../src/zig/service.js';
+import type { LspDocument, LspDocumentContext } from '../src/lsp.js';
+import { createZigWorkerService, loadZigLibDirectory } from '../src/zig/service.js';
 
 const stdlibFile = strToU8('pub const std = true;');
 
@@ -47,19 +49,42 @@ function createTarGzip(entries: { path: string; contents: Uint8Array }[]) {
 
 const stdlibTarGzip = createTarGzip([{ path: 'std/std.zig', contents: stdlibFile }]);
 
-describe('loadZigStdDirectory', () => {
+describe('loadZigLibDirectory', () => {
 	it('loads a valid ZIP archive rooted at std/', async () => {
-		const directory = await loadZigStdDirectory(
+		const directory = await loadZigLibDirectory(
 			zipSync({ 'std/std.zig': stdlibFile }),
 			'https://static.example.com/wasm-zig/std.zip'
 		);
 
-		expect(directory.contents.has('std.zig')).toBe(true);
+		expect(directory.contents.has('std')).toBe(true);
+	});
+
+	it('loads a full lib archive including compiler_rt alongside std', async () => {
+		const archive = createTarGzip([
+			{ path: 'lib/std/std.zig', contents: stdlibFile },
+			{ path: 'lib/compiler_rt.zig', contents: strToU8('pub const runtime = true;') }
+		]);
+		const directory = await loadZigLibDirectory(
+			archive,
+			'https://static.example.com/std.tar.gz'
+		);
+		expect(directory.contents.has('std')).toBe(true);
+		expect(directory.contents.has('compiler_rt.zig')).toBe(true);
+	});
+
+	it('rejects mixed lib and std archive roots', async () => {
+		const archive = createTarGzip([
+			{ path: 'lib/std/std.zig', contents: stdlibFile },
+			{ path: 'std/std.zig', contents: stdlibFile }
+		]);
+		await expect(
+			loadZigLibDirectory(archive, 'https://static.example.com/std.tar.gz')
+		).rejects.toThrow('single lib/ or std/ root');
 	});
 
 	it('rejects ZIP output larger than the expanded-byte budget', async () => {
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				zipSync({ 'std/large.zig': new Uint8Array(5) }),
 				'https://static.example.com/wasm-zig/std.zip',
 				{ maxExpandedBytes: 4, maxFiles: 10 }
@@ -69,7 +94,7 @@ describe('loadZigStdDirectory', () => {
 
 	it('rejects ZIP archives larger than the file-count budget', async () => {
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				zipSync({
 					'std/a.zig': new Uint8Array([1]),
 					'std/b.zig': new Uint8Array([2])
@@ -82,7 +107,7 @@ describe('loadZigStdDirectory', () => {
 
 	it('rejects traversal paths instead of normalizing them', async () => {
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				zipSync({ 'std/../escape.zig': new Uint8Array([1]) }),
 				'https://static.example.com/wasm-zig/std.zip'
 			)
@@ -91,7 +116,7 @@ describe('loadZigStdDirectory', () => {
 
 	it('rejects file and directory path collisions', async () => {
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				zipSync({
 					'std/collision': new Uint8Array([1]),
 					'std/collision/nested.zig': new Uint8Array([2])
@@ -103,7 +128,7 @@ describe('loadZigStdDirectory', () => {
 
 	it('bounds gzip-expanded TAR bytes before materializing the archive', async () => {
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				new Uint8Array(stdlibTarGzip),
 				'https://static.example.com/wasm-zig/std.tar.gz',
 				{ maxExpandedBytes: 512, maxFiles: 10 }
@@ -118,7 +143,7 @@ describe('loadZigStdDirectory', () => {
 		]);
 
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				new Uint8Array(archive),
 				'https://static.example.com/wasm-zig/std.tar.gz',
 				{ maxExpandedBytes: 4096, maxFiles: 1 }
@@ -132,7 +157,7 @@ describe('loadZigStdDirectory', () => {
 		]);
 
 		await expect(
-			loadZigStdDirectory(
+			loadZigLibDirectory(
 				new Uint8Array(archive),
 				'https://static.example.com/wasm-zig/std.tar.gz',
 				{ maxExpandedBytes: 4096, maxFiles: 10 }
@@ -200,7 +225,7 @@ describe('createZigWorkerService', () => {
 			expect.objectContaining({
 				code: document.text,
 				activePath: 'main.zig',
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				compileArgs: [],
 				log: false
 			})
@@ -227,4 +252,70 @@ describe('createZigWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-zig-compiler');
 		expect(context.reportProgress).toHaveBeenCalledWith('zig-diagnostics');
 	});
+
+	it('diagnoses real Zig 0.17 source with the checked-in compiler and matching library', async () => {
+		const compilerBytes = gunzipSync(
+			await readFile(new URL('../../../static/wasm-zig/zig_small.wasm.gz', import.meta.url))
+		);
+		const libraryBytes = await readFile(
+			new URL('../../../static/wasm-zig/std.tar.gz', import.meta.url)
+		);
+		const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+			const url = String(input);
+			const bytes = url.endsWith('/compiler.wasm')
+				? compilerBytes
+				: url.endsWith('/lib.tar.gz')
+					? libraryBytes
+					: null;
+			if (!bytes) throw new Error(`Unexpected test request: ${url}`);
+			return new Response(Uint8Array.from(bytes), {
+				headers: { 'content-length': String(bytes.byteLength) }
+			});
+		});
+		try {
+			const document: LspDocument = {
+				uri: 'file:///workspace/main.zig',
+				languageId: 'zig',
+				version: 1,
+				text: 'const helper = @import("src/helper.zig"); pub fn main() void { _ = helper.value; }\n'
+			};
+			const helper: LspDocument = {
+				uri: 'file:///workspace/src/helper.zig',
+				languageId: 'zig',
+				version: 1,
+				text: 'pub const value = 42;\n'
+			};
+			const context: LspDocumentContext = {
+				documents: new Map([
+					[document.uri, document],
+					[helper.uri, helper]
+				]),
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			const service = createZigWorkerService();
+			await service.initialize?.(
+				{
+					compilerUrl: 'https://zig.test/compiler.wasm',
+					stdlibUrl: 'https://zig.test/lib.tar.gz'
+				},
+				context
+			);
+			expect(await service.diagnostics?.(document, context)).toEqual([]);
+			document.text = 'pub fn main() void { missing(); }\n';
+			document.version += 1;
+			const diagnostics = await service.diagnostics?.(document, context);
+			expect(diagnostics).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						severity: 1,
+						source: 'zig',
+						message: expect.stringContaining('undeclared identifier')
+					})
+				])
+			);
+		} finally {
+			fetch.mockRestore();
+		}
+	}, 120_000);
 });

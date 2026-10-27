@@ -3,7 +3,7 @@ import type { PathLike } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { strToU8, zipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { syncWasmZigAssets } from '../../scripts/sync-wasm-zig.mjs';
@@ -13,6 +13,7 @@ const compilerBytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const stdlibZip = zipSync({ 'std/std.zig': strToU8('pub const std = true;') });
 const releaseBaseUrl = 'https://downloads.example.test/zigc-wasm/v0.11.0';
 const allowedRedirectOrigin = 'https://cdn.example.test';
+const producerBaseUrl = `https://raw.githubusercontent.com/seo-rii/wasm-llvm/${'a'.repeat(40)}/artifacts/zig-browser`;
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -76,6 +77,102 @@ async function writeValidSource() {
 	return sourceDir;
 }
 
+function libraryTar() {
+	const entries = {
+		'lib/std/std.zig': 'pub const std = true;',
+		'lib/compiler_rt.zig': 'comptime {}'
+	};
+	const blocks: Buffer[] = [];
+	for (const [name, text] of Object.entries(entries)) {
+		const bytes = Buffer.from(text);
+		const header = Buffer.alloc(512);
+		header.write(name);
+		header.write('0000644\0', 100);
+		header.write(`${bytes.length.toString(8).padStart(11, '0')}\0`, 124);
+		header.fill(32, 148, 156);
+		header.write('0', 156);
+		header.write('ustar\0', 257);
+		header.write('00', 263);
+		const sum = header.reduce((total, value) => total + value, 0);
+		header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148);
+		blocks.push(header, bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512));
+	}
+	return Buffer.concat([...blocks, Buffer.alloc(1024)]);
+}
+
+async function writeProducerSource(
+	change: {
+		passed?: boolean;
+		compilerSha256?: string;
+		uncompressedBytes?: number;
+		uncompressedSha256?: string;
+		releaseBaseUrl?: string;
+	} = {}
+) {
+	const sourceDir = await makeTempDir();
+	const tar = libraryTar();
+	const archive = gzipSync(tar);
+	const license = Buffer.from('Zig MIT license fixture\n');
+	const digest = (bytes: Uint8Array) => ({ bytes: bytes.byteLength, sha256: sha256(bytes) });
+	const expandedReceipt = {
+		...digest(archive),
+		uncompressedBytes: change.uncompressedBytes ?? tar.length,
+		uncompressedSha256: change.uncompressedSha256 ?? sha256(tar)
+	};
+	const producerReceipt = {
+		schemaVersion: 1,
+		producerId: 'wasm-llvm/zig-browser',
+		profileId: 'zigc-wasm-0.17.0',
+		version: '0.17.0',
+		target: 'wasm32-wasi',
+		wasi: 'preview1',
+		source: {
+			url: 'https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz',
+			sha256: 'b'.repeat(64)
+		},
+		port: {
+			repository: 'https://github.com/seo-rii/zigc-wasm',
+			revision: 'c'.repeat(40),
+			patchSha256: 'd'.repeat(64)
+		},
+		assets: {
+			'zig.wasm': {
+				...digest(compilerBytes),
+				sha256: change.compilerSha256 ?? sha256(compilerBytes)
+			},
+			'lib.tar.gz': expandedReceipt,
+			LICENSE: digest(license)
+		},
+		validation: { passed: change.passed ?? true }
+	};
+	const files = {
+		'zig.wasm': compilerBytes,
+		'lib.tar.gz': archive,
+		'producer-receipt.json': Buffer.from(JSON.stringify(producerReceipt)),
+		LICENSE: license
+	};
+	for (const [name, bytes] of Object.entries(files)) {
+		await writeFixtureFile(sourceDir, name, bytes);
+	}
+	const lockFilePath = path.join(await makeTempDir(), 'producer-inputs.json');
+	await writeFile(
+		lockFilePath,
+		JSON.stringify({
+			schemaVersion: 3,
+			profileId: 'zigc-wasm-0.17.0',
+			releaseBaseUrl: change.releaseBaseUrl ?? producerBaseUrl,
+			allowedRedirectOrigins: [],
+			inputs: {
+				...Object.fromEntries(
+					Object.entries(files).map(([name, bytes]) => [name, digest(bytes)])
+				),
+				'lib.tar.gz': expandedReceipt
+			}
+		})
+	);
+	return { sourceDir, lockFilePath, files, producerReceipt, tar };
+}
+
 async function syncFromRemote(
 	fetchImpl: typeof fetch,
 	options: {
@@ -103,6 +200,112 @@ describe('syncWasmZigAssets', () => {
 			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
 		);
 	});
+
+	it('installs a qualified producer snapshot while retaining consumer URLs and the full lib archive', async () => {
+		const fixture = await writeProducerSource();
+		const targetDir = await makeTempDir();
+		const result = await syncWasmZigAssets({ ...fixture, targetDir });
+		await expect(readFile(path.join(targetDir, 'zig_small.wasm'))).resolves.toEqual(
+			Buffer.from(compilerBytes)
+		);
+		await expect(readFile(path.join(targetDir, 'std.tar.gz'))).resolves.toEqual(
+			fixture.files['lib.tar.gz']
+		);
+		await expect(readFile(path.join(targetDir, 'LICENSE'))).resolves.toEqual(
+			fixture.files.LICENSE
+		);
+		const runtime = JSON.parse(
+			await readFile(path.join(targetDir, 'runtime-build.json'), 'utf8')
+		);
+		expect(runtime.schemaVersion).toBe(3);
+		expect(runtime.upstream.producerReceipt).toEqual(fixture.producerReceipt);
+		expect(runtime.upstream.releaseBaseUrl).toBe(producerBaseUrl);
+		expect(result.receipts['std.tar.gz'].uncompressedSha256).toBe(sha256(fixture.tar));
+	});
+
+	it('downloads the exact immutable producer snapshot with pinned receipt and license', async () => {
+		const fixture = await writeProducerSource();
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			const name = path.basename(String(url)) as keyof typeof fixture.files;
+			return responseFor(fixture.files[name], String(url));
+		});
+		await syncWasmZigAssets({
+			targetDir: await makeTempDir(),
+			lockFilePath: fixture.lockFilePath,
+			fetchImpl: fetchImpl as typeof fetch
+		});
+		expect(fetchImpl).toHaveBeenCalledTimes(4);
+		expect(fetchImpl.mock.calls.map(([url]) => String(url)).sort()).toEqual(
+			Object.keys(fixture.files)
+				.map((name) => `${producerBaseUrl}/${name}`)
+				.sort()
+		);
+	});
+
+	it('verifies decoded producer bytes when HTTP compression changes the transport length', async () => {
+		const fixture = await writeProducerSource();
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			const name = path.basename(String(url)) as keyof typeof fixture.files;
+			// Fetch transparently decodes HTTP gzip while retaining encoded headers.
+			return responseFor(fixture.files[name], String(url), {
+				headers: { 'content-encoding': 'gzip', 'content-length': '1' }
+			});
+		});
+		const result = await syncWasmZigAssets({
+			targetDir: await makeTempDir(),
+			lockFilePath: fixture.lockFilePath,
+			fetchImpl: fetchImpl as typeof fetch
+		});
+		expect(result.receipts['zig_small.wasm'].sha256).toBe(sha256(compilerBytes));
+	});
+
+	it('rejects HTTP-decoded bytes beyond the pinned size before publication', async () => {
+		const fixture = await writeProducerSource();
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			const name = path.basename(String(url)) as keyof typeof fixture.files;
+			const bytes =
+				name === 'zig.wasm' ? new Uint8Array([...compilerBytes, 0]) : fixture.files[name];
+			return responseFor(bytes, String(url), {
+				headers: { 'content-encoding': 'gzip', 'content-length': '1' }
+			});
+		});
+		await expect(
+			syncWasmZigAssets({
+				targetDir: await makeTempDir(),
+				lockFilePath: fixture.lockFilePath,
+				fetchImpl: fetchImpl as typeof fetch
+			})
+		).rejects.toThrow('download exceeds the pinned byte size');
+	});
+
+	it.each([
+		{ change: { passed: false }, error: 'qualified Zig 0.17.0 WASI build' },
+		{
+			change: { compilerSha256: '0'.repeat(64) },
+			error: 'does not match the input lock for zig.wasm'
+		},
+		{ change: { uncompressedBytes: 512 }, error: 'cannot be expanded within its pinned size' },
+		{
+			change: { uncompressedBytes: 256 * 1024 * 1024 + 1 },
+			error: 'invalid expanded size or SHA-256 metadata'
+		},
+		{ change: { uncompressedSha256: '0'.repeat(64) }, error: 'expanded input receipt' },
+		{
+			change: { releaseBaseUrl: producerBaseUrl.replace('a'.repeat(40), 'main') },
+			error: 'immutable wasm-llvm snapshot'
+		}
+	])(
+		'rejects invalid producer provenance before publishing: $error',
+		async ({ change, error }) => {
+			const fixture = await writeProducerSource(change);
+			const targetDir = await makeTempDir();
+			await writeFixtureFile(targetDir, 'existing.txt', Buffer.from('unchanged'));
+			await expect(syncWasmZigAssets({ ...fixture, targetDir })).rejects.toThrow(error);
+			await expect(readFile(path.join(targetDir, 'existing.txt'), 'utf8')).resolves.toBe(
+				'unchanged'
+			);
+		}
+	);
 
 	it('pins the inputs and publishes deterministic execution receipts', async () => {
 		const sourceDir = await writeValidSource();

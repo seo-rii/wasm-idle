@@ -158,7 +158,7 @@ export interface EditorLanguageServerRuntimeOptions {
 	zig?: {
 		compilerUrl?: string;
 		stdlibUrl?: string;
-		targetTriple?: 'wasm64-wasi';
+		targetTriple?: 'wasm32-wasi';
 		compileArgs?: string[];
 	};
 	fennel?: {

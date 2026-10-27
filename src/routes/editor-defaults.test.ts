@@ -101,7 +101,9 @@ describe('editor defaults', () => {
 		expect(editorDefaults.html).toContain('<!doctype html>');
 		expect(editorDefaults.css).toContain('font-family: system-ui');
 		expect(editorDefaults.markdown).toContain('# wasm-idle');
-		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
+		expect(editorDefaults.zig).toContain(
+			'std.Io.File.stdin().readerStreaming(init.io, &input_buffer)'
+		);
 		expect(editorDefaults.zig).toContain('fibonacci={d}');
 		expect(editorDefaults.lisp).toContain('(define (fibonacci n)');
 		expect(editorDefaults.lisp).toContain('(display "fibonacci=")');
