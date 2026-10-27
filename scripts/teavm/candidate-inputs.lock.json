@@ -141,7 +141,8 @@
 					"bytes": 43454,
 					"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
 				}
-			]
+			],
+			"classpath": "main output precedes dependency JARs in generateWasmGC"
 		}
 	},
 	"sourcePatches": [
@@ -152,8 +153,8 @@
 		},
 		{
 			"path": "patches/teavm-javac-0.16.0-debug-scopes.patch",
-			"bytes": 71924,
-			"sha256": "275d03e912c1cfa4754af0e1a026726b7d6289150f0d85fb6db5e2b7e2c5ad0a"
+			"bytes": 72491,
+			"sha256": "10459fdf93377e71aedb250135d7816e32aa9c5eb6738eeb1a3ffb64be50af14"
 		}
 	]
 }

@@ -1,3 +1,16 @@
+diff --git a/compiler/build.gradle b/compiler/build.gradle
+--- a/compiler/build.gradle
++++ b/compiler/build.gradle
+@@ -92,6 +92,9 @@
+ tasks.named("generateWasmGC") {
+     def teavmDaemonClasspath = new ArrayList<Object>(daemonClasspath.from)
+     daemonClasspath.setFrom(sourceSets.teavmDeterminism.output, teavmDaemonClasspath)
++    // The plugin puts dependency JARs first; our emitter fixes must override teavm-core.
++    def compilerClasspath = new ArrayList<Object>(classpath.from)
++    classpath.setFrom(sourceSets.main.output, compilerClasspath)
+ }
+ 
+ teavm {
 diff --git a/compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java b/compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java
 new file mode 100644
 --- /dev/null
