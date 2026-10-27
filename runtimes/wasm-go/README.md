@@ -11,7 +11,7 @@ Current checked-in scope:
 - browser/Node WASI execution path
 - browser/Node `wasm_exec.js` execution path for `js/wasm`
 - build planner that emits `compile`/`link` invocations plus `importcfg` and `embedcfg`
-- reproducible runtime packaging from the official Go `1.26.1` toolchain
+- reproducible runtime packaging from the official Go `1.26.10` toolchain
 - runtime probe that compiles and runs console stdin and additional-stdlib programs for every target
 - code-only compile requests that auto-populate the reachable stdlib `importcfg` closure from the
   bundled sysroot
@@ -25,7 +25,7 @@ cd /path/to/wasm-go
 npm run build
 ```
 
-Download the pinned official Go `1.26.1` host archive for one of the currently supported
+Download the pinned official Go `1.26.10` host archive for one of the currently supported
 `prepare:runtime` hosts (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`), verify its
 SHA-256, then generate runtime assets:
 
@@ -33,6 +33,10 @@ SHA-256, then generate runtime assets:
 cd /path/to/wasm-go
 npm run prepare:runtime
 ```
+
+The build pin does not change an existing runtime bundle. Its `runtime-build.json` and
+`runtime-manifest.v1.json` record the toolchain that actually produced it; regenerate and probe
+the complete compiler, linker, sysroot, and `wasm_exec.js` bundle before syncing it to the app.
 
 That writes:
 
@@ -79,7 +83,7 @@ npm run validate:runtime
 That sequence:
 
 1. builds `dist/`
-2. prepares the pinned `go1.26.1` runtime assets
+2. prepares the pinned `go1.26.10` runtime assets
 3. calls `compileGo()` against the generated bundled runtime
 4. links programs for `wasip1/wasm`, `wasip2/wasm`, `wasip3/wasm`, and `js/wasm`
 5. checks console stdin (`8 13` produces `21\n`) and `crypto/sha256`/`encoding/hex` output
@@ -130,7 +134,7 @@ default in-process executor.
 
 ## Current Limits
 
-- the pinned official `go1.26.1` toolchain currently reports `wasip1/wasm` and `js/wasm` from
+- the pinned official `go1.26.10` toolchain reports `wasip1/wasm` and `js/wasm` from
   `go tool dist list`; unless you provide a custom toolchain that adds `wasip2/wasm` or
   `wasip3/wasm`, those targets still package and execute through the `wasip1` alias path
 - module resolution outside the bundled stdlib is still manual; third-party/user package archives
