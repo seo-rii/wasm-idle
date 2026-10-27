@@ -260,7 +260,7 @@ export const supportMatrixRows = [
 	{
 		language: 'C3',
 		ids: ['C3'],
-		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
+		runtime: 'C3 0.8.5_1 + LLVM/lld WASM (byte ABI)',
 		stdin: 'Yes',
 		editorSupport: 'c3-lsp',
 		debug: '-',
@@ -1557,7 +1557,7 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C3',
 		{
-			packageBase: 'wasm-llvm/c3-browser: C3 0.8.3 / LLVM 22.1.8',
+			packageBase: 'wasm-llvm/c3-browser: C3 0.8.5_1 / LLVM 22.1.8',
 			execution:
 				'Verified c3c and builtin LLD compile real C3 in a fresh browser Worker; UTF-8 env.readByte/env.writeByte ABI and exported main; std::io and WASI unavailable',
 			customization: `${code('runtimeAssets.c3.baseUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed compiler flags and bounded Wasm memories`

@@ -224,7 +224,7 @@
     "wasm-bash/bash.webc": 1808682,
     "wasm-bash/sdk/wasmer_js_bg.wasm": 6598804,
     "wasm-bqn/BQN.wasm": 1175370,
-    "wasm-c3/c3c.wasm": 39058650,
+    "wasm-c3/c3c.wasm": 39987618,
     "wasm-clojurescript/compiler.js": 6588008,
     "wasm-cobol/cobc.wasm": 1713037,
     "wasm-d/runtime/bin/ldc2.wasm": 23577090,
