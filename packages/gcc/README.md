@@ -47,41 +47,35 @@ try {
 }
 ```
 
-`createGccCompiler` provides the same explicit target selector for callers that own
-their Worker. `runGccWasiArtifact` can run a linked artifact independently without
-loading the compiler. Both low-level APIs run synchronous tool/guest instructions in
-their caller's thread. Use `createGccWorker` and its `AbortSignal` or `cancel()` to
-interrupt compilation or a nonterminating guest. Cancellation terminates that Worker.
+`createGccCompiler` selects the target in a caller-owned Worker. `runGccWasiArtifact`
+runs a linked artifact without loading GCC. Tool/guest instructions run
+synchronously in the caller's thread. To interrupt compilation or a guest, use
+`createGccWorker`: its `AbortSignal` or `cancel()` terminates the Worker.
 
 The Wasm pipeline is:
 
-1. GCC `cc1`/`cc1plus`, hosted by Emscripten, emits WAT directly from the original source.
-2. The producer's patched WABT `wat2wasm -r --enable-annotations` emits a relocatable
-   Wasm object. Stock WABT is not interchangeable with this pinned assembler.
-3. LLVM `wasm-ld`, itself hosted as a WASI Preview 1 command, links the object(s),
-   `crt1-command.o`, wasi-libc/libm, and the exact runtime archives listed in the manifest.
-   LLVM is used for linking; it never receives the user's C/C++ source.
-4. The linked module runs with WASI Preview 1 buffered stdin/stdout/stderr. EOF follows
-   `stdin`. The runner does not preopen the host filesystem or provide network access.
+1. Emscripten-hosted GCC `cc1`/`cc1plus` emits WAT from the original source.
+2. Pinned, patched WABT `wat2wasm -r --enable-annotations` emits a relocatable Wasm
+   object. Stock WABT cannot replace it.
+3. WASI-hosted LLVM `wasm-ld` links the objects, `crt1-command.o`, wasi-libc/libm and
+   manifest-listed runtime archives. LLVM never receives the user's C/C++ source.
+4. WASI Preview 1 executes with buffered stdin/stdout/stderr and EOF after `stdin`.
+   The runner provides no filesystem preopens or network access.
 
-Every translation unit gets a fresh GCC/assembler instance. `defines` are passed as
-actual `-DNAME`/`-DNAME=value` arguments to each front end; source text is not rewritten.
-Definitions with preprocessed `.i`/`.ii` input are rejected because GCC would not apply
-ordinary preprocessing to that input. Additional `sources` use the existing multi-unit
-contract below. The new output kinds are `wasm-object` and `wasm-executable`; assembly
-output is a `.wat` file. Each binary artifact includes inspected imports, exports,
-linking metadata, memory limits, and `wasm.features.simd128` detected from its actual
-instructions and value types. Custom metadata is not required for SIMD detection.
+Each unit gets fresh GCC/assembler instances and real `-DNAME`/`-DNAME=value`
+arguments from `defines`. Source is unchanged; definitions with preprocessed
+`.i`/`.ii` input are rejected. Additional `sources` follow the multi-unit contract
+below. Artifacts are `wasm-object`, `wasm-executable`, or `.wat` assembly. Binary
+metadata includes imports, exports, linking information, memory limits and
+`wasm.features.simd128`, detected from instructions/types without custom metadata.
 
-The output uses wasm32, little endian, WASI Preview 1 with an exported memory and `_start`.
-Pointers and `long` are 32-bit, unlike the existing Linux x86-64 target. A Wasm object
-must have linking metadata; an executable may import only Preview 1 functions. The
-loader rejects ELF bytes, unexpected host imports, imported/shared memory, memory64,
-implicit Wasm start sections, and executables whose `_start` is not `() -> ()`. Object
-memory imports are also checked for shared memory and memory64. The runner inspects
-a private byte snapshot and executes that exact compiled module, even if the caller
-later mutates the artifact's buffer. SHA-256 pins establish asset identity;
-compiler correctness still requires the producer's real native and Chromium tests.
+The target is little-endian wasm32/WASI Preview 1: pointers and `long` are 32-bit,
+unlike x86-64. Objects require linking metadata. Executables export memory and
+`_start: () -> ()` and may import only Preview 1 functions. The loader rejects ELF,
+unexpected imports, imported/shared memory, memory64 and implicit start sections;
+object memory imports also reject shared memory/memory64. Execution uses the exact
+private byte snapshot inspected, protecting against later caller mutations.
+Digests establish asset identity; native and Chromium tests qualify the compiler.
 
 The experimental GCC port is not fully ABI-compatible with the LLVM-built WASI sysroot.
 Its `long double` is 64-bit rather than WASI libc's 128-bit; long-double library and
@@ -89,50 +83,40 @@ variadic interfaces are unsupported. Producer patch `0004` corrects scalar singl
 aggregate calls. Linking uses `--fatal-warnings` to reject signature mismatches.
 This cannot detect mismatched variadic layouts or establish complete ABI compatibility.
 
-The experimental bundle's `capabilities` records C++, libc, libm, libstdc++, and static
-initialization availability independently. A bundle without `cpp` rejects C++ requests.
-A bundle with `cpp` but without `libstdcxx` can compile core C++ constructs when they do
-not require unavailable library support; it does not promise STL or iostream. Global
-and function-local static construction/destruction depend on `staticInitialization`
-and can be supported independently of libstdc++. The manifest's `qualification.status`
-is not upgraded by the SDK.
-The GNU runtime recipe excludes the timezone database, C++26 debugger functions, and
-the prebuilt `std` modules. Their atomics/signals require unsupported backend/runtime
-interfaces. Their use fails at compilation or linking; no fallback implementations are
-provided. Basic STL and iostream support must pass the producer's actual runtime
-qualification before a bundle advertises `libstdcxx`.
+Bundle `capabilities` separately records `cpp`, `libc`, `libm`, `libstdcxx` and
+`staticInitialization`. Without `cpp`, C++ requests fail; without `libstdcxx`, only
+constructs not requiring that library can compile. Global/function-local static
+construction and destruction require `staticInitialization` independently of
+libstdc++. The SDK preserves `qualification.status`.
+The GNU runtime excludes timezone databases, C++26 debugger functions and prebuilt
+`std` modules: their atomics/signals need unsupported interfaces, so use fails at
+compile/link time. Advertising `libstdcxx` requires real STL/iostream qualification.
 
-Exceptions, RTTI, threads, dynamic linking and relaxed SIMD are unsupported by this SDK
-contract. Requests enabling them fail explicitly. C++ uses `-fno-exceptions -fno-rtti`
-and `-fuse-cxa-atexit -fno-threadsafe-statics` to preserve static object destruction
-in this single-threaded environment.
-The compiler profile also defines `__GCC_WASI_SINGLE_THREAD__=1` for the producer's
-ported `errno` header. That header references the existing single-thread WASI libc
-storage and rejects `_REENTRANT`; it does not implement TLS or enable threads.
-`cpu` can only be `wasm32`; x86 `avx2`/`avx2-fma` profiles do not select Wasm SIMD.
-Unsupported target pragmas/attributes are diagnosed by GCC with
-`-Werror=pragmas -Werror=attributes`, preserving the original source text. Existing x86
-pragmas, intrinsic headers, libm and libstdc++ behavior remain under the x86 bundle.
+Requests for exceptions, RTTI, threads, dynamic linking or relaxed SIMD fail.
+C++ uses `-fno-exceptions -fno-rtti -fuse-cxa-atexit -fno-threadsafe-statics`,
+preserving static destruction in this single-threaded environment.
+`__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
+single-thread WASI libc storage and rejects `_REENTRANT`; it provides no TLS.
+`cpu` must be `wasm32`; x86 `avx2`/`avx2-fma` do not select Wasm SIMD. GCC diagnoses
+unsupported target pragmas/attributes with `-Werror=pragmas -Werror=attributes`.
+The separate x86 bundle retains its pragmas, intrinsics, libm and libstdc++.
 
-Wasm SIMD requires both a producer bundle with `capabilities.simd: true` and an explicit
-`simd: true` compile request. The SDK probes real `v128` support in the current Wasm
-engine before passing `-msimd128` to GCC. A capable bundle defaults to `-mno-simd128`;
-legacy manifests with `simd: false` retain their original compiler arguments. An object
-or executable containing SIMD without the requested opt-in is rejected.
-The experimental backend profile targets GNU `__attribute__((vector_size(16)))` vectors
-with i8x16, i16x8, i32x4, i64x2, f32x4 and f64x2 lanes. Producer patch `0006` adds scalar-count
-shifts, comparisons, conditional selection and constant shuffles. Patch `0007` enables
-direct `v128` calls and singleton vector aggregates, qualified against pinned Clang
-with SIMD enabled on both sides. Disabled profiles retain indirect vector calls.
-Check the bundle's pinned patches and native/browser qualification; older SIMD bundles
-have fewer operations. Automatic vectorization, `wasm_simd128.h`, relaxed SIMD and
-arbitrary external object inputs are not promised.
+SIMD requires `capabilities.simd: true`, a `simd: true` request and a successful
+engine `v128` probe before GCC receives `-msimd128`. Capable bundles default to
+`-mno-simd128`; legacy `simd: false` manifests retain their arguments. SIMD artifacts
+without opt-in are rejected.
+GNU `__attribute__((vector_size(16)))` supports i8x16/i16x8/i32x4/i64x2/f32x4/f64x2.
+Patch `0006` adds scalar-count shifts, comparisons, selection and constant shuffles.
+Patch `0007` adds direct `v128` calls and singleton vector aggregates, qualified
+against pinned Clang with SIMD enabled on both sides. Disabled profiles use indirect
+calls. Check pinned patches and native/browser results: older bundles support
+fewer operations. Automatic vectorization, `wasm_simd128.h`, relaxed SIMD and
+arbitrary external objects are not promised.
 
-`run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (four MiB by default, combined
-stdout/stderr), and returns the exit code, output, runtime and final linear-memory
-capacity. File I/O requiring a preopened directory, threads and dynamic linking are not
-provided by this runner. Traps remain errors, and failed compilation never yields an
-artifact to execute.
+`run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (default: four MiB combined
+stdout/stderr), returning exit code, output, runtime and final linear-memory
+capacity. It supplies no directory preopens, threads or dynamic linking.
+Traps are errors; failed compilation yields no executable artifact.
 
 ## Existing GCC 13 x86 API
 
@@ -165,28 +149,23 @@ try {
 }
 ```
 
-`controller.abort()` or `compiler.cancel()` terminates the dedicated Worker, including
-a synchronous compiler invocation. A cancelled Worker cannot be reused. The low-level
-`createCrossGccCompiler` API runs in its caller's thread and is intended for hosts which
-already own a Worker; terminating that Worker is the cancellation mechanism.
+`controller.abort()` or `compiler.cancel()` terminates the Worker even during a
+synchronous compilation; it cannot be reused. `createCrossGccCompiler` runs in its
+caller's thread: use and terminate your own Worker to cancel it.
 
 ## Supported compilation contract
 
-One request compiles its primary `code` as C or C++, with optional local header/data files
-under `/workspace`. For executable output, `sources` explicitly selects additional files
-to compile as separate translation units and link in the listed order. Every unit uses
-the request's language, standard, CPU, optimization and preprocessing settings. Source
-text reaches the GNU front end unchanged. GCC's `target` and
-`optimize` pragmas, `push_options`/`pop_options`, PBDS, intrinsic headers and exception
-handling are implemented by the actual compiler and GNU headers, not by a JavaScript
-compatibility layer. Their availability must be confirmed by the real producer suite.
+An x86 request compiles `code` as C/C++, with headers/data under `/workspace`.
+For executables, `sources` selects further units, linked in listed order. All use
+the request's language, standard, CPU, optimization and preprocessing settings.
+GCC receives unchanged source. Its `target`/`optimize` pragmas, push/pop options,
+PBDS, intrinsics and exceptions use real GNU implementation and qualification.
 
-The front ends use `-nostdinc` plus explicit GNU C, C++, GCC internal and glibc include
-directories from the pinned sysroot. C++ also gets the GNU driver's `_GNU_SOURCE` define
-and exception support. GCC emits assembly, GNU `as --64` emits an ELF object, and GNU
-`ld -static` receives the GNU CRT, libstdc++ (C++), libm (C and C++), libgcc, libgcc_eh and
-glibc in their required order. Each stage uses a fresh module and MEMFS to reset GCC
-global state. The JavaScript Worker orchestrates these stages without `fork` or `exec`.
+Front ends use `-nostdinc` and pinned GNU C/C++/GCC/glibc include directories;
+C++ also gets `_GNU_SOURCE` and exceptions. GCC emits assembly, GNU `as --64`
+assembles ELF, and `ld -static` links CRT, libstdc++ (C++), libm (both languages),
+libgcc, libgcc_eh and glibc in the required order. Fresh modules/MEMFS reset state;
+the Worker orchestrates them without `fork`/`exec`.
 
 | Request field  | Supported values                                                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -215,67 +194,55 @@ const result = await compiler.compile({
 });
 ```
 
-Only paths listed in `sources` are compiled in addition to `code`; an unlisted `.cpp`
-in `files` remains an ordinary workspace file. Each translation unit gets a fresh front
-end and assembler, so file-local symbols and macros remain independent. The static
-linker receives all objects after every unit succeeds. Any failing stage stops the request
-without an artifact. Missing/duplicate source paths and intermediate-output collisions
-are rejected before compilation. Additional outputs reserve `program.N.s` and
-`program.N.o` in the workspace, where N starts at 1. Multiple-unit assembly/object output
-is rejected; use separate requests to obtain those individual artifacts.
+Only `sources` entries compile alongside `code`; other `.cpp` files remain data.
+Fresh front ends/assemblers isolate each unit's local symbols and macros. Linking
+starts after all units succeed; any failed stage yields no artifact. Missing or
+duplicate paths and output collisions fail before compilation. Additional outputs
+reserve `program.N.s`/`program.N.o` (N ≥ 1). Multiple-unit assembly/object output
+is rejected; request those artifacts separately.
 
-No `-march=native`, arbitrary driver arguments, PCH, plugin, LTO, shared/dynamic linking,
-OpenMP or process spawning is supported. The option
-allowlist rejects unknown request fields. A CPU profile describes the generated program's
-requirements; it does not detect the browser host CPU. Source pragmas can enable additional
-instructions, just as with native GCC. Choose execution hardware accordingly.
+The allowlist rejects unknown fields, `-march=native`, arbitrary driver arguments,
+PCH, plugins, LTO, dynamic/shared linking, OpenMP and process spawning. CPU profiles
+describe output requirements, not the browser CPU. Source pragmas can enable more
+instructions; choose execution hardware accordingly.
 
-`avx2` enables AVX2 without enabling FMA instructions or FMA contraction of multiply-add
-expressions. Use `avx2-fma` when FMA is intended and supported by the execution host.
-The producer v1 manifest still lists `['x86-64', 'avx2-fma']`: the consumer derives the
-AVX2-only request as a subset of that existing capability, without changing the manifest
-or its integrity digest. `artifact.cpu` records the requested profile, including `avx2`.
-Source target pragmas and attributes can override the requested CPU settings.
+`avx2` disables FMA instructions and contraction; select `avx2-fma` for FMA-capable
+execution hosts. The consumer derives AVX2-only support from the v1 manifest's
+`['x86-64', 'avx2-fma']` without changing its bytes/digest. `artifact.cpu` records
+the request, including `avx2`; source target pragmas/attributes can override it.
 
-The compiler's GMP/MPFR/MPC and Emscripten libraries are **host** dependencies in Wasm.
-The GNU sysroot's glibc, libstdc++, libgcc and CRT are **target** ELF files; they are only
-read by the compiler/linker. Source revisions, file hashes and licenses belong to the
-producer bundle's provenance files. The common sysroot contract is shared with the
-Clang cross compiler, with GCC's own internal headers added by the GCC producer.
+GMP/MPFR/MPC and Emscripten are Wasm **host** dependencies. Sysroot glibc, libstdc++,
+libgcc and CRT are **target** ELF files read by GCC/linker. Producer provenance
+records their revisions, hashes and licenses. The sysroot contract is shared with
+the Clang cross compiler, plus GCC's internal headers.
 
 ## Integrity, state and measurements
 
-The manifest's exact bytes are pinned before parsing. Every JavaScript loader, Wasm
-module and sysroot archive is size bounded and SHA-256 verified before any loader import.
-The browser imports verified loader bytes through Blob URLs and instantiates the verified
-Wasm modules. Hosting CSP must permit module Workers and `blob:` modules. Relative asset
-paths are fixed by the manifest schema; archive paths cannot escape `/sysroot`.
-The runtime's downloaded-byte cache is scoped to each compiler initialization, even
-with a shared custom `fetchImpl`. Retrying after an integrity failure or supplying a
-new manifest digest at the same URL fetches and verifies the bundle again.
+Manifest bytes are pinned before parsing; all loaders, Wasm modules and sysroot
+archives are size bounded and SHA-256 verified before import. Verified loaders use
+Blob URLs; CSP must allow module Workers and `blob:` modules. The schema fixes
+asset paths, and archives cannot escape `/sysroot`. Download caches belong to each
+initialization, even with shared `fetchImpl`: integrity-failure retries and new
+digests at the same URL fetch and verify assets again.
 
-Compilation has no result cache. Compiled Wasm modules are retained only in the current
-compiler instance, whose identity contains the manifest digest, GCC version, host, target
-and sysroot digest. A consumer adding its own result cache must also key source/files,
-the ordered additional `sources` list,
-language/standard, preprocessing, macro definitions, output kind, optimization and CPU profile. Failed
-compilations never return an artifact from an earlier request. The connected example
-removes the previous download at the start of every compile.
+Compilation has no result cache. Compiled modules belong to the current instance,
+identified by manifest/sysroot digests, GCC version, host and target. Consumer
+caches must also key source/files, ordered `sources`, language/standard,
+preprocessing, defines, output kind, optimization and CPU/SIMD. Failures never return
+old artifacts; the example clears its download when compilation starts.
 
-Each result includes all stage argument vectors, exit codes, elapsed milliseconds and
-peak linear-memory capacity. Emscripten memory only grows, so its final capacity is the
-stage's linear-memory maximum. This metric excludes JavaScript and MEMFS allocations;
-it is not total browser process RSS. ELF validation checks ELF64, little endian, x86-64,
-the requested output kind and, for executables, loadable segments without an interpreter.
+Results include stage argv, exit codes, milliseconds and peak linear-memory
+capacity (Emscripten memory only grows). This excludes JS/MEMFS allocations and
+is not process RSS. ELF checks require ELF64, little endian, x86-64, matching
+output kind and executable loadable segments without an interpreter.
 
 ## Seeded API contract fuzzing
 
-`pnpm run fuzz:gcc-contract` runs 10,000 deterministic cases against the actual manifest
-parser, request planner, path checks and asset-integrity loader. It covers option/profile
-combinations, source-byte preservation, copied file buffers, traversal and file/directory
-collisions, reserved outputs, malformed manifests, size/UTF-8 boundaries and corrupted
-manifest/asset bytes. It uses inert download bytes and does **not** execute GCC or establish
-compiler correctness. This is seeded property fuzzing, not coverage-guided fuzzing.
+`pnpm run fuzz:gcc-contract` runs 10,000 deterministic parser/planner/path/integrity
+cases: option profiles, source preservation, buffer copies, traversal/collisions,
+reserved outputs, malformed manifests, size/UTF-8 boundaries and corrupt assets.
+It uses inert bytes and **does not execute GCC** or qualify the compiler. This is
+seeded property fuzzing, not coverage-guided fuzzing.
 
 ```sh
 pnpm run fuzz:gcc-contract --seed 20261024 --iterations 50000 --out .cache/gcc-contract-fuzz
@@ -283,13 +250,11 @@ pnpm run fuzz:gcc-contract --seed 20261024 --iterations 50000 --out .cache/gcc-c
 pnpm run fuzz:gcc-contract --seed 20261024 --case 1234 --out .cache/gcc-contract-replay
 ```
 
-Each case has an independently derived RNG, so replay does not need preceding cases.
-The output directory must be new; the default uses a timestamp and PID to preserve evidence.
-The first cases always exercise resource boundaries; subsequent cases mutate generated
-valid inputs. `report.json` records source identity, seed, coverage groups, elapsed time and
-the first failure. PR/main CI uses a fixed seed; scheduled CI uses its run number as the
-seed. Both save the report even on failure. Keep this report separate from real GCC fuzzing
-and qualification reports.
+Independent RNGs allow individual replay. Output must be a new directory
+(default: timestamp/PID). Boundary cases precede mutated valid inputs.
+`report.json` records source identity, seed, coverage groups, elapsed time and
+first failure, including on failed CI runs. PR/main CI uses a fixed seed;
+scheduled CI uses its run number. Keep real GCC qualification reports separate.
 
 For generated programs executed by actual Wasm GCC, use `pnpm run fuzz:gcc-browser`
 with the producer's immutable corpus and pinned bundle. See
@@ -303,13 +268,11 @@ From the repository root, run:
 pnpm exec vite --config examples/gcc-cross/vite.config.mjs
 ```
 
-Open `/examples/gcc-cross/`, enter the hosted producer manifest URL and its trusted SHA-256,
-then compile and download. The form explicitly selects GCC and provides CPU/output controls,
-compiler diagnostics, per-stage measurements and cancellation. Serve the bundle with CORS
-headers if it is on another origin. For a local setup, put the bundle in the example server's
-`.cache/gcc-bundle/` directory and use `/.cache/gcc-bundle/gcc-toolchain.v1.json` with the
-server's HTTP origin. This is an opt-in example and does not change the main playground's
-existing Clang Run path.
+Open `/examples/gcc-cross/` and enter the producer manifest URL/trusted SHA-256.
+The GCC form offers CPU/output controls, downloads, diagnostics, measurements and
+cancellation. Cross-origin bundles need CORS. Locally, serve `.cache/gcc-bundle/`
+and use `/.cache/gcc-bundle/gcc-toolchain.v1.json` at the server's HTTP origin.
+This opt-in example leaves the main playground's Clang Run path unchanged.
 
 Build the shared core and GCC host before running the following checks. The real
 Chromium qualification loads their emitted package modules and Worker entry.
