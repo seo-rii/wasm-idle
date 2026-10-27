@@ -57,9 +57,14 @@ pub fn main(init: std.process.Init) !void {
     try output_writer.interface.flush();
 }
 `;
-const helper = `pub noinline fn addFive(input: i32) i32 {
+const helper = `const embedded = @embedFile("../data.bin");
+comptime {
+    if (embedded.len != 3 or embedded[0] != 255 or embedded[1] != 0 or embedded[2] != 7)
+        @compileError("binary workspace resource changed");
+}
+pub noinline fn addFive(input: i32) i32 {
     var result = input;
-    result += 5; // initialized-result
+    result += embedded[2] - 2; // initialized-result
     var wide: i64 = @as(i64, input) * -12884901888; // added-result
     wide -= 5;
     var unsigned: u64 = @as(u64, @intCast(input)) << 40;
@@ -423,7 +428,10 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 				debugMode: 'lldb',
 				pauseOnEntry: true,
 				activePath: 'solution.zig',
-				workspaceFiles: [{ path: 'nested/arithmetic.zig', content: helper }],
+				workspaceFiles: [
+					{ path: 'nested/arithmetic.zig', content: helper },
+					{ path: 'data.bin', content: new Uint8Array([255, 0, 7]) }
+				],
 				breakpoints: [breakpointLine],
 				stdin: '7\n',
 				limits: { compileTimeoutMs: 300_000, runTimeoutMs: 90_000 }
@@ -647,7 +655,8 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 				if (binding.syncWorkspace)
 					await binding.syncWorkspace('ZIG', [
 						{ path: 'solution.zig', content: source },
-						{ path: 'nested/arithmetic.zig', content: helper }
+						{ path: 'nested/arithmetic.zig', content: helper },
+						{ path: 'data.bin', content: new Uint8Array([255, 0, 7]) }
 					]);
 				await reportStage('load:start');
 				await runtime.load(source, false, [], options, progress);
@@ -695,6 +704,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 		debugManifestSha256,
 		sourceSha256: digest(source),
 		helperSha256: digest(helper),
+		binaryResourceSha256: digest(new Uint8Array([255, 0, 7])),
 		requests,
 		browserMessages,
 		rawDapEvents,
