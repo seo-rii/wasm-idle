@@ -197,6 +197,53 @@ describe('OCaml worker', () => {
 		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 	});
 
+	it.each(['$', 'am'])(
+		'waits for generated async runtime completion with %s identifiers',
+		async (name) => {
+			let release!: () => void;
+			(globalThis as any).__ocamlPending = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			(globalThis as any).__ocamlEntered = false;
+			const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() {
+				return { success:true, stdout:'', stderr:'', diagnostics:[], artifacts:[
+					{ path:'/workspace/_build/main.js', kind:'js', data:${JSON.stringify(`void 0;(${name}=>async a=>{globalThis.__ocamlEntered=true;await globalThis.__ocamlPending;console.log('async output')})(globalThis)({});`)} },
+					{ path:'/workspace/_build/main.assets/code.wasm', kind:'wasm', data:new Uint8Array([0,97,115,109,1,0,0,0]) }
+				] };
+			}
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+			await import('./ocaml');
+			await (globalThis as any).self.onmessage({ data: loadRequest(compilerModuleUrl) });
+			vi.mocked(URL.revokeObjectURL).mockClear();
+			const executing = (globalThis as any).self.onmessage({
+				data: {
+					code: 'let () = print_endline "async output"',
+					target: 'wasm',
+					prepare: false
+				}
+			});
+			try {
+				await vi.waitFor(() => expect((globalThis as any).__ocamlEntered).toBe(true));
+				expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ results: true });
+				expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+				release();
+				await executing;
+				expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+					output: 'async output\n'
+				});
+				expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+				expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+			} finally {
+				release();
+				await executing;
+				delete (globalThis as any).__ocamlPending;
+				delete (globalThis as any).__ocamlEntered;
+			}
+		}
+	);
+
 	it('loads the manifest through the bounded no-store asset boundary', async () => {
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() { throw new Error('not used'); }
@@ -510,7 +557,7 @@ describe('OCaml worker', () => {
 								function a4I(a){var d=a.length,c=new Uint8Array(d),b=0;for(;b<d;b++)c[b]=a.charCodeAt(b);return c}
 								class Base{}
 								class Device extends Base{constructor(a,b){super();this.flags=b}read(a,b,c,d){cz(d,mc,aha,ow)}}
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									const device=new Device(0,{});
 									const bytes=new Uint8Array(64);
 									const length=device.read(bytes,0,64,false);
@@ -576,7 +623,7 @@ describe('OCaml worker', () => {
 								function a4I(a){var d=a.length,c=new Uint8Array(d),b=0;for(;b<d;b++)c[b]=a.charCodeAt(b);return c}
 								class Base{}
 								class Device extends Base{constructor(a,b){super();this.flags=b}read(a,b,c,d){cz(d,mc,aha,ow)}}
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									const device=new Device(0,{});
 									const bytes=new Uint8Array(64);
 									const length=device.read(bytes,0,64,false);
@@ -635,7 +682,7 @@ describe('OCaml worker', () => {
 							path: '/workspace/_build/main.js',
 							kind: 'js',
 							data: \`
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									console.log('wasm runtime ok');
 								});
 							\`
@@ -701,7 +748,7 @@ describe('OCaml worker', () => {
 							path: '/workspace/_build/main.js',
 							kind: 'js',
 							data: \`
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve();
+								Promise.resolve();
 							\`
 						}
 					]
@@ -765,7 +812,7 @@ describe('OCaml worker', () => {
 						{
 							path: '/workspace/_build/main.js',
 							kind: 'js',
-							data: \`globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve();\`
+							data: \`Promise.resolve();\`
 						}
 					]
 				};
@@ -835,7 +882,7 @@ describe('OCaml worker', () => {
 							path: '/workspace/_build/main.js',
 							kind: 'js',
 							data: \`
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									const fs=globalThis.require('fs');
 									const bytes=new Uint8Array(64);
 									const length=fs.readSync(0,bytes,0,64,null);
@@ -914,7 +961,7 @@ describe('OCaml worker', () => {
 							path: '/workspace/_build/main.js',
 							kind: 'js',
 							data: \`
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									const fs=undefined;
 									const bytes=new Uint8Array(64);
 									const length=fs.readSync(0,bytes,0,64,null);
@@ -973,7 +1020,7 @@ describe('OCaml worker', () => {
 							path: '/workspace/_build/main.js',
 							kind: 'js',
 							data: \`
-								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+								Promise.resolve().then(()=>{
 									const f=undefined;
 									const adapter={read:(a,b,c,d,e)=>f.readSync(a,b,c,d,e)};
 									const bytes=new Uint8Array(64);
