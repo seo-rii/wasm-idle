@@ -23,13 +23,13 @@ export interface CrossGccManifest {
 	readonly kind: 'gcc-x86_64-linux-gnu';
 	readonly host: 'wasm32-emscripten';
 	readonly target: 'x86_64-linux-gnu';
-	readonly compiler: Readonly<{ family: 'gcc'; version: '13.3.0' }>;
+	readonly compiler: Readonly<{ family: 'gcc'; version: '16.2.0' }>;
 	/** Producer v1 capabilities; the request-only `avx2` profile is a subset of `avx2-fma`. */
 	readonly cpuProfiles: readonly ['x86-64', 'avx2-fma'];
 	readonly linkMode: 'static';
 	readonly sysrootPath: '/sysroot';
-	readonly gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13';
-	readonly resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include';
+	readonly gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16';
+	readonly resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include';
 	readonly assets: Readonly<Record<CrossGccAssetName, CrossGccAsset>>;
 	readonly gnu: Readonly<{ gccVersion: string; glibcVersion: string; distribution: string }>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
@@ -62,7 +62,7 @@ export interface CrossGccCompileRequest {
 
 export interface CrossGccIdentity {
 	readonly compiler: 'gcc';
-	readonly compilerVersion: '13.3.0';
+	readonly compilerVersion: '16.2.0';
 	readonly compilerHost: 'wasm32-emscripten';
 	readonly target: 'x86_64-linux-gnu';
 	readonly manifestSha256: string;

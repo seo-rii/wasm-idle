@@ -146,9 +146,9 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		if (language === 'cpp') {
 			cc.push('-D_GNU_SOURCE');
 			includes.push(
-				'/sysroot/usr/include/c++/13',
-				'/sysroot/usr/include/x86_64-linux-gnu/c++/13',
-				'/sysroot/usr/include/c++/13/backward'
+				'/sysroot/usr/include/c++/16',
+				'/sysroot/usr/include/x86_64-linux-gnu/c++/16',
+				'/sysroot/usr/include/c++/16/backward'
 			);
 		}
 		includes.push(
