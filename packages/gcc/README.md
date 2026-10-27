@@ -1,36 +1,28 @@
 # @wasm-idle/gcc
 
-`@wasm-idle/gcc` runs the producer's real GCC front ends and code-generation backends
-in a browser Worker. `createGccWorker({ target: 'x86_64-linux-gnu', ... })` uses the
-existing GCC 13.3.0/GNU binutils bundle; `target: 'wasm32-wasi'` selects a separately
-built experimental GCC 17 Wasm backend. The original `createCrossGccWorker` and
-`createCrossGccCompiler` APIs remain the GCC 13 x86 APIs.
+`@wasm-idle/gcc` runs real GCC in a browser Worker. `createGccWorker` selects
+GCC 13.3.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
+GCC 17 Wasm backend with `target: 'wasm32-wasi'`. `createCrossGccWorker` and
+`createCrossGccCompiler` retain the GCC 13 x86 API.
 
-Both GCC compiler hosts are `wasm32-emscripten`. That host does not determine the
-output target: x86 produces assembly/ELF for download, while Wasm produces WAT,
-relocatable Wasm objects, or linked WASI Preview 1 executables. No browser x86 executor
-is included; ELF bytes never enter `WebAssembly.compile` or `instantiate`.
+Both compiler hosts are `wasm32-emscripten`. The separate output targets produce
+x86 assembly/ELF for download, or WAT/Wasm objects/WASI Preview 1 executables.
+There is no browser x86 executor; ELF never enters `WebAssembly.compile` or `instantiate`.
 
-This package contains only the MIT-licensed JavaScript/TypeScript host and depends on
-`@wasm-idle/core` for shared asset and archive helpers, and
-`@bjorn3/browser_wasi_shim` 0.4.2 for WASI execution. It has no LLVM compiler-package dependency. GCC,
-binutils, Emscripten modules and the GNU target sysroot are distributed separately by the
-producer, with their own source revisions, license notices and distribution obligations.
-The host package does not include those binaries or change their licenses.
+This MIT-licensed JavaScript/TypeScript host depends on `@wasm-idle/core` for assets
+and archives, and `@bjorn3/browser_wasi_shim` 0.4.2 for execution. It has no LLVM
+compiler-package dependency. The producer separately distributes GCC, binutils,
+Emscripten modules and GNU sysroots under their own licenses and obligations.
 
-This API requires an independently built and qualified GCC bundle from `wasm-llvm`'s
-`producer/gcc-browser` for x86 or `producer/gcc-wasi` for Wasm output. There is no implicit
-CDN, fallback compiler, or bundled binary.
-An `unverified` producer manifest remains explicitly unverified; successfully loading
-that manifest does not establish that GCC can compile the acceptance suite.
+Provide a qualified bundle from `wasm-llvm/producer/gcc-browser` (x86) or
+`producer/gcc-wasi` (Wasm). There is no implicit CDN, fallback compiler or bundled
+binary. Loading an `unverified` manifest does not qualify its compiler.
 
 ## Explicit WebAssembly output
 
-The Wasm bundle uses a separate v2 manifest (`kind: gcc-wasm32-wasi`) and a separate
-GCC source revision. It does not replace or upgrade the existing x86 compiler. The
-producer records exact GCC, patched WABT assembler, LLVM linker and wasi-libc source
-revisions. Each asset, including the WASI sysroot and linker, has a pinned size and
-SHA-256 digest. The consumer also requires an independently obtained manifest digest.
+The separate v2 manifest (`kind: gcc-wasm32-wasi`) pins GCC, patched WABT, LLD and
+wasi-libc revisions, plus every asset's size and SHA-256. Supply its independently
+obtained manifest digest. The existing x86 compiler is unchanged.
 
 ```ts
 import { createGccWorker } from '@wasm-idle/gcc';
