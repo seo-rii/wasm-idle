@@ -576,6 +576,9 @@ if (options.force || !(await pathExists(ocamlcOutPath))) {
 	await run(jsOfOcamlNativePath, [
 		'--target-env',
 		'browser',
+		// OCaml 5.5's bytecode linker uses caml_dynlink_parse_ld_conf. Include
+		// js_of_ocaml's real dynamic-linking primitives instead of generated stubs.
+		'+dynlink.js',
 		ocamlcBytecodePath,
 		'-o',
 		ocamlcOutPath
