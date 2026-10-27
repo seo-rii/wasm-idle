@@ -155,7 +155,11 @@ describe('Zig sandbox', () => {
 	});
 
 	it('preserves the full library budget through the public binding and honors explicit limits', async () => {
-		const binding = createPlaygroundBinding(TEST_RUNTIME_ASSETS, async () => new Zig());
+		// Match the app bridge's narrower runtime-assets loader boundary.
+		const binding = createPlaygroundBinding(
+			TEST_RUNTIME_ASSETS,
+			(async () => new Zig()) as never
+		);
 		try {
 			const sandbox = await binding.load('ZIG');
 			await sandbox.load('', false, []);
