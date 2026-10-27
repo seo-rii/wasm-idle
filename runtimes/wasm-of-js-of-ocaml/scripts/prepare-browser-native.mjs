@@ -625,16 +625,19 @@ for (const packageName of browserPackageNames) {
 }
 
 if (options.force || !(await pathExists(findlibConfOutPath))) {
-	const findlibConf = await readFile(findlibConfSourcePath, 'utf8');
-	const rewrittenFindlibConf = findlibConf.replaceAll(
-		switchPrefix.replace(/\/+$/, ''),
-		'/static/toolchain'
-	);
-	await writeFile(
+	// Findlib 1.9.9 uses config-relative paths such as "./ocaml:.". Resolve
+	// those against the mounted library directory rather than the user workspace.
+	await run(process.execPath, [
+		path.join(scriptsDir, 'patch-findlib-conf.mjs'),
+		'--input',
+		findlibConfSourcePath,
+		'--output',
 		findlibConfOutPath,
-		rewrittenFindlibConf.endsWith('\n') ? rewrittenFindlibConf : `${rewrittenFindlibConf}\n`,
-		'utf8'
-	);
+		'--source-prefix',
+		switchLibDir,
+		'--toolchain-root',
+		'/static/toolchain/lib'
+	]);
 }
 
 const ocamlLibFiles = await collectManifestFiles(
