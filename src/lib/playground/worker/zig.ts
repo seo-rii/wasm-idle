@@ -26,8 +26,8 @@ import { fetchRuntimeAssetBytes, resolveRuntimeAssetUrl } from './runtimeAssetFe
 declare var self: any;
 
 const encoder = new TextEncoder();
-const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 128 * 1024 * 1024;
-const DEFAULT_ZIG_STDLIB_MAX_FILES = 4096;
+const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 256 * 1024 * 1024;
+const DEFAULT_ZIG_STDLIB_MAX_FILES = 32768;
 const DEFAULT_ZIP_FILE_BUFFER_BYTES = 64 * 1024;
 
 interface ZigStdlibArchiveLimits {
@@ -43,7 +43,7 @@ let stdlibUrl = '';
 let loadedAssetKey = '';
 type LoadedZigAssets = {
 	compilerModule: WebAssembly.Module;
-	stdDirectory: Directory;
+	libDirectory: Directory;
 };
 let loadedAssets: LoadedZigAssets | null = null;
 let loadingAssets: { key: string; promise: Promise<LoadedZigAssets> } | null = null;
@@ -51,6 +51,22 @@ let assetIntegrity: ZigExecutionAssetReceipts | null = null;
 let runtimeMaxAssetBytes = 0;
 let compiledArtifact: Uint8Array | null = null;
 let compiledCacheKey = '';
+
+// std.Io first attempts positional I/O, then switches to streaming on ESPIPE.
+// The base shim returns NOTSUP, which Zig reports as an unexpected I/O error.
+class ZigStdout extends ConsoleStdout {
+	fd_pwrite(_data: Uint8Array, _offset: bigint) {
+		return { ret: wasi.ERRNO_SPIPE, nwritten: 0 };
+	}
+
+	fd_seek(_offset: bigint, _whence: number) {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
+	}
+
+	fd_tell() {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
+	}
+}
 
 class ZigStdin extends Fd {
 	private initialStdin: string | null;
@@ -76,6 +92,18 @@ class ZigStdin extends Fd {
 			ret: wasi.ERRNO_SUCCESS,
 			filestat: new wasi.Filestat(0n, wasi.FILETYPE_CHARACTER_DEVICE, 0n)
 		};
+	}
+
+	fd_pread(_size: number, _offset: bigint) {
+		return { ret: wasi.ERRNO_SPIPE, data: new Uint8Array(0) };
+	}
+
+	fd_seek(_offset: bigint, _whence: number) {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
+	}
+
+	fd_tell() {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
 	}
 
 	fd_read(size: number) {
@@ -218,6 +246,7 @@ class ZigStdlibArchiveBudget {
 	private expandedBytes = 0;
 	private fileCount = 0;
 	private readonly entries = new Map<string, 'directory' | 'file'>();
+	private archiveRoot: string | null = null;
 
 	constructor(
 		private readonly maxExpandedBytes: number,
@@ -300,17 +329,21 @@ class ZigStdlibArchiveBudget {
 			throw new Error(`Zig standard library archive has an unsafe path: ${path}`);
 		}
 		const normalized = parts.join('/');
-		if (normalized !== 'std' && !normalized.startsWith('std/')) {
-			throw new Error(`Zig standard library archive path is outside std/: ${path}`);
+		if (parts[0] !== 'lib' && parts[0] !== 'std') {
+			throw new Error(`Zig standard library archive path is outside lib/ or std/: ${path}`);
 		}
-		if (!directory && normalized === 'std') {
+		if (this.archiveRoot && this.archiveRoot !== parts[0]) {
+			throw new Error('Zig standard library archive must use a single lib/ or std/ root');
+		}
+		this.archiveRoot = parts[0];
+		if (!directory && parts.length === 1) {
 			throw new Error(`Zig standard library archive has an unsafe file path: ${path}`);
 		}
 		return normalized;
 	}
 }
 
-export async function loadStdDirectory(
+export async function loadLibDirectory(
 	source: Uint8Array,
 	assetUrl: string,
 	limits: ZigStdlibArchiveLimits = {},
@@ -443,11 +476,18 @@ export async function loadStdDirectory(
 			}
 		});
 	}
-	const stdDirectory = root.contents.get('std');
-	if (!(stdDirectory instanceof Directory)) {
-		throw new Error('Zig standard library archive must contain a std/ directory.');
+	const libDirectory = root.contents.get('lib');
+	if (libDirectory instanceof Directory) {
+		if (!(libDirectory.contents.get('std') instanceof Directory)) {
+			throw new Error('Zig library archive must contain lib/std/');
+		}
+		return libDirectory;
 	}
-	return stdDirectory;
+	if (!(root.contents.get('std') instanceof Directory)) {
+		throw new Error('Zig standard library archive must contain lib/std/ or std/');
+	}
+	// Legacy std-only bundles are already a valid /lib tree.
+	return root;
 }
 
 function postProgress(percent: number) {
@@ -516,9 +556,9 @@ async function loadAssets(
 			expected: receipts['zig_small.wasm'],
 			runtimeId: 'ZIG'
 		});
-		const [compilerModule, stdDirectory] = await Promise.all([
+		const [compilerModule, libDirectory] = await Promise.all([
 			WebAssembly.compile(compilerBytes),
-			loadStdDirectory(
+			loadLibDirectory(
 				stdlibBytes,
 				nextStdlibUrl,
 				{ maxExpandedBytes: maxAssetBytes },
@@ -526,7 +566,7 @@ async function loadAssets(
 			)
 		]);
 		postProgress(100);
-		return { compilerModule, stdDirectory };
+		return { compilerModule, libDirectory };
 	})();
 	loadingAssets = { key: nextAssetKey, promise: pending };
 	try {
@@ -567,7 +607,7 @@ async function compileZig({
 	log: boolean;
 }) {
 	if (!assetIntegrity) throw new Error('Zig runtime assets are not loaded');
-	const { compilerModule, stdDirectory } = await loadAssets(
+	const { compilerModule, libDirectory } = await loadAssets(
 		compilerUrl,
 		stdlibUrl,
 		assetIntegrity,
@@ -577,33 +617,34 @@ async function compileZig({
 	let compilerOutput = '';
 	const outputDecoder = new TextDecoder();
 	const errorDecoder = new TextDecoder();
-	const outputFd = new ConsoleStdout((chunk) => {
+	const outputFd = new ZigStdout((chunk) => {
 		compilerOutput += outputDecoder.decode(chunk, { stream: true });
 	});
-	const errorFd = new ConsoleStdout((chunk) => {
+	const errorFd = new ZigStdout((chunk) => {
 		compilerOutput += errorDecoder.decode(chunk, { stream: true });
 	});
 	const args = [
 		'zigc.wasm',
 		'build-exe',
 		entryPath,
-		`-Dtarget=${targetTriple}`,
+		'-target',
+		targetTriple,
 		'-fno-llvm',
 		'-fno-lld',
 		'-O',
-		'ReleaseSmall',
+		'fast',
 		'-femit-bin=output.wasm',
 		...compileArgs
 	];
 	const zigWasi = new WASI(
 		args,
-		[],
+		['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
 		[
 			new OpenFile(new File([])),
 			outputFd,
 			errorFd,
 			new PreopenDirectory('.', root.contents),
-			new PreopenDirectory('/lib', new Map([['std', stdDirectory]])),
+			new PreopenDirectory('/lib', libDirectory.contents),
 			new PreopenDirectory('/cache', new Map())
 		],
 		{ debug: false }
@@ -653,18 +694,18 @@ async function runZigArtifact({
 	stdinChunkOffsetZig = 0;
 	const stdoutDecoder = new TextDecoder();
 	const stderrDecoder = new TextDecoder();
-	const stdout = new ConsoleStdout((chunk) => {
+	const stdout = new ZigStdout((chunk) => {
 		const text = stdoutDecoder.decode(chunk, { stream: true });
 		if (text) postMessage({ output: text });
 	});
-	const stderr = new ConsoleStdout((chunk) => {
+	const stderr = new ZigStdout((chunk) => {
 		const text = stderrDecoder.decode(chunk, { stream: true });
 		if (text) postMessage({ output: text });
 	});
 	const zigWasi = new WASI(
 		['output.wasm', ...args],
 		['USER=jungol'],
-		[new ZigStdin(stdin, log), stdout, stderr],
+		[new ZigStdin(stdin, log), stdout, stderr, new PreopenDirectory('.', new Map())],
 		{ debug: false }
 	);
 	const instance = instantiateResult(
@@ -715,7 +756,7 @@ self.onmessage = async (event: { data: any }) => {
 		stdin,
 		activePath = 'main.zig',
 		workspaceFiles = [],
-		targetTriple = 'wasm64-wasi',
+		targetTriple = 'wasm32-wasi',
 		log
 	} = event.data;
 	try {

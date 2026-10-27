@@ -1388,7 +1388,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.zig': 'ZIG'/);
 		expect(source).toMatch(/ZIG: 'main\.zig'/);
 		expect(source).toMatch(/ZIG: 'zig'/);
-		expect(source).toMatch(/ZIG: \(\) => \(\{ zigTargetTriple: 'wasm64-wasi' \}\)/);
+		expect(source).toMatch(/ZIG: \(\) => \(\{ zigTargetTriple: 'wasm32-wasi' \}\)/);
 		expect(source).not.toContain('api/zig');
 	});
 

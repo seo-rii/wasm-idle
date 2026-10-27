@@ -1061,14 +1061,16 @@ fn fibonacci(n: i32) i32 {
     return if (n <= 1) 1 else fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-pub fn main() !void {
-    var buffer: [64]u8 = undefined;
-    const stdin = std.io.getStdIn().reader();
-    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\\n')) orelse "";
+pub fn main(init: std.process.Init) !void {
+    var input_buffer: [64]u8 = undefined;
+    var stdin = std.Io.File.stdin().readerStreaming(init.io, &input_buffer);
+    const input = (try stdin.interface.takeDelimiter('\\n')) orelse "";
     const trimmed = std.mem.trim(u8, input, " \\t\\r\\n");
     const n = std.fmt.parseInt(i32, trimmed, 10) catch 4;
-    const stdout = std.io.getStdOut().writer();
-    try stdout.print("fibonacci={d}\\n", .{fibonacci(n) + bonus});
+    var output_buffer: [128]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(init.io, &output_buffer);
+    try stdout.interface.print("fibonacci={d}\\n", .{fibonacci(n) + bonus});
+    try stdout.interface.flush();
 }`,
 	commonlisp: `(defun fibonacci (n)
   (if (< n 2)

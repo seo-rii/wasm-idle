@@ -133,12 +133,12 @@ function manifest(rng) {
 		kind: 'gcc-x86_64-linux-gnu',
 		host: 'wasm32-emscripten',
 		target: 'x86_64-linux-gnu',
-		compiler: { family: 'gcc', version: '13.3.0' },
+		compiler: { family: 'gcc', version: '16.2.0' },
 		cpuProfiles: ['x86-64', 'avx2-fma'],
 		linkMode: 'static',
 		sysrootPath: '/sysroot',
-		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13',
-		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include',
+		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
+		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
 		assets: Object.fromEntries(
 			Object.entries(assets).map(([name, assetPath]) => [
 				name,
@@ -150,7 +150,7 @@ function manifest(rng) {
 			])
 		),
 		gnu: {
-			gccVersion: '13',
+			gccVersion: '16',
 			glibcVersion: '2.39',
 			distribution: `Contract fixture ${rng.int(100000)}`
 		},
@@ -504,8 +504,10 @@ function generated(rng, index, api) {
 					null,
 					[],
 					{},
-					{ family: 'clang', version: '13.3.0' },
-					{ family: 'gcc', version: '14.1.0' }
+					{ family: 'clang', version: '16.2.0' },
+					{ family: 'gcc', version: '13.3.0' },
+					{ family: 'gcc', version: '16.1.0' },
+					{ family: 'gcc', version: '17.0.0' }
 				]);
 			},
 			() => {
@@ -555,7 +557,7 @@ function generated(rng, index, api) {
 				]);
 			},
 			() => {
-				input.gnu.gccVersion = rng.pick(['12', '13.3.0', 13, null]);
+				input.gnu.gccVersion = rng.pick(['13', '16.2.0', 16, null]);
 			},
 			() => {
 				input.qualification.status = rng.pick(['trusted', 'VERIFIED', null]);

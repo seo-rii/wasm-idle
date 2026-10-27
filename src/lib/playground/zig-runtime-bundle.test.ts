@@ -45,7 +45,7 @@ function addFileToDirectory(root: Directory, filePath: string, data: Uint8Array)
 	current.contents.set(parts.at(-1) || 'file', new File(data, { readonly: true }));
 }
 
-function untarStdDirectory(source: Uint8Array) {
+function untarLibDirectory(source: Uint8Array) {
 	const root = new Directory(new Map());
 	untar(source, {
 		addDirectory() {},
@@ -53,9 +53,11 @@ function untarStdDirectory(source: Uint8Array) {
 			addFileToDirectory(root, filePath, contents);
 		}
 	});
-	const stdDirectory = root.contents.get('std');
-	if (!(stdDirectory instanceof Directory)) throw new Error('std directory missing');
-	return stdDirectory;
+	const libDirectory = root.contents.get('lib');
+	if (!(libDirectory instanceof Directory)) throw new Error('lib directory missing');
+	expect(libDirectory.contents.get('std')).toBeInstanceOf(Directory);
+	expect(libDirectory.contents.get('compiler_rt.zig')).toBeInstanceOf(File);
+	return libDirectory;
 }
 
 async function readStaticAsset(fileName: string) {
@@ -67,11 +69,11 @@ async function readStaticAsset(fileName: string) {
 
 describe('bundled wasm-zig runtime', () => {
 	it('compiles a Zig program to WASI and runs it with the browser WASI shim', async () => {
-		const [compilerBytes, stdDirectory] = await Promise.all([
+		const [compilerBytes, libDirectory] = await Promise.all([
 			readStaticAsset('zig_small.wasm'),
 			readFile(path.join(staticDir, 'std.tar.gz'))
 				.then((data) => gunzipAsync(data))
-				.then((data) => untarStdDirectory(data))
+				.then((data) => untarLibDirectory(data))
 		]);
 		const workDir = new Map<string, File>([
 			[
@@ -79,9 +81,11 @@ describe('bundled wasm-zig runtime', () => {
 				new File(
 					encoder.encode(`const std = @import("std");
 
-pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
-    try stdout.print("zig-real-ok\\n", .{});
+pub fn main(init: std.process.Init) !void {
+    var buffer: [64]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+    try stdout.interface.print("zig-real-ok\\n", .{});
+    try stdout.interface.flush();
 }
 `)
 				)
@@ -93,14 +97,15 @@ pub fn main() !void {
 				'zigc.wasm',
 				'build-exe',
 				'main.zig',
-				'-Dtarget=wasm64-wasi',
+				'-target',
+				'wasm32-wasi',
 				'-fno-llvm',
 				'-fno-lld',
 				'-O',
-				'ReleaseSmall',
+				'fast',
 				'-femit-bin=output.wasm'
 			],
-			[],
+			['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
 			[
 				new OpenFile(new File([])),
 				new ConsoleStdout((chunk) => {
@@ -110,7 +115,7 @@ pub fn main() !void {
 					compilerOutput += decoder.decode(chunk, { stream: true });
 				}),
 				new PreopenDirectory('.', workDir),
-				new PreopenDirectory('/lib', new Map([['std', stdDirectory]])),
+				new PreopenDirectory('/lib', libDirectory.contents),
 				new PreopenDirectory('/cache', new Map())
 			],
 			{ debug: false }
@@ -136,7 +141,8 @@ pub fn main() !void {
 				}),
 				new ConsoleStdout((chunk) => {
 					programOutput += decoder.decode(chunk, { stream: true });
-				})
+				}),
+				new PreopenDirectory('.', new Map())
 			],
 			{ debug: false }
 		);
