@@ -1,7 +1,7 @@
 # @wasm-idle/gcc
 
 `@wasm-idle/gcc` runs real GCC in a browser Worker. `createGccWorker` selects
-GCC 16.2.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
+GCC 13.3.0 or 16.2.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
 GCC 17 Wasm backend with `target: 'wasm32-wasi'`. `createCrossGccWorker` and
 `createCrossGccCompiler` retain the x86 API.
 
@@ -16,7 +16,8 @@ Emscripten modules and GNU sysroots under their own licenses and obligations.
 
 Provide a qualified bundle from `wasm-llvm/producer/gcc-browser` (x86) or
 `producer/gcc-wasi` (Wasm). There is no implicit CDN, fallback compiler or bundled
-binary. Loading an `unverified` manifest does not qualify its compiler.
+binary. V1 requires matching compiler, GNU library and include versions: GCC 13.3.0/13
+or 16.2.0/16. Loading an `unverified` manifest does not qualify its compiler.
 
 ## Explicit WebAssembly output
 
@@ -118,7 +119,7 @@ stdout/stderr), returning exit code, output, runtime and final linear-memory
 capacity. It supplies no directory preopens, threads or dynamic linking.
 Traps are errors; failed compilation yields no executable artifact.
 
-## Existing GCC 13 x86 API
+## Existing x86 API
 
 ```ts
 import { createCrossGccWorker } from '@wasm-idle/gcc';

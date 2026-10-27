@@ -436,7 +436,7 @@ export async function createGccCompiler(
 	return compiler as CrossGccCompiler | WasiGccCompiler;
 }
 
-/** Backward-compatible GCC 13 x86 API. It never infers a target from downloaded metadata. */
+/** Backward-compatible x86 API. It never infers a target from downloaded metadata. */
 export function createCrossGccCompiler(
 	options: CreateCrossGccCompilerOptions
 ): Promise<CrossGccCompiler> {

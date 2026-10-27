@@ -127,7 +127,8 @@ function tar(path = 'usr/include/stdio.h') {
 	return bytes;
 }
 
-function bundle(archivePath?: string) {
+function bundle(archivePath?: string, version: '13.3.0' | '16.2.0' = '16.2.0') {
+	const major = version === '13.3.0' ? '13' : '16';
 	const files = new Map<string, Uint8Array>([['sysroot.tar', tar(archivePath)]]);
 	for (const tool of ['cc1', 'cc1plus', 'as', 'ld']) {
 		files.set(`${tool}.mjs`, encoder.encode(`synthetic-fixture:${tool}`));
@@ -146,14 +147,14 @@ function bundle(archivePath?: string) {
 		kind: 'gcc-x86_64-linux-gnu',
 		host: 'wasm32-emscripten',
 		target: 'x86_64-linux-gnu',
-		compiler: { family: 'gcc', version: '16.2.0' },
+		compiler: { family: 'gcc', version },
 		cpuProfiles: ['x86-64', 'avx2-fma'],
 		linkMode: 'static',
 		sysrootPath: '/sysroot',
-		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
-		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
+		gccInstallation: `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}`,
+		resourceDir: `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/include`,
 		assets,
-		gnu: { gccVersion: '16', glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
+		gnu: { gccVersion: major, glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
 		qualification: { status: 'unverified' }
 	};
 	const manifestBytes = encoder.encode(JSON.stringify(manifest));
@@ -777,6 +778,58 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			);
 		} finally {
 			compiler.dispose();
+		}
+	});
+
+	it.each([
+		['13.3.0', '13', '16'],
+		['16.2.0', '16', '13']
+	] as const)(
+		'retains GCC %s identity, C++ headers and link paths',
+		async (version, major, other) => {
+			const fixture = bundle(undefined, version);
+			for (const create of [
+				() => createCrossGccCompiler(fixture.options),
+				() => createGccCompiler({ ...fixture.options, target: 'x86_64-linux-gnu' })
+			]) {
+				const compiler = await create();
+				try {
+					expect(compiler.identity.compilerVersion).toBe(version);
+					expect(compiler.manifest.gnu.gccVersion).toBe(major);
+					const result = await compiler.compile({
+						code: 'int main() {}',
+						language: 'cpp'
+					});
+					expect(result.exitCode).toBe(0);
+					expect(result.stages[0].argv).toEqual(
+						expect.arrayContaining([
+							`/sysroot/usr/include/c++/${major}`,
+							`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
+							`/sysroot/usr/include/c++/${major}/backward`,
+							`/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/include`
+						])
+					);
+					expect(result.stages[0].argv).not.toContain(
+						`/sysroot/usr/include/c++/${other}`
+					);
+					expect(result.stages.at(-1)!.argv).toContain(
+						`/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/crtbeginT.o`
+					);
+				} finally {
+					compiler.dispose();
+				}
+			}
+		}
+	);
+
+	it('rejects every mixed compiler, installation, resource and target-library version', () => {
+		for (let mask = 1; mask < 15; mask++) {
+			const fixture = bundle().manifest;
+			fixture.compiler.version = mask & 1 ? '13.3.0' : '16.2.0';
+			fixture.gccInstallation = `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${mask & 2 ? 13 : 16}`;
+			fixture.resourceDir = `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${mask & 4 ? 13 : 16}/include`;
+			fixture.gnu.gccVersion = mask & 8 ? '13' : '16';
+			expect(() => parseCrossGccManifest(fixture)).toThrow();
 		}
 	});
 

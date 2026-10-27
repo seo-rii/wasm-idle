@@ -179,10 +179,11 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		const includes = [];
 		if (language === 'cpp') {
 			cc.push('-D_GNU_SOURCE');
+			const major = manifest.compiler.version.split('.')[0];
 			includes.push(
-				'/sysroot/usr/include/c++/16',
-				'/sysroot/usr/include/x86_64-linux-gnu/c++/16',
-				'/sysroot/usr/include/c++/16/backward'
+				`/sysroot/usr/include/c++/${major}`,
+				`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
+				`/sysroot/usr/include/c++/${major}/backward`
 			);
 		}
 		includes.push(
