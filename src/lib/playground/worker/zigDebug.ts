@@ -173,7 +173,7 @@ export async function compileZigDebugArtifact({
 	const bytes = await runtime.compileBitcodeArtifact(bitcode, {
 		maxWasmMemoryBytes: backend.maxWasmMemoryBytes
 	});
-	const module = await WebAssembly.compile(bytes);
+	const module = await WebAssembly.compile(Uint8Array.from(bytes));
 	if (
 		!['.debug_info', '.debug_line'].every((name) =>
 			WebAssembly.Module.customSections(module, name).some((section) => section.byteLength)

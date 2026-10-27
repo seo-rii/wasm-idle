@@ -604,8 +604,9 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 					);
 				}
 				this.configureLldb(this.loadedRuntimeAssets, options);
-				this.prepareLldb(options, workspace.activePath);
-				this.lldbEntryFunction = `${workspace.activePath
+				const entryPath = workspace.activePath || 'main.zig';
+				this.prepareLldb(options, entryPath);
+				this.lldbEntryFunction = `${entryPath
 					.split('/')
 					.pop()!
 					.replace(/\.zig$/, '')}.main`;
