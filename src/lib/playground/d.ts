@@ -783,16 +783,22 @@ class D extends CompiledLldbSandbox implements Sandbox {
 
 	private cancelOperation(operation: DOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
-		void this.stopLldb();
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
-		this.activeOperation = null;
+		// Retain ownership while stop listeners run so reentrant cancellation cannot
+		// replace the original reason or start a replacement before teardown finishes.
+		void this.stopLldb();
+		this.finishCancellation(operation);
+	}
+
+	private finishCancellation(operation: DOperation) {
+		if (!this.releaseOperation(operation)) return;
 		this.uid += 1;
 		this.finishExplicitStdin(operation);
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.exit = true;
-		this.workerSession.terminate(reason);
+		this.workerSession.terminate(operation.cancellationReason);
 		this.cleanupOperation(operation);
 	}
 
@@ -813,13 +819,13 @@ class D extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		void this.stopLldb();
 		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
 			return;
 		}
+		void this.stopLldb();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -842,12 +848,16 @@ class D extends CompiledLldbSandbox implements Sandbox {
 
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
-		void this.stopLldb();
 		this.disposed = true;
-		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
 		this.disposePromise = Promise.resolve();
 
 		const activeOperation = this.activeOperation;
+		if (activeOperation && !activeOperation.cancelled) {
+			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = this.disposeCancellation;
+		}
+		void this.stopLldb();
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
 		delete this.worker;
 		this.moduleUrl = '';
 		this.manifestUrl = '';
@@ -858,7 +868,7 @@ class D extends CompiledLldbSandbox implements Sandbox {
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();
 		if (activeOperation) {
-			this.cancelOperation(activeOperation, this.disposeCancellation);
+			this.finishCancellation(activeOperation);
 		} else {
 			this.uid += 1;
 			this.workerSession.terminate(this.disposeCancellation);

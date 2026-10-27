@@ -18,6 +18,7 @@
 		javaDebugLanguageAdapter,
 		luaDebugLanguageAdapter,
 		vDebugLanguageAdapter,
+		zigDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
 		rubyDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
@@ -201,7 +202,8 @@
 		'RUST',
 		'OBJC',
 		'OBJECTIVECXX',
-		'V'
+		'V',
+		'ZIG'
 	]);
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
@@ -212,6 +214,7 @@
 		OBJC: cppDebugLanguageAdapter,
 		OBJECTIVECXX: cppDebugLanguageAdapter,
 		V: vDebugLanguageAdapter,
+		ZIG: zigDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
 		JAVA: javaDebugLanguageAdapter,
 		LUA: luaDebugLanguageAdapter,
@@ -225,6 +228,7 @@
 		OBJC: 'Objective-C · LLDB / WAMR',
 		OBJECTIVECXX: 'Objective-C++ · LLDB / WAMR',
 		V: 'V · LLDB / WAMR',
+		ZIG: 'Zig · LLDB / WAMR',
 		GO: 'Go Trace',
 		JAVA: 'Java · Trace',
 		LUA: 'Lua · MobDebug',

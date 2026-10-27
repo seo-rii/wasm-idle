@@ -1,9 +1,9 @@
-export const WASM_ZIG_ASSET_VERSION = 'f163d1df88479fa2';
+export const WASM_ZIG_ASSET_VERSION = 'f13d47d5f39086f8';
 
 export const WASM_ZIG_ASSET_RECEIPTS = Object.freeze({
 	'zig_small.wasm': Object.freeze({
-		bytes: 4206625,
-		sha256: '84723f2ff867a26b3799377647a55778ce07d6c89b46fb781e7e9149a7be4765'
+		bytes: 4934128,
+		sha256: '82a101fd16c4cee7925ffc8fa51ccd713b23f32b13591531de383444e1060fd9'
 	}),
 	'std.tar.gz': Object.freeze({
 		bytes: 30362437,

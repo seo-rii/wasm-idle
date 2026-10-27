@@ -36,6 +36,7 @@ import {
 export type {
 	BrowserClangArtifact,
 	BrowserClangArtifactFormat,
+	BrowserClangBitcodeCompileOptions,
 	BrowserClangCompileProgress,
 	BrowserClangCompileRequest,
 	BrowserClangCompileStage,
