@@ -178,7 +178,7 @@ export async function createCrossGccCompiler(
 		manifest,
 		identity: Object.freeze({
 			compiler: 'gcc',
-			compilerVersion: '13.3.0',
+			compilerVersion: '16.2.0',
 			compilerHost: manifest.host,
 			target: manifest.target,
 			manifestSha256,

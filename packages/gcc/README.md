@@ -1,6 +1,6 @@
 # @wasm-idle/gcc
 
-`@wasm-idle/gcc` runs the producer's real GCC 13.3.0 `cc1`/`cc1plus` and GNU
+`@wasm-idle/gcc` runs the producer's real GCC 16.2.0 `cc1`/`cc1plus` and GNU
 binutils `as`/`ld` as Emscripten WebAssembly modules. It returns Linux x86-64 assembly, ELF
 objects, or static ELF executables for download. The compiler host is
 `wasm32-emscripten`; the output target is `x86_64-linux-gnu`. No browser x86 executor is
@@ -14,6 +14,8 @@ The host package does not include those binaries or change their licenses.
 
 This API requires an independently built and qualified GCC bundle from `wasm-llvm`'s
 `producer/gcc-browser`. There is no implicit CDN, fallback compiler, or bundled binary.
+The manifest must declare GCC 16.2.0 and GCC 16 target libraries and include paths.
+GCC 13 bundles are rejected; rebuild the producer and pin its new manifest digest.
 An `unverified` producer manifest remains explicitly unverified; successfully loading
 that manifest does not establish that GCC can compile the acceptance suite.
 
