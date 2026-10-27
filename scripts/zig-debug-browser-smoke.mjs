@@ -32,6 +32,9 @@ const containerAssets = process.env.WASM_IDLE_ZIG_DEBUG_CONTAINER_ASSETS
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'zig-debug-browser-'));
 const requests = [];
 const browserMessages = [];
+const rawDapEvents = [];
+const probeStages = [];
+const inspectExceptions = process.env.WASM_IDLE_ZIG_DEBUG_INSPECT_EXCEPTIONS === '1';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 let browser;
 let server;
@@ -98,6 +101,27 @@ try {
 	const sourceResolver = {
 		name: 'zig-debug-public-binding',
 		setup(context) {
+			context.onLoad(
+				{ filter: /runtime\/debug\/src\/session\.ts$/ },
+				async ({ path: filename }) => {
+					let contents = await readFile(filename, 'utf8');
+					const before = 'return new BrowserLldbSession(options);';
+					if (contents.split(before).length !== 2)
+						throw new Error('LLDB observation boundary changed');
+					// Observe genuine DAP events without changing source maps, artifacts or control flow.
+					const after = `const session = new BrowserLldbSession(options);
++const report = (value: unknown) => { void fetch(new URL('/__zig-debug-dap',location.href),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}); };
++session.onEvent(event => {
++  if(event.event !== 'stopped') return;
++  report({kind:'stopped',event});
++  if(${inspectExceptions} && (event.body as any)?.reason === 'exception') {
++    void session.request('exceptionInfo',{threadId:(event.body as any).threadId}).then(body=>report({kind:'exceptionInfo',body}),error=>report({kind:'exceptionInfo-error',error:String(error)}));
++  }
++});
++return session;`.replaceAll('\n+', '\n');
+					return { contents: contents.replace(before, after), loader: 'ts' };
+				}
+			);
 			context.onResolve({ filter: /^zig-debug-client$/ }, () => ({
 				path: 'zig-debug-client',
 				namespace: 'zig-debug-client'
@@ -147,7 +171,15 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			context.onLoad({ filter: /.*/, namespace: 'zig-debug-worker-constructor' }, () => ({
 				// Vite's ?worker wrapper; the production Worker implementation is bundled below.
 				contents: `export default class extends Worker {
-  constructor() { super(new URL('./zig-worker.js', import.meta.url), {type:'module'}); }
+  constructor() {
+    super(new URL('./zig-worker.js', import.meta.url), {type:'module'});
+    this.addEventListener('message',({data})=>{
+      const artifact=data?.lldbArtifact;
+      if(!artifact)return;
+      void fetch(new URL('/__zig-debug-artifact',import.meta.url),{method:'POST',body:Uint8Array.from(new Uint8Array(artifact.bytes)),headers:{'X-Zig-Module-Sha256':artifact.descriptor?.moduleSha256 || ''}});
+      void fetch(new URL('/__zig-debug-artifact-metadata',import.meta.url),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({descriptor:artifact.descriptor,sources:artifact.sources})});
+    });
+  }
 }`,
 				loader: 'js'
 			}));
@@ -203,6 +235,58 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 		try {
 			const pathname = new URL(request.url, 'http://localhost').pathname;
 			requests.push(pathname);
+			if (
+				request.method === 'POST' &&
+				[
+					'/__zig-debug-artifact',
+					'/__zig-debug-artifact-metadata',
+					'/__zig-debug-dap'
+				].includes(pathname)
+			) {
+				const chunks = [];
+				let total = 0;
+				const limit =
+					pathname === '/__zig-debug-artifact' ? 32 * 1024 * 1024 : 2 * 1024 * 1024;
+				for await (const chunk of request) {
+					total += chunk.length;
+					if (total > limit)
+						throw new Error('Probe observation exceeded its byte budget');
+					chunks.push(chunk);
+				}
+				const bytes = Buffer.concat(chunks);
+				if (pathname === '/__zig-debug-artifact') {
+					assert.equal(
+						digest(bytes),
+						request.headers['x-zig-module-sha256'],
+						'Observed artifact must preserve producer bytes'
+					);
+					if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT)
+						await writeFile(`${process.env.WASM_IDLE_ZIG_DEBUG_RESULT}.wasm`, bytes, {
+							mode: 0o600
+						});
+				} else if (pathname === '/__zig-debug-artifact-metadata') {
+					JSON.parse(bytes.toString('utf8'));
+					if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT)
+						await writeFile(
+							`${process.env.WASM_IDLE_ZIG_DEBUG_RESULT}.artifact.json`,
+							bytes,
+							{ mode: 0o600 }
+						);
+				} else {
+					rawDapEvents.push(JSON.parse(bytes.toString('utf8')));
+					if (rawDapEvents.length > 128)
+						throw new Error('Probe exceeded DAP observation budget');
+					if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT)
+						await writeFile(
+							`${process.env.WASM_IDLE_ZIG_DEBUG_RESULT}.dap.json`,
+							`${JSON.stringify(rawDapEvents, null, 2)}\n`,
+							{ mode: 0o600 }
+						);
+				}
+				response.writeHead(204);
+				response.end();
+				return;
+			}
 			if (pathname === '/') {
 				response.setHeader('Content-Type', 'text/html');
 				response.end('<!doctype html><title>Zig source debugger qualification</title>');
@@ -285,10 +369,11 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 	const page = await browser.newPage();
 	page.setDefaultTimeout(90_000);
 	await page.exposeFunction('__zigDebugStage', (stage) => {
+		probeStages.push(stage);
 		if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT)
 			writeFileSync(
 				`${process.env.WASM_IDLE_ZIG_DEBUG_RESULT}.stage.json`,
-				`${JSON.stringify(stage)}\n`,
+				`${JSON.stringify({ latest: stage, history: probeStages.slice(-64) })}\n`,
 				{ mode: 0o600 }
 			);
 	});
@@ -532,6 +617,8 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 		helperSha256: digest(helper),
 		requests,
 		browserMessages,
+		rawDapEvents,
+		probeStages,
 		...result
 	};
 	if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT) {
@@ -619,7 +706,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 	if (process.env.WASM_IDLE_ZIG_DEBUG_RESULT && !evidenceWritten) {
 		await writeFile(
 			process.env.WASM_IDLE_ZIG_DEBUG_RESULT,
-			`${JSON.stringify({ error: String(error), requests, browserMessages }, null, 2)}\n`,
+			`${JSON.stringify({ error: String(error), requests, browserMessages, rawDapEvents }, null, 2)}\n`,
 			{ mode: 0o600 }
 		);
 	}
