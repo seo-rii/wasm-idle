@@ -53,7 +53,8 @@ export const scenarios = [
 		// Includes pinned SIMD headers/notices and the Ruby debugger preview module.
 		// Main includes Ruby preview, Python compiler and the cross compiler in 751 files.
 		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
-		budget: { maxBytes: 7 * MiB, maxFiles: 757, maxPackages: 6 },
+		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
+		budget: { maxBytes: 7 * MiB, maxFiles: 759, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -245,8 +246,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
 		// Preserve Java/SIMD headroom and allow 24 KiB for main's 23,009-byte
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
-		// Zig 0.17's host and library receipts bring the measured total to 42,361,668 bytes.
-		budget: { maxBytes: 40 * MiB + 416 * 1024, maxFiles: 3_352, maxPackages: 70 },
+		// Zig's LLVM debug Worker/adapter bring the measured aggregate to
+		// 42,388,306 bytes and 3,358 files; keep the package-count cap unchanged.
+		budget: { maxBytes: 40 * MiB + 440 * 1024, maxFiles: 3_358, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
