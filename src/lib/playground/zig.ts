@@ -831,16 +831,22 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 
 	private cancelOperation(operation: ZigOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
-		this.retireDebugger();
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
-		this.activeOperation = null;
+		// Fence reentrant stop listeners before notifying them, retaining ownership
+		// until the debugger retirement barrier has been registered.
+		this.retireDebugger();
+		this.finishCancellation(operation);
+	}
+
+	private finishCancellation(operation: ZigOperation) {
+		if (!this.releaseOperation(operation)) return;
 		this.uid += 1;
 		this.finishExplicitStdin(operation);
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.exit = true;
-		this.workerSession.terminate(reason);
+		this.workerSession.terminate(operation.cancellationReason);
 		this.cleanupOperation(operation);
 	}
 
@@ -849,13 +855,13 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		this.retireDebugger();
 		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
 			return this.debugDisposal;
 		}
+		this.retireDebugger();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -883,9 +889,13 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 		this.disposePromise = Promise.resolve().then(async () => {
 			await this.debugDisposal;
 		});
-		this.retireDebugger();
 
 		const activeOperation = this.activeOperation;
+		if (activeOperation && !activeOperation.cancelled) {
+			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = this.disposeCancellation;
+		}
+		this.retireDebugger();
 		delete this.worker;
 		this.compilerUrl = '';
 		this.stdlibUrl = '';
@@ -897,7 +907,7 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState();
 		if (activeOperation) {
-			this.cancelOperation(activeOperation, this.disposeCancellation);
+			this.finishCancellation(activeOperation);
 		} else {
 			this.uid += 1;
 			this.workerSession.terminate(this.disposeCancellation);
@@ -920,6 +930,14 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	protected onLldbEvent(event: DebugSessionEvent) {
+		if (event.type === 'stop') {
+			try {
+				super.onLldbEvent(event);
+			} catch {
+				// Stop listeners cannot replace target completion or cancellation.
+			}
+			return;
+		}
 		const operation = this.activeOperation;
 		if (!operation || !this.isOperationActive(operation)) return;
 		try {

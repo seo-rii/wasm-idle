@@ -31,6 +31,7 @@ export class CompiledLldbSandbox {
 		DebugSourceBreakpoint[]
 	>();
 	private lldbPersistentCache?: SandboxExecutionOptions['persistentCache'];
+	private lldbPublishStop?: () => void;
 
 	protected configureLldb(
 		runtimeAssets: string | PlaygroundRuntimeAssets,
@@ -90,6 +91,16 @@ export class CompiledLldbSandbox {
 		onOutput = (text: string) => this.output?.(text)
 	) {
 		if (!this.lldbRuntime) throw new Error('LLDB runtime assets have not been configured.');
+		let stopPublished = false;
+		const publishStop = () => {
+			if (stopPublished) return;
+			stopPublished = true;
+			try {
+				this.onLldbEvent({ type: 'stop' });
+			} catch {
+				// A consumer stop callback cannot interrupt target teardown.
+			}
+		};
 		const session = new LldbSandboxSession({
 			manifestUrl: this.lldbRuntime.manifestUrl,
 			manifestReceipt: this.lldbRuntime.manifestReceipt,
@@ -116,16 +127,20 @@ export class CompiledLldbSandbox {
 			programArgs,
 			stdin: options.stdin,
 			onDebugEvent: (event) => {
-				if (this.lldbSession === session) this.onLldbEvent(event);
+				if (this.lldbSession !== session || stopPublished) return;
+				if (event.type === 'stop') publishStop();
+				else this.onLldbEvent(event);
 			},
 			onOutput
 		});
 		this.lldbSession = session;
+		this.lldbPublishStop = publishStop;
 		for (const input of pendingInput.splice(0)) void session.write(input);
 		if (pendingEof) void session.eof();
 		return session.start().finally(() => {
 			if (this.lldbSession === session) {
 				this.lldbSession = undefined;
+				this.lldbPublishStop = undefined;
 				this.lldbPending = false;
 			}
 		});
@@ -133,9 +148,17 @@ export class CompiledLldbSandbox {
 
 	protected stopLldb() {
 		const session = this.lldbSession;
+		const publishStop = this.lldbPublishStop;
 		this.lldbSession = undefined;
+		this.lldbPublishStop = undefined;
 		this.lldbPending = false;
-		return session?.disconnect();
+		if (!session) return;
+		try {
+			return session.disconnect();
+		} finally {
+			// Notify while this retirement still owns the stop, before a replacement starts.
+			publishStop?.();
+		}
 	}
 
 	protected onLldbEvent(event: DebugSessionEvent) {

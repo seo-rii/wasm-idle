@@ -300,4 +300,41 @@ describe('Zig LLDB lifecycle', () => {
 		expect(workers).toHaveLength(2);
 		await sandbox.dispose();
 	});
+
+	it.each(['terminate', 'abort', 'dispose'] as const)(
+		'preserves the original %s outcome when a stop listener terminates again and throws',
+		async (action) => {
+			const sandbox = new Zig();
+			await sandbox.load(assets);
+			const controller = new AbortController();
+			const running = sandbox.run(code, false, false, undefined, [], {
+				debugMode: 'lldb',
+				signal: controller.signal
+			});
+			const outcome = running.catch((error) => error);
+			handoff();
+			const events = vi.fn((event) => {
+				if (event.type !== 'stop') return;
+				void sandbox.terminate(new Error('reentrant stop cancellation'));
+				throw new Error('stop listener failed');
+			});
+			sandbox.ondebug = events;
+			const reason = new Error('original cancellation');
+			if (action === 'terminate') void sandbox.terminate(reason);
+			else if (action === 'abort') controller.abort(reason);
+			else await sandbox.dispose();
+			if (action === 'dispose') {
+				await expect(outcome).resolves.toMatchObject({
+					code: 'cancelled',
+					phase: 'dispose'
+				});
+			} else {
+				await expect(outcome).resolves.toBe(reason);
+				await expect(sandbox.run(code, false)).resolves.toBe(true);
+			}
+			expect(events).toHaveBeenCalledExactlyOnceWith({ type: 'stop' });
+			expect(sessions[0].disconnect).toHaveBeenCalledOnce();
+			await sandbox.dispose();
+		}
+	);
 });
