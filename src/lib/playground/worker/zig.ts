@@ -12,10 +12,11 @@ import { decompressGzip, untar } from '@wasm-idle/llvm-core';
 import {
 	configureRuntimeAssetCache,
 	verifyRuntimeAssetIntegrity,
-	type RuntimeAssetIntegrityEntry
+	type RuntimeAssetIntegrityEntry,
+	type WorkspaceFile
 } from '@wasm-idle/core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
-import type { SandboxWorkspaceFile, ZigTargetTriple } from '$lib/playground/options';
+import type { ZigTargetTriple } from '$lib/playground/options';
 import {
 	snapshotZigExecutionAssetReceipts,
 	type ZigExecutionAssetReceipt,
@@ -199,19 +200,17 @@ function getFile(root: Directory, filePath: string) {
 	return current instanceof File ? current : null;
 }
 
-function buildWorkspaceRoot(
-	code: string,
-	activePath: string,
-	workspaceFiles: SandboxWorkspaceFile[]
-) {
+function buildWorkspaceRoot(code: string, activePath: string, workspaceFiles: WorkspaceFile[]) {
 	const root = new Directory(new Map());
 	const entryPath = normalizeWorkspacePath(activePath || 'main.zig');
 	for (const file of workspaceFiles) {
-		if (!file || typeof file.path !== 'string' || typeof file.content !== 'string') continue;
+		if (!file || typeof file.path !== 'string') continue;
+		const content = file.path === activePath ? code : file.content;
+		if (typeof content !== 'string' && !(content instanceof Uint8Array)) continue;
 		addFileToDirectory(
 			root,
 			file.path,
-			encoder.encode(file.path === activePath ? code : file.content)
+			typeof content === 'string' ? encoder.encode(content) : content
 		);
 	}
 	addFileToDirectory(root, entryPath, encoder.encode(code));
@@ -603,7 +602,7 @@ async function compileZig({
 }: {
 	code: string;
 	activePath: string;
-	workspaceFiles: SandboxWorkspaceFile[];
+	workspaceFiles: WorkspaceFile[];
 	targetTriple: ZigTargetTriple;
 	compileArgs: string[];
 	debugBackend?: ZigDebugBackend;
@@ -680,6 +679,26 @@ async function compileZig({
 		);
 		return { bytes };
 	}
+	const sources = new Map<string, string>();
+	// The container supplies file bytes, including binary @embedFile resources.
+	// Only Zig source bytes need a lossless text representation in LLDB.
+	const sourceDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+	for (const file of workspaceFiles) {
+		if (!file || typeof file.path !== 'string') continue;
+		const path = normalizeWorkspacePath(file.path);
+		if (path === entryPath) continue;
+		if (typeof file.content === 'string') sources.set(path, file.content);
+		else if (file.content instanceof Uint8Array && path.endsWith('.zig')) {
+			try {
+				sources.set(path, sourceDecoder.decode(file.content));
+			} catch (cause) {
+				throw new Error(`Zig debug source is not valid UTF-8: /workspace/${path}`, {
+					cause
+				});
+			}
+		}
+	}
+	sources.set(entryPath, code);
 	const flags = [
 		'-target',
 		'wasm32-wasi',
@@ -701,13 +720,6 @@ async function compileZig({
 		['build-obj', '/lib/compiler_rt.zig', ...flags, '-femit-llvm-bc=compiler_rt.bc'],
 		'compiler_rt.bc'
 	);
-	const sources = new Map<string, string>();
-	for (const file of workspaceFiles) {
-		if (file && typeof file.path === 'string' && typeof file.content === 'string') {
-			sources.set(normalizeWorkspacePath(file.path), file.content);
-		}
-	}
-	sources.set(entryPath, code);
 	const { compileZigDebugArtifact } = await import('./zigDebug');
 	const debug = await compileZigDebugArtifact({
 		bitcode: [bitcode, compilerRt],

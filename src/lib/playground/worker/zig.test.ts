@@ -494,6 +494,107 @@ describe('Zig worker', () => {
 		expect(shim.state.runCount).toBe(1);
 	});
 
+	it.each(['none', 'lldb'])(
+		'mounts byte-backed Zig imports and binary embedFile data in %s mode',
+		async (debugMode) => {
+			const helper = new Uint8Array(encoder.encode('\ufeffpub const greeting = "안녕";'));
+			const binary = new Uint8Array([0, 255, 128, 13, 10, 0]);
+			debugPipeline.compileZigDebugArtifact.mockResolvedValue({
+				bytes: encoder.encode('debug-wasm'),
+				descriptor: { kind: 'dwarf' },
+				sources: []
+			});
+			await import('./zig');
+			await (globalThis as any).self.onmessage({
+				data: {
+					load: true,
+					compilerUrl: 'https://assets.example.test/zig_small.wasm',
+					stdlibUrl: 'https://assets.example.test/std.tar.gz',
+					integrity: runtimeIntegrity,
+					maxAssetBytes
+				}
+			});
+			const code =
+				'const helper = @import("nested/helper.zig"); const data = @embedFile("data.bin"); pub fn main() void { _ = helper; _ = data; }';
+			await (globalThis as any).self.onmessage({
+				data: {
+					code,
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					activePath: 'main.zig',
+					debugMode,
+					workspaceFiles: [
+						{ path: 'main.zig', content: new Uint8Array([255]) },
+						{ path: 'nested/helper.zig', content: helper },
+						{ path: 'data.bin', content: binary }
+					],
+					debugClangPath: 'https://assets.example.test/clang/',
+					debugClangIntegrity: {
+						'runtime-manifest.v1.json': {
+							bytes: 1,
+							sha256: 'a'.repeat(64),
+							uncompressedBytes: 1,
+							uncompressedSha256: 'a'.repeat(64)
+						}
+					}
+				}
+			});
+			const root = shim.state.constructed[0].fds[3].dir.contents;
+			expect(Array.from(root.get('main.zig').data)).toEqual(Array.from(encoder.encode(code)));
+			expect(Array.from(root.get('nested').contents.get('helper.zig').data)).toEqual(
+				Array.from(helper)
+			);
+			expect(Array.from(root.get('data.bin').data)).toEqual(Array.from(binary));
+			expect(shim.state.compileCount).toBe(debugMode === 'lldb' ? 2 : 1);
+			if (debugMode === 'lldb') {
+				const { sources } = debugPipeline.compileZigDebugArtifact.mock.calls[0][0];
+				expect(sources.map((source: any) => source.path)).toEqual([
+					'/workspace/main.zig',
+					'/workspace/nested/helper.zig'
+				]);
+				const source = sources.find((file: any) => file.path.endsWith('helper.zig'));
+				expect(source.content).toBe('\ufeffpub const greeting = "안녕";');
+				expect(sha256(encoder.encode(source.content))).toBe(sha256(helper));
+			}
+		}
+	);
+
+	it('rejects invalid UTF-8 byte-backed Zig debug source before compilation', async () => {
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'pub fn main() void {}',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'lldb',
+				workspaceFiles: [{ path: 'nested/helper.zig', content: new Uint8Array([255]) }],
+				debugClangPath: 'https://assets.example.test/clang/',
+				debugClangIntegrity: {
+					'runtime-manifest.v1.json': {
+						bytes: 1,
+						sha256: 'a'.repeat(64),
+						uncompressedBytes: 1,
+						uncompressedSha256: 'a'.repeat(64)
+					}
+				}
+			}
+		});
+		expect(shim.state.compileCount).toBe(0);
+		expect(debugPipeline.compileZigDebugArtifact).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Zig debug source is not valid UTF-8: /workspace/nested/helper.zig'
+		});
+	});
+
 	it('rejects debug compiler overrides before invoking the frontend', async () => {
 		await import('./zig');
 		await (globalThis as any).self.onmessage({
