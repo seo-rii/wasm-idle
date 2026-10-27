@@ -1,0 +1,116 @@
+{
+	"format": "wasm-idle-teavm-candidate-inputs-v1",
+	"profileId": "teavm-javac-0.16.0-208d4c9-wasm-idle-candidate",
+	"teavmVersion": "0.16.0",
+	"source": {
+		"repository": "https://github.com/konsoletyper/teavm-javac",
+		"revision": "208d4c97a602ba0df055f16e6882059fb69d0122",
+		"archive": {
+			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/208d4c97a602ba0df055f16e6882059fb69d0122",
+			"bytes": 99644,
+			"sha256": "ad893ca727081e72ab7ffb9f270956c76d4222b09c6bd1196a13c58c7f81ad2e"
+		}
+	},
+	"openjdk": {
+		"repository": "https://github.com/openjdk/jdk25u",
+		"revision": "6c48f4ed707bf0b15f9b6098de30db8aae6fa40f",
+		"archive": {
+			"url": "https://github.com/openjdk/jdk25u/archive/6c48f4ed707bf0b15f9b6098de30db8aae6fa40f.zip",
+			"bytes": 201208868,
+			"sha256": "4f3d4746948c90682ece32e4fc1b40a7828d1e68e9abd2e68316ab8076792458"
+		}
+	},
+	"jdk": {
+		"version": "25.0.5+8",
+		"archive": {
+			"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz",
+			"sha256": "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+		},
+		"release": {
+			"JAVA_VERSION": "25.0.5",
+			"JAVA_RUNTIME_VERSION": "25.0.5+8-LTS",
+			"IMPLEMENTOR_VERSION": "Temurin-25.0.5+8",
+			"OS_ARCH": "x86_64",
+			"OS_NAME": "Linux"
+		}
+	},
+	"gradle": {
+		"version": "9.1.0",
+		"distributionUrl": "https://services.gradle.org/distributions/gradle-9.1.0-bin.zip",
+		"distributionSha256": "a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806"
+	},
+	"compatibility": {
+		"status": "migrated-build-inputs-browser-validation-pending",
+		"previousRuntimeVersion": "0.13.1",
+		"upstreamedPatch": "teavm-javac-stdlib-rename.patch",
+		"sourceChanges": [
+			"Rebase deterministic TypeSet and TagRegistry on TeaVM 0.16.0",
+			"Use the 0.16.0 reflection and ServiceLoader body-intrinsic APIs",
+			"Remove obsolete enum/annotation listeners and numeric supplements now supplied upstream",
+			"Support the now-final TString when injecting String supplements"
+		],
+		"runtimeOverlay": {
+			"classlibSourceJarSha256": "da6f83c1436c87a9ad683b6143aaa9c172b08c3974c9a7d5741a479d0d60092e",
+			"sources": [
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TByteBuffer.java",
+					"upstreamSha256": "fa465468d8580f9f96d87088592fdc2e59d47af922de20cc39aa9ff30b78e03f",
+					"patchedSha256": "e57ff9fa9e9bc652abfaa368ae839bc157d59a91dc6aa4319bf237b2cc1c6b03"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TCharBuffer.java",
+					"upstreamSha256": "cf683f75488569d5220c690d1ad223bd6b559694c03844bb03ffe9b4516e5b96",
+					"patchedSha256": "715461dac73ce7ec2da6e4b3bbf5e4f1f858234af387170b18cba10ca22bf0bc"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TShortBuffer.java",
+					"upstreamSha256": "1fbeb1443a783ea50ecce88782e51ff03bc1f6841e84a45c5c1ffd447b26bb7f",
+					"patchedSha256": "a9dc9059ecd8be8b6aaaac49bfaed4272ec6ac3e5de6c1c246f5385b6470595d"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TIntBuffer.java",
+					"upstreamSha256": "613e5cfff1845c554c658778af352d81c3b36bb9039be0a8c0514bb9e0d29328",
+					"patchedSha256": "4152b391d5c58eec26811b0fd31b9d695227207e11b41b482df83454d6c0f310"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TLongBuffer.java",
+					"upstreamSha256": "5a2d1988cc88a026408c731a2c34befce47c1f09d24780ddbc3550eefebfa223",
+					"patchedSha256": "41eceb3f04e19168f827e938bf2020bc201cd51dbc529bd1a8622eb06489f4ee"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TFloatBuffer.java",
+					"upstreamSha256": "a5ff5a21a3353767e968cd3e733831bc7c8b81ba6cd24cc90219ecde9e8809ed",
+					"patchedSha256": "99a6c815984f000cc42119e010f9894b0b5b0e872948a835cf6d3cbd8017770d"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/nio/TDoubleBuffer.java",
+					"upstreamSha256": "9db10fd6f4637e004943046c4df988fe9a1cf36d6e966ed220837b95db400135",
+					"patchedSha256": "46e4f8db0747a14a8cf50c3f986207a2f1e74db14417cbf5133134072a1d020d"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
+					"upstreamSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
+					"patchedSha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2"
+				},
+				{
+					"sourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
+					"upstreamSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
+					"patchedSha256": "037e2eea47137516a86863193fd1b69567d87f93b441909208760e23eefd7eeb"
+				}
+			]
+		},
+		"pendingValidation": [
+			"Full compiler.wasm build with the pinned Temurin JDK",
+			"Independent byte-reproducibility comparison",
+			"Browser Java stdin/stdout, formatting, reflection, annotation, clone, and ServiceLoader regressions",
+			"Review observed dependency checksums and output receipts before publishing"
+		]
+	},
+	"sourcePatches": [
+		{
+			"path": "patches/teavm-javac-0.16.0-compat.patch",
+			"bytes": 187792,
+			"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
+		}
+	]
+}

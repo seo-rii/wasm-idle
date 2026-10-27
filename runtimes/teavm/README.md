@@ -22,6 +22,59 @@ Gradle, dependency-verification, local-overlay, storage, and license metadata. A
 loader remains a mirror for the pinned generation unless the caller explicitly supplies a complete
 replacement receipt set.
 
+## TeaVM 0.16.0 build candidate
+
+The next build inputs are locked separately in `scripts/teavm/candidate-inputs.lock.json`:
+TeaVM 0.16.0, teavm-javac revision `208d4c97a602ba0df055f16e6882059fb69d0122`,
+Temurin 25.0.5+8 for Linux x64, and Gradle 9.1.0. The real javac source remains the
+upstream-selected OpenJDK revision `6c48f4ed707bf0b15f9b6098de30db8aae6fa40f`.
+Updating the host JDK does not change that independently pinned javac source.
+
+Download the source archive named in that candidate lock, then prepare a fresh directory:
+
+```bash
+node scripts/prepare-wasm-teavm-candidate.mjs /path/to/208d4c97a602ba0df055f16e6882059fb69d0122.tar.gz /path/to/new-candidate
+```
+
+This verifies the source and compatibility-patch hashes, checks and applies
+`teavm-javac-0.16.0-compat.patch`, and pins the Gradle distribution checksum. It needs no
+JDK or dependency downloads. The patch migrates reflection and `ServiceLoader` registration to
+the 0.16 API, rebases the two deterministic compiler classes, keeps the annotation and array-clone
+fixes, and removes numeric supplements now supplied upstream. The remaining eight supplement
+classes compile against 0.16; the string supplement accommodates the now-final `TString`.
+Runtime byte I/O and formatting overlays are rebased on the 0.16 source JAR and compiled as a
+separate source set. Archive assembly checks all 11 replacement targets and appends the missing
+format-width exception. Source correspondence hashes are recorded in the candidate lock.
+
+To prepare and build in one invocation, also supply the exact JDK archive named in the lock;
+the output directory must not already exist:
+
+```bash
+node scripts/prepare-wasm-teavm-candidate.mjs /path/to/208d4c97a602ba0df055f16e6882059fb69d0122.tar.gz /path/to/new-build /path/to/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz
+```
+
+The build uses an isolated Gradle cache, verifies the downloaded OpenJDK source archive, builds
+the patched compiler and both class libraries, and writes the five logical assets under `dist/`
+with observed hashes in `candidate-status.json`. It also collects dependency verification metadata
+for review. Allow several GiB of disk and build memory; this invokes the upstream compiler build
+and downloads dependencies. Run long builds with a private background log as required by the
+workspace instructions.
+
+Preparation and focused Java compatibility checks have passed. A full compiler build, independent
+reproducibility comparison, and browser Java regression suite are still required before publishing.
+The candidate command never changes `static/teavm/`, consumer receipts, or the existing 0.13.1
+producer lock. Do not pass the candidate to `sync:wasm-teavm`, which intentionally still reproduces
+the shipped generation. Promote a complete verified receipt set and corresponding producer only
+after those checks pass.
+
+Run the preparation checks without downloading or building a compiler:
+
+```bash
+node --test scripts/prepare-wasm-teavm-candidate.test.mjs
+```
+
+## Shipped TeaVM 0.13.1 generation
+
 The stack deobfuscator is the unmodified `org/teavm/backend/wasm/deobfuscator.wasm` resource from
 the pinned `teavm-wasm-gc-deobfuscator` 0.13.1 JAR. It resolves the debug metadata already embedded
 in compiled programs to Java class, method, file, and line information, including calls to
