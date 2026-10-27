@@ -43,9 +43,15 @@ npm ci
 
 Bootstrap host tools and the frozen opam switch:
 
+The default switch pins OCaml `5.5.2` and both `js_of_ocaml` and `wasm_of_ocaml-compiler`
+to `6.5.0`. Set `WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER=1` to install the Wasm compiler
+alongside the JavaScript compiler. Build inputs and existing browser assets have separate
+lifetimes: regenerate the full browser bundle and its manifest before syncing a new compiler
+generation into the app.
+
 ```sh
 npm run bootstrap:host-tools
-PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
+PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER=1 npm run toolchain:bootstrap
 ```
 
 Build TypeScript output and prepare the browser-native bundle:
