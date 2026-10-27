@@ -18,7 +18,7 @@ remote debugging port or external debugger service.
 | D                          | Genuine LDC debug profile and source artifact handoff implemented; full-runtime rejection verified                                                                                                               | The full D runtime emits Wasm exception-handling tags unsupported by the pinned WAMR debugger. The UI stays disabled. No `-betterC` subset substitution.                                                                                                          |
 | C#, VB.NET, F#             | Portable PDB generation/loading, virtual source paths and native Mono agent bridge prerequisites implemented                                                                                                     | Actual compilers passed PDB/sequence-point/local metadata and stdin/stdout checks. The shipped native debugger exports are stubs; a real native debugger component, repackaged compiler and managed debugger proxy are still required. No debugger UI is enabled. |
 | Ordinary Go                | Actual `-N -l`, `-w=false` compile/link and stdin/stdout probe                                                                                                                                                   | The Go Wasm linker omits DWARF. Keep existing trace mode; native requests fail explicitly.                                                                                                                                                                        |
-| Zig                        | Five actual target/debug/strip option combinations, successful compile and stdin/stdout                                                                                                                          | Current selfhost outputs have no DWARF. Native requests fail explicitly.                                                                                                                                                                                          |
+| Zig                        | Real WASI Zig frontend → LLVM bitcode → browser Clang/LLD → LLDB/WAMR; original-file breakpoints, step into/over/out, stacks, initialized integer locals, imports, stdin/stdout, stop/restart                    | WASI Preview 1 only. Debug fixes `-O debug`/MVP options and rejects compiler argument overrides. Zig expression evaluation and friendly slice/optional/error-union display are not qualified. Ordinary execution retains the selfhosted Wasm backend.             |
 | TinyGo                     | Receipt-verified direct `debug:true` producer request                                                                                                                                                            | The producer rejects the missing debug runtime closure. A separately identified producer debug profile is required.                                                                                                                                               |
 | Nim                        | Explicit debugger producer gate                                                                                                                                                                                  | The current LLVM 8 release-only producer has no source debug artifact handoff.                                                                                                                                                                                    |
 | PHP                        | Actual shipped PHP 8.4.25 extension/INI probe and stdin/stdout                                                                                                                                                   | Xdebug is absent. Package a real Xdebug-enabled engine and connect its DBGp transport before exposing source debugging.                                                                                                                                           |
@@ -97,3 +97,24 @@ Native compiler attempts and exact receipts are documented in
 [Go/Zig/TinyGo probes](native-debug-compiler-probes.md),
 [.NET prerequisites](../runtimes/wasm-dotnet/README.md#debugging-prerequisites), and
 [PHP prerequisites](../producers/wasm-php/README.md).
+
+## Zig LLVM debug path
+
+The pinned Zig compiler emits source metadata through its pure Zig LLVM builder, without
+linking LLVM libraries into the compiler. Debug compilation emits separate bitcode modules
+for the program and the matching Zig `compiler_rt`, then browser Clang produces objects
+and LLD links WASI libc/builtins. Zig supplies `_start`, so this path omits the C CRT.
+Compiler, library and LLVM backend payloads are verified against their receipts before use;
+the final debug artifact records module and original-source hashes.
+
+Source paths stay under `/workspace`, including imported files. The compiler Worker is
+retired before starting the independent LLDB/WAMR session. Paused time does not consume
+the execution deadline; cancellation disconnects the target and the next run reloads the
+pinned compiler. Captured local values can appear in the editor, but the Zig adapter does
+not evaluate Zig expressions.
+
+After preparing the normal Zig, Clang and debug runtime assets, run the real Chromium gate:
+
+```sh
+node scripts/zig-debug-browser-smoke.mjs
+```
