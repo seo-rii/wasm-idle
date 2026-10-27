@@ -2,23 +2,15 @@
 
 This notice accompanies the browser TeaVM compiler and class-library assets generated from
 `konsoletyper/teavm-javac` revision
-`7e4a44cf521694a4e326e33850dd8aec165eb5c9` with TeaVM 0.13.1.
+`208d4c97a602ba0df055f16e6882059fb69d0122` with TeaVM 0.16.0.
 
 Corresponding source references and byte receipts are recorded in
-`scripts/wasm-teavm-assets.lock.json`. The wasm-idle compatibility overlays are shipped as
-`scripts/teavm/TByteBuffer.java`, `TCharBuffer.java`, `TShortBuffer.java`, `TIntBuffer.java`,
-`TLongBuffer.java`, `TFloatBuffer.java`, `TDoubleBuffer.java`, `JsConsolePrintStream.java`, and
-`TFormatter.java`, which are modified TeaVM sources, and `TIllegalFormatWidthException.java`, which
-is a wasm-idle addition. The teavm-javac compiler is built with the source patches
-`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`,
-`scripts/teavm/patches/teavm-javac-stdlib-rename.patch` (upstream teavm-javac commit `199bed0`),
-`scripts/teavm/patches/teavm-javac-enum-constants.patch`,
-`scripts/teavm/patches/teavm-javac-annotation-classlib.patch`,
-`scripts/teavm/patches/teavm-javac-array-clone.patch`,
-`scripts/teavm/patches/teavm-javac-reproducible-wasm.patch`, which also carries modified copies of
-the TeaVM 0.13.1 classes `org.teavm.dependency.TypeSet` and `org.teavm.model.classes.TagRegistry`
-used only by the build, `scripts/teavm/patches/teavm-javac-bootstrap-services.patch`, and
-`scripts/teavm/patches/teavm-javac-classlib-supplements.patch`. No warranty is provided.
+`scripts/wasm-teavm-assets.lock.json`. The source patch
+`scripts/teavm/patches/teavm-javac-0.16.0-compat.patch` carries the modified TeaVM byte I/O,
+Formatter, reflection, annotation, cloning, ServiceLoader and class-library supplement sources.
+It includes modified `TypeSet` and `TagRegistry` classes used only by the build to make compiler
+output reproducible. The runtime overlays are compiled and assembled inside the Gradle source
+set. `TIllegalFormatWidthException` is a wasm-idle addition. No warranty is provided.
 
 ## TeaVM and teavm-javac
 
