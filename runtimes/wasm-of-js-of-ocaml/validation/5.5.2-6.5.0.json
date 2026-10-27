@@ -1,0 +1,210 @@
+{
+	"schemaVersion": 1,
+	"producer": "wasm-idle/wasm-of-js-of-ocaml",
+	"observedAt": "2026-10-27T07:27:41.617911+00:00",
+	"sourceCommit": "f7157d4a3b77cb5e18d5c3f5ce7229d2d80ab361",
+	"versions": {
+		"ocaml": "5.5.2",
+		"js_of_ocaml": "6.5.0",
+		"wasm_of_ocaml": "6.5.0",
+		"ocamlfind": "1.9.9~preview",
+		"browserBinaryen": "132.0.0",
+		"nativeBootstrapBinaryen": "129"
+	},
+	"opamExport": {
+		"path": "runtimes/wasm-of-js-of-ocaml/validation/5.5.2-6.5.0.opam.export",
+		"sha256": "206ac8f86cbdbf4ad94542f42fa2174776b1cb7b59fd3de178f51fa6164cef22"
+	},
+	"validation": {
+		"hostPipeline": {
+			"passed": 8
+		},
+		"bundle": {
+			"passed": 64
+		},
+		"workerUnit": {
+			"passed": 26
+		},
+		"chromiumHarness": {
+			"passed": true,
+			"sourceCommit": "98ba952963a51d3317de3353c2356a73bf3e10ad",
+			"coverage": [
+				"JavaScript hello",
+				"Wasm hello",
+				"JavaScript Yojson",
+				"Wasm Yojson",
+				"invalid-source diagnostics"
+			]
+		},
+		"appWorker": {
+			"sourceCommit": "f7157d4a3b77cb5e18d5c3f5ce7229d2d80ab361",
+			"browser": "153.0.8010.12",
+			"moduleReceipt": {
+				"bytes": 1892,
+				"sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
+			},
+			"manifestReceipt": {
+				"bytes": 62221,
+				"sha256": "12059feaaa9fb6c89c429162aa40454f82ede1600ed053ac3a9539eff75f5992"
+			},
+			"appWorkerReceipt": {
+				"bytes": 675397,
+				"sha256": "be45cd61a2c5c9524c8ee3a23d23ffc0f2fc504cb36b32cfb472d6bfc48e857b"
+			},
+			"results": [
+				{
+					"fixture": "stdin-sum",
+					"target": "js",
+					"output": "21\n",
+					"milliseconds": 2251,
+					"diagnostics": []
+				},
+				{
+					"fixture": "unicode-and-eof",
+					"target": "js",
+					"output": "\uc785\ub825:\uc548\ub155\nEOF\n",
+					"milliseconds": 1431,
+					"diagnostics": []
+				},
+				{
+					"fixture": "stdin-sum",
+					"target": "wasm",
+					"output": "21\n",
+					"milliseconds": 3784,
+					"diagnostics": []
+				},
+				{
+					"fixture": "unicode-and-eof",
+					"target": "wasm",
+					"output": "\uc785\ub825:\uc548\ub155\nEOF\n",
+					"milliseconds": 3128,
+					"diagnostics": []
+				}
+			],
+			"errors": []
+		}
+	},
+	"assets": [
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
+			"bytes": 2442,
+			"sha256": "f339e720e1b3e26c8e124f557c96669359cd3248b6371fa47a3328015f7ed731"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
+			"bytes": 11214,
+			"sha256": "b99ad4c5d551656a73e70b88081ab119849aed26c8782866bdcf62990cf0d14a"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
+			"bytes": 43310,
+			"sha256": "ed4e5423a79b46e67d60455e57d6a1b6595021b917b1dbeac63187c790f59e30"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-asset-cache.js",
+			"bytes": 4882,
+			"sha256": "643986ac8187348ccd0dc71964bf76b409e95b5453b96654d3b05363442ce745"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
+			"bytes": 15018,
+			"sha256": "7e66fe28000e5921e82445e8dc6ecc09dbcd2d088608e7372e451012297e833d"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
+			"bytes": 4673,
+			"sha256": "b1c44dbd8edbd92b27f66c1adcc62354622906196e601cadb0b87ca205855982"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
+			"bytes": 40078,
+			"sha256": "5b04545b7dcb4e72cfefac2b162624fa98462907d829a716caf26318f456eca1"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
+			"bytes": 4875,
+			"sha256": "eba03289849e7c3e63e061729996cfacd94c91d2c2f3ba3c3125fae4fa82897a"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
+			"bytes": 1105,
+			"sha256": "5cc5b27c952875f370049633336584e2af16bd85e81705431b69c9eeadd48387"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
+			"bytes": 13322,
+			"sha256": "d9c74f0f6b23bb420d81ca35262ef97886d3e4308f77c9910ce7598b27d1f109"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/index.js",
+			"bytes": 1892,
+			"sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/node.js",
+			"bytes": 6026,
+			"sha256": "34afac088667b55a8fde8b8b5a95126b5bf2307f0c786875217cb294d497750d"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/types.js",
+			"bytes": 11,
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
+			"bytes": 11,
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
+			"bytes": 62221,
+			"sha256": "12059feaaa9fb6c89c429162aa40454f82ede1600ed053ac3a9539eff75f5992"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
+			"bytes": 22755825,
+			"sha256": "b1da269cf846a74d37e17163f8d190892d2f1d46e85e57dff75565be20e08c06"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
+			"bytes": 72798,
+			"sha256": "c4bfa94f9b22c1440de383d6da73a3972be4fdab2f983d6a2a4166075e5d73e0"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+			"bytes": 181,
+			"sha256": "7a3f7339e24631f266e25a996a2001eca1633fcd4a66cc9b3074863ffee572b7"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
+			"bytes": 1019897,
+			"sha256": "c21dac5538f2764ef24c2f472b73622cab880983de4cd7aabb4e061bffdb57e3"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
+			"bytes": 549238,
+			"sha256": "389b28a24955b51b88a7a55d40b8f6c651ae5ca2e52ad5f403b2cf86b59f07d3"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
+			"bytes": 2217671,
+			"sha256": "641a1de74ca0fe2f313cb40d6969a60528ccf267129ed9f912a97b8f414291b9"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
+			"bytes": 2229689,
+			"sha256": "70514ac31fd0b700b9b6e8edc9a0e8da6bd57b829c20767087603a613957c3f1"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
+			"bytes": 2473926,
+			"sha256": "8ff6075cb946f9de7fc93a4e0a8af8054d18d862e77014c6b79325f36dce018d"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
+			"bytes": 1844079,
+			"sha256": "676304cff571a81a5d9da6d2bc71a799ac0614d8c184d1cd227a0f346efb4bb4"
+		}
+	],
+	"totalBytes": 33374384
+}
