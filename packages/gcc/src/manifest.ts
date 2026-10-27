@@ -19,8 +19,8 @@ const fixed = {
 	target: 'x86_64-linux-gnu',
 	linkMode: 'static',
 	sysrootPath: '/sysroot',
-	gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13',
-	resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include'
+	gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
+	resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include'
 } as const;
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -48,7 +48,7 @@ export function parseCrossGccManifest(value: unknown): CrossGccManifest {
 		if (input[key] !== expected) throw new Error(`Unsupported GCC manifest ${key}`);
 	}
 	const compiler = record(input.compiler, 'compiler');
-	if (compiler.family !== 'gcc' || compiler.version !== '13.3.0')
+	if (compiler.family !== 'gcc' || compiler.version !== '16.2.0')
 		throw new Error('Unsupported GCC compiler version');
 	if (
 		!Array.isArray(input.cpuProfiles) ||
@@ -78,13 +78,13 @@ export function parseCrossGccManifest(value: unknown): CrossGccManifest {
 		})
 	) as Record<CrossGccAssetName, CrossGccAsset>;
 	const gnu = record(input.gnu, 'GNU provenance');
-	if (gnu.gccVersion !== '13') throw new Error('Unsupported GCC target library version');
+	if (gnu.gccVersion !== '16') throw new Error('Unsupported GCC target library version');
 	const status = record(input.qualification, 'qualification').status;
 	if (status !== 'verified' && status !== 'unverified')
 		throw new Error('Invalid GCC qualification');
 	return Object.freeze({
 		...fixed,
-		compiler: Object.freeze({ family: 'gcc', version: '13.3.0' }),
+		compiler: Object.freeze({ family: 'gcc', version: '16.2.0' }),
 		cpuProfiles: Object.freeze(['x86-64', 'avx2-fma'] as const),
 		assets: Object.freeze(assets),
 		gnu: Object.freeze({

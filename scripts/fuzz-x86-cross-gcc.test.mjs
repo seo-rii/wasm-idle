@@ -5,7 +5,7 @@ import { assertOutput, parseOptions, validateCorpus } from './fuzz-x86-cross-gcc
 
 const digest = 'a'.repeat(64);
 const manifest = {
-	compiler: { family: 'gcc', version: '13.3.0' },
+	compiler: { family: 'gcc', version: '16.2.0' },
 	host: 'wasm32-emscripten',
 	target: 'x86_64-linux-gnu',
 	assets: { sysroot: { sha256: 'b'.repeat(64) } }

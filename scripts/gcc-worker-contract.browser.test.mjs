@@ -87,14 +87,14 @@ export default async function(options) {
 		kind: 'gcc-x86_64-linux-gnu',
 		host: 'wasm32-emscripten',
 		target: 'x86_64-linux-gnu',
-		compiler: { family: 'gcc', version: '13.3.0' },
+		compiler: { family: 'gcc', version: '16.2.0' },
 		cpuProfiles: ['x86-64', 'avx2-fma'],
 		linkMode: 'static',
 		sysrootPath: '/sysroot',
-		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13',
-		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include',
+		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
+		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
 		assets,
-		gnu: { gccVersion: '13', glibcVersion: '2.39', distribution: 'SYNTHETIC CONTRACT PROBE' },
+		gnu: { gccVersion: '16', glibcVersion: '2.39', distribution: 'SYNTHETIC CONTRACT PROBE' },
 		qualification: { status: 'unverified' }
 	};
 	const manifestBytes = encoder.encode(JSON.stringify(manifest));

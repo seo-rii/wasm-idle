@@ -1739,9 +1739,9 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Zig',
 		{
-			packageBase: `static wasm-zig assets / ${code('zig_small.wasm')} + ${code('std.tar.gz')}`,
+			packageBase: `Zig 0.17.0 from wasm-llvm / ${code('zig_small.wasm')} + ${code('std.tar.gz')}`,
 			execution:
-				`native gzip delivery for the tar standard library; default target ${code('wasm64-wasi')}; ` +
+				`native gzip delivery for the full Zig library archive; default target ${code('wasm32-wasi')}; ` +
 				`Zig compile args are appended; supports ` +
 				`${code('stdin')}, ${code('compileArgs')}, ${code('programArgs')}`,
 			customization:
