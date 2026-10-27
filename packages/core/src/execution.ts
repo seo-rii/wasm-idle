@@ -16,6 +16,17 @@ import {
 } from './workspace.js';
 import type { RuntimeTrustRequest } from './capabilities.js';
 
+// Inspect native view metadata even when a runtime shadows these properties.
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const typedArrayName = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	Symbol.toStringTag
+)!.get!;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	'byteLength'
+)!.get!;
+
 export interface ExecutionLimits {
 	assetTimeoutMs: number;
 	startupTimeoutMs: number;
@@ -279,13 +290,11 @@ export function validateExecutionResult(
 				`Execution artifact ${normalizedPath} has an invalid MIME type`
 			);
 		}
-		if (typeof record.data === 'string') {
-			artifactBytes += textEncoder.encode(record.data).byteLength;
-		} else if (
-			ArrayBuffer.isView(record.data) &&
-			Object.prototype.toString.call(record.data) === '[object Uint8Array]'
-		) {
-			artifactBytes += (record.data as Uint8Array).byteLength;
+		const data = record.data;
+		if (typeof data === 'string') {
+			artifactBytes += textEncoder.encode(data).byteLength;
+		} else if (ArrayBuffer.isView(data) && typedArrayName.call(data) === 'Uint8Array') {
+			artifactBytes += typedArrayByteLength.call(data);
 		} else {
 			throw new ProtocolError(
 				`Execution artifact ${normalizedPath} data must be a string or Uint8Array`

@@ -570,27 +570,47 @@ export class ContainerClangRuntime {
 		if (this.#active.has(language))
 			throw new Error(`${language} already has an active command`);
 		this.#active.set(language, job);
+		let admitted: ContainerProcess | undefined, drained: Promise<ProcessResult> | undefined;
 		try {
 			const { programArgs } = resolveSandboxExecutionArgs(language, args, options);
-			job.process = await this.spawn(
+			job.process = admitted = await this.spawn(
 				job,
 				'wasm-run',
 				[`${cwd}/program.wasm`, ...programArgs],
 				{ cwd, env: options.env }
 			);
 			job.writer = job.process.stdin.getWriter();
+			drained = this.drain(job.process, language, requestId);
+			// A callback or stdin failure must not leave an output rejection unobserved.
+			void drained.catch(() => {});
 			progress?.report?.({
 				kind: 'ready',
 				state: 'running',
 				reason: 'started',
 				label: 'Container program started'
 			});
-			const drained = this.drain(job.process, language, requestId);
-			if (options.stdin !== undefined) {
-				await job.writer.write(new TextEncoder().encode(options.stdin));
-				await job.writer.close();
-			} else await this.flush(language);
-			return this.success(await drained, job.signal);
+			const send = async () => {
+				try {
+					if (options.stdin !== undefined) {
+						await job.writer!.write(new TextEncoder().encode(options.stdin));
+						await job.writer!.close();
+					} else await this.flush(language);
+				} catch (error) {
+					// A guest can close stdin before consuming the supplied input. Its
+					// exit status, cancellation and remaining output still decide the result.
+					if ((error as { code?: string } | null)?.code !== 'EPIPE') throw error;
+				}
+			};
+			const [result] = await Promise.all([drained, send()]);
+			return this.success(result, job.signal);
+		} catch (error) {
+			try {
+				await admitted?.terminate();
+			} catch {
+				/* Preserve the original execution or I/O failure. */
+			}
+			await drained?.catch(() => {});
+			throw error;
 		} finally {
 			job.writer?.releaseLock();
 			this.#input.delete(language);

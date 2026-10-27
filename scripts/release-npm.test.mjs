@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+	copyFile,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readdir,
+	rm,
+	symlink,
+	writeFile
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -134,7 +143,7 @@ async function createReleaseFixture() {
 			await mkdir(directory, { recursive: true });
 			await writeFile(
 				path.join(directory, 'package.json'),
-				JSON.stringify(synchronizeManifest(pkg.manifest, '2.0.0', releaseNames))
+				JSON.stringify(synchronizeManifest(pkg.manifest, '1.9.0', releaseNames))
 			);
 		}
 		await mkdir(path.join(fixture, 'scripts'));
@@ -195,14 +204,18 @@ async function createReleaseFixture() {
 			await writeFile(
 				path.join(bin, command),
 				`#!${process.execPath}
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 const args = process.argv.slice(2);
+const registryFile = process.env.RELEASE_TEST_REGISTRY;
+const registry = registryFile && existsSync(registryFile) ? JSON.parse(readFileSync(registryFile, 'utf8')) : {};
 appendFileSync(process.env.RELEASE_TEST_TRACE, JSON.stringify({ command: '${command}', args }) + '\\n');
 if ('${command}' === 'pnpm') {
+  if (args[0] === 'install') process.exit(0);
   if (process.env.RELEASE_TEST_PACK === '1') {
-    if (args[0] === 'run' || args[0] === 'install') process.exit(0);
+    if (args[0] === 'run') process.exit(0);
     if (args[0] !== '--dir' || !args.includes('pack')) throw new Error('Unexpected pack invocation');
     const manifest = JSON.parse(readFileSync(path.join(args[1], 'package.json'), 'utf8'));
     // pnpm 12 ignores npm_config_ignore_scripts during pack without explicit CLI config.
@@ -244,10 +257,28 @@ if (args[0] === 'whoami') {
   process.exit(1);
 }
 if (args[0] === 'view') {
+  if (registry[args[1]]) { console.log(JSON.stringify(registry[args[1]])); process.exit(0); }
   console.error('E404 Not Found');
   process.exit(1);
 }
-if (args[0] === 'publish' && process.env.RELEASE_TEST_AUTH === '1') process.exit(0);
+if (args[0] === 'publish' && process.env.RELEASE_TEST_AUTH === '1') {
+  const bytes = readFileSync(args[1]);
+  const archive = gunzipSync(bytes);
+  const size = parseInt(archive.subarray(124, 136).toString('utf8'), 8);
+  const manifest = JSON.parse(archive.subarray(512, 512 + size).toString('utf8'));
+  if (manifest.name === process.env.RELEASE_TEST_FAIL_PACKAGE) {
+    console.error('release fixture interrupted publishing');
+    process.exit(1);
+  }
+  if (registryFile) {
+    registry[manifest.name + '@' + manifest.version] = {
+      integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64'),
+      shasum: createHash('sha1').update(bytes).digest('hex')
+    };
+    writeFileSync(registryFile, JSON.stringify(registry));
+  }
+  process.exit(0);
+}
 throw new Error('Unexpected fixture invocation');
 `,
 				{ mode: 0o700 }
@@ -261,7 +292,8 @@ throw new Error('Unexpected fixture invocation');
 				{
 					cwd: fixture,
 					encoding: 'utf8',
-					timeout: 15_000,
+					// A full release starts dozens of CLI processes, including on slower CI hosts.
+					timeout: 60_000,
 					env: {
 						...process.env,
 						PATH: `${bin}${path.delimiter}${process.env.PATH}`,
@@ -308,9 +340,14 @@ describe('release CLI', () => {
 		}
 	});
 
-	it('packs and publishes the mixed-version plan and reads the specified asset root', async () => {
-		const { fixture, trace, invoke, packages, assetRoot } = await createReleaseFixture();
+	it('bumps versions, then publishes the prepared mixed-version plan with its asset root', async () => {
+		const { fixture, trace, invoke, packages, assetRoot, assetLockPath } =
+			await createReleaseFixture();
 		try {
+			assert.match(
+				await readFile(assetLockPath, 'utf8'),
+				/WASM_IDLE_ASSET_VERSION: string = '1\.9\.0'/u
+			);
 			await rm(path.join(fixture, 'static'), { recursive: true });
 			const flags = ['--container-version', '0.2.0', '--asset-root', assetRoot];
 			const dryRun = invoke(flags, { RELEASE_TEST_PACK: '1' });
@@ -327,6 +364,10 @@ describe('release CLI', () => {
 				.split('\n')
 				.map((line) => JSON.parse(line));
 			assert.match(dryRun.stdout, /Generated runtime asset lock 2\.0\.0: 2 receipts/u);
+			assert.match(
+				await readFile(assetLockPath, 'utf8'),
+				/WASM_IDLE_ASSET_VERSION: string = '2\.0\.0'/u
+			);
 			assert.ok(
 				calls.some(
 					(call) =>
@@ -413,6 +454,131 @@ describe('release CLI', () => {
 				await readFile(path.join(assetRoot, 'wasm-fixture/runtime.wasm'), 'utf8'),
 				'updated runtime bytes'
 			);
+		} finally {
+			await rm(fixture, { recursive: true, force: true });
+		}
+	});
+
+	it('resumes a partial publish after advancing the runtime asset lock version', async () => {
+		const { fixture, trace, invoke, packages, bin, assetLockPath } =
+			await createReleaseFixture();
+		try {
+			const registryFile = path.join(bin, 'registry.json');
+			const environment = {
+				RELEASE_TEST_PACK: '1',
+				RELEASE_TEST_AUTH: '1',
+				RELEASE_TEST_REGISTRY: registryFile
+			};
+			const interrupted = invoke(['--publish'], {
+				...environment,
+				RELEASE_TEST_FAIL_PACKAGE: '@wasm-idle/container'
+			});
+			assert.equal(interrupted.status, 1);
+			assert.match(interrupted.stderr, /release fixture interrupted publishing/u);
+			const publishedBefore = Object.keys(JSON.parse(await readFile(registryFile, 'utf8')));
+			assert.ok(publishedBefore.length > 0 && publishedBefore.length < packages.length);
+			const preparedLock = await readFile(assetLockPath, 'utf8');
+			assert.match(preparedLock, /WASM_IDLE_ASSET_VERSION: string = '2\.0\.0'/u);
+
+			await writeFile(trace, '');
+			const resumed = invoke(['--publish', '--resume'], environment);
+			assert.equal(resumed.status, 0, resumed.stderr);
+			assert.match(resumed.stdout, /already published with matching integrity/u);
+			assert.equal(await readFile(assetLockPath, 'utf8'), preparedLock);
+			assert.equal(
+				Object.keys(JSON.parse(await readFile(registryFile, 'utf8'))).length,
+				packages.length
+			);
+			const publishCalls = (await readFile(trace, 'utf8'))
+				.trim()
+				.split('\n')
+				.map((line) => JSON.parse(line))
+				.filter((call) => call.args[0] === 'publish');
+			assert.equal(publishCalls.length, packages.length - publishedBefore.length);
+		} finally {
+			await rm(fixture, { recursive: true, force: true });
+		}
+	});
+
+	it('rejects tampered generated locks and unrelated source changes before npm calls', async () => {
+		const { fixture, trace, invoke, assetLockPath, bin } = await createReleaseFixture();
+		try {
+			const prepared = invoke([], { RELEASE_TEST_PACK: '1' });
+			assert.equal(prepared.status, 0, prepared.stderr);
+			const generated = await readFile(assetLockPath, 'utf8');
+			for (const tampered of [
+				`${generated}\nexport const unrelated = true;\n`,
+				generated.replace("'2.0.0'", "'2.1.0'"),
+				generated.replace(/"sha256":"[a-f0-9]{64}"/u, `"sha256":"${'0'.repeat(64)}"`)
+			]) {
+				assert.notEqual(tampered, generated);
+				await writeFile(assetLockPath, tampered);
+				await writeFile(trace, '');
+				const rejected = invoke(['--publish'], { RELEASE_TEST_AUTH: '1' });
+				assert.equal(rejected.status, 1);
+				assert.match(rejected.stderr, /changes beyond the generated 2\.0\.0 release lock/u);
+				assert.equal(await readFile(trace, 'utf8'), '');
+				assert.equal(await readFile(assetLockPath, 'utf8'), tampered);
+			}
+			await writeFile(assetLockPath, generated);
+			await writeFile(
+				path.join(fixture, 'unrelated-source.ts'),
+				'export const unrelated = true;\n'
+			);
+			const unrelated = invoke(['--publish'], { RELEASE_TEST_AUTH: '1' });
+			assert.equal(unrelated.status, 1);
+			assert.match(unrelated.stderr, /clean source worktree[\s\S]*unrelated-source\.ts/u);
+			assert.equal(await readFile(trace, 'utf8'), '');
+			await rm(path.join(fixture, 'unrelated-source.ts'));
+
+			const linkedLock = path.join(bin, 'generated-lock.ts');
+			await writeFile(linkedLock, generated);
+			await rm(assetLockPath);
+			await symlink(linkedLock, assetLockPath);
+			const linked = invoke(['--publish'], { RELEASE_TEST_AUTH: '1' });
+			assert.equal(linked.status, 1);
+			assert.match(linked.stderr, /runtime asset lock must be a regular file/u);
+			assert.equal(await readFile(trace, 'utf8'), '');
+		} finally {
+			await rm(fixture, { recursive: true, force: true });
+		}
+	});
+
+	it('requires the same asset bytes and preserves the committed receipt inventory on re-entry', async () => {
+		const { fixture, trace, invoke, assetRoot, assetLockPath } = await createReleaseFixture();
+		try {
+			await writeFile(
+				path.join(assetRoot, 'wasm-fixture/runtime.wasm'),
+				'new release runtime'
+			);
+			const prepared = invoke(['--asset-root', assetRoot], { RELEASE_TEST_PACK: '1' });
+			assert.equal(prepared.status, 0, prepared.stderr);
+			const generated = await readFile(assetLockPath, 'utf8');
+			await writeFile(trace, '');
+			const otherAssets = invoke(['--publish'], { RELEASE_TEST_AUTH: '1' });
+			assert.equal(otherAssets.status, 1);
+			assert.match(otherAssets.stderr, /changes beyond the generated 2\.0\.0 release lock/u);
+			assert.equal(await readFile(assetLockPath, 'utf8'), generated);
+			assert.equal(await readFile(trace, 'utf8'), '');
+
+			await rm(path.join(assetRoot, 'wasm-fixture/runtime.wasm'));
+			const incomplete = renderRuntimeAssetLock(
+				await createRuntimeAssetLock({
+					rootDir: assetRoot,
+					packageFile: path.join(fixture, 'package.json')
+				})
+			);
+			await writeFile(assetLockPath, incomplete);
+			const missing = invoke(['--publish', '--asset-root', assetRoot], {
+				RELEASE_TEST_AUTH: '1'
+			});
+			assert.equal(missing.status, 1);
+			assert.match(
+				missing.stderr,
+				/Runtime asset root is incomplete: 1 existing receipt paths/u
+			);
+			assert.equal(await readFile(assetLockPath, 'utf8'), incomplete);
+			assert.equal(await readFile(trace, 'utf8'), '');
 		} finally {
 			await rm(fixture, { recursive: true, force: true });
 		}
