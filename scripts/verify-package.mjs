@@ -245,7 +245,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Includes Java's XML adapter, SIMD headers, compiler options and the public container.
 		// Preserve Java/SIMD headroom and allow 24 KiB for main's 23,009-byte
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
-		budget: { maxBytes: 40 * MiB + 408 * 1024, maxFiles: 3_352, maxPackages: 70 },
+		// Zig 0.17's host and library receipts bring the measured total to 42,361,668 bytes.
+		budget: { maxBytes: 40 * MiB + 416 * 1024, maxFiles: 3_352, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

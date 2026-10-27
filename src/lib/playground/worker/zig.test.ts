@@ -10,31 +10,41 @@ const stdlibFile = strToU8('pub const std = true;');
 const stdlibArchive = zipSync({
 	'std/std.zig': stdlibFile
 });
-const stdlibTarHeader = Buffer.alloc(512);
-stdlibTarHeader.write('std/std.zig', 0, 100, 'utf8');
-stdlibTarHeader.write('0000644\0', 100, 8, 'ascii');
-stdlibTarHeader.write('0000000\0', 108, 8, 'ascii');
-stdlibTarHeader.write('0000000\0', 116, 8, 'ascii');
-stdlibTarHeader.write(`${stdlibFile.byteLength.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
-stdlibTarHeader.write('00000000000\0', 136, 12, 'ascii');
-stdlibTarHeader.fill(0x20, 148, 156);
-stdlibTarHeader.write('0', 156, 1, 'ascii');
-stdlibTarHeader.write('ustar\0', 257, 6, 'ascii');
-stdlibTarHeader.write('00', 263, 2, 'ascii');
-stdlibTarHeader.write(
-	`${stdlibTarHeader
-		.reduce((total, byte) => total + byte, 0)
-		.toString(8)
-		.padStart(6, '0')}\0 `,
-	148,
-	8,
-	'ascii'
-);
-const stdlibTar = Buffer.concat([
-	stdlibTarHeader,
-	Buffer.from(stdlibFile),
-	Buffer.alloc((512 - (stdlibFile.byteLength % 512)) % 512),
-	Buffer.alloc(1024)
+function createTar(entries: { path: string; contents: Uint8Array }[]) {
+	const blocks: Buffer[] = [];
+	for (const { path, contents } of entries) {
+		const header = Buffer.alloc(512);
+		header.write(path, 0, 100, 'utf8');
+		header.write('0000644\0', 100, 8, 'ascii');
+		header.write('0000000\0', 108, 8, 'ascii');
+		header.write('0000000\0', 116, 8, 'ascii');
+		header.write(`${contents.byteLength.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+		header.write('00000000000\0', 136, 12, 'ascii');
+		header.fill(0x20, 148, 156);
+		header.write('0', 156, 1, 'ascii');
+		header.write('ustar\0', 257, 6, 'ascii');
+		header.write('00', 263, 2, 'ascii');
+		header.write(
+			`${header
+				.reduce((total, byte) => total + byte, 0)
+				.toString(8)
+				.padStart(6, '0')}\0 `,
+			148,
+			8,
+			'ascii'
+		);
+		blocks.push(
+			header,
+			Buffer.from(contents),
+			Buffer.alloc((512 - (contents.byteLength % 512)) % 512)
+		);
+	}
+	blocks.push(Buffer.alloc(1024));
+	return Buffer.concat(blocks);
+}
+const stdlibTar = createTar([
+	{ path: 'lib/std/std.zig', contents: stdlibFile },
+	{ path: 'lib/compiler_rt.zig', contents: strToU8('pub const compiler_rt = true;') }
 ]);
 const stdlibTarGzip = gzipSync(stdlibTar, { level: 9 });
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -156,6 +166,7 @@ vi.mock('@bjorn3/browser_wasi_shim', () => ({
 	WASI: shim.WASI,
 	wasi: {
 		ERRNO_SUCCESS: 0,
+		ERRNO_SPIPE: 70,
 		FILETYPE_CHARACTER_DEVICE: 2,
 		RIGHTS_FD_READ: 2,
 		Fdstat: class {
@@ -249,7 +260,7 @@ describe('Zig worker', () => {
 					{ path: 'src/main.zig', content: '' },
 					{ path: 'src/helper.zig', content: 'pub const bonus = 3;' }
 				],
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: false
 			}
 		});
@@ -277,15 +288,32 @@ describe('Zig worker', () => {
 			'zigc.wasm',
 			'build-exe',
 			'src/main.zig',
-			'-Dtarget=wasm64-wasi',
+			'-target',
+			'wasm32-wasi',
 			'-fno-llvm',
 			'-fno-lld',
 			'-O',
-			'ReleaseSmall',
+			'fast',
 			'-femit-bin=output.wasm',
 			'-O',
 			'Debug'
 		]);
+		expect(compileWasi.env).toEqual(['ZIG_LOCAL_CACHE_DIR=.zig-cache/local']);
+		expect(compileWasi.fds.slice(3).map((fd) => fd.name)).toEqual(['.', '/lib', '/cache']);
+		expect(compileWasi.fds[4].dir.contents.has('compiler_rt.zig')).toBe(true);
+		expect(compileWasi.fds[4].dir.contents.get('std').contents.has('std.zig')).toBe(true);
+		expect(runWasi.fds[3].name).toBe('.');
+		expect(runWasi.fds[0].fd_pread(10, 0n)).toEqual({ ret: 70, data: new Uint8Array(0) });
+		for (const stream of [...compileWasi.fds.slice(1, 3), ...runWasi.fds.slice(1, 3)]) {
+			expect(stream.fd_pwrite(encoder.encode('must not be written'), 0n)).toEqual({
+				ret: 70,
+				nwritten: 0
+			});
+		}
+		for (const stream of runWasi.fds.slice(0, 3)) {
+			expect(stream.fd_seek(0n, 0)).toEqual({ ret: 70, offset: 0n });
+			expect(stream.fd_tell()).toEqual({ ret: 70, offset: 0n });
+		}
 		expect(runWasi.args).toEqual(['output.wasm', 'demo']);
 		expect(runWasi.env).toEqual(['USER=jungol']);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
@@ -338,7 +366,7 @@ describe('Zig worker', () => {
 			stdin: '',
 			activePath: 'main.zig',
 			workspaceFiles: [{ path: 'main.zig', content: 'pub fn main() void {}' }],
-			targetTriple: 'wasm64-wasi',
+			targetTriple: 'wasm32-wasi',
 			log: false
 		};
 		await (globalThis as any).self.onmessage({
@@ -399,7 +427,7 @@ describe('Zig worker', () => {
 			buffer: new SharedArrayBuffer(1024),
 			stdin: '',
 			activePath: 'main.zig',
-			targetTriple: 'wasm64-wasi',
+			targetTriple: 'wasm32-wasi',
 			log: false
 		};
 		const outputs = () =>
@@ -445,7 +473,7 @@ describe('Zig worker', () => {
 				prepare: true,
 				buffer: new SharedArrayBuffer(1024),
 				activePath: 'main.zig',
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: false
 			}
 		});
@@ -530,14 +558,49 @@ describe('Zig worker', () => {
 
 	it('rejects a ZIP entry whose declared output exceeds the expanded-byte budget', async () => {
 		const archive = zipSync({ 'std/large.zig': new Uint8Array(5) });
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(archive, 'https://assets.example.test/std.zip', {
+			loadLibDirectory(archive, 'https://assets.example.test/std.zip', {
 				maxExpandedBytes: 4,
 				maxFiles: 10
 			})
 		).rejects.toThrow('Zig standard library archive exceeds the 4 byte expanded-size limit');
+	});
+
+	it('loads the matching full library and retains legacy std-only archives', async () => {
+		const { loadLibDirectory } = await import('./zig');
+		const library = await loadLibDirectory(
+			new Uint8Array(stdlibTarGzip),
+			'https://assets.example.test/std.tar.gz',
+			{},
+			runtimeIntegrity['std.tar.gz']
+		);
+		expect(library.contents.get('std')).toHaveProperty('contents');
+		expect(library.contents.has('compiler_rt.zig')).toBe(true);
+		const legacy = await loadLibDirectory(stdlibArchive, 'https://assets.example.test/std.zip');
+		expect(legacy.contents.get('std')).toHaveProperty('contents');
+	});
+
+	it('rejects ambiguous archive roots and lib archives without std', async () => {
+		const { loadLibDirectory } = await import('./zig');
+		await expect(
+			loadLibDirectory(
+				zipSync({
+					'lib/std/std.zig': stdlibFile,
+					'std/std.zig': stdlibFile
+				}),
+				'https://assets.example.test/std.zip'
+			)
+		).rejects.toThrow('single lib/ or std/ root');
+		await expect(
+			loadLibDirectory(
+				zipSync({
+					'lib/compiler_rt.zig': stdlibFile
+				}),
+				'https://assets.example.test/std.zip'
+			)
+		).rejects.toThrow('must contain lib/std/');
 	});
 
 	it('rejects a ZIP archive that exceeds the standard-library file-count budget', async () => {
@@ -545,10 +608,10 @@ describe('Zig worker', () => {
 			'std/a.zig': new Uint8Array([1]),
 			'std/b.zig': new Uint8Array([2])
 		});
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(archive, 'https://assets.example.test/std.zip', {
+			loadLibDirectory(archive, 'https://assets.example.test/std.zip', {
 				maxExpandedBytes: 16,
 				maxFiles: 1
 			})
@@ -557,10 +620,10 @@ describe('Zig worker', () => {
 
 	it('rejects unsafe ZIP paths instead of normalizing traversal', async () => {
 		const archive = zipSync({ 'std/../escape.zig': new Uint8Array([1]) });
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(archive, 'https://assets.example.test/std.zip')
+			loadLibDirectory(archive, 'https://assets.example.test/std.zip')
 		).rejects.toThrow('Zig standard library archive has an unsafe path: std/../escape.zig');
 	});
 
@@ -569,18 +632,18 @@ describe('Zig worker', () => {
 			'std/collision': new Uint8Array([1]),
 			'std/collision/nested.zig': new Uint8Array([2])
 		});
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(archive, 'https://assets.example.test/std.zip')
+			loadLibDirectory(archive, 'https://assets.example.test/std.zip')
 		).rejects.toThrow('Zig standard library archive path collision: std/collision/nested.zig');
 	});
 
 	it('bounds gzip-expanded TAR bytes before materializing the standard library', async () => {
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(
+			loadLibDirectory(
 				new Uint8Array(stdlibTarGzip),
 				'https://assets.example.test/std.tar.gz',
 				{
@@ -592,10 +655,10 @@ describe('Zig worker', () => {
 	});
 
 	it('accepts a transparently decoded TAR only after uncompressed receipt verification', async () => {
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 
 		await expect(
-			loadStdDirectory(
+			loadLibDirectory(
 				new Uint8Array(stdlibTar),
 				'https://assets.example.test/std.tar.gz',
 				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
@@ -606,7 +669,7 @@ describe('Zig worker', () => {
 		const corruptTar = Uint8Array.from(stdlibTar);
 		corruptTar[512] ^= 1;
 		await expect(
-			loadStdDirectory(
+			loadLibDirectory(
 				corruptTar,
 				'https://assets.example.test/std.tar.gz',
 				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
@@ -616,12 +679,12 @@ describe('Zig worker', () => {
 	});
 
 	it('rejects corrupt gzip and alternate ZIP encodings under the receipt-backed path', async () => {
-		const { loadStdDirectory } = await import('./zig');
+		const { loadLibDirectory } = await import('./zig');
 		const corruptGzip = Uint8Array.from(stdlibTarGzip);
 		corruptGzip[corruptGzip.length - 1] ^= 1;
 
 		await expect(
-			loadStdDirectory(
+			loadLibDirectory(
 				corruptGzip,
 				'https://assets.example.test/std.tar.gz',
 				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
@@ -629,7 +692,7 @@ describe('Zig worker', () => {
 			)
 		).rejects.toThrow('compressed SHA-256 mismatch');
 		await expect(
-			loadStdDirectory(
+			loadLibDirectory(
 				stdlibArchive,
 				'https://assets.example.test/std.tar.gz',
 				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },

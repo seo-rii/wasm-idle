@@ -32,13 +32,19 @@ const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_TIMER_MS = 2_147_483_647;
 const TARGET_RECEIPT_FILE = 'runtime-build.json';
 const INPUT_ASSET_NAMES = /** @type {const} */ (['zig_small.wasm', 'std.zip']);
+const PRODUCER_INPUT_ASSET_NAMES = /** @type {const} */ ([
+	'zig.wasm',
+	'lib.tar.gz',
+	'producer-receipt.json',
+	'LICENSE'
+]);
 export const WASM_ZIG_EXECUTION_ASSET_FILES = /** @type {const} */ ([
 	'zig_small.wasm',
 	'std.tar.gz'
 ]);
 
 /** @typedef {{ bytes: number; sha256: string; uncompressedBytes?: number; uncompressedSha256?: string }} ZigAssetReceipt */
-/** @typedef {{ schemaVersion: 2; profileId: string; releaseBaseUrl: string; allowedRedirectOrigins: readonly string[]; inputs: Record<string, ZigAssetReceipt> }} ZigInputLock */
+/** @typedef {{ schemaVersion: 2 | 3; profileId: string; releaseBaseUrl: string; allowedRedirectOrigins: readonly string[]; inputs: Record<string, ZigAssetReceipt> }} ZigInputLock */
 /** @typedef {{ fileName: 'zig_small.wasm' | 'std.tar.gz'; data: Buffer; expandedData?: Buffer }} ZigBundleFile */
 
 /**
@@ -203,6 +209,30 @@ function validateReceipt(value, label) {
 	return Object.freeze({ bytes: value.bytes, sha256: value.sha256 });
 }
 
+/** @param {unknown} value @param {string} label */
+function validateLibraryReceipt(value, label) {
+	const receipt = validateReceipt(value, label);
+	if (
+		!isObject(value) ||
+		!Number.isSafeInteger(value.uncompressedBytes) ||
+		/** @type {number} */ (value.uncompressedBytes) <= 0 ||
+		/** @type {number} */ (value.uncompressedBytes) > 256 * 1024 * 1024 ||
+		typeof value.uncompressedSha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.uncompressedSha256)
+	) {
+		throw new Error(`${label} has invalid expanded size or SHA-256 metadata`);
+	}
+	return Object.freeze({
+		...receipt,
+		uncompressedBytes: /** @type {number} */ (value.uncompressedBytes),
+		uncompressedSha256: value.uncompressedSha256
+	});
+}
+
+/** @param {ZigInputLock} lock */
+const inputAssetNames = (lock) =>
+	lock.schemaVersion === 3 ? PRODUCER_INPUT_ASSET_NAMES : INPUT_ASSET_NAMES;
+
 /** @param {unknown} value */
 function normalizeRedirectOrigin(value) {
 	if (typeof value !== 'string') {
@@ -237,7 +267,7 @@ async function readInputLock(lockFilePath) {
 	const value = await readJson(lockFilePath, 'wasm-zig input lock');
 	if (
 		!isObject(value) ||
-		value.schemaVersion !== 2 ||
+		(value.schemaVersion !== 2 && value.schemaVersion !== 3) ||
 		typeof value.profileId !== 'string' ||
 		!value.profileId.trim() ||
 		typeof value.releaseBaseUrl !== 'string' ||
@@ -265,21 +295,35 @@ async function readInputLock(lockFilePath) {
 	if (new Set(allowedRedirectOrigins).size !== allowedRedirectOrigins.length) {
 		throw new Error('wasm-zig input lock redirect origins must be unique');
 	}
+	if (
+		value.schemaVersion === 3 &&
+		!/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-llvm\/[a-f0-9]{40}\/artifacts\/zig-browser\/?$/u.test(
+			releaseUrl.href
+		)
+	) {
+		throw new Error('wasm-zig producer input lock must pin an immutable wasm-llvm snapshot');
+	}
+	const assetNames = value.schemaVersion === 3 ? PRODUCER_INPUT_ASSET_NAMES : INPUT_ASSET_NAMES;
 	const receivedInputs = Object.keys(value.inputs).sort();
-	const expectedInputs = [...INPUT_ASSET_NAMES].sort();
+	const expectedInputs = [...assetNames].sort();
 	if (
 		receivedInputs.length !== expectedInputs.length ||
 		receivedInputs.some((asset, index) => asset !== expectedInputs[index])
 	) {
-		throw new Error('wasm-zig input lock must describe exactly two source assets');
+		throw new Error(
+			`wasm-zig input lock must describe exactly ${value.schemaVersion === 3 ? 'four' : 'two'} source assets`
+		);
 	}
 	/** @type {Record<string, Readonly<ZigAssetReceipt>>} */
 	const inputs = {};
-	for (const asset of INPUT_ASSET_NAMES) {
-		inputs[asset] = validateReceipt(value.inputs[asset], `wasm-zig input ${asset}`);
+	for (const asset of assetNames) {
+		inputs[asset] = (asset === 'lib.tar.gz' ? validateLibraryReceipt : validateReceipt)(
+			value.inputs[asset],
+			`wasm-zig input ${asset}`
+		);
 	}
 	return Object.freeze({
-		schemaVersion: /** @type {const} */ (2),
+		schemaVersion: /** @type {2 | 3} */ (value.schemaVersion),
 		profileId: value.profileId.trim(),
 		releaseBaseUrl: releaseUrl.href.replace(/\/$/u, ''),
 		allowedRedirectOrigins: Object.freeze(allowedRedirectOrigins),
@@ -331,13 +375,19 @@ async function readBoundedResponse(
 		}
 
 		const rawLength = response.headers.get('content-length');
+		const contentEncoding = response.headers.get('content-encoding')?.trim().toLowerCase();
 		if (rawLength !== null) {
 			const normalized = rawLength.trim();
 			const declared = Number(normalized);
 			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(declared)) {
 				throw new Error(`${label} download has an invalid Content-Length`);
 			}
-			if (declared !== receipt.bytes) {
+			// Fetch exposes decoded body bytes, but Content-Length describes the
+			// transport representation (raw GitHub compresses JSON receipts).
+			if (
+				(!contentEncoding || contentEncoding === 'identity') &&
+				declared !== receipt.bytes
+			) {
 				throw new Error(`${label} download size does not match the pinned receipt`);
 			}
 		}
@@ -417,18 +467,20 @@ async function readBoundedResponse(
 	return output;
 }
 
-/** @param {string} sourceDir */
-async function validateLocalSource(sourceDir) {
+/** @param {string} sourceDir @param {ZigInputLock} lock */
+async function validateLocalSource(sourceDir, lock) {
 	const entries = await readdir(sourceDir, { withFileTypes: true });
 	const received = entries.map((entry) => entry.name).sort();
-	const expected = [...INPUT_ASSET_NAMES].sort();
+	const expected = [...inputAssetNames(lock)].sort();
 	if (
 		received.length !== expected.length ||
 		received.some((asset, index) => asset !== expected[index])
 	) {
-		throw new Error('wasm-zig source directory must contain exactly two pinned assets');
+		throw new Error(
+			`wasm-zig source directory must contain exactly ${lock.schemaVersion === 3 ? 'four' : 'two'} pinned assets`
+		);
 	}
-	for (const asset of INPUT_ASSET_NAMES) {
+	for (const asset of inputAssetNames(lock)) {
 		if (!(await isRegularFile(path.join(sourceDir, asset)))) {
 			throw new Error(`wasm-zig source asset must be a regular file: ${asset}`);
 		}
@@ -549,6 +601,75 @@ function repackageStandardLibrary(archiveBytes) {
 	};
 }
 
+/** @param {Buffer} bytes @param {ZigInputLock} lock */
+function validateProducerReceipt(bytes, lock) {
+	let value;
+	try {
+		value = JSON.parse(bytes.toString('utf8'));
+	} catch {
+		throw new Error('wasm-zig producer receipt is not valid JSON');
+	}
+	if (
+		!isObject(value) ||
+		value.schemaVersion !== 1 ||
+		value.producerId !== 'wasm-llvm/zig-browser' ||
+		value.profileId !== lock.profileId ||
+		value.version !== '0.17.0' ||
+		value.target !== 'wasm32-wasi' ||
+		value.wasi !== 'preview1' ||
+		!isObject(value.validation) ||
+		value.validation.passed !== true ||
+		!isObject(value.source) ||
+		value.source.url !== 'https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz' ||
+		typeof value.source.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.source.sha256) ||
+		!isObject(value.port) ||
+		value.port.repository !== 'https://github.com/seo-rii/zigc-wasm' ||
+		typeof value.port.revision !== 'string' ||
+		!/^[a-f0-9]{40}$/u.test(value.port.revision) ||
+		typeof value.port.patchSha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.port.patchSha256) ||
+		!isObject(value.assets)
+	) {
+		throw new Error(
+			'wasm-zig producer receipt does not describe a qualified Zig 0.17.0 WASI build'
+		);
+	}
+	for (const asset of ['zig.wasm', 'lib.tar.gz', 'LICENSE']) {
+		const actual = (asset === 'lib.tar.gz' ? validateLibraryReceipt : validateReceipt)(
+			value.assets[asset],
+			`wasm-zig producer asset ${asset}`
+		);
+		if (JSON.stringify(actual) !== JSON.stringify(lock.inputs[asset])) {
+			throw new Error(`wasm-zig producer receipt does not match the input lock for ${asset}`);
+		}
+	}
+	return value;
+}
+
+/** @param {Buffer} data @param {ZigAssetReceipt} receipt */
+function readProducerLibrary(data, receipt) {
+	let expandedData;
+	try {
+		expandedData = gunzipSync(data, { maxOutputLength: receipt.uncompressedBytes });
+	} catch {
+		throw new Error('wasm-zig lib.tar.gz cannot be expanded within its pinned size');
+	}
+	if (
+		expandedData.byteLength !== receipt.uncompressedBytes ||
+		sha256(expandedData) !== receipt.uncompressedSha256
+	) {
+		throw new Error('wasm-zig lib.tar.gz does not match its expanded input receipt');
+	}
+	if (
+		expandedData.byteLength < 1024 ||
+		expandedData.subarray(257, 262).toString('ascii') !== 'ustar'
+	) {
+		throw new Error('wasm-zig lib.tar.gz is not a tar archive');
+	}
+	return { data, expandedData };
+}
+
 /** @param {readonly ZigBundleFile[]} files */
 function createOutputReceipts(files) {
 	/** @type {Record<string, Readonly<ZigAssetReceipt>>} */
@@ -611,18 +732,19 @@ export const WASM_ZIG_ASSET_RECEIPTS = Object.freeze({
 `;
 }
 
-/** @param {ZigInputLock} lock @param {Readonly<Record<string, Readonly<ZigAssetReceipt>>>} receipts */
-function renderRuntimeBuild(lock, receipts) {
+/** @param {ZigInputLock} lock @param {Readonly<Record<string, Readonly<ZigAssetReceipt>>>} receipts @param {Record<string, unknown> | undefined} producerReceipt */
+function renderRuntimeBuild(lock, receipts, producerReceipt) {
 	return `${JSON.stringify(
 		{
-			schemaVersion: 2,
+			schemaVersion: lock.schemaVersion,
 			profileId: lock.profileId,
 			fingerprint: fingerprintReceipts(lock.profileId, receipts),
 			upstream: {
 				lockSchemaVersion: lock.schemaVersion,
 				releaseBaseUrl: lock.releaseBaseUrl,
 				allowedRedirectOrigins: lock.allowedRedirectOrigins,
-				inputs: lock.inputs
+				inputs: lock.inputs,
+				...(producerReceipt ? { producerReceipt } : {})
 			},
 			assets: receipts
 		},
@@ -631,10 +753,14 @@ function renderRuntimeBuild(lock, receipts) {
 	)}\n`;
 }
 
-/** @param {string} targetDir @param {Readonly<Record<string, Readonly<ZigAssetReceipt>>>} expectedReceipts */
-async function validateInstalledSnapshot(targetDir, expectedReceipts) {
+/** @param {string} targetDir @param {Readonly<Record<string, Readonly<ZigAssetReceipt>>>} expectedReceipts @param {ZigAssetReceipt | undefined} licenseReceipt */
+async function validateInstalledSnapshot(targetDir, expectedReceipts, licenseReceipt) {
 	const entries = (await readdir(targetDir)).sort();
-	const expectedEntries = [...WASM_ZIG_EXECUTION_ASSET_FILES, TARGET_RECEIPT_FILE].sort();
+	const expectedEntries = [
+		...WASM_ZIG_EXECUTION_ASSET_FILES,
+		TARGET_RECEIPT_FILE,
+		...(licenseReceipt ? ['LICENSE'] : [])
+	].sort();
 	if (
 		entries.length !== expectedEntries.length ||
 		entries.some((entry, index) => entry !== expectedEntries[index])
@@ -647,6 +773,13 @@ async function validateInstalledSnapshot(targetDir, expectedReceipts) {
 			throw new Error(`wasm-zig installed asset must be a regular file: ${asset}`);
 		}
 		verifyBytes(await readFile(filePath), expectedReceipts[asset], `installed ${asset}`);
+	}
+	if (licenseReceipt) {
+		const licensePath = path.join(targetDir, 'LICENSE');
+		if (!(await isRegularFile(licensePath))) {
+			throw new Error('wasm-zig installed LICENSE must be a regular file');
+		}
+		verifyBytes(await readFile(licensePath), licenseReceipt, 'installed LICENSE');
 	}
 	const runtimeBuild = await readJson(
 		path.join(targetDir, TARGET_RECEIPT_FILE),
@@ -795,7 +928,7 @@ export async function syncWasmZigAssets(options = {}) {
 	if (releaseBaseUrl !== lock.releaseBaseUrl) {
 		throw new Error('wasm-zig releaseBaseUrl must match the pinned input lock');
 	}
-	if (useLocalSource) await validateLocalSource(sourceDir);
+	if (useLocalSource) await validateLocalSource(sourceDir, lock);
 	const downloadController = new AbortController();
 	const externalSignal = options.signal;
 	let externalAbortBound = false;
@@ -818,12 +951,11 @@ export async function syncWasmZigAssets(options = {}) {
 			downloadController.abort(error);
 		}, downloadTimeoutMs);
 	}
-	let compilerBytes;
-	let stdlibZip;
+	let sourceAssets;
 	try {
 		throwIfAborted(downloadController.signal, 'wasm-zig download');
-		[compilerBytes, stdlibZip] = await Promise.all(
-			INPUT_ASSET_NAMES.map((asset) =>
+		sourceAssets = await Promise.all(
+			inputAssetNames(lock).map((asset) =>
 				readInputAsset({
 					sourceDir,
 					useLocalSource,
@@ -846,8 +978,14 @@ export async function syncWasmZigAssets(options = {}) {
 		}
 	}
 	if (externalSignal?.aborted) throw signalReason(externalSignal, 'wasm-zig sync');
+	const [compilerBytes, libraryBytes, producerBytes, licenseBytes] = sourceAssets;
 	validateCompiler(compilerBytes);
-	const stdlib = repackageStandardLibrary(stdlibZip);
+	const producerReceipt =
+		lock.schemaVersion === 3 ? validateProducerReceipt(producerBytes, lock) : undefined;
+	const stdlib =
+		lock.schemaVersion === 3
+			? readProducerLibrary(libraryBytes, lock.inputs['lib.tar.gz'])
+			: repackageStandardLibrary(libraryBytes);
 	/** @type {readonly ZigBundleFile[]} */
 	const files = [
 		{ fileName: 'zig_small.wasm', data: compilerBytes },
@@ -871,12 +1009,15 @@ export async function syncWasmZigAssets(options = {}) {
 		for (const file of files) {
 			await writeFile(path.join(nextTargetDir, file.fileName), file.data);
 		}
+		if (lock.schemaVersion === 3) {
+			await writeFile(path.join(nextTargetDir, 'LICENSE'), licenseBytes);
+		}
 		await writeFile(
 			path.join(nextTargetDir, TARGET_RECEIPT_FILE),
-			renderRuntimeBuild(lock, receipts),
+			renderRuntimeBuild(lock, receipts, producerReceipt),
 			'utf8'
 		);
-		await validateInstalledSnapshot(nextTargetDir, receipts);
+		await validateInstalledSnapshot(nextTargetDir, receipts, lock.inputs.LICENSE);
 		await writeFile(nextVersionModulePath, renderVersionModule(fingerprint, receipts), 'utf8');
 		if (externalSignal?.aborted) throw signalReason(externalSignal, 'wasm-zig sync');
 		await publishSwaps(

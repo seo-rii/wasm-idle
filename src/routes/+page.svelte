@@ -429,7 +429,7 @@
 		GO: () => ({ goTarget }),
 		TINYGO: () => ({ limits: { maxWasmMemoryBytes: 2 * 1024 * 1024 * 1024 } }),
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
-		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
+		ZIG: () => ({ zigTargetTriple: 'wasm32-wasi' })
 	};
 	const currentCompilerSettings = $derived(compilerOptions[language] ?? defaultCompilerSettings);
 	const compilerSourceLanguage = $derived(resolveCompilerSourceLanguage(language, activePath));
