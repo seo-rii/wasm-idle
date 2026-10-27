@@ -692,6 +692,12 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 			.replace(
 				/read:\(([^)]*)\)=>[A-Za-z$_][\w$]*\.readSync\(/g,
 				'read:($1)=>globalThis.fs.readSync('
+			)
+			.replace(
+				// wasm_of_ocaml 6.5 checks its registered virtual files before
+				// falling back to Node's five-argument readSync. Preserve that path.
+				/\breturn [A-Za-z$_][\w$]*\.readSync\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\}/g,
+				'return globalThis.fs.readSync($1,$2,$3,$4,$5)}'
 			);
 		if (log && normalizedSource === programArtifact.data) {
 			console.warn('[wasm-idle:ocaml-worker] stdin runtime patch did not match generated JS');

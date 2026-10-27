@@ -1007,8 +1007,16 @@ describe('OCaml worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
-	it('rewrites minified generated read adapters to the browser fs shim', async () => {
-		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+	it.each([
+		['6.3', '(a,b,c,d,e)=>f.readSync(a,b,c,d,e)'],
+		[
+			'6.5',
+			'(a,b,c,d,e)=>{const g=n.get(a);if(g){const f=e===null?g.offset:Number(e),a=Math.min(d,g.data.length-f);if(a<=0)return 0;b.set(g.data.subarray(f,f+a),c);g.offset=f+a;return a}return f.readSync(a,b,c,d,e)}'
+		]
+	])(
+		'bridges %s minified reads while preserving registered file reads',
+		async (version, readAdapter) => {
+			const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() {
 				return {
 					success: true,
@@ -1022,8 +1030,10 @@ describe('OCaml worker', () => {
 							data: \`
 								Promise.resolve().then(()=>{
 									const f=undefined;
-									const adapter={read:(a,b,c,d,e)=>f.readSync(a,b,c,d,e)};
+									const n=new Map([[7,{data:new Uint8Array([65]),offset:0}]]);
+									const adapter={read:${readAdapter}};
 									const bytes=new Uint8Array(64);
+									if('${version}'==='6.5'){if(adapter.read(7,bytes,0,64,null)!==1||bytes[0]!==65)throw new Error('registered file read changed');if(adapter.read(7,bytes,0,64,null)!==0)throw new Error('registered file EOF changed')}
 									const length=adapter.read(0,bytes,0,64,null);
 									console.log(new TextDecoder().decode(bytes.slice(0,length)));
 								});
@@ -1037,33 +1047,34 @@ describe('OCaml worker', () => {
 				return {};
 			}
 		`);
-		const buffer = new SharedArrayBuffer(1024);
-		const queuedInput = ['9\n'];
+			const buffer = new SharedArrayBuffer(1024);
+			const queuedInput = ['9\n'];
 
-		(globalThis as any).postMessage = vi.fn((message: any) => {
-			if (message?.buffer) {
-				flushQueuedStdin(queuedInput, buffer);
-			}
-		});
+			(globalThis as any).postMessage = vi.fn((message: any) => {
+				if (message?.buffer) {
+					flushQueuedStdin(queuedInput, buffer);
+				}
+			});
 
-		await import('./ocaml');
-		await (globalThis as any).self.onmessage({
-			data: loadRequest(compilerModuleUrl)
-		});
-		await Promise.resolve();
+			await import('./ocaml');
+			await (globalThis as any).self.onmessage({
+				data: loadRequest(compilerModuleUrl)
+			});
+			await Promise.resolve();
 
-		await (globalThis as any).self.onmessage({
-			data: {
-				code: 'let () = print_endline (read_line ())',
-				prepare: false,
-				target: 'wasm',
-				buffer
-			}
-		});
-		await Promise.resolve();
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'let () = print_endline (read_line ())',
+					prepare: false,
+					target: 'wasm',
+					buffer
+				}
+			});
+			await Promise.resolve();
 
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '9\n' });
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
-	});
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '9\n' });
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		}
+	);
 });
