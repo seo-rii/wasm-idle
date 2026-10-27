@@ -1,9 +1,9 @@
 # @wasm-idle/gcc
 
 `@wasm-idle/gcc` runs real GCC in a browser Worker. `createGccWorker` selects
-GCC 13.3.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
+GCC 16.2.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
 GCC 17 Wasm backend with `target: 'wasm32-wasi'`. `createCrossGccWorker` and
-`createCrossGccCompiler` retain the GCC 13 x86 API.
+`createCrossGccCompiler` retain the x86 API.
 
 Both compiler hosts are `wasm32-emscripten`. The separate output targets produce
 x86 assembly/ELF for download, or WAT/Wasm objects/WASI Preview 1 executables.

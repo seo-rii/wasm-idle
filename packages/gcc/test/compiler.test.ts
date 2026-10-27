@@ -146,14 +146,14 @@ function bundle(archivePath?: string) {
 		kind: 'gcc-x86_64-linux-gnu',
 		host: 'wasm32-emscripten',
 		target: 'x86_64-linux-gnu',
-		compiler: { family: 'gcc', version: '13.3.0' },
+		compiler: { family: 'gcc', version: '16.2.0' },
 		cpuProfiles: ['x86-64', 'avx2-fma'],
 		linkMode: 'static',
 		sysrootPath: '/sysroot',
-		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13',
-		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include',
+		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
+		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
 		assets,
-		gnu: { gccVersion: '13', glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
+		gnu: { gccVersion: '16', glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
 		qualification: { status: 'unverified' }
 	};
 	const manifestBytes = encoder.encode(JSON.stringify(manifest));
@@ -358,7 +358,12 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					'-march=x86-64',
 					'-nostdinc',
 					'-fexceptions',
-					'/sysroot/usr/include/c++/13'
+					'-std=gnu++20',
+					'/sysroot/usr/include/c++/16',
+					'/sysroot/usr/include/x86_64-linux-gnu/c++/16',
+					'/sysroot/usr/include/c++/16/backward',
+					'/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
+					'/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include-fixed'
 				])
 			);
 			expect(host.calls[0].argv).not.toContain('-mavx2');
@@ -368,10 +373,14 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					'-lstdc++',
 					'-lgcc_eh',
 					'-lc',
-					'/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/crtbeginT.o'
+					'/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/crtbeginT.o'
 				])
 			);
-			expect(compiler.identity.sysrootSha256).toBe(fixture.manifest.assets.sysroot.sha256);
+			expect(compiler.identity).toMatchObject({
+				compilerVersion: '16.2.0',
+				compilerHost: 'wasm32-emscripten',
+				sysrootSha256: fixture.manifest.assets.sysroot.sha256
+			});
 			expect(preparedCalls).toBeGreaterThanOrEqual(4);
 			expect(compileWasm).toHaveBeenCalledTimes(preparedCalls);
 			for (const [bytes] of compileWasm.mock.calls)
@@ -787,7 +796,14 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		for (const change of [
 			{ host: 'x86_64-linux-gnu' },
 			{ target: 'wasm32-wasi' },
-			{ compiler: { family: 'clang', version: '13.3.0' } },
+			{ compiler: { family: 'clang', version: '16.2.0' } },
+			{ compiler: { family: 'gcc', version: '13.3.0' } },
+			{ compiler: { family: 'gcc', version: '16.1.0' } },
+			{ compiler: { family: 'gcc', version: '17.0.0' } },
+			{ gnu: { ...manifest.gnu, gccVersion: '13' } },
+			{ gnu: { ...manifest.gnu, gccVersion: '16.2.0' } },
+			{ gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13' },
+			{ resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include' },
 			{ cpuProfiles: ['native'] },
 			{ resourceDir: '/tmp/include' },
 			{
