@@ -51,6 +51,7 @@ describe('frontend-owned LLVM bitcode entry points', () => {
 		).toEqual(['__wasm_idle_build/bitcode/0.o', '__wasm_idle_build/bitcode/1.o']);
 		expect(linker).toEqual(
 			expect.arrayContaining([
+				'stack-size=1048576',
 				'-lc',
 				'-lm',
 				'-Llib/clang/22/lib/wasi',
@@ -58,6 +59,46 @@ describe('frontend-owned LLVM bitcode entry points', () => {
 			])
 		);
 		expect(linker.join(' ')).not.toMatch(/crt1|allow-undefined|strip|libc\+\+/u);
+	});
+
+	it('preserves a frontend-owned 16 MiB stack while retaining the Wasm memory limit', async () => {
+		const { runtime } = harness();
+		await runtime.compileBitcodeArtifact(bc, {
+			stackSizeBytes: 16 * 1024 * 1024,
+			maxWasmMemoryBytes: 128 * 1024 * 1024
+		});
+		expect(vi.mocked(runtime.run).mock.calls.at(-1)).toEqual(
+			expect.arrayContaining(['stack-size=16777216', '--max-memory=134217728'])
+		);
+	});
+
+	it.each([0, -16, 1, 17, 1.5, NaN, Infinity, 2 ** 32, Number.MAX_SAFE_INTEGER])(
+		'rejects an invalid wasm32 stack size before invoking tools: %s',
+		async (stackSizeBytes) => {
+			const { runtime } = harness();
+			await expect(runtime.compileBitcodeArtifact(bc, { stackSizeBytes })).rejects.toThrow(
+				'stack size'
+			);
+			expect(runtime.getModule).not.toHaveBeenCalled();
+			expect(runtime.run).not.toHaveBeenCalled();
+		}
+	);
+
+	it('checks the stack against the page-rounded memory limit and releases the compilation guard', async () => {
+		const { runtime } = harness();
+		await expect(
+			runtime.compileBitcodeArtifact(bc, {
+				stackSizeBytes: 1024 * 1024 + 16,
+				maxWasmMemoryBytes: 1024 * 1024 + 1
+			})
+		).rejects.toThrow('stack size exceeds the Wasm memory limit');
+		expect(runtime.run).not.toHaveBeenCalled();
+		await expect(
+			runtime.compileBitcodeArtifact(bc, {
+				stackSizeBytes: 1024 * 1024,
+				maxWasmMemoryBytes: 1024 * 1024
+			})
+		).resolves.toEqual(wasm);
 	});
 
 	it('clears stale object and Wasm outputs before reusing the runtime', async () => {

@@ -171,6 +171,8 @@ export async function compileZigDebugArtifact({
 			postMessage({ progress: { percent: percent * 100, stage: 'zig-debug-backend' } })
 	});
 	const bytes = await runtime.compileBitcodeArtifact(bitcode, {
+		// Match Zig's WASI linker default; its freestanding target uses a smaller stack.
+		stackSizeBytes: 16 * 1024 * 1024,
 		maxWasmMemoryBytes: backend.maxWasmMemoryBytes
 	});
 	const module = await WebAssembly.compile(Uint8Array.from(bytes));

@@ -7,6 +7,7 @@ import {
 import {
 	resolveDebugMode,
 	type BrowserClangArtifact,
+	type BrowserClangBitcodeCompileOptions,
 	type BrowserClangDebugMode,
 	type BrowserClangCompileRequest,
 	BrowserClangPauseEvent,
@@ -1666,7 +1667,7 @@ class Clang {
 	/** Lower frontend-owned LLVM bitcode and link its WASI entry point without a C CRT. */
 	async compileBitcodeArtifact(
 		bitcode: Uint8Array | readonly Uint8Array[],
-		options: { maxWasmMemoryBytes?: number } = {}
+		options: BrowserClangBitcodeCompileOptions = {}
 	): Promise<Uint8Array> {
 		if (bitcodeCompilations.has(this)) {
 			throw new Error(
@@ -1683,6 +1684,21 @@ class Clang {
 				throw new TypeError('At least one nonempty LLVM bitcode module is required');
 			}
 			const memoryLimit = resolveWasmMemoryLimit(options.maxWasmMemoryBytes);
+			const stackSizeBytes =
+				options.stackSizeBytes === undefined ? 1024 * 1024 : options.stackSizeBytes;
+			if (
+				!Number.isSafeInteger(stackSizeBytes) ||
+				stackSizeBytes <= 0 ||
+				stackSizeBytes >= 2 ** 32 ||
+				stackSizeBytes % 16 !== 0
+			) {
+				throw new TypeError(
+					'Clang Wasm stack size must be a positive wasm32 byte count aligned to 16 bytes'
+				);
+			}
+			if (memoryLimit !== undefined && stackSizeBytes > memoryLimit) {
+				throw new RangeError('Clang Wasm stack size exceeds the Wasm memory limit');
+			}
 			await this.ready;
 			const clang = await this.getModule(this.assetUrls.clang);
 			const directory = `${internalBuildRoot}/bitcode`;
@@ -1726,7 +1742,7 @@ class Clang {
 				'wasm-ld',
 				'--export-dynamic',
 				'-z',
-				'stack-size=1048576',
+				`stack-size=${stackSizeBytes}`,
 				...objects,
 				'-Llib/wasm32-wasi',
 				'-lc',
