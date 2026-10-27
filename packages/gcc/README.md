@@ -84,6 +84,11 @@ before libc. Older manifests default to `false`: their 64-bit `long double` is
 incompatible with WASI long-double library and variadic interfaces. Linking uses
 `--fatal-warnings`; execution tests are also needed to detect variadic ABI errors.
 
+The optional `capabilities.int128` flag is for producer-qualified signed/unsigned
+`__int128` operations and ABI. It defaults to `false` and adds no compile option
+or link override. Native and Worker execution must qualify a bundle before it
+advertises this capability.
+
 Bundle `capabilities` separately records `cpp`, `libc`, `libm`, `libstdcxx` and
 `staticInitialization`. Without `cpp`, C++ requests fail; without `libstdcxx`, only
 constructs not requiring that library can compile. Global/function-local static

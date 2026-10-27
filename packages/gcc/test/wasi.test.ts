@@ -305,6 +305,38 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 			).toThrow(/longDouble/);
 	});
 
+	it('validates optional int128 metadata without changing compiler or link arguments', () => {
+		const source = manifestFixture();
+		const legacy = parseWasiGccManifest(source);
+		expect(legacy.capabilities.int128).toBe(false);
+		for (const int128 of [false, true]) {
+			const manifest = parseWasiGccManifest({
+				...source,
+				capabilities: { ...source.capabilities, int128 }
+			});
+			expect(manifest.capabilities.int128).toBe(int128);
+			for (const language of ['c', 'cpp'] as const)
+				for (const emit of ['assembly', 'object', 'executable'] as const) {
+					const request = {
+						code: '__int128 value; unsigned __int128 other;',
+						language,
+						emit,
+						defines: ['ONLINE_JUDGE=1']
+					};
+					expect(wasiGccCompilePlan(request, manifest)).toEqual(
+						wasiGccCompilePlan(request, legacy)
+					);
+				}
+		}
+		for (const int128 of [null, '128', 128, [], {}])
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					capabilities: { ...source.capabilities, int128 }
+				})
+			).toThrow('Invalid GCC WASI capability: int128');
+	});
+
 	it('schedules actual GCC, relocatable WABT and wasm-ld with real -D options for each unit', () => {
 		const code = '#include "local.h"\nint helper(void); int main(void) { return helper(); }';
 		const manifest = parseWasiGccManifest(manifestFixture());

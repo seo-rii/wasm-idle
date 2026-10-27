@@ -109,6 +109,13 @@ The print/scan extension is part of `sysroot.tar` and its loading measurements.
 Saved intermediate WAT/objects cover the main translation unit; the executable
 contains all requested translation units.
 
+The optional `capabilities.int128` metadata defaults to false for older bundles.
+A producer must separately qualify signed and unsigned `__int128` code generation,
+WASI argument/result and variadic ABI, runtime helpers, and actual native/Worker
+execution before advertising it. It does not enable a compiler option, rewrite
+source, change the link plan or establish qualification by itself. This SDK
+contract alone does not claim that an existing bundle supports the extension.
+
 The shared fixture set covers integer/floating-point operations, control flow,
 calls/function pointers, globals, structures, allocation, libc I/O, dynamic-input
 libm, C/C++ translation units and headers, static initialization/destruction,

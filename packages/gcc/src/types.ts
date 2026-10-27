@@ -152,6 +152,8 @@ export interface WasiGccManifest {
 		staticInitialization: boolean;
 		/** Qualified IEEE binary128 ABI, arithmetic and WASI long-double library interfaces. */
 		longDouble?: boolean;
+		/** Qualified signed/unsigned __int128 operations and ABI. */
+		int128?: boolean;
 		exceptions: false;
 		rtti: false;
 		threads: false;
