@@ -4,6 +4,7 @@ import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import { gccDigest, parseCrossGccManifest, parseWasiGccManifest } from './manifest.js';
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
+import { gccSysrootTree, mountGccSysroot } from './sysroot-fs.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
 import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
@@ -169,6 +170,7 @@ export async function createGccCompiler(
 		}
 	});
 	if (!sysroot.size) throw new Error('GCC sysroot is empty');
+	const sysrootTree = gccSysrootTree(sysroot, directories, '/sysroot');
 	const factories = new Map<
 		CrossGccTool,
 		{ factory?: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
@@ -181,7 +183,7 @@ export async function createGccCompiler(
 		factories.clear();
 		assets.clear();
 		sysroot.clear();
-		directories.clear();
+		sysrootTree.clear();
 	}
 	try {
 		for (const tool of tools) {
@@ -319,6 +321,8 @@ export async function createGccCompiler(
 					if (disposed) throw new Error('GCC compiler is disposed');
 					if (
 						!module?.FS ||
+						typeof module.FS.mount !== 'function' ||
+						typeof module.FS.createNode !== 'function' ||
 						typeof module.callMain !== 'function' ||
 						!(module.HEAPU8 instanceof Uint8Array)
 					)
@@ -327,8 +331,8 @@ export async function createGccCompiler(
 						);
 					module.FS.mkdirTree('/workspace');
 					module.FS.mkdirTree('/tmp');
-					for (const path of directories) module.FS.mkdirTree(path);
-					for (const [path, bytes] of [...sysroot, ...workspace]) {
+					mountGccSysroot(module.FS, sysrootTree, '/sysroot');
+					for (const [path, bytes] of workspace) {
 						module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 						module.FS.writeFile(path, bytes);
 					}

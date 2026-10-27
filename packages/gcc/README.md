@@ -171,7 +171,8 @@ Front ends use `-nostdinc` and pinned GNU C/C++/GCC/glibc include directories;
 C++ also gets `_GNU_SOURCE` and exceptions. GCC emits assembly, GNU `as --64`
 assembles ELF, and `ld -static` links CRT, libstdc++ (C++), libm (both languages),
 libgcc, libgcc_eh and glibc in the required order. Fresh modules/MEMFS reset state;
-the Worker orchestrates them without `fork`/`exec`.
+the sysroot is mounted read-only, not copied, and the Worker orchestrates them without
+`fork`/`exec`.
 
 | Request field  | Supported values                                                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------- |
