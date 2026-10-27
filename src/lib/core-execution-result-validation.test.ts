@@ -1,5 +1,8 @@
 import { runInNewContext } from 'node:vm';
-import { validateExecutionResult, type ExecutionResult } from '@wasm-idle/core';
+import {
+	validateExecutionResult,
+	type ExecutionResult
+} from '../../packages/core/src/execution.js';
 import { describe, expect, it } from 'vitest';
 
 function createResult(): ExecutionResult {
@@ -84,6 +87,71 @@ describe('structured execution result validation', () => {
 				artifacts: [result.artifacts[0], { ...result.artifacts[0] }]
 			})
 		).toThrow('Duplicate execution artifact path');
+	});
+
+	it.each([undefined, 0, 1, NaN])(
+		'enforces the artifact quota despite byteLength=%s',
+		(byteLength) => {
+			const data = new Uint8Array(256);
+			Object.defineProperty(data, 'byteLength', { value: byteLength });
+			const result = {
+				...createResult(),
+				artifacts: [{ path: 'out.bin', kind: 'file' as const, data }]
+			};
+
+			expect(() => validateExecutionResult(result, { maxWorkspaceBytes: 16 })).toThrow(
+				expect.objectContaining({ code: 'total-size-limit', actual: 256, limit: 16 })
+			);
+		}
+	);
+
+	it.each([
+		{ name: 'Uint16Array', data: new Uint16Array(3) },
+		{ name: 'DataView', data: new DataView(new ArrayBuffer(3)) }
+	])('rejects an artifact $name disguised as Uint8Array', ({ data }) => {
+		Object.defineProperty(data, Symbol.toStringTag, { value: 'Uint8Array' });
+		const result = {
+			...createResult(),
+			artifacts: [{ path: 'out.bin', kind: 'file', data }]
+		};
+
+		expect(() => validateExecutionResult(result)).toThrow(
+			'Execution artifact out.bin data must be a string or Uint8Array'
+		);
+	});
+
+	it('validates native artifact metadata without evaluating shadowed getters', () => {
+		const data = Uint8Array.of(0, 1, 2, 3, 4).subarray(1, 4);
+		for (const key of ['byteLength', Symbol.toStringTag]) {
+			Object.defineProperty(data, key, {
+				get() {
+					throw new Error('Artifact metadata getter must not be evaluated');
+				}
+			});
+		}
+		const result = {
+			...createResult(),
+			artifacts: [{ path: 'out.bin', kind: 'file' as const, data }]
+		};
+
+		expect(validateExecutionResult(result, { maxWorkspaceBytes: 3 })).toBe(result);
+		expect(() => validateExecutionResult(result, { maxWorkspaceBytes: 2 })).toThrow(
+			expect.objectContaining({ code: 'total-size-limit', actual: 3, limit: 2 })
+		);
+	});
+
+	it('enforces native byte lengths for foreign-realm artifacts', () => {
+		const data = runInNewContext(
+			'const data = new Uint8Array(256); Object.defineProperty(data, "byteLength", { value: 0 }); data'
+		) as Uint8Array;
+		const result = {
+			...createResult(),
+			artifacts: [{ path: 'out.bin', kind: 'file' as const, data }]
+		};
+
+		expect(() => validateExecutionResult(result, { maxWorkspaceBytes: 16 })).toThrow(
+			expect.objectContaining({ code: 'total-size-limit', actual: 256, limit: 16 })
+		);
 	});
 
 	it('rejects malformed diagnostics, timings, termination, and runtime identity', () => {
