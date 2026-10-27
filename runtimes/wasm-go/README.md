@@ -132,6 +132,14 @@ runtime assets are reachable under `runtimeBaseUrl` (or under paths relative to 
 runtime root). Injecting `dependencies.runTool` is only necessary when you want to override the
 default in-process executor.
 
+## Playground Worker acceptance
+
+After syncing a new bundle, run `node scripts/probe-go-worker.mjs` from the repository root.
+This compiles the actual playground Worker and tests all four target mappings in Chromium,
+including shared-buffer stdin, UTF-8 and EOF, standard-library imports, compiler diagnostics,
+and reuse of a prepared artifact. Set `WASM_IDLE_GO_WORKER_RECEIPT` to retain the runtime and
+Worker hashes with the results, or `WASM_IDLE_CHROMIUM_EXECUTABLE` to select an existing Chromium.
+
 ## Current Limits
 
 - the pinned official `go1.26.10` toolchain reports `wasip1/wasm` and `js/wasm` from
