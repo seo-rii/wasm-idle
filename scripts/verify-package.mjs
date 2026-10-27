@@ -269,7 +269,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
-		budget: { maxBytes: 40 * MiB + 488 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// The combined install measures 42,443,361 bytes; allow 1 KiB for composition overhead.
+		budget: { maxBytes: 40 * MiB + 489 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
