@@ -54,6 +54,8 @@ const abortReason = (signal: AbortSignal, phase: ZigOperation['phase']) =>
 			);
 
 class Zig implements Sandbox {
+	// The public binding must preserve this runtime's full lib/ archive budget.
+	readonly defaultExecutionLimits = Object.freeze({ maxAssetBytes: 256 * 1024 * 1024 });
 	output: any = null;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(1024);
@@ -279,7 +281,10 @@ class Zig implements Sandbox {
 					this.releaseBeforeSession(activeOperation, 'Zig runtime startup cancelled')
 				);
 			}
-			limits = resolveExecutionLimits(options.limits);
+			limits = resolveExecutionLimits({
+				...this.defaultExecutionLimits,
+				...options.limits
+			});
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Zig runtime startup cancelled')
@@ -503,7 +508,7 @@ class Zig implements Sandbox {
 					'Zig source debugging is unavailable: the current Wasm compiler does not emit DWARF.'
 				);
 			}
-			limits = resolveExecutionLimits(options.limits);
+			limits = resolveExecutionLimits({ ...this.defaultExecutionLimits, ...options.limits });
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.zig';
 			const workspaceLimits = options.workspaceLimits;
@@ -518,7 +523,7 @@ class Zig implements Sandbox {
 					limits.maxWorkspaceBytes
 				)
 			});
-			targetTriple = options.zigTargetTriple || 'wasm64-wasi';
+			targetTriple = options.zigTargetTriple || 'wasm32-wasi';
 			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(

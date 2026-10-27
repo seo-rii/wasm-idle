@@ -210,30 +210,35 @@ async function probeZig(outputDirectory) {
 		addDirectory() {},
 		addFile: (filename, contents) => addFile(root, filename, contents)
 	});
-	const std = root.get('std');
-	assert(std instanceof Directory);
+	const lib = root.get('lib');
+	assert(lib instanceof Directory);
+	assert(lib.contents.get('std') instanceof Directory);
+	assert(lib.contents.get('compiler_rt.zig') instanceof File);
 	const module = await WebAssembly.compile(compiler);
 	const source = `const std = @import("std");
-pub fn main() !void {
-    var input: [16]u8 = undefined;
-    const count = try std.io.getStdIn().read(&input);
-    try std.io.getStdOut().writeAll(input[0..count]);
+pub fn main(init: std.process.Init) !void {
+    var input_buffer: [16]u8 = undefined;
+    var stdin = std.Io.File.stdin().readerStreaming(init.io, &input_buffer);
+    const input = (try stdin.interface.takeDelimiter('\\n')) orelse "";
+    var output_buffer: [16]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(init.io, &output_buffer);
+    try stdout.interface.print("{s}\\n", .{input});
+    try stdout.interface.flush();
 }
 `;
 	const attempts = [];
-	for (const [target, optimization, flags, targetFlags] of [
-		['wasm64-wasi', 'ReleaseSmall', []],
-		['wasm64-wasi', 'Debug', ['-fno-strip']],
-		['wasm32-wasi', 'Debug', ['-fno-strip']],
-		['wasm32-wasi', 'ReleaseSmall', ['-fno-strip']],
-		['wasm32-wasi', 'Debug', ['-fno-strip'], ['-target', 'wasm32-wasi']]
+	for (const [target, optimization, flags] of [
+		['wasm32-wasi', 'fast', []],
+		['wasm32-wasi', 'debug', ['-fno-strip']],
+		['wasm32-wasi', 'small', ['-fno-strip']]
 	]) {
 		const workspace = new Map([['main.zig', new File(encode(source))]]);
 		const args = [
 			'zigc.wasm',
 			'build-exe',
 			'main.zig',
-			...(targetFlags ?? [`-Dtarget=${target}`]),
+			'-target',
+			target,
 			'-fno-llvm',
 			'-fno-lld',
 			'-O',
@@ -248,10 +253,10 @@ pub fn main() !void {
 				await runWasi(
 					module,
 					args,
-					[],
+					['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
 					[
 						new PreopenDirectory('.', workspace),
-						new PreopenDirectory('/lib', new Map([['std', std]])),
+						new PreopenDirectory('/lib', lib.contents),
 						new PreopenDirectory('/cache', new Map())
 					]
 				)
@@ -272,7 +277,7 @@ pub fn main() !void {
 							await WebAssembly.compile(artifact.data),
 							['program.wasm'],
 							[],
-							[],
+							[new PreopenDirectory('.', new Map())],
 							'7\n'
 						);
 						assert.equal(attempt.execution.exitCode, 0);

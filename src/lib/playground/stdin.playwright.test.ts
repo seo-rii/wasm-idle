@@ -12,6 +12,7 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
+import zigStdinSource from '../test-fixtures/zig-stdin.zig?raw';
 
 const pythonStdinSource = `line = input()
 print(f"main={int(line.strip()) + 5}")`;
@@ -144,15 +145,6 @@ print("main=" .. tostring((tonumber(line) or 0) + 5))`;
 const schemeStdinSource = `(display "main=")
 (display (read-char (current-input-port)))
 (newline)`;
-
-const zigStdinSource = `const std = @import("std");
-
-pub fn main() !void {
-    var buffer: [32]u8 = undefined;
-    const input = (try std.io.getStdIn().reader().readUntilDelimiterOrEof(&buffer, '\\n')) orelse "0";
-    const n = try std.fmt.parseInt(i32, std.mem.trim(u8, input, " \\t\\r\\n"), 10);
-    try std.io.getStdOut().writer().print("main={d}\\n", .{n + 5});
-}`;
 
 const cStdinSource = `#include <stdio.h>
 
