@@ -270,7 +270,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// GCC WASI adds eight files; this aggregate already installs the WASI shim.
 		// Its baseline ABI/SIMD changes retain the existing 48 KiB allowance.
 		// Preserve main's separate 8 KiB increase for Zig 0.17 host/library receipts.
-		budget: { maxBytes: 40 * MiB + 464 * 1024, maxFiles: 3_360, maxPackages: 70 },
+		// GCC's read-only sysroot mount adds 5,578 bytes and two files (42,418,523 measured).
+		budget: { maxBytes: 40 * MiB + 472 * 1024, maxFiles: 3_362, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
