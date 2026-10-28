@@ -1,0 +1,60 @@
+const Record = struct { data: i32, some: bool };
+
+pub noinline fn addFive(input: i32) i32 {
+    var result = input;
+    result += 5; // initialized-result
+    var wide: i64 = @as(i64, input) * -12884901888; // added-result
+    wide -= 5;
+    var unsigned: u64 = @as(u64, @intCast(input)) << 40;
+    unsigned += 9;
+    var storage = [_]u8{ 65, 0, 255, 10 };
+    var bytes: []u8 = &storage;
+    var text: []const u8 = "Zig \xe2\x9c\x93";
+    var empty: []const u8 = "";
+    var long_storage: [96]u8 = @splat(65);
+    var long_bytes: []u8 = &long_storage;
+    var numbers_storage = [_]i32{ input, -3, 42 };
+    var numbers: []i32 = &numbers_storage;
+    var some: ?i32 = input;
+    var none: ?i32 = null;
+    var optional_bytes: ?[]const u8 = "optional";
+    var absent_bytes: ?[]const u8 = null;
+    var optional_pointer: ?*i32 = &result;
+    var absent_pointer: ?*i32 = null;
+    var success: error{ Bad, Other }!i32 = input;
+    var failure: error{ Bad, Other }!i32 = error.Bad;
+    var void_success: error{Bad}!void = {};
+    var void_failure: error{Bad}!void = error.Bad;
+    var nested_optional: ??i32 = @as(?i32, null);
+    var record = Record{ .data = input, .some = false };
+    var undefined_optional: ?i32 = undefined;
+    var undefined_slice: []u8 = undefined;
+    var undefined_error: error{Bad}!i32 = undefined;
+    _ = &wide;
+    _ = &unsigned;
+    _ = &bytes;
+    _ = &text;
+    _ = &empty;
+    _ = &long_bytes;
+    _ = &numbers;
+    _ = &some;
+    _ = &none;
+    _ = &optional_bytes;
+    _ = &absent_bytes;
+    _ = &optional_pointer;
+    _ = &absent_pointer;
+    _ = &success;
+    _ = &failure;
+    _ = &void_success;
+    _ = &void_failure;
+    _ = &nested_optional;
+    _ = &record;
+    _ = &undefined_optional;
+    _ = &undefined_slice;
+    _ = &undefined_error;
+    result += 0; // initialized-widths
+    some = null;
+    bytes = bytes[1..];
+    success = error.Other;
+    return result; // updated-values
+}

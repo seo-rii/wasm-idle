@@ -4,6 +4,7 @@
 // Usage: node scripts/zig-debug-browser-smoke.mjs [zig-assets] [clang-assets] [debug-assets]
 // Set WASM_IDLE_ZIG_DEBUG_CONTAINER_ASSETS to a prepared static/container-app directory
 // to exercise the application owner and nested Worker transport.
+// Set WASM_IDLE_ZIG_DEBUG_VALUES=1 for the focused native Zig value-formatting gate.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -35,6 +36,7 @@ const browserMessages = [];
 const rawDapEvents = [];
 const probeStages = [];
 const inspectExceptions = process.env.WASM_IDLE_ZIG_DEBUG_INSPECT_EXCEPTIONS === '1';
+const inspectValues = process.env.WASM_IDLE_ZIG_DEBUG_VALUES === '1';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 let browser;
 let server;
@@ -57,7 +59,9 @@ pub fn main(init: std.process.Init) !void {
     try output_writer.interface.flush();
 }
 `;
-const helper = `const embedded = @embedFile("../data.bin");
+const helper = inspectValues
+	? await readFile(path.join(root, 'src/lib/test-fixtures/zig-debug-values.zig'), 'utf8')
+	: `const embedded = @embedFile("../data.bin");
 comptime {
     if (embedded.len != 3 or embedded[0] != 255 or embedded[1] != 0 or embedded[2] != 7)
         @compileError("binary workspace resource changed");
@@ -80,6 +84,7 @@ const breakpointLine = markerLine(source, '// breakpoint');
 const initializedResultLine = markerLine(helper, '// initialized-result');
 const addedResultLine = markerLine(helper, '// added-result');
 const initializedWidthsLine = markerLine(helper, '// initialized-widths');
+const updatedValuesLine = markerLine(helper, '// updated-values');
 
 try {
 	const zigReceipt = JSON.parse(
@@ -116,6 +121,14 @@ try {
 					// Observe genuine DAP events without changing source maps, artifacts or control flow.
 					const after = `const session = new BrowserLldbSession(options);
 +const report = (value: unknown) => { void fetch(new URL('/__zig-debug-dap',location.href),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}); };
++if (${inspectValues}) {
++  const request = session.request.bind(session);
++  (session as any).request = async (command: string, args?: unknown) => {
++    const body = await request(command,args);
++    if (['variables','scopes','readMemory','writeMemory','evaluate'].includes(command)) report({kind:command,args,body});
++    return body;
++  };
++}
 +session.onEvent(event => {
 +  if(event.event !== 'stopped') return;
 +  report({kind:'stopped',event});
@@ -342,7 +355,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			try {
 				bytes = await readFile(filename);
 			} catch (error) {
-				if (error.code !== 'ENOENT' || !filename.endsWith('/zig_small.wasm')) throw error;
+				if (error.code !== 'ENOENT' || !filename.endsWith('.wasm')) throw error;
 				bytes = await readFile(`${filename}.gz`);
 				response.setHeader('Content-Encoding', 'gzip');
 			}
@@ -393,6 +406,8 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			debugManifestSha256,
 			breakpointLine,
 			initializedWidthsLine,
+			updatedValuesLine,
+			inspectValues,
 			container
 		}) => {
 			const reportStage = (stage) => globalThis.__zigDebugStage({ stage, at: Date.now() });
@@ -515,7 +530,28 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 				}
 				async function snapshot(event) {
 					const variables = [];
-					// The first milestone qualifies scalar locals in the helper, not stdlib struct formatting.
+					let childBudget = 128;
+					async function inspectVariable(variable, depth = 0) {
+						const value = { ...variable };
+						if (!variable.variablesReference || depth >= 3 || childBudget <= 0)
+							return value;
+						try {
+							const children = await runtime.debugVariables(
+								variable.variablesReference,
+								0,
+								Math.min(12, childBudget)
+							);
+							value.children = [];
+							for (const child of children.slice(0, childBudget)) {
+								if (childBudget <= 0) break;
+								childBudget -= 1;
+								value.children.push(await inspectVariable(child, depth + 1));
+							}
+						} catch (error) {
+							value.childrenError = String(error);
+						}
+						return value;
+					}
 					for (const scope of event.sourcePath === '/workspace/nested/arithmetic.zig'
 						? await runtime.debugScopes(event.frameId)
 						: []) {
@@ -524,11 +560,17 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 						for (const variable of await runtime.debugVariables(
 							scope.variablesReference
 						)) {
-							variables.push({
-								name: variable.name,
-								value: variable.value,
-								type: variable.type
-							});
+							variables.push(
+								inspectValues &&
+									(event.line === initializedWidthsLine ||
+										event.line === updatedValuesLine)
+									? await inspectVariable(variable)
+									: {
+											name: variable.name,
+											value: variable.value,
+											type: variable.type
+										}
+							);
 						}
 					}
 					const value = {
@@ -539,6 +581,35 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 						callStack: event.callStack.slice(0, 8),
 						variables
 					};
+					if (inspectValues && event.line === initializedWidthsLine) {
+						const bytes = variables.find((variable) => variable.name === 'long_bytes');
+						value.bytePage = await runtime.debugVariables(
+							bytes.variablesReference,
+							66,
+							1000
+						);
+						value.byteWrite = await runtime.debugWriteMemory(
+							value.bytePage[0].memoryReference,
+							0,
+							Uint8Array.of(66)
+						);
+						value.bytePageAfterWrite = await runtime.debugVariables(
+							bytes.variablesReference,
+							66,
+							1000
+						);
+						const optional = variables.find((variable) => variable.name === 'some');
+						// This fixture's ?i32 DWARF puts its u8 presence tag at offset 4.
+						// The gate below checks that address against the genuine DAP tag field.
+						value.tagWrite = await runtime.debugWriteMemory(
+							optional.memoryReference,
+							4,
+							Uint8Array.of(0)
+						);
+						value.optionalChildrenAfterWrite = await runtime.debugVariables(
+							optional.variablesReference
+						);
+					}
 					record.snapshots.push(value);
 					return value;
 				}
@@ -556,7 +627,19 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 					}
 					await command('continue');
 					let current = await command('stepInto');
-					for (let step = 0; step < 20; step++) {
+					if (inspectValues) {
+						await runtime.setBreakpoints(
+							[initializedWidthsLine],
+							'/workspace/nested/arithmetic.zig'
+						);
+						current = await command('continue');
+						await runtime.setBreakpoints(
+							[updatedValuesLine],
+							'/workspace/nested/arithmetic.zig'
+						);
+						current = await command('continue');
+					}
+					for (let step = 0; !inspectValues && step < 20; step++) {
 						if (
 							current.sourcePath === '/workspace/nested/arithmetic.zig' &&
 							current.line >= initializedWidthsLine
@@ -663,6 +746,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 				await reportStage('load:done');
 				await execute(false);
 				if (runs[0].error || runs[0].outcome?.error) return { runs };
+				if (inspectValues) return { runs, terminalCases };
 				await execute(true);
 				// No explicit reload: the public instance must recover after retiring/cancelling Workers.
 				await execute(false);
@@ -684,6 +768,8 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			debugManifestSha256,
 			breakpointLine,
 			initializedWidthsLine,
+			updatedValuesLine,
+			inspectValues,
 			container: !!containerAssets
 		}
 	);
@@ -724,7 +810,7 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 	console.log(JSON.stringify(evidence, null, 2));
 	assert.equal(
 		result.runs.length,
-		3,
+		inspectValues ? 1 : 3,
 		'Expected successful debug, paused cancellation, and restart'
 	);
 	for (const run of result.runs.filter((entry) => !entry.cancel)) {
@@ -758,11 +844,104 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 			);
 		const localAt = (line, name) =>
 			atHelperLine(line)?.variables.find((value) => value.name === name)?.value;
-		assert.equal(localAt(initializedResultLine, 'input'), '7');
-		assert.equal(localAt(initializedResultLine, 'result'), '7');
-		assert.equal(localAt(addedResultLine, 'result'), '12');
+		if (!inspectValues) {
+			assert.equal(localAt(initializedResultLine, 'input'), '7');
+			assert.equal(localAt(initializedResultLine, 'result'), '7');
+			assert.equal(localAt(addedResultLine, 'result'), '12');
+		}
 		assert.equal(localAt(initializedWidthsLine, 'wide'), '-90194313221');
 		assert.equal(localAt(initializedWidthsLine, 'unsigned'), '7696581394441');
+		if (inspectValues) {
+			const values = Object.fromEntries(
+				atHelperLine(initializedWidthsLine).variables.map((value) => [value.name, value])
+			);
+			assert.equal(values.bytes.value, 'len=4 "A\\x00\\xff\\x0a"');
+			assert.deepEqual(
+				values.bytes.children
+					.filter((value) => /^\[\d+\]$/.test(value.name))
+					.map((value) => value.value),
+				['65', '0', '255', '10']
+			);
+			assert.equal(values.text.value, 'len=7 "Zig ✓"');
+			assert.equal(values.empty.value, 'len=0 ""');
+			assert.match(values.numbers.value, /^len=3, ptr=0x[\da-f]+$/);
+			assert.deepEqual(
+				values.numbers.children.map((value) => value.name),
+				['ptr', 'len']
+			);
+			assert.equal(values.some.value, 'some(7)');
+			assert.deepEqual(
+				values.some.children.map((value) => value.name),
+				['payload']
+			);
+			assert.equal(values.none.value, 'null');
+			assert.equal(values.none.variablesReference, 0);
+			assert.equal(values.optional_bytes.value, 'some(len=8 "optional")');
+			assert.equal(values.absent_bytes.value, 'null');
+			assert.match(values.optional_pointer.value, /^some\(0x[\da-f]+\)$/);
+			assert.equal(values.absent_pointer.value, 'null');
+			assert.equal(values.absent_pointer.variablesReference, 0);
+			assert.equal(values.success.value, '7');
+			assert.deepEqual(
+				values.success.children.map((value) => value.name),
+				['payload']
+			);
+			assert.equal(values.failure.value, 'error.Bad');
+			assert.deepEqual(
+				values.failure.children.map((value) => value.name),
+				['error']
+			);
+			assert.equal(values.void_success.value, '{}');
+			assert.equal(values.void_failure.value, 'error.Bad');
+			assert.equal(values.nested_optional.value, 'some(null)');
+			assert.equal(values.record.value, 'nested.arithmetic.Record');
+			assert.equal(values.undefined_optional.value, '<unavailable: invalid optional tag>');
+			assert.equal(values.undefined_slice.value, '<unavailable: invalid slice range>');
+			assert.equal(values.long_bytes.value, `len=96 "${'A'.repeat(32)}"…`);
+			assert.equal(values.long_bytes.indexedVariables, 96);
+			const page = atHelperLine(initializedWidthsLine).bytePage;
+			assert.equal(page.length, 32);
+			assert.equal(page[0].name, '[64]');
+			assert.equal(page.at(-1).name, '[95]');
+			assert(page.every((value) => value.value === '65'));
+			const edited = atHelperLine(initializedWidthsLine);
+			assert.equal(edited.byteWrite.bytesWritten, 1);
+			assert.equal(edited.tagWrite.bytesWritten, 1);
+			assert.equal(edited.bytePageAfterWrite.length, 32);
+			assert.equal(edited.bytePageAfterWrite[0].name, '[64]');
+			assert.equal(edited.bytePageAfterWrite[0].value, '66');
+			assert(edited.bytePageAfterWrite.slice(1).every((value) => value.value === '65'));
+			assert.deepEqual(
+				edited.optionalChildrenAfterWrite,
+				[],
+				'A memory-written null must hide its inactive payload without a frame reload'
+			);
+			const tag = rawDapEvents
+				.filter((event) => event.kind === 'variables')
+				.flatMap((event) => event.body.variables)
+				.find((field) => field.evaluateName === 'some.some' && field.value === "'\\x01'");
+			const write = rawDapEvents.find(
+				(event) => event.kind === 'writeMemory' && event.args.data === 'AA=='
+			);
+			assert.equal(
+				Number.parseInt(write.args.memoryReference, 16) + write.args.offset,
+				Number.parseInt(tag.memoryReference, 16),
+				'Write the actual DWARF tag address'
+			);
+			assert.equal(localAt(updatedValuesLine, 'some'), 'null');
+			assert.equal(localAt(updatedValuesLine, 'bytes'), 'len=3 "\\x00\\xff\\x0a"');
+			assert.equal(localAt(updatedValuesLine, 'success'), 'error.Other');
+			assert(
+				!rawDapEvents.some((event) => event.kind === 'evaluate'),
+				'Formatting must not evaluate expressions'
+			);
+			const memoryRequests = rawDapEvents.filter((event) => event.kind === 'readMemory');
+			assert(memoryRequests.length > 0, 'Byte previews must read real target memory');
+			assert(
+				memoryRequests.every((event) => event.args.count <= 64),
+				'Memory reads must remain bounded'
+			);
+		}
 		assert(
 			atHelperLine(initializedWidthsLine)?.callStack.some((frame) =>
 				/solution\.main/.test(frame.functionName)
@@ -776,33 +955,35 @@ serveContainerWorker({languages:['ZIG'],createBinding,createBashConfiguration:cr
 		}
 		assert.equal(run.snapshots.at(-1).sourcePath, '/workspace/solution.zig');
 	}
-	const cancelled = result.runs.find((run) => run.cancel);
-	assert.equal(cancelled.error, '');
-	assert.equal(cancelled.snapshots.length, 1);
-	assert.equal(cancelled.output, '');
-	assert.notEqual(
-		cancelled.outcome?.completed,
-		true,
-		'Cancelled run must not report successful execution'
-	);
-	assert.equal(result.terminalCases?.length, 2, 'Expected nonzero exit and real trap cases');
-	const exited = result.terminalCases.find((value) => value.name === 'exit.zig');
-	assert.match(
-		exited.outcome.error,
-		/exited with code 23/,
-		'Real nonzero target exit must be preserved'
-	);
-	assert.notEqual(exited.outcome.completed, true);
-	const trapped = result.terminalCases.find((value) => value.name === 'trap.zig');
-	assert.equal(trapped.pause.stoppedReason, 'exception');
-	assert.equal(trapped.pause.sourcePath, '/workspace/trap.zig');
-	assert.equal(trapped.pause.line, 2);
-	assert.equal(
-		trapped.settledBeforeCancel,
-		false,
-		'A genuine Zig trap must remain paused until cancellation'
-	);
-	assert.notEqual(trapped.outcome.completed, true);
+	if (!inspectValues) {
+		const cancelled = result.runs.find((run) => run.cancel);
+		assert.equal(cancelled.error, '');
+		assert.equal(cancelled.snapshots.length, 1);
+		assert.equal(cancelled.output, '');
+		assert.notEqual(
+			cancelled.outcome?.completed,
+			true,
+			'Cancelled run must not report successful execution'
+		);
+		assert.equal(result.terminalCases?.length, 2, 'Expected nonzero exit and real trap cases');
+		const exited = result.terminalCases.find((value) => value.name === 'exit.zig');
+		assert.match(
+			exited.outcome.error,
+			/exited with code 23/,
+			'Real nonzero target exit must be preserved'
+		);
+		assert.notEqual(exited.outcome.completed, true);
+		const trapped = result.terminalCases.find((value) => value.name === 'trap.zig');
+		assert.equal(trapped.pause.stoppedReason, 'exception');
+		assert.equal(trapped.pause.sourcePath, '/workspace/trap.zig');
+		assert.equal(trapped.pause.line, 2);
+		assert.equal(
+			trapped.settledBeforeCancel,
+			false,
+			'A genuine Zig trap must remain paused until cancellation'
+		);
+		assert.notEqual(trapped.outcome.completed, true);
+	}
 	assert(requests.includes('/wasm-zig/std.tar.gz'));
 	assert(requests.includes('/clang/runtime-manifest.v1.json'));
 	assert(requests.some((entry) => entry.includes('clang.wasm')));
