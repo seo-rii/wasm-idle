@@ -293,10 +293,14 @@ function instrumentDebugFields(
 					cases.push(
 						`case 256:return new ${bridgeClass}.Field("[remaining fields]","unavailable","${fields.length - 256} fields omitted (256-field inspection limit)");`
 					);
-				const name = text(firstNode(node, 'typeIdentifier'));
+				// A source class name can resolve to its type parameter or an inherited
+				// member type. The nonce marker gives us the lexical owner even then,
+				// and still rejects an anonymous subclass inheriting these readers.
+				const owner = `${prefix}Owner`;
 				insert(
 					firstToken(body, 'RCurly')!.startOffset,
-					`public java.lang.Class<?> ${prefix}fieldOwner(){return ${name}.class;}` +
+					`private static final class ${owner}{}` +
+						`public java.lang.Class<?> ${prefix}fieldOwner(){return ${owner}.class.getDeclaringClass();}` +
 						`public int ${prefix}fieldCount(){return ${Math.min(fields.length, 257)};}` +
 						`public ${bridgeClass}.Field ${prefix}field(int index){switch(index){${cases.join('')}default:throw new java.lang.IndexOutOfBoundsException();}}`
 				);

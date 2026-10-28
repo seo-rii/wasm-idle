@@ -493,6 +493,57 @@ describe.skipIf(!enabled)('Java source debug instrumentation JVM semantics', () 
 		}
 	);
 
+	it.each([
+		{
+			name: 'a type parameter that shadows its class',
+			declarations: 'class Box<Box> { private int value = 7; }',
+			localDeclaration: '',
+			construction: 'new Box<Integer>()'
+		},
+		{
+			name: 'an inherited member type that shadows its subclass',
+			declarations:
+				'class Parent { static class Box {} } class Box extends Parent { private int value = 7; }',
+			localDeclaration: '',
+			construction: 'new Box()'
+		},
+		{
+			name: 'a local generic class and its anonymous subclass',
+			declarations: '',
+			localDeclaration: 'class Box<Box> { private int value = 7; }',
+			construction: 'new Box<Integer>()'
+		}
+	])('resolves field owners with $name', { timeout: 30_000 }, (testCase) => {
+		const source = `public class Main {
+    public static void main(String[] args) {
+        ${testCase.localDeclaration}
+        Object root = ${testCase.construction};
+        Object anonymous = ${testCase.construction} { int hidden = 17; };
+        System.out.print("owner");
+    }
+}
+${testCase.declarations}`;
+		const helper = `public final class WasmIdleDebugProbe {
+    ${fieldContract}
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return line == 6; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {
+        Object root = values[1];
+        Inspectable fields = (Inspectable) root;
+        if (fields.WasmIdleDebugProbe_fieldOwner() != root.getClass()) throw new AssertionError("wrong owner");
+        if (fields.WasmIdleDebugProbe_fieldCount() != 1) throw new AssertionError("wrong fields");
+        Field field = fields.WasmIdleDebugProbe_field(0);
+        if (!field.name.equals("value") || !field.value.equals(7)) throw new AssertionError("wrong value");
+        Inspectable anonymous = (Inspectable) values[2];
+        if (anonymous.WasmIdleDebugProbe_fieldOwner() == values[2].getClass()) throw new AssertionError("anonymous subclass incorrectly supported");
+    }
+}`;
+		const original = executeJava(source, temporaryDirectory());
+		expect(original).toEqual({ status: 0, stdout: 'owner', stderr: '' });
+		const transformed = instrumentJavaDebugSource(source, 'Main.java', 'WasmIdleDebugProbe');
+		expect(executeJava(transformed.code, temporaryDirectory(), helper)).toEqual(original);
+	});
+
 	it(
 		'keeps field reads bounded and observes a blank final before constructor assignment',
 		{ timeout: 20_000 },
@@ -548,7 +599,7 @@ class Large { ${Array.from({ length: 260 }, (_, index) => `private int field${in
 			// Compile the production Snapshot in the JVM; only its unused browser JSO
 			// transport is replaced. Field dispatch and serialization remain unchanged.
 			const helper = bridge.source.replace(/^import org\.teavm\..*;\n/gm, '').replace(
-				/    private static JSObject target\(\)[\s\S]*?    private static final class Snapshot/,
+				/ {4}private static JSObject target\(\)[\s\S]*? {4}private static final class Snapshot/,
 				`public static boolean poll(String path, int line, int column) { return false; }
     public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {}
     private static final class Snapshot`

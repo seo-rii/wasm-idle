@@ -23,6 +23,10 @@ public class Main {
         Object[] references = {opaque, alias, null};
         Object anonymous = new Opaque() { int hidden = 17; };
         Object library = new StringBuilder("opaque library state");
+        Object generic = new Box<Integer>();
+        Object inherited = new Shadowed();
+        class Local<Local> { private int value = 13; }
+        Object local = new Local<Integer>();
         visits++;
         number += ++opaque.value - 7; // inspect here
         return number + 4;
@@ -35,6 +39,9 @@ public class Main {
     }
 }
 class Parent { private int value = 99; }
+class Box<Box> { private int value = 11; }
+class ShadowParent { static class Shadowed {} }
+class Shadowed extends ShadowParent { private int value = 12; }
 class Opaque extends Parent {
     static int calls = 0;
     static int getters = 0;
@@ -113,6 +120,7 @@ it(
 						referenceArray: any[] = [],
 						nextObjectFields: any[] = [],
 						beyondFields: any[] = [];
+					const shadowedFields: Record<string, any[]> = {};
 					let oldObjectReference = 0,
 						staleObjectError = '';
 					let output = '',
@@ -143,6 +151,14 @@ it(
 								);
 								if (pauses.length === 1) {
 									firstVariables = variables;
+									for (const name of ['generic', 'inherited', 'local']) {
+										shadowedFields[name] = await sandbox.debugVariables(
+											variables.find((item: any) => item.name === name)
+												.variablesReference,
+											0,
+											10
+										);
+									}
 									oldObjectReference = variables.find(
 										(item: any) => item.name === 'opaque'
 									).variablesReference;
@@ -271,6 +287,7 @@ it(
 							referenceArray,
 							nextObjectFields,
 							beyondFields,
+							shadowedFields,
 							staleObjectError,
 							evaluations,
 							rejected,
@@ -332,6 +349,14 @@ it(
 				expect.objectContaining({ name: '[1]', indexedVariables: 1 })
 			]);
 			expect(result.rowPage.map((item: any) => item.value)).toEqual(['68', '69']);
+			for (const [name, value] of [
+				['generic', '11'],
+				['inherited', '12'],
+				['local', '13']
+			])
+				expect(result.shadowedFields[name]).toEqual([
+					expect.objectContaining({ name: 'value', value, variablesReference: 0 })
+				]);
 			const object = result.firstVariables.find((item: any) => item.name === 'opaque');
 			expect(object).toMatchObject({
 				namedVariables: 5,
