@@ -6,13 +6,13 @@ Continuing a program generates many trace events but comparatively few pauses. A
 
 The trace callback still polls the shared breakpoint version so edits made while running take effect. The host compares the requested version before copying or JSON-encoding the payload. An unchanged version returns null. A changed version retains the existing filtering and bounds. This is not a new atomic-snapshot protocol and does not promise lock-free consistency beyond the existing writer contract.
 
-The ordinary continue path avoids an f_back traversal. Next, step-out, resume-skip comparisons and actual pauses still obtain the depth they need. Removing those comparisons would make recursion and stepping incorrect; the native regression executes real sys.settrace events rather than only examining source strings.
+The ordinary continue path avoids an f_back traversal. Next, step-out and actual pauses still obtain the depth they need. Removing those comparisons would make recursion and stepping incorrect; the native regression executes real sys.settrace events rather than only examining source strings.
 
 ## Preview policy is part of the user-visible contract
 
-Strings and bytes are sliced before representation. Lists/tuples inspect at most eight entries; dictionaries/sets inspect at most six; recursion retains the depth bound. Huge integers use a bounded descriptive form instead of decimal conversion. Automatic previews do not invoke arbitrary user __repr__ implementations or custom-container methods. The cost is a deliberately less detailed display for custom objects, not a change to the running program. Explicit watch expressions remain the way to request a user-defined representation. Set previews are not globally sorted: that would traverse the entire set and defeat the bound.
+Strings and bytes are sliced before representation. Lists/tuples inspect at most eight entries; dictionaries/sets inspect at most six; recursion retains the depth bound. Huge integers use a bounded descriptive form instead of decimal conversion. Automatic previews do not invoke arbitrary user **repr** implementations or custom-container methods. The cost is a deliberately less detailed display for custom objects, not a change to the running program. Explicit watch expressions remain the way to request a user-defined representation. Set previews are not globally sorted: that would traverse the entire set and defeat the bound.
 
-These limits bound inspection work, not the program's allocation or total Pyodide heap. Each pause can still contain many variables; measuring pause latency and long-session retention remains necessary. sys.monitoring is not introduced here, and no LLDB/WAMR behavior is changed.
+These limits bound inspection work, not the program's allocation or total Pyodide heap. Each pause initially previews at most 50 visible locals; additional pages remain explicit. Measuring pause latency and long-session retention remains necessary. sys.monitoring is not introduced here, and no LLDB/WAMR behavior is changed.
 
 ## CI repair and validation layers
 
@@ -25,3 +25,25 @@ The preceding CI had a separate J-runtime timeout and an LLDB post-stop JavaScri
 ## Acceptance measurements
 
 Use the same program and breakpoint sequence before/after: continue through a large loop, update breakpoints during execution, next/into/out through recursion, inspect large strings/containers, evaluate explicit watches, cancel and rerun. Record continue wall time, trace-event/JSON/stack-walk counts, pause-to-variables latency and post-stop memory. Keep failures and cold/warm runs separate. No numerical speedup is claimed before those browser measurements.
+
+## Reusing fixed debug setup
+
+Debug runs now compile the fixed trace/preview source and image hook once per Python worker. Each run executes that code into a new private dictionary containing its own source filenames, initial breakpoints, version, pause state and bridge. Only code objects are shared. Source programs still compile with their actual execution filename, execute in a fresh `__main__`, and retain top-level await, input/output and workspace-import behavior.
+
+The image hook executes its existing installation guard in the same Pyodide globals as ordinary runs. The worker removes each run's imported trace and destroys its JavaScript proxy in the cleanup path, including syntax errors, user exceptions and cancellation. It does not cache a frame, user globals or a previous run's stepping state. The existing per-line atomic breakpoint-version check, real `sys.settrace` event stream, and bounded locals paging remain in place.
+
+The opt-in probe runs the actual pinned Pyodide on Node:
+
+```sh
+node scripts/probe-python-debug-trace.mjs --baseline-ref=27b4be22fbc7e9a543eadd0b3267b40cecabbd61
+```
+
+It records the Node/Pyodide/Python versions and source hashes, separates the first run, then records seven alternating-order samples after one warmup. The continue workload executes the same 50,000-iteration loop with no trace, a minimal trace, the baseline helper and the current helper. Setup timing separately compares compilation/execution of the baseline fixed helpers with creation of a fresh run from cached helper code. It excludes runtime loading, user-source compilation, pauses, DOM rendering and network delivery; it is not an end-to-end browser speedup claim. Timing is reported rather than used as a flaky CI threshold.
+
+## Why sys.monitoring remains an experiment
+
+The pinned Pyodide 314.0.7 runs CPython 3.14.2 and exposes `sys.monitoring`. Availability is insufficient for replacing the debugger. The probe's single-line `while` program produces `sys.settrace` lines `[1, 2, 2, 2, 2, 3]`, while a monitoring `LINE` callback sees `[1, 2, 3]`. This follows the [Python monitoring event contract](https://docs.python.org/3.14/library/sys.monitoring.html#monitoring-events): `LINE` concerns changes in source line, while jumps and function lifecycles have separate events. A LINE-only replacement would lose repeated-line breakpoints and stepping.
+
+Disabling events at non-breakpoint locations would also remove the current opportunity to poll a running program's shared breakpoint version. A future backend needs a qualified event/rearming design, frame lookup, recursion/generator handling and cancellation behavior. No alternate monitoring backend is enabled. A separate initial experiment that split global frame dispatch from the local line callback was slower on the pinned interpreter and was discarded.
+
+The regression layers now check helper code identity with fresh state, changed filenames, error/cancellation recovery and the image guard in actual Pyodide; native tracing additionally covers recursive step-out. The real Chromium worker cases retain live edits, watches, imported source paths and locals paging, and add repeated-line stepping, recursive stepping and interactive input on the reused worker. Native CPython event counts can differ from the pinned browser interpreter, so the browser test explicitly covers CPython 3.14's final false `while` condition.
