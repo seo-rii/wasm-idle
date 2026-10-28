@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCrossGccWorker } from '../src/worker.js';
+import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -21,7 +21,12 @@ class FixtureWorker {
 						id: message.id,
 						type: 'ready',
 						manifest: { compiler: { family: 'gcc' } },
-						identity: { compilerHost: 'wasm32-emscripten', target: 'x86_64-linux-gnu' }
+						identity: {
+							compilerHost: 'wasm32-emscripten',
+							target:
+								(message.options as { target?: string }).target ??
+								'x86_64-linux-gnu'
+						}
 					}
 				})
 			);
@@ -39,6 +44,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it.each([
+		null,
+		{ id: 1, type: 'unknown' },
+		{ id: 1, type: 'run-result', result: {} },
+		{ id: 1, type: 'result' }
+	])('terminates and settles pending work on malformed Worker response %j', async (data) => {
+		const compiler = await createCrossGccWorker(options),
+			transport = FixtureWorker.instances[0];
+		const pending = compiler.compile({ code: 'source' });
+		const rejected = expect(pending).rejects.toThrow('invalid response');
+		expect(() => transport.onmessage?.({ data })).not.toThrow();
+		await rejected;
+		expect(transport.terminate).toHaveBeenCalledOnce();
+		await expect(compiler.compile({ code: 'again' })).rejects.toThrow('disposed');
+	});
 	it('terminates synchronous compiler work on AbortSignal and rejects reuse', async () => {
 		const compiler = await createCrossGccWorker(options),
 			transport = FixtureWorker.instances[0];
@@ -94,5 +114,48 @@ describe('GCC Worker ownership and cancellation', () => {
 			createCrossGccWorker({ ...options, signal: AbortSignal.abort() })
 		).rejects.toMatchObject({ name: 'AbortError' });
 		expect(FixtureWorker.instances).toHaveLength(0);
+	});
+
+	it('sends an explicit Wasm output target and returns WASI run output through the Worker', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		expect(transport.messages[0].options).toMatchObject({ target: 'wasm32-wasi' });
+		const artifact = {
+			compiler: 'gcc',
+			compilerHost: 'wasm32-emscripten',
+			target: 'wasm32-wasi',
+			format: 'wasm-executable',
+			fileName: 'program.wasm',
+			bytes: new Uint8Array(),
+			cpu: 'wasm32'
+		} as const;
+		const pending = compiler.run(artifact, { stdin: '42\n' });
+		expect(transport.messages[1]).toMatchObject({
+			type: 'run',
+			artifact,
+			options: { stdin: '42\n' }
+		});
+		await expect(compiler.compile({ code: 'int main() {}' })).rejects.toThrow('busy');
+		transport.onmessage?.({
+			data: {
+				id: 1,
+				type: 'run-result',
+				result: {
+					exitCode: 0,
+					stdout: '42\n',
+					stderr: '',
+					milliseconds: 1,
+					peakMemoryBytes: 65536
+				}
+			}
+		});
+		expect(await pending).toMatchObject({ exitCode: 0, stdout: '42\n' });
+		const controller = new AbortController();
+		const running = compiler.run(artifact, { signal: controller.signal });
+		expect(transport.messages[2].options).not.toHaveProperty('signal');
+		const rejected = expect(running).rejects.toMatchObject({ name: 'AbortError' });
+		controller.abort();
+		await rejected;
+		expect(transport.terminate).toHaveBeenCalledOnce();
 	});
 });
