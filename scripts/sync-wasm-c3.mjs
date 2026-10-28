@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 /** @param {Uint8Array} bytes */
 const receiptFor = (bytes) => ({ bytes: bytes.length, sha256: sha256(bytes) });
-const expectedManifest = '6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb';
+const expectedManifest = 'e138fc873d706e9d7042cc3419c32206bcb58c647e7e7b2c769ac369eb9fe2c1';
 
 /** Render the consumer wrapper from current sources and a pinned compiler profile.
  * @param {Record<string, unknown>} profile
@@ -90,9 +90,9 @@ export async function syncC3(producer) {
 	const receipt = await verify(directory);
 	if (
 		receipt.manifestSha256 !== expectedManifest ||
-		receipt.sources.c3.commit !== '1d155ee04d3b607261b99aa15ed5eefd6d7db284'
+		receipt.sources.c3.commit !== 'd1b1e4451716a34e9c5eb46b78999ff92e71c3a1'
 	) {
-		throw new Error('C3 producer revision is not the reviewed 0.8.3 profile');
+		throw new Error('C3 producer revision is not the reviewed 0.8.5_1 profile');
 	}
 	/** @type {Record<string, Buffer>} */
 	const files = {};
@@ -112,7 +112,7 @@ export async function syncC3(producer) {
 		throw new Error('C3 producer receipt changed during sync');
 	}
 	const profile = {
-		profileId: 'c3-0.8.3-wasm32-byte-v1',
+		profileId: 'c3-0.8.5_1-wasm32-byte-v1',
 		producerManifestSha256: expectedManifest,
 		compilerJavaScriptReceipt: receiptFor(files['c3c.mjs']),
 		compilerWasmReceipt: receiptFor(files['c3c.wasm']),
