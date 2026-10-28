@@ -185,10 +185,8 @@ function appendTrailingNewline(text: string) {
 	return text.endsWith('\n') ? text : `${text}\n`;
 }
 
-function normalizeAssetLoader(programSource: string, runtimePromiseKey: string) {
-	let normalizedSource = programSource.includes('($=>async a=>{')
-		? programSource.replace('($=>async a=>{', `globalThis.${runtimePromiseKey}=($=>async a=>{`)
-		: programSource;
+function normalizeAssetLoader(programSource: string) {
+	const normalizedSource = programSource;
 	const assetLoaderPattern =
 		/function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{const ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\?new URL\(\2,\4\):\2;return fetch\(\3\)\}/;
 	const matchedLoader = normalizedSource.match(assetLoaderPattern);
@@ -477,7 +475,6 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 		(artifact) => artifact.kind === 'wasm' || artifact.kind === 'asset'
 	) as Array<CompileArtifact & { data: Uint8Array | string }>;
 	const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
-	const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
 	const stdinHookKey = '__wasmIdleOcamlReadStdin';
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
@@ -676,7 +673,7 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 	runtimeGlobal['exports'] = (runtimeGlobal['module'] as { exports: unknown }).exports;
 
 	try {
-		let normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
+		let normalizedSource = normalizeAssetLoader(programArtifact.data);
 		const stdinReadReplacement =
 			'read($1,$2,$3,$4){var e=globalThis.__wasmIdleOcamlReadStdin?globalThis.__wasmIdleOcamlReadStdin($3):null;if(e==null)return 0;var h=e.length,f=new Uint8Array(h),i=0;for(;i<h;i++)f[i]=e.charCodeAt(i);var g=f.length<$3?f.length:$3;$1.set(f.subarray(0,g),$2);return g}';
 		const patchedSource = normalizedSource.replace(
@@ -695,14 +692,21 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 			.replace(
 				/read:\(([^)]*)\)=>[A-Za-z$_][\w$]*\.readSync\(/g,
 				'read:($1)=>globalThis.fs.readSync('
+			)
+			.replace(
+				// wasm_of_ocaml 6.5 checks its registered virtual files before
+				// falling back to Node's five-argument readSync. Preserve that path.
+				/\breturn [A-Za-z$_][\w$]*\.readSync\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\}/g,
+				'return globalThis.fs.readSync($1,$2,$3,$4,$5)}'
 			);
 		if (log && normalizedSource === programArtifact.data) {
 			console.warn('[wasm-idle:ocaml-worker] stdin runtime patch did not match generated JS');
 		}
-		new Function(`${normalizedSource}\n//# sourceURL=${programArtifact.path}`)();
-		const runtimePromise = (globalThis as typeof globalThis & Record<string, unknown>)[
-			runtimePromiseKey
-		];
+		// The generated script's completion value is its async Wasm initializer.
+		// Evaluate in a fresh function scope without depending on minified names.
+		const runtimePromise = new Function('return eval(arguments[0])')(
+			`${normalizedSource}\n//# sourceURL=${programArtifact.path}`
+		);
 		if (runtimePromise instanceof Promise) {
 			await runtimePromise;
 		}
@@ -714,7 +718,6 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 		if (originalInstantiateStreaming) {
 			WebAssembly.instantiateStreaming = originalInstantiateStreaming;
 		}
-		delete (globalThis as typeof globalThis & Record<string, unknown>)[runtimePromiseKey];
 		delete (globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey];
 		if (!hadProcess) {
 			delete runtimeGlobal['process'];
