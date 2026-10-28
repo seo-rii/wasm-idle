@@ -262,6 +262,7 @@ export class LldbSandboxSession {
 	private supportsValueFormatting = false;
 	private command: DebugCommand | null = null;
 	private pauseRequested = false;
+	private wasiExitResumed = false;
 	private pauseRequestVersion = 0;
 	private targetStopped = false;
 	private entryPhase: 'initial' | 'seeking-main' | 'done' = 'done';
@@ -321,6 +322,7 @@ export class LldbSandboxSession {
 		this.entryPhase =
 			this.options.pauseOnEntry && this.options.pauseAtMain ? 'initial' : 'done';
 		this.pauseRequested = false;
+		this.wasiExitResumed = false;
 		this.initialized = false;
 		this.dapExitCode = null;
 		let rejectCompletion!: (error: Error) => void;
@@ -1436,7 +1438,9 @@ export class LldbSandboxSession {
 			this.pauseRequested = false;
 			const session = this.requireSession();
 			const version = ++this.stateVersion;
-			void this.resolveStoppedState(threadId, reason, version).catch((error) => {
+			const wasiExit =
+				body.reason === 'exception' && body.description === 'Exception: wasi proc exit';
+			void this.resolveStoppedState(threadId, reason, version, wasiExit).catch((error) => {
 				if (version !== this.stateVersion || this.session !== session) return;
 				this.fail(
 					error instanceof Error ? error : new Error('Unable to read LLDB stopped state.')
@@ -1572,7 +1576,8 @@ export class LldbSandboxSession {
 	private async resolveStoppedState(
 		requestedThreadId: number | undefined,
 		reason: string,
-		version: number
+		version: number,
+		wasiExit = false
 	) {
 		const session = this.requireSession();
 		let threadId = requestedThreadId;
@@ -1590,6 +1595,15 @@ export class LldbSandboxSession {
 			threadId = threads[0]?.id;
 		}
 		if (!threadId) throw new Error('LLDB stopped without a WebAssembly thread.');
+		if (!this.isCurrentValueRequest(session, version)) return;
+		if (wasiExit && !this.wasiExitResumed) {
+			// WAMR uses an internal exception to unwind WASI proc_exit. Resume that
+			// unwind once; only the target lifecycle may decide its actual exit status.
+			this.wasiExitResumed = true;
+			this.activeThreadId = threadId;
+			await this.debugCommand('continue');
+			return;
+		}
 		const { frames, totalFrames } = await this.requestStackPage(session, threadId, 0, 1);
 		const selectedFrame = frames[0];
 		if (!selectedFrame) throw new Error('LLDB stopped without a stack frame.');

@@ -44,6 +44,10 @@ export default function(assets) {
 			resolveDir: root
 		}));
 		context.onResolve({ filter: /^@wasm-idle\/(core|llvm-core)(\/|$)/ }, ({ path: name }) => {
+			if (name === '@wasm-idle/llvm-core/clang')
+				return { path: path.join(root, 'packages/llvm-core/runtime/clang/src/index.ts') };
+			if (name === '@wasm-idle/llvm-core/debug')
+				return { path: path.join(root, 'packages/llvm-core/runtime/debug/src/index.ts') };
 			for (const [prefix, directory] of Object.entries(sourcePackages)) {
 				if (name === prefix) return { path: path.join(directory, 'index.ts') };
 				if (name.startsWith(`${prefix}/`)) {

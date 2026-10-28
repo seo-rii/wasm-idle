@@ -88,7 +88,7 @@ describe('checked-in Zig execution asset receipts', () => {
 
 		expect(lock.schemaVersion).toBe(3);
 		expect(runtimeBuild.schemaVersion).toBe(3);
-		expect(lock.profileId).toBe('zigc-wasm-0.17.0');
+		expect(lock.profileId).toBe('zigc-wasm-0.17.0-ir');
 		expect(lock.releaseBaseUrl).toMatch(
 			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-llvm\/[a-f0-9]{40}\/artifacts\/zig-browser$/u
 		);
@@ -104,6 +104,12 @@ describe('checked-in Zig execution asset receipts', () => {
 			version: '0.17.0',
 			target: 'wasm32-wasi',
 			wasi: 'preview1',
+			debug: {
+				format: 'llvm-bitcode',
+				api: '-femit-llvm-bc',
+				sourceRoot: '/workspace',
+				usesLlvmLibraries: false
+			},
 			validation: { passed: true }
 		});
 		expect(runtimeBuild.upstream.producerReceipt.assets['zig.wasm']).toEqual(

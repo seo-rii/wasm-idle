@@ -18,7 +18,8 @@ export {
 	pythonDebugLanguageAdapter,
 	rubyDebugLanguageAdapter,
 	rustDebugLanguageAdapter,
-	vDebugLanguageAdapter
+	vDebugLanguageAdapter,
+	zigDebugLanguageAdapter
 } from './language/index.js';
 export { createDebugSessionController } from './controller.js';
 export {
