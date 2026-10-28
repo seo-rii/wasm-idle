@@ -208,6 +208,12 @@ function workerFixture() {
 		Uint8Array,
 		Atomics,
 		require(id) {
+			if (id === './pythonDebug')
+				return {
+					createPythonDebugHelpers: () => ({
+						createTrace: () => Object.assign(() => {}, { destroy() {} })
+					})
+				};
 			if (id === './pythonStdio') return stdioExports;
 			if (id === './pythonDebugPreview') return previewExports;
 			if (id === './pythonWorkspaceFiles') return workspaceExports;

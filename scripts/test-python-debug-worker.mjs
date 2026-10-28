@@ -61,12 +61,14 @@ const compiled = transpile(
 	source +
 		'\nexport function __inject(runtime: any) { pyodide = runtime; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }'
 );
-async function run(check) {
+async function run(check, { runs = 1, fail = false } = {}) {
 	const debugBuffer = new SharedArrayBuffer(64);
 	const control = new Int32Array(debugBuffer);
 	const messages = [];
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
+	let helperCreations = 0;
+	let traceDestructions = 0;
 	vm.runInNewContext(compiled, {
 		exports,
 		self,
@@ -84,6 +86,20 @@ async function run(check) {
 		Uint8Array,
 		Atomics,
 		require(id) {
+			if (id === './pythonDebug')
+				return {
+					createPythonDebugHelpers: () => {
+						helperCreations++;
+						return {
+							createTrace: () =>
+								Object.assign(() => {}, {
+									destroy() {
+										traceDestructions++;
+									}
+								})
+						};
+					}
+				};
 			if (id === './pythonDebugPreview') return preview;
 			if (id === './pythonExecution')
 				return { createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
@@ -127,21 +143,27 @@ async function run(check) {
 				name.startsWith('__wasm_idle_python_debug_breakpoints_')
 			);
 			check(self[name], control);
+			if (fail) throw new Error('expected execution failure');
 		}
 	});
-	await self.onmessage({
-		data: {
-			code: 'x = 1',
-			debug: true,
-			debugBuffer,
-			buffer: new SharedArrayBuffer(64),
-			watchBuffer: new SharedArrayBuffer(64),
-			watchResultBuffer: new SharedArrayBuffer(64),
-			interrupt: new SharedArrayBuffer(4)
-		}
-	});
-	assert.equal(calls, 1);
-	assert.equal(messages.at(-1).results, true, JSON.stringify(messages));
+	for (let index = 0; index < runs; index++)
+		await self.onmessage({
+			data: {
+				code: 'x = 1',
+				debug: true,
+				debugBuffer,
+				buffer: new SharedArrayBuffer(64),
+				watchBuffer: new SharedArrayBuffer(64),
+				watchResultBuffer: new SharedArrayBuffer(64),
+				interrupt: new SharedArrayBuffer(4)
+			}
+		});
+	assert.equal(calls, runs);
+	assert.equal(helperCreations, 1);
+	assert.equal(traceDestructions, runs);
+	assert.ok(!Object.keys(self).some((name) => name.startsWith('__wasm_idle_python_debug_')));
+	if (fail) assert.equal(messages.at(-1).error, 'expected execution failure');
+	else assert.equal(messages.at(-1).results, true, JSON.stringify(messages));
 }
 test('unchanged breakpoint version returns null before touching the payload', () =>
 	run((read, view) => {
@@ -160,3 +182,8 @@ test('changed breakpoint payload retains bounds and filters nonpositive lines', 
 		Atomics.store(view, 5, 11);
 		assert.deepEqual(JSON.parse(read(0)), { version: 1, lines: [11] });
 	}));
+
+test('repeated debug runs reuse helper compilation and release each trace bridge', () =>
+	run(() => {}, { runs: 3 }));
+test('failed debug runs also release trace bridges and allow another run', () =>
+	run(() => {}, { runs: 2, fail: true }));

@@ -1,61 +1,96 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
 import { loadPyodide } from 'pyodide';
 import { expect, it } from 'vitest';
-import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
+import { createPythonDebugHelpers } from './pythonDebug';
 
-it('continues real Pyodide tracing when the unchanged breakpoint bridge returns JavaScript null', async () => {
+it('reuses compiled debug helpers on real Pyodide without sharing run state or filenames', async () => {
 	const runtime = await loadPyodide();
-	const source = readFileSync(new URL('./python.ts', import.meta.url), 'utf8');
-	let trace = source.slice(
-		source.indexOf('import os as __wasm_idle_debug_os'),
-		source.indexOf('sys.settrace(__wasm_idle_debug_trace)')
+	const helpers = createPythonDebugHelpers(
+		runtime,
+		`
+if not globals().get('__debug_test_image_installed', False):
+    __debug_test_image_installed = True
+    __debug_test_image_installs = globals().get('__debug_test_image_installs', 0) + 1
+`
 	);
-	for (const [key, value] of Object.entries({
-		'${normalizedBreakpoints}': '[]',
-		"${pauseOnEntry ? 'True' : 'False'}": 'False',
-		'${debugFilenameLiteral}': '"user.py"',
-		'${debugPauseName}': 'pause',
-		'${debugWaitName}': 'wait',
-		'${debugReadWatchName}': 'read_watch',
-		'${debugWriteWatchName}': 'write_watch',
-		'${debugReadBreakpointsName}': 'read_breakpoints',
-		'${PYTHON_DEBUG_PREVIEW}': PYTHON_DEBUG_PREVIEW
-	}))
-		trace = trace.replaceAll(key, value);
-	expect(trace).not.toContain('${');
 	let version = 0;
 	let lines: number[] = [];
-	const pauses: number[] = [];
-	runtime.registerJsModule('debug_bridge', {
+	let commands: number[] = [];
+	let snapshots = 0;
+	const pauses: { line: number; reason: string }[] = [];
+	const codeIdentities: number[] = [];
+	const bridge = {
 		state: {
 			get version() {
 				return version;
 			}
 		},
-		read_breakpoints: (known: number) =>
-			known === version ? null : JSON.stringify({ version, lines }),
-		pause: (line: number) => pauses.push(line),
-		wait: () => 1,
-		read_watch: () => '',
-		write_watch: () => {}
-	});
+		readBreakpoints: (known: number) => {
+			snapshots++;
+			return known === version ? null : JSON.stringify({ version, lines });
+		},
+		pause: (line: number, reason: string) => {
+			pauses.push({ line, reason });
+			return pauses.length;
+		},
+		wait: () => commands.shift() ?? 1,
+		readWatch: () => '',
+		writeWatch: () => {}
+	};
+	function run(source: string, filename = 'user.py', pauseOnEntry = false) {
+		const trace = helpers.createTrace(filename, JSON.stringify(lines), pauseOnEntry, bridge);
+		runtime.globals.set('__test_trace', trace);
+		runtime.globals.set('__test_source', source);
+		runtime.globals.set('__test_filename', filename);
+		try {
+			codeIdentities.push(runtime.runPython('id(__test_trace.__code__)'));
+			return runtime.runPython(`
+import sys
+scope = {}
+try:
+    sys.settrace(__test_trace)
+    exec(compile(__test_source, __test_filename, 'exec'), scope)
+finally:
+    sys.settrace(None)
+scope.get('value')
+`);
+		} finally {
+			for (const name of ['__test_trace', '__test_source', '__test_filename'])
+				runtime.globals.delete(name);
+			trace.destroy();
+		}
+	}
 	try {
-		runtime.runPython(
-			`import sys, json\nfrom debug_bridge import read_breakpoints, pause, wait, read_watch, write_watch, state as __wasm_idle_debug_breakpoint_state\n${trace}`
-		);
-		const run = () =>
-			runtime.runPython(
-				'scope = {}\ntry:\n    sys.settrace(__wasm_idle_debug_trace)\n    exec(compile("x = 1\\nx += 1\\nx += 1", "user.py", "exec"), scope)\nfinally:\n    sys.settrace(None)\nscope["x"]'
-			);
-		expect(run()).toBe(3);
+		expect(run('value = 1\nvalue += 1\nvalue += 1')).toBe(3);
 		expect(pauses).toEqual([]);
 		version++;
 		lines = [2];
-		expect(run()).toBe(3);
-		expect(pauses).toEqual([2]);
+		expect(run('value = 1\nvalue += 1\nvalue += 1')).toBe(3);
+		expect(pauses).toEqual([{ line: 2, reason: 'breakpoint' }]);
+		// Leave a next command pending at the end of one run; the next run must start clean.
+		lines = [];
+		version++;
+		commands = [3];
+		expect(run('value = 7', 'first.py', true)).toBe(7);
+		expect(
+			run('assert "__wasm_idle_debug_bridge" not in globals()\nvalue = 9', '한글.py')
+		).toBe(9);
+		expect(pauses.at(-1)).toEqual({ line: 1, reason: 'entry' });
+		expect(pauses).toHaveLength(2);
+		commands = [-1];
+		expect(() => run('value = 10', 'cancel.py', true)).toThrow('KeyboardInterrupt');
+		expect(runtime.runPython('sys.gettrace() is None')).toBe(true);
+		expect(() => run('raise ValueError("expected")', 'error.py')).toThrow('expected');
+		expect(() => run('def :', 'syntax.py')).toThrow('SyntaxError');
+		expect(runtime.runPython('sys.gettrace() is None')).toBe(true);
+		expect(run('value = 42', 'recovery.py')).toBe(42);
+		expect(new Set(codeIdentities).size).toBe(1);
+		expect(snapshots).toBe(7); // Once per executed run, not on each unchanged line.
+		expect(runtime.runPython('__debug_test_image_installs')).toBe(1);
 	} finally {
 		runtime.runPython('sys.settrace(None)');
-		runtime.unregisterJsModule('debug_bridge');
+		helpers.dispose();
 	}
+	helpers.dispose();
+	expect(() => helpers.createTrace('disposed.py', '[]', false, bridge)).toThrow('disposed');
 }, 120_000);
