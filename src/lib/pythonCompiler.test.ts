@@ -89,6 +89,7 @@ describe('compilePython', () => {
 	it.each([
 		[{ invalidationMode: 'checked-hash' }, 'checked-hash', undefined],
 		[{ invalidationMode: 'unchecked-hash' }, 'unchecked-hash', undefined],
+		[{ invalidationMode: 'normalized' }, 'normalized', undefined],
 		[{ invalidationMode: 'timestamp' }, 'timestamp', 0],
 		[{ invalidationMode: 'timestamp', timestamp: 0 }, 'timestamp', 0],
 		[{ invalidationMode: 'timestamp', timestamp: 1_700_000_000 }, 'timestamp', 1_700_000_000],
@@ -111,6 +112,7 @@ describe('compilePython', () => {
 		['timestamp without timestamp mode', { timestamp: 0 }],
 		['checked-hash timestamp', { invalidationMode: 'checked-hash', timestamp: 0 }],
 		['unchecked-hash timestamp', { invalidationMode: 'unchecked-hash', timestamp: 0 }],
+		['normalized timestamp', { invalidationMode: 'normalized', timestamp: 0 }],
 		['NaN timestamp', { invalidationMode: 'timestamp', timestamp: Number.NaN }],
 		[
 			'infinite timestamp',

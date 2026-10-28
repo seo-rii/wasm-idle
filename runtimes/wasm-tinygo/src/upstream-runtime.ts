@@ -12,6 +12,7 @@ import {
 import {
 	TINYGO_GO_VERSION,
 	TINYGO_ROOT_PATH,
+	TINYGO_RUNTIME_EXTRA_SOURCES,
 	TINYGO_RUNTIME_PROFILE_ID,
 	TINYGO_UPSTREAM_COMPILER_PACKAGES,
 	TINYGO_UPSTREAM_PACKAGE_GRAPH_FIELDS,
@@ -42,14 +43,9 @@ import { capTinyGoWasmMemory } from './upstream-worker.ts';
 
 const RUNTIME_MANIFEST_PATH = `runtime/${TINYGO_RUNTIME_PROFILE_ID}/manifest.json`;
 const MAX_DIAGNOSTIC_BYTES = 1024 * 1024;
-const EXPECTED_EXTRA_SOURCES = [
-	'src/runtime/asm_tinygowasm.S',
-	'src/runtime/gc_boehm.c',
-	'src/internal/task/task_asyncify_wasm.S'
-] as const;
 const WASM_MAGIC = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const TINYGO_LLVM_VALIDATION = {
-	toolchain: 'llvm-20.1.1',
+	toolchain: 'llvm-22.1.4',
 	moduleVerified: true,
 	targetTriple: 'wasm32-unknown-wasi',
 	dataLayout: 'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20',
@@ -224,9 +220,12 @@ export interface TinyGoLinkPlanObject {
 }
 
 export interface TinyGoLLVMValidation {
-	toolchain: 'llvm-20.1.1';
+	toolchain: 'llvm-22.1.4';
 	moduleVerified: true;
+	/** Validated preview1 ABI identity, retained for historical receipt compatibility. */
 	targetTriple: 'wasm32-unknown-wasi';
+	/** Actual bitcode spelling emitted by newer protocol v6 producers. */
+	inputTargetTriple?: 'wasm32-unknown-wasi' | 'wasm32-unknown-wasip1';
 	dataLayout: 'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20';
 	threadLocalGlobals: 0;
 	globalConstructors: 0;
@@ -553,7 +552,7 @@ async function verifyRuntimeClosureAssets(
 		}
 	}
 	const sources = Object.keys(runtime.extraFiles).sort();
-	const expectedSources = [...EXPECTED_EXTRA_SOURCES].sort();
+	const expectedSources = [...TINYGO_RUNTIME_EXTRA_SOURCES].sort();
 	if (
 		sources.length !== expectedSources.length ||
 		expectedSources.some((source, index) => sources[index] !== source)
@@ -742,7 +741,7 @@ export function validateTinyGoLinkPlan(
 	);
 	const orderedRuntimePaths = [
 		`${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}`,
-		...EXPECTED_EXTRA_SOURCES.map((source) => {
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map((source) => {
 			const asset = runtime.extraFiles[source];
 			if (!asset) throw new Error(`TinyGo runtime closure is missing ${source}`);
 			return `${TINYGO_ROOT_PATH}/${asset.path}`;
@@ -804,7 +803,7 @@ export function validateTinyGoLinkPlan(
 	}
 	const expectedRuntimeInputs = new Map<string, { kind: string; source?: string }>([
 		[`${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}`, { kind: 'compiler-rt' }],
-		...EXPECTED_EXTRA_SOURCES.map(
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map(
 			(source) =>
 				[
 					`${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`,
@@ -964,7 +963,7 @@ export function validateTinyGoLinkPlanV2(
 	);
 	const orderedRuntimePaths = [
 		`${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}`,
-		...EXPECTED_EXTRA_SOURCES.map((source) => {
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map((source) => {
 			const asset = runtime.extraFiles[source];
 			if (!asset) throw new Error(`TinyGo runtime closure is missing ${source}`);
 			return `${TINYGO_ROOT_PATH}/${asset.path}`;
@@ -1013,7 +1012,7 @@ export function validateTinyGoLinkPlanV2(
 	}
 	const expectedRuntimeInputs = new Map<string, { kind: string; source?: string }>([
 		[`${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}`, { kind: 'compiler-rt' }],
-		...EXPECTED_EXTRA_SOURCES.map(
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map(
 			(source) =>
 				[
 					`${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`,
@@ -1284,7 +1283,7 @@ export async function validateTinyGoLinkPlanV3(
 	}
 	const runtimeInputs = [
 		{ kind: 'compiler-rt', path: `${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}` },
-		...EXPECTED_EXTRA_SOURCES.map((source) => ({
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map((source) => ({
 			kind: 'extra-file',
 			source,
 			path: `${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`
@@ -1731,10 +1730,17 @@ async function validateTinyGoLinkPlanV4ToV6(
 		}
 		if (expectedKind === 'target-c' || expectedKind === 'target-cxx') {
 			const evidence = object.llvmValidation;
+			const hasInputTargetTriple = Object.hasOwn(evidence ?? {}, 'inputTargetTriple');
+			const expectedFields = Object.keys(TINYGO_LLVM_VALIDATION);
+			if (protocolVersion === 6 && hasInputTargetTriple)
+				expectedFields.push('inputTargetTriple');
 			if (
 				!evidence ||
-				Object.keys(evidence).sort().join('\0') !==
-					Object.keys(TINYGO_LLVM_VALIDATION).sort().join('\0') ||
+				Array.isArray(evidence) ||
+				Object.keys(evidence).sort().join('\0') !== expectedFields.sort().join('\0') ||
+				(hasInputTargetTriple &&
+					evidence.inputTargetTriple !== 'wasm32-unknown-wasi' &&
+					evidence.inputTargetTriple !== 'wasm32-unknown-wasip1') ||
 				evidence.toolchain !== TINYGO_LLVM_VALIDATION.toolchain ||
 				evidence.moduleVerified !== TINYGO_LLVM_VALIDATION.moduleVerified ||
 				evidence.targetTriple !== TINYGO_LLVM_VALIDATION.targetTriple ||
@@ -1785,7 +1791,7 @@ async function validateTinyGoLinkPlanV4ToV6(
 	}
 	const baseRuntimeInputs = [
 		{ kind: 'compiler-rt', path: `${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}` },
-		...EXPECTED_EXTRA_SOURCES.map((source) => ({
+		...TINYGO_RUNTIME_EXTRA_SOURCES.map((source) => ({
 			kind: 'extra-file',
 			source,
 			path: `${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`

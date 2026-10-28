@@ -972,13 +972,24 @@ class TinyGo implements Sandbox {
 					const owner = this.activeOperation;
 					if (!owner) throw new Error('TinyGo asset load has no active operation');
 					this.assertOperation(owner);
-					const bytes = await fetchPinnedRuntimeAsset({
-						url,
-						receipt,
-						persistentCache: this.persistentCache,
-						maxAssetBytes: owner.limits?.maxAssetBytes ?? maxAssetBytes,
-						signal: init?.signal ?? owner.controller.signal
-					});
+					const signal = init?.signal ?? owner.controller.signal;
+					let bytes: Uint8Array;
+					try {
+						bytes = await fetchPinnedRuntimeAsset({
+							url,
+							receipt,
+							persistentCache: this.persistentCache,
+							maxAssetBytes: owner.limits?.maxAssetBytes ?? maxAssetBytes,
+							signal
+						});
+					} catch (error) {
+						this.assertOperation(owner);
+						signal.throwIfAborted();
+						if (!receipt.uncompressedSha256) throw error;
+						// HTTP may already decode gzip. Let the upstream loader verify its pinned
+						// logical bytes and limits when the encoded-byte cache cannot accept it.
+						return globalThis.fetch(input, { ...init, signal });
+					}
 					this.assertOperation(owner);
 					// This is a verified byte adapter, not a network response with a fabricated URL.
 					return new Response(Uint8Array.from(bytes).buffer, {
@@ -1088,7 +1099,7 @@ class TinyGo implements Sandbox {
 							appendLog(
 								'upstream TinyGo receipt validation scheduled in compiler worker'
 							);
-							return { target: 'wasip1', implementation: 'upstream-tinygo-0.40.1' };
+							return { target: 'wasip1', implementation: 'upstream-tinygo-0.43.0' };
 						},
 						async execute() {
 							if (target !== 'wasip1') {

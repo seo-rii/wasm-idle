@@ -6,8 +6,8 @@
   AST-to-C subset and is not TinyGo language support.
 - `upstream.js` is an independent consumer for the source-pinned upstream TinyGo compiler produced
   by `wasm-llvm/producer/tinygo-browser`. It verifies the producer receipt and every asset before
-  running a source-pinned Go 1.24.6 `cmd/go` WASI package provider, the real TinyGo
-  builder/compiler pipeline, raw WASI LLD, and Binaryen 129.
+  running a source-pinned Go 1.26.10 `cmd/go` WASI package provider, the real TinyGo
+  builder/compiler pipeline, raw WASI LLD, and Binaryen 132.
 
 The upstream path derives its own graph from workspace files and exercises a multi-package module
 with real CGo, C, hosted C++17, uppercase preprocessed `.S`, `go:embed`, generics, package
@@ -105,7 +105,7 @@ Detailed compatibility and verification notes live in [COMPATIBILITY.md](./COMPA
 - `src/upstream-assets.ts`, `src/upstream-contract.ts`, `src/upstream-vfs.ts`
   Hash-bound asset loading, compiler/package/link-plan contracts, and bounded binary VFS extraction.
 - `src/upstream-runtime.ts`
-  Upstream compiler, raw LLD, Binaryen 129, and separate WASI execution orchestration.
+  Upstream compiler, raw LLD, Binaryen 132, and separate WASI execution orchestration.
 - `src/bootstrap-exports.ts`
   Bootstrap wasm manifest reader and expectation verifier.
 - `src/compile-unit.ts`
@@ -167,7 +167,7 @@ receipt-bound assets.
   Verifies the passed wasm-llvm compiler and package-provider receipts and atomically prepares the
   declared upstream assets without replacing an existing output directory.
 - `npm run probe:wasm-llvm-upstream -- ...`
-  Runs the upstream consumer through the Node browser-WASI shim, raw LLD, Binaryen 129, and exact
+  Runs the upstream consumer through the Node browser-WASI shim, raw LLD, Binaryen 132, and exact
   stdin/stdout acceptance.
 - `npm run probe:wasm-llvm-upstream-browser -- ...`
   Serves the built `upstream.js` entry and runs the same acceptance in Chromium.
@@ -204,7 +204,7 @@ The real TinyGo host bridge also writes temporary `tinygo-host-probe.json` and `
 
 ## External Binaryen payload
 
-The upstream worker build extracts Binaryen 129's embedded Wasm into a compressed
+The upstream worker build extracts Binaryen 132's embedded Wasm into a compressed
 `assets/upstream-binaryen-<sha256-prefix>.wasm.gz.bin` asset. The build parses the
 upstream source without evaluating it and rejects an unknown decoder layout. The
 browser checks both compressed and decoded receipts before creating the Wasm Blob;
