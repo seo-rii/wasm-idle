@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 import { chromium } from 'playwright-core';
+import { TINYGO_BINARYEN_VERSION } from '../src/upstream-contract.ts';
 
 const FLAGS = new Map([
 	['--dist', 'distPath'],
@@ -274,7 +275,7 @@ try {
 					producerReceiptSha256: sha256(producerReceipt),
 					packageGraphReceiptSha256: sha256(packageGraphReceipt),
 					assets: assetManifest.assets,
-					binaryenVersion: '129.0.0',
+					binaryenVersion: TINYGO_BINARYEN_VERSION,
 					browser: await page.evaluate(() => navigator.userAgent),
 					...state
 				};

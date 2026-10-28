@@ -1088,7 +1088,7 @@ class TinyGo implements Sandbox {
 							appendLog(
 								'upstream TinyGo receipt validation scheduled in compiler worker'
 							);
-							return { target: 'wasip1', implementation: 'upstream-tinygo-0.40.1' };
+							return { target: 'wasip1', implementation: 'upstream-tinygo-0.43.0' };
 						},
 						async execute() {
 							if (target !== 'wasip1') {

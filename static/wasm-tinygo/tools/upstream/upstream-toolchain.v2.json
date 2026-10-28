@@ -3,34 +3,34 @@
   "format": "wasm-idle-tinygo-upstream-assets-v2",
   "producerReceipt": {
     "path": "producer-receipt.json",
-    "bytes": 10207,
-    "sha256": "a400355ee1ca13c6a79bca0c7c2e8cf05ecf457fdc61c9fc69692bb17500842a"
+    "bytes": 7452,
+    "sha256": "dbb053f5cba9a14524d4ecad25203042284a2d6b6e428f575d1351c5702c722f"
   },
   "packageGraphReceipt": {
     "path": "package-graph-provider-receipt.json",
-    "bytes": 10368,
-    "sha256": "b25c8ffd86af0e540cf058e38b273271100ff297316f30a38c8239c77d9357d1"
+    "bytes": 11122,
+    "sha256": "730ccd0af0b6c359ac0bd69082696f4702a988004cc6d46ffdcde752392364f5"
   },
   "assets": {
     "compiler": {
       "path": "tinygo-compiler.wasm",
-      "bytes": 54057556,
-      "sha256": "a65f51c7d2845ea1469328705f2c9839f0151ee221e6a3efea851226e4e2d649"
+      "bytes": 96523963,
+      "sha256": "d6606b814c724ae6c20218d967474a7fe5dac747c003f599fe2bc50337693ec6"
     },
     "packageGraph": {
       "path": "tinygo-package-graph.wasm",
-      "bytes": 25870831,
-      "sha256": "b7b28719bf97d5c5e140c3ec6f8f40a40fc7d02216e0160e460a34b79f61cb14"
+      "bytes": 27997948,
+      "sha256": "b7a526594fd5ea5531caecf11bd3a8e97af05c40dff63d8a57370419c47b56ed"
     },
     "rootArchive": {
       "path": "tinygoroot.tar.gz.bin",
-      "bytes": 29058996,
-      "sha256": "6c085f441ecc5990b71628f0b47b80e9e9810ae6384093e65723f795b4bd8688"
+      "bytes": 31145479,
+      "sha256": "1c8da52758481da69c1810b3614687b76feba6600ae16bbcc5ea66c3cc2a9865"
     },
     "lld": {
       "path": "lld.wasm",
-      "bytes": 20795796,
-      "sha256": "14f08c475b24ef45313cab7a086693525955c2c000b833faaaf48ad35b2521f8"
+      "bytes": 16171013,
+      "sha256": "34d39bc410c098e7e09933b61cc8e28699447af9a28abf4544d71b6e9cad1f9d"
     }
   }
 }

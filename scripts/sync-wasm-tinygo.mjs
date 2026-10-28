@@ -29,7 +29,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 const DEFAULT_GRAPH_LOCK_PATH = path.resolve(THIS_DIR, 'wasm-tinygo-assets.lock.json');
 const TINYGO_PROFILE_FORMAT = 'wasm-idle-tinygo-runtime-profile-v1';
-const TINYGO_PROFILE_ID = 'tinygo-0.40.1-wasip1-protocol-v6';
+const TINYGO_PROFILE_ID = 'tinygo-0.43.0-wasip1-protocol-v6';
 const TINYGO_PROTOCOL_VERSION = 6;
 const UPSTREAM_MANIFEST_PATH = 'tools/upstream/upstream-toolchain.v2.json';
 const STATIC_RUNTIME_MIN_COMPRESS_BYTES = 256 * 1024;

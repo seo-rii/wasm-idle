@@ -1627,7 +1627,7 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'TinyGo',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / upstream TinyGo 0.40.1 browser toolchain`,
+			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / upstream TinyGo 0.43.0 browser toolchain`,
 			execution:
 				`receipt-verifies and runs upstream ${code('cmd/go')} plus TinyGo in a disposable capped Worker; ` +
 				`targets ${code('wasip1')}; supports ${code('stdin')}, ${code('programArgs')}, ${code('workspaceFiles')}, ` +

@@ -371,7 +371,7 @@ describe('TinyGo sandbox', () => {
 
 		expect(upstreamFixtureState.loadCalls).toBe(1);
 		expect(upstreamFixtureState.loadOptions?.profile).toMatchObject({
-			profileId: 'tinygo-0.40.1-wasip1-protocol-v6',
+			profileId: 'tinygo-0.43.0-wasip1-protocol-v6',
 			protocolVersion: 6,
 			manifestPath: 'tools/upstream/upstream-toolchain.v2.json',
 			manifestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u)
