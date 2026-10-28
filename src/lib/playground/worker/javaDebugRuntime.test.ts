@@ -162,6 +162,87 @@ it('keeps the target paused after an inspection error and rejects bad pages', ()
 	]);
 });
 
+it('preserves named field counts and cyclic handles, then invalidates them on the next stop', () => {
+	const replies: any[] = [];
+	const events: DebugSessionEvent[] = [];
+	const queued: object[] = [
+		{ op: 'variables', id: 1, stopId: 1, reference: 100002, start: 1, count: 1 },
+		{ op: 'variables', id: 2, stopId: 1, reference: 100002, start: 0, count: 2 },
+		{ op: 'control', command: 'nextLine' }
+	];
+	const runtime = createJavaDebugRuntime(
+		files,
+		{ activePath: 'Main.java', breakpoints: [], pauseOnEntry: true },
+		(event) => events.push(event),
+		(blocking) => (blocking ? JSON.stringify(queued.shift()) : ''),
+		(reply) => replies.push(reply)
+	);
+	const root = {
+		name: 'root',
+		value: 'Node@1',
+		type: 'Node',
+		variablesReference: 1,
+		namedVariables: 2
+	};
+	const locals = JSON.stringify([root, { ...root, name: 'alias' }]);
+	expect(runtime.pause('Main.java', 2, 3, stack('Main', 2), 1, locals, 2)).toMatchObject({
+		reference: 1,
+		start: 1,
+		count: 1
+	});
+	expect(runtime.reply(1, 1, JSON.stringify([{ ...root, name: 'next' }]), null)).toMatchObject({
+		reference: 1,
+		start: 0,
+		count: 2
+	});
+	expect(replies[0].value).toEqual([{ ...root, name: 'next', variablesReference: 100002 }]);
+	expect(runtime.reply(2, 1, '[]', null)).toBeNull();
+	queued.push(
+		{ op: 'variables', id: 3, stopId: 2, reference: 100002 },
+		{ op: 'control', command: 'continue' }
+	);
+	expect(runtime.pause('Main.java', 3, 3, stack('Main', 3), 1, locals, 2)).toBeNull();
+	expect(replies.at(-1).error).toMatch(/stale/);
+	expect(events.filter((event) => event.type === 'pause').map((event) => event.locals)).toEqual([
+		[
+			{ ...root, variablesReference: 100002 },
+			{ ...root, name: 'alias', variablesReference: 100002 }
+		],
+		[
+			{ ...root, variablesReference: 200002 },
+			{ ...root, name: 'alias', variablesReference: 200002 }
+		]
+	]);
+});
+
+it.each([-1, 258, 1.5, '2'])('rejects an invalid object field count %s', (namedVariables) => {
+	const runtime = createJavaDebugRuntime(
+		files,
+		{ activePath: 'Main.java', breakpoints: [], pauseOnEntry: true },
+		() => {},
+		() => '{"op":"control","command":"continue"}'
+	);
+	expect(() =>
+		runtime.pause(
+			'Main.java',
+			2,
+			3,
+			stack('Main', 2),
+			1,
+			JSON.stringify([
+				{
+					name: 'object',
+					value: 'Object@1',
+					type: 'Object',
+					variablesReference: 1,
+					namedVariables
+				}
+			]),
+			1
+		)
+	).toThrow(/descriptor/);
+});
+
 it('uses full Java depth for next and out beyond the 64 displayed frames, and skips same-line callbacks', () => {
 	const events: DebugSessionEvent[] = [];
 	const commands = ['nextLine', 'stepOut', 'continue'];

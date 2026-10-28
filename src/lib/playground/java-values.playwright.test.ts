@@ -19,24 +19,36 @@ public class Main {
         int[][] matrix = {{number, number + 1}, {number + 2}};
         double negativeZero = Double.longBitsToDouble(Long.MIN_VALUE);
         Opaque opaque = new Opaque();
+        Opaque alias = opaque;
+        Object[] references = {opaque, alias, null};
+        Object anonymous = new Opaque() { int hidden = 17; };
+        Object library = new StringBuilder("opaque library state");
         visits++;
-        number += 1; // inspect here
+        number += ++opaque.value - 7; // inspect here
         return number + 4;
     }
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         int input = scanner.nextInt();
         int result = calculate(input);
-        System.out.println("java-values=" + result + ";visits=" + visits + ";toString=" + Opaque.calls);
+        System.out.println("java-values=" + result + ";visits=" + visits + ";toString=" + Opaque.calls + ";getters=" + Opaque.getters);
     }
 }
-class Opaque {
+class Parent { private int value = 99; }
+class Opaque extends Parent {
     static int calls = 0;
+    static int getters = 0;
+    int value = 7;
+    private final String secret = "hidden";
+    private Opaque next = this;
+    private final int[] data = {5, 8};
+    private Object missing = null;
+    public int getValue() { getters++; throw new IllegalStateException("unexpected getter call"); }
     public String toString() { calls++; throw new IllegalStateException("unexpected user method call"); }
 }`;
 
 it(
-	'inspects real Java locals and arrays, evaluates snapshots, and resumes the same container program',
+	'inspects real Java locals, object fields and arrays, evaluates snapshots, and resumes the same container program',
 	{
 		skip: !enabled,
 		timeout: 300_000,
@@ -95,6 +107,14 @@ it(
 					let rowPage: any[] = [],
 						callerScopes: any[] = [],
 						oldReference = 0;
+					let objectFields: any[] = [],
+						objectPage: any[] = [],
+						objectArray: any[] = [],
+						referenceArray: any[] = [],
+						nextObjectFields: any[] = [],
+						beyondFields: any[] = [];
+					let oldObjectReference = 0,
+						staleObjectError = '';
 					let output = '',
 						failure = '',
 						staleError = '',
@@ -123,6 +143,36 @@ it(
 								);
 								if (pauses.length === 1) {
 									firstVariables = variables;
+									oldObjectReference = variables.find(
+										(item: any) => item.name === 'opaque'
+									).variablesReference;
+									objectFields = await sandbox.debugVariables(
+										oldObjectReference,
+										0,
+										50
+									);
+									objectPage = await sandbox.debugVariables(
+										oldObjectReference,
+										1,
+										2
+									);
+									beyondFields = await sandbox.debugVariables(
+										oldObjectReference,
+										100,
+										50
+									);
+									objectArray = await sandbox.debugVariables(
+										objectFields.find((item: any) => item.name === 'data')
+											.variablesReference,
+										0,
+										50
+									);
+									referenceArray = await sandbox.debugVariables(
+										variables.find((item: any) => item.name === 'references')
+											.variablesReference,
+										0,
+										50
+									);
 									oldReference = variables.find(
 										(item: any) => item.name === 'values'
 									).variablesReference;
@@ -172,6 +222,17 @@ it(
 									await sandbox.debugCommand('nextLine');
 								} else {
 									nextVariables = variables;
+									nextObjectFields = await sandbox.debugVariables(
+										variables.find((item: any) => item.name === 'opaque')
+											.variablesReference,
+										0,
+										50
+									);
+									try {
+										await sandbox.debugVariables(oldObjectReference, 0, 1);
+									} catch (error) {
+										staleObjectError = String(error);
+									}
 									evaluations['number + 5 after step'] =
 										await sandbox.debugEvaluate('number + 5');
 									try {
@@ -204,6 +265,13 @@ it(
 							arrayPage,
 							matrixPage,
 							rowPage,
+							objectFields,
+							objectPage,
+							objectArray,
+							referenceArray,
+							nextObjectFields,
+							beyondFields,
+							staleObjectError,
 							evaluations,
 							rejected,
 							callerScopes,
@@ -235,7 +303,7 @@ it(
 			);
 			expect(result.failure).toBe('');
 			expect(result.completed).toBe(true);
-			expect(result.output).toBe('java-values=73;visits=1;toString=0\n');
+			expect(result.output).toBe('java-values=73;visits=1;toString=0;getters=0\n');
 			expect(result.pauses).toHaveLength(2);
 			expect(result.pauses[0]).toMatchObject({
 				line: result.line,
@@ -264,6 +332,58 @@ it(
 				expect.objectContaining({ name: '[1]', indexedVariables: 1 })
 			]);
 			expect(result.rowPage.map((item: any) => item.value)).toEqual(['68', '69']);
+			const object = result.firstVariables.find((item: any) => item.name === 'opaque');
+			expect(object).toMatchObject({
+				namedVariables: 5,
+				variablesReference: expect.any(Number)
+			});
+			expect(object.variablesReference).toBeGreaterThan(0);
+			expect(
+				result.firstVariables.find((item: any) => item.name === 'alias').variablesReference
+			).toBe(object.variablesReference);
+			expect(result.objectFields).toEqual([
+				expect.objectContaining({
+					name: 'value',
+					type: 'int',
+					value: '7',
+					variablesReference: 0
+				}),
+				expect.objectContaining({
+					name: 'secret',
+					type: 'String',
+					value: '"hidden"',
+					variablesReference: 0
+				}),
+				expect.objectContaining({
+					name: 'next',
+					type: 'Opaque',
+					variablesReference: object.variablesReference,
+					namedVariables: 5
+				}),
+				expect.objectContaining({ name: 'data', type: 'int[]', indexedVariables: 2 }),
+				expect.objectContaining({
+					name: 'missing',
+					type: 'Object',
+					value: 'null',
+					variablesReference: 0
+				})
+			]);
+			expect(result.objectPage).toEqual(result.objectFields.slice(1, 3));
+			expect(result.beyondFields).toEqual([]);
+			expect(result.objectArray.map((item: any) => item.value)).toEqual(['5', '8']);
+			expect(result.referenceArray.map((item: any) => item.variablesReference)).toEqual([
+				object.variablesReference,
+				object.variablesReference,
+				0
+			]);
+			for (const name of ['anonymous', 'library'])
+				expect(result.firstVariables.find((item: any) => item.name === name)).toMatchObject(
+					{ variablesReference: 0 }
+				);
+			expect(result.nextObjectFields.find((item: any) => item.name === 'value').value).toBe(
+				'8'
+			);
+			expect(result.staleObjectError).toMatch(/stale|unknown/i);
 			expect(result.evaluations).toEqual({
 				'number + 5': '73',
 				'wide + 1L': '9007199254740994',

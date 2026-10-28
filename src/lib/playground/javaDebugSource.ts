@@ -243,6 +243,70 @@ const singleStatementBodies = new Set([
 	'enhancedForStatement'
 ]);
 
+/** javac compiles these direct reads; inspection never uses reflection or bean accessors. */
+function instrumentDebugFields(
+	tree: CstNode,
+	source: string,
+	bridgeClass: string,
+	insert: (offset: number, text: string) => void
+) {
+	const prefix = `${bridgeClass.split('.').at(-1)}_`;
+	// The worker selects a nonce absent from every source. Keep direct callers safe too.
+	if (source.includes(prefix)) return;
+	const text = (node?: CstNode) =>
+		node ? source.slice(node.location.startOffset, node.location.endOffset + 1) : '';
+	const visit = (node: CstNode) => {
+		if (node.name === 'normalClassDeclaration') {
+			const body = firstNode(node, 'classBody')!;
+			const fields = nodes(body, 'classBodyDeclaration').flatMap((declaration) => {
+				const member = firstNode(declaration, 'classMemberDeclaration');
+				const field = member && firstNode(member, 'fieldDeclaration');
+				if (
+					!field ||
+					nodes(field, 'fieldModifier').some((modifier) => firstToken(modifier, 'Static'))
+				)
+					return [];
+				const type = text(firstNode(field, 'unannType'));
+				const list = firstNode(field, 'variableDeclaratorList')!;
+				return nodes(list, 'variableDeclarator').flatMap((variable) => {
+					const id = firstNode(variable, 'variableDeclaratorId')!;
+					const name = firstToken(id, 'Identifier')?.image;
+					return name && name !== '_'
+						? [{ name, type: type + text(firstNode(id, 'dims')) }]
+						: [];
+				});
+			});
+			if (fields.length) {
+				const interfaces = firstNode(node, 'classImplements');
+				const before = firstNode(node, 'classPermits') ?? body;
+				insert(
+					interfaces ? interfaces.location.endOffset + 1 : before.location.startOffset,
+					`${interfaces ? ',' : ' implements '}${bridgeClass}.Inspectable `
+				);
+				const cases = fields
+					.slice(0, 256)
+					.map(
+						(field, index) =>
+							`case ${index}:return new ${bridgeClass}.Field(${JSON.stringify(field.name)},${JSON.stringify(field.type)},this.${field.name});`
+					);
+				if (fields.length > 256)
+					cases.push(
+						`case 256:return new ${bridgeClass}.Field("[remaining fields]","unavailable","${fields.length - 256} fields omitted (256-field inspection limit)");`
+					);
+				const name = text(firstNode(node, 'typeIdentifier'));
+				insert(
+					firstToken(body, 'RCurly')!.startOffset,
+					`public java.lang.Class<?> ${prefix}fieldOwner(){return ${name}.class;}` +
+						`public int ${prefix}fieldCount(){return ${Math.min(fields.length, 257)};}` +
+						`public ${bridgeClass}.Field ${prefix}field(int index){switch(index){${cases.join('')}default:throw new java.lang.IndexOutOfBoundsException();}}`
+				);
+			}
+		}
+		for (const child of nodes(node)) visit(child);
+	};
+	visit(tree);
+}
+
 /** Add statement callbacks using the upstream Java CST; javac/TeaVM still execute the program. */
 export function instrumentJavaDebugSource(source: string, sourcePath: string, bridgeClass: string) {
 	if (
@@ -368,6 +432,7 @@ export function instrumentJavaDebugSource(source: string, sourcePath: string, br
 		}
 	};
 	visit(tree, []);
+	instrumentDebugFields(tree, source, bridgeClass, insert);
 	let code = source;
 	for (const [offset, additions] of [...insertions].sort(([left], [right]) => right - left)) {
 		// A wrapped body's closing brace must precede a following statement's

@@ -19,6 +19,19 @@ import java.lang.Throwable;
 import java.lang.StackTraceElement;
 
 public final class ${className} {
+    public interface Inspectable {
+        Class<?> ${className}_fieldOwner();
+        int ${className}_fieldCount();
+        Field ${className}_field(int index);
+    }
+    public static final class Field {
+        final String name;
+        final String type;
+        final Object value;
+        public Field(String name, String type, Object value) {
+            this.name = name; this.type = type; this.value = value;
+        }
+    }
     private static final class Captured {
         final String kind;
         final Object value;
@@ -147,6 +160,18 @@ public final class ${className} {
             if (value instanceof double[]) return ((double[]) value).length;
             return -1;
         }
+        Inspectable fields(Object value) {
+            if (!(value instanceof Inspectable)) return null;
+            // A proxy can discover the generated interface at runtime and dispatch
+            // its methods into a user InvocationHandler. Proxy classes extend Proxy
+            // directly; test trusted class metadata before dispatch, without linking
+            // java.lang.reflect.Proxy (absent from the pinned browser SDK).
+            Class<?> parent = value.getClass().getSuperclass();
+            if (parent != null && parent.getName().equals("java.lang.reflect.Proxy")) return null;
+            Inspectable fields = (Inspectable) value;
+            // An uninstrumented anonymous subclass must not inherit a partial inspector.
+            return fields.${className}_fieldOwner() == value.getClass() ? fields : null;
+        }
         Object element(Object value, int index) {
             if (value instanceof Object[]) return ((Object[]) value)[index];
             if (value instanceof int[]) return ((int[]) value)[index];
@@ -188,6 +213,7 @@ public final class ${className} {
             String display;
             int reference = 0;
             int size = length(value);
+            Inspectable fields = fields(value);
             if (value == null) display = "null";
             else if (value instanceof String) {
                 String text = (String) value;
@@ -200,17 +226,23 @@ public final class ${className} {
             else if (size >= 0) {
                 reference = handle(value);
                 display = value.getClass().getName() + " (" + size + ")";
-            } else display = value.getClass().getName() + "@" + handle(value);
+            } else {
+                int identity = handle(value);
+                if (fields != null) reference = identity;
+                display = value.getClass().getName() + "@" + identity;
+            }
             return "{\"name\":" + quote(name) + ",\"type\":" + quote(type)
                 + ",\"value\":" + quote(display) + ",\"variablesReference\":" + reference
-                + (size >= 0 ? ",\"indexedVariables\":" + size : "") + "}";
+                + (size >= 0 ? ",\"indexedVariables\":" + size : "")
+                + (fields != null ? ",\"namedVariables\":" + fields.${className}_fieldCount() : "") + "}";
         }
         String variables(int reference, int start, int count) {
             if (start < 0 || count < 0 || count > 1000 || reference < 0 || reference > handles.size())
                 throw new IllegalArgumentException("Invalid Java variable page");
-            Object array = reference == 0 ? null : handles.get(reference - 1);
-            int size = reference == 0 ? names.length : length(array);
-            if (size < 0) throw new IllegalArgumentException("Java object has no indexed children");
+            Object target = reference == 0 ? null : handles.get(reference - 1);
+            Inspectable fields = fields(target);
+            int size = reference == 0 ? names.length : fields == null ? length(target) : fields.${className}_fieldCount();
+            if (size < 0) throw new IllegalArgumentException("Java object has no inspectable children");
             StringBuilder result = new StringBuilder("[");
             int end = start >= size ? size : start + Math.min(count, size - start);
             for (int i = start; i < end; i++) {
@@ -218,8 +250,11 @@ public final class ${className} {
                 String type = reference == 0 && types[i].equals("var")
                     ? (kinds[i].equals("reference") ? (values[i] == null ? "null" : values[i].getClass().getName()) : kinds[i])
                     : reference == 0 ? types[i] : "";
-                result.append(reference == 0 ? describe(names[i], type, values[i])
-                    : describe("[" + i + "]", "", element(array, i)));
+                if (reference == 0) result.append(describe(names[i], type, values[i]));
+                else if (fields != null) {
+                    Field field = fields.${className}_field(i);
+                    result.append(describe(field.name, field.type, field.value));
+                } else result.append(describe("[" + i + "]", "", element(target, i)));
             }
             return result.append(']').toString();
         }

@@ -65,7 +65,11 @@ export function createJavaDebugRuntime(
 				item.variablesReference < 0 ||
 				item.variablesReference > 4096 ||
 				(item.indexedVariables !== undefined &&
-					(!Number.isSafeInteger(item.indexedVariables) || item.indexedVariables < 0))
+					(!Number.isSafeInteger(item.indexedVariables) || item.indexedVariables < 0)) ||
+				(item.namedVariables !== undefined &&
+					(!Number.isSafeInteger(item.namedVariables) ||
+						item.namedVariables < 0 ||
+						item.namedVariables > 257))
 			)
 				throw new Error('Invalid Java variable descriptor');
 			const reference = item.variablesReference
@@ -79,6 +83,9 @@ export function createJavaDebugRuntime(
 				variablesReference: reference,
 				...(item.indexedVariables !== undefined
 					? { indexedVariables: item.indexedVariables }
+					: {}),
+				...(item.namedVariables !== undefined
+					? { namedVariables: item.namedVariables }
 					: {})
 			};
 		});

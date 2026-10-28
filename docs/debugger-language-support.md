@@ -13,7 +13,7 @@ remote debugging port or external debugger service.
 | Objective-C, Objective-C++ | Real Clang DWARF → LLDB/WAMR; original source breakpoints, integer locals, stepping, stdin/stdout                                                                                                                | Foundation needs host libffi imports unavailable in the current WAMR target. Object layout and Objective-C expression evaluation are not qualified.                                                                                                               |
 | V                          | Real V `-g` line directives → Clang DWARF → LLDB/WAMR; original `.v` breakpoints, integer locals, stepping, stdin/stdout                                                                                         | V-specific expression evaluation and rich type inspection are not qualified.                                                                                                                                                                                      |
 | JavaScript, TypeScript     | Ordinary execution remains available; source debugging is disabled                                                                                                                                               | The extension-dependent CDP integration has been removed. No extension-free backend is qualified for the current runtime.                                                                                                                                         |
-| Java                       | Real javac/TeaVM source hooks; original-file breakpoints, genuine Java stacks, current-frame locals, array inspection, read-only scalar/String snapshot expressions, stepping, Pause, stdin/stdout, stop/restart | Only safely captured bindings in the stopped frame are exposed. Objects remain opaque; expression restrictions are described below. Debug rejects Unicode preprocessing escapes and unsupported parser syntax.                                                    |
+| Java                       | Real javac/TeaVM source hooks; original source breakpoints, Java stacks, current-frame locals, declared instance fields, arrays, scalar/String snapshot expressions, stepping, Pause, stdin/stdout, stop/restart | Only safely captured bindings in the stopped frame are exposed. Object inspection covers declared instance fields of ordinary source classes; unsupported objects remain opaque. Debug rejects Unicode preprocessing escapes and unsupported parser syntax.       |
 | Lua                        | Pinned, unmodified MobDebug engine in the actual Lua VM; breakpoints, stack/locals, evaluation, step into/over/out, stdin/stdout, restart                                                                        | Its socket transport is replaced by a Worker mailbox. Evaluation currently supports the top frame. Fennel is not enabled.                                                                                                                                         |
 | D                          | Genuine LDC debug profile and source artifact handoff implemented; full-runtime rejection verified                                                                                                               | The full D runtime emits Wasm exception-handling tags unsupported by the pinned WAMR debugger. The UI stays disabled. No `-betterC` subset substitution.                                                                                                          |
 | C#, VB.NET, F#             | Portable PDB generation/loading, virtual source paths and native Mono agent bridge prerequisites implemented                                                                                                     | Actual compilers passed PDB/sequence-point/local metadata and stdin/stdout checks. The shipped native debugger exports are stubs; a real native debugger component, repackaged compiler and managed debugger proxy are still required. No debugger UI is enabled. |
@@ -41,7 +41,17 @@ getters or `toString()`. Only the currently stopped frame has a value snapshot. 
 uninitialized declarations, flow-pattern bindings and outer lambda bindings are omitted rather
 than read before definite assignment or accidentally captured. Caller frames remain available in
 the genuine stack without fabricated local values. Primitive, object and nested arrays expose
-paged element values; general objects show type and identity without reflective field access.
+paged element values. Ordinary classes in debug sources expose their directly declared instance
+fields, including private/final fields, through generated direct reads compiled by javac/TeaVM.
+Aliases and cycles keep the same handle within a stop; object fields can contain further objects
+and arrays. Each object exposes at most 256 fields plus an explicit omitted-fields entry.
+Pages are limited to 1,000 values and each stop to 4,096 object/array handles. No field is changed,
+and no user getter, accessor or `toString()` is called. Fields use direct reads rather than
+reflective lookup. Static and inherited
+fields are not listed. Dynamic proxies, library objects, records, enums, anonymous classes and classes without
+declared instance fields retain an opaque type/identity display. An unsupported subclass never
+uses an inherited generated reader as if it described the subclass. Reads during construction
+show the actual current field value, which may still be its default value.
 Displayed stacks are bounded to 64 frames; stepping retains full depth.
 
 Java expression evaluation compiles a standalone helper with the shipped javac/TeaVM, using the
@@ -57,7 +67,8 @@ String reference-identity comparisons, default-locale String case conversion, us
 target object/array expressions are rejected explicitly. Ternaries require original compile-time
 constant metadata to preserve Java narrowing rules; short library class names could be shadowed
 in the target's lexical scope. Content comparison with `equals()` and null comparisons remain
-available. Array elements can be inspected in the Variables tree. Stop, resume, frame selection and
+available. Object fields and array elements can be inspected in the Variables tree; this does not
+enable live reference expressions or writes. Stop, resume, frame selection and
 a new pause cancel outstanding evaluations. Handles expire when execution resumes or a new pause
 starts. Evaluation compilers are reused during a debug run and disposed when it ends. Strings are shortened only for display;
 oversized evaluation inputs are rejected instead of silently truncated.

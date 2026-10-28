@@ -6,13 +6,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { instrumentJavaDebugSource } from './javaDebugSource';
+import { createJavaDebugBridge } from './javaDebugBridge';
 
 // These tests compare the original and transformed programs in a real JVM.
 // TeaVM/JSO execution and debugger events have a separate browser qualification.
 const enabled = process.env.WASM_IDLE_RUN_JAVA_TRANSFORM_SEMANTICS === '1';
 const directories: string[] = [];
 const captureMethod = `public static Object capture(Object value) { return value; }`;
+const fieldContract = `
+    public interface Inspectable {
+        Class<?> WasmIdleDebugProbe_fieldOwner();
+        int WasmIdleDebugProbe_fieldCount();
+        Field WasmIdleDebugProbe_field(int index);
+    }
+    public static final class Field {
+        public final String name, type;
+        public final Object value;
+        public Field(String name, String type, Object value) { this.name=name; this.type=type; this.value=value; }
+    }
+`;
 const snapshotMethods = `
+    ${fieldContract}
     ${captureMethod}
     public static boolean poll(String path, int line, int column) { return true; }
     public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) { hit(path, line, column); }
@@ -418,6 +432,155 @@ describe.skipIf(!enabled)('Java source debug instrumentation JVM semantics', () 
 				stdout: '29',
 				stderr: 'parameter,words,value,poison,values,inferred,'
 			});
+		}
+	);
+
+	it(
+		'reads private declared fields, identity and cycles without dispatching user methods',
+		{ timeout: 20_000 },
+		() => {
+			const source = `public class Main {
+    static int calls;
+    static class Parent { private int value = 99; }
+    static class Box<T> extends Parent {
+        private final int value = 7;
+        T next;
+        int[] data = {3, 5};
+        final int later;
+        Box() { later = 11; }
+        int getValue() { calls++; throw new AssertionError("getter"); }
+        public String toString() { calls++; throw new AssertionError("toString"); }
+    }
+    public static void main(String[] args) {
+        Box<Object> root = new Box<Object>();
+        root.next = root;
+        Box<Object> alias = root;
+        Object anonymous = new Box<Object>() { int hidden = 17; };
+        System.out.print("fields=" + calls);
+    }
+}`;
+			const line =
+				source.split('\n').findIndex((line) => line.includes('System.out.print')) + 1;
+			const helper = `public final class WasmIdleDebugProbe {
+    ${fieldContract}
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return line == ${line}; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {
+        Object root = values[1];
+        if (root != values[2]) throw new AssertionError("alias lost");
+        Inspectable fields = (Inspectable) root;
+        if (fields.WasmIdleDebugProbe_fieldOwner() != root.getClass()) throw new AssertionError("owner");
+        if (fields.WasmIdleDebugProbe_fieldCount() != 4) throw new AssertionError("inherited/static fields leaked");
+        Field field = fields.WasmIdleDebugProbe_field(0);
+        if (!field.name.equals("value") || !field.type.equals("int") || !field.value.equals(7)) throw new AssertionError("private hidden field");
+        if (fields.WasmIdleDebugProbe_field(1).value != root) throw new AssertionError("cycle lost");
+        if (((int[])fields.WasmIdleDebugProbe_field(2).value)[1] != 5) throw new AssertionError("array lost");
+        if (!fields.WasmIdleDebugProbe_field(3).value.equals(11)) throw new AssertionError("blank final");
+        Inspectable anonymous = (Inspectable) values[3];
+        if (anonymous.WasmIdleDebugProbe_fieldOwner() == values[3].getClass()) throw new AssertionError("anonymous subclass incorrectly supported");
+    }
+}`;
+			const transformed = instrumentJavaDebugSource(
+				source,
+				'Main.java',
+				'WasmIdleDebugProbe'
+			);
+			expect(executeJava(transformed.code, temporaryDirectory(), helper)).toEqual({
+				status: 0,
+				stdout: 'fields=0',
+				stderr: ''
+			});
+		}
+	);
+
+	it(
+		'keeps field reads bounded and observes a blank final before constructor assignment',
+		{ timeout: 20_000 },
+		() => {
+			const source = `public class Main {
+    private final int later;
+    Main() {
+        later = 11; // before assignment
+    }
+    public static void main(String[] args) {
+        new Main();
+        Large large = new Large();
+        System.out.print("bounded");
+    }
+}
+class Large { ${Array.from({ length: 260 }, (_, index) => `private int field${index}=${index};`).join('')} }`;
+			const helper = `public final class WasmIdleDebugProbe {
+    ${fieldContract}
+    ${captureMethod}
+    public static boolean poll(String path, int line, int column) { return line == 4 || line == 9; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {
+        Inspectable fields = (Inspectable) values[line == 4 ? 0 : 1];
+        if (line == 4) {
+            if (!fields.WasmIdleDebugProbe_field(0).value.equals(0)) throw new AssertionError("initialized too soon");
+            return;
+        }
+        if (fields.WasmIdleDebugProbe_fieldCount() != 257) throw new AssertionError("unbounded fields");
+        if (!fields.WasmIdleDebugProbe_field(255).value.equals(255)) throw new AssertionError("last field");
+        Field omitted = fields.WasmIdleDebugProbe_field(256);
+        if (!omitted.type.equals("unavailable") || !omitted.value.equals("4 fields omitted (256-field inspection limit)")) throw new AssertionError("silent truncation");
+        try { fields.WasmIdleDebugProbe_field(257); throw new AssertionError("page escaped bound"); }
+        catch (IndexOutOfBoundsException expected) {}
+    }
+}`;
+			const transformed = instrumentJavaDebugSource(
+				source,
+				'Main.java',
+				'WasmIdleDebugProbe'
+			);
+			expect(executeJava(transformed.code, temporaryDirectory(), helper)).toEqual({
+				status: 0,
+				stdout: 'bounded',
+				stderr: ''
+			});
+		}
+	);
+
+	it(
+		'does not dispatch field inspection into a dynamic Proxy invocation handler',
+		{ timeout: 20_000 },
+		() => {
+			const bridge = createJavaDebugBridge('WasmIdleDebugProbe');
+			// Compile the production Snapshot in the JVM; only its unused browser JSO
+			// transport is replaced. Field dispatch and serialization remain unchanged.
+			const helper = bridge.source.replace(/^import org\.teavm\..*;\n/gm, '').replace(
+				/    private static JSObject target\(\)[\s\S]*?    private static final class Snapshot/,
+				`public static boolean poll(String path, int line, int column) { return false; }
+    public static void hit(String path, int line, int column, String[] names, String[] types, Object[] values) {}
+    private static final class Snapshot`
+			);
+			const source = `public class Main {
+    static int calls;
+    static class Value { private int field = 7; }
+    public static void main(String[] args) throws Exception {
+        Value value = new Value();
+        Object proxy = java.lang.reflect.Proxy.newProxyInstance(Main.class.getClassLoader(), value.getClass().getInterfaces(), (receiver, method, arguments) -> { calls++; throw new AssertionError("user InvocationHandler called"); });
+        Class<?> type = Class.forName("${bridge.qualifiedName}$Snapshot");
+        java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        Object snapshot = constructor.newInstance(new Object[]{new String[]{"proxy", "value"}, new String[]{"Object", "Value"}, new Object[]{${bridge.qualifiedName}.capture(proxy), ${bridge.qualifiedName}.capture(value)}});
+        java.lang.reflect.Method variables = type.getDeclaredMethod("variables", int.class, int.class, int.class);
+        variables.setAccessible(true);
+        String result = (String) variables.invoke(snapshot, 0, 0, 2);
+        if (calls != 0) throw new AssertionError("inspection called user code");
+        System.out.print(result);
+    }
+}`;
+			const transformed = instrumentJavaDebugSource(
+				source,
+				'Main.java',
+				bridge.qualifiedName
+			);
+			const result = executeJava(transformed.code, temporaryDirectory(), helper);
+			expect(result.status, result.stderr).toBe(0);
+			expect(JSON.parse(result.stdout)).toEqual([
+				expect.objectContaining({ name: 'proxy', variablesReference: 0 }),
+				expect.objectContaining({ name: 'value', variablesReference: 2, namedVariables: 1 })
+			]);
 		}
 	);
 
