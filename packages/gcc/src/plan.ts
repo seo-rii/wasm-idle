@@ -1,18 +1,23 @@
-import type { CrossGccCompileRequest, CrossGccManifest, CrossGccTool } from './types.js';
+import type {
+	CrossGccCompileRequest,
+	CrossGccManifest,
+	CrossGccTool,
+	WasiGccCompileRequest
+} from './types.js';
 
 const encoder = new TextEncoder();
 const maxWorkspaceBytes = 16 * 1024 * 1024;
-const requestKeys = new Set([
+const requestKeys = [
 	'code',
 	'language',
-	'cpu',
 	'emit',
 	'optimization',
 	'standard',
 	'preprocessed',
 	'files',
-	'sources'
-]);
+	'sources',
+	'defines'
+];
 const reservedNames = new Set([
 	'main.c',
 	'main.cpp',
@@ -35,27 +40,44 @@ export function gccRelativePath(value: unknown): string {
 	return value;
 }
 
-/** No fork/exec and no source rewriting: the Worker explicitly schedules these real GNU tools. */
-export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossGccManifest) {
+/** Shared source validation for the two real GCC backends; it never edits source text. */
+export function gccCompileInputs(
+	request: CrossGccCompileRequest | WasiGccCompileRequest,
+	targetKeys: readonly string[],
+	additionalReservedNames: readonly string[] = []
+) {
 	if (!request || typeof request !== 'object' || typeof request.code !== 'string')
 		throw new Error('GCC requires source text');
-	if (Object.keys(request).some((key) => !requestKeys.has(key)))
+	const supportedKeys = new Set([...requestKeys, ...targetKeys]);
+	if (Object.keys(request).some((key) => !supportedKeys.has(key)))
 		throw new Error('Unsupported GCC option; use the documented compile request fields');
-	const language = request.language ?? 'cpp',
-		cpu = request.cpu ?? 'x86-64';
+	const language = request.language ?? 'cpp';
 	const emit = request.emit ?? 'executable',
 		optimization = request.optimization ?? '2';
-	// AVX2 without FMA is a subset of the existing producer v1 capability.
-	// Keep accepting the pinned manifest unchanged; do not invent producer metadata.
 	if (
 		!['c', 'cpp'].includes(language) ||
-		!manifest.cpuProfiles.includes(cpu === 'avx2' ? 'avx2-fma' : cpu) ||
 		!['assembly', 'object', 'executable'].includes(emit) ||
 		!['0', '1', '2', '3', 's'].includes(optimization)
 	)
 		throw new Error('Invalid GCC compilation profile');
 	if (request.preprocessed !== undefined && typeof request.preprocessed !== 'boolean')
 		throw new Error('Invalid GCC preprocessed option');
+	if (
+		request.defines !== undefined &&
+		(!Array.isArray(request.defines) || request.defines.length > 256)
+	)
+		throw new Error('GCC supports at most 256 macro definitions');
+	const definitions = (request.defines ?? []).map((definition) => {
+		if (
+			typeof definition !== 'string' ||
+			definition.length > 4096 ||
+			!/^[A-Za-z_][A-Za-z0-9_]*(?:=[^\x00-\x1f]*)?$/u.test(definition)
+		)
+			throw new Error('Invalid GCC macro definition; use NAME or NAME=value');
+		return `-D${definition}`;
+	});
+	if (request.preprocessed && definitions.length)
+		throw new Error('GCC macro definitions require ordinary source, not preprocessed input');
 	if (
 		request.sources !== undefined &&
 		(!Array.isArray(request.sources) || request.sources.length > 63)
@@ -65,7 +87,7 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 	if (new Set(sources).size !== sources.length) throw new Error('Duplicate GCC translation unit');
 	if (sources.length && emit !== 'executable')
 		throw new Error('Additional GCC translation units require executable output');
-	const reserved = new Set(reservedNames);
+	const reserved = new Set([...reservedNames, ...additionalReservedNames]);
 	for (let i = 1; i <= sources.length; i++) {
 		reserved.add(`program.${i}.s`);
 		reserved.add(`program.${i}.o`);
@@ -125,6 +147,17 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 	for (const source of sources) {
 		if (!paths.has(source)) throw new Error(`Missing GCC translation unit: ${source}`);
 	}
+	return { language, emit, optimization, standard, main, files, sources, definitions };
+}
+
+/** No fork/exec and no source rewriting: the Worker explicitly schedules these real GNU tools. */
+export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossGccManifest) {
+	const { language, emit, optimization, standard, main, files, sources, definitions } =
+		gccCompileInputs(request, ['cpu']);
+	const cpu = request.cpu ?? 'x86-64';
+	// AVX2 without FMA is a subset of the existing producer v1 capability.
+	if (!manifest.cpuProfiles.includes(cpu === 'avx2' ? 'avx2-fma' : cpu))
+		throw new Error('Invalid GCC compilation profile');
 	const cc = [
 		'-quiet',
 		'-m64',
@@ -134,7 +167,8 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		`-std=${standard}`,
 		'-fno-pie',
 		'-fasynchronous-unwind-tables',
-		'-fdiagnostics-color=never'
+		'-fdiagnostics-color=never',
+		...definitions
 	];
 	if (cpu === 'avx2') cc.push('-mavx2', '-mno-fma');
 	else if (cpu === 'avx2-fma') cc.push('-mavx2', '-mfma');
@@ -145,10 +179,11 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 		const includes = [];
 		if (language === 'cpp') {
 			cc.push('-D_GNU_SOURCE');
+			const major = manifest.compiler.version.split('.')[0];
 			includes.push(
-				'/sysroot/usr/include/c++/16',
-				'/sysroot/usr/include/x86_64-linux-gnu/c++/16',
-				'/sysroot/usr/include/c++/16/backward'
+				`/sysroot/usr/include/c++/${major}`,
+				`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
+				`/sysroot/usr/include/c++/${major}/backward`
 			);
 		}
 		includes.push(
