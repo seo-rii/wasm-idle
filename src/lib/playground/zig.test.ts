@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlaygroundRuntimeAssets } from './assets';
+import { createPlaygroundBinding } from '@wasm-idle/core';
 
 const TEST_RUNTIME_ASSETS = {
 	zig: { compilerUrl: '/wasm-zig/zig_small.wasm', stdlibUrl: '/wasm-zig/std.tar.gz' }
@@ -60,12 +61,14 @@ import { WASM_ZIG_ASSET_RECEIPTS } from './wasmZigVersion';
 import type { ZigExecutionAssetReceipts } from './zigAssets';
 
 describe('Zig sandbox', () => {
-	it('rejects source debugging before dispatch and remains usable for normal execution', async () => {
+	it('rejects unsupported trace debugging before dispatch and remains usable for normal execution', async () => {
 		const sandbox = new Zig();
 		await sandbox.load(TEST_RUNTIME_ASSETS);
 		await expect(
-			sandbox.run('pub fn main() void {}', false, false, undefined, [], { debugMode: 'lldb' })
-		).rejects.toThrow('does not emit DWARF');
+			sandbox.run('pub fn main() void {}', false, false, undefined, [], {
+				debugMode: 'trace'
+			})
+		).rejects.toThrow('requires debugMode: lldb');
 		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
@@ -133,7 +136,7 @@ describe('Zig sandbox', () => {
 				compileArgs: ['-O', 'Debug'],
 				activePath: 'src/main.zig',
 				workspaceFiles: [helperFile],
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: true
 			})
 		);
@@ -145,12 +148,41 @@ describe('Zig sandbox', () => {
 				args: ['one'],
 				stdin: '5\n',
 				activePath: 'main.zig',
-				targetTriple: 'wasm64-wasi',
+				targetTriple: 'wasm32-wasi',
 				log: true
 			})
 		);
 		expect(progressValues).toContain(1);
 		expect(outputs).toEqual(['zig artifact ready\n', 'zig-ok\n']);
+	});
+
+	it('preserves the full library budget through the public binding and honors explicit limits', async () => {
+		// Match the app bridge's narrower runtime-assets loader boundary.
+		const binding = createPlaygroundBinding(
+			TEST_RUNTIME_ASSETS,
+			(async () => new Zig()) as never
+		);
+		try {
+			const sandbox = await binding.load('ZIG');
+			await sandbox.load('', false, []);
+			expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					load: true,
+					maxAssetBytes: 256 * 1024 * 1024
+				})
+			);
+			const limitedSandbox = await binding.load('ZIG');
+			await expect(
+				limitedSandbox.load('', false, [], {
+					limits: {
+						maxAssetBytes: WASM_ZIG_ASSET_RECEIPTS['std.tar.gz'].uncompressedBytes - 1
+					}
+				})
+			).rejects.toThrow('byte limit');
+			expect(workerInstances).toHaveLength(1);
+		} finally {
+			await binding.dispose();
+		}
 	});
 
 	it('rejects malformed or over-limit receipts before creating a worker', async () => {
@@ -1290,7 +1322,7 @@ describe('Zig sandbox', () => {
 			get zigTargetTriple() {
 				targetReads += 1;
 				if (targetReads > 1) throw new Error('Zig target was read more than once');
-				return 'wasm64-wasi' as const;
+				return 'wasm32-wasi' as const;
 			},
 			get stdin() {
 				stdinReads += 1;
@@ -1307,7 +1339,7 @@ describe('Zig sandbox', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				stdin: 'captured input\n',
-				targetTriple: 'wasm64-wasi'
+				targetTriple: 'wasm32-wasi'
 			})
 		);
 	});

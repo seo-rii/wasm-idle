@@ -4,7 +4,8 @@ import {
 	File,
 	OpenFile,
 	PreopenDirectory,
-	WASI
+	WASI,
+	wasi
 } from '@bjorn3/browser_wasi_shim';
 import { decompressGzip, untar } from '@wasm-idle/llvm-core';
 import { fetchBoundedExternalAsset } from '../external-asset.js';
@@ -18,7 +19,7 @@ import {
 	type WorkerLanguageService
 } from '../lsp.js';
 
-export type ZigLanguageServerTargetTriple = 'wasm64-wasi';
+export type ZigLanguageServerTargetTriple = 'wasm32-wasi';
 
 export interface ZigWorkerOptions {
 	compilerUrl: string;
@@ -70,8 +71,8 @@ type LoadZigCompilerHost = (
 	context: LspDocumentContext
 ) => Promise<ZigCompilerHost>;
 
-const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 128 * 1024 * 1024;
-const DEFAULT_ZIG_STDLIB_MAX_FILES = 4096;
+const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 256 * 1024 * 1024;
+const DEFAULT_ZIG_STDLIB_MAX_FILES = 32768;
 const DEFAULT_ZIP_FILE_BUFFER_BYTES = 64 * 1024;
 
 const ZIG_KEYWORDS = [
@@ -274,11 +275,13 @@ function parseZigDiagnostics(output: string): ZigCompilerDiagnostic[] {
 async function fetchBytes(
 	url: string,
 	stage: string,
-	reportProgress: LspDocumentContext['reportProgress']
+	reportProgress: LspDocumentContext['reportProgress'],
+	maxBytes?: number
 ) {
 	return await fetchBoundedExternalAsset({
 		url,
 		label: stage,
+		maxBytes,
 		reportProgress(loaded, total) {
 			reportProgress(stage, loaded, total);
 		}
@@ -290,6 +293,7 @@ class ZigStdlibArchiveBudget {
 	private expandedBytes = 0;
 	private fileCount = 0;
 	private readonly entries = new Map<string, 'directory' | 'file'>();
+	private archiveRoot: string | null = null;
 
 	constructor(
 		private readonly maxExpandedBytes: number,
@@ -372,17 +376,21 @@ class ZigStdlibArchiveBudget {
 			throw new Error(`Zig standard library archive has an unsafe path: ${path}`);
 		}
 		const normalized = parts.join('/');
-		if (normalized !== 'std' && !normalized.startsWith('std/')) {
-			throw new Error(`Zig standard library archive path is outside std/: ${path}`);
+		if (parts[0] !== 'lib' && parts[0] !== 'std') {
+			throw new Error(`Zig standard library archive path is outside lib/ or std/: ${path}`);
 		}
-		if (!directory && normalized === 'std') {
+		if (this.archiveRoot && this.archiveRoot !== parts[0]) {
+			throw new Error('Zig standard library archive must use a single lib/ or std/ root');
+		}
+		this.archiveRoot = parts[0];
+		if (!directory && parts.length === 1) {
 			throw new Error(`Zig standard library archive has an unsafe file path: ${path}`);
 		}
 		return normalized;
 	}
 }
 
-export async function loadZigStdDirectory(
+export async function loadZigLibDirectory(
 	source: Uint8Array,
 	assetUrl: string,
 	limits: ZigStdlibArchiveLimits = {}
@@ -490,11 +498,34 @@ export async function loadZigStdDirectory(
 			}
 		});
 	}
-	const stdDirectory = root.contents.get('std');
-	if (!(stdDirectory instanceof Directory)) {
-		throw new Error('Zig standard library archive must contain a std/ directory');
+	const libDirectory = root.contents.get('lib');
+	if (libDirectory instanceof Directory) {
+		if (!(libDirectory.contents.get('std') instanceof Directory)) {
+			throw new Error('Zig library archive must contain lib/std/');
+		}
+		return libDirectory;
 	}
-	return stdDirectory;
+	if (!(root.contents.get('std') instanceof Directory)) {
+		throw new Error('Zig standard library archive must contain lib/std/ or std/');
+	}
+	// Legacy std-only bundles are already a valid /lib tree.
+	return root;
+}
+
+// std.Io first attempts positional I/O, then switches to streaming on ESPIPE.
+// The base shim returns NOTSUP, which Zig reports as an unexpected I/O error.
+class ZigStdout extends ConsoleStdout {
+	fd_pwrite(_data: Uint8Array, _offset: bigint) {
+		return { ret: wasi.ERRNO_SPIPE, nwritten: 0 };
+	}
+
+	fd_seek(_offset: bigint, _whence: number) {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
+	}
+
+	fd_tell() {
+		return { ret: wasi.ERRNO_SPIPE, offset: 0n };
+	}
 }
 
 const instantiateResult = (
@@ -507,11 +538,16 @@ async function loadDefaultZigCompilerHost(
 ): Promise<ZigCompilerHost> {
 	const [compilerBytes, stdlibBytes] = await Promise.all([
 		fetchBytes(options.compilerUrl, 'load-zig-compiler', context.reportProgress),
-		fetchBytes(options.stdlibUrl, 'load-zig-stdlib', context.reportProgress)
+		fetchBytes(
+			options.stdlibUrl,
+			'load-zig-stdlib',
+			context.reportProgress,
+			DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES
+		)
 	]);
-	const [compilerModule, stdDirectory] = await Promise.all([
+	const [compilerModule, libDirectory] = await Promise.all([
 		WebAssembly.compile(compilerBytes),
-		loadZigStdDirectory(stdlibBytes, options.stdlibUrl)
+		loadZigLibDirectory(stdlibBytes, options.stdlibUrl)
 	]);
 
 	return {
@@ -527,28 +563,29 @@ async function loadDefaultZigCompilerHost(
 			const writeOutput = (chunk: Uint8Array) => {
 				compilerOutput += decoder.decode(chunk, { stream: true });
 			};
-			const outputFd = new ConsoleStdout(writeOutput);
-			const errorFd = new ConsoleStdout(writeOutput);
+			const outputFd = new ZigStdout(writeOutput);
+			const errorFd = new ZigStdout(writeOutput);
 			const zigWasi = new WASI(
 				[
 					'zigc.wasm',
 					'build-exe',
 					request.activePath,
-					`-Dtarget=${request.targetTriple}`,
+					'-target',
+					request.targetTriple,
 					'-fno-llvm',
 					'-fno-lld',
 					'-O',
-					'ReleaseSmall',
+					'fast',
 					'-femit-bin=output.wasm',
 					...request.compileArgs
 				],
-				[],
+				['ZIG_LOCAL_CACHE_DIR=.zig-cache/local'],
 				[
 					new OpenFile(new File([])),
 					outputFd,
 					errorFd,
 					new PreopenDirectory('.', root.contents),
-					new PreopenDirectory('/lib', new Map([['std', stdDirectory]])),
+					new PreopenDirectory('/lib', libDirectory.contents),
 					new PreopenDirectory('/cache', new Map())
 				],
 				{ debug: false }
@@ -588,7 +625,7 @@ export function createZigWorkerService(
 	loadCompilerHost: LoadZigCompilerHost = loadDefaultZigCompilerHost
 ): WorkerLanguageService {
 	let compiler: ZigCompilerHost | null = null;
-	let targetTriple: ZigLanguageServerTargetTriple = 'wasm64-wasi';
+	let targetTriple: ZigLanguageServerTargetTriple = 'wasm32-wasi';
 	let compileArgs: string[] = [];
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];

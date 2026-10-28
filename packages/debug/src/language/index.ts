@@ -6,4 +6,5 @@ export { pythonDebugLanguageAdapter } from './python.js';
 export { rubyDebugLanguageAdapter } from './ruby.js';
 export { rustDebugLanguageAdapter } from './rust.js';
 export { vDebugLanguageAdapter } from './v.js';
+export { zigDebugLanguageAdapter } from './zig.js';
 export type { DebugLanguageAdapter } from './types.js';

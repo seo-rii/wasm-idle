@@ -211,6 +211,13 @@ export interface BrowserClangRuntimeOptions {
 	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 }
 
+export interface BrowserClangBitcodeCompileOptions {
+	/** Positive wasm32 byte count aligned to 16 bytes. Defaults to 1 MiB. */
+	stackSizeBytes?: number;
+	/** Stack and static data must fit within this module memory limit. */
+	maxWasmMemoryBytes?: number;
+}
+
 export interface BrowserClangRuntimeRunOptions {
 	/** Check cumulative UTF-8 bytes before temporarily retaining PCH diagnostics. */
 	onBufferedOutput?: (byteLength: number) => void;

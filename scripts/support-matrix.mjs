@@ -822,7 +822,7 @@ export const supportMatrixRows = [
 		runtime: 'zig_small.wasm',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
@@ -1739,14 +1739,17 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Zig',
 		{
-			packageBase: `static wasm-zig assets / ${code('zig_small.wasm')} + ${code('std.tar.gz')}`,
+			packageBase: `Zig 0.17.0 from wasm-llvm / ${code('zig_small.wasm')} + ${code('std.tar.gz')}`,
 			execution:
-				`native gzip delivery for the tar standard library; default target ${code('wasm64-wasi')}; ` +
+				`native gzip delivery for the full Zig library archive; default target ${code('wasm32-wasi')}; ` +
 				`Zig compile args are appended; supports ` +
-				`${code('stdin')}, ${code('compileArgs')}, ${code('programArgs')}`,
+				`${code('stdin')}, ${code('compileArgs')}, ${code('programArgs')}; ` +
+				`LLDB debug emits LLVM bitcode with source metadata, then uses the pinned browser Clang/LLD and WAMR; ` +
+				`debug mode fixes the debug/MVP options and rejects compiler argument overrides`,
 			customization:
 				`${code('runtimeAssets.zig.compilerUrl')}/${code('stdlibUrl')} or ${code('PUBLIC_WASM_ZIG_*')}; ` +
-				`${code('zigTargetTriple')}, ${code('activePath')}, ${code('workspaceFiles')}`
+				`${code('zigTargetTriple')}, ${code('activePath')}, ${code('workspaceFiles')}, ${code('debugMode')}; ` +
+				`debug requires receipt-verified URL-based ${code('runtimeAssets.clang')} assets and the LLDB runtime`
 		}
 	],
 	[

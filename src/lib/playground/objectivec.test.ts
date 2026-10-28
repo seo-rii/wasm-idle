@@ -2,6 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
+const sessions = vi.hoisted(() => [] as any[]);
+
+vi.mock('$lib/playground/lldbSession', () => ({
+	LldbSandboxSession: class {
+		resolve!: (value: true) => void;
+		constructor(readonly options: any) {
+			sessions.push(this);
+		}
+		start() {
+			return new Promise<true>((resolve) => {
+				this.resolve = resolve;
+			});
+		}
+		disconnect = vi.fn(async () => {
+			await Promise.resolve();
+			this.resolve(true);
+			this.options.onDebugEvent({ type: 'stop' });
+		});
+	}
+}));
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -41,8 +61,56 @@ import ObjectiveC from './objectivec';
 describe('Objective-C sandbox debugging', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		sessions.length = 0;
 		vi.stubGlobal('Worker', MockWorker);
 	});
+
+	it.each(['OBJC', 'OBJECTIVECXX'] as const)(
+		'preserves a replacement %s load started by an LLDB stop listener',
+		async (language) => {
+			const sandbox = new ObjectiveC(language);
+			await sandbox.load('/');
+			const running = sandbox.run(
+				'int main(void) { return 0; }',
+				false,
+				false,
+				undefined,
+				[],
+				{
+					debugMode: 'lldb'
+				}
+			);
+			const outcome = running.catch((error) => error);
+			workerInstances[0].onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0, 97, 115, 109),
+						sources: [
+							{ path: '/workspace/main.m', content: 'int main(void) { return 0; }' }
+						]
+					}
+				}
+			} as MessageEvent<any>);
+			let replacement: Promise<void> | undefined;
+			const events = vi.fn((event) => {
+				if (event.type !== 'stop') return;
+				sandbox.terminate();
+				replacement = sandbox.load('/');
+				throw new Error('stop listener failed');
+			});
+			sandbox.ondebug = events;
+			sandbox.terminate();
+			await expect(outcome).resolves.toBe('Process terminated');
+			await expect(replacement).resolves.toBeUndefined();
+			expect(events).toHaveBeenCalledExactlyOnceWith({ type: 'stop' });
+			expect(sessions[0].disconnect).toHaveBeenCalledOnce();
+			expect(workerInstances).toHaveLength(2);
+			expect(sandbox.worker).toBe(workerInstances[1]);
+			expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+			sandbox.ondebug = undefined;
+			sandbox.terminate();
+		}
+	);
 
 	it.each([false, true])('cancels initialization during import: %s', async (duringImport) => {
 		const sandbox = new ObjectiveC();
