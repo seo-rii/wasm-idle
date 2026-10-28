@@ -176,6 +176,7 @@ describe('Python worker runtime dispatch', () => {
 	it.each([
 		['checked hash', 'checked-hash', undefined],
 		['unchecked hash', 'unchecked-hash', undefined],
+		['normalized', 'normalized', undefined],
 		['default timestamp', 'timestamp', undefined],
 		['zero timestamp', 'timestamp', 0],
 		['custom timestamp', 'timestamp', 1_700_000_000],

@@ -271,8 +271,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
 		// Main's measured baseline is 42,443,361 bytes. Selected compiler updates add
 		// 2,786 bytes: TinyGo 2,010, TeaVM 550, OCaml 220 and C3 6.
-		// A shared 492 KiB allowance covers their projected 42,446,147-byte combined install.
-		budget: { maxBytes: 40 * MiB + 492 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// Python's normalized bytecode mode adds another 1,621 bytes including documentation.
+		// A 494 KiB allowance covers the projected 42,447,768-byte combined install.
+		budget: { maxBytes: 40 * MiB + 494 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

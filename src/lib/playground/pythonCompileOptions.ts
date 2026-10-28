@@ -12,8 +12,11 @@ export interface PythonCompileOptions {
 	fileName?: string;
 	/** 0 preserves assertions and docstrings; 1 removes assertions; 2 also removes docstrings. */
 	optimize?: 0 | 1 | 2;
-	/** Cache invalidation format. Defaults to reproducible checked-hash bytecode without a timestamp. */
-	invalidationMode?: 'checked-hash' | 'unchecked-hash' | 'timestamp';
+	/**
+	 * Defaults to reproducible checked-hash bytecode. `normalized` clears source-dependent
+	 * header fields for source-free execution and bytecode hashing, preserving the code payload.
+	 */
+	invalidationMode?: 'checked-hash' | 'unchecked-hash' | 'timestamp' | 'normalized';
 	/** Source mtime in integer Unix seconds (0–4294967295). Only valid in timestamp mode; defaults to 0. */
 	timestamp?: number;
 	runtimeAssets?: SandboxRuntimeAssets;
@@ -50,9 +53,9 @@ export function resolvePythonBytecodeOptions(
 ) {
 	const invalidationMode =
 		options.invalidationMode === undefined ? 'checked-hash' : options.invalidationMode;
-	if (!['checked-hash', 'unchecked-hash', 'timestamp'].includes(invalidationMode)) {
+	if (!['checked-hash', 'unchecked-hash', 'timestamp', 'normalized'].includes(invalidationMode)) {
 		throw new RuntimeConfigurationError(
-			'Python invalidationMode must be checked-hash, unchecked-hash, or timestamp'
+			'Python invalidationMode must be checked-hash, unchecked-hash, timestamp, or normalized'
 		);
 	}
 	if (invalidationMode !== 'timestamp') {
