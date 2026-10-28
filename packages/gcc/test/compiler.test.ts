@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
+import { loadGccModuleFactory } from '../src/module-loader.js';
 
 interface FixtureNode {
 	mode: number;
@@ -236,6 +237,32 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it.each(['wasm', 'loader'] as const)(
+		'preserves the original %s initialization failure',
+		async (phase) => {
+			const failure = new Error(`synthetic ${phase} initialization failure`);
+			if (phase === 'wasm') vi.spyOn(WebAssembly, 'compile').mockRejectedValueOnce(failure);
+			else vi.mocked(loadGccModuleFactory).mockRejectedValueOnce(failure);
+			await expect(createCrossGccCompiler(bundle().options)).rejects.toBe(failure);
+		}
+	);
+
+	it('preserves cancellation during initialization and releases prepared loaders', async () => {
+		const controller = new AbortController();
+		const failure = new DOMException('synthetic initialization cancellation', 'AbortError');
+		const compile = WebAssembly.compile.bind(WebAssembly);
+		vi.spyOn(WebAssembly, 'compile').mockImplementationOnce(async (bytes) => {
+			const module = await compile(bytes);
+			controller.abort(failure);
+			return module;
+		});
+		await expect(
+			createCrossGccCompiler({ ...bundle().options, signal: controller.signal })
+		).rejects.toBe(failure);
+		const loaded = await vi.mocked(loadGccModuleFactory).mock.results.at(-1)!.value;
+		expect(loaded.revoke).toHaveBeenCalledOnce();
+	});
+
 	it('releases extracted sysroot bytes while the disposed compiler remains reachable', async () => {
 		setFlagsFromString('--expose_gc');
 		const collect = runInNewContext('gc') as () => void;

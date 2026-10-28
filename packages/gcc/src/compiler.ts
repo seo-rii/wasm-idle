@@ -153,6 +153,7 @@ export async function createCrossGccCompiler(
 		CrossGccTool,
 		{ factory: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
 	>();
+	let precompiled: { flags: readonly string[]; bytes: Uint8Array } | undefined;
 	let disposed = false,
 		active = false;
 	function dispose() {
@@ -180,7 +181,6 @@ export async function createCrossGccCompiler(
 		dispose();
 		throw error;
 	}
-	let precompiled: { flags: readonly string[]; bytes: Uint8Array } | undefined;
 	/** Each stage gets a fresh module and workspace; the first failing tool ends the run. */
 	async function run(
 		stages: readonly {
