@@ -269,9 +269,11 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
-		// Python's normalized bytecode mode adds 1,621 bytes including documentation.
-		// Allow 2 KiB above the previous cap for the measured 42,444,982-byte install.
-		budget: { maxBytes: 40 * MiB + 491 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// Main's measured baseline is 42,443,361 bytes. Selected compiler updates add
+		// 2,786 bytes: TinyGo 2,010, TeaVM 550, OCaml 220 and C3 6.
+		// Python's normalized bytecode mode adds another 1,621 bytes including documentation.
+		// A 494 KiB allowance covers the projected 42,447,768-byte combined install.
+		budget: { maxBytes: 40 * MiB + 494 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

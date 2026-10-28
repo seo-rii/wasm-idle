@@ -22,11 +22,15 @@ export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
 export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 = 'wasm-llvm-tinygo-runtime-closure-v1' as const;
 export const TINYGO_RUNTIME_CLOSURE_FORMAT = 'wasm-llvm-tinygo-runtime-closure-v2' as const;
 export const TINYGO_RUNTIME_PROFILE_ID = 'wasip1-asyncify-precise-o1' as const;
+export const TINYGO_RUNTIME_EXTRA_SOURCES = [
+	'src/runtime/asm_tinygowasm.S',
+	'src/internal/task/task_asyncify_wasm.S'
+] as const;
 export const TINYGO_ROOT_PATH = '/tinygo-root' as const;
 export const TINYGO_WORKSPACE_PATH = '/workspace' as const;
 export const TINYGO_WORK_PATH = '/work' as const;
-export const TINYGO_GO_VERSION = 'go1.24.6' as const;
-export const TINYGO_BINARYEN_VERSION = '129.0.0' as const;
+export const TINYGO_GO_VERSION = 'go1.26.10' as const;
+export const TINYGO_BINARYEN_VERSION = '132.0.0' as const;
 
 export const TINYGO_UPSTREAM_COMPILER_PACKAGES = [
 	'github.com/tinygo-org/tinygo/builder',
@@ -76,9 +80,10 @@ export const TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS = [
 	'math_big_pure_go',
 	'gc.precise',
 	'scheduler.asyncify',
+	'tinygo.unwind.asyncify',
 	'serial.none',
 	'tinygo.unicore',
-	...Array.from({ length: 24 }, (_, index) => `go1.${index + 1}`)
+	...Array.from({ length: 26 }, (_, index) => `go1.${index + 1}`)
 ] as const;
 
 const SOURCE_FILE_FIELDS = [
@@ -1199,15 +1204,30 @@ export function parseTinyGoRuntimeClosure(
 		throw new Error('TinyGo runtime closure profile differs from compile protocol v1');
 	}
 	const extraFilesObject = expectObject(root.extraFiles, 'TinyGo runtime closure.extraFiles');
-	const extraFiles = Object.fromEntries(
-		Object.entries(extraFilesObject).map(([source, asset]) => [
-			source,
-			parseRuntimeAsset(asset, `TinyGo runtime closure.extraFiles[${JSON.stringify(source)}]`)
-		])
+	expectExactKeys(
+		extraFilesObject,
+		TINYGO_RUNTIME_EXTRA_SOURCES,
+		'TinyGo runtime closure.extraFiles'
 	);
-	if (Object.keys(extraFiles).length !== 3) {
-		throw new Error('TinyGo runtime closure must contain exactly three extra files');
-	}
+	const extraFiles = Object.fromEntries(
+		TINYGO_RUNTIME_EXTRA_SOURCES.map((source, index) => {
+			const asset = parseRuntimeAsset(
+				extraFilesObject[source],
+				`TinyGo runtime closure.extraFiles[${JSON.stringify(source)}]`
+			);
+			if (
+				asset.source !== source ||
+				asset.id !== `extra-${index}` ||
+				asset.path !== `runtime/${TINYGO_RUNTIME_PROFILE_ID}/extra-${index}.o` ||
+				asset.format !== 'wasm-object'
+			) {
+				throw new Error(
+					`TinyGo runtime closure extra-file identity differs from the precise runtime profile: ${source}`
+				);
+			}
+			return [source, asset];
+		})
+	);
 	const hostedCxx = root.format === TINYGO_RUNTIME_CLOSURE_FORMAT;
 	const libCxx = hostedCxx
 		? parseRuntimeAsset(root.libCxx, 'TinyGo runtime closure.libCxx')

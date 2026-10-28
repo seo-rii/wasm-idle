@@ -33,6 +33,86 @@ async function readActiveState(page) {
 	}));
 }
 
+/** @param {unknown} error */
+function isInitialNavigationError(error) {
+	const message = error instanceof Error ? error.message : String(error);
+	return (
+		message.includes('Execution context was destroyed') ||
+		message.includes('Cannot find context with specified id')
+	);
+}
+
+/**
+ * @internal
+ * @param {import('playwright-core').Page} page
+ * @param {string} browserUrl
+ * @param {number} timeoutMs
+ */
+export async function waitForInitialTinyGoBrowserReadiness(page, browserUrl, timeoutMs) {
+	const deadline = Date.now() + timeoutMs;
+	/** @type {Awaited<ReturnType<typeof readActiveState>> | undefined} */
+	let activeState;
+	let reloads = 0;
+	/** @type {unknown} */
+	let lastNavigationError;
+	const notReadyError = () =>
+		new Error(
+			`page is not ready for wasm-idle TinyGo within the initial readiness limit\n${JSON.stringify({ browserUrl, activeState, reloads })}`,
+			{ cause: lastNavigationError }
+		);
+	const remainingTimeout = () => {
+		const remaining = deadline - Date.now();
+		if (remaining <= 0) throw notReadyError();
+		return remaining;
+	};
+	/** @param {number} delay */
+	const wait = async (delay) => {
+		await page.waitForTimeout(Math.min(delay, remainingTimeout()));
+	};
+	await page.goto(browserUrl, { waitUntil: 'domcontentloaded', timeout: remainingTimeout() });
+	await wait(2_000);
+	while (true) {
+		try {
+			remainingTimeout();
+			activeState = await readActiveState(page);
+			if (
+				activeState.crossOriginIsolated &&
+				activeState.sharedArrayBuffer &&
+				activeState.serviceWorkerControlled
+			) {
+				return activeState;
+			}
+			if (reloads === 4) throw notReadyError();
+			await page.evaluate(
+				async (waitMs) => {
+					if (!navigator.serviceWorker) return;
+					await Promise.race([
+						navigator.serviceWorker.ready,
+						new Promise((resolve) => setTimeout(resolve, waitMs))
+					]);
+				},
+				Math.min(1_500, remainingTimeout())
+			);
+			reloads += 1;
+			await page.goto(browserUrl, {
+				waitUntil: 'domcontentloaded',
+				timeout: remainingTimeout()
+			});
+			await wait(2_000 + reloads * 500);
+		} catch (error) {
+			if (!isInitialNavigationError(error)) throw error;
+			lastNavigationError = error;
+			try {
+				await page.waitForLoadState('domcontentloaded', { timeout: remainingTimeout() });
+			} catch (loadError) {
+				if (!isInitialNavigationError(loadError)) throw loadError;
+				lastNavigationError = loadError;
+			}
+			await wait(250);
+		}
+	}
+}
+
 /**
  * @param {import('playwright-core').Page} page
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
@@ -103,45 +183,11 @@ export async function runTinyGoBrowserProbe({
 	});
 
 	try {
-		await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
-		await page.waitForTimeout(2_000);
-
-		let activeState = await readActiveState(page);
-		for (let attempt = 0; attempt < 4; attempt += 1) {
-			if (
-				activeState.crossOriginIsolated &&
-				activeState.sharedArrayBuffer &&
-				activeState.serviceWorkerControlled
-			) {
-				break;
-			}
-			await page.evaluate(async () => {
-				if (!navigator.serviceWorker) return;
-				try {
-					await Promise.race([
-						navigator.serviceWorker.ready,
-						new Promise((resolve) => setTimeout(resolve, 1_500))
-					]);
-				} catch {
-					// Ignore readiness errors and retry with a fresh navigation.
-				}
-			});
-			await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
-			await page.waitForTimeout(2_500 + attempt * 500);
-			activeState = await readActiveState(page);
-		}
-		if (
-			!activeState.crossOriginIsolated ||
-			!activeState.sharedArrayBuffer ||
-			!activeState.serviceWorkerControlled
-		) {
-			throw new Error(
-				`page is not ready for wasm-idle TinyGo\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString()), null, 2)}`
-			);
-		}
-
-		await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
-		await page.waitForTimeout(1_000);
+		const activeState = await waitForInitialTinyGoBrowserReadiness(
+			page,
+			resolvedBrowserUrl.toString(),
+			runTimeoutMs
+		);
 		await page.waitForSelector('#language-select', {
 			state: 'attached',
 			timeout: runTimeoutMs
