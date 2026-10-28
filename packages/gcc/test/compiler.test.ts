@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
@@ -17,9 +19,21 @@ interface FixtureNode {
 
 const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
+	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
+
+vi.mock('../src/sysroot-fs.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../src/sysroot-fs.js')>();
+	return {
+		...actual,
+		gccSysrootTree(...args: Parameters<typeof actual.gccSysrootTree>) {
+			host.sysrootFiles = [...args[0].values()].map((bytes) => new WeakRef(bytes));
+			return actual.gccSysrootTree(...args);
+		}
+	};
+});
 
 /** Deliberately synthetic host fixture. It does not compile C/C++ or validate GCC semantics. */
 vi.mock('../src/module-loader.js', () => ({
@@ -212,12 +226,30 @@ function bundle(archivePath?: string) {
 
 beforeEach(() => {
 	host.calls.length = 0;
+	host.sysrootFiles = [];
 	host.mode = '';
 	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it('releases extracted sysroot bytes while the disposed compiler remains reachable', async () => {
+		setFlagsFromString('--expose_gc');
+		const collect = runInNewContext('gc') as () => void;
+		setFlagsFromString('--no-expose_gc');
+		const compiler = await createCrossGccCompiler(bundle().options);
+		expect(host.sysrootFiles).toHaveLength(1);
+		compiler.dispose();
+		// WeakRefs keep their targets alive for the current job. Collect only after
+		// crossing an event-loop boundary, without dereferencing between collections.
+		for (let iteration = 0; iteration < 5; iteration++) {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			collect();
+		}
+		expect(host.sysrootFiles.map((file) => file.deref())).toEqual([undefined]);
+		await expect(compiler.compile({ code: '' })).rejects.toThrow('disposed');
+	});
+
 	it('runs separate front end, assembler and static linker with real GNU paths and untouched source', async () => {
 		const fixture = bundle(),
 			compileWasm = vi.spyOn(WebAssembly, 'compile');

@@ -158,6 +158,8 @@ export async function createCrossGccCompiler(
 		for (const entry of factories.values()) entry.revoke();
 		factories.clear();
 		assets.clear();
+		sysroot.clear();
+		directories.clear();
 		sysrootTree.clear();
 	}
 	try {
