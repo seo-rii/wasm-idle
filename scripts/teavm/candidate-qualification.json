@@ -1,0 +1,551 @@
+{
+	"format": "wasm-idle-teavm-qualification-v2",
+	"date": "2026-10-27",
+	"status": "qualified-for-checked-in-runtime",
+	"profileId": "teavm-javac-0.16.0-208d4c9-integrated-overlay-v1",
+	"fingerprint": "7583fd8040be494e926ab2fe6dfe3a4d2352103b2011d0f991fa9fa743ad49ee",
+	"inputs": {
+		"path": "scripts/teavm/candidate-inputs.lock.json",
+		"bytes": 7001,
+		"sha256": "dc7dd12d6a2034523870e6a797d1779f63fc09c57b8e13226b9b25cd5ffd7bf7"
+	},
+	"publicationLock": {
+		"path": "scripts/wasm-teavm-assets.lock.json",
+		"bytes": 13502,
+		"sha256": "7eddaad86028cc94da04ff5ece27ac840ce16cc57d3ddfc78c580a006b537c6a"
+	},
+	"source": {
+		"repository": "https://github.com/konsoletyper/teavm-javac",
+		"revision": "208d4c97a602ba0df055f16e6882059fb69d0122",
+		"archive": {
+			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/208d4c97a602ba0df055f16e6882059fb69d0122",
+			"bytes": 99644,
+			"sha256": "ad893ca727081e72ab7ffb9f270956c76d4222b09c6bd1196a13c58c7f81ad2e"
+		}
+	},
+	"sourcePatches": [
+		{
+			"path": "scripts/teavm/patches/teavm-javac-0.16.0-compat.patch",
+			"bytes": 187792,
+			"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
+		},
+		{
+			"path": "scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch",
+			"bytes": 72491,
+			"sha256": "10459fdf93377e71aedb250135d7816e32aa9c5eb6738eeb1a3ffb64be50af14"
+		}
+	],
+	"compilerOverrides": {
+		"version": "0.16.0",
+		"sourceJar": {
+			"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.16.0/teavm-core-0.16.0-sources.jar",
+			"bytes": 1670879,
+			"sha256": "687cabf23e0d17a15be30fbc070809c2931714340aca224120fe31579f95519b"
+		},
+		"sources": [
+			{
+				"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+				"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+				"upstreamSha256": "a15d251d9fc1bd7e2a9668677c3e45e6604d4072d2c631408d0c4b2f0fb60b46",
+				"bytes": 25905,
+				"sha256": "52c766f5027cc9b96c7bdd8138d1b81a313061dde369c6bd9dd0e692a2dbeb25"
+			},
+			{
+				"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+				"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+				"upstreamSha256": "3ca9b19463d6013216d0b41f2d7a59cf3f91629c2abf77b66c8835cee9dd3d62",
+				"bytes": 43454,
+				"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
+			}
+		],
+		"classpath": "main output precedes dependency JARs in generateWasmGC"
+	},
+	"jdk": {
+		"version": "25.0.5+8",
+		"archive": {
+			"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz",
+			"sha256": "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+		},
+		"release": {
+			"JAVA_VERSION": "25.0.5",
+			"JAVA_RUNTIME_VERSION": "25.0.5+8-LTS",
+			"IMPLEMENTOR_VERSION": "Temurin-25.0.5+8",
+			"OS_ARCH": "x86_64",
+			"OS_NAME": "Linux"
+		}
+	},
+	"gradleVerification": {
+		"path": "scripts/teavm/candidate-gradle-verification-metadata.xml",
+		"bytes": 132259,
+		"sha256": "c3779dda8a80c0b28355f2e656f24ec424d2641d275e432e70c02ab7b02674ba",
+		"components": 290,
+		"artifacts": 505,
+		"enforcedDuringBuild": true,
+		"mode": "strict",
+		"unchangedAcrossBuilds": true
+	},
+	"builds": [
+		{
+			"id": "independent-strict",
+			"sourceCommit": "1e3addeadf33a91e003cca1fe6b8c9145af8286b",
+			"commandExitCode": 0,
+			"buildReceiptSha256": "ba635d7ae29b48bc28374c9420fbd2e8f8e948493834e2f1f8a24d6020e0874d"
+		},
+		{
+			"id": "publication-strict",
+			"sourceCommit": "7b58988f3acfd460df7fe1fe3f65ac20641412af",
+			"command": "pnpm run sync:wasm-teavm <pinned-source-checkout> <pinned-jdk-archive>",
+			"commandExitCode": 0,
+			"manifest": {
+				"path": "static/teavm/runtime-manifest.v2.json",
+				"bytes": 13573,
+				"sha256": "3c39d7eb7ee84f825d47b9dfdaef5d7ad51a24810c85b0e0c13ce3a7cdff0884"
+			}
+		}
+	],
+	"reproducibility": {
+		"freshSourceDirectories": true,
+		"freshJdkDirectories": true,
+		"freshGradleUserHomes": true,
+		"sharedCompilationOutputs": false,
+		"readOnlyDependencyCacheReused": true,
+		"outputsByteIdentical": true,
+		"outputs": [
+			{
+				"path": "compiler.wasm-runtime.js",
+				"bytes": 16425,
+				"sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08"
+			},
+			{
+				"path": "compiler.wasm",
+				"bytes": 4746215,
+				"sha256": "96291b9bf94d3ff3422ed35ff2305ec7c9d8052c9150f5a41b8ea6bc63bbd0de"
+			},
+			{
+				"path": "compiler.wasm-deobfuscator.wasm",
+				"bytes": 48410,
+				"sha256": "d64d18b9d003c0ced4191133fadb870be4b532f54a2de25f094bc0de61223654"
+			},
+			{
+				"path": "compile-classlib-teavm.bin",
+				"bytes": 215642,
+				"sha256": "bbf8f130a711847df4822c7f8de88e622e25d5f6b89530d2f441096cebc617ed"
+			},
+			{
+				"path": "runtime-classlib-teavm.bin",
+				"bytes": 2300137,
+				"sha256": "05896413a99b04c70e818a5616b94e9ac3cc39a9d87de99c79661f164cff86d1"
+			}
+		]
+	},
+	"nativeEmitterRegression": {
+		"path": "scripts/teavm/DebugScopesRegression.java",
+		"bytes": 4115,
+		"sha256": "70763b8251a05130b591b3f259b8a1673053cc652a4b941f2aa24e52e338a970",
+		"upstreamExitCode": 1,
+		"patchedExitCode": 0,
+		"scopeStarts": 4,
+		"scopeEnds": 4,
+		"sequences": 2,
+		"nestedInlineFrames": 3
+	},
+	"classpathRegression": {
+		"path": "scripts/teavm/DebugClasspathRegression.gradle",
+		"bytes": 1223,
+		"sha256": "502c22b55618ecd50ceaf7da7cd5c30efe41f8fe3bd3d4e3fa51761674a4e6cd",
+		"command": "./gradlew --dependency-verification strict -I <regression-script> :compiler:verifyEmitterClasspath",
+		"exitCode": 0,
+		"mainOutputsPrecedeDependencyJars": true,
+		"patchedClassesPresent": true
+	},
+	"browser": {
+		"engine": "chromium",
+		"version": "153.0.8010.12",
+		"command": "node scripts/probe-wasm-teavm-candidate.mjs <candidate-dir> <report.json>",
+		"probeSha256": "7cfebc99d4ac26953b92d27b7e60c05c4852ea642b60fd1af9b04536f4222d31",
+		"fixtureSource": {
+			"path": "src/lib/playground/java.integration.test.ts",
+			"sha256": "54a2c79d4bd33364dfc9c49a76d38bba62aa91bd18aec843b4361169e21ac8a9"
+		},
+		"helperSources": {
+			"src/lib/playground/javaStdin.ts": "f1cbbea894115699946f885bc9f60054c02a8d83cb58ecf4ec46ca60f09f71c8",
+			"src/lib/playground/javaRuntimeStdin.ts": "60567d91890de2456a0e98e3b610204226eb893d2be601823e10555fc1d7c51e"
+		},
+		"runs": 1,
+		"casesPerRun": 24,
+		"pageErrors": [],
+		"stdinChunkBytes": 7,
+		"cases": [
+			{
+				"name": "BufferedReader with StringTokenizer",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 309,
+					"ends": 309
+				}
+			},
+			{
+				"name": "BufferedReader lines until EOF with UTF-8 input",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 298,
+					"ends": 298
+				}
+			},
+			{
+				"name": "StreamTokenizer over BufferedReader",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 350,
+					"ends": 350
+				}
+			},
+			{
+				"name": "BufferedWriter and PrintWriter flushes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 351,
+					"ends": 351
+				}
+			},
+			{
+				"name": "Formatter line separator and escaped percent",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 669,
+					"ends": 669
+				}
+			},
+			{
+				"name": "cloned objects and floating-point formatting",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 674,
+					"ends": 674
+				}
+			},
+			{
+				"name": "Formatter half-up rounding",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 648,
+					"ends": 648
+				}
+			},
+			{
+				"name": "System.out byte writes across flushes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 382,
+					"ends": 382
+				}
+			},
+			{
+				"name": "exception methods, getClass and collection clone",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 259,
+					"ends": 259
+				}
+			},
+			{
+				"name": "enum reflection",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 242,
+					"ends": 242
+				}
+			},
+			{
+				"name": "annotations with element values",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 221,
+					"ends": 221
+				}
+			},
+			{
+				"name": "primitive array clone",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 157,
+					"ends": 157
+				}
+			},
+			{
+				"name": "runtime annotations and ServiceLoader",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 243,
+					"ends": 243
+				}
+			},
+			{
+				"name": "class library methods missing from TeaVM 0.13.1",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 1808,
+					"ends": 1808
+				}
+			},
+			{
+				"name": "typed NIO buffers",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 264,
+					"ends": 264
+				}
+			},
+			{
+				"name": "upstream/collections-streams",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 619,
+					"ends": 619
+				}
+			},
+			{
+				"name": "upstream/exceptions",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 178,
+					"ends": 178
+				}
+			},
+			{
+				"name": "upstream/get-class",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 180,
+					"ends": 180
+				}
+			},
+			{
+				"name": "upstream/hello-world",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 144,
+					"ends": 144
+				}
+			},
+			{
+				"name": "upstream/inner-classes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 229,
+					"ends": 229
+				}
+			},
+			{
+				"name": "upstream/modern-java",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 261,
+					"ends": 261
+				}
+			},
+			{
+				"name": "upstream/multi-file",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 172,
+					"ends": 172
+				}
+			},
+			{
+				"name": "upstream/renamed-methods",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 267,
+					"ends": 267
+				}
+			},
+			{
+				"name": "upstream/strings",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 1394,
+					"ends": 1394
+				}
+			}
+		]
+	},
+	"applicationWorker": {
+		"engine": "chromium",
+		"version": "153.0.8010.12",
+		"command": "node scripts/probe-teavm-worker.mjs",
+		"probeSha256": "9bd63731853ff25aef92d31c95e0c521453266dd99546e9ef9fb1e3e98c0efeb",
+		"workerSha256": "775df29f68a274618554bbcb8cc6d8371ed58895923f4c1ae4ade8e1fe2899b2",
+		"manifestSha256": "3c39d7eb7ee84f825d47b9dfdaef5d7ad51a24810c85b0e0c13ce3a7cdff0884",
+		"cases": 14,
+		"consoleWarnings": [],
+		"results": [
+			{
+				"loading": "buffered",
+				"fixture": "shared-stdin",
+				"status": "passed",
+				"stdinRequests": 2,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "buffered",
+				"fixture": "utf8-eof",
+				"status": "passed",
+				"stdinRequests": 3,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "buffered",
+				"fixture": "formatting",
+				"status": "passed",
+				"stdinRequests": 1,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "buffered",
+				"fixture": "caught-stack",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": true
+			},
+			{
+				"loading": "buffered",
+				"fixture": "uncaught-stack",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": true
+			},
+			{
+				"loading": "buffered",
+				"fixture": "diagnostic",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "buffered",
+				"fixture": "recovery",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "streaming",
+				"fixture": "shared-stdin",
+				"status": "passed",
+				"stdinRequests": 2,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "streaming",
+				"fixture": "utf8-eof",
+				"status": "passed",
+				"stdinRequests": 3,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "streaming",
+				"fixture": "formatting",
+				"status": "passed",
+				"stdinRequests": 1,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "streaming",
+				"fixture": "caught-stack",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": true
+			},
+			{
+				"loading": "streaming",
+				"fixture": "uncaught-stack",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": true
+			},
+			{
+				"loading": "streaming",
+				"fixture": "diagnostic",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": false
+			},
+			{
+				"loading": "streaming",
+				"fixture": "recovery",
+				"status": "passed",
+				"stdinRequests": 0,
+				"sourceThrowFrameVerified": false
+			}
+		]
+	},
+	"scopedChecks": {
+		"vitestFiles": 9,
+		"vitestTests": 99,
+		"skipped": 0,
+		"realNodeStreamingExecution": true,
+		"candidatePreparerTests": 8,
+		"coreTypeScriptBuild": true,
+		"runtimeWrapperTypecheck": true,
+		"eslint": true
+	},
+	"knownLimitations": [
+		{
+			"name": "inlined-caller-frame",
+			"description": "The identical optimized launcher retains Main.fail(Main.java:2) but omits the inlined Main.main(Main.java:3) frame in 0.16.0. The previous 0.13.1 runtime retained both. The acceptance probe requires the original throw site and rejects raw Wasm/FakeClass frames; complete inlined caller recovery remains a follow-up.",
+			"comparisonReceiptSha256": "95d97384755b46f48e4f2fc550a54cfabbc698e8db1aa17a4f4aa086b1b588d3",
+			"exceptionBridgeSourceSha256": "9796d7c4ef4177a806594575700f6632cfd4b633b3f7cf9151e3db4dbb8c3de9",
+			"previousRuntimeVersion": "0.13.1",
+			"currentRuntimeVersion": "0.16.0"
+		}
+	]
+}

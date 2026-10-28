@@ -18,6 +18,8 @@ yarn.lock
 
 # Generated app/runtime assets.
 static/
+/artifacts/ocaml-browser/*/wasm-of-js-of-ocaml/
+/artifacts/ocaml-browser/*/licenses/
 
 # Preserve verbatim upstream license text embedded in Nim's notice bundle.
 /scripts/wasm-nim-third-party-notices.md

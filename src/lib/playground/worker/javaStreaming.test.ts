@@ -111,10 +111,22 @@ describe('verified Java compiler streaming', () => {
 		).rejects.toThrow('successful body');
 	});
 	it('transforms only one exact known loader anchor', () => {
-		const anchor = 'async function b(e,t){if(typeof e!=="string")';
+		const anchor =
+			'async function J(e,t){if(typeof e!=="string"){return await WebAssembly.compile(e,{builtins:["js-string"]})}';
 		expect(acceptCompiledTeaVmModule(anchor)).toContain('e instanceof WebAssembly.Module');
+		const bundled = readFileSync(
+			new URL('../../../../static/teavm/compiler.wasm-runtime.js', import.meta.url),
+			'utf8'
+		);
+		expect(acceptCompiledTeaVmModule(bundled)).toContain('e instanceof WebAssembly.Module');
 		expect(() => acceptCompiledTeaVmModule('changed')).toThrow('Unsupported');
 		expect(() => acceptCompiledTeaVmModule(anchor + anchor)).toThrow('Unsupported');
+		expect(() => acceptCompiledTeaVmModule(anchor.replace('J(e,t)', 'b(e,t)'))).toThrow(
+			'Unsupported'
+		);
+		expect(() => acceptCompiledTeaVmModule(anchor.replace('js-string', 'changed'))).toThrow(
+			'Unsupported'
+		);
 	});
 	it('pins the streaming optimization to the complete bundled profile and keeps custom loaders', () => {
 		const host = readFileSync(new URL('../java.ts', import.meta.url), 'utf8');

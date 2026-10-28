@@ -55,6 +55,12 @@ const UPSTREAM_PROGRAM_EXPORTS = new Set([
 	'__libc_realloc',
 	'_start'
 ]);
+const UPSTREAM_PROGRAM_RUNTIME_HELPER_EXPORTS = new Set([
+	'fminimum',
+	'fminimumf',
+	'fmaximum',
+	'fmaximumf'
+]);
 
 interface WasmSection {
 	id: number;
@@ -834,6 +840,8 @@ function assertProtocolTargetFeatures(
 			throw new Error(`${label} contains duplicate target feature ${decoded.value}`);
 		}
 		seen.add(decoded.value);
+		// LLVM 22 explicitly records non-shared memory with "-shared-mem".
+		if (prefix === 0x2d && decoded.value === 'shared-mem') continue;
 		if (FORBIDDEN_TARGET_FEATURES.has(decoded.value)) {
 			throw new Error(`${label} contains forbidden target feature ${decoded.value}`);
 		}
@@ -930,7 +938,13 @@ export function assertTinyGoRelocatableWasmObject(
 		throw new Error(`${label} contains executable-only export or start behavior`);
 	}
 	if (profile === 'upstream-program') {
-		const remainingExports = new Set(UPSTREAM_PROGRAM_EXPORTS);
+		const hasRuntimeHelpers = core.exports.some((entry) =>
+			UPSTREAM_PROGRAM_RUNTIME_HELPER_EXPORTS.has(entry.name)
+		);
+		const remainingExports = new Set([
+			...UPSTREAM_PROGRAM_EXPORTS,
+			...(hasRuntimeHelpers ? UPSTREAM_PROGRAM_RUNTIME_HELPER_EXPORTS : [])
+		]);
 		for (const entry of core.exports) {
 			if (!remainingExports.delete(entry.name)) {
 				throw new Error(`${label} contains unexpected program export ${entry.name}`);
@@ -945,6 +959,9 @@ export function assertTinyGoRelocatableWasmObject(
 		}
 		const missingExport = remainingExports.values().next().value;
 		if (missingExport !== undefined) {
+			if (UPSTREAM_PROGRAM_RUNTIME_HELPER_EXPORTS.has(missingExport)) {
+				throw new Error(`${label} is missing required runtime helper export ${missingExport}`);
+			}
 			throw new Error(`${label} is missing required program export ${missingExport}`);
 		}
 	}

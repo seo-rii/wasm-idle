@@ -16,6 +16,7 @@ import {
 	TINYGO_WORKSPACE_PATH,
 	computeTinyGoRuntimeProfileFingerprint,
 	normalizeTinyGoPackageJSON,
+	parseTinyGoRuntimeClosure,
 	sha256TinyGoBytes,
 	validateTinyGoPackageJSON,
 	verifyTinyGoUpstreamAssetSet,
@@ -92,7 +93,7 @@ function makeTar(entries: Array<{ path: string; contents?: Uint8Array; type?: st
 
 const sha = '0'.repeat(64);
 const llvmValidation = {
-	toolchain: 'llvm-20.1.1' as const,
+	toolchain: 'llvm-22.1.4' as const,
 	moduleVerified: true as const,
 	targetTriple: 'wasm32-unknown-wasi' as const,
 	dataLayout: 'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20' as const,
@@ -410,8 +411,7 @@ function runtimeClosure(): TinyGoRuntimeClosure {
 		extraFiles: Object.fromEntries(
 			[
 				['src/runtime/asm_tinygowasm.S', 'extra-0.o', 'wasm-object'],
-				['src/runtime/gc_boehm.c', 'extra-1.bc', 'llvm-bitcode'],
-				['src/internal/task/task_asyncify_wasm.S', 'extra-2.o', 'wasm-object']
+				['src/internal/task/task_asyncify_wasm.S', 'extra-1.o', 'wasm-object']
 			].map(([source, filename, format], index) => [
 				source,
 				asset(
@@ -772,6 +772,129 @@ test('reports memory-file descriptor rights required by wasi-libc and Clang', ()
 	assert.notEqual(writable.fs_rights_base & BigInt(wasi.RIGHTS_FD_WRITE), 0n);
 	assert.notEqual(directory.fs_rights_base & BigInt(wasi.RIGHTS_PATH_OPEN), 0n);
 	assert.notEqual(directory.fs_rights_inherited & BigInt(wasi.RIGHTS_FD_WRITE), 0n);
+});
+
+test('accepts disabled shared-mem metadata while rejecting forbidden memory features', () => {
+	const objectWithFeatures = (features: readonly string[], memoryFlags = 0) => {
+		const memory = [1, memoryFlags, 1, ...(memoryFlags & 1 ? [1] : [])];
+		return new Uint8Array([
+			...relocatableWasmObject(),
+			5,
+			...wasmU32(memory.length),
+			...memory,
+			...wasmCustomSection('target_features', [
+				...wasmU32(features.length),
+				...features.flatMap((feature) => [feature.charCodeAt(0), ...wasmName(feature.slice(1))])
+			])
+		]);
+	};
+
+	assert.doesNotThrow(() =>
+		assertTinyGoRelocatableWasmObject(objectWithFeatures(['-shared-mem']), 'object')
+	);
+	assert.doesNotThrow(() =>
+		assertTinyGoRelocatableWasmObject(
+			objectWithFeatures(['+bulk-memory', '-multivalue', '-reference-types', '-shared-mem']),
+			'object'
+		)
+	);
+	for (const feature of ['+shared-mem', '-shared-memory', '+atomics', '-atomics', '+simd128']) {
+		assert.throws(
+			() => assertTinyGoRelocatableWasmObject(objectWithFeatures([feature]), 'object'),
+			/forbidden target feature/u,
+			feature
+		);
+	}
+	for (const memoryFlags of [3, 4]) {
+		const object = objectWithFeatures(['-shared-mem'], memoryFlags);
+		assert.equal(WebAssembly.validate(object), true);
+		assert.throws(
+			() => assertTinyGoRelocatableWasmObject(object, 'object'),
+			/unsupported WebAssembly limits flags/u
+		);
+	}
+	assert.throws(
+		() =>
+			assertTinyGoRelocatableWasmObject(
+				objectWithFeatures(['-shared-mem', '+shared-mem']),
+				'object'
+			),
+		/duplicate target feature shared-mem/u
+	);
+	assert.throws(
+		() => assertTinyGoRelocatableWasmObject(objectWithFeatures(['-bulk-memory']), 'object'),
+		/target feature outside the protocol/u
+	);
+});
+
+test('accepts only complete historical or current TinyGo program export sets', () => {
+	const historicalExports = [
+		'malloc',
+		'__libc_malloc',
+		'aligned_alloc',
+		'free',
+		'__libc_free',
+		'calloc',
+		'__libc_calloc',
+		'realloc',
+		'__libc_realloc',
+		'_start'
+	];
+	const runtimeHelpers = ['fminimum', 'fminimumf', 'fmaximum', 'fmaximumf'];
+	const currentExports = [...historicalExports, ...runtimeHelpers];
+	const validate = (object: Uint8Array) =>
+		assertTinyGoRelocatableWasmObject(object, 'program object', { profile: 'upstream-program' });
+	assert.doesNotThrow(() => validate(relocatableWasmObject({ programExports: historicalExports })));
+	assert.doesNotThrow(() => validate(relocatableWasmObject({ programExports: currentExports })));
+	for (const runtimeSubset of [runtimeHelpers.slice(0, 1), runtimeHelpers.slice(0, 3)]) {
+		assert.throws(
+			() =>
+				validate(
+					relocatableWasmObject({ programExports: [...historicalExports, ...runtimeSubset] })
+				),
+			/missing required runtime helper export/u
+		);
+	}
+	assert.throws(
+		() => validate(relocatableWasmObject({ programExports: [...currentExports, 'unknown'] })),
+		/unexpected program export unknown/u
+	);
+	assert.throws(
+		() => validate(relocatableWasmObject({ programExports: currentExports.slice(1) })),
+		/missing required program export malloc/u
+	);
+	for (const helperKind of ['imported', 'memory'] as const) {
+		const definedExports = currentExports.filter((name) => name !== 'fminimum');
+		const imports = [1, ...wasmName('env'), ...wasmName('fminimum'), 0, 0];
+		const functions = [...wasmU32(definedExports.length), ...definedExports.map(() => 0)];
+		const exports = [
+			...wasmU32(currentExports.length),
+			...currentExports.flatMap((name) => [
+				...wasmName(name),
+				name === 'fminimum' && helperKind === 'memory' ? 2 : 0,
+				...wasmU32(
+					name === 'fminimum'
+						? 0
+						: definedExports.indexOf(name) + Number(helperKind === 'imported')
+				)
+			])
+		];
+		const code = [...wasmU32(definedExports.length), ...definedExports.flatMap(() => [2, 0, 0x0b])];
+		const object = wasmModule(
+			[1, 4, 1, 0x60, 0, 0],
+			...(helperKind === 'imported' ? [[2, ...wasmU32(imports.length), ...imports]] : []),
+			[3, ...wasmU32(functions.length), ...functions],
+			...(helperKind === 'memory' ? [[5, 3, 1, 0, 1]] : []),
+			[7, ...wasmU32(exports.length), ...exports],
+			[10, ...wasmU32(code.length), ...code],
+			wasmCustomSection('linking', [2, 8, 1, 0])
+		);
+		assert.equal(WebAssembly.validate(object), true);
+		assert.throws(
+			() => validate(object),
+			helperKind === 'imported' ? /not a defined function/u : /not a function/u
+		);
+	}
 });
 
 test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI modules', async () => {
@@ -1480,7 +1603,7 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 		status: 'passed',
 		upstream: {
 			module: 'golang.org/toolchain',
-			version: 'go1.24.6',
+			version: 'go1.26.10',
 			entrypoint: 'cmd/go',
 			identityPackages: [...TINYGO_UPSTREAM_PACKAGE_GRAPH_PACKAGES]
 		},
@@ -1569,6 +1692,41 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 		lld
 	});
 	assert.equal(verified.compileProtocolVersion, 1);
+	// A correctly hashed old provider is still incompatible with this compiler's
+	// standard library and release-tag selection.
+	for (const staleField of ['version', 'tags', 'unwind']) {
+		const staleGraph = structuredClone(packageGraphReceiptValue);
+		if (staleField === 'version') staleGraph.upstream.version = 'go1.24.6';
+		else {
+			staleGraph.protocol.arguments = staleGraph.protocol.arguments.map((argument) =>
+				argument.startsWith('-tags=')
+					? argument.replace(
+							staleField === 'unwind' ? ' tinygo.unwind.asyncify' : ' go1.25 go1.26',
+							''
+						)
+					: argument
+			);
+		}
+		const staleReceipt = new TextEncoder().encode(JSON.stringify(staleGraph));
+		await assert.rejects(
+			verifyTinyGoUpstreamAssetSet({
+				manifest: {
+					...manifest,
+					packageGraphReceipt: await evidence(
+						'package-graph-provider-receipt.json',
+						staleReceipt
+					)
+				},
+				producerReceipt,
+				packageGraphReceipt: staleReceipt,
+				compiler,
+				packageGraph,
+				rootArchive,
+				lld
+			}),
+			/pinned upstream cmd\/go|package-graph.*protocol/u
+		);
+	}
 	const v2ReceiptValue = structuredClone(receiptValue);
 	v2ReceiptValue.schemaVersion = 2;
 	v2ReceiptValue.format = 'wasm-llvm-tinygo-browser-compiler-v2';
@@ -1853,6 +2011,55 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 			lld
 		}),
 		/TinyGo compiler SHA-256 differs/
+	);
+});
+
+test('binds the TinyGo 0.43 precise runtime to its two assembly object receipts', () => {
+	const runtime = runtimeClosure();
+	assert.deepEqual(parseTinyGoRuntimeClosure(runtime, sha), runtime);
+	const [assemblySource, taskSource] = Object.keys(runtime.extraFiles);
+	for (const [field, value] of [
+		['source', 'src/runtime/gc_boehm.c'],
+		['format', 'llvm-bitcode'],
+		['id', 'extra-2'],
+		['path', `runtime/${TINYGO_RUNTIME_PROFILE_ID}/extra-2.o`]
+	]) {
+		const changed = structuredClone(runtime);
+		Object.assign(changed.extraFiles[taskSource], { [field]: value });
+		assert.throws(
+			() => parseTinyGoRuntimeClosure(changed, sha),
+			/runtime closure extra-file identity/u,
+			field
+		);
+	}
+	const unexpectedSource = structuredClone(runtime);
+	unexpectedSource.extraFiles['src/runtime/gc_boehm.c'] = unexpectedSource.extraFiles[taskSource];
+	delete unexpectedSource.extraFiles[taskSource];
+	assert.throws(
+		() => parseTinyGoRuntimeClosure(unexpectedSource, sha),
+		/runtime closure\.extraFiles must contain exactly/u
+	);
+	const missingObject = structuredClone(runtime);
+	delete missingObject.extraFiles[assemblySource];
+	assert.throws(
+		() => parseTinyGoRuntimeClosure(missingObject, sha),
+		/runtime closure\.extraFiles must contain exactly/u
+	);
+	const obsoleteBoehm = structuredClone(runtime);
+	obsoleteBoehm.extraFiles['src/runtime/gc_boehm.c'] = {
+		...obsoleteBoehm.extraFiles[taskSource],
+		id: 'extra-2',
+		path: `runtime/${TINYGO_RUNTIME_PROFILE_ID}/extra-2.bc`,
+		format: 'llvm-bitcode',
+		source: 'src/runtime/gc_boehm.c'
+	};
+	assert.throws(
+		() => parseTinyGoRuntimeClosure(obsoleteBoehm, sha),
+		/runtime closure\.extraFiles must contain exactly/u
+	);
+	assert.throws(
+		() => parseTinyGoRuntimeClosure(runtime, 'f'.repeat(64)),
+		/runtime closure compiler hash differs/u
 	);
 });
 
@@ -2183,6 +2390,70 @@ test('binds compile protocol v4 C++, Clang assembly, dependencies, formats, and 
 		).schemaVersion,
 		6
 	);
+	const v6ValidationOptions = {
+		...validationOptions,
+		expectedCXXFlags: new Map([['example.com/app\0helper.cc', ['-DCPP_VALUE=7']]]),
+		expectedCGoLinkerFlags: ['-lexample']
+	};
+	for (const inputTargetTriple of ['wasm32-unknown-wasi', 'wasm32-unknown-wasip1']) {
+		const withProvenance = structuredClone(flaggedPlan);
+		for (const object of withProvenance.objects.filter((item) => item.llvmValidation)) {
+			Object.assign(object.llvmValidation!, { inputTargetTriple });
+		}
+		assert.equal(
+			(await validateTinyGoLinkPlanV6(withProvenance, runtime, v6ValidationOptions))
+				.schemaVersion,
+			6
+		);
+	}
+	for (const objectIndex of [1, 2]) {
+		for (const invalidEvidence of [
+			{ inputTargetTriple: null },
+			{ inputTargetTriple: undefined },
+			{ inputTargetTriple: 'wasm32-unknown-wasip2' },
+			{ inputTargetTriple: 'wasm32-unknown-wasip3' },
+			{ inputTargetTriple: 'wasm64-unknown-wasip1' },
+			{ inputTargetTriple: 'wasm32-unknown-unknown' },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1-threads' },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1', extra: true },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1', extra: undefined },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1', targetTriple: 'wasm32-unknown-wasip1' },
+			{ targetTriple: 'wasm32-unknown-wasip1' },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1', dataLayout: 'e-p:64:64' },
+			{ inputTargetTriple: 'wasm32-unknown-wasip1', threadLocalGlobals: 1 }
+		]) {
+			const invalidPlan = structuredClone(flaggedPlan);
+			Object.assign(invalidPlan.objects[objectIndex]!.llvmValidation!, invalidEvidence);
+			await assert.rejects(
+				validateTinyGoLinkPlanV6(invalidPlan, runtime, v6ValidationOptions),
+				/lacks exact LLVM validation evidence/u
+			);
+		}
+		for (const withInputTriple of [false, true]) {
+			const invalidPlan = structuredClone(flaggedPlan);
+			const evidence = Object.assign([], llvmValidation);
+			if (withInputTriple)
+				Object.assign(evidence, { inputTargetTriple: 'wasm32-unknown-wasip1' });
+			Object.assign(invalidPlan.objects[objectIndex]!, { llvmValidation: evidence });
+			await assert.rejects(
+				validateTinyGoLinkPlanV6(invalidPlan, runtime, v6ValidationOptions),
+				/lacks exact LLVM validation evidence/u
+			);
+		}
+	}
+	for (const [legacyPlan, validate] of [
+		[plan, validateTinyGoLinkPlanV4],
+		[hostedPlan, validateTinyGoLinkPlanV5]
+	] as const) {
+		const unexpectedProvenance = structuredClone(legacyPlan);
+		Object.assign(unexpectedProvenance.objects[1]!.llvmValidation!, {
+			inputTargetTriple: 'wasm32-unknown-wasi'
+		});
+		await assert.rejects(
+			validate(unexpectedProvenance, runtime, validationOptions),
+			/lacks exact LLVM validation evidence/u
+		);
+	}
 	const workspaceRootLibraryPlan = structuredClone(flaggedPlan);
 	workspaceRootLibraryPlan.cgoLinkerFlags = ['-L/workspace'];
 	workspaceRootLibraryPlan.arguments[workspaceRootLibraryPlan.arguments.indexOf('-lexample')] =
