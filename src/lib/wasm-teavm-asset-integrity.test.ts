@@ -47,14 +47,15 @@ interface TeaVmRuntimeManifest {
 		sourcePatches: Array<{ path: string }>;
 		gradle: { version: string; verificationMetadata: { sha256: string } };
 		overlay: {
-			archiveEntryCount: number;
-			sources: Array<{
-				upstreamSourceEntry: string;
-				transforms: Array<{ from: string; to: string; expectedOccurrences: number }>;
-			}>;
-			classes: Array<{ targetEntry: string }>;
-			addedSources: Array<{ sourcePath: string }>;
-			addedClasses: Array<{ targetEntry: string }>;
+			mode: string;
+			sources: Array<{ path: string; bytes: number; sha256: string }>;
+			correspondence: {
+				sources: Array<{
+					sourceEntry: string;
+					upstreamSha256: string;
+					patchedSha256: string;
+				}>;
+			};
 		};
 	};
 	producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
@@ -102,52 +103,27 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.13.1-7e4a44c-overlay-v3-java-errors',
-			provenanceLevel: 'source-build-and-compatibility-overlay-reproduced',
+			profileId: 'teavm-javac-0.16.0-208d4c9-integrated-overlay-v1',
+			provenanceLevel: 'source-build-and-integrated-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',
-				revision: '7e4a44cf521694a4e326e33850dd8aec165eb5c9'
+				revision: '208d4c97a602ba0df055f16e6882059fb69d0122'
 			},
 			components: {
 				teavm: {
-					version: '0.13.1',
-					revision: 'b3a245b7d9034ff35cdfab2def057a3d4f256efb'
+					version: '0.16.0',
+					revision: 'e87d452e4bd70c77b9e19314a46c3d6971c148b6'
 				},
 				openjdk: { revision: '6c48f4ed707bf0b15f9b6098de30db8aae6fa40f' }
 			},
 			build: {
-				jdk: { version: '25.0.3+9' },
+				jdk: { version: '25.0.5+8' },
 				gradle: { version: '9.1.0' },
-				// Apply @PluggableDependency plugins in the browser compiler (TeaVM #1322).
-				// Then apply @Rename when converting the javac SDK (upstream teavm-javac 199bed0).
 				sourcePatches: [
-					{ path: 'scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch' },
-					{ path: 'scripts/teavm/patches/teavm-javac-stdlib-rename.patch' },
-					// Link enum values() for Class.getEnumConstants (EnumDependencySupport).
-					{ path: 'scripts/teavm/patches/teavm-javac-enum-constants.patch' },
-					// Annotation must not extend itself and SuppressWarnings needs value().
-					{ path: 'scripts/teavm/patches/teavm-javac-annotation-classlib.patch' },
-					// Propagate cloned primitive array types to Object.clone().
-					{ path: 'scripts/teavm/patches/teavm-javac-array-clone.patch' },
-					// Deterministic class order and tags so compiler.wasm is byte-reproducible.
-					{ path: 'scripts/teavm/patches/teavm-javac-reproducible-wasm.patch' },
-					// ServiceLoader and runtime annotations skipped by JCLPlugin in the bootstrap.
-					{ path: 'scripts/teavm/patches/teavm-javac-bootstrap-services.patch' },
-					// Methods the TeaVM 0.13.1 class library lacks, merged into the SDK and the runtime.
-					{ path: 'scripts/teavm/patches/teavm-javac-classlib-supplements.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-0.16.0-compat.patch' },
+					{ path: 'scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch' }
 				],
-				overlay: {
-					archiveEntryCount: 2141,
-					addedSources: [
-						{ sourcePath: 'scripts/teavm/TIllegalFormatWidthException.java' }
-					],
-					addedClasses: [
-						{
-							targetEntry:
-								'org/teavm/classlib/java/util/TIllegalFormatWidthException.class'
-						}
-					]
-				}
+				overlay: { mode: 'gradle-source-set' }
 			},
 			producer: {
 				files: [
@@ -156,73 +132,18 @@ describe('checked-in TeaVM runtime trust root', () => {
 				]
 			}
 		});
-		// Every typed NIO buffer factory must drop its JS-only @JSByRef view, or Wasm GC
-		// generation fails for programs that reach that buffer type (CharBuffer via Readers).
-		const nioBuffers = [
-			['Byte', 'Int8Array'],
-			['Char', 'Uint16Array'],
-			['Short', 'Int16Array'],
-			['Int', 'Int32Array'],
-			['Long', 'BigInt64Array'],
-			['Float', 'Float32Array'],
-			['Double', 'Float64Array']
-		];
-		const consoleStream = 'org/teavm/classlib/impl/console/JsConsolePrintStream';
-		const formatter = 'org/teavm/classlib/java/util/TFormatter';
-		const formatterSource = manifest.build.overlay.sources.at(-1)!;
-		// %n and %% must not consume an argument (TeaVM #1317); %f rounds half up (TeaVM #1323).
-		expect(formatterSource.upstreamSourceEntry).toBe(`${formatter}.java`);
-		expect(formatterSource.transforms.map(({ to }) => to).join('\n')).toMatch(
-			/formatLineSeparator\(\)[\s\S]*formatPercent\(\)[\s\S]*setRoundingMode\(RoundingMode\.HALF_UP\)/
-		);
+		const overlay = manifest.build.overlay;
+		expect(overlay.sources).toHaveLength(10);
+		for (const correspondence of overlay.correspondence.sources) {
+			const source = overlay.sources.find(({ path }) =>
+				path.endsWith(correspondence.sourceEntry)
+			);
+			expect(source?.sha256).toBe(correspondence.patchedSha256);
+			expect(correspondence.upstreamSha256).toMatch(/^[a-f0-9]{64}$/);
+		}
 		expect(
-			manifest.build.overlay.sources
-				.slice(0, -1)
-				.map(({ upstreamSourceEntry, transforms }) => ({
-					upstreamSourceEntry,
-					transforms
-				}))
-		).toEqual([
-			...nioBuffers.map(([buffer, typedArray]) => ({
-				upstreamSourceEntry: `org/teavm/classlib/java/nio/T${buffer}Buffer.java`,
-				transforms: [
-					{
-						from: `${typedArray}.fromJavaArray`,
-						to: `${typedArray}.copyFromJavaArray`,
-						expectedOccurrences: 2
-					}
-				]
-			})),
-			// Console byte writes must invoke the pending flush, advance the source offset, and keep an
-			// incomplete UTF-8 sequence pending across a flush instead of ending the decoder's input.
-			{
-				upstreamSourceEntry: `${consoleStream}.java`,
-				transforms: [
-					{
-						from: '            flushAction = null;\n            flushAction.run();',
-						to: '            Runnable action = flushAction;\n            flushAction = null;\n            action.run();',
-						expectedOccurrences: 1
-					},
-					{
-						from: '                buffer.put(b, off, count);\n                len -= count;',
-						to: '                buffer.put(b, off, count);\n                off += count;\n                len -= count;',
-						expectedOccurrences: 1
-					},
-					{
-						from: '            if (buffer.position() > 0) {\n                output(true);\n            }',
-						to: '            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }',
-						expectedOccurrences: 1
-					}
-				]
-			}
-		]);
-		expect(manifest.build.overlay.classes.map(({ targetEntry }) => targetEntry)).toEqual([
-			...nioBuffers.map(([buffer]) => `org/teavm/classlib/java/nio/T${buffer}Buffer.class`),
-			`${consoleStream}.class`,
-			`${consoleStream}$ByteEncoder.class`,
-			`${formatter}.class`,
-			`${formatter}$FormatWriter.class`
-		]);
+			overlay.sources.some(({ path }) => path.endsWith('/TIllegalFormatWidthException.java'))
+		).toBe(true);
 		expect(manifest.assets.map((file) => file.path)).toEqual(TEAVM_RUNTIME_ASSET_NAMES);
 
 		const logicalReceipts = Object.create(null) as Record<
@@ -277,20 +198,9 @@ describe('checked-in TeaVM runtime trust root', () => {
 			build: {
 				gradle: { verificationMetadata: { path: string; bytes: number; sha256: string } };
 				sourcePatches: Array<{ path: string; bytes: number; sha256: string }>;
-				overlay: {
-					utilityPath: string;
-					utilityBytes: number;
-					utilitySha256: string;
-					sources: Array<{
-						sourcePath: string;
-						sourceBytes: number;
-						sourceSha256: string;
-					}>;
-					addedSources: Array<{
-						sourcePath: string;
-						sourceBytes: number;
-						sourceSha256: string;
-					}>;
+				overlay: { sources: Array<{ path: string; bytes: number; sha256: string }> };
+				compilerOverrides: {
+					sources: Array<{ path: string; bytes: number; sha256: string }>;
 				};
 			};
 			producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
@@ -304,24 +214,39 @@ describe('checked-in TeaVM runtime trust root', () => {
 			...lock.producer.files,
 			lock.build.gradle.verificationMetadata,
 			...lock.build.sourcePatches,
-			...[...lock.build.overlay.sources, ...lock.build.overlay.addedSources].map(
-				({ sourcePath: path, sourceBytes, sourceSha256 }) => ({
-					path,
-					bytes: sourceBytes,
-					sha256: sourceSha256
-				})
-			),
-			{
-				path: lock.build.overlay.utilityPath,
-				bytes: lock.build.overlay.utilityBytes,
-				sha256: lock.build.overlay.utilitySha256
-			},
 			...lock.legalFiles.map(({ sourcePath: path, bytes, sha256 }) => ({
 				path,
 				bytes,
 				sha256
 			}))
 		];
+
+		// Every overlay and emitter override is a complete file inside the pinned patches.
+		const patch = (
+			await Promise.all(
+				lock.build.sourcePatches.map(({ path }) =>
+					readFile(resolve(process.cwd(), path), 'utf8')
+				)
+			)
+		).join('\n');
+		for (const source of [
+			...lock.build.overlay.sources,
+			...lock.build.compilerOverrides.sources
+		]) {
+			const section = patch
+				.split(`diff --git a/${source.path} b/${source.path}\n`)[1]
+				?.split('\ndiff --git ')[0];
+			expect(section, source.path).toBeDefined();
+			const bytes =
+				section!
+					.split('\n')
+					.filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+					.map((line) => line.slice(1))
+					.join('\n') + '\n';
+			expect({ bytes: Buffer.byteLength(bytes), sha256: sha256(bytes) }, source.path).toEqual(
+				{ bytes: source.bytes, sha256: source.sha256 }
+			);
+		}
 
 		for (const receipt of receipts) {
 			const bytes = await readFile(resolve(process.cwd(), receipt.path));

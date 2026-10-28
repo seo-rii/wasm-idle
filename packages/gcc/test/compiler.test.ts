@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCrossGccCompiler } from '../src/compiler.js';
+import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
 import { loadGccModuleFactory } from '../src/module-loader.js';
 
@@ -22,6 +22,7 @@ const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
+	output: undefined as Uint8Array | undefined,
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
 
@@ -128,11 +129,12 @@ vi.mock('../src/module-loader.js', () => ({
 							? new TextEncoder().encode(
 									'# Synthetic assembly fixture, not GCC output\n.text\n'
 								)
-							: elf(
-									tool === 'as' ? 1 : 2,
-									host.mode === 'wrong-machine' ? 183 : 62,
-									host.mode === 'dynamic'
-								)
+							: (host.output ??
+									elf(
+										tool === 'as' ? 1 : 2,
+										host.mode === 'wrong-machine' ? 183 : 62,
+										host.mode === 'dynamic'
+									))
 					);
 					if (host.mode === 'exit-status') throw { name: 'ExitStatus', status: 0 };
 					return 0;
@@ -181,7 +183,12 @@ function tar(path = 'usr/include/stdio.h') {
 	return bytes;
 }
 
-function bundle(archivePath?: string, capabilities?: Record<string, unknown>) {
+function bundle(
+	archivePath?: string,
+	version: '13.3.0' | '16.2.0' = '16.2.0',
+	capabilities?: Record<string, unknown>
+) {
+	const major = version === '13.3.0' ? '13' : '16';
 	const files = new Map<string, Uint8Array>([['sysroot.tar', tar(archivePath)]]);
 	for (const tool of ['cc1', 'cc1plus', 'as', 'ld']) {
 		files.set(`${tool}.mjs`, encoder.encode(`synthetic-fixture:${tool}`));
@@ -200,14 +207,14 @@ function bundle(archivePath?: string, capabilities?: Record<string, unknown>) {
 		kind: 'gcc-x86_64-linux-gnu',
 		host: 'wasm32-emscripten',
 		target: 'x86_64-linux-gnu',
-		compiler: { family: 'gcc', version: '16.2.0' },
+		compiler: { family: 'gcc', version },
 		cpuProfiles: ['x86-64', 'avx2-fma'],
 		linkMode: 'static',
 		sysrootPath: '/sysroot',
-		gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16',
-		resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/16/include',
+		gccInstallation: `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}`,
+		resourceDir: `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/include`,
 		assets,
-		gnu: { gccVersion: '16', glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
+		gnu: { gccVersion: major, glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
 		...(capabilities ? { capabilities } : {}),
 		qualification: { status: 'unverified' }
 	};
@@ -228,10 +235,116 @@ function bundle(archivePath?: string, capabilities?: Record<string, unknown>) {
 	};
 }
 
+// These byte fixtures exercise host boundaries only, never real GCC code generation.
+function wasiCommand(simd = false) {
+	const body = [0, ...(simd ? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a] : []), 0x0b];
+	return Uint8Array.from([
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		1,
+		4,
+		1,
+		0x60,
+		0,
+		0,
+		3,
+		2,
+		1,
+		0,
+		5,
+		3,
+		1,
+		0,
+		1,
+		7,
+		19,
+		2,
+		6,
+		...encoder.encode('memory'),
+		2,
+		0,
+		6,
+		...encoder.encode('_start'),
+		0,
+		0,
+		10,
+		body.length + 2,
+		1,
+		body.length,
+		...body
+	]);
+}
+
+function wasiBundle(linker = wasiCommand()) {
+	const fixture = bundle();
+	fixture.files.delete('gcc-toolchain.v1.json');
+	fixture.files.delete('ld.mjs');
+	fixture.files.set('ld.wasm', linker);
+	const revision = (family: string) => ({
+		family,
+		repository: `https://example.test/${family}`,
+		version: '17.0.0',
+		commit: 'a'.repeat(40)
+	});
+	const manifest = {
+		schemaVersion: 2,
+		kind: 'gcc-wasm32-wasi',
+		host: 'wasm32-emscripten',
+		target: 'wasm32-wasi',
+		compiler: revision('gcc'),
+		assembler: revision('wabt'),
+		linker: { ...revision('lld'), host: 'wasm32-wasi' },
+		sysroot: revision('wasi-libc'),
+		abi: 'wasm32-wasi-preview1',
+		linkMode: 'static',
+		sysrootPath: '/sysroot',
+		gccInstallation: '/sysroot/lib/gcc/wasm32-wasi/17.0.0',
+		resourceDir: '/sysroot/lib/gcc/wasm32-wasi/17.0.0/include',
+		runtimeLibraries: ['/sysroot/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a'],
+		capabilities: {
+			c: true,
+			cpp: true,
+			libc: true,
+			libm: true,
+			libstdcxx: false,
+			staticInitialization: false,
+			exceptions: false,
+			rtti: false,
+			threads: false,
+			dynamicLinking: false,
+			simd: true
+		},
+		qualification: { status: 'unverified' },
+		assets: Object.fromEntries(
+			[...fixture.files].map(([path, bytes]) => [
+				path === 'sysroot.tar'
+					? 'sysroot'
+					: path.replace('.mjs', 'Js').replace('.wasm', 'Wasm'),
+				{ path, sha256: hash(bytes), bytes: bytes.length }
+			])
+		)
+	};
+	const manifestBytes = encoder.encode(JSON.stringify(manifest));
+	fixture.files.set('gcc-toolchain.v2.json', manifestBytes);
+	return {
+		...fixture.options,
+		target: 'wasm32-wasi' as const,
+		manifestUrl: 'https://example.test/gcc/gcc-toolchain.v2.json',
+		manifestSha256: hash(manifestBytes)
+	};
+}
+
 beforeEach(() => {
 	host.calls.length = 0;
 	host.sysrootFiles = [];
 	host.mode = '';
+	host.output = undefined;
 	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
@@ -278,6 +391,39 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 		expect(host.sysrootFiles.map((file) => file.deref())).toEqual([undefined]);
 		await expect(compiler.compile({ code: '' })).rejects.toThrow('disposed');
+	});
+
+	it('validates the pinned WASI linker command ABI during loading', async () => {
+		await expect(createGccCompiler(wasiBundle(wasm))).rejects.toThrow(
+			'must export memory and _start'
+		);
+	});
+
+	it('refuses unrequested SIMD in assembled output and permits the explicit capable-bundle opt-in', async () => {
+		host.output = Uint8Array.from([
+			...wasiCommand(true),
+			0,
+			9,
+			7,
+			...encoder.encode('linking'),
+			2
+		]);
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			await expect(
+				compiler.compile({ code: 'fixture', language: 'c', emit: 'object' })
+			).rejects.toThrow('SIMD without an enabled SIMD compilation request');
+			const result = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				emit: 'object',
+				simd: true
+			});
+			expect(result.artifact?.wasm?.features).toEqual({ simd128: true });
+			expect(result.stages[0].argv).toContain('-msimd128');
+		} finally {
+			compiler.dispose();
+		}
 	});
 
 	it('runs separate front end, assembler and static linker with real GNU paths and untouched source', async () => {
@@ -684,7 +830,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			unsupported.dispose();
 		}
 		const compiler = await createCrossGccCompiler(
-			bundle(header, { precompiledHeaders: true }).options
+			bundle(header, '16.2.0', { precompiledHeaders: true }).options
 		);
 		try {
 			await expect(compiler.precompileHeader({ code: '' } as never)).rejects.toThrow(
@@ -804,6 +950,58 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			);
 		} finally {
 			compiler.dispose();
+		}
+	});
+
+	it.each([
+		['13.3.0', '13', '16'],
+		['16.2.0', '16', '13']
+	] as const)(
+		'retains GCC %s identity, C++ headers and link paths',
+		async (version, major, other) => {
+			const fixture = bundle(undefined, version);
+			for (const create of [
+				() => createCrossGccCompiler(fixture.options),
+				() => createGccCompiler({ ...fixture.options, target: 'x86_64-linux-gnu' })
+			]) {
+				const compiler = await create();
+				try {
+					expect(compiler.identity.compilerVersion).toBe(version);
+					expect(compiler.manifest.gnu.gccVersion).toBe(major);
+					const result = await compiler.compile({
+						code: 'int main() {}',
+						language: 'cpp'
+					});
+					expect(result.exitCode).toBe(0);
+					expect(result.stages[0].argv).toEqual(
+						expect.arrayContaining([
+							`/sysroot/usr/include/c++/${major}`,
+							`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
+							`/sysroot/usr/include/c++/${major}/backward`,
+							`/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/include`
+						])
+					);
+					expect(result.stages[0].argv).not.toContain(
+						`/sysroot/usr/include/c++/${other}`
+					);
+					expect(result.stages.at(-1)!.argv).toContain(
+						`/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/crtbeginT.o`
+					);
+				} finally {
+					compiler.dispose();
+				}
+			}
+		}
+	);
+
+	it('rejects every mixed compiler, installation, resource and target-library version', () => {
+		for (let mask = 1; mask < 15; mask++) {
+			const fixture = bundle().manifest;
+			fixture.compiler.version = mask & 1 ? '13.3.0' : '16.2.0';
+			fixture.gccInstallation = `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${mask & 2 ? 13 : 16}`;
+			fixture.resourceDir = `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${mask & 4 ? 13 : 16}/include`;
+			fixture.gnu.gccVersion = mask & 8 ? '13' : '16';
+			expect(() => parseCrossGccManifest(fixture)).toThrow();
 		}
 	});
 

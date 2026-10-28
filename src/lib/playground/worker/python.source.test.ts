@@ -1,4 +1,5 @@
 import source from './python.ts?raw';
+import debugSource from './pythonDebug.ts?raw';
 import { describe, expect, it } from 'vitest';
 
 describe('Python worker source', () => {
@@ -84,8 +85,8 @@ describe('Python worker source', () => {
 		expect(source).toContain('const version = Atomics.load(debugBufferPyodide, 2);');
 		expect(source).toContain('Math.min(Atomics.load(debugBufferPyodide, 3)');
 		expect(source).toContain('const line = Atomics.load(debugBufferPyodide, 4 + index);');
-		expect(source).toContain('def __wasm_idle_debug_refresh_breakpoints():');
-		expect(source).toMatch(
+		expect(debugSource).toContain('def __wasm_idle_debug_refresh_breakpoints():');
+		expect(debugSource).toMatch(
 			/if event != "line":[\s\S]*?__wasm_idle_debug_refresh_breakpoints\(\)[\s\S]*?line = frame\.f_lineno/
 		);
 	});

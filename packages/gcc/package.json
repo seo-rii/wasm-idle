@@ -1,7 +1,7 @@
 {
 	"name": "@wasm-idle/gcc",
 	"version": "1.3.0",
-	"description": "Browser Worker host for GNU GCC and Linux x86-64 cross compilation",
+	"description": "Browser Worker host for GNU GCC targeting Linux x86-64 or WebAssembly WASI",
 	"license": "MIT",
 	"type": "module",
 	"sideEffects": false,
@@ -31,6 +31,7 @@
 		"verify:package-boundary": "node scripts/verify-package-boundary.mjs"
 	},
 	"dependencies": {
+		"@bjorn3/browser_wasi_shim": "0.4.2",
 		"@wasm-idle/core": "workspace:*"
 	},
 	"devDependencies": {

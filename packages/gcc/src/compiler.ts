@@ -1,17 +1,30 @@
 import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
-import { gccAssetPaths, gccDigest, parseCrossGccManifest } from './manifest.js';
+import { gccDigest, parseCrossGccManifest, parseWasiGccManifest } from './manifest.js';
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
 import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
+import { wasiGccCompilePlan } from './wasi-plan.js';
+import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
+import { runGccWasiArtifact } from './wasi-run.js';
+import { runWasiGccLinker } from './wasi-linker.js';
 import type {
 	CreateCrossGccCompilerOptions,
+	CreateGccCompilerOptions,
+	CrossGccAsset,
 	CrossGccAssetName,
+	CrossGccCompileRequest,
 	CrossGccCompiler,
 	CrossGccEmit,
+	CrossGccPrecompileRequest,
 	CrossGccStageResult,
-	CrossGccTool
+	CrossGccTool,
+	GccWasmInspection,
+	WasiGccArtifact,
+	WasiGccCompileRequest,
+	WasiGccCompiler,
+	WasiGccRunOptions
 } from './types.js';
 
 const tools = ['cc1', 'cc1plus', 'as', 'ld'] as const;
@@ -67,10 +80,21 @@ function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
 	}
 }
 
-/** Load the real GCC front ends and GNU binutils. No x86 execution API is provided. */
-export async function createCrossGccCompiler(
-	options: CreateCrossGccCompilerOptions
-): Promise<CrossGccCompiler> {
+export function createGccCompiler(
+	options: CreateGccCompilerOptions & { target: 'x86_64-linux-gnu' }
+): Promise<CrossGccCompiler>;
+export function createGccCompiler(
+	options: CreateGccCompilerOptions & { target: 'wasm32-wasi' }
+): Promise<WasiGccCompiler>;
+export function createGccCompiler(
+	options: CreateGccCompilerOptions
+): Promise<CrossGccCompiler | WasiGccCompiler>;
+/** Load a pinned real GCC bundle for the explicitly selected output target. */
+export async function createGccCompiler(
+	options: CreateGccCompilerOptions
+): Promise<CrossGccCompiler | WasiGccCompiler> {
+	if (options.target !== 'x86_64-linux-gnu' && options.target !== 'wasm32-wasi')
+		throw new Error('GCC requires an explicit supported output target');
 	const manifestSha256 = gccDigest(options.manifestSha256);
 	const manifestUrl = new URL(options.manifestUrl.toString());
 	if (
@@ -96,16 +120,17 @@ export async function createCrossGccCompiler(
 		bytes: manifestBytes,
 		expected: manifestSha256
 	});
-	const manifest = parseCrossGccManifest(
-		JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes))
-	);
+	const manifest = (
+		options.target === 'wasm32-wasi' ? parseWasiGccManifest : parseCrossGccManifest
+	)(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));
+	const manifestAssets: Partial<Record<CrossGccAssetName, CrossGccAsset>> = manifest.assets;
 	for (const asset of Object.values(manifest.assets))
 		if (asset.bytes > maxAssetBytes)
 			throw new Error('GCC asset exceeds the configured byte limit');
 	const assets = new Map<CrossGccAssetName, Uint8Array>();
 	await Promise.all(
-		(Object.keys(gccAssetPaths) as CrossGccAssetName[]).map(async (name) => {
-			const receipt = manifest.assets[name],
+		(Object.keys(manifest.assets) as CrossGccAssetName[]).map(async (name) => {
+			const receipt = manifestAssets[name]!,
 				url = new URL(receipt.path, manifestUrl).href;
 			const bytes = new Uint8Array(
 				await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl)
@@ -151,7 +176,7 @@ export async function createCrossGccCompiler(
 	const sysrootTree = gccSysrootTree(sysroot, directories, '/sysroot');
 	const factories = new Map<
 		CrossGccTool,
-		{ factory: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
+		{ factory?: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
 	>();
 	let precompiled: { flags: readonly string[]; bytes: Uint8Array } | undefined;
 	let disposed = false,
@@ -172,9 +197,14 @@ export async function createCrossGccCompiler(
 			const bytes = assets.get(`${tool}Wasm`)!;
 			if (bytes[0] !== 0 || bytes[1] !== 97 || bytes[2] !== 115 || bytes[3] !== 109)
 				throw new Error(`GCC ${tool} host asset is not WebAssembly`);
-			const wasm = await WebAssembly.compile(Uint8Array.from(bytes));
-			const loader = await loadGccModuleFactory(assets.get(`${tool}Js`)!);
-			factories.set(tool, { ...loader, wasm });
+			if (manifest.target === 'wasm32-wasi' && tool === 'ld') {
+				const { module: wasm } = await compileGccWasm(bytes, 'executable');
+				factories.set(tool, { revoke() {}, wasm });
+			} else {
+				const wasm = await WebAssembly.compile(Uint8Array.from(bytes));
+				const loader = await loadGccModuleFactory(assets.get(`${tool}Js`)!);
+				factories.set(tool, { ...loader, wasm });
+			}
 		}
 		signal?.throwIfAborted();
 	} catch (error) {
@@ -189,13 +219,23 @@ export async function createCrossGccCompiler(
 			output: string;
 			precompiledHeader?: Uint8Array;
 		}[],
-		files: readonly { path: string; contents: Uint8Array }[]
+		files: readonly { path: string; contents: Uint8Array }[],
+		simdEnabled = false
 	) {
 		if (disposed) throw new Error('GCC compiler is disposed');
 		if (active) throw new Error('GCC compiler is busy');
 		active = true;
 		const workspace = new Map(files.map((file) => [file.path, file.contents]));
 		const results: CrossGccStageResult[] = [];
+		let wasmInspection: GccWasmInspection | undefined;
+		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
+			const inspection = await inspectGccWasm(bytes, emit);
+			if (inspection.features.simd128 && !simdEnabled)
+				throw new Error(
+					'GCC produced Wasm SIMD without an enabled SIMD compilation request'
+				);
+			return inspection;
+		}
 		let stdout = '',
 			stderr = '',
 			diagnosticBytes = 0;
@@ -213,7 +253,28 @@ export async function createCrossGccCompiler(
 				const loaded = factories.get(stage.tool)!;
 				let exitCode = 0;
 				const start = performance.now();
-				const module = await loaded.factory({
+				if (manifest.target === 'wasm32-wasi' && stage.tool === 'ld') {
+					const linked = await runWasiGccLinker(
+						loaded.wasm,
+						stage.argv,
+						[...sysroot, ...workspace],
+						stage.output,
+						(stream, text) => print(stream)(text)
+					);
+					results.push({
+						tool: stage.tool,
+						argv: [...stage.argv],
+						exitCode: linked.exitCode,
+						milliseconds: performance.now() - start,
+						peakMemoryBytes: linked.peakMemoryBytes
+					});
+					if (linked.exitCode !== 0)
+						return { exitCode: linked.exitCode, stdout, stderr, stages: results };
+					wasmInspection = await inspectOutput(linked.output!, 'executable');
+					workspace.set(stage.output, linked.output!);
+					continue;
+				}
+				const module = await loaded.factory!({
 					noInitialRun: true,
 					noExitRuntime: false,
 					wasmBinary: assets.get(`${stage.tool}Wasm`),
@@ -234,7 +295,10 @@ export async function createCrossGccCompiler(
 						if (
 							path === `${stage.tool}.wasm` ||
 							((stage.tool === 'as' || stage.tool === 'ld') &&
-								path === `${stage.tool}-new.wasm`)
+								path === `${stage.tool}-new.wasm`) ||
+							(manifest.target === 'wasm32-wasi' &&
+								stage.tool === 'as' &&
+								path === 'wat2wasm.wasm')
 						) {
 							return new URL(manifest.assets[`${stage.tool}Wasm`].path, manifestUrl)
 								.href;
@@ -295,7 +359,9 @@ export async function createCrossGccCompiler(
 				});
 				if (exitCode !== 0) return { exitCode, stdout, stderr, stages: results };
 				const output = Uint8Array.from(module.FS.readFile(stage.output));
-				if (stage.output !== pchPath)
+				if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
+					wasmInspection = await inspectOutput(output, 'object');
+				else if (stage.output !== pchPath)
 					validateOutput(
 						output,
 						stage.tool === 'as'
@@ -306,7 +372,7 @@ export async function createCrossGccCompiler(
 					);
 				workspace.set(stage.output, output);
 			}
-			return { exitCode: 0, stdout, stderr, stages: results, workspace };
+			return { exitCode: 0, stdout, stderr, stages: results, workspace, wasmInspection };
 		} catch (error) {
 			// Worker transport forwards only the error message. Preserve diagnostics
 			// printed before an unexpected host abort, without turning it into a
@@ -325,25 +391,90 @@ export async function createCrossGccCompiler(
 			active = false;
 		}
 	}
-	return {
+	async function precompileHeader(request: CrossGccPrecompileRequest = {}) {
+		if (disposed) throw new Error('GCC compiler is disposed');
+		if (active) throw new Error('GCC compiler is busy');
+		if (manifest.target !== 'x86_64-linux-gnu' || !manifest.capabilities.precompiledHeaders)
+			throw new Error('This GCC bundle cannot load precompiled headers');
+		if (
+			!request ||
+			typeof request !== 'object' ||
+			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard'].includes(key))
+		)
+			throw new Error('Unsupported GCC precompiled header option');
+		const { frontEndFlags } = gccCompilePlan(
+			{ ...request, code: '', language: 'cpp', emit: 'assembly' },
+			manifest
+		);
+		// Precompile the copy GCC would find first, exactly as #include <bits/stdc++.h> does.
+		const header = frontEndFlags
+			.flatMap((flag, index) =>
+				frontEndFlags[index - 1] === '-isystem' ? [`${flag}/bits/stdc++.h`] : []
+			)
+			.find((path) => {
+				let entry: GccSysrootDirectory | Uint8Array | undefined = sysrootTree;
+				for (const name of path.slice('/sysroot/'.length).split('/'))
+					entry = entry instanceof Map ? entry.get(name) : undefined;
+				return entry instanceof Uint8Array;
+			});
+		if (!header) throw new Error('GCC sysroot has no bits/stdc++.h');
+		precompiled = undefined;
+		const result = await run(
+			[
+				{
+					tool: 'cc1plus',
+					argv: [
+						...frontEndFlags,
+						header,
+						'-o',
+						'/workspace/stdc++.h.s',
+						'--output-pch',
+						pchPath
+					],
+					output: pchPath
+				}
+			],
+			[]
+		);
+		if (!result.workspace) return result;
+		const { workspace } = result;
+		const bytes = workspace.get(pchPath)!;
+		precompiled = { flags: frontEndFlags, bytes };
+		return {
+			exitCode: result.exitCode,
+			stdout: result.stdout,
+			stderr: result.stderr,
+			stages: result.stages,
+			bytes: bytes.byteLength
+		};
+	}
+	const compiler = {
 		manifest,
 		identity: Object.freeze({
 			compiler: 'gcc',
-			compilerVersion: '16.2.0',
+			compilerVersion: manifest.compiler.version,
 			compilerHost: manifest.host,
 			target: manifest.target,
 			manifestSha256,
-			sysrootSha256: manifest.assets.sysroot.sha256
+			sysrootSha256: manifest.assets.sysroot.sha256,
+			...(manifest.target === 'wasm32-wasi'
+				? { compilerCommit: manifest.compiler.commit }
+				: {})
 		}),
-		async compile(request) {
+		async compile(request: CrossGccCompileRequest | WasiGccCompileRequest) {
 			if (disposed) throw new Error('GCC compiler is disposed');
 			if (active) throw new Error('GCC compiler is busy');
-			const plan = gccCompilePlan(request, manifest);
+			const plan =
+				manifest.target === 'wasm32-wasi'
+					? wasiGccCompilePlan(request as WasiGccCompileRequest, manifest)
+					: gccCompilePlan(request as CrossGccCompileRequest, manifest);
+			const frontEndFlags = 'frontEndFlags' in plan ? plan.frontEndFlags : undefined;
 			// GCC loads the header only where it is valid; otherwise it parses the source.
 			const pch =
 				precompiled &&
-				plan.frontEndFlags.length === precompiled.flags.length &&
-				plan.frontEndFlags.every((flag, index) => flag === precompiled!.flags[index])
+				frontEndFlags &&
+				frontEndFlags.length === precompiled.flags.length &&
+				frontEndFlags.every((flag, index) => flag === precompiled!.flags[index])
 					? precompiled
 					: undefined;
 			const result = await run(
@@ -361,10 +492,13 @@ export async function createCrossGccCompiler(
 						precompiledHeader: pch.bytes
 					};
 				}),
-				plan.files
+				plan.files,
+				manifest.target === 'wasm32-wasi' &&
+					manifest.capabilities.simd &&
+					(request as WasiGccCompileRequest).simd === true
 			);
 			if (!result.workspace) return result;
-			const { workspace, ...completed } = result;
+			const { workspace, wasmInspection, ...completed } = result;
 			return {
 				...completed,
 				artifact: {
@@ -374,68 +508,45 @@ export async function createCrossGccCompiler(
 					format:
 						plan.emit === 'assembly'
 							? 'assembly'
-							: plan.emit === 'object'
-								? 'elf-object'
-								: 'elf-executable',
+							: manifest.target === 'wasm32-wasi'
+								? plan.emit === 'object'
+									? 'wasm-object'
+									: 'wasm-executable'
+								: plan.emit === 'object'
+									? 'elf-object'
+									: 'elf-executable',
 					fileName: plan.fileName,
 					bytes: workspace.get(`/workspace/${plan.fileName}`)!,
-					cpu: plan.cpu
+					cpu: plan.cpu,
+					...(wasmInspection ? { wasm: wasmInspection } : {})
 				}
 			};
 		},
-		async precompileHeader(request = {}) {
-			if (disposed) throw new Error('GCC compiler is disposed');
-			if (active) throw new Error('GCC compiler is busy');
-			if (!manifest.capabilities.precompiledHeaders)
-				throw new Error('This GCC bundle cannot load precompiled headers');
-			if (
-				!request ||
-				typeof request !== 'object' ||
-				Object.keys(request).some(
-					(key) => !['cpu', 'optimization', 'standard'].includes(key)
-				)
-			)
-				throw new Error('Unsupported GCC precompiled header option');
-			const { frontEndFlags } = gccCompilePlan(
-				{ ...request, code: '', language: 'cpp', emit: 'assembly' },
-				manifest
-			);
-			// Precompile the copy GCC would find first, exactly as #include <bits/stdc++.h> does.
-			const header = frontEndFlags
-				.flatMap((flag, index) =>
-					frontEndFlags[index - 1] === '-isystem' ? [`${flag}/bits/stdc++.h`] : []
-				)
-				.find((path) => {
-					let entry: GccSysrootDirectory | Uint8Array | undefined = sysrootTree;
-					for (const name of path.slice('/sysroot/'.length).split('/'))
-						entry = entry instanceof Map ? entry.get(name) : undefined;
-					return entry instanceof Uint8Array;
-				});
-			if (!header) throw new Error('GCC sysroot has no bits/stdc++.h');
-			precompiled = undefined;
-			const result = await run(
-				[
-					{
-						tool: 'cc1plus',
-						argv: [
-							...frontEndFlags,
-							header,
-							'-o',
-							'/workspace/stdc++.h.s',
-							'--output-pch',
-							pchPath
-						],
-						output: pchPath
+		...(manifest.target === 'x86_64-linux-gnu' ? { precompileHeader } : {}),
+		dispose,
+		...(manifest.target === 'wasm32-wasi'
+			? {
+					async run(artifact: WasiGccArtifact, runOptions?: WasiGccRunOptions) {
+						if (disposed) throw new Error('GCC compiler is disposed');
+						if (active) throw new Error('GCC compiler is busy');
+						active = true;
+						try {
+							return await runGccWasiArtifact(artifact, runOptions);
+						} finally {
+							active = false;
+						}
 					}
-				],
-				[]
-			);
-			if (!result.workspace) return result;
-			const { workspace, ...completed } = result;
-			const bytes = workspace.get(pchPath)!;
-			precompiled = { flags: frontEndFlags, bytes };
-			return { ...completed, bytes: bytes.byteLength };
-		},
-		dispose
+				}
+			: {})
 	};
+	// The target selects both the manifest parser and the planner above. Public overloads
+	// preserve the existing narrow x86 types while exposing the separate WASI contract.
+	return compiler as CrossGccCompiler | WasiGccCompiler;
+}
+
+/** Backward-compatible x86 API. It never infers a target from downloaded metadata. */
+export function createCrossGccCompiler(
+	options: CreateCrossGccCompilerOptions
+): Promise<CrossGccCompiler> {
+	return createGccCompiler({ ...options, target: 'x86_64-linux-gnu' });
 }

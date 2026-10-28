@@ -124,14 +124,8 @@ class SideEffect { static int calls; public String toString() { calls++; throw n
 				{
 					stackDeobfuscator: {
 						enabled: true,
-						path: await (
-							WebAssembly.compile as (
-								bytes: BufferSource,
-								options: { builtins: string[] }
-							) => Promise<WebAssembly.Module>
-						)((await read('compiler.wasm-deobfuscator.wasm')) as BufferSource, {
-							builtins: ['js-string']
-						}),
+						// The raw 0.16 loader compiles its own deobfuscator input.
+						path: await read('compiler.wasm-deobfuscator.wasm'),
 						infoLocation: 'embedded'
 					},
 					installImports(imports: any) {

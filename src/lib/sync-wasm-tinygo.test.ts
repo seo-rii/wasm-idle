@@ -412,7 +412,7 @@ describe('syncWasmTinyGoDist', () => {
 			'wasm-idle:tinygo-executable-graph:v1\n'
 		);
 		expect(computeTinyGoExecutableGraphFingerprint(lock)).toBe(
-			'8b2e87ec50b586591903adcff8c547b37c3b23d4e12f97d8266035cefdeebac4'
+			'626d47447d73e8f2b1b2e5d166e6a0dc7bda15314cab50de2000798e58c89e84'
 		);
 		expect(
 			[...lock.modules.values()].map(({ path: modulePath, bytes, sha256: digest }) => ({
@@ -422,34 +422,34 @@ describe('syncWasmTinyGoDist', () => {
 			}))
 		).toEqual([
 			{
-				modulePath: 'assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin',
-				bytes: 2366782,
-				digest: 'e497b67a6bcbee29639792a3d58ecacb22781287f7fe155bfdf079e6ca159dff'
+				modulePath: 'assets/upstream-binaryen-48916159e6bb29f4.wasm.gz.bin',
+				bytes: 2337116,
+				digest: '63375e0508c38f6ec0a43b43015fa938db0020616b3e02aa8ad49e3e84acf6e8'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-6CYe8gHb.js',
-				bytes: 105574,
-				digest: '30c6b0d3f0968222e0d78f7ec54300838eca0326558e448bc48ab213e35aae2f'
+				modulePath: 'assets/upstream-compile-worker-CbXtAM7H.js',
+				bytes: 589,
+				digest: 'bbf7c5086ae414dc3f33777e3eebf16ea8631325b8bb4690d25091c03567f31a'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-CFw6Ych6.js',
-				bytes: 558,
-				digest: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209'
+				modulePath: 'assets/upstream-compile-worker-CjBUBLVc.js',
+				bytes: 106370,
+				digest: '5bf52b17b6cfcca0f1e200fc908eb58864144860e442d230f6edebd222975103'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-CeYS3ydo.js',
-				bytes: 181175,
-				digest: 'faa2bf6a310cd23991babde1fb62cd34253d692fee03029fe3508eae4c24b1c0'
+				modulePath: 'assets/upstream-compile-worker-CtGm-AK6.js',
+				bytes: 183991,
+				digest: 'ea3e633cdf6bc8e9d8cb628b8fe7ac971b082e83b1963dffa1fe1a90f0a9ddb8'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-NPJcbr3r.js',
-				bytes: 110,
-				digest: '2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80'
+				modulePath: 'assets/upstream-compile-worker-Dsn9Eg6C.js',
+				bytes: 126,
+				digest: 'a03423dd62954c6479910dddedc4703ecdc36e4dcd783e5d2b121fb16b72a1b4'
 			},
 			{
 				modulePath: 'upstream.js',
-				bytes: 126235,
-				digest: 'b780e6d7492c60f9c7481eda0b3ef45be15887ee367b8728532e824a4592e3b1'
+				bytes: 126854,
+				digest: '67031b67fe3b70fea1e0cbc2b01ba113eae585cddb641a4769cdf1056104a5a9'
 			}
 		]);
 	});

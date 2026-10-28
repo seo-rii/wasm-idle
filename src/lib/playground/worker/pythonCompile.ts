@@ -46,6 +46,7 @@ def compile_bytecode(source, filename, optimization, byte_limit, invalidation_mo
         "checked-hash": py_compile.PycInvalidationMode.CHECKED_HASH,
         "unchecked-hash": py_compile.PycInvalidationMode.UNCHECKED_HASH,
         "timestamp": py_compile.PycInvalidationMode.TIMESTAMP,
+        "normalized": py_compile.PycInvalidationMode.CHECKED_HASH,
     }[invalidation_mode]
 
     with tempfile.TemporaryDirectory(prefix="wasm-idle-pyc-") as directory:
@@ -68,6 +69,10 @@ def compile_bytecode(source, filename, optimization, byte_limit, invalidation_mo
             return {"byteLimitExceeded": size}
         with open(output_path, "rb") as output_file:
             data = output_file.read()
+    if invalidation_mode == "normalized":
+        # Preserve the runtime magic and complete code object, but remove the
+        # source hash, flags, timestamp and source size for source-free artifacts.
+        data = data[:4] + bytes(12) + data[16:]
     return {
         "data": data,
         "pythonVersion": platform.python_version(),

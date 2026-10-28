@@ -1,0 +1,421 @@
+{
+	"schemaVersion": 1,
+	"capturedAt": "2026-10-28T08:38:36.941Z",
+	"commit": "27b4be22fbc7e9a543eadd0b3267b40cecabbd61",
+	"sourceDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	"benchmarkSourceSha256": {
+		"scripts/benchmark-debug-responsiveness.mjs": "3d77c47e6ba8ebd2fcd68dce1d13b987ea1792f498ad2bcadc0e4e534c7c4268",
+		"scripts/debug-responsiveness-client.ts": "c2646ac9617cb55c52c96394b1e753f938ff131a527ee8473b7502bad1a235f3"
+	},
+	"chromium": "156.0.8078.4",
+	"node": "v24.22.1",
+	"platform": "linux/x64",
+	"samples": 10,
+	"receipts": {
+		"clang/runtime-manifest.v1.json": {
+			"bytes": 967,
+			"sha256": "0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad"
+		},
+		"clang/bin/clang.wasm.gz": {
+			"bytes": 13124999,
+			"sha256": "cc7b6b229af392f439a1ca89dbb8d5e016792264a0a6ee59608ff24e269be982"
+		},
+		"clang/bin/lld.wasm.gz": {
+			"bytes": 6421841,
+			"sha256": "798ce825f3e3cf9a695b6a049f157ba28d38731a3dc5e699ccdf23d69d3a5c20"
+		},
+		"clang/bin/memfs.wasm.gz": {
+			"bytes": 16111,
+			"sha256": "a3e43451bc15ae69a7f113009e2ee82ab4db711625c1782cd45d0d3c4d38175a"
+		},
+		"clang/bin/c-sysroot.tar.gz": {
+			"bytes": 2006388,
+			"sha256": "da7a29250b2fe2d928fa8818069ff67e1dcb26c529bbf01f40bbeb251535ecaa"
+		},
+		"clang/libc-printscan-long-double.a.gz": {
+			"bytes": 52723,
+			"sha256": "b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b"
+		},
+		"wasm-debug/runtime-manifest.v2.json": {
+			"bytes": 2853,
+			"sha256": "78e65afcf84ed709c6d166f4ef55bf34e5e3b10c61155a3484547cb8b27bd3a1"
+		},
+		"wasm-debug/debug/lldb-web-dap.js": {
+			"bytes": 162488,
+			"sha256": "c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d"
+		},
+		"wasm-debug/debug/lldb-web-dap.wasm": {
+			"bytes": 42718479,
+			"sha256": "e7146642a865ffb41cca6635c72f97bfe923be1ce7f0d930e2e59713a3ee5222"
+		},
+		"wasm-debug/debug/lldb-web-dap.pthread.mjs": {
+			"bytes": 1364,
+			"sha256": "d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d"
+		},
+		"wasm-debug/debug/wamr-debug.js": {
+			"bytes": 111550,
+			"sha256": "5071ebb71f077a9ebed15d52897a2ab13b470a44a1e271f44113f3a27d388e0d"
+		},
+		"wasm-debug/debug/wamr-debug.wasm": {
+			"bytes": 278960,
+			"sha256": "a1a128771b8fb352725e9b5120bc7448e6cc639b66275c2fa2ef49bd212185e1"
+		},
+		"wasm-debug/debug/wamr-debug.worker.mjs": {
+			"bytes": 111543,
+			"sha256": "b02f409a57667da4edf2562fddc1101527bd2ccd6885133c178188e09d2413b8"
+		},
+		"teavm/compiler.wasm-runtime.js": {
+			"bytes": 13936,
+			"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
+		},
+		"teavm/compiler.wasm": {
+			"bytes": 4334204,
+			"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4"
+		},
+		"teavm/compiler.wasm-deobfuscator.wasm": {
+			"bytes": 36608,
+			"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c"
+		},
+		"teavm/compile-classlib-teavm.bin": {
+			"bytes": 200641,
+			"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733"
+		},
+		"teavm/runtime-classlib-teavm.bin": {
+			"bytes": 2392921,
+			"sha256": "e06ea60036c383004a43f1b01b108e07271b1ffc67f9906505873ff8a5c1e7a6"
+		}
+	},
+	"methodology": "Direct sandbox API latency, no UI paint. First context session is separate from warm same-context restarts; disk/OS/engine caches are not reset. LLDB preparation compiles C once; Java preparation loads its compiler and launch includes compilation. Persistent asset cache disabled; existing compiler/module/evaluator caches retained. Heap is calibrated page performance.memory, excludes worker heaps and process RSS. p95 is nearest-rank and exploratory at small sample counts.",
+	"results": [
+		{
+			"language": "lldb",
+			"prepareMs": 1462.5999999940395,
+			"watchSupported": false,
+			"calibration": {
+				"baseline": 745775,
+				"retained": 101345280,
+				"released": 681879
+			},
+			"importedHeap": 3941880,
+			"postDisposePageHeapBytes": 4900134,
+			"workersAfterDispose": 0,
+			"firstSession": {
+				"index": 0,
+				"phase": "first-session",
+				"launchMs": 2968.240000002086,
+				"firstWatchMs": null,
+				"repeatedWatchMs": [],
+				"stepMs": 569.7199999988079,
+				"continueMs": 41.399999998509884,
+				"output": "result=70\n",
+				"postRunPageHeapBytes": 4698007,
+				"workersAfterRun": 0
+			},
+			"summaryMs": {
+				"restart": {
+					"count": 9,
+					"p50": 1118.640000000596,
+					"p95": 2036.3999999985099
+				},
+				"step": {
+					"count": 10,
+					"p50": 12.655000001192093,
+					"p95": 569.7199999988079
+				},
+				"firstWatchPerSession": null,
+				"repeatedWatch": null
+			},
+			"runs": [
+				{
+					"index": 0,
+					"phase": "first-session",
+					"launchMs": 2968.240000002086,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 569.7199999988079,
+					"continueMs": 41.399999998509884,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4698007,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 1,
+					"phase": "restart",
+					"launchMs": 1917.8149999976158,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 16.479999996721745,
+					"continueMs": 47.810000002384186,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4793415,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 2,
+					"phase": "restart",
+					"launchMs": 2036.3999999985099,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 17.75,
+					"continueMs": 41.00999999791384,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4830507,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 3,
+					"phase": "restart",
+					"launchMs": 1778.7149999961257,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 13.654999993741512,
+					"continueMs": 39.86500000208616,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4860907,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 4,
+					"phase": "restart",
+					"launchMs": 1118.640000000596,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 11.064999997615814,
+					"continueMs": 33.41499999910593,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4943099,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 5,
+					"phase": "restart",
+					"launchMs": 994.625,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 11.130000002682209,
+					"continueMs": 34.774999998509884,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4957583,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 6,
+					"phase": "restart",
+					"launchMs": 1314.0149999931455,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 12.655000001192093,
+					"continueMs": 33.8399999961257,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4960319,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 7,
+					"phase": "restart",
+					"launchMs": 1109.570000000298,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 10.894999995827675,
+					"continueMs": 35.9100000038743,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 4977375,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 8,
+					"phase": "restart",
+					"launchMs": 996.8800000026822,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 13.855000004172325,
+					"continueMs": 35.439999997615814,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 5027759,
+					"workersAfterRun": 0
+				},
+				{
+					"index": 9,
+					"phase": "restart",
+					"launchMs": 1017.8550000041723,
+					"firstWatchMs": null,
+					"repeatedWatchMs": [],
+					"stepMs": 11.79500000178814,
+					"continueMs": 38.125,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 5029227,
+					"workersAfterRun": 0
+				}
+			]
+		},
+		{
+			"language": "java",
+			"prepareMs": 437.4699999988079,
+			"watchSupported": true,
+			"calibration": {
+				"baseline": 745775,
+				"retained": 101345280,
+				"released": 681879
+			},
+			"importedHeap": 3941880,
+			"postDisposePageHeapBytes": 12832884,
+			"workersAfterDispose": 0,
+			"firstSession": {
+				"index": 0,
+				"phase": "first-session",
+				"launchMs": 3078.255000002682,
+				"firstWatchMs": 2436.070000000298,
+				"repeatedWatchMs": [8.640000000596046, 5.760000005364418],
+				"stepMs": 1.3799999952316284,
+				"continueMs": 2.5,
+				"output": "result=70\n",
+				"postRunPageHeapBytes": 12568077,
+				"workersAfterRun": 1
+			},
+			"summaryMs": {
+				"restart": {
+					"count": 9,
+					"p50": 6.954999998211861,
+					"p95": 9.325000002980232
+				},
+				"step": {
+					"count": 10,
+					"p50": 1.2749999985098839,
+					"p95": 1.5850000008940697
+				},
+				"firstWatchPerSession": {
+					"count": 10,
+					"p50": 1980.8299999982119,
+					"p95": 2463.9799999967217
+				},
+				"repeatedWatch": {
+					"count": 20,
+					"p50": 4.96000000089407,
+					"p95": 7.024999998509884
+				}
+			},
+			"runs": [
+				{
+					"index": 0,
+					"phase": "first-session",
+					"launchMs": 3078.255000002682,
+					"firstWatchMs": 2436.070000000298,
+					"repeatedWatchMs": [8.640000000596046, 5.760000005364418],
+					"stepMs": 1.3799999952316284,
+					"continueMs": 2.5,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12568077,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 1,
+					"phase": "restart",
+					"launchMs": 9.325000002980232,
+					"firstWatchMs": 2242.0900000035763,
+					"repeatedWatchMs": [5.969999998807907, 5.745000004768372],
+					"stepMs": 1.5850000008940697,
+					"continueMs": 0.7349999994039536,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12649749,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 2,
+					"phase": "restart",
+					"launchMs": 9.310000002384186,
+					"firstWatchMs": 1980.8299999982119,
+					"repeatedWatchMs": [5.924999997019768, 4.829999998211861],
+					"stepMs": 1.1200000047683716,
+					"continueMs": 0.6749999970197678,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12762417,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 3,
+					"phase": "restart",
+					"launchMs": 5.570000000298023,
+					"firstWatchMs": 2463.9799999967217,
+					"repeatedWatchMs": [6.929999999701977, 7.024999998509884],
+					"stepMs": 1.4800000041723251,
+					"continueMs": 0.625,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12769277,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 4,
+					"phase": "restart",
+					"launchMs": 6.954999998211861,
+					"firstWatchMs": 1829.8299999982119,
+					"repeatedWatchMs": [4.600000001490116, 4.3549999967217445],
+					"stepMs": 1.3400000035762787,
+					"continueMs": 1.1449999958276749,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12800261,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 5,
+					"phase": "restart",
+					"launchMs": 4.705000005662441,
+					"firstWatchMs": 1981.4099999964237,
+					"repeatedWatchMs": [5.540000006556511, 5],
+					"stepMs": 1.5700000002980232,
+					"continueMs": 1.2049999982118607,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12806625,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 6,
+					"phase": "restart",
+					"launchMs": 5.53999999910593,
+					"firstWatchMs": 2068.094999998808,
+					"repeatedWatchMs": [5.6400000005960464, 2.9200000017881393],
+					"stepMs": 0.7650000005960464,
+					"continueMs": 0.380000002682209,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12807905,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 7,
+					"phase": "restart",
+					"launchMs": 8.984999999403954,
+					"firstWatchMs": 1472.8149999976158,
+					"repeatedWatchMs": [4.839999996125698, 4.049999997019768],
+					"stepMs": 0.9500000029802322,
+					"continueMs": 0.4450000002980232,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12825709,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 8,
+					"phase": "restart",
+					"launchMs": 6.549999997019768,
+					"firstWatchMs": 1682.8000000044703,
+					"repeatedWatchMs": [4.96000000089407, 4.96000000089407],
+					"stepMs": 1.2749999985098839,
+					"continueMs": 0.5750000029802322,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12846529,
+					"workersAfterRun": 1
+				},
+				{
+					"index": 9,
+					"phase": "restart",
+					"launchMs": 7.03999999910593,
+					"firstWatchMs": 1407.445000000298,
+					"repeatedWatchMs": [4.024999998509884, 2.869999997317791],
+					"stepMs": 0.7150000035762787,
+					"continueMs": 0.4399999976158142,
+					"output": "result=70\n",
+					"postRunPageHeapBytes": 12847969,
+					"workersAfterRun": 1
+				}
+			]
+		}
+	]
+}

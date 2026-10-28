@@ -450,7 +450,7 @@ function createPreflightManifest(
 				identity: {
 					languageId: 'TINYGO',
 					implementationId: 'tinygo-upstream-browser',
-					implementationVersion: '0.40.1',
+					implementationVersion: '0.43.0',
 					profile: {
 						profileId: 'tinygo-executable-graph-v1',
 						manifestSchemaVersion: 1,

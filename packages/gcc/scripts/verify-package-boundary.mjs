@@ -21,9 +21,8 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
 assert.equal(manifest.name, '@wasm-idle/gcc');
 for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
 	for (const dependency of Object.keys(manifest[field] ?? {})) {
-		assert.equal(
-			dependency,
-			'@wasm-idle/core',
+		assert.ok(
+			['@wasm-idle/core', '@bjorn3/browser_wasi_shim'].includes(dependency),
 			`GCC must use neutral core helpers rather than another compiler package: ${dependency}`
 		);
 	}
@@ -63,7 +62,9 @@ for (const path of paths) {
 	for (const [, reference] of references) {
 		if (!reference.startsWith('.')) {
 			assert.ok(
-				reference === '@wasm-idle/core' || reference.startsWith('@wasm-idle/core/'),
+				reference === '@wasm-idle/core' ||
+					reference.startsWith('@wasm-idle/core/') ||
+					reference === '@bjorn3/browser_wasi_shim',
 				`Unexpected GCC dependency in ${path}: ${reference}`
 			);
 			continue;

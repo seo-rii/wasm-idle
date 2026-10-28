@@ -12,7 +12,7 @@ import { createPythonExecutionHelpers } from './pythonExecution';
 import { compilePythonBytecode } from './pythonCompile';
 import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
 import { createPythonWorkspaceFiles } from './pythonWorkspaceFiles';
-import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
+import { createPythonDebugHelpers } from './pythonDebug';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import {
@@ -58,6 +58,7 @@ let installedApecodeVersion: string | undefined;
 let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
 let invalidateWorkspaceImports: ReturnType<typeof createPythonWorkspaceImports> | undefined;
 let syncWorkspaceFiles: ReturnType<typeof createPythonWorkspaceFiles> | undefined;
+let debugHelpers: ReturnType<typeof createPythonDebugHelpers> | undefined;
 let debugPauseSequence = 0;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
@@ -775,6 +776,8 @@ self.onmessage = async (event: any) => {
 				}
 			}
 		};
+		let debugTrace: any;
+		const debugTraceName = `__wasm_idle_python_debug_trace_${ts}`;
 		const debugPauseName = `__wasm_idle_python_debug_pause_${ts}`;
 		const debugWaitName = `__wasm_idle_python_debug_wait_${ts}`;
 		const debugReadWatchName = `__wasm_idle_python_debug_watch_read_${ts}`;
@@ -875,7 +878,6 @@ self.onmessage = async (event: any) => {
 			(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
 		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
 		const executionFilenameLiteral = JSON.stringify(executionFilename);
-		const debugFilenameLiteral = JSON.stringify(debugFilename);
 		const normalizedBreakpoints = JSON.stringify(
 			[...(Array.isArray(breakpoints) ? breakpoints : [])]
 				.map((value) => Number(value))
@@ -893,6 +895,23 @@ self.onmessage = async (event: any) => {
 			if (isPython && !debug) {
 				await getExecutionHelpers().run(code, executionFilename, self[executionReadyName]);
 			} else {
+				if (debug) {
+					debugHelpers ??= createPythonDebugHelpers(pyodide, imageHook);
+					debugTrace = debugHelpers.createTrace(
+						debugFilename,
+						normalizedBreakpoints,
+						!!pauseOnEntry,
+						{
+							state: self[debugBreakpointStateName],
+							readBreakpoints: self[debugReadBreakpointsName],
+							pause: self[debugPauseName],
+							wait: self[debugWaitName],
+							readWatch: self[debugReadWatchName],
+							writeWatch: self[debugWriteWatchName]
+						}
+					);
+					self[debugTraceName] = debugTrace;
+				}
 				await pyodide.runPythonAsync(`import ast
 import builtins
 import inspect
@@ -901,164 +920,9 @@ import os
 import sys
 import types
 from js import ${executionReadyName} as __wasm_idle_execution_ready
-${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
-${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
-${debug ? `from js import ${debugReadBreakpointsName}` : ''}
-${debug ? `from js import ${debugBreakpointStateName} as __wasm_idle_debug_breakpoint_state` : ''}
+${debug ? `from js import ${debugTraceName} as __wasm_idle_debug_trace` : ''}
 
-${imageHook}
-
-${
-	debug
-		? `
-import os as __wasm_idle_debug_os
-
-# Direct compilation uses relative paths; imported modules use absolute paths.
-# Capture both identities before user code can change the working directory.
-__wasm_idle_debug_source_filenames = {
-    ${debugFilenameLiteral},
-    __wasm_idle_debug_os.path.abspath(${debugFilenameLiteral}),
-}
-__wasm_idle_debug_breakpoints = set(${normalizedBreakpoints})
-__wasm_idle_debug_breakpoint_version = -1
-__wasm_idle_debug_pause_on_entry = ${pauseOnEntry ? 'True' : 'False'}
-__wasm_idle_debug_step_mode = None
-__wasm_idle_debug_next_depth = None
-__wasm_idle_debug_step_out_depth = None
-
-def __wasm_idle_debug_refresh_breakpoints():
-    global __wasm_idle_debug_breakpoints
-    global __wasm_idle_debug_breakpoint_version
-    if __wasm_idle_debug_breakpoint_state.version == __wasm_idle_debug_breakpoint_version:
-        return
-    payload = ${debugReadBreakpointsName}(__wasm_idle_debug_breakpoint_version)
-    # JavaScript null crosses Pyodide as JsNull rather than Python None.
-    if not isinstance(payload, str):
-        return
-    snapshot = json.loads(payload)
-    version = int(snapshot.get("version", -1))
-    if version == __wasm_idle_debug_breakpoint_version:
-        return
-    __wasm_idle_debug_breakpoint_version = version
-    __wasm_idle_debug_breakpoints = set(int(line) for line in snapshot.get("lines", []) if int(line) > 0)
-
-def __wasm_idle_debug_depth(frame):
-    depth = 0
-    current = frame
-    while current is not None:
-        if current.f_code.co_filename in __wasm_idle_debug_source_filenames:
-            depth += 1
-        current = current.f_back
-    return depth
-
-${PYTHON_DEBUG_PREVIEW}
-
-def __wasm_idle_debug_locals(frame, start=0, count=50):
-    locals_preview = []
-    index = 0
-    for name, value in frame.f_locals.items():
-        if name == "__builtins__" or name.startswith("__wasm_idle_") or name.startswith("."):
-            continue
-        if index >= start:
-            preview = __wasm_idle_debug_preview(value)
-            if len(preview) > 200:
-                preview = preview[:197] + "..."
-            suffix = "… [" + str(index) + "]"
-            display_name = name if len(name) <= 256 else name[:256-len(suffix)] + suffix
-            locals_preview.append({"name": display_name, "value": preview})
-            if len(locals_preview) >= count:
-                break
-        index += 1
-    return locals_preview
-
-def __wasm_idle_debug_stack(frame):
-    stack = []
-    current = frame
-    while current is not None:
-        if current.f_code.co_filename in __wasm_idle_debug_source_filenames:
-            stack.append({"functionName": current.f_code.co_name, "line": current.f_lineno})
-        current = current.f_back
-    return stack
-
-def __wasm_idle_debug_trace(frame, event, arg):
-    global __wasm_idle_debug_pause_on_entry
-    global __wasm_idle_debug_step_mode
-    global __wasm_idle_debug_next_depth
-    global __wasm_idle_debug_step_out_depth
-
-    if frame.f_code.co_filename not in __wasm_idle_debug_source_filenames:
-        return None
-    if event != "line":
-        return __wasm_idle_debug_trace
-
-    __wasm_idle_debug_refresh_breakpoints()
-    # Returning from a trace callback executes this event; a later event on the same
-    # line is another loop iteration, not a replay of the previous stop.
-    needs_depth = __wasm_idle_debug_step_mode in ("next", "out")
-    depth = __wasm_idle_debug_depth(frame) if needs_depth else None
-    line = frame.f_lineno
-
-    reason = None
-    if __wasm_idle_debug_pause_on_entry:
-        reason = "entry"
-    elif line in __wasm_idle_debug_breakpoints:
-        reason = "breakpoint"
-    elif __wasm_idle_debug_step_mode == "step":
-        reason = "step"
-    elif __wasm_idle_debug_step_mode == "next" and __wasm_idle_debug_next_depth is not None and depth <= __wasm_idle_debug_next_depth:
-        reason = "nextLine"
-    elif __wasm_idle_debug_step_mode == "out" and __wasm_idle_debug_step_out_depth is not None and depth <= __wasm_idle_debug_step_out_depth:
-        reason = "stepOut"
-
-    if reason is None:
-        return __wasm_idle_debug_trace
-
-    if depth is None:
-        depth = __wasm_idle_debug_depth(frame)
-    __wasm_idle_debug_pause_on_entry = False
-    __wasm_idle_debug_step_mode = None
-    __wasm_idle_debug_next_depth = None
-    __wasm_idle_debug_step_out_depth = None
-
-    sys.stdout.flush()
-    sys.stderr.flush()
-    pause_reference = ${debugPauseName}(line, reason, json.dumps(__wasm_idle_debug_locals(frame)), json.dumps(__wasm_idle_debug_stack(frame)))
-    while True:
-        command = ${debugWaitName}()
-        if command < 0:
-            raise KeyboardInterrupt()
-        if command == 6:
-            try:
-                request = json.loads(${debugReadWatchName}())
-                start = max(0, int(request.get("start", 0)))
-                count = max(1, min(50, int(request.get("count", 50))))
-                page = __wasm_idle_debug_locals(frame, start, count) if request.get("reference") == pause_reference else []
-                ${debugWriteWatchName}(json.dumps(page))
-            except Exception:
-                ${debugWriteWatchName}("[]")
-            continue
-        if command != 5:
-            break
-        try:
-            expression = ${debugReadWatchName}()
-            result = __wasm_idle_debug_preview(eval(expression, frame.f_globals, frame.f_locals))
-        except Exception as error:
-            result = "?" if error.__class__.__name__ == "NameError" else "error"
-        ${debugWriteWatchName}(result)
-    if command == 2:
-        __wasm_idle_debug_step_mode = "step"
-    elif command == 3:
-        __wasm_idle_debug_step_mode = "next"
-        __wasm_idle_debug_next_depth = depth
-    elif command == 4:
-        __wasm_idle_debug_step_mode = "out"
-        __wasm_idle_debug_step_out_depth = max(0, depth - 1)
-    return __wasm_idle_debug_trace
-
-sys.settrace(__wasm_idle_debug_trace)
-`
-		: ''
-}
+${debug ? 'sys.settrace(__wasm_idle_debug_trace)' : imageHook}
 
 ${
 	isHy
@@ -1124,15 +988,7 @@ finally:
     __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)}, None)
     del __wasm_idle_execution_ready
     sys.settrace(None)
-    ${
-		debug
-			? `
-    __wasm_idle_debug_step_mode = None
-    __wasm_idle_debug_next_depth = None
-    __wasm_idle_debug_step_out_depth = None
-`
-			: ''
-	}
+    ${debug ? 'del __wasm_idle_debug_trace' : ''}
 `
 }
 `);
@@ -1157,6 +1013,8 @@ finally:
 			delete self[debugWriteWatchName];
 			delete self[debugReadBreakpointsName];
 			delete self[debugBreakpointStateName];
+			delete self[debugTraceName];
+			debugTrace?.destroy();
 		}
 	}
 };

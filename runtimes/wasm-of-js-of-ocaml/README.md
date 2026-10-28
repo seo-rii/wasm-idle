@@ -43,9 +43,34 @@ npm ci
 
 Bootstrap host tools and the frozen opam switch:
 
+The default switch pins OCaml `5.5.2` and both `js_of_ocaml` and `wasm_of_ocaml-compiler`
+to `6.5.0`. Set `WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER=1` to install the Wasm compiler
+alongside the JavaScript compiler. Build inputs and existing browser assets have separate
+lifetimes: regenerate the full browser bundle and its manifest before syncing a new compiler
+generation into the app.
+
+OCaml 5.5 currently requires `ocamlfind 1.9.9~preview`: upstream opam metadata
+excludes OCaml 5.5 from the stable `ocamlfind 1.9.8` package. Keep the exported
+opam switch with qualification evidence so this compatibility dependency and
+the other resolved package versions remain reviewable.
+
+The qualified 5.5.2 / 6.5.0 browser inputs, source licenses, and full OPAM export
+are retained in [`artifacts/ocaml-browser/5.5.2-6.5.0`](../../artifacts/ocaml-browser/5.5.2-6.5.0/)
+and [`validation/5.5.2-6.5.0.json`](validation/5.5.2-6.5.0.json).
+The browser runs Binaryen `132.0.0`; native Binaryen `129` is only a bootstrap
+tool. Qualification covers native compilation, browser JavaScript and Wasm
+compilation (including Yojson and diagnostics), and the actual app Worker with
+stdin, UTF-8, and EOF on both backends.
+
+From the repository root, `node scripts/prepare-browser-test-assets.mjs ocaml`
+downloads the pinned compiler inputs, checks their size and SHA-256, and rebuilds
+the browser adapter from tracked TypeScript. The delivered bundle contains 24
+files totaling 33,374,384 bytes; its 34 MB asset budget accommodates the larger
+OCaml 5.5 standard library and wasm_of_ocaml runtime pack.
+
 ```sh
 npm run bootstrap:host-tools
-PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
+PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER=1 npm run toolchain:bootstrap
 ```
 
 Build TypeScript output and prepare the browser-native bundle:

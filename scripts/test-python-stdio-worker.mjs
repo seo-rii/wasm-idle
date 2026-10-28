@@ -108,6 +108,12 @@ async function execute({
 		Uint8Array,
 		Atomics,
 		require(id) {
+			if (id === './pythonDebug')
+				return {
+					createPythonDebugHelpers: () => ({
+						createTrace: () => Object.assign(() => {}, { destroy() {} })
+					})
+				};
 			if (id === './pythonStdio') return stdioExports;
 			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id === './pythonWorkspaceFiles') return workspaceExports;
@@ -180,9 +186,13 @@ test('normal worker uses native stdio and drains before results', async () => {
 });
 test('debug wrapper is valid Python and flushes before pausing', async () => {
 	const r = await execute({ debug: true });
+	assert.match(r.sources[0], /sys.settrace\(__wasm_idle_debug_trace\)/);
 	assert.match(
-		r.sources[0],
-		/sys.stdout.flush\(\)\n    sys.stderr.flush\(\)\n    pause_reference = __wasm_idle_python_debug_pause_/
+		readFileSync(
+			new URL('../src/lib/playground/worker/pythonDebug.ts', import.meta.url),
+			'utf8'
+		),
+		/sys.stdout.flush\(\)\n {4}sys.stderr.flush\(\)\n {4}pause_reference = __wasm_idle_debug_bridge.pause/
 	);
 });
 test('Hy wrapper remains valid Python and follows the same stream lifecycle', () =>

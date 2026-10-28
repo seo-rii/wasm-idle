@@ -6,18 +6,11 @@ import types
 import unittest
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/lib/playground/worker/python.ts').read_text()
+source = (root / 'src/lib/playground/worker/pythonDebug.ts').read_text()
 preview = (root / 'src/lib/playground/worker/pythonDebugPreview.ts').read_text().split('String.raw`', 1)[1].split('`;', 1)[0]
-trace = source[source.index('import os as __wasm_idle_debug_os'):source.index('sys.settrace(__wasm_idle_debug_trace)')]
-for old, new in {
-    '${normalizedBreakpoints}': '[]',
-    "${pauseOnEntry ? 'True' : 'False'}": 'False',
-    '${debugFilenameLiteral}': '"user.py"',
-    '${debugPauseName}': 'pause', '${debugWaitName}': 'wait',
-    '${debugReadWatchName}': 'read_watch', '${debugWriteWatchName}': 'write_watch',
-    '${debugReadBreakpointsName}': 'read_breakpoints', '${PYTHON_DEBUG_PREVIEW}': preview,
-}.items():
-    trace = trace.replace(old, new)
+trace = source.split('export const PYTHON_DEBUG_TRACE = String.raw`', 1)[1].split('`;', 1)[0]
+trace = trace.replace('${PYTHON_DEBUG_PREVIEW}', preview)
+factory = source.split('export const PYTHON_DEBUG_FACTORY = String.raw`', 1)[1].split('`;', 1)[0]
 assert '${' not in trace
 
 
@@ -29,13 +22,15 @@ class DebugTests(unittest.TestCase):
         self.lines = []
         self.snapshots = 0
         self.callback_calls = 0
-        self.ns = {'sys': sys, 'json': json,
-                   'pause': lambda line, reason, *_: self.events.append((line, reason)),
-                   'wait': lambda: next(self.commands),
-                   'read_watch': lambda: 'value', 'write_watch': lambda _: None,
-                   'read_breakpoints': self.read_breakpoints,
-                   '__wasm_idle_debug_breakpoint_state': self}
-        exec(compile(trace, '<trace-helper>', 'exec'), self.ns)
+        self.bridge = types.SimpleNamespace(
+            pause=lambda line, reason, *_: self.events.append((line, reason)),
+            wait=lambda: next(self.commands),
+            readWatch=lambda: 'value', writeWatch=lambda _: None,
+            readBreakpoints=self.read_breakpoints, state=self)
+        namespace = {}
+        exec(compile(factory, '<debug-factory>', 'exec'), namespace)
+        self.make_trace = namespace['__wasm_idle_compile_debug_helpers'](trace, '')
+        self.ns = self.make_trace('user.py', '[]', False, self.bridge).__globals__
         self.preview = self.ns['__wasm_idle_debug_preview']
 
     def read_breakpoints(self, known):
@@ -49,6 +44,18 @@ class DebugTests(unittest.TestCase):
         return types.SimpleNamespace(f_code=types.SimpleNamespace(co_filename='user.py', co_name='main'),
                                      f_lineno=line, f_back=parent, f_locals={})
 
+    def test_cached_helper_code_has_fresh_run_state_and_filename(self):
+        first = self.ns['__wasm_idle_debug_trace']
+        self.ns['__wasm_idle_debug_step_mode'] = 'next'
+        second = self.make_trace('other.py', '[7]', True, self.bridge)
+        self.assertIs(first.__code__, second.__code__)
+        self.assertIsNot(first.__globals__, second.__globals__)
+        self.assertIsNone(second.__globals__['__wasm_idle_debug_step_mode'])
+        self.assertEqual(second.__globals__['__wasm_idle_debug_breakpoints'], {7})
+        self.assertTrue(second.__globals__['__wasm_idle_debug_pause_on_entry'])
+        self.assertIn('other.py', second.__globals__['__wasm_idle_debug_source_filenames'])
+        self.assertNotIn('user.py', second.__globals__['__wasm_idle_debug_source_filenames'])
+
     def test_breakpoint_payload_only_decoded_when_version_changes(self):
         refresh = self.ns['__wasm_idle_debug_refresh_breakpoints']
         for _ in range(1000):
@@ -59,6 +66,25 @@ class DebugTests(unittest.TestCase):
         refresh()
         self.assertEqual(self.snapshots, 2)
         self.assertEqual(self.ns['__wasm_idle_debug_breakpoints'], {3, 7})
+
+    def test_unchanged_lines_poll_version_without_calling_snapshot_helper(self):
+        refresh = self.ns['__wasm_idle_debug_refresh_breakpoints']
+        calls, polls = [], []
+        class State:
+            @property
+            def version(state):
+                polls.append(self.version)
+                return self.version
+        self.ns['__wasm_idle_debug_breakpoint_state'] = State()
+        self.ns['__wasm_idle_debug_refresh_breakpoints'] = lambda: (calls.append(1), refresh())[1]
+        for line in range(1, 1000):
+            self.ns['__wasm_idle_debug_trace'](self.frame(line), 'line', None)
+        self.assertEqual(len(calls), 1)
+        self.assertGreaterEqual(len(polls), 999)
+        self.lines, self.version = [1000], 1
+        self.ns['__wasm_idle_debug_trace'](self.frame(1000), 'line', None)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.events, [(1000, 'breakpoint')])
 
     def test_large_locals_only_preview_the_requested_page(self):
         frame = self.frame()
@@ -108,6 +134,20 @@ class DebugTests(unittest.TestCase):
             sys.settrace(None)
         self.assertEqual(scope['value'], 7)
         self.assertEqual(self.events, [(1, 'entry'), (3, 'nextLine'), (2, 'step'), (4, 'stepOut')])
+
+    def test_recursive_step_out_returns_to_the_selected_caller(self):
+        self.ns['__wasm_idle_debug_pause_on_entry'] = True
+        self.commands = iter([3, 2, 3, 2, 4, 1])
+        code = 'def recur(n):\n    if n == 0:\n        return 0\n    value = recur(n - 1)\n    return value + 1\nvalue = recur(2)\nresult = value\n'
+        scope = {}
+        try:
+            sys.settrace(self.ns['__wasm_idle_debug_trace'])
+            exec(compile(code, 'user.py', 'exec'), scope)
+        finally:
+            sys.settrace(None)
+        self.assertEqual(scope['result'], 2)
+        self.assertEqual(self.events, [(1, 'entry'), (6, 'nextLine'), (2, 'step'),
+                                      (4, 'nextLine'), (2, 'step'), (5, 'stepOut')])
 
     def test_continue_revisits_breakpoints_on_same_line_loop_iterations(self):
         self.lines, self.version = [2], 1

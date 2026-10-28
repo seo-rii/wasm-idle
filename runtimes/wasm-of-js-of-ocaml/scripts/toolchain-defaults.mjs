@@ -1,3 +1,3 @@
-export const DEFAULT_OCAML_COMPILER_VERSION = '5.4.1';
-export const DEFAULT_JS_OF_OCAML_VERSION = '6.3.2';
+export const DEFAULT_OCAML_COMPILER_VERSION = '5.5.2';
+export const DEFAULT_JS_OF_OCAML_VERSION = '6.5.0';
 export const DEFAULT_SWITCH_NAME = `wasm-of-js-of-ocaml-${DEFAULT_OCAML_COMPILER_VERSION}`;

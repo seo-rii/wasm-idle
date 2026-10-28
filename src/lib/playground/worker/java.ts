@@ -30,7 +30,7 @@ let compiler: any = null;
 let runtimeLoad:
 	| ((code: string | ArrayBufferView | WebAssembly.Module, options?: object) => Promise<any>)
 	| null = null;
-let exceptionDeobfuscator: WebAssembly.Module | null = null;
+let exceptionDeobfuscator: Uint8Array | WebAssembly.Module | null = null;
 let loadedBaseUrl = '';
 let output: ReturnType<typeof createJavaOutput> | null = null;
 let compiledCode = '';
@@ -149,13 +149,18 @@ self.addEventListener('message', async (event) => {
 					loadWorkerRuntimeAsset('runtime-classlib-teavm.bin').then(({ bytes }) =>
 						toInt8Array(bytes)
 					),
-					loadWorkerRuntimeAsset('compiler.wasm-deobfuscator.wasm').then(({ bytes }) =>
-						(
-							WebAssembly.compile as (
-								bytes: BufferSource,
-								options: { builtins: string[] }
-							) => Promise<WebAssembly.Module>
-						)(bytes as BufferSource, { builtins: ['js-string'] })
+					loadWorkerRuntimeAsset('compiler.wasm-deobfuscator.wasm').then(
+						async ({ bytes }) => {
+							const module = await (
+								WebAssembly.compile as (
+									bytes: BufferSource,
+									options: { builtins: string[] }
+								) => Promise<WebAssembly.Module>
+							)(bytes as BufferSource, { builtins: ['js-string'] });
+							// Validate before acknowledging load. Only the adapted loader accepts a
+							// compiled deobfuscator; ordinary/custom loaders require Wasm bytes.
+							return streamCompiler ? module : Uint8Array.from(bytes);
+						}
 					)
 				]);
 				// Publish only a fully initialized compiler; a failed first attempt
