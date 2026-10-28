@@ -270,9 +270,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
 		// Main's measured baseline is 42,443,361 bytes. Selected compiler updates add
-		// 2,118 bytes: TinyGo 1,342, TeaVM 550, OCaml 220 and C3 6.
-		// A shared 491 KiB allowance covers their projected 42,445,479-byte combined install.
-		budget: { maxBytes: 40 * MiB + 491 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// 2,786 bytes: TinyGo 2,010, TeaVM 550, OCaml 220 and C3 6.
+		// A shared 492 KiB allowance covers their projected 42,446,147-byte combined install.
+		budget: { maxBytes: 40 * MiB + 492 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
