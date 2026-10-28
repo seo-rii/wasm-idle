@@ -2,6 +2,20 @@
 const c3Profile = __WASM_IDLE_C3_PROFILE__;
 let c3Consumed = false;
 
+function c3CompilerDiagnostic(line) {
+	const match =
+		/^(.*):(\d+):(\d+): (error|warning): (.*)$/u.exec(line) ||
+		/^\((.*):(\d+):(\d+)\) (Error|Warning): (.*)$/u.exec(line);
+	if (!match) return null;
+	return {
+		fileName: match[1].replace(/^\/work\//u, ''),
+		lineNumber: Number(match[2]),
+		columnNumber: Number(match[3]),
+		severity: match[4].toLowerCase(),
+		message: match[5]
+	};
+}
+
 function c3Stdin(source, channel) {
 	const input = new TextEncoder().encode(source || '');
 	let offset = 0;
@@ -130,23 +144,15 @@ self.onmessage = async ({ data }) => {
 		const { default: createCompiler } = await import(loaderUrl);
 		let diagnosticCount = 0;
 		const diagnostic = (line) => {
-			const match = /^\((.*):(\d+):(\d+)\) (Error|Warning): (.*)$/u.exec(line);
-			if (!match) return;
+			const parsed = c3CompilerDiagnostic(line);
+			if (!parsed) return;
 			if (++diagnosticCount > limits.maxDiagnostics)
 				throw Object.assign(new Error('C3 diagnostic limit exceeded'), {
 					code: 'diagnostic-limit',
 					actual: diagnosticCount,
 					limit: limits.maxDiagnostics
 				});
-			self.postMessage({
-				diagnostic: {
-					fileName: match[1].replace(/^\/work\//u, ''),
-					lineNumber: Number(match[2]),
-					columnNumber: Number(match[3]),
-					severity: match[4] === 'Error' ? 'error' : 'warning',
-					message: match[5]
-				}
-			});
+			self.postMessage({ diagnostic: parsed });
 		};
 		const log = (line) => {
 			line = String(line);

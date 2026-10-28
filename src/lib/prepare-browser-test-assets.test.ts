@@ -381,7 +381,9 @@ describe('browser test asset preparation', () => {
 			]
 		] as const) {
 			expect(manifest.groupBaseUrls[group]).toMatch(
-				/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+				group === 'c3'
+					? /^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-llvm\/[a-f0-9]{40}\/artifacts\/c3-browser\/$/u
+					: /^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
 			);
 			const assets = manifest.assets.filter(
 				(asset: { group: string }) => asset.group === group
