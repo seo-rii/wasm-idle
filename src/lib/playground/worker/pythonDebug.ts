@@ -85,7 +85,9 @@ def __wasm_idle_debug_trace(frame, event, arg):
     if event != "line":
         return __wasm_idle_debug_trace
 
-    __wasm_idle_debug_refresh_breakpoints()
+    # Poll atomically on every user line, but enter the snapshot helper only on change.
+    if __wasm_idle_debug_breakpoint_state.version != __wasm_idle_debug_breakpoint_version:
+        __wasm_idle_debug_refresh_breakpoints()
     # Returning from a trace callback executes this event; a later event on the same
     # line is another loop iteration, not a replay of the previous stop.
     needs_depth = __wasm_idle_debug_step_mode in ("next", "out")

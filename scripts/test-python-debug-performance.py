@@ -67,6 +67,25 @@ class DebugTests(unittest.TestCase):
         self.assertEqual(self.snapshots, 2)
         self.assertEqual(self.ns['__wasm_idle_debug_breakpoints'], {3, 7})
 
+    def test_unchanged_lines_poll_version_without_calling_snapshot_helper(self):
+        refresh = self.ns['__wasm_idle_debug_refresh_breakpoints']
+        calls, polls = [], []
+        class State:
+            @property
+            def version(state):
+                polls.append(self.version)
+                return self.version
+        self.ns['__wasm_idle_debug_breakpoint_state'] = State()
+        self.ns['__wasm_idle_debug_refresh_breakpoints'] = lambda: (calls.append(1), refresh())[1]
+        for line in range(1, 1000):
+            self.ns['__wasm_idle_debug_trace'](self.frame(line), 'line', None)
+        self.assertEqual(len(calls), 1)
+        self.assertGreaterEqual(len(polls), 999)
+        self.lines, self.version = [1000], 1
+        self.ns['__wasm_idle_debug_trace'](self.frame(1000), 'line', None)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.events, [(1000, 'breakpoint')])
+
     def test_large_locals_only_preview_the_requested_page(self):
         frame = self.frame()
         frame.f_locals = {f'value_{index}': index for index in range(10000)}

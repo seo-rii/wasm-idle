@@ -10,7 +10,7 @@ The ordinary continue path avoids an f_back traversal. Next, step-out and actual
 
 ## Preview policy is part of the user-visible contract
 
-Strings and bytes are sliced before representation. Lists/tuples inspect at most eight entries; dictionaries/sets inspect at most six; recursion retains the depth bound. Huge integers use a bounded descriptive form instead of decimal conversion. Automatic previews do not invoke arbitrary user **repr** implementations or custom-container methods. The cost is a deliberately less detailed display for custom objects, not a change to the running program. Explicit watch expressions remain the way to request a user-defined representation. Set previews are not globally sorted: that would traverse the entire set and defeat the bound.
+Strings and bytes are sliced before representation. Lists/tuples inspect at most eight entries; dictionaries/sets inspect at most six; recursion retains the depth bound. Huge integers use a bounded descriptive form instead of decimal conversion. Automatic previews do not invoke arbitrary user `__repr__` implementations or custom-container methods. The cost is a deliberately less detailed display for custom objects, not a change to the running program. Explicit watch expressions remain the way to request a user-defined representation. Set previews are not globally sorted: that would traverse the entire set and defeat the bound.
 
 These limits bound inspection work, not the program's allocation or total Pyodide heap. Each pause initially previews at most 50 visible locals; additional pages remain explicit. Measuring pause latency and long-session retention remains necessary. sys.monitoring is not introduced here, and no LLDB/WAMR behavior is changed.
 
@@ -30,7 +30,7 @@ Use the same program and breakpoint sequence before/after: continue through a la
 
 Debug runs now compile the fixed trace/preview source and image hook once per Python worker. Each run executes that code into a new private dictionary containing its own source filenames, initial breakpoints, version, pause state and bridge. Only code objects are shared. Source programs still compile with their actual execution filename, execute in a fresh `__main__`, and retain top-level await, input/output and workspace-import behavior.
 
-The image hook executes its existing installation guard in the same Pyodide globals as ordinary runs. The worker removes each run's imported trace and destroys its JavaScript proxy in the cleanup path, including syntax errors, user exceptions and cancellation. It does not cache a frame, user globals or a previous run's stepping state. The existing per-line atomic breakpoint-version check, real `sys.settrace` event stream, and bounded locals paging remain in place.
+The image hook executes its existing installation guard in the same Pyodide globals as ordinary runs. The worker removes each run's imported trace and destroys its JavaScript proxy in the cleanup path, including syntax errors, user exceptions and cancellation. It does not cache a frame, user globals or a previous run's stepping state. The atomic breakpoint-version check remains on every user line. Its unchanged-version branch now returns directly to the trace logic without calling the Python snapshot helper; that helper is entered when the version changes. The real `sys.settrace` event stream and bounded locals paging remain in place.
 
 The opt-in probe runs the actual pinned Pyodide on Node:
 
@@ -39,6 +39,17 @@ node scripts/probe-python-debug-trace.mjs --baseline-ref=27b4be22fbc7e9a543eadd0
 ```
 
 It records the Node/Pyodide/Python versions and source hashes, separates the first run, then records seven alternating-order samples after one warmup. The continue workload executes the same 50,000-iteration loop with no trace, a minimal trace, the baseline helper and the current helper. Setup timing separately compares compilation/execution of the baseline fixed helpers with creation of a fresh run from cached helper code. It excludes runtime loading, user-source compilation, pauses, DOM rendering and network delivery; it is not an end-to-end browser speedup claim. Timing is reported rather than used as a flaky CI threshold.
+
+### Pinned-runtime measurements (2026-10-28)
+
+One Node 24.22.1 process with Pyodide 314.0.7 / CPython 3.14.2 produced these median times using the probe above. Comparisons use the same process and alternating samples; absolute times vary with host load.
+
+| Workload                                   |  Baseline |   Current |
+| ------------------------------------------ | --------: | --------: |
+| Continue through the 50,000-iteration loop | 182.40 ms | 166.51 ms |
+| Fixed trace/image setup per debug run      |  5.634 ms |  0.047 ms |
+
+The loop reduction is 8.7% in this workload. The same loop took 9.39 ms without tracing and 20.27 ms with a minimal no-op `sys.settrace` callback: most remaining debugger cost is in its Python/JavaScript line handling, not helper compilation. Both debugger variants checked the shared version on every user line; only changed versions requested JSON snapshots. The setup comparison has 20 repetitions per sample and excludes the one-time factory compilation. These are separate costs, not additive estimates of a full debug launch.
 
 ## Why sys.monitoring remains an experiment
 
