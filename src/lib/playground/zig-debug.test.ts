@@ -41,6 +41,9 @@ vi.mock('$lib/playground/lldbSession', () => ({
 		debugCommand = vi.fn();
 		setBreakpoints = vi.fn();
 		variables = vi.fn(async () => [{ name: 'result', value: '12' }]);
+		scopes = vi.fn(async () => []);
+		frameScopes = vi.fn(async () => []);
+		writeMemory = vi.fn(async () => ({ bytesWritten: 1 }));
 	}
 }));
 
@@ -104,6 +107,186 @@ describe('Zig LLDB lifecycle', () => {
 		await expect(sandbox.run(code, false)).resolves.toBe(true);
 		expect(workers).toHaveLength(2);
 		await sandbox.dispose();
+	});
+
+	it.each(['frame', 'step', 'pause', 'resume', 'write', 'stop'] as const)(
+		'invalidates formatted children and pending responses on %s',
+		async (action) => {
+			const sandbox = new Zig();
+			await sandbox.load(assets);
+			const outcome = sandbox
+				.run(code, false, false, undefined, [], { debugMode: 'lldb' })
+				.catch((error) => error);
+			handoff();
+			const session = sessions[0];
+			const local = { name: 'maybe', type: '?i32', value: '?i32', variablesReference: 12 };
+			session.variables.mockImplementation(async (reference: number) =>
+				reference === 9
+					? [local]
+					: [
+							{ name: 'payload', type: 'int', value: '7', variablesReference: 0 },
+							{
+								name: 'some',
+								type: 'unsigned char',
+								value: "'\\x01'",
+								variablesReference: 0
+							}
+						]
+			);
+			expect((await sandbox.debugVariables(9))[0].value).toBe('some(7)');
+			await sandbox.debugFrameScopes(7);
+			expect((await sandbox.debugVariables(12)).map((field) => field.name)).toEqual([
+				'payload'
+			]);
+			let release!: (values: unknown[]) => void;
+			session.variables.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						release = resolve;
+					})
+			);
+			const pending = sandbox.debugVariables(9);
+			if (action === 'frame') await sandbox.debugScopes(8);
+			else if (action === 'step') sandbox.debugCommand('nextLine');
+			else if (action === 'write')
+				await sandbox.debugWriteMemory('0x100', 0, Uint8Array.of(0));
+			else if (action === 'stop') await sandbox.dispose();
+			else session.options.onDebugEvent({ type: action });
+			release([local]);
+			expect(await pending).toEqual([]);
+			if (action !== 'stop') {
+				// Memory writes retain the handle's layout, while a new stop/frame retires it.
+				expect((await sandbox.debugVariables(12)).map((field) => field.name)).toEqual(
+					action === 'write' ? ['payload'] : ['payload', 'some']
+				);
+				await sandbox.dispose();
+			}
+			await outcome;
+		}
+	);
+
+	it('retires a formatter first created while a memory write was pending', async () => {
+		const sandbox = new Zig();
+		await sandbox.load(assets);
+		const outcome = sandbox
+			.run(code, false, false, undefined, [], { debugMode: 'lldb' })
+			.catch((error) => error);
+		handoff();
+		const session = sessions[0];
+		let finishWrite!: (result: unknown) => void;
+		session.writeMemory.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishWrite = resolve;
+				})
+		);
+		const writing = sandbox.debugWriteMemory('0x100', 0, Uint8Array.of(0));
+		let finishRead!: (result: unknown[]) => void;
+		session.variables.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishRead = resolve;
+				})
+		);
+		const reading = sandbox.debugVariables(9);
+		finishWrite({ bytesWritten: 1 });
+		await writing;
+		finishRead([{ name: 'result', value: '7' }]);
+		expect(await reading).toEqual([]);
+		await sandbox.dispose();
+		await outcome;
+	});
+
+	it('refreshes existing slice pages and optional tags after a write in the same pause', async () => {
+		const sandbox = new Zig();
+		await sandbox.load(assets);
+		const outcome = sandbox
+			.run(code, false, false, undefined, [], { debugMode: 'lldb' })
+			.catch((error) => error);
+		handoff();
+		const session = sessions[0];
+		const bytes = new Uint8Array(96).fill(65);
+		let some = "'\\x01'";
+		session.variables.mockImplementation(
+			async (reference: number, start = 0, count?: number) => {
+				const variables =
+					reference === 9
+						? [
+								{
+									name: 'bytes',
+									type: '[]u8',
+									value: '[]u8',
+									variablesReference: 12
+								},
+								{
+									name: 'maybe',
+									type: '?i32',
+									value: '?i32',
+									variablesReference: 13
+								}
+							]
+						: reference === 12
+							? [
+									{
+										name: 'ptr',
+										type: 'unsigned char *',
+										value: '0x100',
+										variablesReference: 0
+									},
+									{
+										name: 'len',
+										type: 'unsigned int',
+										value: '96',
+										variablesReference: 0
+									}
+								]
+							: [
+									{
+										name: 'payload',
+										type: 'int',
+										value: '7',
+										variablesReference: 0
+									},
+									{
+										name: 'some',
+										type: 'unsigned char',
+										value: some,
+										variablesReference: 0
+									}
+								];
+				return variables.slice(start, count === undefined ? undefined : start + count);
+			}
+		);
+		session.readMemory = vi.fn(async (reference: string, _offset: number, count: number) => ({
+			address: reference,
+			data: bytes.slice(
+				Number.parseInt(reference, 16) - 256,
+				Number.parseInt(reference, 16) - 256 + count
+			),
+			unreadableBytes: 0
+		}));
+		session.writeMemory.mockImplementation(async () => {
+			bytes[64] = 66;
+			some = "'\\0'";
+			return { bytesWritten: 1 };
+		});
+		const [slice, optional] = await sandbox.debugVariables(9);
+		expect(slice.indexedVariables).toBe(96);
+		expect(optional.value).toBe('some(7)');
+		await sandbox.debugWriteMemory('0x140', 0, Uint8Array.of(66));
+		// The caller retains these references: editing memory does not select a new frame.
+		expect(
+			(await sandbox.debugVariables(slice.variablesReference!, 66, 2)).map((value) => [
+				value.name,
+				value.value
+			])
+		).toEqual([
+			['[64]', '66'],
+			['[65]', '65']
+		]);
+		expect(await sandbox.debugVariables(optional.variablesReference!)).toEqual([]);
+		await sandbox.dispose();
+		await outcome;
 	});
 
 	it('compiles prepare-only debug requests without starting a debug target', async () => {
