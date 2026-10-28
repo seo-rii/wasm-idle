@@ -399,6 +399,9 @@ importers:
 
   packages/gcc:
     dependencies:
+      '@bjorn3/browser_wasi_shim':
+        specifier: 0.4.2
+        version: 0.4.2
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:../core
