@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash, webcrypto } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import { loadRuntimeAssetBytes } from '../../../runtimes/wasm-tinygo/src/runtime-assets';
 import { readBufferedStdin } from './stdinBuffer';
 import { resolveEditorDefaultSource } from '../../routes/editor-defaults';
 import { RuntimeAssetCache } from '@wasm-idle/core';
@@ -298,6 +301,126 @@ describe('TinyGo sandbox', () => {
 			})
 		);
 		await sandbox.dispose();
+	});
+
+	it.each(['valid', 'corrupt'])(
+		'verifies %s HTTP-decoded gzip bytes after the transport cache rejects them',
+		async (variant) => {
+			const originalCrypto = globalThis.crypto;
+			vi.stubGlobal('crypto', webcrypto);
+			const sandbox = new TinyGo();
+			try {
+				// A valid Wasm custom section makes the logical bytes larger than their gzip.
+				const logical = Uint8Array.from([
+					0,
+					97,
+					115,
+					109,
+					1,
+					0,
+					0,
+					0,
+					0,
+					0x81,
+					0x02,
+					...new Uint8Array(257)
+				]);
+				const storage = gzipSync(logical);
+				const digest = (bytes: Uint8Array) =>
+					createHash('sha256').update(bytes).digest('hex');
+				const receipt = {
+					bytes: storage.byteLength,
+					sha256: digest(storage),
+					uncompressedBytes: logical.byteLength,
+					uncompressedSha256: digest(logical)
+				};
+				const assetPath = 'tools/upstream/tinygo-package-graph.wasm';
+				const logicalUrl = `https://example.invalid/wasm-tinygo/${assetPath}`;
+				const decoded = logical.slice();
+				if (variant === 'corrupt') decoded[decoded.length - 1] ^= 1;
+				const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+					const url = String(input);
+					const response = new Response(
+						url.endsWith('.gz')
+							? decoded
+							: '<!doctype html><title>missing asset</title>',
+						{
+							headers: url.endsWith('.gz')
+								? {
+										'Content-Encoding': 'gzip',
+										'Content-Length': String(storage.byteLength)
+									}
+								: { 'Content-Type': 'text/html' }
+						}
+					);
+					Object.defineProperty(response, 'url', { value: url });
+					return response;
+				});
+				vi.stubGlobal('fetch', fetcher);
+				const core =
+					await vi.importActual<typeof import('@wasm-idle/core')>('@wasm-idle/core');
+				pinnedFetch.mockImplementation(core.fetchPinnedRuntimeAsset);
+				upstreamFixtureState.onLoad = async ({ fetchImpl }) => {
+					const loaded = loadRuntimeAssetBytes({
+						assetPath,
+						assetUrl: logicalUrl,
+						label: 'package provider',
+						fetchImpl,
+						receipt,
+						maxAssetBytes: 1024
+					});
+					if (variant === 'corrupt') await expect(loaded).rejects.toThrow('HTML');
+					else expect(await loaded).toEqual(logical);
+				};
+				await sandbox.load({
+					tinygo: {
+						moduleUrl: upstreamModuleUrl,
+						runtimeProfile: {
+							...WASM_TINYGO_RUNTIME_PROFILE,
+							assetReceipts: {
+								...WASM_TINYGO_RUNTIME_PROFILE.assetReceipts,
+								[assetPath]: receipt
+							}
+						}
+					},
+					persistentCache: false
+				});
+				await sandbox.run('package main\nfunc main() {}', true);
+				expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+					logicalUrl,
+					`${logicalUrl}.gz`,
+					`${logicalUrl}.gz`
+				]);
+			} finally {
+				await sandbox.dispose();
+				vi.stubGlobal('crypto', originalCrypto);
+			}
+		}
+	);
+
+	it('preserves nonencoded cache failures and aborts without a native retry', async () => {
+		const failure = new Error('pinned receipt rejected');
+		const aborted = new Error('transport aborted');
+		const controller = new AbortController();
+		pinnedFetch.mockRejectedValueOnce(failure).mockImplementationOnce(async () => {
+			controller.abort(aborted);
+			throw failure;
+		});
+		upstreamFixtureState.onLoad = async ({ fetchImpl }) => {
+			const root = 'https://example.invalid/wasm-tinygo/tools/upstream/';
+			await expect(fetchImpl!(`${root}upstream-toolchain.v2.json`)).rejects.toBe(failure);
+			await expect(
+				fetchImpl!(`${root}tinygo-package-graph.wasm.gz`, { signal: controller.signal })
+			).rejects.toBe(aborted);
+		};
+		const sandbox = new TinyGo();
+		try {
+			await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+			await sandbox.run('package main\nfunc main() {}', true);
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+		} finally {
+			await sandbox.dispose();
+		}
 	});
 
 	it('snapshots lazy TinyGo run overrides and restores the load baseline on the next run', async () => {
