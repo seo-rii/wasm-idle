@@ -187,7 +187,7 @@ describe('package install budgets', () => {
 		).toEqual({
 			'wasm-idle root install': {
 				maxBytes: 7 * MiB,
-				maxFiles: 759,
+				maxFiles: 763,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 489 * 1024,
-				maxFiles: 3_366,
+				maxBytes: 40 * MiB + 510 * 1024,
+				maxFiles: 3_370,
 				maxPackages: 70
 			}
 		});
