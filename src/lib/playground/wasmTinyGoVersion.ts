@@ -2,10 +2,10 @@ export const WASM_TINYGO_RUNTIME_PROFILE = Object.freeze({
 	profileId: 'tinygo-0.43.0-wasip1-protocol-v6',
 	protocolVersion: 6,
 	manifestPath: 'tools/upstream/upstream-toolchain.v2.json',
-	manifestFingerprint: '501796ff1f7d70f55948d35fe6b3340bd97e24c7bcbb843b6e1ec11990072a12',
+	manifestFingerprint: 'e637c8eddc51710c1af07eb77b7d24c56f9502c6f5a0f26d06cc73edba05a572',
 	manifestReceipt: Object.freeze({
 		bytes: 1123,
-		sha256: 'e60a70f64d642272c19c8ba1ef87a49e8ccbcab4dee23e5bbd00d48a66019c9b'
+		sha256: '604c746e664e8738c22c20489dd9d8fd52dd3df653f148d52b3b16fbc23fb380'
 	}),
 	assetReceipts: Object.freeze({
 		'tools/upstream/lld.wasm': Object.freeze({
@@ -20,13 +20,13 @@ export const WASM_TINYGO_RUNTIME_PROFILE = Object.freeze({
 		}),
 		'tools/upstream/producer-receipt.json': Object.freeze({
 			bytes: 7452,
-			sha256: 'dbb053f5cba9a14524d4ecad25203042284a2d6b6e428f575d1351c5702c722f'
+			sha256: '94f70d6848a6496c588b7eda94e7ad139bb79778a44b95382a8cb6863b9043d4'
 		}),
 		'tools/upstream/tinygo-compiler.wasm': Object.freeze({
-			bytes: 29517023,
-			sha256: '6750cb6e5d34dc33d125b45811540f9d5fd8dd7f90a670d3f55b22f00139fea5',
+			bytes: 29517026,
+			sha256: '72c31eb39213a17625f71a4c06ef22d54bf2997f9c4d6cc4a73429e61f750bde',
 			uncompressedBytes: 96523963,
-			uncompressedSha256: 'd6606b814c724ae6c20218d967474a7fe5dac747c003f599fe2bc50337693ec6'
+			uncompressedSha256: 'fbea627d2430377515daf54fc6c42cceb10d5c09973534a328228c6bf6ce324d'
 		}),
 		'tools/upstream/tinygo-package-graph.wasm': Object.freeze({
 			bytes: 6623009,
@@ -35,8 +35,8 @@ export const WASM_TINYGO_RUNTIME_PROFILE = Object.freeze({
 			uncompressedSha256: 'b7a526594fd5ea5531caecf11bd3a8e97af05c40dff63d8a57370419c47b56ed'
 		}),
 		'tools/upstream/tinygoroot.tar.gz.bin': Object.freeze({
-			bytes: 31145479,
-			sha256: '1c8da52758481da69c1810b3614687b76feba6600ae16bbcc5ea66c3cc2a9865'
+			bytes: 31145468,
+			sha256: '402bfd7059e12414cf0038c3e006c4030e1aa2f0b1ee6f1ffbc62cee9f5e2e3f'
 		})
 	})
 });
@@ -120,4 +120,4 @@ export const WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 });
 
 export const WASM_TINYGO_ASSET_VERSION =
-	'24878248ed93ee64e8e9b5374f1206703e641ab3e87f1f7c59ce7556f5de1493';
+	'1f50eede6cf4de937e8150400e72e094fbfe1ee732b6f1f28d2a439593c4abc3';

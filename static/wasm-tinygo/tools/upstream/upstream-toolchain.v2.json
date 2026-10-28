@@ -4,7 +4,7 @@
   "producerReceipt": {
     "path": "producer-receipt.json",
     "bytes": 7452,
-    "sha256": "dbb053f5cba9a14524d4ecad25203042284a2d6b6e428f575d1351c5702c722f"
+    "sha256": "94f70d6848a6496c588b7eda94e7ad139bb79778a44b95382a8cb6863b9043d4"
   },
   "packageGraphReceipt": {
     "path": "package-graph-provider-receipt.json",
@@ -15,7 +15,7 @@
     "compiler": {
       "path": "tinygo-compiler.wasm",
       "bytes": 96523963,
-      "sha256": "d6606b814c724ae6c20218d967474a7fe5dac747c003f599fe2bc50337693ec6"
+      "sha256": "fbea627d2430377515daf54fc6c42cceb10d5c09973534a328228c6bf6ce324d"
     },
     "packageGraph": {
       "path": "tinygo-package-graph.wasm",
@@ -24,8 +24,8 @@
     },
     "rootArchive": {
       "path": "tinygoroot.tar.gz.bin",
-      "bytes": 31145479,
-      "sha256": "1c8da52758481da69c1810b3614687b76feba6600ae16bbcc5ea66c3cc2a9865"
+      "bytes": 31145468,
+      "sha256": "402bfd7059e12414cf0038c3e006c4030e1aa2f0b1ee6f1ffbc62cee9f5e2e3f"
     },
     "lld": {
       "path": "lld.wasm",
