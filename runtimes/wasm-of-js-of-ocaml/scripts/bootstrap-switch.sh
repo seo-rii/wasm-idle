@@ -10,8 +10,8 @@ Create a host-side frozen OCaml switch that can later be collected into a browse
 Environment:
   WASM_OF_JS_OF_OCAML_OPAM_BIN         Custom opam executable. Default: opam
   WASM_OF_JS_OF_OCAML_OPAM_ROOT        Custom opam root. Default: ~/.cache/wasm-of-js-of-ocaml/opam
-  WASM_OF_JS_OF_OCAML_SWITCH_NAME      Switch name. Default: wasm-of-js-of-ocaml-5.4.1
-  WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE Compiler package. Default: ocaml-base-compiler.5.4.1.
+  WASM_OF_JS_OF_OCAML_SWITCH_NAME      Switch name. Default: wasm-of-js-of-ocaml-5.5.2
+  WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE Compiler package. Default: ocaml-base-compiler.5.5.2.
   WASM_OF_JS_OF_OCAML_BASE_PACKAGES    Space-separated package list.
   WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER
                                        Install wasm_of_ocaml-compiler when non-empty.
@@ -35,8 +35,8 @@ if ! command -v "$OPAM_BIN" >/dev/null 2>&1; then
 fi
 
 OPAM_ROOT="${WASM_OF_JS_OF_OCAML_OPAM_ROOT:-$HOME/.cache/wasm-of-js-of-ocaml/opam}"
-PINNED_OCAML_VERSION="5.4.1"
-PINNED_JS_OF_OCAML_VERSION="6.3.2"
+PINNED_OCAML_VERSION="5.5.2"
+PINNED_JS_OF_OCAML_VERSION="6.5.0"
 SWITCH_NAME="${WASM_OF_JS_OF_OCAML_SWITCH_NAME:-wasm-of-js-of-ocaml-$PINNED_OCAML_VERSION}"
 BASE_PACKAGES="${WASM_OF_JS_OF_OCAML_BASE_PACKAGES:-ocamlfind dune js_of_ocaml.$PINNED_JS_OF_OCAML_VERSION js_of_ocaml-compiler.$PINNED_JS_OF_OCAML_VERSION}"
 INSTALL_WASM_COMPILER="${WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER:-}"
@@ -66,7 +66,7 @@ fi
 OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" install -y $BASE_PACKAGES
 
 if [[ -n "$INSTALL_WASM_COMPILER" ]]; then
-  OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" install -y wasm_of_ocaml-compiler
+  OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" install -y "wasm_of_ocaml-compiler.$PINNED_JS_OF_OCAML_VERSION"
 fi
 
 PREFIX="$(OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" var --root "$OPAM_ROOT" --switch "$SWITCH_NAME" prefix)"
