@@ -1,6 +1,7 @@
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
+	type DebugCommand,
 	type DebugSessionEvent,
 	type SandboxExecutionOptions,
 	type ZigTargetTriple
@@ -33,6 +34,8 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { CompiledLldbSandbox } from '$lib/playground/compiledLldb';
+import type { LldbSandboxSession } from '$lib/playground/lldbSession';
+import { ZigDebugValues } from '$lib/playground/zigDebugValues';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
@@ -79,6 +82,8 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 	private loadedIntegrity?: ReturnType<typeof snapshotZigExecutionAssetReceipts>;
 	private debugTimeout?: { pause(): void; resume(): void };
 	private debugDisposal?: Promise<void>;
+	private zigDebugValues?: ZigDebugValues;
+	private zigDebugSession?: LldbSandboxSession;
 	private disposed = false;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('Zig sandbox disposed', {
@@ -917,6 +922,7 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	private retireDebugger() {
+		this.zigDebugValues?.invalidate();
 		try {
 			const disconnecting = this.stopLldb();
 			if (!disconnecting) return;
@@ -930,7 +936,11 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	protected onLldbEvent(event: DebugSessionEvent) {
+		if (event.type === 'pause' || event.type === 'resume' || event.type === 'stop')
+			this.zigDebugValues?.invalidate();
 		if (event.type === 'stop') {
+			this.zigDebugValues = undefined;
+			this.zigDebugSession = undefined;
 			try {
 				super.onLldbEvent(event);
 			} catch {
@@ -946,6 +956,41 @@ class Zig extends CompiledLldbSandbox implements Sandbox {
 			super.onLldbEvent(event);
 		} catch (error) {
 			this.cancelOperation(operation, error);
+		}
+	}
+
+	debugVariables(reference: number, start?: number, count?: number) {
+		if (!this.lldbSession) return Promise.resolve([]);
+		if (this.zigDebugSession !== this.lldbSession) {
+			this.zigDebugValues?.invalidate();
+			this.zigDebugSession = this.lldbSession;
+			this.zigDebugValues = new ZigDebugValues(this.lldbSession);
+		}
+		return this.zigDebugValues!.variables(reference, start, count);
+	}
+
+	debugCommand(command: DebugCommand) {
+		this.zigDebugValues?.invalidate();
+		return super.debugCommand(command);
+	}
+
+	debugScopes(frameId: number) {
+		this.zigDebugValues?.invalidate();
+		return super.debugScopes(frameId);
+	}
+
+	async debugWriteMemory(
+		reference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	) {
+		const session = this.lldbSession;
+		this.zigDebugValues?.invalidateValues();
+		try {
+			return await super.debugWriteMemory(reference, offset, data, allowPartial);
+		} finally {
+			if (this.lldbSession === session) this.zigDebugValues?.invalidateValues();
 		}
 	}
 
