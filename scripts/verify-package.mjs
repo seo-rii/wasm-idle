@@ -54,7 +54,8 @@ export const scenarios = [
 		// Main includes Ruby preview, Python compiler and the cross compiler in 751 files.
 		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
-		budget: { maxBytes: 7 * MiB, maxFiles: 759, maxPackages: 6 },
+		// Python debug setup and Zig value formatting add two more such pairs.
+		budget: { maxBytes: 7 * MiB, maxFiles: 763, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -269,8 +270,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
-		// The combined install measures 42,443,361 bytes; allow 1 KiB for composition overhead.
-		budget: { maxBytes: 40 * MiB + 489 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// Combined Java field inspection, Python debug setup and Zig value formatting
+		// measure 42,464,239 bytes / 3,370 files. Allow 1 KiB of composition headroom,
+		// rounded up to KiB; package/dependency limits remain unchanged.
+		budget: { maxBytes: 40 * MiB + 510 * 1024, maxFiles: 3_370, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
