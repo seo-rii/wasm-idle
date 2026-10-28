@@ -1,14 +1,40 @@
 import { createHash } from 'node:crypto';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
 
+interface FixtureNode {
+	mode: number;
+	node_ops: {
+		readdir(node: FixtureNode): string[];
+		lookup(node: FixtureNode, name: string): FixtureNode;
+		getattr(node: FixtureNode): { size: number };
+	};
+	stream_ops: {
+		read(stream: object, bytes: Uint8Array, offset: number, length: number, at: number): number;
+	};
+}
+
 const host = vi.hoisted(() => ({
 	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
+	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	output: undefined as Uint8Array | undefined,
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
+
+vi.mock('../src/sysroot-fs.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../src/sysroot-fs.js')>();
+	return {
+		...actual,
+		gccSysrootTree(...args: Parameters<typeof actual.gccSysrootTree>) {
+			host.sysrootFiles = [...args[0].values()].map((bytes) => new WeakRef(bytes));
+			return actual.gccSysrootTree(...args);
+		}
+	};
+});
 
 /** Deliberately synthetic host fixture. It does not compile C/C++ or validate GCC semantics. */
 vi.mock('../src/module-loader.js', () => ({
@@ -43,6 +69,33 @@ vi.mock('../src/module-loader.js', () => ({
 					readFile(path: string) {
 						if (!files.has(path)) throw new Error('fixture output missing');
 						return files.get(path)!;
+					},
+					ErrnoError: class {
+						constructor(readonly errno: number) {}
+					},
+					createNode: (_parent: unknown, name: string, mode: number) => ({ name, mode }),
+					// Record mounted files by reading them through the mount's own operations.
+					mount(type: { mount(mount: object): FixtureNode }, _: object, path: string) {
+						const visit = (node: FixtureNode, directory: string) => {
+							for (const name of node.node_ops.readdir(node).slice(2)) {
+								const child = node.node_ops.lookup(node, name);
+								if (child.mode & 0o40000) visit(child, `${directory}/${name}`);
+								else {
+									const bytes = new Uint8Array(
+										child.node_ops.getattr(child).size
+									);
+									child.stream_ops.read(
+										{ node: child },
+										bytes,
+										0,
+										bytes.length,
+										0
+									);
+									files.set(`${directory}/${name}`, bytes);
+								}
+							}
+						};
+						visit(type.mount({}), path);
 					}
 				},
 				callMain(argv: string[]) {
@@ -281,6 +334,7 @@ function wasiBundle(linker = wasiCommand()) {
 
 beforeEach(() => {
 	host.calls.length = 0;
+	host.sysrootFiles = [];
 	host.mode = '';
 	host.output = undefined;
 	host.failure = undefined;
@@ -288,6 +342,23 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it('releases extracted sysroot bytes while the disposed compiler remains reachable', async () => {
+		setFlagsFromString('--expose_gc');
+		const collect = runInNewContext('gc') as () => void;
+		setFlagsFromString('--no-expose_gc');
+		const compiler = await createCrossGccCompiler(bundle().options);
+		expect(host.sysrootFiles).toHaveLength(1);
+		compiler.dispose();
+		// WeakRefs keep their targets alive for the current job. Collect only after
+		// crossing an event-loop boundary, without dereferencing between collections.
+		for (let iteration = 0; iteration < 5; iteration++) {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			collect();
+		}
+		expect(host.sysrootFiles.map((file) => file.deref())).toEqual([undefined]);
+		await expect(compiler.compile({ code: '' })).rejects.toThrow('disposed');
+	});
+
 	it('validates the pinned WASI linker command ABI during loading', async () => {
 		await expect(createGccCompiler(wasiBundle(wasm))).rejects.toThrow(
 			'must export memory and _start'

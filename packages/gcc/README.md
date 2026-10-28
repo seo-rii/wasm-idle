@@ -171,7 +171,9 @@ Front ends use `-nostdinc` and pinned GNU C/C++/GCC/glibc include directories;
 C++ also gets `_GNU_SOURCE` and exceptions. GCC emits assembly, GNU `as --64`
 assembles ELF, and `ld -static` links CRT, libstdc++ (C++), libm (both languages),
 libgcc, libgcc_eh and glibc in the required order. Fresh modules/MEMFS reset state;
-the Worker orchestrates them without `fork`/`exec`.
+Emscripten stages mount the verified sysroot read-only and share its extracted bytes.
+The WASI-hosted linker retains its existing verified file map. The Worker
+orchestrates the stages without `fork`/`exec`.
 
 | Request field  | Supported values                                                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------- |

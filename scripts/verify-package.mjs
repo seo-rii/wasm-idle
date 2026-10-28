@@ -98,7 +98,8 @@ export const scenarios = [
 		// WASI adds eight GCC JavaScript/declaration files and the pinned, 26-file shim.
 		// ABI/SIMD checks add 14,739 installed bytes without new files or dependencies.
 		// The measured 2,628,057-byte install needs 7 KiB above the previous cap.
-		budget: { maxBytes: 2.5 * MiB + 7 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Shared read-only sysroot storage adds two files within an 11 KiB allowance.
+		budget: { maxBytes: 2.5 * MiB + 11 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -275,7 +276,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// bytes) and normalized Python bytecode (1,621 bytes). The projected combined
 		// install is 42,468,646 bytes; 515 KiB preserves at least 1 KiB of headroom.
 		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
-		budget: { maxBytes: 40 * MiB + 515 * 1024, maxFiles: 3_370, maxPackages: 70 },
+		// GCC shared sysroot storage adds 5,712 emitted/documentation bytes and two files.
+		budget: { maxBytes: 40 * MiB + 523 * 1024, maxFiles: 3_372, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

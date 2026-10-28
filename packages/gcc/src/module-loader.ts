@@ -1,8 +1,27 @@
+/** The subset of Emscripten's FS node used by custom mounts. */
+export interface GccFileSystemNode {
+	id: number;
+	mode: number;
+	node_ops: object;
+	stream_ops: object;
+	atime: number;
+	mtime: number;
+	ctime: number;
+}
+
 export interface GccFileSystem {
 	mkdirTree(path: string): void;
 	writeFile(path: string, bytes: Uint8Array): void;
 	readFile(path: string): Uint8Array;
 	chdir(path: string): void;
+	mount(type: { mount(mount: object): GccFileSystemNode }, options: object, path: string): void;
+	createNode(
+		parent: GccFileSystemNode | null,
+		name: string,
+		mode: number,
+		rdev: number
+	): GccFileSystemNode;
+	ErrnoError: new (errno: number) => unknown;
 }
 
 export interface GccModule {
