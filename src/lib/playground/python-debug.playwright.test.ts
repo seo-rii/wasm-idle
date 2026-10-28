@@ -64,12 +64,20 @@ ${pageSource.slice(scopeStart, scopeEnd)}`,
 		server = await createServer({
 			configFile: false,
 			root,
-			publicDir: 'static',
+			publicDir: process.env.WASM_IDLE_PYTHON_DEBUG_STATIC_DIR || 'static',
 			cacheDir: `${root}.cache/python-debug-browser-vite`,
 			optimizeDeps: { noDiscovery: true },
 			resolve: {
 				alias: [
 					{ find: '$lib', replacement: `${root}src/lib` },
+					{
+						find: '@wasm-idle/llvm-core/core',
+						replacement: `${root}packages/llvm-core/runtime/core/src`
+					},
+					{
+						find: /^@wasm-idle\/llvm-core$/,
+						replacement: `${root}packages/llvm-core/runtime/core/src/index.ts`
+					},
 					...createCoreSourceAliases(root)
 				]
 			},
@@ -473,6 +481,99 @@ print("running=" + str(value))`,
 				globalThis.__pythonDebugFixture.session.sendCommand('continue')
 			);
 			await waitForCompletion('stepped=11', [4, 5, 2, 3, 6]);
+		}
+	);
+
+	it(
+		'keeps repeated-line stepping on the same worker across debug runs',
+		browserTestOptions,
+		async () => {
+			for (const command of ['stepInto', 'nextLine'] as const) {
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.start(
+						'value = 0\nwhile value < 3: value += 1\nprint(value)',
+						[],
+						true
+					)
+				);
+				await waitForPause(1);
+				// Pinned CPython 3.14 also reports the final, false while condition.
+				for (const value of [0, 1, 2, 3]) {
+					await page.evaluate(
+						(next) => globalThis.__pythonDebugFixture.session.sendCommand(next),
+						command
+					);
+					await waitForPause(2);
+					expect(
+						await page.evaluate(() =>
+							globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+						)
+					).toBe(String(value));
+				}
+				await page.evaluate(
+					(next) => globalThis.__pythonDebugFixture.session.sendCommand(next),
+					command
+				);
+				await waitForPause(3);
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.session.sendCommand('continue')
+				);
+				await waitForCompletion('3', [1, 2, 2, 2, 2, 3]);
+			}
+		}
+	);
+
+	it('steps out of recursion to the selected caller', browserTestOptions, async () => {
+		await page.evaluate(() =>
+			globalThis.__pythonDebugFixture.start(
+				'def recur(n):\n    if n == 0:\n        return 0\n    value = recur(n - 1)\n    return value + 1\nvalue = recur(2)\nprint(value)',
+				[6]
+			)
+		);
+		await waitForPause(6);
+		for (const [command, line, n] of [
+			['stepInto', 2, '2'],
+			['nextLine', 4, '2'],
+			['stepInto', 2, '1'],
+			['stepOut', 5, '2']
+		] as const) {
+			await page.evaluate(
+				(next) => globalThis.__pythonDebugFixture.session.sendCommand(next),
+				command
+			);
+			await waitForPause(line);
+			expect(
+				await page.evaluate(() => globalThis.__pythonDebugFixture.python.debugEvaluate('n'))
+			).toBe(n);
+		}
+		await page.evaluate(() => globalThis.__pythonDebugFixture.session.sendCommand('continue'));
+		await waitForCompletion('2', [6, 2, 4, 2, 5]);
+	});
+
+	it(
+		'keeps interactive input and output across a cached debug helper',
+		browserTestOptions,
+		async () => {
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.start(
+					'value = input("value: ")\nvalue = int(value) + 1\nprint(value)',
+					[2]
+				)
+			);
+			await page.waitForFunction(() =>
+				globalThis.__pythonDebugFixture.output.includes('value: ')
+			);
+			await page.evaluate(() => globalThis.__pythonDebugFixture.python.write('41\n'));
+			await waitForPause(2);
+			expect(
+				await page.evaluate(() =>
+					globalThis.__pythonDebugFixture.python.debugEvaluate('value')
+				)
+			).toBe("'41'");
+			await page.evaluate(() =>
+				globalThis.__pythonDebugFixture.session.sendCommand('continue')
+			);
+			await waitForCompletion('value: 42', [2]);
 		}
 	);
 

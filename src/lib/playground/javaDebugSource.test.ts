@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { instrumentJavaDebugSource } from './javaDebugSource';
 
 describe('Java source debug instrumentation', () => {
+	it('adds bounded direct field readers only to ordinary classes with declared instance fields', () => {
+		const source = `class Box<T> implements Runnable {
+    private T item;
+    int values[], other;
+    static int ignored;
+    public void run() {}
+    record Record(int value) {}
+    enum Enum { ITEM; int value; }
+}`;
+		const result = instrumentJavaDebugSource(source, 'Box.java', 'dbg.DebugProbe');
+		expect(result.code).toContain('implements Runnable,dbg.DebugProbe.Inspectable');
+		expect(result.code).toContain('new dbg.DebugProbe.Field("item","T",this.item)');
+		expect(result.code).toContain('new dbg.DebugProbe.Field("values","int[]",this.values)');
+		expect(result.code).toContain('new dbg.DebugProbe.Field("other","int",this.other)');
+		expect(result.code).not.toContain('this.ignored');
+		expect(result.code.match(/DebugProbe_fieldOwner\(\)/g)).toHaveLength(1);
+		expect(result.code.split('\n')).toHaveLength(source.split('\n').length);
+	});
+
+	it('bounds field accessors and leaves generated-name collisions opaque', () => {
+		const source = `class Large { ${Array.from({ length: 260 }, (_, i) => `int field${i};`).join('')} }`;
+		const result = instrumentJavaDebugSource(source, 'Large.java', 'DebugProbe');
+		expect(result.code).toContain('DebugProbe_fieldCount(){return 257;}');
+		expect(result.code).toContain('4 fields omitted (256-field inspection limit)');
+		expect(result.code).toContain('this.field255');
+		expect(result.code).not.toContain('this.field256');
+		const collision = 'class Value { int value; void DebugProbe_field(int index) {} }';
+		expect(instrumentJavaDebugSource(collision, 'Value.java', 'DebugProbe').code).not.toContain(
+			'DebugProbe.Inspectable'
+		);
+	});
+
 	it('reports original statement locations and preserves CRLF source lines', () => {
 		const source = [
 			'public class Main {',
