@@ -397,7 +397,7 @@ describe('compressed runtime service worker', () => {
 
 	it('bypasses compressed synthesis for a pinned TinyGo graph module', async () => {
 		const receipt = 'b'.repeat(64);
-		const assetPath = 'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js';
+		const assetPath = 'wasm-tinygo/assets/upstream-compile-worker-CbXtAM7H.js';
 		const compressedBytes = new TextEncoder().encode('stale compressed module');
 		const networkBytes = new TextEncoder().encode('receipt-matched network module');
 		const harness = await createServiceWorkerHarness(

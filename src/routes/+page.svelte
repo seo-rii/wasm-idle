@@ -4694,6 +4694,7 @@
 							>
 							<option value="unchecked-hash">Unchecked hash</option>
 							<option value="timestamp">Timestamp</option>
+							<option value="normalized">Normalized (bytecode only)</option>
 						</select>
 					</div>
 					{#if pythonInvalidationMode === 'timestamp'}
@@ -4723,6 +4724,10 @@
 							version produce identical .pyc files.
 						{:else if pythonInvalidationMode === 'unchecked-hash'}
 							Stores a source hash without checking it on import.
+						{:else if pythonInvalidationMode === 'normalized'}
+							Removes source metadata so matching compiled programs produce identical
+							.pyc files. Use for bytecode without source; use checked hash for caches
+							alongside source files.
 						{:else}
 							Checks the chosen timestamp and source size on import. The default
 							timestamp is 0.

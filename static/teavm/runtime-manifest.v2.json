@@ -1,16 +1,16 @@
 {
 	"format": "wasm-teavm-runtime-manifest-v2",
 	"runtime": "teavm-javac",
-	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v3-java-errors",
-	"provenanceLevel": "source-build-and-compatibility-overlay-reproduced",
+	"profileId": "teavm-javac-0.16.0-208d4c9-integrated-overlay-v1",
+	"provenanceLevel": "source-build-and-integrated-overlay-reproduced",
 	"licenseExpression": "Apache-2.0 AND GPL-2.0-only WITH Classpath-exception-2.0 AND BSD-3-Clause AND Unicode-3.0",
 	"source": {
 		"repository": "https://github.com/konsoletyper/teavm-javac.git",
-		"revision": "7e4a44cf521694a4e326e33850dd8aec165eb5c9",
+		"revision": "208d4c97a602ba0df055f16e6882059fb69d0122",
 		"archive": {
-			"url": "https://github.com/konsoletyper/teavm-javac/archive/7e4a44cf521694a4e326e33850dd8aec165eb5c9.tar.gz",
-			"bytes": 88734,
-			"sha256": "29bfb6e2b6c1669972846794af4285d913faf720af74f2c8fcac758a5433c61c"
+			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/208d4c97a602ba0df055f16e6882059fb69d0122",
+			"bytes": 99644,
+			"sha256": "ad893ca727081e72ab7ffb9f270956c76d4222b09c6bd1196a13c58c7f81ad2e"
 		},
 		"buildInputs": [
 			{
@@ -20,8 +20,8 @@
 			},
 			{
 				"path": "gradle/libs.versions.toml",
-				"bytes": 1082,
-				"sha256": "134bbfe1cf45739309c10b376364503f9f5ce0d6c4b098980d4babbed4fe6e87"
+				"bytes": 1460,
+				"sha256": "63c1ede00b437d2602780e8f34ea7682a44778b1b6b76d4858eea066a35b2dec"
 			},
 			{
 				"path": "gradle/wrapper/gradle-wrapper.jar",
@@ -45,8 +45,8 @@
 			},
 			{
 				"path": "compiler/build.gradle",
-				"bytes": 4648,
-				"sha256": "684175dafc1717af618368b83a8d5f400b3c903cb309e061a40201588e05c3c2"
+				"bytes": 5805,
+				"sha256": "65cef2d0b8315add5c3839eca1407873389b9a7184c86fe7f79488403b2b960a"
 			},
 			{
 				"path": "javac/build.gradle",
@@ -62,26 +62,20 @@
 	},
 	"components": {
 		"teavm": {
-			"version": "0.13.1",
+			"version": "0.16.0",
 			"repository": "https://github.com/konsoletyper/teavm.git",
-			"revision": "b3a245b7d9034ff35cdfab2def057a3d4f256efb",
+			"revision": "e87d452e4bd70c77b9e19314a46c3d6971c148b6",
 			"artifacts": [
 				{
-					"name": "teavm-classlib-0.13.1-sources.jar",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1-sources.jar",
-					"bytes": 1819937,
-					"sha256": "c816953b045aa1e6aaf4dd38006951884abbc8cd069b7bae32767d4fe12d68d3"
-				},
-				{
-					"name": "teavm-wasm-gc-deobfuscator-0.13.1.jar",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-wasm-gc-deobfuscator/0.13.1/teavm-wasm-gc-deobfuscator-0.13.1.jar",
-					"bytes": 18444,
-					"sha256": "0e89d9a53d8c891cb781b533b259f183bb3e0df1559b26e93b69df3429cab86a"
+					"name": "teavm-wasm-gc-deobfuscator-0.16.0.jar",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-wasm-gc-deobfuscator/0.16.0/teavm-wasm-gc-deobfuscator-0.16.0.jar",
+					"bytes": 22824,
+					"sha256": "5c6ead508a9f26fdd08f09498c3f835de6e068c5c84095dd818ea4638e5171ca"
 				}
 			]
 		},
 		"openjdk": {
-			"repository": "https://github.com/openjdk/jdk25u.git",
+			"repository": "https://github.com/openjdk/jdk25u",
 			"revision": "6c48f4ed707bf0b15f9b6098de30db8aae6fa40f",
 			"archive": {
 				"url": "https://github.com/openjdk/jdk25u/archive/6c48f4ed707bf0b15f9b6098de30db8aae6fa40f.zip",
@@ -97,16 +91,16 @@
 		},
 		"jdk": {
 			"distribution": "Eclipse Temurin",
-			"version": "25.0.3+9",
+			"version": "25.0.5+8",
 			"archive": {
-				"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.3%2B9/OpenJDK25U-jdk_x64_linux_hotspot_25.0.3_9.tar.gz",
-				"bytes": 141282180,
-				"sha256": "69264a7a211bf5029830d07bc3370f879769d62ebc5b5488e90c9343a2da0e1f"
+				"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz",
+				"sha256": "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb",
+				"bytes": 141341188
 			},
 			"release": {
-				"IMPLEMENTOR_VERSION": "Temurin-25.0.3+9",
-				"JAVA_VERSION": "25.0.3",
-				"JAVA_RUNTIME_VERSION": "25.0.3+9-LTS",
+				"JAVA_VERSION": "25.0.5",
+				"JAVA_RUNTIME_VERSION": "25.0.5+8-LTS",
+				"IMPLEMENTOR_VERSION": "Temurin-25.0.5+8",
 				"OS_ARCH": "x86_64",
 				"OS_NAME": "Linux"
 			}
@@ -114,431 +108,179 @@
 		"gradle": {
 			"version": "9.1.0",
 			"distributionUrl": "https://services.gradle.org/distributions/gradle-9.1.0-bin.zip",
-			"distributionBytes": 134528013,
 			"distributionSha256": "a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806",
+			"distributionBytes": 134528013,
 			"verificationMetadata": {
-				"path": "scripts/teavm/gradle-verification-metadata.xml",
-				"bytes": 87353,
-				"sha256": "d6a95d9ecec6e4d222d42b1fafc85819456e778350c27ec978e896f26dbab86c"
+				"path": "scripts/teavm/candidate-gradle-verification-metadata.xml",
+				"bytes": 132259,
+				"sha256": "c3779dda8a80c0b28355f2e656f24ec424d2641d275e432e70c02ab7b02674ba"
 			}
 		},
 		"node": {
-			"version": "24.1.0",
-			"zlib": "1.3.0.1-motley-780819f",
+			"version": "24.22.1",
+			"zlib": "1.3.2.1-motley-285e94b",
 			"archive": {
-				"url": "https://nodejs.org/dist/v24.1.0/node-v24.1.0-linux-x64.tar.xz",
-				"bytes": 31647444,
-				"sha256": "76b77c43f97a7c4cf60917e24c5e212faaf8ca664e433759ef98d12f268b6b49"
+				"url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz",
+				"bytes": 32026916,
+				"sha256": "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6"
 			}
 		},
 		"sourcePatches": [
 			{
-				"path": "scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch",
-				"bytes": 4446,
-				"sha256": "0e52f4dd5c1e7392eb3acfbced274bd1e0134b71804125a4c31615815ebc53ca"
+				"path": "scripts/teavm/patches/teavm-javac-0.16.0-compat.patch",
+				"bytes": 187792,
+				"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
 			},
 			{
-				"path": "scripts/teavm/patches/teavm-javac-stdlib-rename.patch",
-				"bytes": 4680,
-				"sha256": "e6d9edfac544c09b1dea1bf8a7dc3691c3b98267cdb099f613bd5751c76e1414"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-enum-constants.patch",
-				"bytes": 5131,
-				"sha256": "0b8907cc32bb12eee450e03d691d4328e6417f2925ee97a982a5df4a7dafcd88"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-annotation-classlib.patch",
-				"bytes": 3462,
-				"sha256": "f1cfcf898a8a96aa9bad16369751735e9cb4e080fcf3d7d87d74968aba2ac12b"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-array-clone.patch",
-				"bytes": 11177,
-				"sha256": "1b0e54b7d10fd57f3c8fc424f110872cb0300c882b2f5d1ddce044d62dd51116"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-reproducible-wasm.patch",
-				"bytes": 20783,
-				"sha256": "f81ab2a7a1c9687f46b9038277663c6f7782b27a593e99dcd537c0149aad9a4d"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-bootstrap-services.patch",
-				"bytes": 4439,
-				"sha256": "f7b58039291c1e0cd55433cde2ab8d465a9acd9ad4754ddfd8b9d7fb4a88b1a9"
-			},
-			{
-				"path": "scripts/teavm/patches/teavm-javac-classlib-supplements.patch",
-				"bytes": 38792,
-				"sha256": "302fe3144d9b85df48a947f3657ee014f427a4ae8016a662b5826a0f6ed37a3a"
+				"path": "scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch",
+				"bytes": 72491,
+				"sha256": "10459fdf93377e71aedb250135d7816e32aa9c5eb6738eeb1a3ffb64be50af14"
 			}
 		],
 		"commands": [
-			"git apply <source-patches>",
-			"./gradlew --no-daemon clean :javac:downloadJDK",
-			"./gradlew --no-daemon :compiler:createDist",
-			"javac --release 17 <locked-classpath> <overlay-sources>",
-			"java ApplyRuntimeClasslibOverlay <canonical-runtime> <overlay-classes>"
-		],
-		"upstreamOutputs": [
-			{
-				"path": "compiler.wasm-runtime.js",
-				"bytes": 13936,
-				"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
-			},
-			{
-				"path": "compiler.wasm",
-				"bytes": 4334204,
-				"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4"
-			},
-			{
-				"path": "compiler.wasm-deobfuscator.wasm",
-				"bytes": 36608,
-				"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c"
-			},
-			{
-				"path": "compile-classlib-teavm.bin",
-				"bytes": 200641,
-				"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733"
-			},
-			{
-				"path": "runtime-classlib-teavm.bin",
-				"bytes": 2397545,
-				"sha256": "97c1efc7c6cb35292892750c1148cba20af75413febaa6ebc35ff4b1dc103ed5"
-			}
+			"git archive <locked-source-revision>; git apply <locked-source-patch>",
+			"./gradlew --no-daemon --dependency-verification strict clean :javac:downloadJDK",
+			"./gradlew --no-daemon --dependency-verification strict :compiler:createDist",
+			"unzip <pinned-deobfuscator-jar> org/teavm/backend/wasm/deobfuscator.wasm"
 		],
 		"overlay": {
-			"utilityPath": "scripts/teavm/ApplyRuntimeClasslibOverlay.java",
-			"utilityBytes": 6477,
-			"utilitySha256": "c87ea6f280752b21233da8361fc4ab1cbf90c85f6855ba4e59c57ba9622ac085",
-			"release": 17,
-			"archiveEntryCount": 2141,
-			"canonicalRuntime": {
-				"bytes": 2397545,
-				"sha256": "97c1efc7c6cb35292892750c1148cba20af75413febaa6ebc35ff4b1dc103ed5"
-			},
-			"classpath": [
-				{
-					"name": "teavm-classlib",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1.jar",
-					"bytes": 17768641,
-					"sha256": "a250f7baf877767af72634cd3f19d30f2a6b8a3fb16bd3931b99fde1b17cd12d"
-				},
-				{
-					"name": "teavm-core",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.13.1/teavm-core-0.13.1.jar",
-					"bytes": 2950160,
-					"sha256": "b9fe1b008512c8f11ff3efbd9cf2f0565b4bfa76943a9f23910befc0812f7ebf"
-				},
-				{
-					"name": "teavm-jso-apis",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-jso-apis/0.13.1/teavm-jso-apis-0.13.1.jar",
-					"bytes": 177707,
-					"sha256": "7a7c211dd03dfbca4445ea5e01b70091226d9e52ce7425d675294ef47a76586b"
-				},
-				{
-					"name": "teavm-jso",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-jso/0.13.1/teavm-jso-0.13.1.jar",
-					"bytes": 8391,
-					"sha256": "421b848c79d161c34e9f178d3d37b35e8efaadada487056c3fd3d4d3de1c172c"
-				},
-				{
-					"name": "teavm-interop",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-interop/0.13.1/teavm-interop-0.13.1.jar",
-					"bytes": 13753,
-					"sha256": "f00f983b986d367799570ab482fee89502915213fe347d361e5bcf1e23a8fa04"
-				},
-				{
-					"name": "teavm-platform",
-					"version": "0.13.1",
-					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-platform/0.13.1/teavm-platform-0.13.1.jar",
-					"bytes": 131492,
-					"sha256": "ca725f27d0be52d1ddc95e11b63bad8cfe0f66dac9977a46d4089c6282ee1f8e"
-				}
-			],
+			"mode": "gradle-source-set",
+			"sourceRoot": "compiler/src/classlibOverlay/java",
 			"sources": [
 				{
-					"sourcePath": "scripts/teavm/TByteBuffer.java",
-					"sourceBytes": 12916,
-					"sourceSha256": "5a7c6baa28d638f357fa47489908682de3d5be22b33b5c96ec531ac0edb1f962",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TByteBuffer.java",
-					"upstreamSourceBytes": 12908,
-					"upstreamSourceSha256": "fe910ed3405fe17b776547a11ed464b572a74e90f4aadfb4cf36039a36c8af94",
-					"transforms": [
-						{
-							"from": "Int8Array.fromJavaArray",
-							"to": "Int8Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/impl/console/JsConsolePrintStream.java",
+					"bytes": 5210,
+					"sha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2"
 				},
 				{
-					"sourcePath": "scripts/teavm/TCharBuffer.java",
-					"sourceBytes": 11297,
-					"sourceSha256": "e6dd0814ffdfefc193d2d395f04fbaaf7d60e0f3e54a0229c9f1a1f5a4d1cd50",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TCharBuffer.java",
-					"upstreamSourceBytes": 11289,
-					"upstreamSourceSha256": "5a0c2da869436d715b49266f79b027d1762c3bb9b601936bc49d7b3600a7b9e4",
-					"transforms": [
-						{
-							"from": "Uint16Array.fromJavaArray",
-							"to": "Uint16Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TByteBuffer.java",
+					"bytes": 12563,
+					"sha256": "e57ff9fa9e9bc652abfaa368ae839bc157d59a91dc6aa4319bf237b2cc1c6b03"
 				},
 				{
-					"sourcePath": "scripts/teavm/TShortBuffer.java",
-					"sourceBytes": 9051,
-					"sourceSha256": "f38c8955184cf3793b7794e5788170e8faaa5e7460d2d32212a6b514911e6324",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TShortBuffer.java",
-					"upstreamSourceBytes": 9043,
-					"upstreamSourceSha256": "43c3d90b46fe53df61a7d7826341e868ce3ac7edb63567f8ff3c73085e6209a8",
-					"transforms": [
-						{
-							"from": "Int16Array.fromJavaArray",
-							"to": "Int16Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TCharBuffer.java",
+					"bytes": 11225,
+					"sha256": "715461dac73ce7ec2da6e4b3bbf5e4f1f858234af387170b18cba10ca22bf0bc"
 				},
 				{
-					"sourcePath": "scripts/teavm/TIntBuffer.java",
-					"sourceBytes": 8923,
-					"sourceSha256": "8ac1326d8b940e9bd7235c1d8e8d80e99b28f2c20c3799474c2cbcd2ce0998c2",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TIntBuffer.java",
-					"upstreamSourceBytes": 8915,
-					"upstreamSourceSha256": "657d7ea89ac2d9c7fda3b21c5cc424f56f7c02a351a694582bcf0476a64d5144",
-					"transforms": [
-						{
-							"from": "Int32Array.fromJavaArray",
-							"to": "Int32Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TDoubleBuffer.java",
+					"bytes": 9154,
+					"sha256": "46e4f8db0747a14a8cf50c3f986207a2f1e74db14417cbf5133134072a1d020d"
 				},
 				{
-					"sourcePath": "scripts/teavm/TLongBuffer.java",
-					"sourceBytes": 9072,
-					"sourceSha256": "77fb55887ce264f975785a95b8272f4826d47b5d7844e51c321890a953dc329e",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TLongBuffer.java",
-					"upstreamSourceBytes": 9064,
-					"upstreamSourceSha256": "b14c3cafe33fdcb4af911f4e2416969f0a1423f5735f23e380b98ead1c0da5bd",
-					"transforms": [
-						{
-							"from": "BigInt64Array.fromJavaArray",
-							"to": "BigInt64Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TFloatBuffer.java",
+					"bytes": 9027,
+					"sha256": "99a6c815984f000cc42119e010f9894b0b5b0e872948a835cf6d3cbd8017770d"
 				},
 				{
-					"sourcePath": "scripts/teavm/TFloatBuffer.java",
-					"sourceBytes": 9099,
-					"sourceSha256": "b2fe029de67216bc87eb838f7f0d0937911675e249a67618670b9079399d32fc",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TFloatBuffer.java",
-					"upstreamSourceBytes": 9091,
-					"upstreamSourceSha256": "34e8908c509eac27c2bcebf145f4b8b0b7e6cbc2530202cd91f4d4cb94376aa7",
-					"transforms": [
-						{
-							"from": "Float32Array.fromJavaArray",
-							"to": "Float32Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TIntBuffer.java",
+					"bytes": 8851,
+					"sha256": "4152b391d5c58eec26811b0fd31b9d695227207e11b41b482df83454d6c0f310"
 				},
 				{
-					"sourcePath": "scripts/teavm/TDoubleBuffer.java",
-					"sourceBytes": 9226,
-					"sourceSha256": "b7ec352258878cd31ee23014eea53e3bda061d094701f5aad246925b52bde084",
-					"upstreamSourceEntry": "org/teavm/classlib/java/nio/TDoubleBuffer.java",
-					"upstreamSourceBytes": 9218,
-					"upstreamSourceSha256": "85b49814569d69beb6ef831af3ff3a8e66389be3cda27f3cc20ebb3d78f7c671",
-					"transforms": [
-						{
-							"from": "Float64Array.fromJavaArray",
-							"to": "Float64Array.copyFromJavaArray",
-							"expectedOccurrences": 2
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TLongBuffer.java",
+					"bytes": 9000,
+					"sha256": "41eceb3f04e19168f827e938bf2020bc201cd51dbc529bd1a8622eb06489f4ee"
 				},
 				{
-					"sourcePath": "scripts/teavm/JsConsolePrintStream.java",
-					"sourceBytes": 5210,
-					"sourceSha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2",
-					"upstreamSourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
-					"upstreamSourceBytes": 5042,
-					"upstreamSourceSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
-					"transforms": [
-						{
-							"from": "            flushAction = null;\n            flushAction.run();",
-							"to": "            Runnable action = flushAction;\n            flushAction = null;\n            action.run();",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "                buffer.put(b, off, count);\n                len -= count;",
-							"to": "                buffer.put(b, off, count);\n                off += count;\n                len -= count;",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "            if (buffer.position() > 0) {\n                output(true);\n            }",
-							"to": "            if (buffer.position() > 0) {\n                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending\n                output(false);\n            }",
-							"expectedOccurrences": 1
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TShortBuffer.java",
+					"bytes": 8979,
+					"sha256": "a9dc9059ecd8be8b6aaaac49bfaed4272ec6ac3e5de6c1c246f5385b6470595d"
 				},
 				{
-					"sourcePath": "scripts/teavm/TFormatter.java",
-					"sourceBytes": 29792,
-					"sourceSha256": "037e2eea47137516a86863193fd1b69567d87f93b441909208760e23eefd7eeb",
-					"upstreamSourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
-					"upstreamSourceBytes": 24170,
-					"upstreamSourceSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
-					"transforms": [
-						{
-							"from": "                char specifier = parseFormatSpecifier();\n                configureFormat();\n",
-							"to": "                char specifier = parseFormatSpecifier();\n                // %n and %% do not correspond to any argument\n                if (specifier == 'n') {\n                    formatLineSeparator();\n                    continue;\n                }\n                if (specifier == '%') {\n                    formatPercent();\n                    continue;\n                }\n                configureFormat();\n",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "                case '%':\n                    out.append(\"%\");\n                    break;\n",
-							"to": "",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
-							"to": "        private void formatLineSeparator() throws IOException {\n            if (flags != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags));\n            }\n            if (width != -1) {\n                throw new TIllegalFormatWidthException(width);\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            out.append(System.lineSeparator());\n        }\n\n        private void formatPercent() throws IOException {\n            if ((flags & ~TFormattableFlags.LEFT_JUSTIFY) != 0) {\n                throw new TIllegalFormatFlagsException(flagsToString(flags & ~TFormattableFlags.LEFT_JUSTIFY));\n            }\n            if (precision != -1) {\n                throw new TIllegalFormatPrecisionException(precision);\n            }\n            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width == -1) {\n                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));\n            }\n            formatGivenString(false, \"%\");\n        }\n\n        private void formatFloat(char specifier, boolean upperCase) throws IOException {\n",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "import java.math.BigDecimal;\n",
-							"to": "import java.math.BigDecimal;\nimport java.math.RoundingMode;\n",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "            format.setMinimumFractionDigits(precision);\n",
-							"to": "            format.setMinimumFractionDigits(precision);\n            format.setRoundingMode(RoundingMode.HALF_UP);\n",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "                case 'f':\n                    formatFloat(specifier, false);\n                    break;\n",
-							"to": "                case 'f':\n                    formatFloat(specifier, false);\n                    break;\n                case 'e':\n                    formatScientific(specifier, false);\n                    break;\n                case 'E':\n                    formatScientific(specifier, true);\n                    break;\n",
-							"expectedOccurrences": 1
-						},
-						{
-							"from": "        private int predictDecimalSize(boolean negative, TDecimalFormat format) {\n",
-							"to": "        private void formatScientific(char specifier, boolean upperCase) throws IOException {\n            verifyFlags(specifier, MASK_FOR_GENERAL_FORMAT | TFormattableFlags.SIGNED\n                    | TFormattableFlags.LEADING_SPACE | TFormattableFlags.ZERO_PADDED\n                    | TFormattableFlags.PARENTHESIZED_NEGATIVE);\n            verifyFloatFlags();\n\n            if (precision == -1) {\n                precision = 6;\n            }\n\n            Object arg = args[argumentIndex];\n            BigDecimal value = null;\n            boolean negative;\n            boolean nan = false;\n            if (arg instanceof Double || arg instanceof Float) {\n                double d = ((Number) arg).doubleValue();\n                negative = Double.compare(d, 0.0) < 0;\n                nan = Double.isNaN(d);\n                if (!nan && !Double.isInfinite(d)) {\n                    // Like the JDK, round the shortest decimal representation of the double value\n                    value = new BigDecimal(Double.toString(Math.abs(d)));\n                }\n            } else if (arg instanceof BigDecimal) {\n                negative = ((BigDecimal) arg).signum() < 0;\n                value = ((BigDecimal) arg).abs();\n            } else if (arg == null) {\n                precision = -1;\n                formatGivenString(upperCase, \"null\");\n                return;\n            } else {\n                throw new IllegalFormatConversionException(specifier, arg.getClass());\n            }\n\n            StringBuilder sb = new StringBuilder();\n            if (value == null) {\n                sb.append(nan ? \"NaN\" : \"Infinity\");\n            } else {\n                int exponent = 0;\n                if (value.signum() != 0) {\n                    sb.append(value.unscaledValue().toString());\n                    exponent = sb.length() - value.scale() - 1;\n                }\n                if (sb.length() > precision + 1) {\n                    // Round half up by hand: BigDecimal.round does not round when it drops a single digit\n                    boolean roundUp = sb.charAt(precision + 1) >= '5';\n                    sb.setLength(precision + 1);\n                    int i = precision;\n                    while (roundUp && i >= 0) {\n                        roundUp = sb.charAt(i) == '9';\n                        sb.setCharAt(i, roundUp ? '0' : (char) (sb.charAt(i) + 1));\n                        --i;\n                    }\n                    if (roundUp) {\n                        sb.insert(0, '1').setLength(precision + 1);\n                        ++exponent;\n                    }\n                }\n                while (sb.length() < precision + 1) {\n                    sb.append('0');\n                }\n                if (precision > 0 || (flags & TFormattableFlags.ALTERNATE) != 0) {\n                    sb.insert(1, '.');\n                }\n                sb.append(exponent < 0 ? \"e-\" : \"e+\");\n                if (Math.abs(exponent) < 10) {\n                    sb.append('0');\n                }\n                sb.append(Math.abs(exponent));\n            }\n\n            String prefix = \"\";\n            String suffix = \"\";\n            if (negative) {\n                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {\n                    prefix = \"(\";\n                    suffix = \")\";\n                } else {\n                    prefix = \"-\";\n                }\n            } else if (!nan && (flags & TFormattableFlags.SIGNED) != 0) {\n                prefix = \"+\";\n            } else if (!nan && (flags & TFormattableFlags.LEADING_SPACE) != 0) {\n                prefix = \" \";\n            }\n            if (value != null && (flags & TFormattableFlags.ZERO_PADDED) != 0) {\n                while (prefix.length() + sb.length() + suffix.length() < width) {\n                    sb.insert(0, '0');\n                }\n            }\n\n            precision = -1; // prevent formatGivenString from trimming\n            formatGivenString(upperCase, prefix + sb + suffix);\n        }\n\n        private int predictDecimalSize(boolean negative, TDecimalFormat format) {\n",
-							"expectedOccurrences": 1
-						}
-					]
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java",
+					"bytes": 29792,
+					"sha256": "037e2eea47137516a86863193fd1b69567d87f93b441909208760e23eefd7eeb"
+				},
+				{
+					"path": "compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TIllegalFormatWidthException.java",
+					"bytes": 611,
+					"sha256": "5242e1c00b4433885ef95776d80ae62ff070e43926c10a8f51c12919553360b8"
 				}
 			],
-			"classes": [
+			"correspondence": {
+				"classlibSourceJarSha256": "da6f83c1436c87a9ad683b6143aaa9c172b08c3974c9a7d5741a479d0d60092e",
+				"sources": [
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TByteBuffer.java",
+						"upstreamSha256": "fa465468d8580f9f96d87088592fdc2e59d47af922de20cc39aa9ff30b78e03f",
+						"patchedSha256": "e57ff9fa9e9bc652abfaa368ae839bc157d59a91dc6aa4319bf237b2cc1c6b03"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TCharBuffer.java",
+						"upstreamSha256": "cf683f75488569d5220c690d1ad223bd6b559694c03844bb03ffe9b4516e5b96",
+						"patchedSha256": "715461dac73ce7ec2da6e4b3bbf5e4f1f858234af387170b18cba10ca22bf0bc"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TShortBuffer.java",
+						"upstreamSha256": "1fbeb1443a783ea50ecce88782e51ff03bc1f6841e84a45c5c1ffd447b26bb7f",
+						"patchedSha256": "a9dc9059ecd8be8b6aaaac49bfaed4272ec6ac3e5de6c1c246f5385b6470595d"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TIntBuffer.java",
+						"upstreamSha256": "613e5cfff1845c554c658778af352d81c3b36bb9039be0a8c0514bb9e0d29328",
+						"patchedSha256": "4152b391d5c58eec26811b0fd31b9d695227207e11b41b482df83454d6c0f310"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TLongBuffer.java",
+						"upstreamSha256": "5a2d1988cc88a026408c731a2c34befce47c1f09d24780ddbc3550eefebfa223",
+						"patchedSha256": "41eceb3f04e19168f827e938bf2020bc201cd51dbc529bd1a8622eb06489f4ee"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TFloatBuffer.java",
+						"upstreamSha256": "a5ff5a21a3353767e968cd3e733831bc7c8b81ba6cd24cc90219ecde9e8809ed",
+						"patchedSha256": "99a6c815984f000cc42119e010f9894b0b5b0e872948a835cf6d3cbd8017770d"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/nio/TDoubleBuffer.java",
+						"upstreamSha256": "9db10fd6f4637e004943046c4df988fe9a1cf36d6e966ed220837b95db400135",
+						"patchedSha256": "46e4f8db0747a14a8cf50c3f986207a2f1e74db14417cbf5133134072a1d020d"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.java",
+						"upstreamSha256": "7674283adf74ba39029800906d67af2d70bf35da04c1ac8d33a6de52075e40f4",
+						"patchedSha256": "fdd62b1fd2648f0322c72264a5b61031043a2ece09d3977706ffbbe8d64ac6e2"
+					},
+					{
+						"sourceEntry": "org/teavm/classlib/java/util/TFormatter.java",
+						"upstreamSha256": "2d7883402f09ef434569d1ca8b0ce1ccf26ef95f44ae8483cfb095103a4f6493",
+						"patchedSha256": "037e2eea47137516a86863193fd1b69567d87f93b441909208760e23eefd7eeb"
+					}
+				]
+			}
+		},
+		"compilerOverrides": {
+			"version": "0.16.0",
+			"sourceJar": {
+				"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.16.0/teavm-core-0.16.0-sources.jar",
+				"bytes": 1670879,
+				"sha256": "687cabf23e0d17a15be30fbc070809c2931714340aca224120fe31579f95519b"
+			},
+			"sources": [
 				{
-					"targetEntry": "org/teavm/classlib/java/nio/TByteBuffer.class",
-					"canonicalClassBytes": 11977,
-					"canonicalClassSha256": "cbc18da714d13533cebdb1faa6c6111d3267529924b00ff2754b6880b4c5d901",
-					"classBytes": 10166,
-					"classSha256": "4049841193133ad9e36fd8b0f8f8cd3c6ddf57c091def6c3fa592b2d801b956a"
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
+					"upstreamSha256": "a15d251d9fc1bd7e2a9668677c3e45e6604d4072d2c631408d0c4b2f0fb60b46",
+					"bytes": 25905,
+					"sha256": "52c766f5027cc9b96c7bdd8138d1b81a313061dde369c6bd9dd0e692a2dbeb25"
 				},
 				{
-					"targetEntry": "org/teavm/classlib/java/nio/TCharBuffer.class",
-					"canonicalClassBytes": 11068,
-					"canonicalClassSha256": "276e812f70715846afc0d7e6ce11807ce6502ed3650a111e4b35ec5e5966ce4d",
-					"classBytes": 8987,
-					"classSha256": "741264b2bff8982f2d4992cdfc83e2e096b2293adb0ef518e5d30e7a1a318229"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/nio/TShortBuffer.class",
-					"canonicalClassBytes": 8504,
-					"canonicalClassSha256": "a874a1c7b6fdf0c5aa3d15ca29257fc4d4c5607d3e980020a33c5afc3ad173c2",
-					"classBytes": 6989,
-					"classSha256": "a60890939b48feab0b106c612bb04f04f8ac20a374ee1a1ad581438d4977c2f8"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/nio/TIntBuffer.class",
-					"canonicalClassBytes": 8357,
-					"canonicalClassSha256": "b6e58478e3043677f38d93e972b877207fb3012c342acba11e1a909ad4bb954a",
-					"classBytes": 6848,
-					"classSha256": "37ceac2c15072c4dfd3c489008d4418895c20308e68bc507d079c9b9cff68fb9"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/nio/TLongBuffer.class",
-					"canonicalClassBytes": 8526,
-					"canonicalClassSha256": "a33b4c5b9049ce0b431bf6116e83f94c79436a5983bf5ad656e9a7888ec12112",
-					"classBytes": 6993,
-					"classSha256": "f9be933d488a44603befda83f857da99fdaaf08360e5981d3162d69e43707d90"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/nio/TFloatBuffer.class",
-					"canonicalClassBytes": 8548,
-					"canonicalClassSha256": "b655ecc5a103e79527b24233d070fe4e8e815d3a103f188b0372d50158d40a61",
-					"classBytes": 7033,
-					"classSha256": "ffeeb07b64939fbf341ffa5842da62b2dd9961536c18ed2d12026d59df1d0d0a"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/nio/TDoubleBuffer.class",
-					"canonicalClassBytes": 8612,
-					"canonicalClassSha256": "fe8e2a1368e6f72ef18ed8f89969f6d6e42396fdee23b85eccd2ff81f9c5861e",
-					"classBytes": 7073,
-					"classSha256": "80da642f1198977868d7fcc2cee694996d975f359bf9d614ead3a3bea83a3aaf"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream.class",
-					"canonicalClassBytes": 3722,
-					"canonicalClassSha256": "d71fb27e45d617e3a8b7a09cbc93beb27320741a346bb793545fd081c2f9477e",
-					"classBytes": 2854,
-					"classSha256": "b53824fa892785e70284ba50bb40cf9c0c2a6ae7b515875bea6506c0a050c162"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/impl/console/JsConsolePrintStream$ByteEncoder.class",
-					"canonicalClassBytes": 3634,
-					"canonicalClassSha256": "4f8db161a099a53146f1162de3939d9d1a1fcd58097a0fc0a78754cdd13f6fcf",
-					"classBytes": 3291,
-					"classSha256": "05f574c8f74dca5bea3374aae23deeb372e3d4d0f6c6a8916b500343739cb97a"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/util/TFormatter.class",
-					"canonicalClassBytes": 3594,
-					"canonicalClassSha256": "f5ea2dffc2dc8df5961102ff89fa66565830b1d17e95ae85e0a983d45964a727",
-					"classBytes": 2899,
-					"classSha256": "5bae6b47e4fce709e9f655dd27f3ce8cc4f8521a3b79d0261aa1e34555551d7c"
-				},
-				{
-					"targetEntry": "org/teavm/classlib/java/util/TFormatter$FormatWriter.class",
-					"canonicalClassBytes": 13376,
-					"canonicalClassSha256": "714ab8ce856032d688853f12ffd860c6c7970849b1eab05e5c142be970162985",
-					"classBytes": 14229,
-					"classSha256": "dcdec1669940afa13806ed90f7bc82781a26e54c3a16f40ec8a82d89327468c0"
+					"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
+					"upstreamSha256": "3ca9b19463d6013216d0b41f2d7a59cf3f91629c2abf77b66c8835cee9dd3d62",
+					"bytes": 43454,
+					"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
 				}
 			],
-			"addedSources": [
-				{
-					"sourcePath": "scripts/teavm/TIllegalFormatWidthException.java",
-					"sourceBytes": 611,
-					"sourceSha256": "5242e1c00b4433885ef95776d80ae62ff070e43926c10a8f51c12919553360b8"
-				}
-			],
-			"addedClasses": [
-				{
-					"targetEntry": "org/teavm/classlib/java/util/TIllegalFormatWidthException.class",
-					"classBytes": 874,
-					"classSha256": "0c440a6516fc12871502cb2f239a2d55a0fcd973c47a4a5991c0492786693b4a"
-				}
-			]
+			"classpath": "main output precedes dependency JARs in generateWasmGC"
 		}
 	},
 	"producer": {
 		"files": [
 			{
 				"path": "scripts/sync-wasm-teavm.mjs",
-				"bytes": 40474,
-				"sha256": "7b43af0fe8e1e1ca7b2b30f3006dc30bbcc46769938c08259839d01e974287ec"
+				"bytes": 32433,
+				"sha256": "f1c33cc8b961e59457a7173251f96d352142b8410776e9f70e7a16c694eacbc5"
 			},
 			{
 				"path": "scripts/sync-wasm-teavm.d.mts",
@@ -551,71 +293,71 @@
 		{
 			"path": "THIRD_PARTY_NOTICES.md",
 			"mediaType": "text/markdown",
-			"bytes": 40369,
-			"sha256": "ca8bb133115c5dcd6a675201faeab7746b0d238fc2910d7856fe01c61a5635c0"
+			"bytes": 39892,
+			"sha256": "4d3f36434500a0875cb7db49cf5ba414bc208161c37871ef088f078aabfd6e6c"
 		}
 	],
 	"assets": [
 		{
 			"path": "compiler.wasm-runtime.js",
 			"mediaType": "text/javascript",
-			"bytes": 13936,
-			"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63",
+			"bytes": 16425,
+			"sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08",
 			"storage": {
 				"path": "compiler.wasm-runtime.js",
 				"encoding": "identity",
-				"bytes": 13936,
-				"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
+				"bytes": 16425,
+				"sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08"
 			}
 		},
 		{
 			"path": "compiler.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 4334204,
-			"sha256": "2ad4ddca798a73c66b0944655c02914fe40981d2c232e15b73cc9175a4c81ed4",
+			"bytes": 4746215,
+			"sha256": "96291b9bf94d3ff3422ed35ff2305ec7c9d8052c9150f5a41b8ea6bc63bbd0de",
 			"storage": {
 				"path": "compiler.wasm.gz",
 				"encoding": "gzip",
-				"bytes": 1691491,
-				"sha256": "a73734d930d0559518eb5751482d5256b64da12c7d46b71df4adcee54ba54ceb"
+				"bytes": 1850481,
+				"sha256": "85516bce089fe6eea631f17c5b528972b3915d6679fdc10b5a2968a2bb64a438"
 			}
 		},
 		{
 			"path": "compiler.wasm-deobfuscator.wasm",
 			"mediaType": "application/wasm",
-			"bytes": 36608,
-			"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c",
+			"bytes": 48410,
+			"sha256": "d64d18b9d003c0ced4191133fadb870be4b532f54a2de25f094bc0de61223654",
 			"storage": {
 				"path": "compiler.wasm-deobfuscator.wasm",
 				"encoding": "identity",
-				"bytes": 36608,
-				"sha256": "0e8f5d502437a114c6b61b10e199ad40c947eaebcface06d84e09c608fdff44c"
+				"bytes": 48410,
+				"sha256": "d64d18b9d003c0ced4191133fadb870be4b532f54a2de25f094bc0de61223654"
 			}
 		},
 		{
 			"path": "compile-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 200641,
-			"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733",
+			"bytes": 215642,
+			"sha256": "bbf8f130a711847df4822c7f8de88e622e25d5f6b89530d2f441096cebc617ed",
 			"storage": {
 				"path": "compile-classlib-teavm.bin",
 				"encoding": "identity",
-				"bytes": 200641,
-				"sha256": "073703f162a80346adacd69a6ab46065b51dadccd111b27a0da885ebfe119733"
+				"bytes": 215642,
+				"sha256": "bbf8f130a711847df4822c7f8de88e622e25d5f6b89530d2f441096cebc617ed"
 			}
 		},
 		{
 			"path": "runtime-classlib-teavm.bin",
 			"mediaType": "application/octet-stream",
-			"bytes": 2392921,
-			"sha256": "e06ea60036c383004a43f1b01b108e07271b1ffc67f9906505873ff8a5c1e7a6",
+			"bytes": 2300137,
+			"sha256": "05896413a99b04c70e818a5616b94e9ac3cc39a9d87de99c79661f164cff86d1",
 			"storage": {
 				"path": "runtime-classlib-teavm.bin.gz",
 				"encoding": "gzip",
-				"bytes": 2357917,
-				"sha256": "fa1eb45fea1c86652e8a55c607b0a2c8cfb36c9320e84f39d3247f502de204c6"
+				"bytes": 2263210,
+				"sha256": "8eb6f3f0f9d65163e6984833fbbe555bec0194caa860716b08621df04baadbc1"
 			}
 		}
 	],
-	"fingerprint": "b913ae6e9294153a261ba9e612a2032241e99293eddcef154c8868f2f5977cd0"
+	"fingerprint": "7583fd8040be494e926ab2fe6dfe3a4d2352103b2011d0f991fa9fa743ad49ee"
 }

@@ -271,9 +271,11 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
 		// Combined Java field inspection, Python debug setup and Zig value formatting
-		// measure 42,464,239 bytes / 3,370 files. Allow 1 KiB of composition headroom,
-		// rounded up to KiB; package/dependency limits remain unchanged.
-		budget: { maxBytes: 40 * MiB + 510 * 1024, maxFiles: 3_370, maxPackages: 70 },
+		// measure 42,464,239 bytes / 3,370 files before main's compiler updates (2,786
+		// bytes) and normalized Python bytecode (1,621 bytes). The projected combined
+		// install is 42,468,646 bytes; 515 KiB preserves at least 1 KiB of headroom.
+		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
+		budget: { maxBytes: 40 * MiB + 515 * 1024, maxFiles: 3_370, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

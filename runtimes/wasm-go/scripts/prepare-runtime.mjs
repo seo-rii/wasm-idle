@@ -9,23 +9,23 @@ import { splitGoSysrootPacks } from './split-sysroot.mjs';
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
 const projectRoot = path.resolve(scriptsDir, '..');
-const goVersion = 'go1.26.1';
+const goVersion = 'go1.26.10';
 const hostArchives = {
 	'linux-x64': {
-		filename: 'go1.26.1.linux-amd64.tar.gz',
-		sha256: '031f088e5d955bab8657ede27ad4e3bc5b7c1ba281f05f245bcc304f327c987a'
+		filename: 'go1.26.10.linux-amd64.tar.gz',
+		sha256: 'ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5'
 	},
 	'linux-arm64': {
-		filename: 'go1.26.1.linux-arm64.tar.gz',
-		sha256: 'a290581cfe4fe28ddd737dde3095f3dbeb7f2e4065cab4eae44dfc53b760c2f7'
+		filename: 'go1.26.10.linux-arm64.tar.gz',
+		sha256: '3f4227ce7b206a513e794f1393adb473a07b46e94d18bd15d1c684bbb7319797'
 	},
 	'darwin-x64': {
-		filename: 'go1.26.1.darwin-amd64.tar.gz',
-		sha256: '65773dab2f8cc4cd23d93ba6d0a805de150ca0b78378879292be0b903b8cdd08'
+		filename: 'go1.26.10.darwin-amd64.tar.gz',
+		sha256: 'e820ab780c273ae4a340b79d0f3c4313b74ee029aa3874792145d44b9f4f91da'
 	},
 	'darwin-arm64': {
-		filename: 'go1.26.1.darwin-arm64.tar.gz',
-		sha256: '353df43a7811ce284c8938b5f3c7df40b7bfb6f56cb165b150bc40b5e2dd541f'
+		filename: 'go1.26.10.darwin-arm64.tar.gz',
+		sha256: '0b5183492292ada170f9b561a834863808dd02edba599e4ad0e89899330020b3'
 	}
 };
 const defaultRequestedTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'];

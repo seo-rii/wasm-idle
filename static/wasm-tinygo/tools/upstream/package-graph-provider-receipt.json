@@ -6,10 +6,10 @@
   "upstream": {
     "sourceLock": "package-graph.lock.json",
     "module": "golang.org/toolchain",
-    "version": "go1.24.6",
-    "archiveFilename": "v0.0.1-go1.24.6.linux-amd64.zip",
-    "archiveBytes": 82904480,
-    "archiveSha256": "e7f0fd16d1b06c716162a0938744bb7ebf7edbc3248d42432271a1b5c1fde1ce",
+    "version": "go1.26.10",
+    "archiveFilename": "v0.0.1-go1.26.10.linux-amd64.zip",
+    "archiveBytes": 71735438,
+    "archiveSha256": "f64ecb0807852be2c98899561c45288a9ad57f4e88f3cd002ffabeccbd03bfe1",
     "entrypoint": "cmd/go",
     "identityPackages": [
       "go/build",
@@ -21,28 +21,28 @@
     "identitySources": [
       {
         "path": "src/go/build/build.go",
-        "bytes": 63892,
-        "sha256": "e2c9d4056a147bce2b170cce9c9dff26ca9ef9ca8aa0af85c2ead342a3277bb8"
+        "bytes": 63650,
+        "sha256": "64a2053da6f34c5ccf2c2a1bdefd737fcbcba0ce3b38a654b15855cc85408ce6"
       },
       {
         "path": "src/go/build/constraint/expr.go",
-        "bytes": 15207,
-        "sha256": "850924f7ed53ce4bf1342cc6978afaaf902f6263420d63fc8c82e3485e497d9b"
+        "bytes": 15254,
+        "sha256": "96f51c3c0e5e9c6844d7ffb7ba36eee0076239710c3520e527f06f35d8734058"
       },
       {
         "path": "src/cmd/go/internal/list/list.go",
-        "bytes": 34151,
-        "sha256": "f0dd7ee9cd045c796072a2edbdbfd178e859f1fa6f42a792e0711e9d0e2f361b"
+        "bytes": 34408,
+        "sha256": "a3c8ef6c48c8d2bab6af1f82f0e5b89274bed94f4ace5c78ca8cf879865bb47c"
       },
       {
         "path": "src/cmd/go/internal/load/pkg.go",
-        "bytes": 126012,
-        "sha256": "7080541914db2ac8ec9b0a4926d55efde949786d86816efb138c444037484a6e"
+        "bytes": 126442,
+        "sha256": "8ab6cf53b1674ef93d500b1ab07df3dc650fe003374ce14c31d992f899f4d339"
       },
       {
         "path": "src/cmd/go/internal/modload/load.go",
-        "bytes": 86531,
-        "sha256": "233085e67f0758e34b75501d979d966876281ac3518d1d112924769f1f129747"
+        "bytes": 88999,
+        "sha256": "ca59b7f03dc34c81b90dc7d4921b893571e2e1c76a6a39580c1975e6b6b01d00"
       },
       {
         "path": "src/cmd/go/internal/lockedfile/lockedfile_filelock.go",
@@ -249,6 +249,26 @@
         "module": "wasi_snapshot_preview1",
         "name": "proc_exit",
         "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink",
+        "kind": "function"
       }
     ]
   },
@@ -259,7 +279,7 @@
       "-deps",
       "-e",
       "-mod=readonly",
-      "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+      "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify tinygo.unwind.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24 go1.25 go1.26",
       "."
     ],
     "argumentsByModuleMode": {
@@ -268,7 +288,7 @@
         "-deps",
         "-e",
         "-mod=readonly",
-        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify tinygo.unwind.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24 go1.25 go1.26",
         "."
       ],
       "vendor": [
@@ -276,7 +296,7 @@
         "-deps",
         "-e",
         "-mod=vendor",
-        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify tinygo.unwind.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24 go1.25 go1.26",
         "."
       ]
     },
@@ -302,11 +322,16 @@
     "status": "passed",
     "fixture": "fixtures/package-graph-module",
     "comparison": "same-pinned-native-cmd-go-exact-json",
-    "packageCount": 43,
+    "packageCount": 45,
+    "runtimeUnwindSources": [
+      "panic_unwind_asyncify.go",
+      "panic_unwind_return.go",
+      "panic_unwind_signal_unicore.go"
+    ],
     "packageJSON": {
       "path": "acceptance/package-list.json",
-      "bytes": 15317,
-      "sha256": "9a2bfddc3246bea07f9cf687d79b9eaef3c732819d4ce8ed38c031c639875c32"
+      "bytes": 16487,
+      "sha256": "956485cc65d33fd387147ad64621759829db49a4866dff7e8151a07e0f4df9a3"
     },
     "fixtureSources": [
       {
@@ -349,8 +374,8 @@
   "assets": [
     {
       "path": "tinygo-package-graph.wasm",
-      "bytes": 25870831,
-      "sha256": "b7b28719bf97d5c5e140c3ec6f8f40a40fc7d02216e0160e460a34b79f61cb14"
+      "bytes": 27997948,
+      "sha256": "b7a526594fd5ea5531caecf11bd3a8e97af05c40dff63d8a57370419c47b56ed"
     }
   ]
 }
