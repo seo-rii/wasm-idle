@@ -1,10 +1,11 @@
 // @vitest-environment node
 
+import { execFile } from 'node:child_process';
 import { link, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRuntimeAssetLock } from '../../../scripts/generate-runtime-asset-lock.mjs';
+import { promisify } from 'node:util';
 import { RUNTIME_ASSET_LOCK } from '../../../packages/core/src/runtime-asset-lock.generated';
 import compilerSource from '../../../static/wasm-go/compiler.js?raw';
 import browserExecutionSource from '../../../static/wasm-go/browser-execution.js?raw';
@@ -48,10 +49,18 @@ describe('bundled wasm-go compiler', () => {
 					)
 				})
 			);
-			const canonical = await createRuntimeAssetLock({
-				rootDir,
-				packageFile: fileURLToPath(new URL('../../../package.json', import.meta.url))
-			});
+			const generatorUrl = new URL(
+				'../../../scripts/generate-runtime-asset-lock.mjs',
+				import.meta.url
+			);
+			const packageFile = fileURLToPath(new URL('../../../package.json', import.meta.url));
+			const { stdout } = await promisify(execFile)(process.execPath, [
+				'--input-type=module',
+				'--eval',
+				`import { createRuntimeAssetLock } from ${JSON.stringify(generatorUrl.href)};
+				process.stdout.write(JSON.stringify(await createRuntimeAssetLock(${JSON.stringify({ rootDir, packageFile })})));`
+			]);
+			const canonical = JSON.parse(stdout) as { assets: typeof RUNTIME_ASSET_LOCK.assets };
 			const goEntries = (entries: typeof RUNTIME_ASSET_LOCK.assets) =>
 				Object.fromEntries(
 					Object.entries(entries).filter(([asset]) => asset.startsWith('wasm-go/'))
