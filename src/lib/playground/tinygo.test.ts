@@ -374,13 +374,11 @@ describe('TinyGo sandbox', () => {
 				};
 				await sandbox.load({
 					tinygo: {
+						...WASM_TINYGO_RUNTIME_PROFILE,
 						moduleUrl: upstreamModuleUrl,
-						runtimeProfile: {
-							...WASM_TINYGO_RUNTIME_PROFILE,
-							assetReceipts: {
-								...WASM_TINYGO_RUNTIME_PROFILE.assetReceipts,
-								[assetPath]: receipt
-							}
+						assetReceipts: {
+							...WASM_TINYGO_RUNTIME_PROFILE.assetReceipts,
+							[assetPath]: receipt
 						}
 					},
 					persistentCache: false
