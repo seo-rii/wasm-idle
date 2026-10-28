@@ -54,7 +54,8 @@ export const scenarios = [
 		// Main includes Ruby preview, Python compiler and the cross compiler in 751 files.
 		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
-		budget: { maxBytes: 7 * MiB, maxFiles: 759, maxPackages: 6 },
+		// Python debug setup and Zig value formatting add two more such pairs.
+		budget: { maxBytes: 7 * MiB, maxFiles: 763, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -269,11 +270,12 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
-		// Main's measured baseline is 42,443,361 bytes. Selected compiler updates add
-		// 2,786 bytes: TinyGo 2,010, TeaVM 550, OCaml 220 and C3 6.
-		// Python's normalized bytecode mode adds another 1,621 bytes including documentation.
-		// A 494 KiB allowance covers the projected 42,447,768-byte combined install.
-		budget: { maxBytes: 40 * MiB + 494 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// Combined Java field inspection, Python debug setup and Zig value formatting
+		// measure 42,464,239 bytes / 3,370 files before main's compiler updates (2,786
+		// bytes) and normalized Python bytecode (1,621 bytes). The projected combined
+		// install is 42,468,646 bytes; 515 KiB preserves at least 1 KiB of headroom.
+		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
+		budget: { maxBytes: 40 * MiB + 515 * 1024, maxFiles: 3_370, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
