@@ -505,6 +505,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/GO: goDebugLanguageAdapter/);
 		expect(source).toMatch(/RUST: rustDebugLanguageAdapter/);
+		expect(source).toMatch(/ZIG: zigDebugLanguageAdapter/);
 		expect(source).toMatch(/C: cppDebugLanguageAdapter/);
 		expect(source).toMatch(/CPP: cppDebugLanguageAdapter/);
 		expect(source).toMatch(/OBJC: cppDebugLanguageAdapter/);
@@ -536,7 +537,8 @@ describe('example route debug actions', () => {
 			'RUST',
 			'OBJC',
 			'OBJECTIVECXX',
-			'V'
+			'V',
+			'ZIG'
 		]);
 		const selectedMode = source
 			.match(/const selectedDebugMode = \$derived\(([\s\S]*?)\n\t\);/)?.[1]
