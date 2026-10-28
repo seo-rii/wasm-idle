@@ -1,0 +1,5261 @@
+diff --git a/compiler/build.gradle b/compiler/build.gradle
+--- a/compiler/build.gradle
++++ b/compiler/build.gradle
+@@ -40,10 +40,58 @@
+ sourceSets {
+     classlibEmu {
+     }
++    // Methods that ClasslibSupplements adds to TeaVM class library classes, both in the javac SDK and in the
++    // runtime class library.
++    classlibSupplement {
++        compileClasspath = files(configurations.classlibInput, configurations.classlibAuxInput)
++    }
++    // TeaVM 0.16.0 sources with the wasm-idle byte I/O and Formatter fixes.
++    classlibOverlay {
++        compileClasspath = files(configurations.classlibInput, configurations.classlibAuxInput)
++    }
++    teavmDeterminism {
++    }
++}
++
++tasks.named("compileClasslibSupplementJava") {
++    // Methods are copied as is into classes of the TeaVM class library, which is Java 11 bytecode.
++    options.release = 11
++}
++
++tasks.named("compileClasslibOverlayJava") {
++    options.release = 17
++}
++
++def classlibSupplementDir = sourceSets.classlibSupplement.java.destinationDirectory
++def classlibOverlayDir = sourceSets.classlibOverlay.java.destinationDirectory
++
++dependencies {
++    // Non-transitive: only artifacts that the TeaVM build daemon already resolves.
++    teavmDeterminismCompileOnly(libs.teavm.core) {
++        transitive = false
++    }
++    teavmDeterminismCompileOnly("org.teavm:teavm-relocated-libs-hppc:${libs.versions.teavm.get()}") {
++        transitive = false
++    }
+ }
+
+ compileJava {
+     options.compilerArgs.addAll("--limit-modules", "java.base")
++}
++
++// Preserve the iteration fixes needed for reproducible compiler.wasm builds: the order in which dependency
++// analysis reaches classes follows identity hash codes (TypeSet keeps DependencyNode domains in a
++// HashSet), and TagRegistry assigns the class tags used by Class.isInstance/isAssignableFrom range
++// checks in that order. src/teavmDeterminism holds copies of these two TeaVM 0.16.0 classes with
++// deterministic iteration; they go first on the classpath of the out-of-process TeaVM build daemon
++// and are not part of the compiled program.
++if (libs.versions.teavm.get() != "0.16.0") {
++    throw new GradleException("src/teavmDeterminism patches TeaVM 0.16.0 classes; "
++            + "re-check them against TeaVM ${libs.versions.teavm.get()}")
++}
++tasks.named("generateWasmGC") {
++    def teavmDaemonClasspath = new ArrayList<Object>(daemonClasspath.from)
++    daemonClasspath.setFrom(sourceSets.teavmDeterminism.output, teavmDaemonClasspath)
+ }
+
+ teavm {
+@@ -63,14 +111,17 @@
+     def output = classlibOutDir.map { it.file("compile-classlib-teavm.bin") }
+     dependsOn configurations.classlibInput
+     dependsOn sourceSets.classlibEmu.output
++    dependsOn sourceSets.classlibSupplement.output
+     inputs.files configurations.classlibInput
+     inputs.files {
+         sourceSets.classlibEmu.output.classesDirs.collect { fileTree(it) }
+     }
++    inputs.dir classlibSupplementDir
+     outputs.file output
+     args {
+         [
+             output.get().asFile.absolutePath,
++            classlibSupplementDir.get().asFile.absolutePath,
+             *configurations.classlibInput.files.collect { it.absolutePath },
+             *sourceSets.classlibEmu.output.classesDirs.files.collect { it.absolutePath }
+         ].iterator()
+@@ -135,16 +186,20 @@
+ }
+
+ def buildTeaVMClassLib = tasks.register("buildTeaVMClassLib", JavaExec) {
+-    dependsOn prepareTeaVMClassLib, compileJava
++    dependsOn prepareTeaVMClassLib, compileJava, sourceSets.classlibSupplement.output, sourceSets.classlibOverlay.output
+     classpath sourceSets.main.runtimeClasspath
+     def inputDir = project.layout.buildDirectory.dir("tmp/classlib-runtime")
+     def outputFile = project.layout.buildDirectory.file("classlib/runtime-classlib-teavm.bin")
+     inputs.dir inputDir
++    inputs.dir classlibSupplementDir
++    inputs.dir classlibOverlayDir
+     outputs.file outputFile
+     args  {
+         [
+                 inputDir.get().asFile.absolutePath,
+-                outputFile.get().asFile.absolutePath
++                outputFile.get().asFile.absolutePath,
++                classlibSupplementDir.get().asFile.absolutePath,
++                classlibOverlayDir.get().asFile.absolutePath
+         ].iterator()
+     }
+     mainClass = "org.teavm.javac.ArchiveBuilder"
+diff --git a/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java b/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibEmu/java/org/teavm/classlib/java/lang/TSuppressWarnings.java
+@@ -0,0 +1,34 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.classlib.java.lang;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Replaces SuppressWarnings of TeaVM classlib, which lacks {@code value} element. javac expects it to be there:
++ * otherwise, {@code @SuppressWarnings("unchecked")} reports "cannot find symbol", and then javac fails with
++ * null pointer dereference while collecting suppressed lint categories.
++ */
++@Retention(RetentionPolicy.SOURCE)
++@Target({ ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER, ElementType.CONSTRUCTOR,
++        ElementType.LOCAL_VARIABLE })
++public @interface TSuppressWarnings {
++    String[] value();
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/impl/console/JsConsolePrintStream.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/impl/console/JsConsolePrintStream.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/impl/console/JsConsolePrintStream.java
+@@ -0,0 +1,207 @@
++/*
++ *  Copyright 2023 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.impl.console;
++
++import java.io.PrintStream;
++import java.nio.ByteBuffer;
++import java.nio.CharBuffer;
++import java.nio.charset.Charset;
++import java.nio.charset.CharsetDecoder;
++import java.nio.charset.CoderResult;
++import java.nio.charset.CodingErrorAction;
++import java.nio.charset.StandardCharsets;
++import java.util.Objects;
++
++public abstract class JsConsolePrintStream extends PrintStream {
++    private ByteEncoder byteEncoder;
++    private Runnable flushAction;
++
++    public JsConsolePrintStream() {
++        super(null, false, (Charset) null);
++    }
++
++    @Override
++    public void println(String s) {
++        print(s);
++        print("\n");
++    }
++
++    @Override
++    public void print(int i) {
++        print(Integer.toString(i));
++    }
++
++    @Override
++    public void print(char c) {
++        print(Character.toString(c));
++    }
++
++    @Override
++    public void print(long l) {
++        print(Long.toString(l));
++    }
++
++    @Override
++    public void print(double d) {
++        super.print(d);
++    }
++
++    @Override
++    public void print(Object s) {
++        print(Objects.toString(s));
++    }
++
++    @Override
++    public void print(char[] s) {
++        print(new String(s));
++    }
++
++    @Override
++    public void println() {
++        print("\n");
++    }
++
++    @Override
++    public void println(int i) {
++        println(Integer.toString(i));
++    }
++
++    @Override
++    public void println(char c) {
++        println(Character.toString(c));
++    }
++
++    @Override
++    public void println(long l) {
++        println(Long.toString(l));
++    }
++
++    @Override
++    public void println(float d) {
++        println(Float.toString(d));
++    }
++
++    @Override
++    public void println(double d) {
++        println(Double.toString(d));
++    }
++
++    @Override
++    public void println(boolean b) {
++        println(Boolean.toString(b));
++    }
++
++    @Override
++    public void println(Object s) {
++        println(Objects.toString(s));
++    }
++
++    @Override
++    public void write(int b) {
++        ensureByteEncoder().write(b);
++    }
++
++    @Override
++    public void write(byte[] b, int off, int len) {
++        ensureByteEncoder().write(b, off, len);
++    }
++
++    protected void print(char[] s, int begin, int end) {
++        print(new String(s, begin, end));
++    }
++
++    protected void print(CharSequence s, int begin, int end) {
++        print(s.subSequence(begin, end).toString());
++    }
++
++    @Override
++    public void flush() {
++        if (flushAction != null) {
++            Runnable action = flushAction;
++            flushAction = null;
++            action.run();
++        }
++    }
++
++    private ByteEncoder ensureByteEncoder() {
++        if (byteEncoder == null) {
++            byteEncoder = new ByteEncoder();
++        }
++        return byteEncoder;
++    }
++
++    @Override
++    public abstract void print(String s);
++
++    private class ByteEncoder {
++        private ByteBuffer buffer = ByteBuffer.wrap(new byte[32]);
++        private char[] outChars = new char[32];
++        private CharBuffer outBuffer = CharBuffer.wrap(outChars);
++        private CharsetDecoder decoder = StandardCharsets.UTF_8
++                .newDecoder()
++                .onMalformedInput(CodingErrorAction.REPLACE)
++                .onUnmappableCharacter(CodingErrorAction.REPLACE);
++
++        void write(int b) {
++            postponeFlush();
++            if (!buffer.hasRemaining()) {
++                output();
++            }
++            buffer.put((byte) b);
++        }
++
++        void write(byte[] b, int off, int len) {
++            postponeFlush();
++            while (len > 0) {
++                var count = Math.min(len, buffer.remaining());
++                buffer.put(b, off, count);
++                off += count;
++                len -= count;
++                output();
++            }
++        }
++
++        void postponeFlush() {
++            if (flushAction == null) {
++                flushAction = this::flush;
++            }
++        }
++
++        private void flush() {
++            if (buffer.position() > 0) {
++                // A flush is not the end of the stream: keep an incomplete UTF-8 sequence pending
++                output(false);
++            }
++        }
++
++        private void output() {
++            output(false);
++        }
++
++        private void output(boolean endOfInput) {
++            buffer.flip();
++            while (true) {
++                var result = decoder.decode(buffer, outBuffer, endOfInput);
++                print(new String(outChars, 0, outBuffer.position()));
++                outBuffer.rewind();
++                if (result != CoderResult.OVERFLOW) {
++                    break;
++                }
++            }
++            buffer.compact();
++        }
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TByteBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TByteBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TByteBuffer.java
+@@ -0,0 +1,423 @@
++/*
++ *  Copyright 2015 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import java.nio.BufferUnderflowException;
++import java.util.Objects;
++import org.teavm.backend.c.runtime.Memory;
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.classlib.java.lang.TComparable;
++import org.teavm.classlib.java.lang.TOutOfMemoryError;
++import org.teavm.interop.Address;
++import org.teavm.jso.core.JSObjects;
++import org.teavm.jso.typedarrays.Int8Array;
++import org.teavm.runtime.GC;
++import org.teavm.runtime.heap.Heap;
++
++public abstract class TByteBuffer extends TBuffer implements TComparable<TByteBuffer> {
++    TByteOrder order = TByteOrder.BIG_ENDIAN;
++
++    TByteBuffer() {
++    }
++
++    public static TByteBuffer allocateDirect(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TByteBufferJsImpl(null, 0, new Int8Array(capacity), true, false);
++            result.limit = capacity;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var memory = Memory.malloc(capacity);
++            var result = new TByteBufferNative(null, null, 0, null, memory, capacity, false);
++            GC.registerDirectBuffer(Address.ofObject(result).toStructure());
++            result.limit = capacity;
++            return result;
++        }
++        if (PlatformDetector.isWebAssemblyGC()) {
++            var addr = Heap.alloc(capacity);
++            if (addr == null) {
++                throw new TOutOfMemoryError();
++            }
++            var result = new TByteBufferWasmGC(null, null, 0, null, addr, capacity, false);
++            result.regKey = JSObjects.create();
++            result.regToken = JSObjects.create();
++            result.limit = capacity;
++            TJSBufferHelper.WasmGC.register(result.regKey, addr, result.regToken);
++            return result;
++        }
++        return new TByteBufferImpl(capacity, true);
++    }
++
++    public static TByteBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new byte[capacity];
++            var result = new TByteBufferJsImpl(array, 0, Int8Array.copyFromJavaArray(array), false, false);
++            result.limit = capacity;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var array = new byte[capacity];
++            var result = new TByteBufferNative(null, array, 0, array, Address.ofData(array), array.length, false);
++            result.limit = capacity;
++            return result;
++        }
++        return new TByteBufferImpl(capacity, false);
++    }
++
++    public static TByteBuffer wrap(byte[] array, int offset, int length) {
++        Objects.checkFromIndexSize(offset, length, array.length);
++        if (PlatformDetector.isJavaScript()) {
++            var data = Int8Array.copyFromJavaArray(array);
++            var result = new TByteBufferJsImpl(array, 0, data, false, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TByteBufferNative(null, array, 0, array, Address.ofData(array), array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TByteBufferImpl(0, array.length, array, offset, offset + length, false, false);
++    }
++
++    public static TByteBuffer wrap(byte[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TByteBuffer slice();
++
++    public abstract TByteBuffer duplicate();
++
++    public abstract TByteBuffer asReadOnlyBuffer();
++
++    public abstract byte get();
++
++    public abstract TByteBuffer put(byte b);
++
++    public abstract byte get(int index);
++
++    public abstract TByteBuffer put(int index, byte b);
++
++    public TByteBuffer get(byte[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new BufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TByteBuffer get(int index, byte[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    public TByteBuffer get(int index, byte[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    abstract void getImpl(int index, byte[] dst, int offset, int length);
++
++    public TByteBuffer get(byte[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TByteBuffer put(TByteBuffer src) {
++        if (src == this) {
++            throw new IllegalArgumentException();
++        }
++        var bytesToTransfer = src.remaining();
++        if (bytesToTransfer > remaining()) {
++            throw new TBufferOverflowException();
++        }
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        putImpl(position(), src, src.position(), bytesToTransfer);
++        position += bytesToTransfer;
++        src.position += bytesToTransfer;
++        return this;
++    }
++
++    public TByteBuffer put(int index, TByteBuffer src, int offset, int length) {
++        if (src.remaining() == 0) {
++            return this;
++        }
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.limit() || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    abstract void putImpl(int index, TByteBuffer src, int offset, int length);
++
++    public TByteBuffer put(byte[] src, int offset, int length) {
++        if (length == 0) {
++            return this;
++        }
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(src, offset, position, length);
++        position += length;
++        return this;
++    }
++
++    public final TByteBuffer put(byte[] src) {
++        return put(src, 0, src.length);
++    }
++
++    public TByteBuffer put(int index, byte[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    public TByteBuffer put(int index, byte[] src, int offset, int length) {
++        if (length == 0) {
++            return this;
++        }
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(src, offset, index, length);
++        return this;
++    }
++
++    abstract void putImpl(byte[] src, int srcOffset, int destOffset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return hasArrayImpl();
++    }
++
++    @Override
++    public final byte[] array() {
++        return arrayImpl();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return arrayOffsetImpl();
++    }
++
++    abstract boolean hasArrayImpl();
++
++    abstract byte[] arrayImpl();
++
++    abstract int arrayOffsetImpl();
++
++    public abstract TByteBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[ByteBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position();
++        for (int i = position(); i < limit; ++i) {
++            hashCode = 31 * hashCode + get(pos);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TByteBuffer)) {
++            return false;
++        }
++        TByteBuffer other = (TByteBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position();
++        int b = other.position();
++        for (int i = 0; i < sz; ++i) {
++            if (get(a++) != other.get(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TByteBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position();
++        int b = other.position();
++        for (int i = 0; i < sz; ++i) {
++            int r = Byte.compare(get(a++), other.get(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public final TByteOrder order() {
++        return order;
++    }
++
++    public final TByteBuffer order(TByteOrder bo) {
++        order = bo;
++        onOrderChanged();
++        return this;
++    }
++
++    void onOrderChanged() {
++    }
++
++    public abstract char getChar();
++
++    public abstract TByteBuffer putChar(char value);
++
++    public abstract char getChar(int index);
++
++    public abstract TByteBuffer putChar(int index, char value);
++
++    public abstract TCharBuffer asCharBuffer();
++
++    public abstract short getShort();
++
++    public abstract TByteBuffer putShort(short value);
++
++    public abstract short getShort(int index);
++
++    public abstract TByteBuffer putShort(int index, short value);
++
++    public abstract TShortBuffer asShortBuffer();
++
++    public abstract int getInt();
++
++    public abstract TByteBuffer putInt(int value);
++
++    public abstract int getInt(int index);
++
++    public abstract TByteBuffer putInt(int index, int value);
++
++    public abstract TIntBuffer asIntBuffer();
++
++    public abstract long getLong();
++
++    public abstract TByteBuffer putLong(long value);
++
++    public abstract long getLong(int index);
++
++    public abstract TByteBuffer putLong(int index, long value);
++
++    public abstract TLongBuffer asLongBuffer();
++
++    public abstract float getFloat();
++
++    public abstract TByteBuffer putFloat(float value);
++
++    public abstract float getFloat(int index);
++
++    public abstract TByteBuffer putFloat(int index, float value);
++
++    public abstract TFloatBuffer asFloatBuffer();
++
++    public abstract double getDouble();
++
++    public abstract TByteBuffer putDouble(double value);
++
++    public abstract double getDouble(int index);
++
++    public abstract TByteBuffer putDouble(int index, double value);
++
++    public abstract TDoubleBuffer asDoubleBuffer();
++
++    @Override
++    public final TByteBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TByteBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TByteBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TByteBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TByteBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TByteBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TByteBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TCharBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TCharBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TCharBuffer.java
+@@ -0,0 +1,387 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import java.io.IOException;
++import java.util.Objects;
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.classlib.java.lang.TReadable;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.Uint16Array;
++
++public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuffer>, Appendable,
++        CharSequence, TReadable {
++    TCharBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    abstract char getChar(int index);
++
++    abstract void putChar(int index, char value);
++
++    public static TCharBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new char[capacity];
++            return new TCharBufferOverTypedArray(0, capacity, false, Uint16Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new char[capacity];
++            return new TCharBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TCharBufferOverArray(capacity);
++    }
++
++    public static TCharBuffer wrap(char[] array, int offset, int length) {
++        if (length < 0 || offset < 0 || length + offset > array.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TCharBufferOverTypedArray(0, array.length, false, Uint16Array.copyFromJavaArray(array), array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TCharBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TCharBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TCharBuffer wrap(char[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    @Override
++    public int read(TCharBuffer target) throws IOException {
++        Objects.requireNonNull(target);
++        if (!hasRemaining()) {
++            return -1;
++        }
++        int sz = Math.min(remaining(), target.remaining());
++        int srcPos = position;
++        int dstPos = target.position;
++        for (int i = 0; i < sz; ++i) {
++            target.putChar(dstPos++, getChar(srcPos++));
++        }
++        target.position += sz;
++        return sz;
++    }
++
++    public static TCharBuffer wrap(CharSequence csq, int start, int end) {
++        return wrap(csq.toString().toCharArray(), start, end - start);
++    }
++
++    public static TCharBuffer wrap(CharSequence csq) {
++        return wrap(csq.toString().toCharArray());
++    }
++
++    public abstract TCharBuffer slice();
++
++    public abstract TCharBuffer duplicate();
++
++    public abstract TCharBuffer asReadOnlyBuffer();
++
++    public abstract char get();
++
++    public abstract TCharBuffer put(char c);
++
++    public abstract char get(int index);
++
++    public abstract TCharBuffer put(int index, char c);
++
++    public TCharBuffer get(char[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TCharBuffer get(int index, char[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TCharBuffer get(int index, char[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, char[] dst, int offset, int length);
++
++    public TCharBuffer get(char[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TCharBuffer put(TCharBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TCharBuffer put(int index, TCharBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    abstract void putImpl(int index, TCharBuffer src, int offset, int length);
++
++    public TCharBuffer put(char[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TCharBuffer put(int index, char[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public TCharBuffer put(int index, char[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    public final TCharBuffer put(char[] src) {
++        return put(src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, char[] src, int offset, int length);
++
++    public TCharBuffer put(String src, int start, int end) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (end < start || start < 0 || end > src.length()) {
++            throw new IndexOutOfBoundsException();
++        }
++        int sz = end - start;
++        if (remaining() < sz) {
++            throw new TBufferOverflowException();
++        }
++        int pos = position;
++        putImpl(pos, src, start, end);
++        position += sz;
++        return this;
++    }
++
++    public final TCharBuffer put(String src) {
++        return put(src, 0, src.length());
++    }
++
++    abstract void putImpl(int index, String src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final char[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract char[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TCharBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            hashCode = 31 * hashCode + getChar(pos++);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TCharBuffer)) {
++            return false;
++        }
++        TCharBuffer other = (TCharBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getChar(a++) != other.getChar(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TCharBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Character.compare(getChar(a++), other.getChar(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    @Override
++    public String toString() {
++        char[] chars = new char[limit - position];
++        int pos = position;
++        for (int i = 0; i < chars.length; ++i) {
++            chars[i] = getChar(pos++);
++        }
++        return new String(chars);
++    }
++
++    @Override
++    public final int length() {
++        return remaining();
++    }
++
++    @Override
++    public final char charAt(int index) {
++        return get(index);
++    }
++
++    @Override
++    public abstract TCharBuffer subSequence(int start, int end);
++
++    @Override
++    public TCharBuffer append(CharSequence csq) {
++        return put(csq.toString());
++    }
++
++    @Override
++    public TCharBuffer append(CharSequence csq, int start, int end) {
++        return put(csq.subSequence(start, end).toString());
++    }
++
++    @Override
++    public TCharBuffer append(char c) {
++        return put(c);
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TCharBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TCharBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TCharBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TCharBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TCharBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TCharBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TCharBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TDoubleBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TDoubleBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TDoubleBuffer.java
+@@ -0,0 +1,303 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.Float64Array;
++
++public abstract class TDoubleBuffer extends TBuffer implements Comparable<TDoubleBuffer> {
++    TDoubleBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    public static TDoubleBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new double[capacity];
++            return new TDoubleBufferOverTypedArray(0, capacity, false, Float64Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new double[capacity];
++            return new TDoubleBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TDoubleBufferOverArray(capacity);
++    }
++
++    public static TDoubleBuffer wrap(double[] array, int offset, int length) {
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TDoubleBufferOverTypedArray(0, array.length, false, Float64Array.copyFromJavaArray(array),
++                    array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TDoubleBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TDoubleBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TDoubleBuffer wrap(double[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TDoubleBuffer slice();
++
++    public abstract TDoubleBuffer duplicate();
++
++    public abstract TDoubleBuffer asReadOnlyBuffer();
++
++    public abstract double get();
++
++    public abstract TDoubleBuffer put(double b);
++
++    public abstract double get(int index);
++
++    public abstract TDoubleBuffer put(int index, double b);
++
++    abstract double getElement(int index);
++
++    abstract void putElement(int index, double value);
++
++    public TDoubleBuffer get(double[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TDoubleBuffer get(int index, double[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TDoubleBuffer get(int index, double[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, double[] dst, int offset, int length);
++
++    public TDoubleBuffer get(double[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TDoubleBuffer put(int index, TDoubleBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    abstract void putImpl(int index, TDoubleBuffer src, int offset, int length);
++
++    public TDoubleBuffer put(TDoubleBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TDoubleBuffer put(double[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TDoubleBuffer put(int index, double[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public final TDoubleBuffer put(double[] src) {
++        return put(src, 0, src.length);
++    }
++
++    public TDoubleBuffer put(int index, double[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, double[] src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final double[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract double[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TDoubleBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[DoubleBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            long elem = Double.doubleToLongBits(getElement(pos++));
++            hashCode = 31 * hashCode + (int) elem + (int) (elem >>> 32);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TDoubleBuffer)) {
++            return false;
++        }
++        TDoubleBuffer other = (TDoubleBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getElement(a++) != other.getElement(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TDoubleBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Double.compare(getElement(a++), other.getElement(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TDoubleBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TDoubleBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TDoubleBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TDoubleBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TDoubleBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TDoubleBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TDoubleBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TFloatBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TFloatBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TFloatBuffer.java
+@@ -0,0 +1,302 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.Float32Array;
++
++public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatBuffer> {
++    TFloatBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    public static TFloatBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new float[capacity];
++            return new TFloatBufferOverTypedArray(0, capacity, false, Float32Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new float[capacity];
++            return new TFloatBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TFloatBufferOverArray(capacity);
++    }
++
++    public static TFloatBuffer wrap(float[] array, int offset, int length) {
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TFloatBufferOverTypedArray(0, array.length, false, Float32Array.copyFromJavaArray(array),
++                    array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TFloatBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TFloatBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TFloatBuffer wrap(float[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TFloatBuffer slice();
++
++    public abstract TFloatBuffer duplicate();
++
++    public abstract TFloatBuffer asReadOnlyBuffer();
++
++    public abstract float get();
++
++    public abstract TFloatBuffer put(float b);
++
++    public abstract float get(int index);
++
++    public abstract TFloatBuffer put(int index, float b);
++
++    abstract float getElement(int index);
++
++    abstract void putElement(int index, float value);
++
++    public TFloatBuffer get(float[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TFloatBuffer get(int index, float[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TFloatBuffer get(int index, float[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, float[] dst, int offset, int length);
++
++    public TFloatBuffer get(float[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TFloatBuffer put(int index, TFloatBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    abstract void putImpl(int index, TFloatBuffer src, int offset, int length);
++
++    public TFloatBuffer put(TFloatBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TFloatBuffer put(float[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TFloatBuffer put(int index, float[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public final TFloatBuffer put(float[] src) {
++        return put(src, 0, src.length);
++    }
++
++    public TFloatBuffer put(int index, float[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, float[] src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final float[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract float[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TFloatBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[FloatBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            hashCode = 31 * hashCode + Float.floatToIntBits(getElement(pos++));
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TFloatBuffer)) {
++            return false;
++        }
++        TFloatBuffer other = (TFloatBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getElement(a++) != other.getElement(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TFloatBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Float.compare(getElement(a++), other.getElement(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TFloatBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TFloatBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TFloatBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TFloatBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TFloatBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TFloatBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TFloatBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TIntBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TIntBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TIntBuffer.java
+@@ -0,0 +1,301 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.Int32Array;
++
++public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffer> {
++    TIntBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    public static TIntBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new int[capacity];
++            return new TIntBufferOverTypedArray(0, capacity, false, Int32Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new int[capacity];
++            return new TIntBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TIntBufferOverArray(capacity);
++    }
++
++    public static TIntBuffer wrap(int[] array, int offset, int length) {
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TIntBufferOverTypedArray(0, array.length, false, Int32Array.copyFromJavaArray(array), array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TIntBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TIntBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TIntBuffer wrap(int[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TIntBuffer slice();
++
++    public abstract TIntBuffer duplicate();
++
++    public abstract TIntBuffer asReadOnlyBuffer();
++
++    public abstract int get();
++
++    public abstract TIntBuffer put(int b);
++
++    public abstract int get(int index);
++
++    public abstract TIntBuffer put(int index, int b);
++
++    abstract int getElement(int index);
++
++    abstract void putElement(int index, int value);
++
++    public TIntBuffer get(int[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TIntBuffer get(int index, int[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TIntBuffer get(int index, int[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, int[] dst, int offset, int length);
++
++    public TIntBuffer get(int[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TIntBuffer put(int index, TIntBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public TIntBuffer put(int index, int[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, TIntBuffer src, int offset, int length);
++
++    public TIntBuffer put(TIntBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TIntBuffer put(int[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TIntBuffer put(int index, int[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public final TIntBuffer put(int[] src) {
++        return put(src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, int[] src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final int[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract int[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TIntBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[IntBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            hashCode = 31 * hashCode + getElement(pos++);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TIntBuffer)) {
++            return false;
++        }
++        TIntBuffer other = (TIntBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getElement(a++) != other.getElement(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TIntBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Integer.compare(getElement(a++), other.getElement(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TIntBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TIntBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TIntBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TIntBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TIntBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TIntBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TIntBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TLongBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TLongBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TLongBuffer.java
+@@ -0,0 +1,303 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.BigInt64Array;
++
++public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuffer> {
++    TLongBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    public static TLongBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new long[capacity];
++            return new TLongBufferOverTypedArray(0, capacity, false, BigInt64Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new long[capacity];
++            return new TLongBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TLongBufferOverArray(capacity);
++    }
++
++    public static TLongBuffer wrap(long[] array, int offset, int length) {
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TLongBufferOverTypedArray(0, array.length, false, BigInt64Array.copyFromJavaArray(array),
++                    array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TLongBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TLongBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TLongBuffer wrap(long[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TLongBuffer slice();
++
++    public abstract TLongBuffer duplicate();
++
++    public abstract TLongBuffer asReadOnlyBuffer();
++
++    public abstract long get();
++
++    public abstract TLongBuffer put(long b);
++
++    public abstract long get(int index);
++
++    public abstract TLongBuffer put(int index, long b);
++
++    abstract long getElement(int index);
++
++    abstract void putElement(int index, long value);
++
++    public TLongBuffer get(long[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TLongBuffer get(int index, long[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TLongBuffer get(int index, long[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, long[] dst, int offset, int length);
++
++    public TLongBuffer get(long[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TLongBuffer put(int index, TLongBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public TLongBuffer put(int index, long[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, TLongBuffer src, int offset, int length);
++
++    public TLongBuffer put(TLongBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TLongBuffer put(long[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TLongBuffer put(int index, long[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public final TLongBuffer put(long[] src) {
++        return put(src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, long[] src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final long[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract long[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TLongBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[LongBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            long elem = getElement(pos++);
++            hashCode = 31 * hashCode + (int) elem + (int) (elem >>> 32);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TLongBuffer)) {
++            return false;
++        }
++        TLongBuffer other = (TLongBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getElement(a++) != other.getElement(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TLongBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Long.compare(getElement(a++), other.getElement(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TLongBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TLongBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TLongBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TLongBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TLongBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TLongBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TLongBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TShortBuffer.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TShortBuffer.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/nio/TShortBuffer.java
+@@ -0,0 +1,301 @@
++/*
++ *  Copyright 2014 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.nio;
++
++import org.teavm.classlib.PlatformDetector;
++import org.teavm.interop.Address;
++import org.teavm.jso.typedarrays.Int16Array;
++
++public abstract class TShortBuffer extends TBuffer implements Comparable<TShortBuffer> {
++    TShortBuffer(int position, int limit) {
++        this.position = position;
++        this.limit = limit;
++    }
++
++    public static TShortBuffer allocate(int capacity) {
++        if (capacity < 0) {
++            throw new IllegalArgumentException("Capacity is negative: " + capacity);
++        }
++        if (PlatformDetector.isJavaScript()) {
++            var array = new short[capacity];
++            return new TShortBufferOverTypedArray(0, capacity, false, Int16Array.copyFromJavaArray(array), array);
++        }
++        if (PlatformDetector.isC()) {
++            var array = new short[capacity];
++            return new TShortBufferNative(null, array, 0, capacity, false, array, Address.ofData(array),
++                    capacity, false);
++        }
++        return new TShortBufferOverArray(capacity);
++    }
++
++    public static TShortBuffer wrap(short[] array, int offset, int length) {
++        if (PlatformDetector.isJavaScript()) {
++            var result = new TShortBufferOverTypedArray(0, array.length, false, Int16Array.copyFromJavaArray(array), array);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        if (PlatformDetector.isC()) {
++            var result = new TShortBufferNative(null, array, 0, array.length, false, array, Address.ofData(array),
++                    array.length, false);
++            result.position = offset;
++            result.limit = offset + length;
++            return result;
++        }
++        return new TShortBufferOverArray(0, array.length, array, offset, offset + length, false);
++    }
++
++    public static TShortBuffer wrap(short[] array) {
++        return wrap(array, 0, array.length);
++    }
++
++    public abstract TShortBuffer slice();
++
++    public abstract TShortBuffer duplicate();
++
++    public abstract TShortBuffer asReadOnlyBuffer();
++
++    public abstract short get();
++
++    public abstract TShortBuffer put(short b);
++
++    public abstract short get(int index);
++
++    public abstract TShortBuffer put(int index, short b);
++
++    abstract short getElement(int index);
++
++    abstract void putElement(int index, short value);
++
++    public TShortBuffer get(short[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        if (length > remaining()) {
++            throw new TBufferUnderflowException();
++        }
++        getImpl(position, dst, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TShortBuffer get(int index, short[] dst, int offset, int length) {
++        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        getImpl(index, dst, offset, length);
++        return this;
++    }
++
++    public TShortBuffer get(int index, short[] dst) {
++        return get(index, dst, 0, dst.length);
++    }
++
++    abstract void getImpl(int index, short[] dst, int offset, int length);
++
++    public TShortBuffer get(short[] dst) {
++        return get(dst, 0, dst.length);
++    }
++
++    public TShortBuffer put(TShortBuffer src) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        var elementsToTransfer = src.remaining();
++        if (remaining() < elementsToTransfer) {
++            throw new TBufferOverflowException();
++        }
++        putImpl(position, src, src.position, elementsToTransfer);
++        position += elementsToTransfer;
++        src.position += elementsToTransfer;
++        return this;
++    }
++
++    public TShortBuffer put(int index, TShortBuffer src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    abstract void putImpl(int index, TShortBuffer src, int offset, int length);
++
++    public TShortBuffer put(short[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (remaining() < length) {
++            throw new TBufferOverflowException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(position, src, offset, length);
++        position += length;
++        return this;
++    }
++
++    public TShortBuffer put(int index, short[] src, int offset, int length) {
++        if (isReadOnly()) {
++            throw new TReadOnlyBufferException();
++        }
++        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
++            throw new IndexOutOfBoundsException();
++        }
++        putImpl(index, src, offset, length);
++        return this;
++    }
++
++    public TShortBuffer put(int index, short[] src) {
++        return put(index, src, 0, src.length);
++    }
++
++    public final TShortBuffer put(short[] src) {
++        return put(src, 0, src.length);
++    }
++
++    abstract void putImpl(int index, short[] src, int offset, int length);
++
++    @Override
++    public final boolean hasArray() {
++        return isArrayPresent();
++    }
++
++    @Override
++    public final short[] array() {
++        return getArray();
++    }
++
++    @Override
++    public final int arrayOffset() {
++        return getArrayOffset();
++    }
++
++    abstract boolean isArrayPresent();
++
++    abstract short[] getArray();
++
++    abstract int getArrayOffset();
++
++    public abstract TShortBuffer compact();
++
++    @Override
++    public abstract boolean isDirect();
++
++    @Override
++    public String toString() {
++        return "[ShortBuffer position=" + position + ", limit=" + limit + ", capacity=" + capacity() + ", mark "
++                + (mark >= 0 ? " at " + mark : " is not set") + "]";
++    }
++
++    @Override
++    public int hashCode() {
++        int hashCode = 0;
++        int pos = position;
++        for (int i = position; i < limit; ++i) {
++            hashCode = 31 * hashCode + getElement(pos++);
++        }
++        return hashCode;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++        if (this == obj) {
++            return true;
++        }
++        if (!(obj instanceof TShortBuffer)) {
++            return false;
++        }
++        TShortBuffer other = (TShortBuffer) obj;
++        int sz = remaining();
++        if (sz != other.remaining()) {
++            return false;
++        }
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            if (getElement(a++) != other.getElement(b++)) {
++                return false;
++            }
++        }
++        return true;
++    }
++
++    @Override
++    public int compareTo(TShortBuffer other) {
++        if (this == other) {
++            return 0;
++        }
++        int sz = Math.min(remaining(), other.remaining());
++        int a = position;
++        int b = other.position;
++        for (int i = 0; i < sz; ++i) {
++            int r = Short.compare(getElement(a++), other.getElement(b++));
++            if (r != 0) {
++                return r;
++            }
++        }
++        return Integer.compare(remaining(), other.remaining());
++    }
++
++    public abstract TByteOrder order();
++
++    @Override
++    public final TShortBuffer mark() {
++        super.mark();
++        return this;
++    }
++
++    @Override
++    public final TShortBuffer reset() {
++        super.reset();
++        return this;
++    }
++
++    @Override
++    public final TShortBuffer clear() {
++        super.clear();
++        return this;
++    }
++
++    @Override
++    public final TShortBuffer flip() {
++        super.flip();
++        return this;
++    }
++
++    @Override
++    public final TShortBuffer rewind() {
++        super.rewind();
++        return this;
++    }
++
++    @Override
++    public TShortBuffer limit(int newLimit) {
++        super.limit(newLimit);
++        return this;
++    }
++
++    @Override
++    public TShortBuffer position(int newPosition) {
++        super.position(newPosition);
++        return this;
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java
+@@ -0,0 +1,799 @@
++/*
++ *  Copyright 2017 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++package org.teavm.classlib.java.util;
++
++import java.io.Closeable;
++import java.io.Flushable;
++import java.io.IOException;
++import java.io.OutputStream;
++import java.io.OutputStreamWriter;
++import java.io.PrintStream;
++import java.io.UnsupportedEncodingException;
++import java.math.BigDecimal;
++import java.math.RoundingMode;
++import java.text.DecimalFormat;
++import java.text.DecimalFormatSymbols;
++import java.text.NumberFormat;
++import java.util.DuplicateFormatFlagsException;
++import java.util.FormatFlagsConversionMismatchException;
++import java.util.IllegalFormatConversionException;
++import java.util.Locale;
++import java.util.UnknownFormatConversionException;
++import org.teavm.classlib.impl.IntegerUtil;
++import org.teavm.classlib.java.text.TDecimalFormat;
++
++public final class TFormatter implements Closeable, Flushable {
++    private Locale locale;
++    private Appendable out;
++    private IOException ioException;
++
++    public TFormatter() {
++        this(Locale.getDefault());
++    }
++
++    public TFormatter(Appendable a) {
++        this(a, Locale.getDefault());
++    }
++
++    public TFormatter(Locale l) {
++        this(new StringBuilder(), l);
++    }
++
++    public TFormatter(Appendable a, Locale l) {
++        out = a;
++        locale = l;
++    }
++
++    public TFormatter(PrintStream ps) {
++        this(new OutputStreamWriter(ps));
++    }
++
++    public TFormatter(OutputStream os) {
++        this(new OutputStreamWriter(os));
++    }
++
++    public TFormatter(OutputStream os, String csn) throws UnsupportedEncodingException {
++        this(new OutputStreamWriter(os, csn));
++    }
++
++    public TFormatter(OutputStream os, String csn, Locale l) throws UnsupportedEncodingException {
++        this(new OutputStreamWriter(os, csn), l);
++    }
++
++    public Locale locale() {
++        requireOpen();
++        return locale;
++    }
++
++    public Appendable out() {
++        requireOpen();
++        return out;
++    }
++
++    private void requireOpen() {
++        if (out == null) {
++            throw new TFormatterClosedException();
++        }
++    }
++
++    @Override
++    public String toString() {
++        requireOpen();
++        return out.toString();
++    }
++
++    @Override
++    public void flush() {
++        requireOpen();
++        if (out instanceof Flushable) {
++            try {
++                ((Flushable) out).flush();
++            } catch (IOException e) {
++                ioException = e;
++            }
++        }
++    }
++
++    @Override
++    public void close() {
++        requireOpen();
++        try {
++            if (out instanceof Closeable) {
++                ((Closeable) out).close();
++            }
++        } catch (IOException e) {
++            ioException = e;
++        } finally {
++            out = null;
++        }
++    }
++
++    public IOException ioException() {
++        return ioException;
++    }
++
++    public TFormatter format(String format, Object... args) {
++        return format(locale, format, args);
++    }
++
++    public TFormatter format(Locale l, String format, Object... args) {
++        requireOpen();
++        try {
++            if (args == null) {
++                args = new Object[1];
++            }
++            new FormatWriter(this, out, l, format, args).write();
++        } catch (IOException e) {
++            ioException = e;
++        }
++        return this;
++    }
++
++    static class FormatWriter {
++        private static final String FORMAT_FLAGS = "--#+ 0,(<";
++        private static final int MASK_FOR_GENERAL_FORMAT =
++                TFormattableFlags.LEFT_JUSTIFY | TFormattableFlags.ALTERNATE
++                        | TFormattableFlags.UPPERCASE | TFormattableFlags.PREVIOUS_ARGUMENT;
++        private static final int MASK_FOR_CHAR_FORMAT =
++                TFormattableFlags.LEFT_JUSTIFY | TFormattableFlags.UPPERCASE | TFormattableFlags.PREVIOUS_ARGUMENT;
++        private static final int MASK_FOR_INT_DECIMAL_FORMAT = MASK_FOR_GENERAL_FORMAT ^ TFormattableFlags.ALTERNATE
++                | TFormattableFlags.LEADING_SPACE | TFormattableFlags.ZERO_PADDED
++                | TFormattableFlags.PARENTHESIZED_NEGATIVE | TFormattableFlags.SIGNED
++                | TFormattableFlags.GROUPING_SEPARATOR;
++        private static final int MASK_FOR_INT_RADIX_FORMAT = MASK_FOR_GENERAL_FORMAT
++                | TFormattableFlags.ZERO_PADDED | TFormattableFlags.PARENTHESIZED_NEGATIVE;
++        private TFormatter formatter;
++        Appendable out;
++        Locale locale;
++        String format;
++        Object[] args;
++        int index;
++        int formatSpecifierStart;
++        int defaultArgumentIndex;
++        int argumentIndex;
++        int previousArgumentIndex;
++        int width;
++        int precision;
++        int flags;
++
++        FormatWriter(TFormatter formatter, Appendable out, Locale locale, String format, Object[] args) {
++            this.formatter = formatter;
++            this.out = out;
++            this.locale = locale;
++            this.format = format;
++            this.args = args;
++        }
++
++        void write() throws IOException {
++            while (true) {
++                int next = format.indexOf('%', index);
++                if (next < 0) {
++                    out.append(format.substring(index));
++                    break;
++                }
++                out.append(format.substring(index, next));
++                index = next + 1;
++
++                formatSpecifierStart = index;
++                char specifier = parseFormatSpecifier();
++                // %n and %% do not correspond to any argument
++                if (specifier == 'n') {
++                    formatLineSeparator();
++                    continue;
++                }
++                if (specifier == '%') {
++                    formatPercent();
++                    continue;
++                }
++                configureFormat();
++                formatValue(specifier);
++            }
++        }
++
++        private void formatValue(char specifier) throws IOException {
++            switch (specifier) {
++                case 'b':
++                    formatBoolean(specifier, false);
++                    break;
++                case 'B':
++                    formatBoolean(specifier, true);
++                    break;
++                case 'h':
++                    formatHex(specifier, false);
++                    break;
++                case 'H':
++                    formatHex(specifier, true);
++                    break;
++                case 's':
++                    formatString(specifier, false);
++                    break;
++                case 'S':
++                    formatString(specifier, true);
++                    break;
++
++                case 'c':
++                    formatChar(specifier, false);
++                    break;
++                case 'C':
++                    formatChar(specifier, true);
++                    break;
++
++                case 'd':
++                    formatDecimalInt(specifier, false);
++                    break;
++                case 'D':
++                    formatDecimalInt(specifier, true);
++                    break;
++
++                case 'o':
++                    formatRadixInt(specifier, 3, false);
++                    break;
++                case 'O':
++                    formatRadixInt(specifier, 3, true);
++                    break;
++
++                case 'x':
++                    formatRadixInt(specifier, 4, false);
++                    break;
++                case 'X':
++                    formatRadixInt(specifier, 4, true);
++                    break;
++
++                case 'f':
++                    formatFloat(specifier, false);
++                    break;
++                case 'e':
++                    formatScientific(specifier, false);
++                    break;
++                case 'E':
++                    formatScientific(specifier, true);
++                    break;
++
++                default:
++                    throw new UnknownFormatConversionException(String.valueOf(specifier));
++            }
++        }
++
++        private void formatLineSeparator() throws IOException {
++            if (flags != 0) {
++                throw new TIllegalFormatFlagsException(flagsToString(flags));
++            }
++            if (width != -1) {
++                throw new TIllegalFormatWidthException(width);
++            }
++            if (precision != -1) {
++                throw new TIllegalFormatPrecisionException(precision);
++            }
++            out.append(System.lineSeparator());
++        }
++
++        private void formatPercent() throws IOException {
++            if ((flags & ~TFormattableFlags.LEFT_JUSTIFY) != 0) {
++                throw new TIllegalFormatFlagsException(flagsToString(flags & ~TFormattableFlags.LEFT_JUSTIFY));
++            }
++            if (precision != -1) {
++                throw new TIllegalFormatPrecisionException(precision);
++            }
++            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width == -1) {
++                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));
++            }
++            formatGivenString(false, "%");
++        }
++
++        private void formatFloat(char specifier, boolean upperCase) throws IOException {
++            verifyFlags(specifier, MASK_FOR_INT_DECIMAL_FORMAT);
++            verifyFloatFlags();
++
++            if (precision == -1) {
++                precision = 6;
++            }
++
++            Object arg = args[argumentIndex];
++            boolean negative;
++            if (arg instanceof Double) {
++                negative = (Double) arg < 0;
++            } else if (arg instanceof Float) {
++                negative = (Float) arg < 0;
++            } else if (arg instanceof BigDecimal) {
++                negative = ((BigDecimal) arg).signum() < 0;
++            } else {
++                throw new IllegalFormatConversionException(specifier, arg == null ? null : arg.getClass());
++            }
++
++            TDecimalFormat format = new TDecimalFormat();
++            format.setDecimalFormatSymbols(new DecimalFormatSymbols(locale));
++            if (width != -1) {
++                int decimalSize = predictDecimalSize(negative, format);
++                format.setMaximumIntegerDigits(decimalSize);
++                if ((flags & TFormattableFlags.ZERO_PADDED) != 0) {
++                    format.setMinimumIntegerDigits(decimalSize);
++                }
++            }
++            format.setMaximumFractionDigits(precision);
++            format.setMinimumFractionDigits(precision);
++            format.setRoundingMode(RoundingMode.HALF_UP);
++            format.setGroupingUsed((flags & TFormattableFlags.GROUPING_SEPARATOR) != 0);
++            if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
++                format.setNegativePrefix("(");
++                format.setNegativeSuffix(")");
++            }
++            if ((flags & TFormattableFlags.SIGNED) != 0) {
++                format.setPositivePrefix("+"); // DecimalFormatSymbols has no plus sign
++            } else if ((flags & TFormattableFlags.LEADING_SPACE) != 0) {
++                format.setPositivePrefix(" ");
++            }
++
++            String str = format.format(arg);
++
++            precision = -1; // prevent formatGivenString from trimming
++
++            formatGivenString(upperCase, str);
++        }
++
++        private void formatScientific(char specifier, boolean upperCase) throws IOException {
++            verifyFlags(specifier, MASK_FOR_GENERAL_FORMAT | TFormattableFlags.SIGNED
++                    | TFormattableFlags.LEADING_SPACE | TFormattableFlags.ZERO_PADDED
++                    | TFormattableFlags.PARENTHESIZED_NEGATIVE);
++            verifyFloatFlags();
++
++            if (precision == -1) {
++                precision = 6;
++            }
++
++            Object arg = args[argumentIndex];
++            BigDecimal value = null;
++            boolean negative;
++            boolean nan = false;
++            if (arg instanceof Double || arg instanceof Float) {
++                double d = ((Number) arg).doubleValue();
++                negative = Double.compare(d, 0.0) < 0;
++                nan = Double.isNaN(d);
++                if (!nan && !Double.isInfinite(d)) {
++                    // Like the JDK, round the shortest decimal representation of the double value
++                    value = new BigDecimal(Double.toString(Math.abs(d)));
++                }
++            } else if (arg instanceof BigDecimal) {
++                negative = ((BigDecimal) arg).signum() < 0;
++                value = ((BigDecimal) arg).abs();
++            } else if (arg == null) {
++                precision = -1;
++                formatGivenString(upperCase, "null");
++                return;
++            } else {
++                throw new IllegalFormatConversionException(specifier, arg.getClass());
++            }
++
++            StringBuilder sb = new StringBuilder();
++            if (value == null) {
++                sb.append(nan ? "NaN" : "Infinity");
++            } else {
++                int exponent = 0;
++                if (value.signum() != 0) {
++                    sb.append(value.unscaledValue().toString());
++                    exponent = sb.length() - value.scale() - 1;
++                }
++                if (sb.length() > precision + 1) {
++                    // Round half up by hand: BigDecimal.round does not round when it drops a single digit
++                    boolean roundUp = sb.charAt(precision + 1) >= '5';
++                    sb.setLength(precision + 1);
++                    int i = precision;
++                    while (roundUp && i >= 0) {
++                        roundUp = sb.charAt(i) == '9';
++                        sb.setCharAt(i, roundUp ? '0' : (char) (sb.charAt(i) + 1));
++                        --i;
++                    }
++                    if (roundUp) {
++                        sb.insert(0, '1').setLength(precision + 1);
++                        ++exponent;
++                    }
++                }
++                while (sb.length() < precision + 1) {
++                    sb.append('0');
++                }
++                if (precision > 0 || (flags & TFormattableFlags.ALTERNATE) != 0) {
++                    sb.insert(1, '.');
++                }
++                sb.append(exponent < 0 ? "e-" : "e+");
++                if (Math.abs(exponent) < 10) {
++                    sb.append('0');
++                }
++                sb.append(Math.abs(exponent));
++            }
++
++            String prefix = "";
++            String suffix = "";
++            if (negative) {
++                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
++                    prefix = "(";
++                    suffix = ")";
++                } else {
++                    prefix = "-";
++                }
++            } else if (!nan && (flags & TFormattableFlags.SIGNED) != 0) {
++                prefix = "+";
++            } else if (!nan && (flags & TFormattableFlags.LEADING_SPACE) != 0) {
++                prefix = " ";
++            }
++            if (value != null && (flags & TFormattableFlags.ZERO_PADDED) != 0) {
++                while (prefix.length() + sb.length() + suffix.length() < width) {
++                    sb.insert(0, '0');
++                }
++            }
++
++            precision = -1; // prevent formatGivenString from trimming
++            formatGivenString(upperCase, prefix + sb + suffix);
++        }
++
++        private int predictDecimalSize(boolean negative, TDecimalFormat format) {
++            int decimalSize = width;
++            if (precision > 0) {
++                decimalSize -= precision + 1; // width also includes decimal places. Subtract them!
++            }
++            // signs take up space as well. Also subtract them!
++            if (negative) {
++                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
++                    decimalSize -= 2;
++                } else {
++                    decimalSize--;
++                }
++            } else if ((flags & (TFormattableFlags.SIGNED | TFormattableFlags.LEADING_SPACE)) != 0) {
++                decimalSize--;
++            }
++            // the grouping separator also takes up space. You know the drill.
++            if ((flags & TFormattableFlags.GROUPING_SEPARATOR) != 0) {
++                decimalSize -= decimalSize / (format.getGroupingSize() + 1);
++            }
++            return decimalSize;
++        }
++
++        private void verifyFloatFlags() {
++            if ((flags & TFormattableFlags.SIGNED) != 0 && (flags & TFormattableFlags.LEADING_SPACE) != 0) {
++                throw new TIllegalFormatFlagsException("+ ");
++            }
++            if ((flags & TFormattableFlags.ZERO_PADDED) != 0 && (flags & TFormattableFlags.LEFT_JUSTIFY) != 0) {
++                throw new TIllegalFormatFlagsException("0-");
++            }
++            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width < 0) {
++                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));
++            }
++        }
++
++        private void formatBoolean(char specifier, boolean upperCase) throws IOException {
++            verifyFlagsForGeneralFormat(specifier);
++            Object arg = args[argumentIndex];
++            String s = Boolean.toString(arg instanceof Boolean ? (Boolean) arg : arg != null);
++            formatGivenString(upperCase, s);
++        }
++
++        private void formatHex(char specifier, boolean upperCase) throws IOException {
++            verifyFlagsForGeneralFormat(specifier);
++            Object arg = args[argumentIndex];
++            String s = arg != null ? Integer.toHexString(arg.hashCode()) : "null";
++            formatGivenString(upperCase, s);
++        }
++
++        private void formatString(char specifier, boolean upperCase) throws IOException {
++            verifyFlagsForGeneralFormat(specifier);
++            Object arg = args[argumentIndex];
++            if (arg instanceof TFormattable) {
++                int flagsToPass = flags & 7;
++                if (upperCase) {
++                    flagsToPass |= TFormattableFlags.UPPERCASE;
++                }
++                ((TFormattable) arg).formatTo(formatter, flagsToPass, width, precision);
++            } else {
++                formatGivenString(upperCase, String.valueOf(arg));
++            }
++        }
++
++        private void formatChar(char specifier, boolean upperCase) throws IOException {
++            verifyFlags(specifier, MASK_FOR_CHAR_FORMAT);
++            Object arg = args[argumentIndex];
++
++            if (precision >= 0) {
++                throw new TIllegalFormatPrecisionException(precision);
++            }
++
++            int c;
++            if (arg instanceof Character) {
++                c = (Character) arg;
++            } else if (arg instanceof Byte) {
++                c = (char) (byte) arg;
++            } else if (arg instanceof Short) {
++                c = (char) (short) arg;
++            } else if (arg instanceof Integer) {
++                c = (int) arg;
++                if (!Character.isValidCodePoint(c)) {
++                    throw new TIllegalFormatCodePointException(c);
++                }
++            } else if (arg == null) {
++                formatGivenString(upperCase, "null");
++                return;
++            } else {
++                throw new IllegalFormatConversionException(specifier, arg.getClass());
++            }
++
++            formatGivenString(upperCase, new String(Character.toChars(c)));
++        }
++
++        private void formatDecimalInt(char specifier, boolean upperCase) throws IOException {
++            verifyFlags(specifier, MASK_FOR_INT_DECIMAL_FORMAT);
++            verifyIntFlags();
++
++            String str;
++            Object arg = args[argumentIndex];
++            boolean negative;
++            if (arg instanceof Long) {
++                long value = (Long) arg;
++                str = Long.toString(Math.abs(value));
++                negative = value < 0;
++            } else if (arg instanceof Integer || arg instanceof Byte || arg instanceof Short) {
++                int value = ((Number) arg).intValue();
++                str = Integer.toString(Math.abs(value));
++                negative = value < 0;
++            } else {
++                throw new IllegalFormatConversionException(specifier, arg != null ? arg.getClass() : null);
++            }
++
++            int additionalSymbols = 0;
++            StringBuilder sb = new StringBuilder();
++            if (negative) {
++                if ((flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
++                    sb.append('(');
++                    additionalSymbols += 2;
++                } else {
++                    sb.append('-');
++                    additionalSymbols++;
++                }
++            } else {
++                if ((flags & TFormattableFlags.SIGNED) != 0) {
++                    sb.append('+');
++                    additionalSymbols++;
++                } else if ((flags & TFormattableFlags.LEADING_SPACE) != 0) {
++                    sb.append(' ');
++                    additionalSymbols++;
++                }
++            }
++
++            StringBuilder valueSb = new StringBuilder();
++            if ((flags & TFormattableFlags.GROUPING_SEPARATOR) != 0) {
++                char separator = new DecimalFormatSymbols(locale).getGroupingSeparator();
++                int size = ((DecimalFormat) NumberFormat.getNumberInstance(locale)).getGroupingSize();
++                int offset = str.length() % size;
++                if (offset == 0) {
++                    offset = size;
++                }
++
++                int prev = 0;
++                for (int i = offset; i < str.length(); i += size) {
++                    valueSb.append(str.substring(prev, i));
++                    valueSb.append(separator);
++                    prev = i;
++                }
++                valueSb.append(str.substring(prev));
++            } else {
++                valueSb.append(str);
++            }
++
++            if ((flags & TFormattableFlags.ZERO_PADDED) != 0) {
++                int actual = valueSb.length() + additionalSymbols;
++                for (int i = actual; i < width; ++i) {
++                    sb.append(Character.forDigit(0, 10));
++                }
++            }
++            sb.append(valueSb);
++
++            if (negative && (flags & TFormattableFlags.PARENTHESIZED_NEGATIVE) != 0) {
++                sb.append(')');
++            }
++
++            formatGivenString(upperCase, sb.toString());
++        }
++
++        private void formatRadixInt(char specifier, int radixLog2, boolean upperCase) throws IOException {
++            verifyFlags(specifier, MASK_FOR_INT_RADIX_FORMAT);
++            verifyIntFlags();
++
++            String str;
++            Object arg = args[argumentIndex];
++            if (arg instanceof Long) {
++                str = IntegerUtil.toUnsignedLogRadixString((Long) arg, radixLog2);
++            } else if (arg instanceof Integer) {
++                str = IntegerUtil.toUnsignedLogRadixString((Integer) arg, radixLog2);
++            } else if (arg instanceof Short) {
++                str = IntegerUtil.toUnsignedLogRadixString((Short) arg & 0xFFFF, radixLog2);
++            } else if (arg instanceof Byte) {
++                str = IntegerUtil.toUnsignedLogRadixString((Byte) arg & 0xFF, radixLog2);
++            } else {
++                throw new IllegalFormatConversionException(specifier, arg != null ? arg.getClass() : null);
++            }
++
++            StringBuilder sb = new StringBuilder();
++            if ((flags & TFormattableFlags.ALTERNATE) != 0) {
++                String prefix = radixLog2 == 4 ? "0x" : "0";
++                str = prefix + str;
++            }
++
++            if ((flags & TFormattableFlags.ZERO_PADDED) != 0) {
++                for (int i = str.length(); i < width; ++i) {
++                    sb.append(Character.forDigit(0, 10));
++                }
++            }
++            sb.append(str);
++
++            formatGivenString(upperCase, sb.toString());
++        }
++
++        private void verifyIntFlags() {
++            if ((flags & TFormattableFlags.SIGNED) != 0 && (flags & TFormattableFlags.LEADING_SPACE) != 0) {
++                throw new TIllegalFormatFlagsException("+ ");
++            }
++            if ((flags & TFormattableFlags.ZERO_PADDED) != 0 && (flags & TFormattableFlags.LEFT_JUSTIFY) != 0) {
++                throw new TIllegalFormatFlagsException("0-");
++            }
++            if (precision >= 0) {
++                throw new TIllegalFormatPrecisionException(precision);
++            }
++            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0 && width < 0) {
++                throw new TMissingFormatWidthException(format.substring(formatSpecifierStart, index));
++            }
++        }
++
++        private void formatGivenString(boolean upperCase, String str) throws IOException {
++            if (precision > 0 && precision < str.length()) {
++                str = str.substring(0, precision);
++            }
++
++            if (upperCase) {
++                str = str.toUpperCase();
++            }
++
++            if ((flags & TFormattableFlags.LEFT_JUSTIFY) != 0) {
++                out.append(str);
++                mayBeAppendSpaces(str);
++            } else {
++                mayBeAppendSpaces(str);
++                out.append(str);
++            }
++        }
++
++        private void verifyFlagsForGeneralFormat(char conversion) {
++            verifyFlags(conversion, MASK_FOR_GENERAL_FORMAT);
++        }
++
++        private void verifyFlags(char conversion, int mask) {
++            if ((flags | mask) != mask) {
++                throw new FormatFlagsConversionMismatchException(flagsToString(flags & ~mask), conversion);
++            }
++        }
++
++        private String flagsToString(int flags) {
++            int flagIndex = Integer.numberOfTrailingZeros(flags);
++            return String.valueOf(FORMAT_FLAGS.charAt(flagIndex));
++        }
++
++        private void mayBeAppendSpaces(String str) throws IOException {
++            if (width > str.length()) {
++                int diff = width - str.length();
++                StringBuilder sb = new StringBuilder(diff);
++                for (int i = 0; i < diff; ++i) {
++                    sb.append(' ');
++                }
++                out.append(sb);
++            }
++        }
++
++        private void configureFormat() {
++            if ((flags & TFormattableFlags.PREVIOUS_ARGUMENT) != 0) {
++                argumentIndex = Math.max(0, previousArgumentIndex);
++            }
++
++            if (argumentIndex == -1) {
++                argumentIndex = defaultArgumentIndex++;
++            }
++            previousArgumentIndex = argumentIndex;
++        }
++
++        private char parseFormatSpecifier() {
++            flags = 0;
++            argumentIndex = -1;
++            width = -1;
++            precision = -1;
++
++            char c = format.charAt(index);
++
++            if (c != '0' && isDigit(c)) {
++                int n = readInt();
++                if (index < format.length() && format.charAt(index) == '$') {
++                    index++;
++                    argumentIndex = n - 1;
++                } else {
++                    width = n;
++                }
++            }
++            parseFlags();
++
++            if (width < 0 && index < format.length() && isDigit(format.charAt(index))) {
++                width = readInt();
++            }
++
++            if (index < format.length() && format.charAt(index) == '.') {
++                index++;
++                if (index >= format.length() || !isDigit(format.charAt(index))) {
++                    throw new UnknownFormatConversionException(String.valueOf(format.charAt(index - 1)));
++                }
++                precision = readInt();
++            }
++
++            if (index >= format.length()) {
++                throw new UnknownFormatConversionException(String.valueOf(format.charAt(format.length() - 1)));
++            }
++            return format.charAt(index++);
++        }
++
++        private void parseFlags() {
++            while (index < format.length()) {
++                char c = format.charAt(index);
++                int flag;
++                switch (c) {
++                    case '-':
++                        flag = TFormattableFlags.LEFT_JUSTIFY;
++                        break;
++                    case '#':
++                        flag = TFormattableFlags.ALTERNATE;
++                        break;
++                    case '+':
++                        flag = TFormattableFlags.SIGNED;
++                        break;
++                    case ' ':
++                        flag = TFormattableFlags.LEADING_SPACE;
++                        break;
++                    case '0':
++                        flag = TFormattableFlags.ZERO_PADDED;
++                        break;
++                    case ',':
++                        flag = TFormattableFlags.GROUPING_SEPARATOR;
++                        break;
++                    case '(':
++                        flag = TFormattableFlags.PARENTHESIZED_NEGATIVE;
++                        break;
++                    case '<':
++                        flag = TFormattableFlags.PREVIOUS_ARGUMENT;
++                        break;
++                    default:
++                        return;
++                }
++                if ((flags & flag) != 0) {
++                    throw new DuplicateFormatFlagsException(String.valueOf(c));
++                }
++                flags |= flag;
++                index++;
++            }
++        }
++
++        private int readInt() {
++            int result = 0;
++            while (index < format.length() && isDigit(format.charAt(index))) {
++                result = result * 10 + (format.charAt(index++) - '0');
++            }
++            return result;
++        }
++
++        private static boolean isDigit(char c) {
++            return c >= '0' && c <= '9';
++        }
++    }
++}
+diff --git a/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TIllegalFormatWidthException.java b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TIllegalFormatWidthException.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TIllegalFormatWidthException.java
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2026 wasm-idle contributors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     https://www.apache.org/licenses/LICENSE-2.0
++ */
++package org.teavm.classlib.java.util;
++
++public class TIllegalFormatWidthException extends TIllegalFormatException {
++    private int width;
++
++    public TIllegalFormatWidthException(int width) {
++        super("Illegal width: " + width);
++        this.width = width;
++    }
++
++    public int getWidth() {
++        return width;
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CharacterSupplement.java
+@@ -0,0 +1,29 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TCharacter;
++
++@Supplement(TCharacter.class)
++final class CharacterSupplement {
++    private CharacterSupplement() {
++    }
++
++    public static String toString(int codePoint) {
++        return String.valueOf(Character.toChars(codePoint));
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/CollectionSupplement.java
+@@ -0,0 +1,28 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.util.TCollection;
++import org.teavm.classlib.java.util.stream.TStream;
++
++@Supplement(TCollection.class)
++interface CollectionSupplement<E> extends TCollection<E> {
++    // Streams of the TeaVM class library are sequential.
++    default TStream<E> parallelStream() {
++        return stream();
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/IntegerSupplement.java
+@@ -0,0 +1,43 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TInteger;
++
++@Supplement(TInteger.class)
++final class IntegerSupplement {
++    private IntegerSupplement() {
++    }
++
++    public static int parseUnsignedInt(String s) throws NumberFormatException {
++        return parseUnsignedInt(s, 10);
++    }
++
++    public static int parseUnsignedInt(String s, int radix) throws NumberFormatException {
++        if (s == null) {
++            throw new NumberFormatException("Cannot parse null string");
++        }
++        if (!s.isEmpty() && s.charAt(0) == '-') {
++            throw new NumberFormatException("Illegal leading minus sign on unsigned string " + s);
++        }
++        long value = Long.parseLong(s, radix);
++        if (value >>> 32 != 0) {
++            throw new NumberFormatException("String value " + s + " exceeds range of unsigned int");
++        }
++        return (int) value;
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/LongSupplement.java
+@@ -0,0 +1,62 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TLong;
++
++@Supplement(TLong.class)
++final class LongSupplement {
++    private LongSupplement() {
++    }
++
++    public static long parseUnsignedLong(String s) throws NumberFormatException {
++        return parseUnsignedLong(s, 10);
++    }
++
++    public static long parseUnsignedLong(String s, int radix) throws NumberFormatException {
++        if (s == null) {
++            throw new NumberFormatException("Cannot parse null string");
++        }
++        if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX) {
++            throw new NumberFormatException("Illegal radix " + radix);
++        }
++        int start = !s.isEmpty() && s.charAt(0) == '+' ? 1 : 0;
++        if (start == s.length()) {
++            throw new NumberFormatException("For input string: \"" + s + "\"");
++        }
++        if (s.charAt(0) == '-') {
++            throw new NumberFormatException("Illegal leading minus sign on unsigned string " + s);
++        }
++        long limit = Long.divideUnsigned(-1L, radix);
++        long result = 0;
++        for (int i = start; i < s.length(); ++i) {
++            int digit = Character.digit(s.charAt(i), radix);
++            if (digit < 0) {
++                throw new NumberFormatException("For input string: \"" + s + "\"");
++            }
++            if (Long.compareUnsigned(result, limit) > 0) {
++                throw new NumberFormatException("String value " + s + " exceeds range of unsigned long");
++            }
++            long shifted = result * radix;
++            result = shifted + digit;
++            if (Long.compareUnsigned(result, shifted) < 0) {
++                throw new NumberFormatException("String value " + s + " exceeds range of unsigned long");
++            }
++        }
++        return result;
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/MathSupplement.java
+@@ -0,0 +1,41 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.lang.TMath;
++
++@Supplement(TMath.class)
++final class MathSupplement {
++    private MathSupplement() {
++    }
++
++    public static long multiplyFull(int x, int y) {
++        return (long) x * (long) y;
++    }
++
++    // The high 64 bits of the signed 128-bit product, from products of 32-bit halves.
++    public static long multiplyHigh(long x, long y) {
++        long xHigh = x >> 32;
++        long xLow = x & 0xFFFFFFFFL;
++        long yHigh = y >> 32;
++        long yLow = y & 0xFFFFFFFFL;
++        long lowProduct = xLow * yLow;
++        long middle = xHigh * yLow + (lowProduct >>> 32);
++        long middleLow = xLow * yHigh + (middle & 0xFFFFFFFFL);
++        return xHigh * yHigh + (middle >> 32) + (middleLow >> 32);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/PrintStreamSupplement.java
+@@ -0,0 +1,47 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.io.OutputStream;
++import org.teavm.classlib.java.io.TPrintStream;
++
++@Supplement(TPrintStream.class)
++abstract class PrintStreamSupplement extends TPrintStream {
++    PrintStreamSupplement() {
++        super((OutputStream) null);
++    }
++
++    // Without print(boolean) and print(float), javac picks print(Object) and print(double), which prints
++    // 0.1f as 0.10000000149011612.
++    public void print(boolean b) {
++        print(String.valueOf(b));
++    }
++
++    public void print(float f) {
++        print(String.valueOf(f));
++    }
++
++    // Without it, javac picks println(Object), which prints the array identity.
++    public void println(char[] s) {
++        print(s);
++        println();
++    }
++
++    public void writeBytes(byte[] buf) {
++        write(buf, 0, buf.length);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StreamSupplement.java
+@@ -0,0 +1,26 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import org.teavm.classlib.java.util.stream.TStream;
++
++@Supplement(TStream.class)
++interface StreamSupplement<T> extends TStream<T> {
++    static <T> TStream<T> ofNullable(T t) {
++        return t == null ? TStream.empty() : TStream.of(t);
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/StringSupplement.java
+@@ -0,0 +1,48 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Function;
++import java.util.stream.Stream;
++import org.teavm.classlib.java.lang.TString;
++
++@Supplement(TString.class)
++final class StringSupplement {
++    public Stream<String> lines() {
++        String s = toString();
++        List<String> lines = new ArrayList<>();
++        int start = 0;
++        while (start < s.length()) {
++            int end = start;
++            while (end < s.length() && s.charAt(end) != '\n' && s.charAt(end) != '\r') {
++                ++end;
++            }
++            lines.add(s.substring(start, end));
++            if (end + 1 < s.length() && s.charAt(end) == '\r' && s.charAt(end + 1) == '\n') {
++                ++end;
++            }
++            start = end + 1;
++        }
++        return lines.stream();
++    }
++
++    public <R> R transform(Function<? super String, ? extends R> f) {
++        return f.apply(toString());
++    }
++}
+diff --git a/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/classlibSupplement/java/org/teavm/javac/supplement/Supplement.java
+@@ -0,0 +1,32 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac.supplement;
++
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++/**
++ * Marks a class whose methods {@code org.teavm.javac.ClasslibSupplements} adds to the given TeaVM class library
++ * class.
++ */
++@Retention(RetentionPolicy.CLASS)
++@Target(ElementType.TYPE)
++@interface Supplement {
++    Class<?> value();
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java b/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
+--- a/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
++++ b/compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java
+@@ -25,6 +25,7 @@
+ import java.nio.charset.StandardCharsets;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
++import java.util.TreeMap;
+ import java.util.zip.GZIPOutputStream;
+
+ public class ArchiveBuilder implements Closeable {
+@@ -50,19 +51,48 @@
+     public static void main(String[] args) throws IOException {
+         var root = Path.of(args[0]);
+         var outPath = Path.of(args[1]);
++        var supplements = ClasslibSupplements.load(Path.of(args[2]));
++        var overlayRoot = Path.of(args[3]);
++        var overlay = new TreeMap<String, Path>();
++        try (var files = Files.walk(overlayRoot)) {
++            files.filter(Files::isRegularFile).forEach(file -> {
++                var name = overlayRoot.relativize(file).toString().replace('\\', '/');
++                if (!name.endsWith(".class")) {
++                    throw new IllegalStateException("Non-class runtime overlay entry " + name);
++                }
++                overlay.put(name, file);
++            });
++        }
++        if (overlay.size() != 12) {
++            throw new IllegalStateException("Expected 12 runtime overlay classes, got " + overlay.size());
++        }
++        var addedEntry = "org/teavm/classlib/java/util/TIllegalFormatWidthException.class";
+         Files.createDirectories(outPath.getParent());
+         try (var input = Files.walk(root);
+                 var output = new ArchiveBuilder(Files.newOutputStream(outPath))) {
+-            input.forEach(file -> {
++            input.sorted().forEach(file -> {
+                 if (Files.isRegularFile(file)) {
+-                    var relName = root.relativize(file).toString();
++                    var relName = root.relativize(file).toString().replace('\\', '/');
+                     try {
+-                        output.append(relName, Files.readAllBytes(file));
++                        if (relName.equals(addedEntry)) {
++                            throw new IllegalStateException("Runtime already contains added overlay entry " + relName);
++                        }
++                        var replacement = overlay.remove(relName);
++                        var data = Files.readAllBytes(replacement != null ? replacement : file);
++                        if (relName.endsWith(".class")) {
++                            data = supplements.apply(data);
++                        }
++                        output.append(relName, data);
+                     } catch (IOException e) {
+                         throw new UncheckedIOException(e);
+                     }
+                 }
+             });
++            if (overlay.size() != 1 || !overlay.containsKey(addedEntry)) {
++                throw new IllegalStateException("Missing runtime overlay targets: " + overlay.keySet());
++            }
++            output.append(addedEntry, Files.readAllBytes(overlay.get(addedEntry)));
+         }
++        supplements.checkApplied();
+     }
+ }
+diff --git a/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java b/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/ArrayCloneDependencySupport.java
+@@ -0,0 +1,244 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.util.ArrayDeque;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import org.teavm.dependency.AbstractDependencyListener;
++import org.teavm.dependency.DependencyAgent;
++import org.teavm.dependency.MethodDependency;
++import org.teavm.model.FieldReference;
++import org.teavm.model.MethodDescriptor;
++import org.teavm.model.MethodHandle;
++import org.teavm.model.MethodReader;
++import org.teavm.model.MethodReference;
++import org.teavm.model.ProgramReader;
++import org.teavm.model.RuntimeConstant;
++import org.teavm.model.ValueType;
++import org.teavm.model.VariableReader;
++import org.teavm.model.instructions.AbstractInstructionReader;
++import org.teavm.model.instructions.ArrayElementType;
++import org.teavm.model.instructions.InvocationType;
++
++/**
++ * Makes {@code Object.clone()} aware of primitive arrays that are cloned by a method.
++ * <p>
++ * WebAssembly GC backend puts clone function into class of a primitive array only when the array type
++ * reaches {@code this} of {@code Object.clone()}. Dependency analyzer does this for array clone instruction
++ * by connecting variable that holds the array to {@code this}. However, it creates nodes only for variables
++ * that escape method (i.e. passed to a method, stored to a field, returned and so on), and array clone does not
++ * count as escape. So, for code like {@code int[] b = a.clone(); b[0] = 1;}, where neither {@code a} nor
++ * {@code b} escape, {@code int[]} class does not get clone function and clone fails at runtime with
++ * "dereferencing a null pointer". This listener infers static type of cloned arrays and propagates
++ * primitive array types to {@code Object.clone()} explicitly. Static type of primitive array is exact,
++ * since such arrays don't have subtypes. Reference arrays are not affected by the problem, since their classes
++ * always get clone function.
++ */
++class ArrayCloneDependencySupport extends AbstractDependencyListener {
++    private static final MethodReference CLONE_METHOD = new MethodReference(Object.class, "clone", Object.class);
++
++    @Override
++    public void methodReached(DependencyAgent agent, MethodDependency method) {
++        var methodReader = method.getMethod();
++        var program = methodReader != null ? methodReader.getProgram() : null;
++        if (program == null || !hasArrayClone(program)) {
++            return;
++        }
++        var analyzer = new Analyzer(methodReader);
++        for (var i = 0; i < program.basicBlockCount(); ++i) {
++            var block = program.basicBlockAt(i);
++            for (var phi : block.readPhis()) {
++                for (var incoming : phi.readIncomings()) {
++                    analyzer.addSource(phi.getReceiver(), incoming.getValue(), 0);
++                }
++            }
++            block.readAllInstructions(analyzer);
++        }
++        var cloneThis = agent.linkMethod(CLONE_METHOD).getVariable(0);
++        for (var type : analyzer.collectTypes(analyzer.clonedArrays)) {
++            if (type instanceof ValueType.Array
++                    && ((ValueType.Array) type).getItemType() instanceof ValueType.Primitive) {
++                cloneThis.propagate(agent.getType(type));
++            }
++        }
++    }
++
++    private static boolean hasArrayClone(ProgramReader program) {
++        var found = new boolean[1];
++        var reader = new AbstractInstructionReader() {
++            @Override
++            public void cloneArray(VariableReader receiver, VariableReader array) {
++                found[0] = true;
++            }
++        };
++        for (var i = 0; i < program.basicBlockCount() && !found[0]; ++i) {
++            program.basicBlockAt(i).readAllInstructions(reader);
++        }
++        return found[0];
++    }
++
++    private static class Source {
++        final ValueType type;
++        final int variable;
++        final int depth;
++
++        Source(ValueType type, int variable, int depth) {
++            this.type = type;
++            this.variable = variable;
++            this.depth = depth;
++        }
++    }
++
++    private static class Analyzer extends AbstractInstructionReader {
++        private static final int MAX_DEPTH = 255;
++        final Map<Integer, List<Source>> sources = new HashMap<>();
++        final List<Integer> clonedArrays = new ArrayList<>();
++
++        Analyzer(MethodReader method) {
++            for (var i = 0; i < method.parameterCount(); ++i) {
++                addType(i + 1, method.parameterType(i));
++            }
++        }
++
++        void addType(int variable, ValueType type) {
++            sources.computeIfAbsent(variable, k -> new ArrayList<>()).add(new Source(type, -1, 0));
++        }
++
++        void addSource(VariableReader receiver, VariableReader source, int depth) {
++            sources.computeIfAbsent(receiver.getIndex(), k -> new ArrayList<>())
++                    .add(new Source(null, source.getIndex(), depth));
++        }
++
++        // Collects static types of values of given variables. Each work item is a variable and a depth,
++        // where non-zero depth means types of array items of the given nesting level.
++        Set<ValueType> collectTypes(List<Integer> variables) {
++            var result = new LinkedHashSet<ValueType>();
++            var visited = new HashSet<Long>();
++            var stack = new ArrayDeque<Long>();
++            for (var variable : variables) {
++                stack.push((long) variable << 8);
++            }
++            while (!stack.isEmpty()) {
++                var item = stack.pop();
++                if (!visited.add(item)) {
++                    continue;
++                }
++                var depth = (int) (item & 255);
++                var variableSources = sources.get((int) (item >>> 8));
++                if (variableSources == null) {
++                    continue;
++                }
++                for (var source : variableSources) {
++                    if (source.type == null) {
++                        if (depth + source.depth <= MAX_DEPTH) {
++                            stack.push(((long) source.variable << 8) | (depth + source.depth));
++                        }
++                        continue;
++                    }
++                    var type = source.type;
++                    var level = 0;
++                    while (level < depth && type instanceof ValueType.Array) {
++                        type = ((ValueType.Array) type).getItemType();
++                        ++level;
++                    }
++                    if (level == depth) {
++                        result.add(type);
++                    }
++                }
++            }
++            return result;
++        }
++
++        @Override
++        public void createArray(VariableReader receiver, ValueType itemType, VariableReader size) {
++            addType(receiver.getIndex(), ValueType.arrayOf(itemType));
++        }
++
++        @Override
++        public void createArray(VariableReader receiver, ValueType itemType,
++                List<? extends VariableReader> dimensions) {
++            addType(receiver.getIndex(), itemType);
++        }
++
++        @Override
++        public void cloneArray(VariableReader receiver, VariableReader array) {
++            clonedArrays.add(array.getIndex());
++            addSource(receiver, array, 0);
++        }
++
++        @Override
++        public void assign(VariableReader receiver, VariableReader assignee) {
++            addSource(receiver, assignee, 0);
++        }
++
++        @Override
++        public void nullCheck(VariableReader receiver, VariableReader value) {
++            addSource(receiver, value, 0);
++        }
++
++        @Override
++        public void unwrapArray(VariableReader receiver, VariableReader array, ArrayElementType elementType) {
++            addSource(receiver, array, 0);
++        }
++
++        @Override
++        public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
++            if (targetType instanceof ValueType.Array) {
++                addType(receiver.getIndex(), targetType);
++            } else {
++                addSource(receiver, value, 0);
++            }
++        }
++
++        @Override
++        public void getElement(VariableReader receiver, VariableReader array, VariableReader index,
++                ArrayElementType type) {
++            if (type == ArrayElementType.OBJECT) {
++                addSource(receiver, array, 1);
++            }
++        }
++
++        @Override
++        public void getField(VariableReader receiver, VariableReader instance, FieldReference field,
++                ValueType fieldType) {
++            addType(receiver.getIndex(), fieldType);
++        }
++
++        @Override
++        public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
++                List<? extends VariableReader> arguments, InvocationType type) {
++            if (receiver != null) {
++                addType(receiver.getIndex(), method.getReturnType());
++            }
++        }
++
++        @Override
++        public void invokeDynamic(VariableReader receiver, VariableReader instance, MethodDescriptor method,
++                List<? extends VariableReader> arguments, MethodHandle bootstrapMethod,
++                List<RuntimeConstant> bootstrapArguments) {
++            if (receiver != null) {
++                addType(receiver.getIndex(), method.getResultType());
++            }
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/BootstrapDependencySupport.java b/compiler/src/main/java/org/teavm/javac/BootstrapDependencySupport.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/BootstrapDependencySupport.java
+@@ -0,0 +1,48 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.util.ServiceLoader;
++import org.teavm.backend.wasm.TeaVMWasmGCHost;
++import org.teavm.classlib.impl.ServiceLoaderInformation;
++import org.teavm.classlib.impl.ServiceLoaderSupport;
++import org.teavm.classlib.impl.ServiceLoaderWasmGCSupport;
++import org.teavm.classlib.impl.reflection.ReflectionTransformer;
++import org.teavm.vm.TeaVM;
++
++/** Restores services skipped by JCLPlugin when the compiler itself runs in TeaVM. */
++final class BootstrapDependencySupport {
++    private BootstrapDependencySupport() {
++    }
++
++    static void install(TeaVM teavm) {
++        // In 0.16 ClassGenerator handles enum constants. WasmGCTarget installs the common
++        // reflection and annotation dependency listener; the old Wasm GC listener no longer exists.
++        teavm.add(new PluggableDependencySupport());
++        teavm.add(new ArrayCloneDependencySupport());
++        teavm.add(new ReflectionTransformer());
++        var serviceLoaderSupport = new ServiceLoaderSupport(teavm.getClassLoader(), teavm.getResourceProvider());
++        teavm.add(serviceLoaderSupport);
++        teavm.registerService(ServiceLoaderInformation.class, serviceLoaderSupport);
++        var wasmHost = teavm.getExtension(TeaVMWasmGCHost.class);
++        wasmHost.contributeToCodeGen((context, registry) -> {
++            registry.bodyIntrinsics().registerIntrinsic(ServiceLoader.class, new ServiceLoaderWasmGCSupport(
++                    serviceLoaderSupport, context.classInfoProvider(), context.functions(), context.functionTypes(),
++                    context.names(), context.typeMapper(), context.module()));
++        });
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java b/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/ClasslibSupplements.java
+@@ -0,0 +1,285 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.TreeSet;
++import org.objectweb.asm.AnnotationVisitor;
++import org.objectweb.asm.ClassReader;
++import org.objectweb.asm.ClassVisitor;
++import org.objectweb.asm.ClassWriter;
++import org.objectweb.asm.FieldVisitor;
++import org.objectweb.asm.Handle;
++import org.objectweb.asm.Label;
++import org.objectweb.asm.MethodVisitor;
++import org.objectweb.asm.Opcodes;
++import org.objectweb.asm.Type;
++
++/**
++ * Adds methods that the TeaVM class library lacks to its classes, in both the javac SDK and the runtime class
++ * library, so that both always declare the same API.
++ * <p>
++ * A supplement is a class of the {@code classlibSupplement} source set annotated with
++ * {@code @org.teavm.javac.supplement.Supplement(Target.class)}. To call members of the target, it extends the
++ * target, or for an interface, extends it. All its methods except constructors are copied to the target, with
++ * references to the supplement replaced by the target. The supplement may only add methods: it must not declare
++ * fields, static initializers, synthetic methods (lambdas) or methods the target already declares, and must not
++ * call {@code super} methods.
++ */
++public final class ClasslibSupplements {
++    private static final String SUPPLEMENT_DESC = "Lorg/teavm/javac/supplement/Supplement;";
++    private static final String SUPPLEMENT_ANNOTATION = "org/teavm/javac/supplement/Supplement";
++    private final Map<String, List<byte[]>> supplements = new LinkedHashMap<>();
++    private final Set<String> applied = new HashSet<>();
++
++    private ClasslibSupplements() {
++    }
++
++    public static ClasslibSupplements load(Path dir) throws IOException {
++        var result = new ClasslibSupplements();
++        var files = new TreeSet<Path>();
++        try (var stream = Files.walk(dir)) {
++            stream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".class")).forEach(files::add);
++        }
++        for (var file : files) {
++            var bytes = Files.readAllBytes(file);
++            var reader = new ClassReader(bytes);
++            if (reader.getClassName().equals(SUPPLEMENT_ANNOTATION)) {
++                continue;
++            }
++            var target = findTarget(reader);
++            if (target == null) {
++                throw new IllegalStateException(reader.getClassName() + " is not annotated with @Supplement");
++            }
++            result.supplements.computeIfAbsent(target, key -> new ArrayList<>()).add(bytes);
++        }
++        return result;
++    }
++
++    private static String findTarget(ClassReader reader) {
++        var target = new String[1];
++        reader.accept(new ClassVisitor(Opcodes.ASM9) {
++            @Override
++            public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
++                if (!desc.equals(SUPPLEMENT_DESC)) {
++                    return null;
++                }
++                return new AnnotationVisitor(Opcodes.ASM9) {
++                    @Override
++                    public void visit(String name, Object value) {
++                        if (name.equals("value")) {
++                            target[0] = ((Type) value).getInternalName();
++                        }
++                    }
++                };
++            }
++        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
++        return target[0];
++    }
++
++    /**
++     * Returns the class with its supplements' methods added, or the class itself when it has no supplements.
++     */
++    public byte[] apply(byte[] bytes) {
++        var reader = new ClassReader(bytes);
++        var className = reader.getClassName();
++        var classSupplements = supplements.get(className);
++        if (classSupplements == null) {
++            return bytes;
++        }
++        if (!applied.add(className)) {
++            throw new IllegalStateException("Supplements of " + className + " are applied twice");
++        }
++        var writer = new ClassWriter(0);
++        var declared = new HashSet<String>();
++        reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
++            @Override
++            public MethodVisitor visitMethod(int access, String name, String desc, String signature,
++                    String[] exceptions) {
++                declared.add(name + desc);
++                return super.visitMethod(access, name, desc, signature, exceptions);
++            }
++
++            @Override
++            public void visitEnd() {
++                for (var supplement : classSupplements) {
++                    copyMethods(new ClassReader(supplement), className, declared, writer);
++                }
++                super.visitEnd();
++            }
++        }, 0);
++        return writer.toByteArray();
++    }
++
++    /**
++     * Fails unless every supplement was applied, i.e. the class library contained every target.
++     */
++    public void checkApplied() {
++        for (var target : supplements.keySet()) {
++            if (!applied.contains(target)) {
++                throw new IllegalStateException("Supplemented class " + target + " was not found");
++            }
++        }
++    }
++
++    private static void copyMethods(ClassReader supplement, String target, Set<String> declared, ClassWriter writer) {
++        var name = supplement.getClassName();
++        var supertypes = new ArrayList<String>(List.of(supplement.getInterfaces()));
++        if (!supplement.getSuperName().equals("java/lang/Object")) {
++            supertypes.add(supplement.getSuperName());
++        }
++        if (!supertypes.isEmpty() && !supertypes.equals(List.of(target))) {
++            throw new IllegalStateException(name + " must extend nothing but " + target);
++        }
++        var remapper = new Remapper(name, target);
++        supplement.accept(new ClassVisitor(Opcodes.ASM9) {
++            @Override
++            public FieldVisitor visitField(int access, String fieldName, String desc, String signature,
++                    Object value) {
++                throw new IllegalStateException(name + " must not declare fields");
++            }
++
++            @Override
++            public MethodVisitor visitMethod(int access, String methodName, String desc, String signature,
++                    String[] exceptions) {
++                if (methodName.equals("<init>")) {
++                    return null;
++                }
++                if (methodName.equals("<clinit>") || (access & (Opcodes.ACC_SYNTHETIC | Opcodes.ACC_BRIDGE)) != 0) {
++                    throw new IllegalStateException(name + "." + methodName + " can't be added to " + target);
++                }
++                desc = remapper.desc(desc);
++                if (!declared.add(methodName + desc)) {
++                    throw new IllegalStateException(target + " already declares " + methodName + desc);
++                }
++                var method = writer.visitMethod(access, methodName, desc, remapper.desc(signature), exceptions);
++                return new RemappingMethodVisitor(method, remapper, name + "." + methodName);
++            }
++        }, ClassReader.SKIP_DEBUG);
++    }
++
++    private static final class Remapper {
++        private final String from;
++        private final String to;
++
++        Remapper(String from, String to) {
++            this.from = from;
++            this.to = to;
++        }
++
++        String name(String name) {
++            return from.equals(name) ? to : name;
++        }
++
++        String desc(String desc) {
++            return desc == null ? null : desc.replace("L" + from + ";", "L" + to + ";");
++        }
++
++        Object value(Object value) {
++            if (value instanceof Type) {
++                var type = (Type) value;
++                return type.getSort() == Type.OBJECT ? Type.getObjectType(name(type.getInternalName()))
++                        : Type.getType(desc(type.getDescriptor()));
++            }
++            if (value instanceof Handle) {
++                var handle = (Handle) value;
++                return new Handle(handle.getTag(), name(handle.getOwner()), handle.getName(), desc(handle.getDesc()),
++                        handle.isInterface());
++            }
++            return value;
++        }
++
++        Object[] frame(Object[] values) {
++            if (values == null) {
++                return null;
++            }
++            var result = values.clone();
++            for (var i = 0; i < result.length; ++i) {
++                if (result[i] instanceof String) {
++                    result[i] = name((String) result[i]);
++                }
++            }
++            return result;
++        }
++    }
++
++    private static final class RemappingMethodVisitor extends MethodVisitor {
++        private final Remapper remapper;
++        private final String location;
++
++        RemappingMethodVisitor(MethodVisitor mv, Remapper remapper, String location) {
++            super(Opcodes.ASM9, mv);
++            this.remapper = remapper;
++            this.location = location;
++        }
++
++        @Override
++        public void visitFrame(int type, int numLocal, Object[] local, int numStack, Object[] stack) {
++            super.visitFrame(type, numLocal, remapper.frame(local), numStack, remapper.frame(stack));
++        }
++
++        @Override
++        public void visitTypeInsn(int opcode, String type) {
++            super.visitTypeInsn(opcode, remapper.name(type));
++        }
++
++        @Override
++        public void visitFieldInsn(int opcode, String owner, String name, String desc) {
++            super.visitFieldInsn(opcode, remapper.name(owner), name, remapper.desc(desc));
++        }
++
++        @Override
++        public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean isInterface) {
++            if (opcode == Opcodes.INVOKESPECIAL && !name.equals("<init>")) {
++                throw new IllegalStateException(location + " must not call super or private methods");
++            }
++            super.visitMethodInsn(opcode, remapper.name(owner), name, remapper.desc(desc), isInterface);
++        }
++
++        @Override
++        public void visitInvokeDynamicInsn(String name, String desc, Handle bsm, Object... bsmArgs) {
++            var args = bsmArgs.clone();
++            for (var i = 0; i < args.length; ++i) {
++                args[i] = remapper.value(args[i]);
++            }
++            super.visitInvokeDynamicInsn(name, remapper.desc(desc), (Handle) remapper.value(bsm), args);
++        }
++
++        @Override
++        public void visitLdcInsn(Object value) {
++            super.visitLdcInsn(remapper.value(value));
++        }
++
++        @Override
++        public void visitMultiANewArrayInsn(String desc, int numDimensions) {
++            super.visitMultiANewArrayInsn(remapper.desc(desc), numDimensions);
++        }
++
++        @Override
++        public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
++            super.visitTryCatchBlock(start, end, handler, type == null ? null : remapper.name(type));
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/Compiler.java b/compiler/src/main/java/org/teavm/javac/Compiler.java
+--- a/compiler/src/main/java/org/teavm/javac/Compiler.java
++++ b/compiler/src/main/java/org/teavm/javac/Compiler.java
+@@ -280,6 +280,7 @@
+         new JSOPlugin().install(teavm);
+         new PlatformPlugin().install(teavm);
+         new JCLPlugin().install(teavm);
++        BootstrapDependencySupport.install(teavm);
+         teavm.setEntryPoint(mainClass);
+         target.setObfuscated(false);
+         target.setDebugInfoLocation(WasmDebugInfoLocation.EMBEDDED);
+diff --git a/compiler/src/main/java/org/teavm/javac/PluggableDependencySupport.java b/compiler/src/main/java/org/teavm/javac/PluggableDependencySupport.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/main/java/org/teavm/javac/PluggableDependencySupport.java
+@@ -0,0 +1,67 @@
++/*
++ *  Copyright 2026 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++
++package org.teavm.javac;
++
++import java.util.Map;
++import java.util.function.Supplier;
++import org.teavm.classlib.java.lang.ClassGenerator;
++import org.teavm.classlib.java.lang.ObjectDependencyPlugin;
++import org.teavm.classlib.java.lang.StringNativeDependency;
++import org.teavm.classlib.java.lang.SystemDependencyPlugin;
++import org.teavm.classlib.java.lang.reflect.ArrayDependencyPlugin;
++import org.teavm.dependency.AbstractDependencyListener;
++import org.teavm.dependency.DependencyAgent;
++import org.teavm.dependency.DependencyPlugin;
++import org.teavm.dependency.MethodDependency;
++import org.teavm.dependency.PluggableDependency;
++import org.teavm.jso.impl.JSNativeInjector;
++import org.teavm.model.ValueType;
++
++/**
++ * Applies dependency plugins that class library methods declare with {@link PluggableDependency}.
++ * <p>
++ * Normally, dependency analyzer does this itself, instantiating plugin classes via reflection. When TeaVM
++ * is compiled by TeaVM, which is the case here, it skips such annotations, so the plugins never run.
++ * For example, without {@link ObjectDependencyPlugin}, result of {@code Object.clone()} does not get the
++ * type of the cloned object, methods called on the clone are not linked, and code like {@code HashMap.clone()}
++ * or {@code String.format("%.2f", x)} fails at runtime with "dereferencing a null pointer".
++ * Since reflection is not available, plugins are enumerated explicitly. Plugins of {@code org.teavm.platform}
++ * are omitted, as this API is not supported by WebAssembly GC backend.
++ */
++class PluggableDependencySupport extends AbstractDependencyListener {
++    private static final Map<String, Supplier<DependencyPlugin>> PLUGINS = Map.of(
++            ObjectDependencyPlugin.class.getName(), ObjectDependencyPlugin::new,
++            ClassGenerator.class.getName(), ClassGenerator::new,
++            StringNativeDependency.class.getName(), StringNativeDependency::new,
++            SystemDependencyPlugin.class.getName(), SystemDependencyPlugin::new,
++            ArrayDependencyPlugin.class.getName(), ArrayDependencyPlugin::new,
++            JSNativeInjector.class.getName(), JSNativeInjector::new
++    );
++
++    @Override
++    public void methodReached(DependencyAgent agent, MethodDependency method) {
++        var annotation = method.getMethod().getAnnotations().get(PluggableDependency.class.getName());
++        if (annotation == null) {
++            return;
++        }
++        var pluginClassName = ((ValueType.Object) annotation.getValue("value").getJavaClass()).getClassName();
++        var plugin = PLUGINS.get(pluginClassName);
++        if (plugin != null) {
++            plugin.get().methodReached(agent, method);
++        }
++    }
++}
+diff --git a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+--- a/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
++++ b/compiler/src/main/java/org/teavm/javac/StdlibConverter.java
+@@ -23,6 +23,7 @@
+ import java.io.InputStream;
+ import java.io.UncheckedIOException;
+ import java.nio.file.Files;
++import java.nio.file.Path;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.LinkedHashSet;
+@@ -87,12 +88,23 @@
+             case "java/lang/RuntimeException":
+                 superName = "java/lang/Exception";
+                 break;
++            case "java/lang/annotation/Annotation":
++                // TAnnotation is declared as @interface, while Annotation of JDK is a plain interface
++                access &= ~Opcodes.ACC_ANNOTATION;
++                break;
+         }
+
+         if (interfaces != null) {
+-            for (int i = 0; i < interfaces.length; ++i) {
+-                interfaces[i] = rename(interfaces[i]);
+-            }
++            // Skip interfaces that turn into the class itself after renaming. For example, TAnnotation, being
++            // an @interface, extends java.lang.annotation.Annotation. javac does not check class files for cyclic
++            // inheritance, so Types.rank() recurses on such a class until the stack overflows, which happens
++            // whenever javac resolves an annotation element, as in @SuppressWarnings("unchecked").
++            var renamedInterfaces = new LinkedHashSet<String>();
++            for (var itf : interfaces) {
++                renamedInterfaces.add(rename(itf));
++            }
++            renamedInterfaces.remove(name);
++            interfaces = renamedInterfaces.toArray(new String[0]);
+         }
+         if (signature != null) {
+             signature = renameClassSignature(signature);
+@@ -466,9 +478,10 @@
+     }
+
+     public static void main(String[] args) throws IOException {
++        var supplements = ClasslibSupplements.load(Path.of(args[1]));
+         try (var output = new ArchiveBuilder(new FileOutputStream(args[0]))) {
+             var packageNames = new LinkedHashSet<String>();
+-            for (var i = 1; i < args.length; ++i) {
++            for (var i = 2; i < args.length; ++i) {
+                 var file = new File(args[i]);
+                 if (file.isFile()) {
+                     try (var input = new ZipInputStream(new FileInputStream(args[i]))) {
+@@ -481,7 +494,7 @@
+                                 continue;
+                             }
+
+-                            addFile(input, output, packageNames);
++                            addFile(input, supplements, output, packageNames);
+                         }
+                     }
+                 } else {
+@@ -489,7 +502,7 @@
+                         stream.forEach(path -> {
+                             if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(".class")) {
+                                 try {
+-                                    addFile(Files.newInputStream(path), output, packageNames);
++                                    addFile(Files.newInputStream(path), supplements, output, packageNames);
+                                 } catch (IOException e) {
+                                     throw new UncheckedIOException(e);
+                                 }
+@@ -498,6 +511,7 @@
+                     }
+                 }
+             }
++            supplements.checkApplied();
+             if (!packageNames.isEmpty()) {
+                 var writer = new ClassWriter(0);
+                 writer.visit(Opcodes.V21, Opcodes.ACC_MODULE, "java.base", null, null, null);
+@@ -511,8 +525,9 @@
+         }
+     }
+
+-    private static void addFile(InputStream input, ArchiveBuilder output, Set<String> packageNames) throws IOException {
+-        ClassReader reader = new ClassReader(input);
++    private static void addFile(InputStream input, ClasslibSupplements supplements, ArchiveBuilder output,
++            Set<String> packageNames) throws IOException {
++        ClassReader reader = new ClassReader(supplements.apply(input.readAllBytes()));
+         ClassWriter writer = new ClassWriter(0);
+         StdlibConverter converter = new StdlibConverter(writer, collectMethodRenames(reader));
+         reader.accept(converter, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES
+diff --git a/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java b/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/teavmDeterminism/java/org/teavm/dependency/TypeSet.java
+@@ -0,0 +1,332 @@
++/*
++ *  Copyright 2018 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++// Modified for wasm-idle. TeaVM 0.16.0 source: preserve deterministic iteration of identity-hashed dependency nodes.
++package org.teavm.dependency;
++
++import org.teavm.hppc.ObjectArrayList;
++import org.teavm.hppc.cursors.ObjectCursor;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.BitSet;
++import java.util.Collection;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Set;
++import java.util.function.Predicate;
++
++class TypeSet {
++    private static final int SMALL_TYPES_THRESHOLD = 3;
++    static final DependencyType[] EMPTY_TYPES = new DependencyType[0];
++    private DependencyAnalyzer dependencyAnalyzer;
++    DependencyNode origin;
++    private int[] smallTypes;
++    private BitSet types;
++    private int typesCount;
++
++    private Object domain;
++    ObjectArrayList<Transition> transitions;
++    ArrayList<ConsumerWithNode> consumers;
++
++    TypeSet(DependencyAnalyzer dependencyAnalyzer, DependencyNode origin) {
++        this.dependencyAnalyzer = dependencyAnalyzer;
++        this.origin = origin;
++        domain = origin;
++    }
++
++    void addType(DependencyType type) {
++        if (types == null) {
++            if (smallTypes == null) {
++                smallTypes = new int[] { type.index };
++                return;
++            }
++        }
++        if (smallTypes != null) {
++            if (smallTypes.length == SMALL_TYPES_THRESHOLD) {
++                types = new BitSet(dependencyAnalyzer.types.size() * 2);
++                for (int existingType : smallTypes) {
++                    types.set(existingType);
++                }
++                typesCount = smallTypes.length;
++                smallTypes = null;
++            } else {
++                smallTypes = Arrays.copyOf(smallTypes, smallTypes.length + 1);
++                smallTypes[smallTypes.length - 1] = type.index;
++                return;
++            }
++        }
++        types.set(type.index);
++        typesCount++;
++    }
++
++    DependencyType[] getTypes() {
++        if (this.types != null) {
++            DependencyType[] types = new DependencyType[this.types.cardinality()];
++            int j = 0;
++            for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                DependencyType type = dependencyAnalyzer.types.get(index);
++                types[j++] = type;
++            }
++            return types;
++        } else if (this.smallTypes != null) {
++            DependencyType[] types = new DependencyType[smallTypes.length];
++            for (int i = 0; i < types.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                types[i] = type;
++            }
++            return types;
++        } else {
++            return EMPTY_TYPES;
++        }
++    }
++
++    boolean hasMoreTypesThan(int limit, Predicate<DependencyType> filter) {
++        if (this.types != null) {
++            if (filter == null) {
++                return this.types.cardinality() > limit;
++            }
++            for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                DependencyType type = dependencyAnalyzer.types.get(index);
++                if (filter.test(type)) {
++                    if (--limit < 0) {
++                        return true;
++                    }
++                }
++            }
++            return false;
++        } else if (this.smallTypes != null) {
++            if (this.smallTypes.length <= limit) {
++                return false;
++            }
++            if (filter == null) {
++                return true;
++            }
++            for (int i = 0; i < smallTypes.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                if (filter.test(type)) {
++                    if (--limit < 0) {
++                        return true;
++                    }
++                }
++            }
++            return false;
++        } else {
++            return false;
++        }
++    }
++
++    DependencyType[] getTypesForNode(DependencyNode sourceNode, DependencyNode targetNode,
++            DependencyTypeFilter filter) {
++        int j = 0;
++        DependencyType[] types;
++        if (this.types != null) {
++            int[] filteredTypes = null;
++            if (typesCount > 15) {
++                filteredTypes = filter != null ? filter.tryExtract(this.types) : null;
++                if (filteredTypes == null) {
++                    filteredTypes = sourceNode.getFilter().tryExtract(this.types);
++                }
++                if (filteredTypes == null) {
++                    filteredTypes = targetNode.getFilter().tryExtract(this.types);
++                }
++            }
++            if (filteredTypes != null) {
++                types = new DependencyType[filteredTypes.length];
++                for (int index : filteredTypes) {
++                    DependencyType type = dependencyAnalyzer.types.get(index);
++                    if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                            && (filter == null || filter.match(type))) {
++                        types[j++] = type;
++                    }
++                }
++            } else {
++                types = new DependencyType[typesCount];
++                for (int index = this.types.nextSetBit(0); index >= 0; index = this.types.nextSetBit(index + 1)) {
++                    DependencyType type = dependencyAnalyzer.types.get(index);
++                    if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                            && (filter == null || filter.match(type))) {
++                        types[j++] = type;
++                    }
++                }
++            }
++        } else if (this.smallTypes != null) {
++            types = new DependencyType[smallTypes.length];
++            for (int i = 0; i < types.length; ++i) {
++                DependencyType type = dependencyAnalyzer.types.get(smallTypes[i]);
++                if (sourceNode.filter(type) && !targetNode.hasType(type) && targetNode.filter(type)
++                        && (filter == null || filter.match(type))) {
++                    types[j++] = type;
++                }
++            }
++        } else {
++            return EMPTY_TYPES;
++        }
++
++        if (j == 0) {
++            return EMPTY_TYPES;
++        }
++        if (j < types.length) {
++            types = Arrays.copyOf(types, j);
++        }
++        return types;
++    }
++
++    boolean hasType(DependencyType type) {
++        if (smallTypes != null) {
++            for (int i = 0; i < smallTypes.length; ++i) {
++                if (smallTypes[i] == type.index) {
++                    return true;
++                }
++            }
++            return false;
++        }
++        return types != null && types.get(type.index);
++    }
++
++    boolean hasAnyType() {
++        return types != null || smallTypes != null;
++    }
++
++    TypeSet copy(DependencyNode origin) {
++        TypeSet result = new TypeSet(dependencyAnalyzer, origin);
++        result.types = types != null ? (BitSet) types.clone() : null;
++        result.smallTypes = smallTypes;
++        result.typesCount = typesCount;
++        return result;
++    }
++
++    void invalidate() {
++        transitions = null;
++        consumers = null;
++    }
++
++    Set<? extends DependencyNode> domain() {
++        if (domain == null) {
++            return Set.of();
++        } else if (domain instanceof DependencyNode) {
++            return Set.of((DependencyNode) domain);
++        } else {
++            //noinspection unchecked
++            return (Set<? extends DependencyNode>) domain;
++        }
++    }
++
++    void addDomain(DependencyNode node) {
++        if (domain == null) {
++            domain = node;
++        } else if (domain instanceof DependencyNode) {
++            if (domain == node) {
++                return;
++            }
++            domain = new LinkedHashSet<>(Set.of((DependencyNode) domain));
++        }
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.add(node);
++    }
++
++    void addDomain(Collection<? extends DependencyNode> nodes) {
++        if (nodes.isEmpty()) {
++            return;
++        }
++        if (domain == null) {
++            if (nodes.size() == 1) {
++                domain = nodes.iterator().next();
++            }
++            return;
++        } else if (domain instanceof DependencyNode) {
++            if (nodes.contains(domain) && nodes.size() == 1) {
++                return;
++            }
++            domain = new LinkedHashSet<>(Set.of((DependencyNode) domain));
++        }
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.addAll(nodes);
++    }
++
++    void removeDomain(Collection<? extends DependencyNode> nodes) {
++        if (domain == null || nodes.isEmpty()) {
++            return;
++        }
++        if (domain instanceof DependencyNode) {
++            if (nodes.contains(domain)) {
++                domain = null;
++            }
++            return;
++        }
++
++        @SuppressWarnings("unchecked")
++        var set = (Set<DependencyNode>) domain;
++        set.removeAll(nodes);
++        if (set.isEmpty()) {
++            domain = null;
++        } else if (set.size() == 1) {
++            domain = set.iterator().next();
++        }
++    }
++
++    ObjectArrayList<Transition> getTransitions() {
++        if (transitions == null) {
++            transitions = new ObjectArrayList<>();
++            for (DependencyNode node : domain()) {
++                if (node.transitions != null) {
++                    for (ObjectCursor<Transition> cursor : node.transitionList) {
++                        Transition transition = cursor.value;
++                        if (transition.filter != null || transition.destination.typeSet != this) {
++                            transitions.add(transition);
++                        }
++                    }
++                }
++            }
++        }
++        return transitions;
++    }
++
++    List<ConsumerWithNode> getConsumers() {
++        if (domain == null) {
++            return List.of();
++        } else if (domain instanceof DependencyNode) {
++            var node = (DependencyNode) domain;
++            if (node.followers == null) {
++                return List.of();
++            } else {
++                return List.of(new ConsumerWithNode(node.followers.toArray(new DependencyConsumer[0]), node));
++            }
++        } else {
++            if (consumers == null) {
++                consumers = new ArrayList<>();
++                for (var node : domain()) {
++                    if (node.followers != null) {
++                        consumers.add(new ConsumerWithNode(node.followers.toArray(new DependencyConsumer[0]), node));
++                    }
++                }
++                consumers.trimToSize();
++            }
++            return consumers;
++        }
++    }
++
++    int typeCount() {
++        return smallTypes != null ? smallTypes.length : types != null ? typesCount : 0;
++    }
++
++    void cleanup() {
++        origin = null;
++        domain = null;
++        transitions = null;
++        consumers = null;
++    }
++}
+diff --git a/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java b/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java
+new file mode 100644
+--- /dev/null
++++ b/compiler/src/teavmDeterminism/java/org/teavm/model/classes/TagRegistry.java
+@@ -0,0 +1,151 @@
++/*
++ *  Copyright 2016 Alexey Andreev.
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ *  You may obtain a copy of the License at
++ *
++ *       http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++// Modified for wasm-idle. TeaVM 0.16.0 source: assign class tags in sorted class-name order.
++package org.teavm.model.classes;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.HashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.Set;
++import java.util.stream.Collectors;
++import org.teavm.model.ClassHierarchy;
++import org.teavm.model.ClassReader;
++import org.teavm.model.ElementModifier;
++import org.teavm.model.ListableClassReaderSource;
++
++public class TagRegistry {
++    private Map<String, List<Range>> ranges = new HashMap<>();
++
++    public TagRegistry(ListableClassReaderSource classSource, ClassHierarchy classHierarchy) {
++        List<String> classNames = new ArrayList<>(classSource.getClassNames());
++        Collections.sort(classNames);
++        List<String> roots = new ArrayList<>();
++        Map<String, Set<String>> implementedBy = new HashMap<>();
++
++        Map<String, List<String>> hierarchy = new HashMap<>();
++        for (String className : classNames) {
++            ClassReader cls = classSource.get(className);
++            if (cls == null || cls.hasModifier(ElementModifier.INTERFACE)) {
++                continue;
++            }
++            for (String iface : cls.getInterfaces()) {
++                markImplementor(classHierarchy, className, iface, implementedBy);
++            }
++            if (cls.getParent() == null || cls.getParent().equals(cls.getName())) {
++                roots.add(className);
++            } else {
++                hierarchy.computeIfAbsent(cls.getParent(), key -> new ArrayList<>()).add(className);
++            }
++        }
++
++        Map<String, Range> simpleRanges = new HashMap<>();
++        int current = 0;
++        for (String root : roots) {
++            current = 1 + assignRange(current, hierarchy, root, simpleRanges);
++        }
++
++        for (String className : classNames) {
++            ClassReader cls = classSource.get(className);
++            if (cls == null) {
++                continue;
++            }
++            if (cls.hasModifier(ElementModifier.INTERFACE)) {
++                Set<String> implementorRoots = implementedBy.get(cls.getName());
++                if (implementorRoots != null) {
++                    List<Range> ifaceRanges = implementorRoots.stream()
++                            .map(simpleRanges::get)
++                            .filter(Objects::nonNull)
++                            .sorted(Comparator.comparing(range -> range.lower))
++                            .collect(Collectors.toList());
++                    if (!ifaceRanges.isEmpty()) {
++                        ranges.put(className, ifaceRanges);
++                    }
++                }
++            } else {
++                Range simpleRange = simpleRanges.get(className);
++                if (simpleRange != null) {
++                    ranges.put(className, new ArrayList<>(Arrays.asList(simpleRange)));
++                }
++            }
++        }
++
++    }
++
++    private String findTopmostImplementor(ClassHierarchy hierarchy, String className, String ifaceName) {
++        ClassReader cls = hierarchy.getClassSource().get(className);
++        if (cls == null) {
++            return null;
++        }
++
++        if (cls.getParent() != null) {
++            String candidate = findTopmostImplementor(hierarchy, cls.getParent(), ifaceName);
++            if (candidate != null) {
++                return candidate;
++            }
++        }
++
++        return hierarchy.isSuperType(ifaceName, className, false) ? className : null;
++    }
++
++    private void markImplementor(ClassHierarchy hierarchy, String className, String ifaceName,
++            Map<String, Set<String>> implementedBy) {
++        className = findTopmostImplementor(hierarchy, className, ifaceName);
++
++        if (!implementedBy.computeIfAbsent(ifaceName, key -> new LinkedHashSet<>()).add(className)) {
++            return;
++        }
++
++        ClassReader iface = hierarchy.getClassSource().get(ifaceName);
++        if (iface == null) {
++            return;
++        }
++
++        for (String superIface : iface.getInterfaces()) {
++            markImplementor(hierarchy, className, superIface, implementedBy);
++        }
++    }
++
++    private int assignRange(int start, Map<String, List<String>> hierarchy, String className,
++            Map<String, Range> ranges) {
++        int end = start + 1;
++        for (String childClass : hierarchy.getOrDefault(className, Collections.emptyList())) {
++            end = assignRange(end, hierarchy, childClass, ranges);
++        }
++        ++end;
++        ranges.put(className, new Range(start, end));
++        return end;
++    }
++
++    public List<Range> getRanges(String className) {
++        return new ArrayList<>(ranges.getOrDefault(className, Collections.emptyList()));
++    }
++
++    public static class Range {
++        public int lower;
++        public int upper;
++
++        private Range(int lower, int upper) {
++            this.lower = lower;
++            this.upper = upper;
++        }
++    }
++}

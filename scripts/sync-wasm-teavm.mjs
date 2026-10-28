@@ -610,6 +610,9 @@ export async function produceWasmTeaVmAssets(options) {
 	const gradle = requireObject(build.gradle, 'Gradle metadata');
 	const node = requireObject(build.node, 'Node metadata');
 	const overlay = requireObject(build.overlay, 'overlay metadata');
+	if (overlay.mode !== 'gradle-source-set') {
+		throw new Error('TeaVM producer requires the integrated Gradle overlay source set');
+	}
 	const components = requireObject(lock.components, 'component metadata');
 	const teavm = requireObject(components.teavm, 'TeaVM component metadata');
 	const openjdk = requireObject(components.openjdk, 'OpenJDK metadata');
@@ -631,72 +634,6 @@ export async function produceWasmTeaVmAssets(options) {
 		jdkArchivePath,
 		validateReceipt(jdkArchive, 'TeaVM JDK archive'),
 		'TeaVM JDK archive'
-	);
-	if (
-		!Array.isArray(overlay.sources) ||
-		overlay.sources.length === 0 ||
-		!Array.isArray(overlay.classes) ||
-		overlay.classes.length === 0
-	) {
-		throw new Error('TeaVM producer lock is missing overlay sources or classes');
-	}
-	const overlaySources = overlay.sources.map((entry) =>
-		requireObject(entry, 'overlay source metadata')
-	);
-	const overlayClasses = overlay.classes.map((entry) =>
-		requireObject(entry, 'overlay class metadata')
-	);
-	// wasm-idle-authored classes that the canonical archive does not contain.
-	if (
-		(overlay.addedSources !== undefined && !Array.isArray(overlay.addedSources)) ||
-		(overlay.addedClasses !== undefined && !Array.isArray(overlay.addedClasses))
-	) {
-		throw new Error('TeaVM producer lock has invalid added overlay sources or classes');
-	}
-	const addedOverlaySources = (overlay.addedSources ?? []).map((entry) =>
-		requireObject(entry, 'added overlay source metadata')
-	);
-	const addedOverlayClasses = (overlay.addedClasses ?? []).map((entry) =>
-		requireObject(entry, 'added overlay class metadata')
-	);
-	for (const [entries, field] of [
-		[[...overlaySources, ...addedOverlaySources], 'sourcePath'],
-		[overlaySources, 'upstreamSourceEntry'],
-		[[...overlayClasses, ...addedOverlayClasses], 'targetEntry']
-	]) {
-		if (
-			entries.some((entry) => typeof entry[field] !== 'string') ||
-			new Set(entries.map((entry) => entry[field])).size !== entries.length
-		) {
-			throw new Error(`TeaVM producer lock has invalid or duplicate overlay ${field}`);
-		}
-	}
-	for (const entry of [...overlaySources, ...addedOverlaySources]) {
-		await verifyFileReceipt(
-			path.resolve(
-				repoRoot,
-				validateRelativePath(entry.sourcePath, 'TeaVM overlay source path')
-			),
-			validateReceipt(
-				{ bytes: entry.sourceBytes, sha256: entry.sourceSha256 },
-				`TeaVM overlay source ${entry.sourcePath}`
-			),
-			`TeaVM overlay source ${entry.sourcePath}`
-		);
-	}
-	if (typeof overlay.utilityPath !== 'string') {
-		throw new Error('TeaVM producer lock has invalid overlay utility path');
-	}
-	await verifyFileReceipt(
-		path.resolve(
-			repoRoot,
-			validateRelativePath(overlay.utilityPath, 'TeaVM overlay utility path')
-		),
-		validateReceipt(
-			{ bytes: overlay.utilityBytes, sha256: overlay.utilitySha256 },
-			'TeaVM overlay utility'
-		),
-		'TeaVM overlay utility'
 	);
 	if (typeof verificationMetadata.path !== 'string') {
 		throw new Error('TeaVM producer lock has invalid Gradle verification-metadata path');
@@ -788,6 +725,21 @@ export async function produceWasmTeaVmAssets(options) {
 				env: { ...process.env, GIT_CEILING_DIRECTORIES: temporaryRoot }
 			});
 		}
+		if (!Array.isArray(overlay.sources) || overlay.sources.length === 0) {
+			throw new Error('TeaVM producer lock is missing integrated overlay source receipts');
+		}
+		for (const source of overlay.sources) {
+			if (!isObject(source) || typeof source.path !== 'string')
+				throw new Error('Invalid TeaVM overlay source');
+			await verifyFileReceipt(
+				path.join(
+					buildRoot,
+					validateRelativePath(source.path, 'TeaVM overlay source path')
+				),
+				validateReceipt(source, 'TeaVM overlay source'),
+				`TeaVM integrated overlay ${source.path}`
+			);
+		}
 		await run('tar', ['-xzf', jdkArchivePath, '-C', jdkExtractRoot], {
 			cwd: temporaryRoot,
 			env: process.env
@@ -822,9 +774,20 @@ export async function produceWasmTeaVmAssets(options) {
 			'gradle-wrapper.properties'
 		);
 		const wrapperProperties = await readFile(wrapperPropertiesPath, 'utf8');
+		if (
+			!wrapperProperties
+				.replaceAll('\\:', ':')
+				.includes(`distributionUrl=${gradle.distributionUrl}`)
+		) {
+			throw new Error('TeaVM Gradle distribution URL differs from its lock');
+		}
 		await writeFile(
 			wrapperPropertiesPath,
 			`${wrapperProperties.trimEnd()}\ndistributionSha256Sum=${gradle.distributionSha256}\n`
+		);
+		await writeFile(
+			path.join(gradleUserHome, 'gradle.properties'),
+			'org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=256m\norg.gradle.workers.max=1\norg.gradle.parallel=false\n'
 		);
 		const buildEnvironment = {
 			...process.env,
@@ -832,125 +795,55 @@ export async function produceWasmTeaVmAssets(options) {
 			GRADLE_USER_HOME: gradleUserHome,
 			PATH: `${path.join(javaHome, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`
 		};
-		await run('./gradlew', ['--no-daemon', 'clean', ':javac:downloadJDK'], {
-			cwd: buildRoot,
-			env: buildEnvironment
-		});
+		await run(
+			'./gradlew',
+			['--no-daemon', '--dependency-verification', 'strict', 'clean', ':javac:downloadJDK'],
+			{
+				cwd: buildRoot,
+				env: buildEnvironment
+			}
+		);
 		const openjdkZip = path.join(buildRoot, 'javac', 'build', `jdk-${openjdk.revision}.zip`);
 		await verifyFileReceipt(
 			openjdkZip,
 			validateReceipt(openjdkArchive, 'TeaVM OpenJDK source archive'),
 			'TeaVM OpenJDK source archive'
 		);
-		await run('./gradlew', ['--no-daemon', ':compiler:createDist'], {
-			cwd: buildRoot,
-			env: buildEnvironment
-		});
-		if (!Array.isArray(teavm.artifacts)) {
-			throw new Error('TeaVM producer lock is missing TeaVM source artifact metadata');
-		}
-		const sourceArtifact = teavm.artifacts.find(
-			(artifact) =>
-				isObject(artifact) && artifact.name === 'teavm-classlib-0.13.1-sources.jar'
-		);
-		if (!isObject(sourceArtifact) || typeof sourceArtifact.url !== 'string') {
-			throw new Error('TeaVM producer lock is missing the TeaVM classlib source JAR');
-		}
-		const sourceJarPath = path.join(temporaryRoot, sourceArtifact.name);
-		await run('curl', ['--fail', '--location', '--output', sourceJarPath, sourceArtifact.url], {
-			cwd: temporaryRoot,
-			env: buildEnvironment
-		});
-		await verifyFileReceipt(
-			sourceJarPath,
-			validateReceipt(sourceArtifact, 'TeaVM classlib source JAR'),
-			'TeaVM classlib source JAR'
-		);
-		const upstreamSourceRoot = path.join(temporaryRoot, 'upstream-overlay-source');
-		await mkdir(upstreamSourceRoot);
 		await run(
-			'unzip',
-			[
-				'-q',
-				sourceJarPath,
-				...overlaySources.map((entry) => entry.upstreamSourceEntry),
-				'-d',
-				upstreamSourceRoot
-			],
-			{ cwd: temporaryRoot, env: buildEnvironment }
+			'./gradlew',
+			['--no-daemon', '--dependency-verification', 'strict', ':compiler:createDist'],
+			{
+				cwd: buildRoot,
+				env: buildEnvironment
+			}
 		);
-		for (const entry of overlaySources) {
-			const upstreamSource = await verifyFileReceipt(
-				path.join(upstreamSourceRoot, ...entry.upstreamSourceEntry.split('/')),
-				validateReceipt(
-					{
-						bytes: entry.upstreamSourceBytes,
-						sha256: entry.upstreamSourceSha256
-					},
-					`TeaVM upstream overlay source ${entry.upstreamSourceEntry}`
-				),
-				`TeaVM upstream overlay source ${entry.upstreamSourceEntry}`
-			);
-			if (!Array.isArray(entry.transforms) || entry.transforms.length === 0) {
-				throw new Error(`TeaVM overlay ${entry.sourcePath} has no source transforms`);
-			}
-			let sourceText = upstreamSource.toString('utf8');
-			for (const transform of entry.transforms) {
-				if (
-					!isObject(transform) ||
-					typeof transform.from !== 'string' ||
-					!transform.from ||
-					typeof transform.to !== 'string' ||
-					!Number.isSafeInteger(transform.expectedOccurrences) ||
-					transform.expectedOccurrences <= 0
-				) {
-					throw new Error('TeaVM producer lock has an invalid overlay transform');
-				}
-				const occurrences = sourceText.split(transform.from).length - 1;
-				if (occurrences !== transform.expectedOccurrences) {
-					throw new Error(
-						`TeaVM overlay ${entry.upstreamSourceEntry} expected ${transform.expectedOccurrences} source occurrences, found ${occurrences}`
-					);
-				}
-				sourceText = sourceText.split(transform.from).join(transform.to);
-			}
-			const transformedSource = Buffer.from(sourceText);
-			const vendoredOverlaySource = await readFile(path.resolve(repoRoot, entry.sourcePath));
-			if (!transformedSource.equals(vendoredOverlaySource)) {
-				throw new Error(
-					`TeaVM vendored overlay ${entry.sourcePath} is not the locked source transform`
-				);
-			}
-		}
-		const distributionZip = path.join(
-			buildRoot,
-			'compiler',
-			'build',
-			'distributions',
-			'dist.zip'
-		);
-		await run('unzip', ['-q', distributionZip, ...LOGICAL_ASSETS, '-d', distDir], {
-			cwd: temporaryRoot,
-			env: buildEnvironment
-		});
+		const deobfuscatorName = `teavm-wasm-gc-deobfuscator-${teavm.version}.jar`;
+		if (!Array.isArray(teavm.artifacts))
+			throw new Error('TeaVM component artifact receipts are missing');
 		const deobfuscatorArtifact = teavm.artifacts.find(
-			(artifact) =>
-				isObject(artifact) && artifact.name === 'teavm-wasm-gc-deobfuscator-0.13.1.jar'
+			(artifact) => isObject(artifact) && artifact.name === deobfuscatorName
 		);
-		if (!isObject(deobfuscatorArtifact) || typeof deobfuscatorArtifact.name !== 'string') {
-			throw new Error('TeaVM producer lock is missing the stack deobfuscator JAR');
-		}
-		const deobfuscatorJar = await findFileByName(
-			path.join(
-				gradleUserHome,
-				'caches',
+		if (!isObject(deobfuscatorArtifact))
+			throw new Error('TeaVM stack deobfuscator input is missing');
+		let deobfuscatorJar;
+		for (const cache of [
+			path.join(gradleUserHome, 'caches'),
+			buildEnvironment.GRADLE_RO_DEP_CACHE
+		]) {
+			if (!cache) continue;
+			const directory = path.join(
+				cache,
 				'modules-2',
 				'files-2.1',
 				'org.teavm',
 				'teavm-wasm-gc-deobfuscator'
-			),
-			deobfuscatorArtifact.name
-		);
+			);
+			deobfuscatorJar = await findFileByName(directory, deobfuscatorName).catch((error) => {
+				if (error.code === 'ENOENT') return undefined;
+				throw error;
+			});
+			if (deobfuscatorJar) break;
+		}
 		if (!deobfuscatorJar)
 			throw new Error('TeaVM stack deobfuscator dependency was not resolved');
 		await verifyFileReceipt(
@@ -958,155 +851,32 @@ export async function produceWasmTeaVmAssets(options) {
 			validateReceipt(deobfuscatorArtifact, 'TeaVM stack deobfuscator JAR'),
 			'TeaVM stack deobfuscator JAR'
 		);
+		await run(
+			'unzip',
+			[
+				'-q',
+				path.join(buildRoot, 'compiler/build/distributions/dist.zip'),
+				...LOGICAL_ASSETS.filter((asset) => asset !== 'compiler.wasm-deobfuscator.wasm'),
+				'-d',
+				distDir
+			],
+			{
+				cwd: temporaryRoot,
+				env: buildEnvironment
+			}
+		);
 		const { stdout: deobfuscatorBytes } = await execFile(
 			'unzip',
 			['-p', deobfuscatorJar, 'org/teavm/backend/wasm/deobfuscator.wasm'],
-			{ encoding: 'buffer', maxBuffer: 1024 * 1024 }
-		);
-		if (
-			!deobfuscatorBytes.equals(
-				await readFile(path.join(distDir, 'compiler.wasm-deobfuscator.wasm'))
-			)
-		) {
-			throw new Error('TeaVM stack deobfuscator differs from its pinned JAR resource');
-		}
-		if (!Array.isArray(build.upstreamOutputs)) {
-			throw new Error('TeaVM producer lock is missing upstream output receipts');
-		}
-		const upstreamReceipts = build.upstreamOutputs.map((entry) => ({
-			path: validateRelativePath(entry.path, 'TeaVM upstream output path'),
-			...validateReceipt(entry, `TeaVM upstream ${entry.path}`)
-		}));
-		for (const receipt of upstreamReceipts) {
-			await verifyFileReceipt(
-				path.join(distDir, receipt.path),
-				receipt,
-				`TeaVM upstream output ${receipt.path}`
-			);
-		}
-		if (!Array.isArray(overlay.classpath) || overlay.classpath.length === 0) {
-			throw new Error('TeaVM producer lock is missing the overlay classpath');
-		}
-		const classpath = [];
-		for (const artifact of overlay.classpath) {
-			if (
-				!isObject(artifact) ||
-				typeof artifact.name !== 'string' ||
-				typeof artifact.version !== 'string'
-			) {
-				throw new Error('TeaVM producer lock has an invalid overlay classpath entry');
+			{
+				encoding: 'buffer',
+				maxBuffer: 1024 * 1024
 			}
-			const jarName = `${artifact.name}-${artifact.version}.jar`;
-			const jarPath = await findFileByName(
-				path.join(
-					gradleUserHome,
-					'caches',
-					'modules-2',
-					'files-2.1',
-					'org.teavm',
-					artifact.name
-				),
-				jarName
-			);
-			if (!jarPath) throw new Error(`TeaVM overlay dependency was not resolved: ${jarName}`);
-			await verifyFileReceipt(
-				jarPath,
-				validateReceipt(artifact, `TeaVM ${jarName}`),
-				`TeaVM overlay dependency ${jarName}`
-			);
-			classpath.push(jarPath);
-		}
-		const overlayClassRoot = path.join(temporaryRoot, 'overlay-classes');
-		const utilityClasses = path.join(temporaryRoot, 'utility-classes');
-		await Promise.all([mkdir(overlayClassRoot), mkdir(utilityClasses)]);
-		const overlayUtilityPath = path.resolve(repoRoot, overlay.utilityPath);
-		await run(
-			path.join(javaHome, 'bin', 'javac'),
-			[
-				'--release',
-				String(overlay.release),
-				'-cp',
-				classpath.join(path.delimiter),
-				'-d',
-				overlayClassRoot,
-				...[...overlaySources, ...addedOverlaySources].map((entry) =>
-					path.resolve(repoRoot, entry.sourcePath)
-				)
-			],
-			{ cwd: temporaryRoot, env: buildEnvironment }
 		);
-		// Nested classes compile to separate entries; every emitted class must be locked.
-		const compiledOverlayClasses = (await readdir(overlayClassRoot, { recursive: true }))
-			.filter((entry) => entry.endsWith('.class'))
-			.map((entry) => entry.split(path.sep).join('/'))
-			.sort();
-		if (
-			JSON.stringify(compiledOverlayClasses) !==
-			JSON.stringify(
-				[...overlayClasses, ...addedOverlayClasses].map((entry) => entry.targetEntry).sort()
-			)
-		) {
-			throw new Error(
-				`TeaVM overlay classes do not match javac output: ${compiledOverlayClasses.join(', ')}`
-			);
-		}
-		const overlayReplacementArgs = [];
-		for (const entry of [...overlayClasses, ...addedOverlayClasses]) {
-			const overlayClassPath = path.join(overlayClassRoot, ...entry.targetEntry.split('/'));
-			await verifyFileReceipt(
-				overlayClassPath,
-				validateReceipt(
-					{ bytes: entry.classBytes, sha256: entry.classSha256 },
-					`TeaVM overlay class ${entry.targetEntry}`
-				),
-				`TeaVM overlay class ${entry.targetEntry}`
-			);
-			overlayReplacementArgs.push(
-				entry.targetEntry,
-				overlayClassPath,
-				// '-' asks the utility to append an entry the canonical archive must not contain.
-				addedOverlayClasses.includes(entry) ? '-' : entry.canonicalClassSha256,
-				entry.classSha256
-			);
-		}
-		await run(
-			path.join(javaHome, 'bin', 'javac'),
-			['--release', '17', '-d', utilityClasses, overlayUtilityPath],
-			{ cwd: temporaryRoot, env: buildEnvironment }
-		);
-		const canonicalRuntimePath = path.join(distDir, 'runtime-classlib-teavm.bin');
-		const canonicalRuntimeReceipt = validateReceipt(
-			overlay.canonicalRuntime,
-			'TeaVM canonical runtime classlib'
-		);
-		await verifyFileReceipt(
-			canonicalRuntimePath,
-			canonicalRuntimeReceipt,
-			'TeaVM canonical runtime classlib'
-		);
-		const patchedRuntimePath = path.join(temporaryRoot, 'runtime-classlib-teavm.bin');
-		await run(
-			path.join(javaHome, 'bin', 'java'),
-			[
-				'-cp',
-				utilityClasses,
-				'ApplyRuntimeClasslibOverlay',
-				canonicalRuntimePath,
-				patchedRuntimePath,
-				String(overlay.archiveEntryCount),
-				...overlayReplacementArgs
-			],
-			{ cwd: temporaryRoot, env: buildEnvironment }
-		);
-		const finalRuntimeReceipt = lock.outputs.find(
-			(output) => output.path === 'runtime-classlib-teavm.bin'
-		);
-		const patchedRuntime = await verifyFileReceipt(
-			patchedRuntimePath,
-			finalRuntimeReceipt,
-			'TeaVM patched runtime classlib'
-		);
-		await writeFile(canonicalRuntimePath, patchedRuntime);
+		await writeFile(path.join(distDir, 'compiler.wasm-deobfuscator.wasm'), deobfuscatorBytes);
+		// The Gradle source set already applied and verified every classlib replacement.
+		// Transactional publication below rejects any output differing from the independently
+		// reproduced five-asset receipt, including the JAR's deobfuscator resource.
 		return await syncWasmTeaVmAssets({
 			distDir,
 			targetDir: options.targetDir,

@@ -1,0 +1,21 @@
+// Run with the prepared compiler checkout: ./gradlew -I <this-file> :compiler:verifyEmitterClasspath
+gradle.projectsEvaluated {
+    def compiler = gradle.rootProject.project(":compiler")
+    compiler.tasks.register("verifyEmitterClasspath") {
+        dependsOn compiler.tasks.named("classes")
+        doLast {
+            def classpath = compiler.tasks.named("generateWasmGC").get().classpath.files.toList()
+            def ownOutputs = compiler.sourceSets.main.output.files.toList()
+            assert classpath.take(ownOutputs.size()) == ownOutputs :
+                    "Compiler source outputs must precede dependency JARs"
+            def coreIndex = classpath.findIndexOf { it.name == "teavm-core-0.16.0.jar" }
+            assert coreIndex >= ownOutputs.size() : "Missing or shadowing teavm-core dependency"
+            ["WasmBinaryRenderer", "WasmBinaryRenderingVisitor"].each { name ->
+                assert ownOutputs.any {
+                    new File(it, "org/teavm/backend/wasm/render/${name}.class").isFile()
+                } : "Missing compiler emitter override: ${name}"
+            }
+            println "Compiler emitter overrides precede teavm-core; both patched classes are present"
+        }
+    }
+}
