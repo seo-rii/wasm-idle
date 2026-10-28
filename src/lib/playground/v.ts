@@ -768,15 +768,21 @@ class VLang extends CompiledLldbSandbox implements Sandbox {
 
 	private cancelOperation(operation: VOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
-		void this.stopLldb();
-		this.finishExplicitStdin(operation);
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
-		this.activeOperation = null;
+		// Retain ownership while stop listeners run so reentrant cancellation cannot
+		// replace the original reason or start a replacement before teardown finishes.
+		void this.stopLldb();
+		this.finishCancellation(operation);
+	}
+
+	private finishCancellation(operation: VOperation) {
+		if (!this.releaseOperation(operation)) return;
+		this.finishExplicitStdin(operation);
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate(reason);
+		this.workerSession.terminate(operation.cancellationReason);
 		this.exit = true;
 		this.cleanupOperation(operation);
 	}
@@ -787,12 +793,12 @@ class VLang extends CompiledLldbSandbox implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		if (this.disposed) return;
-		void this.stopLldb();
 		const operation = this.activeOperation;
 		if (operation) {
 			this.cancelOperation(operation, reason);
 			return;
 		}
+		void this.stopLldb();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -812,11 +818,15 @@ class VLang extends CompiledLldbSandbox implements Sandbox {
 
 	dispose() {
 		if (this.disposePromise) return this.disposePromise;
-		void this.stopLldb();
 		this.disposed = true;
 		this.disposePromise = Promise.resolve();
 
 		const activeOperation = this.activeOperation;
+		if (activeOperation && !activeOperation.cancelled) {
+			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = this.disposeCancellation;
+		}
+		void this.stopLldb();
 		const assetBridge = this.assetBridge;
 		delete this.worker;
 		this.assetBridge = null;
@@ -829,7 +839,7 @@ class VLang extends CompiledLldbSandbox implements Sandbox {
 			// Asset cleanup is best effort after host state becomes unreachable.
 		}
 		if (activeOperation) {
-			this.cancelOperation(activeOperation, this.disposeCancellation);
+			this.finishCancellation(activeOperation);
 		} else {
 			this.uid += 1;
 			this.workerSession.terminate(this.disposeCancellation);

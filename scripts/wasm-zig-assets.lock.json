@@ -1,12 +1,12 @@
 {
 	"schemaVersion": 3,
-	"profileId": "zigc-wasm-0.17.0",
-	"releaseBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-llvm/2652ff9008b966397a46bbeecccc7c83225a6dd6/artifacts/zig-browser",
+	"profileId": "zigc-wasm-0.17.0-ir",
+	"releaseBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-llvm/137a9f194a5031db3a41c572ab7f2c3eacf97056/artifacts/zig-browser",
 	"allowedRedirectOrigins": [],
 	"inputs": {
 		"zig.wasm": {
-			"bytes": 4206625,
-			"sha256": "84723f2ff867a26b3799377647a55778ce07d6c89b46fb781e7e9149a7be4765"
+			"bytes": 4934128,
+			"sha256": "82a101fd16c4cee7925ffc8fa51ccd713b23f32b13591531de383444e1060fd9"
 		},
 		"lib.tar.gz": {
 			"bytes": 30362437,
@@ -15,8 +15,8 @@
 			"uncompressedSha256": "63a671ed94b5b3f41cca3f7cde7ab237c9b2e72aae682bbfadf09799fa803397"
 		},
 		"producer-receipt.json": {
-			"bytes": 1664,
-			"sha256": "5e29e340d2628dc7aef2db65a364f62a40e17107ad7644d8f03270546db5b4f4"
+			"bytes": 1944,
+			"sha256": "eb3015ef9572615e60050d4f4314aeec36b8cf49e22678b9aeb1c6b3090f0214"
 		},
 		"LICENSE": {
 			"bytes": 1080,

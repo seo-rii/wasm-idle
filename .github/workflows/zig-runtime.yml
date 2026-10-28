@@ -5,6 +5,7 @@ on:
         paths:
             - .github/workflows/zig-runtime.yml
             - scripts/zig017-browser-smoke.mjs
+            - scripts/zig-debug-browser-smoke.mjs
             - scripts/sync-wasm-zig.mjs
             - scripts/wasm-zig-assets.lock.json
             - static/wasm-zig/**
@@ -14,10 +15,13 @@ on:
             - src/routes/editor-defaults.ts
             - src/lib/test-fixtures/zig-stdin.zig
             - packages/lsp/src/zig/**
+            - packages/debug/src/language/zig.ts
+            - packages/llvm-core/runtime/clang/src/runtime.ts
     push:
         branches: [main]
         paths:
             - scripts/zig017-browser-smoke.mjs
+            - scripts/zig-debug-browser-smoke.mjs
             - scripts/sync-wasm-zig.mjs
             - scripts/wasm-zig-assets.lock.json
             - static/wasm-zig/**
@@ -27,6 +31,8 @@ on:
             - src/routes/editor-defaults.ts
             - src/lib/test-fixtures/zig-stdin.zig
             - packages/lsp/src/zig/**
+            - packages/debug/src/language/zig.ts
+            - packages/llvm-core/runtime/clang/src/runtime.ts
     workflow_dispatch:
 
 permissions:
@@ -35,7 +41,7 @@ permissions:
 jobs:
     chromium:
         runs-on: ubuntu-24.04
-        timeout-minutes: 15
+        timeout-minutes: 20
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -49,3 +55,9 @@ jobs:
             - run: pnpm exec playwright-core install --with-deps chromium
             - name: Compile and run Zig programs in the real browser Worker
               run: pnpm test:zig:browser
+            - name: Prepare the pinned LLVM backend and LLDB runtime
+              run: |
+                  pnpm run prepare:test-assets -- clang
+                  pnpm run prepare:wasm-debug-release
+            - name: Qualify Zig source debugging in Chromium
+              run: node scripts/zig-debug-browser-smoke.mjs

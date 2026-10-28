@@ -4,6 +4,12 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
+const debugPipeline = vi.hoisted(() => ({ compileZigDebugArtifact: vi.fn() }));
+vi.mock('./zigDebug', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./zigDebug')>()),
+	compileZigDebugArtifact: debugPipeline.compileZigDebugArtifact
+}));
+
 const encoder = new TextEncoder();
 const compilerAsset = new Uint8Array([0, 97, 115, 109]);
 const stdlibFile = strToU8('pub const std = true;');
@@ -129,7 +135,10 @@ const shim = vi.hoisted(() => {
 				if (state.compileOutput) state.compileOutput(this.fds);
 				else this.fds[1].write(encoder.encode('compile log\n'));
 				if (state.nextCompileExitCode !== 0) return state.nextCompileExitCode;
-				this.fds[3].dir.contents.set('output.wasm', new File(encoder.encode('wasm-out')));
+				const outputPath =
+					this.args.find((argument) => argument.startsWith('-femit-'))?.split('=')[1] ||
+					'output.wasm';
+				this.fds[3].dir.contents.set(outputPath, new File(encoder.encode('wasm-out')));
 				return 0;
 			}
 			state.runCount += 1;
@@ -224,6 +233,7 @@ describe('Zig worker', () => {
 		shim.state.runCount = 0;
 		shim.state.compileOutput = null;
 		shim.state.runOutput = null;
+		debugPipeline.compileZigDebugArtifact.mockReset();
 	});
 
 	it('loads compiler assets, compiles Zig source, and runs the emitted WASI artifact', async () => {
@@ -394,6 +404,227 @@ describe('Zig worker', () => {
 				([message]: [any]) => message.progress?.kind === 'ready'
 			)
 		).toHaveLength(1);
+	});
+
+	it('prepares real IR inputs and returns the cached LLDB artifact without running it', async () => {
+		const bytes = encoder.encode('debug-wasm');
+		const lldbArtifact = { bytes, descriptor: { kind: 'dwarf' }, sources: [] };
+		debugPipeline.compileZigDebugArtifact.mockResolvedValue(lldbArtifact);
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes
+			}
+		});
+		const request = {
+			code: 'pub fn main() void {}',
+			activePath: 'src/main.zig',
+			workspaceFiles: [
+				{ path: 'src/main.zig', content: 'old source' },
+				{ path: 'src/helper.zig', content: 'pub const n = 7;' }
+			],
+			buffer: new SharedArrayBuffer(1024),
+			debugMode: 'lldb',
+			debugClangPath: 'https://assets.example.test/clang/',
+			debugClangIntegrity: {
+				'runtime-manifest.v1.json': {
+					bytes: 1,
+					sha256: 'a'.repeat(64),
+					uncompressedBytes: 1,
+					uncompressedSha256: 'a'.repeat(64)
+				}
+			}
+		};
+		await (globalThis as any).self.onmessage({ data: { ...request, prepare: true } });
+		expect(shim.state.compileCount).toBe(2);
+		expect(shim.state.runCount).toBe(0);
+		const invocations = shim.state.constructed.filter(
+			(invocation) => invocation.args[0] === 'zigc.wasm'
+		);
+		expect(invocations[0].args).toEqual([
+			'zigc.wasm',
+			'build-exe',
+			'src/main.zig',
+			'-target',
+			'wasm32-wasi',
+			'-mcpu=mvp',
+			'-O',
+			'debug',
+			'-fllvm',
+			'-fno-libllvm',
+			'-fno-lld',
+			'-fno-emit-bin',
+			'-fno-compiler-rt',
+			'-femit-llvm-bc=output.bc'
+		]);
+		expect(invocations[1].args).toEqual(
+			expect.arrayContaining([
+				'build-obj',
+				'/lib/compiler_rt.zig',
+				'-femit-llvm-bc=compiler_rt.bc'
+			])
+		);
+		for (const invocation of invocations) {
+			expect(invocation.fds.slice(3).map((fd) => fd.name)).toEqual(['.', '/lib', '/cache']);
+		}
+		const compiled = debugPipeline.compileZigDebugArtifact.mock.calls[0][0];
+		expect(compiled.bitcode.map((bytes: Uint8Array) => Array.from(bytes))).toEqual([
+			Array.from(encoder.encode('wasm-out')),
+			Array.from(encoder.encode('wasm-out'))
+		]);
+		expect(compiled.sources).toEqual([
+			{ path: '/workspace/src/helper.zig', content: 'pub const n = 7;' },
+			{ path: '/workspace/src/main.zig', content: request.code }
+		]);
+		expect(compiled.zigReceipts).toEqual(runtimeIntegrity);
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ lldbArtifact });
+		await (globalThis as any).self.onmessage({ data: request });
+		expect(debugPipeline.compileZigDebugArtifact).toHaveBeenCalledTimes(1);
+		expect(shim.state.compileCount).toBe(2);
+		expect(shim.state.runCount).toBe(0);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ lldbArtifact });
+		await (globalThis as any).self.onmessage({
+			data: { ...request, debugMode: 'none', stdin: '' }
+		});
+		expect(shim.state.compileCount).toBe(3);
+		expect(shim.state.runCount).toBe(1);
+	});
+
+	it.each(['none', 'lldb'])(
+		'mounts byte-backed Zig imports and binary embedFile data in %s mode',
+		async (debugMode) => {
+			const helper = new Uint8Array(encoder.encode('\ufeffpub const greeting = "안녕";'));
+			const binary = new Uint8Array([0, 255, 128, 13, 10, 0]);
+			debugPipeline.compileZigDebugArtifact.mockResolvedValue({
+				bytes: encoder.encode('debug-wasm'),
+				descriptor: { kind: 'dwarf' },
+				sources: []
+			});
+			await import('./zig');
+			await (globalThis as any).self.onmessage({
+				data: {
+					load: true,
+					compilerUrl: 'https://assets.example.test/zig_small.wasm',
+					stdlibUrl: 'https://assets.example.test/std.tar.gz',
+					integrity: runtimeIntegrity,
+					maxAssetBytes
+				}
+			});
+			const code =
+				'const helper = @import("nested/helper.zig"); const data = @embedFile("data.bin"); pub fn main() void { _ = helper; _ = data; }';
+			await (globalThis as any).self.onmessage({
+				data: {
+					code,
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					activePath: 'main.zig',
+					debugMode,
+					workspaceFiles: [
+						{ path: 'main.zig', content: new Uint8Array([255]) },
+						{ path: 'nested/helper.zig', content: helper },
+						{ path: 'data.bin', content: binary }
+					],
+					debugClangPath: 'https://assets.example.test/clang/',
+					debugClangIntegrity: {
+						'runtime-manifest.v1.json': {
+							bytes: 1,
+							sha256: 'a'.repeat(64),
+							uncompressedBytes: 1,
+							uncompressedSha256: 'a'.repeat(64)
+						}
+					}
+				}
+			});
+			const root = shim.state.constructed[0].fds[3].dir.contents;
+			expect(Array.from(root.get('main.zig').data)).toEqual(Array.from(encoder.encode(code)));
+			expect(Array.from(root.get('nested').contents.get('helper.zig').data)).toEqual(
+				Array.from(helper)
+			);
+			expect(Array.from(root.get('data.bin').data)).toEqual(Array.from(binary));
+			expect(shim.state.compileCount).toBe(debugMode === 'lldb' ? 2 : 1);
+			if (debugMode === 'lldb') {
+				const { sources } = debugPipeline.compileZigDebugArtifact.mock.calls[0][0];
+				expect(sources.map((source: any) => source.path)).toEqual([
+					'/workspace/main.zig',
+					'/workspace/nested/helper.zig'
+				]);
+				const source = sources.find((file: any) => file.path.endsWith('helper.zig'));
+				expect(source.content).toBe('\ufeffpub const greeting = "안녕";');
+				expect(sha256(encoder.encode(source.content))).toBe(sha256(helper));
+			}
+		}
+	);
+
+	it('rejects invalid UTF-8 byte-backed Zig debug source before compilation', async () => {
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'pub fn main() void {}',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'lldb',
+				workspaceFiles: [{ path: 'nested/helper.zig', content: new Uint8Array([255]) }],
+				debugClangPath: 'https://assets.example.test/clang/',
+				debugClangIntegrity: {
+					'runtime-manifest.v1.json': {
+						bytes: 1,
+						sha256: 'a'.repeat(64),
+						uncompressedBytes: 1,
+						uncompressedSha256: 'a'.repeat(64)
+					}
+				}
+			}
+		});
+		expect(shim.state.compileCount).toBe(0);
+		expect(debugPipeline.compileZigDebugArtifact).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Zig debug source is not valid UTF-8: /workspace/nested/helper.zig'
+		});
+	});
+
+	it('rejects debug compiler overrides before invoking the frontend', async () => {
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'pub fn main() void {}',
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'lldb',
+				compileArgs: ['-fstrip']
+			}
+		});
+		expect(shim.state.compileCount).toBe(0);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining('does not accept compiler argument overrides')
+		});
+	});
+
+	it('requires pinned Clang assets before compiling debug source', async () => {
+		await import('./zig');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'pub fn main() void {}',
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'lldb',
+				debugClangPath: 'https://assets.example.test/clang/'
+			}
+		});
+		expect(shim.state.compileCount).toBe(0);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining('verified Clang runtime asset receipts')
+		});
 	});
 
 	it('decodes compiler and program UTF-8 per stream without leaking into the next run', async () => {

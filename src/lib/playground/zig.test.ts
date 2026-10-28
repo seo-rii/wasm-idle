@@ -61,12 +61,14 @@ import { WASM_ZIG_ASSET_RECEIPTS } from './wasmZigVersion';
 import type { ZigExecutionAssetReceipts } from './zigAssets';
 
 describe('Zig sandbox', () => {
-	it('rejects source debugging before dispatch and remains usable for normal execution', async () => {
+	it('rejects unsupported trace debugging before dispatch and remains usable for normal execution', async () => {
 		const sandbox = new Zig();
 		await sandbox.load(TEST_RUNTIME_ASSETS);
 		await expect(
-			sandbox.run('pub fn main() void {}', false, false, undefined, [], { debugMode: 'lldb' })
-		).rejects.toThrow('does not emit DWARF');
+			sandbox.run('pub fn main() void {}', false, false, undefined, [], {
+				debugMode: 'trace'
+			})
+		).rejects.toThrow('requires debugMode: lldb');
 		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});

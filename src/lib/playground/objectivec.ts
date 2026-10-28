@@ -409,7 +409,6 @@ class ObjectiveC extends CompiledLldbSandbox implements Sandbox {
 	}
 
 	terminate() {
-		void this.stopLldb();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -419,6 +418,8 @@ class ObjectiveC extends CompiledLldbSandbox implements Sandbox {
 		Atomics.notify(control, 0);
 		this.workerSession.terminate();
 		this.exit = true;
+		// A stop listener may start a replacement; finish the old operation first.
+		void this.stopLldb();
 	}
 
 	async clear() {
