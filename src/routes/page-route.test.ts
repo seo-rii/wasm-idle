@@ -190,7 +190,7 @@ describe('Python bytecode options', () => {
 		return { context, compilePython, compileActive };
 	}
 
-	it.each(['checked-hash', 'unchecked-hash'])(
+	it.each(['checked-hash', 'unchecked-hash', 'normalized'])(
 		'compiles %s bytecode without forwarding the timestamp field',
 		async (mode) => {
 			const { context, compilePython, compileActive } = fixture();
@@ -205,6 +205,21 @@ describe('Python bytecode options', () => {
 			expect(context.downloadBlob).toHaveBeenCalledOnce();
 		}
 	);
+
+	it('recovers from an invalid timestamp when normalized mode is selected', async () => {
+		const { context, compilePython, compileActive } = fixture();
+		context.pythonInvalidationMode = 'timestamp';
+		context.pythonTimestampInput = '';
+		await compileActive();
+		expect(compilePython).not.toHaveBeenCalled();
+		context.pythonInvalidationMode = 'normalized';
+		await compileActive();
+		expect(context.pythonCompileOptionError).toBeNull();
+		expect(compilePython).toHaveBeenCalledOnce();
+		expect(compilePython.mock.calls[0][1]).toMatchObject({ invalidationMode: 'normalized' });
+		expect(compilePython.mock.calls[0][1]).not.toHaveProperty('timestamp');
+		expect(context.downloadBlob).toHaveBeenCalledOnce();
+	});
 
 	it.each(['0', '1700000000', '4294967295'])(
 		'forwards the explicit timestamp %s as integer Unix seconds',

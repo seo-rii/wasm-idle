@@ -322,13 +322,29 @@ describe.skipIf(!enabled)('real Python 3.14 browser runtime', () => {
 
 				await timestamp.fill('');
 				expect(await compileButton.isDisabled()).toBe(true);
-				await mode.selectOption('unchecked-hash');
+				await mode.selectOption('normalized');
 				expect(await timestamp.count()).toBe(0);
 				expect(await compileButton.isEnabled()).toBe(true);
+				const normalizedBytecode = await downloadBytecode();
+				expect(normalizedBytecode.subarray(0, 4)).toEqual(bytecode.subarray(0, 4));
+				expect(normalizedBytecode.subarray(4, 16)).toEqual(Buffer.alloc(12));
+				expect(normalizedBytecode.subarray(16)).toEqual(bytecode.subarray(16));
+				await setPythonSource(page, source.replace('\n', ' # comment-only change\n'));
+				expect(await downloadBytecode()).toEqual(normalizedBytecode);
+				await mode.selectOption('checked-hash');
+				const checkedCommentBytecode = await downloadBytecode();
+				expect(checkedCommentBytecode.readUInt32LE(4)).toBe(3);
+				expect(checkedCommentBytecode.subarray(8, 16)).not.toEqual(
+					bytecode.subarray(8, 16)
+				);
+				expect(checkedCommentBytecode.subarray(16)).toEqual(bytecode.subarray(16));
+
+				await setPythonSource(page, source);
+				await mode.selectOption('unchecked-hash');
 				const uncheckedBytecode = await downloadBytecode();
 				expect(uncheckedBytecode.readUInt32LE(4)).toBe(1);
 				expect(uncheckedBytecode.subarray(8)).toEqual(bytecode.subarray(8));
-				expect(downloadCount).toBe(4);
+				expect(downloadCount).toBe(7);
 				expect(
 					await page.evaluate(
 						() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
@@ -342,7 +358,8 @@ describe.skipIf(!enabled)('real Python 3.14 browser runtime', () => {
 					`import base64, runpy
 from pathlib import Path
 path = Path("/tmp/downloaded.pyc")
-path.write_bytes(base64.b64decode(${JSON.stringify(bytecode.toString('base64'))}))
+path.write_bytes(base64.b64decode(${JSON.stringify(normalizedBytecode.toString('base64'))}))
+assert not path.with_suffix(".py").exists()
 try:
     runpy.run_path(str(path), run_name="__main__")
 except RuntimeError as error:

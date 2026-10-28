@@ -78,7 +78,9 @@ const rewritten = input
 				if (segment.startsWith('/')) {
 					return segment;
 				}
-				return `${options.toolchainRoot}/${segment.replace(/^\/+/, '')}`;
+				return path.posix.normalize(
+					`${options.toolchainRoot}/${segment.replace(/^\/+/, '')}`
+				);
 			})
 			.join(separator);
 		return `${key}="${rewrittenValue}"`;

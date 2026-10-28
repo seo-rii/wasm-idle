@@ -31,6 +31,7 @@ function worker(
 ) {
 	const messages: any[] = [];
 	const runs: Array<{ args: string[]; local: number }> = [];
+	const deobfuscatorInputs: unknown[] = [];
 	const counts = {
 		compile: 0,
 		bridgeCompile: 0,
@@ -105,8 +106,15 @@ function worker(
 		}
 	};
 	const runtime = {
-		load: async (bytes: Uint8Array, settings?: { installImports?: (imports: any) => void }) => {
+		load: async (
+			bytes: Uint8Array,
+			settings?: {
+				installImports?: (imports: any) => void;
+				stackDeobfuscator?: { path?: unknown };
+			}
+		) => {
 			if (bytes[0] === 9 || (bytes as any).app) {
+				deobfuscatorInputs.push(settings?.stackDeobfuscator?.path);
 				const imports = { teavmConsole: { putcharStdout: (_charCode: number) => {} } };
 				settings?.installImports?.(imports);
 				let local = 0;
@@ -147,7 +155,7 @@ function worker(
 					if (failure.engineCompile) throw new Error('engine compilation failed');
 					return { app: true };
 				}
-				return {};
+				return { deobfuscator: true };
 			}
 		},
 		URL: { createObjectURL: () => 'blob:loader', revokeObjectURL() {} },
@@ -211,6 +219,7 @@ function worker(
 	return {
 		counts,
 		runs,
+		deobfuscatorInputs,
 		hasDiagnosticListener: () => onDiagnostic !== undefined,
 		failure,
 		messages,
@@ -428,6 +437,16 @@ test('custom byte-only loaders retain their byte input contract', async () => {
 	await w.run({ prepare: false });
 	assert.equal(w.counts.engineCompile, 0);
 	assert.equal(w.counts.run, 1);
+	assert.ok(w.deobfuscatorInputs[0] instanceof Uint8Array);
+	assert.deepEqual(Array.from(w.deobfuscatorInputs[0]), [1]);
+});
+
+test('the verified streaming loader can reuse the compiled stack deobfuscator', async () => {
+	const w = worker();
+	await w.load('/teavm/', true);
+	await w.run({ prepare: false });
+	assert.equal(w.counts.run, 1);
+	assert.deepEqual(w.deobfuscatorInputs[0], { deobfuscator: true });
 });
 
 test('debug and ordinary preparation never reuse each other’s compiled artifact', async () => {

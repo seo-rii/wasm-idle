@@ -62,14 +62,17 @@ test('browser-native harness executes hello, yojson, and diagnostics fixtures', 
 	await page.goto('/');
 
 	await expect
-		.poll(async () => await page.locator('#status').textContent(), {
+		.poll(async () => (await page.locator('#output').textContent())?.startsWith('{'), {
 			timeout: 180_000,
-			message: 'expected browser-native harness to finish successfully'
+			message: 'expected browser-native harness to publish its results'
 		})
-		.toBe('Browser-native compile succeeded.');
+		.toBe(true);
 
 	const outputText = await page.locator('#output').textContent();
 	expect(outputText).toBeTruthy();
+	expect(await page.locator('#status').textContent(), outputText || '').toBe(
+		'Browser-native compile succeeded.'
+	);
 
 	const output = JSON.parse(outputText || '{}') as {
 		hello: {

@@ -36,7 +36,7 @@ const registry: RuntimeRegistryManifest = {
 			identity: {
 				languageId: 'C3',
 				implementationId: 'c3c',
-				implementationVersion: '0.8.3',
+				implementationVersion: '0.8.5_1',
 				profile: {
 					profileId: profile.profileId,
 					manifestSchemaVersion: 1,
