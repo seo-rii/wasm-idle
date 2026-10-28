@@ -251,11 +251,7 @@ describe('Zig values from native DWARF fields', () => {
 		const { backend, formatter } = fixture([composite('bytes', '[]u8', 2)], {
 			2: sliceFields('0x100', '4')
 		});
-		let release!: (value: {
-			address: string;
-			data: Uint8Array;
-			unreadableBytes: number;
-		}) => void;
+		let release!: (value: Awaited<ReturnType<typeof backend.readMemory>>) => void;
 		backend.readMemory.mockImplementationOnce(
 			() =>
 				new Promise((resolve) => {
