@@ -1160,13 +1160,35 @@ Pin the runtime assets when comparing builds across machines or releases.
 `fileName` defaults to `main.py`;
 `optimize` accepts `0`, `1` (remove assertions), or `2` (also remove docstrings).
 
-The optional `invalidationMode` selects CPython's bytecode cache format:
+The optional `invalidationMode` selects the bytecode header format:
 
 | Mode                     | Header and source validation                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------- |
 | `checked-hash` (default) | Stores a source hash; Python checks source content when validating the cache.           |
 | `unchecked-hash`         | Stores a source hash; Python normally trusts the cache without checking source content. |
 | `timestamp`              | Stores source modification time and encoded source byte length.                         |
+| `normalized`             | Clears source validation metadata for comparing and running bytecode without source.    |
+
+Choose `normalized` when the artifact hash should depend on the compiled program instead of
+the original source text:
+
+```ts
+const result = await compilePython(source, {
+	fileName: 'pkg/main.py',
+	invalidationMode: 'normalized'
+});
+```
+
+This mode first compiles checked-hash bytecode, then zeroes header bytes 4–15: flags and source
+hash, or the overlapping timestamp and source-size fields. It preserves the magic number and
+the complete compiled payload, including constants, filenames and line/column information.
+With the same runtime, `fileName` and optimization options, comment changes that leave this
+payload unchanged produce identical `.pyc` bytes. Changes to program or line information still
+change the artifact.
+
+Run normalized files directly with `runpy.run_path`, or import them as source-free `module.pyc`
+files. They are not source-validation caches: when placed alongside `.py` source, the zeroed
+metadata can make Python recompile that source. The default remains `checked-hash`.
 
 In `timestamp` mode, `timestamp` defaults to **0**, keeping this mode reproducible too.
 To choose another fixed time, supply an integer Unix timestamp from `0` to `4294967295`:
@@ -1179,9 +1201,9 @@ const result = await compilePython(source, {
 });
 ```
 
-`timestamp` is accepted only with `invalidationMode: 'timestamp'`; hash modes have no timestamp
-field. To use the current time, explicitly pass `Math.floor(Date.now() / 1000)` in timestamp
-mode; the resulting bytes then depend on that time. When distributing a timestamp-based cache
+`timestamp` is accepted only with `invalidationMode: 'timestamp'`; all other modes, including
+`normalized`, reject it. To use the current time, explicitly pass `Math.floor(Date.now() / 1000)`
+in timestamp mode; the resulting bytes then depend on that time. When distributing a timestamp-based cache
 alongside source, its timestamp and encoded byte size must match the source file's metadata
 for Python to reuse the cache.
 

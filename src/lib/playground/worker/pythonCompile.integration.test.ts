@@ -60,6 +60,7 @@ describe('Python bytecode on the pinned real Pyodide', () => {
 		['default', {}, 3, undefined],
 		['checked hash', { invalidationMode: 'checked-hash' }, 3, undefined],
 		['unchecked hash', { invalidationMode: 'unchecked-hash' }, 1, undefined],
+		['normalized', { invalidationMode: 'normalized' }, 0, undefined],
 		['timestamp default', { invalidationMode: 'timestamp' }, 0, 0],
 		['timestamp zero', { invalidationMode: 'timestamp', timestamp: 0 }, 0, 0],
 		[
@@ -103,7 +104,9 @@ json.dumps({"hash": importlib.util.source_hash(encoded).hex(), "size": len(encod
 				);
 				const header = new DataView(artifact.data.buffer, artifact.data.byteOffset, 16);
 				expect(header.getUint32(4, true)).toBe(flags);
-				if (timestamp === undefined) {
+				if ('invalidationMode' in options && options.invalidationMode === 'normalized') {
+					expect(artifact.data.subarray(4, 16)).toEqual(new Uint8Array(12));
+				} else if (timestamp === undefined) {
 					expect(Buffer.from(artifact.data.subarray(8, 16)).toString('hex')).toBe(
 						expected.hash
 					);
@@ -142,6 +145,7 @@ os.environ["SOURCE_DATE_EPOCH"] = epoch
 			{},
 			{ invalidationMode: 'checked-hash' },
 			{ invalidationMode: 'unchecked-hash' },
+			{ invalidationMode: 'normalized' },
 			{ invalidationMode: 'timestamp' },
 			{ invalidationMode: 'timestamp', timestamp: 1_700_000_123 }
 		];
@@ -168,7 +172,8 @@ os.environ["SOURCE_DATE_EPOCH"] = epoch
 				expect(second.data).toEqual(first.data);
 				const header = new DataView(first.data.buffer, first.data.byteOffset, 16);
 				expect(header.getUint32(4, true)).toBe(
-					option.invalidationMode === 'timestamp'
+					option.invalidationMode === 'timestamp' ||
+						option.invalidationMode === 'normalized'
 						? 0
 						: option.invalidationMode === 'unchecked-hash'
 							? 1
@@ -194,6 +199,30 @@ else:
 		}
 	}, 120_000);
 
+	it('normalizes comment variants without erasing program, filename, or line differences', () => {
+		const source = 'value = 42\n';
+		const options = { invalidationMode: 'normalized' } as const;
+		const original = compilePythonBytecode(runtime, source, 'main.py', 0, limit);
+		const normalized = compilePythonBytecode(runtime, source, 'main.py', 0, limit, options);
+		expect(normalized.data.subarray(0, 4)).toEqual(original.data.subarray(0, 4));
+		expect(normalized.data.subarray(4, 16)).toEqual(new Uint8Array(12));
+		expect(normalized.data.subarray(16)).toEqual(original.data.subarray(16));
+		for (const variant of ['value = 42 # inline comment\n', 'value = 42\n# final comment\n']) {
+			const checked = compilePythonBytecode(runtime, variant, 'main.py', 0, limit);
+			const compiled = compilePythonBytecode(runtime, variant, 'main.py', 0, limit, options);
+			expect(checked.data).not.toEqual(original.data);
+			expect(compiled.data).toEqual(normalized.data);
+		}
+		for (const variant of ['value = 43\n', '\nvalue = 42\n']) {
+			expect(
+				compilePythonBytecode(runtime, variant, 'main.py', 0, limit, options).data
+			).not.toEqual(normalized.data);
+		}
+		expect(
+			compilePythonBytecode(runtime, source, 'other.py', 0, limit, options).data
+		).not.toEqual(normalized.data);
+	});
+
 	it('validates invalidation options before allocating Python proxies or temporary files', () => {
 		const before = temporaryCompiles();
 		const toPy = vi.spyOn(runtime, 'toPy');
@@ -204,6 +233,7 @@ else:
 				{ timestamp: 0 },
 				{ invalidationMode: 'checked-hash', timestamp: 0 },
 				{ invalidationMode: 'unchecked-hash', timestamp: 0 },
+				{ invalidationMode: 'normalized', timestamp: 0 },
 				{ invalidationMode: 'timestamp', timestamp: null },
 				{ invalidationMode: 'timestamp', timestamp: '123' },
 				{ invalidationMode: 'timestamp', timestamp: -1 },
@@ -230,7 +260,7 @@ else:
 		}
 	});
 
-	it.each(['unchecked-hash', 'timestamp'] as const)(
+	it.each(['unchecked-hash', 'timestamp', 'normalized'] as const)(
 		'cleans failed %s compiles and recovers',
 		(invalidationMode) => {
 			const before = temporaryCompiles();
@@ -277,37 +307,43 @@ os.utime = fail_utime
 		}
 	});
 
-	it('executes the exported file without source and preserves Unicode stdin and stdout', () => {
-		const output: string[] = [];
-		const artifact = compilePythonBytecode(
-			runtime,
-			'value = input("입력: ")\nprint("출력:", value)',
-			'nested/main.py',
-			0,
-			limit
-		);
-		const path = '/tmp/wasm-idle-bytecode-only.pyc';
-		runtime.FS.writeFile(path, artifact.data);
-		const stdio = createPythonStdio(runtime, {
-			initialInput: '한글🙂\n',
-			readInput: () => null,
-			emit: (text) => output.push(text)
-		});
-		try {
-			expect(temporaryCompiles()).toEqual([]);
-			expect(runtime.runPython('__import__("os").path.exists("nested/main.py")')).toBe(false);
-			runtime.runPython(
-				`import runpy\nrunpy.run_path(${JSON.stringify(path)}, run_name="__main__")\nNone`
+	it.each(['checked-hash', 'normalized'] as const)(
+		'executes the %s exported file without source and preserves Unicode stdin and stdout',
+		(invalidationMode) => {
+			const output: string[] = [];
+			const artifact = compilePythonBytecode(
+				runtime,
+				'value = input("입력: ")\nprint("출력:", value)',
+				'nested/main.py',
+				0,
+				limit,
+				{ invalidationMode }
 			);
-			stdio.flush();
-			expect(output.join('')).toBe('입력: 출력: 한글🙂\n');
-		} finally {
-			stdio.close();
-			runtime.FS.unlink(path);
-			runtime.setStdin({ stdin: () => null });
-			runtime.setStdout({ batched: () => {} });
+			const path = '/tmp/wasm-idle-bytecode-only.pyc';
+			runtime.FS.writeFile(path, artifact.data);
+			const stdio = createPythonStdio(runtime, {
+				initialInput: '한글🙂\n',
+				readInput: () => null,
+				emit: (text) => output.push(text)
+			});
+			try {
+				expect(temporaryCompiles()).toEqual([]);
+				expect(runtime.runPython('__import__("os").path.exists("nested/main.py")')).toBe(
+					false
+				);
+				runtime.runPython(
+					`import runpy\nrunpy.run_path(${JSON.stringify(path)}, run_name="__main__")\nNone`
+				);
+				stdio.flush();
+				expect(output.join('')).toBe('입력: 출력: 한글🙂\n');
+			} finally {
+				stdio.close();
+				runtime.FS.unlink(path);
+				runtime.setStdin({ stdin: () => null });
+				runtime.setStdout({ batched: () => {} });
+			}
 		}
-	});
+	);
 
 	it.each([
 		['if', 'SyntaxError'],
