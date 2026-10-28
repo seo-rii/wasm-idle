@@ -269,9 +269,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// cross-clang JavaScript/declaration pair when combined with standalone GCC.
 		// GCC WASI retains its existing 48 KiB / eight-file allowance.
 		// Preserve main's additional 24 KiB / six files for Zig's debug adapter.
-		// TeaVM's validated loaders add 348 + 202 bytes to the 42,443,361-byte baseline.
-		// The combined 42,443,911-byte install leaves 889 bytes of headroom.
-		budget: { maxBytes: 40 * MiB + 490 * 1024, maxFiles: 3_366, maxPackages: 70 },
+		// Main's measured baseline is 42,443,361 bytes. Selected compiler updates add
+		// 2,118 bytes: TinyGo 1,342, TeaVM 550, OCaml 220 and C3 6.
+		// A shared 491 KiB allowance covers their projected 42,445,479-byte combined install.
+		budget: { maxBytes: 40 * MiB + 491 * 1024, maxFiles: 3_366, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
