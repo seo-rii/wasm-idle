@@ -108,8 +108,8 @@ are rejected before compilation. Additional outputs reserve `program.N.s` and
 `program.N.o` in the workspace, where N starts at 1. Multiple-unit assembly/object output
 is rejected; use separate requests to obtain those individual artifacts.
 
-No `-march=native`, arbitrary driver arguments, PCH, plugin, LTO, shared/dynamic linking,
-OpenMP or process spawning is supported. The option
+No `-march=native`, arbitrary driver arguments, user-supplied PCH files, plugin, LTO,
+shared/dynamic linking, OpenMP or process spawning is supported. The option
 allowlist rejects unknown request fields. A CPU profile describes the generated program's
 requirements; it does not detect the browser host CPU. Source pragmas can enable additional
 instructions, just as with native GCC. Choose execution hardware accordingly.
@@ -120,6 +120,27 @@ The producer v1 manifest still lists `['x86-64', 'avx2-fma']`: the consumer deri
 AVX2-only request as a subset of that existing capability, without changing the manifest
 or its integrity digest. `artifact.cpu` records the requested profile, including `avx2`.
 Source target pragmas and attributes can override the requested CPU settings.
+
+### Precompiled `bits/stdc++.h`
+
+Parsing GNU `bits/stdc++.h` takes most of a typical C++ compilation. When
+`manifest.capabilities.precompiledHeaders` is true, `precompileHeader()` lets the real
+`cc1plus` precompile that header for one C++ profile (`standard`, `optimization` and `cpu`,
+with the same defaults as `compile()`):
+
+```ts
+await compiler.precompileHeader({ optimization: '2' }); // About 7 s and 100 MB, once.
+const result = await compiler.compile({ code: '#include <bits/stdc++.h>\n...' });
+```
+
+The compiler retains one PCH and replaces it on the next call. Later C++ units whose
+front-end flags are identical get `-isystem /pch` first on their include path, as the
+stage `argv` shows. GCC itself decides whether to load it: a PCH is used only when
+`#include <bits/stdc++.h>` comes before any C/C++ token and the macros and target
+options match. Otherwise GCC parses the header normally. The output is identical either
+way. With the producer's GCC 16.2 build, a `bits/stdc++.h` program's front end took about
+1.2 s instead of 3.4 s. Older bundles lack the capability; for them the method rejects
+instead of risking GCC's `PCH allocation failure`.
 
 The compiler's GMP/MPFR/MPC and Emscripten libraries are **host** dependencies in Wasm.
 The GNU sysroot's glibc, libstdc++, libgcc and CRT are **target** ELF files; they are only

@@ -2,7 +2,8 @@ import { createCrossGccCompiler } from './compiler.js';
 import type {
 	CreateCrossGccCompilerOptions,
 	CrossGccCompileRequest,
-	CrossGccCompiler
+	CrossGccCompiler,
+	CrossGccPrecompileRequest
 } from './types.js';
 
 const scope = globalThis as unknown as {
@@ -16,9 +17,9 @@ scope.onmessage = async ({
 	data
 }: MessageEvent<{
 	id: number;
-	type: 'initialize' | 'compile';
+	type: 'initialize' | 'compile' | 'precompileHeader';
 	options?: CreateCrossGccCompilerOptions;
-	request?: CrossGccCompileRequest;
+	request?: CrossGccCompileRequest & CrossGccPrecompileRequest;
 }>) => {
 	try {
 		if (data.type === 'initialize') {
@@ -39,6 +40,10 @@ scope.onmessage = async ({
 				{ id: data.id, type: 'result', result },
 				result.artifact ? [result.artifact.bytes.buffer as ArrayBuffer] : []
 			);
+		} else if (data.type === 'precompileHeader') {
+			if (!compiler) throw new Error('GCC Worker is not ready');
+			const result = await compiler.precompileHeader(data.request);
+			scope.postMessage({ id: data.id, type: 'precompiled', result });
 		} else throw new Error('Unknown GCC Worker message');
 	} catch (error) {
 		scope.postMessage({

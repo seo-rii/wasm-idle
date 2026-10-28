@@ -3,12 +3,14 @@ import type {
 	CrossGccCompileResult,
 	CrossGccIdentity,
 	CrossGccManifest,
+	CrossGccPrecompileResult,
 	CrossGccWorker
 } from './types.js';
 
 type WorkerMessage =
 	| { id: number; type: 'ready'; manifest: CrossGccManifest; identity: CrossGccIdentity }
 	| { id: number; type: 'result'; result: CrossGccCompileResult }
+	| { id: number; type: 'precompiled'; result: CrossGccPrecompileResult }
 	| { id: number; type: 'error'; message: string };
 
 /** Owns a dedicated Worker. Cancellation ends its CPU work even inside synchronous main(). */
@@ -91,6 +93,18 @@ export async function createCrossGccWorker(
 					const response = await send({ type: 'compile', request }, signal);
 					if (response.type !== 'result')
 						throw new Error('GCC Worker returned an invalid compile response');
+					return response.result;
+				} finally {
+					busy = false;
+				}
+			},
+			async precompileHeader(request = {}, { signal } = {}) {
+				if (busy) throw new Error('GCC Worker is busy');
+				busy = true;
+				try {
+					const response = await send({ type: 'precompileHeader', request }, signal);
+					if (response.type !== 'precompiled')
+						throw new Error('GCC Worker returned an invalid precompile response');
 					return response.result;
 				} finally {
 					busy = false;
