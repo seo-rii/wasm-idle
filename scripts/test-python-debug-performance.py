@@ -14,16 +14,36 @@ factory = source.split('export const PYTHON_DEBUG_FACTORY = String.raw`', 1)[1].
 assert '${' not in trace
 
 
+def same_line_loop_reference():
+    code = compile('value = 0\nwhile value < 3: value += 1\nfinished = value\n', 'user.py', 'exec')
+    events = []
+
+    def observe(frame, event, arg):
+        if frame.f_code is code:
+            if event == 'line':
+                events.append((frame.f_lineno, frame.f_locals.get('value')))
+            return observe
+        return None
+
+    try:
+        sys.settrace(observe)
+        exec(code, {})
+    finally:
+        sys.settrace(None)
+    return code, events
+
+
 class DebugTests(unittest.TestCase):
     def setUp(self):
         self.events = []
+        self.paused_values = []
         self.commands = iter([1] * 20)
         self.version = 0
         self.lines = []
         self.snapshots = 0
         self.callback_calls = 0
         self.bridge = types.SimpleNamespace(
-            pause=lambda line, reason, *_: self.events.append((line, reason)),
+            pause=self.pause,
             wait=lambda: next(self.commands),
             readWatch=lambda: 'value', writeWatch=lambda _: None,
             readBreakpoints=self.read_breakpoints, state=self)
@@ -32,6 +52,11 @@ class DebugTests(unittest.TestCase):
         self.make_trace = namespace['__wasm_idle_compile_debug_helpers'](trace, '')
         self.ns = self.make_trace('user.py', '[]', False, self.bridge).__globals__
         self.preview = self.ns['__wasm_idle_debug_preview']
+
+    def pause(self, line, reason, locals_json, *_):
+        self.events.append((line, reason))
+        value = next((item['value'] for item in json.loads(locals_json) if item['name'] == 'value'), None)
+        self.paused_values.append((line, value))
 
     def read_breakpoints(self, known):
         self.callback_calls += 1
@@ -151,29 +176,44 @@ class DebugTests(unittest.TestCase):
 
     def test_continue_revisits_breakpoints_on_same_line_loop_iterations(self):
         self.lines, self.version = [2], 1
+        self.bridge.wait = lambda: 1
+        code, reference = same_line_loop_reference()
+        expected = [(line, str(value)) for line, value in reference if line == 2]
+        self.assertEqual([item for item in expected if item[1] != '3'], [(2, '0'), (2, '1'), (2, '2')])
         scope = {}
         try:
             sys.settrace(self.ns['__wasm_idle_debug_trace'])
-            exec(compile('value = 0\nwhile value < 3: value += 1\nfinished = value\n', 'user.py', 'exec'), scope)
+            exec(code, scope)
         finally:
             sys.settrace(None)
         self.assertEqual(scope['finished'], 3)
-        self.assertEqual(self.events, [(2, 'breakpoint')] * 3)
+        self.assertEqual(self.events, [(line, 'breakpoint') for line, _ in expected])
+        self.assertEqual(self.paused_values, expected)
 
     def test_step_commands_stop_on_later_iterations_of_the_same_line(self):
         for command, reason in [(2, 'step'), (3, 'nextLine')]:
             with self.subTest(command=command):
                 self.setUp()
                 self.ns['__wasm_idle_debug_pause_on_entry'] = True
-                self.commands = iter([command] * 4 + [1])
+                # Python 3.14 also reports the final failed while condition. Follow
+                # the interpreter's events and keep stepping until this bounded
+                # program exits, rather than switching to Continue after N stops.
+                code, reference = same_line_loop_reference()
+                self.assertEqual(reference[0], (1, None))
+                self.assertEqual(reference[-1], (3, 3))
+                self.assertEqual([(line, value) for line, value in reference if line == 2 and value < 3],
+                                 [(2, 0), (2, 1), (2, 2)])
+                self.bridge.wait = lambda: command
                 scope = {}
                 try:
                     sys.settrace(self.ns['__wasm_idle_debug_trace'])
-                    exec(compile('value = 0\nwhile value < 3: value += 1\nfinished = value\n', 'user.py', 'exec'), scope)
+                    exec(code, scope)
                 finally:
                     sys.settrace(None)
                 self.assertEqual(scope['finished'], 3)
-                self.assertEqual(self.events, [(1, 'entry'), (2, reason), (2, reason), (2, reason), (3, reason)])
+                self.assertEqual(self.events, [(1, 'entry')] + [(line, reason) for line, _ in reference[1:]])
+                self.assertEqual(self.paused_values, [(line, str(value) if value is not None else None)
+                                                     for line, value in reference])
 
     def test_large_string_and_bytes_are_sliced_before_repr(self):
         for value in ('한' * 1000000, b'x' * 1000000, bytearray(1000000)):
