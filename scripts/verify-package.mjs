@@ -249,7 +249,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Zig's LLVM debug Worker/adapter bring the measured aggregate to
 		// 42,388,306 bytes and 3,358 files; keep the package-count cap unchanged.
 		// GCC's read-only sysroot mount adds 5,578 bytes and two files (42,397,771 measured).
-		budget: { maxBytes: 40 * MiB + 448 * 1024, maxFiles: 3_360, maxPackages: 70 },
+		// GCC header precompilation adds 7,548 bytes and no files.
+		budget: { maxBytes: 40 * MiB + 456 * 1024, maxFiles: 3_360, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
