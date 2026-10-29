@@ -801,6 +801,15 @@ describe('syncWasmClangDist', () => {
 			path: 'patches/wasm-function-end-location.patch',
 			sha256: '328eec2ebde3eacb26f8fa998cddef6a57df6719c1f9cffb25e5da95aa10a5c5'
 		});
+		fixture.receipt.recipe.files.push({
+			path: 'scripts/resource-profile.mjs',
+			bytes: 42,
+			sha256: 'c'.repeat(64),
+			entries: 1
+		});
+		fixture.receipt.recipe.sha256 = sha256(
+			Buffer.from(JSON.stringify(fixture.receipt.recipe.files))
+		);
 		await updateBuildReceipt(sourceDir, fixture);
 		await syncWasmClangDist({ sourceDir, staticDir });
 		expect(
@@ -809,6 +818,43 @@ describe('syncWasmClangDist', () => {
 			)
 		).toEqual(fixture.receipt);
 	});
+
+	it.each(['missing', 'wrong-path', 'invalid-sha256', 'extra', 'changed-digest'])(
+		'rejects a %s resource-profile recipe before replacing existing targets',
+		async (failure) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir);
+			fixture.receipt.manifestSha256 =
+				'de99e0be692a813c854edf8f42606f35226c285b567b246c617a1cecc74c62d9';
+			fixture.buildInfo.toolchain.producer.manifestSha256 = fixture.receipt.manifestSha256;
+			fixture.receipt.sources.llvm.patches.push({
+				path: 'patches/wasm-function-end-location.patch',
+				sha256: '328eec2ebde3eacb26f8fa998cddef6a57df6719c1f9cffb25e5da95aa10a5c5'
+			});
+			const resource = {
+				path:
+					failure === 'wrong-path'
+						? 'scripts/unknown.mjs'
+						: 'scripts/resource-profile.mjs',
+				bytes: 42,
+				sha256: failure === 'invalid-sha256' ? 'invalid' : 'c'.repeat(64),
+				entries: 1
+			};
+			if (failure !== 'missing') fixture.receipt.recipe.files.push(resource);
+			if (failure === 'extra') fixture.receipt.recipe.files.push(resource);
+			fixture.receipt.recipe.sha256 = sha256(
+				Buffer.from(JSON.stringify(fixture.receipt.recipe.files))
+			);
+			if (failure === 'changed-digest') fixture.receipt.recipe.sha256 = 'd'.repeat(64);
+			await updateBuildReceipt(sourceDir, fixture);
+			await writeExistingTargets(staticDir);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				'invalid recipe identity'
+			);
+			await expectExistingTargets(staticDir);
+		}
+	);
 
 	it.each(['unknown-manifest', 'wrong-path', 'wrong-sha256', 'missing', 'extra'])(
 		'rejects %s function-end patch evidence before replacing existing targets',

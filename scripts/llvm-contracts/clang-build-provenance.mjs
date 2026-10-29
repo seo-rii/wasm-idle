@@ -150,13 +150,18 @@ export function parseClangBuildReceipt(toolchain, bytes) {
 	for (const name of TOOL_NAMES) {
 		if (!identity(receipt.tools?.[name])) fail(`missing ${name} executable identity`);
 	}
+	// The function-end producer also records the shared clangd resource profile.
+	// Earlier published receipts retain their exact seven-file recipe contract.
+	const recipeFiles = hasFunctionEndPatch
+		? [...RECIPE_FILES, 'resource-profile.mjs']
+		: RECIPE_FILES;
 	if (
 		!Array.isArray(receipt.recipe?.files) ||
-		receipt.recipe.files.length !== RECIPE_FILES.length ||
+		receipt.recipe.files.length !== recipeFiles.length ||
 		receipt.recipe.sha256 !== sha256(JSON.stringify(receipt.recipe.files)) ||
 		receipt.recipe.files.some(
 			/** @param {any} entry @param {number} index */
-			(entry, index) => entry?.path !== `scripts/${RECIPE_FILES[index]}` || !identity(entry)
+			(entry, index) => entry?.path !== `scripts/${recipeFiles[index]}` || !identity(entry)
 		)
 	)
 		fail('invalid recipe identity');
