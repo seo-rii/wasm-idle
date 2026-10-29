@@ -207,6 +207,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	SCALA: {
+		label: 'Scala 3 — Scala.js (experimental)',
+		editorLanguage: 'scala',
+		supportsArgs: true,
+		argsLabel: 'Program arguments',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	GLEAM: {
 		label: 'Gleam',
 		editorLanguage: 'gleam',
@@ -577,6 +585,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
 	r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
 	ruby: () => import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
+	scala: () => import('monaco-editor/esm/vs/basic-languages/scala/scala.contribution.js'),
 	shell: () => import('monaco-editor/esm/vs/basic-languages/shell/shell.contribution.js'),
 	rust: () => import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
 	sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),

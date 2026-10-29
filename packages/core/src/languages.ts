@@ -6,6 +6,7 @@ const canonicalLanguageIds = [
 	'OBJECTIVECXX',
 	'PYTHON3',
 	'JAVA',
+	'SCALA',
 	'RUST',
 	'GO',
 	'D',

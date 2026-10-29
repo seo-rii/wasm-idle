@@ -17,6 +17,7 @@ export type EditorDefaultLanguage =
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'scala'
 	| 'go'
 	| 'd'
 	| 'csharp'
@@ -91,6 +92,7 @@ export const editorDefaults: Record<
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'scala'
 	| 'go'
 	| 'd'
 	| 'csharp'
@@ -309,6 +311,14 @@ def fibonacci(n):
 tokens = input().split()
 n = int(tokens[0]) if tokens else 4
 print(f"fibonacci={fibonacci(n) + BONUS}")`,
+	scala: `// Enter a name in Preloaded stdin before Run. Extra reads receive EOF.
+// Scala.js supports Scala libraries; JVM-only dependencies are unavailable.
+object Main:
+  def main(args: Array[String]): Unit =
+    val name = Option(scala.io.StdIn.readLine()).getOrElse("Scala")
+    println(s"Hello, $name!")
+    println(List(1, 2, 3).map(_ * 2).mkString(", "))
+`,
 	java: `import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -1591,6 +1601,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.scala ||
 		source === editorDefaults.go ||
 		source === editorDefaults.d ||
 		source === editorDefaults.csharp ||

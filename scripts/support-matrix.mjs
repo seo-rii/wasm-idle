@@ -505,6 +505,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Scala 3 / Scala.js (experimental)',
+		ids: ['SCALA'],
+		runtime: 'Real Scala 3 browser compiler + Scala.js linker',
+		stdin: 'Buffered only; EOF after preloaded input',
+		editorSupport: 'Scala syntax + compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/scala.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SCALA',
+			language: 'SCALA'
+		}
+	},
+	{
 		language: 'Gleam',
 		ids: ['GLEAM'],
 		runtime: 'Gleam precompiled browser runtime',
@@ -1414,6 +1427,15 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase: `${npmPackage('swipl-wasm')} synced into ${code('static/wasm-prolog')}`,
 			execution: `static worker runs SWI-Prolog; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization: staticWorkerCustomizationFor('prolog')
+		}
+	],
+	[
+		'Scala 3 / Scala.js (experimental)',
+		{
+			packageBase:
+				'pgilliar/scala3-compiler-sjs browser revision 357051c857d4ffd5d1e1bfc9a56f0cbf5943a325; compiler, linker, classpath and runtime IR pinned together',
+			execution: `Browser compiler emits Scala.js IR; linker emits JavaScript ES modules for a fresh execution Worker; requires WebAssembly JSPI; root ${code('object Main')} with ${code('main(args: Array[String])')}; buffered ${code('stdin')} with EOF only; Scala.js standard library profile, no JVM-only libraries, macros or arbitrary dependencies`,
+			customization: `Program arguments, ${code('workspaceFiles')}, preloaded ${code('stdin')}; no debugger or language server`
 		}
 	],
 	[

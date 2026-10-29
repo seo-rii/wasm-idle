@@ -35,6 +35,7 @@ export interface RuntimeAssetKeySource {
 	java?: RuntimeAssetLoaderKeySource;
 	clang?: RuntimeAssetLoaderKeySource;
 	clangd?: RuntimeAssetLoaderKeySource;
+	scala?: { baseUrl?: string };
 	rust?: {
 		compilerUrl?: string;
 		manifestUrl?: string;
@@ -1299,6 +1300,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'c3', property: 'baseUrl', key: 'c3BaseUrl' },
 	{ runtime: 'grain', property: 'baseUrl', key: 'grainBaseUrl' },
+	{ runtime: 'scala', property: 'baseUrl', key: 'scalaBaseUrl' },
 	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
 	{ runtime: 'aheui', property: 'baseUrl', key: 'aheuiBaseUrl' },
 	{ runtime: 'apecode', property: 'baseUrl', key: 'apecodeBaseUrl' },

@@ -70,3 +70,6 @@ static/wasm-lfortran/
 /static/wasm-java-lsp/
 /static/wasm-java-lsp.preparing-*/
 /static/wasm-java-lsp.previous-*/
+
+# Scala compiler graph is prepared from the immutable reviewed asset lock.
+/static/wasm-scala/
