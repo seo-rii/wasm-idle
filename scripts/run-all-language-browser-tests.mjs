@@ -77,7 +77,8 @@ const BROWSER_TEST_ASSET_ENVIRONMENTS = {
 	c3: ['WASM_IDLE_RUN_REAL_BROWSER_C3'],
 	lfortran: ['WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN'],
 	lean4: ['WASM_IDLE_RUN_REAL_BROWSER_LEAN4'],
-	commonlisp: ['WASM_IDLE_RUN_REAL_BROWSER_COMMONLISP']
+	commonlisp: ['WASM_IDLE_RUN_REAL_BROWSER_COMMONLISP'],
+	scala: ['WASM_IDLE_RUN_REAL_BROWSER_SCALA']
 };
 
 /** @param {{ env: Record<string, string> }} plan */
