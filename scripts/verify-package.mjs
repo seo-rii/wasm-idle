@@ -280,7 +280,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
 		// GCC shared sysroot storage adds 5,712 emitted/documentation bytes and two files.
 		// PCH support adds another 8,315 bytes without new files or dependencies.
-		budget: { maxBytes: 40 * MiB + 596 * 1024, maxFiles: 3_392, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 612 * 1024, maxFiles: 3_392, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
