@@ -514,7 +514,7 @@ export const supportMatrixRows = [
 		browserTest: {
 			file: 'src/lib/playground/scala.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_SCALA',
-			language: 'SCALA'
+			marker: "included: q.playgroundLanguages.includes('SCALA')"
 		}
 	},
 	{
