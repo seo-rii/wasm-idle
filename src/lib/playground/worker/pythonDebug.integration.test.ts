@@ -94,3 +94,96 @@ scope.get('value')
 	helpers.dispose();
 	expect(() => helpers.createTrace('disposed.py', '[]', false, bridge)).toThrow('disposed');
 }, 120_000);
+
+it('follows real Pyodide loop line events through every iteration and the following line', async () => {
+	const runtime = await loadPyodide();
+	const helpers = createPythonDebugHelpers(runtime, '');
+	const reference: [number, number | null][] = JSON.parse(
+		runtime.runPython(`
+import json
+import sys
+__loop_code = compile('value = 0\\nwhile value < 3: value += 1\\nfinished = value\\n', 'loop.py', 'exec')
+__loop_events = []
+def __loop_observe(frame, event, arg):
+    if frame.f_code is __loop_code:
+        if event == 'line':
+            __loop_events.append((frame.f_lineno, frame.f_locals.get('value')))
+        return __loop_observe
+    return None
+try:
+    sys.settrace(__loop_observe)
+    exec(__loop_code, {})
+finally:
+    sys.settrace(None)
+json.dumps(__loop_events)
+`)
+	);
+	expect(reference[0]).toEqual([1, null]);
+	expect(reference.at(-1)).toEqual([3, 3]);
+	expect(reference.filter(([line, value]) => line === 2 && value! < 3)).toEqual([
+		[2, 0],
+		[2, 1],
+		[2, 2]
+	]);
+	try {
+		for (const [command, reason] of [
+			[1, 'breakpoint'],
+			[2, 'step'],
+			[3, 'nextLine']
+		] as const) {
+			const lines = command === 1 ? [2] : [];
+			const pauses: [number, string][] = [];
+			const values: [number, number | null][] = [];
+			const bridge = {
+				state: { version: 0 },
+				readBreakpoints: (known: number) =>
+					known === 0 ? null : JSON.stringify({ version: 0, lines }),
+				pause: (line: number, pauseReason: string, localsJson: string) => {
+					const locals: { name: string; value: string }[] = JSON.parse(localsJson);
+					const value = locals.find((local) => local.name === 'value');
+					pauses.push([line, pauseReason]);
+					values.push([line, value ? Number(value.value) : null]);
+					return pauses.length;
+				},
+				wait: () => command,
+				readWatch: () => '',
+				writeWatch: () => {}
+			};
+			const trace = helpers.createTrace(
+				'loop.py',
+				JSON.stringify(lines),
+				command !== 1,
+				bridge
+			);
+			runtime.globals.set('__loop_trace', trace);
+			try {
+				expect(
+					runtime.runPython(`
+__loop_scope = {}
+try:
+    sys.settrace(__loop_trace)
+    exec(__loop_code, __loop_scope)
+finally:
+    sys.settrace(None)
+__loop_scope['finished']
+`)
+				).toBe(3);
+				const expected =
+					command === 1 ? reference.filter(([line]) => line === 2) : reference;
+				expect(values).toEqual(expected);
+				expect(pauses).toEqual(
+					expected.map(([line], index) => [
+						line,
+						command !== 1 && index === 0 ? 'entry' : reason
+					])
+				);
+			} finally {
+				runtime.globals.delete('__loop_trace');
+				trace.destroy();
+			}
+		}
+	} finally {
+		runtime.runPython('sys.settrace(None)');
+		helpers.dispose();
+	}
+}, 120_000);
