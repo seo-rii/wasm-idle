@@ -82,6 +82,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'wasm',
 		producerPath: 'src/lib/playground/worker/wasm.ts'
 	},
+	SCALA: {
+		strategy: 'entry-signal',
+		hostModule: 'scala',
+		producerPath: 'src/lib/playground/worker/scala/execution.worker.js'
+	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },

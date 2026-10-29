@@ -207,7 +207,7 @@
 	]);
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
-	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
+	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL', 'SCALA']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
@@ -999,6 +999,7 @@
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
+			'.scala': 'SCALA',
 			'.py': 'PYTHON',
 			'.rs': 'RUST',
 			'.go': 'GO',
@@ -1104,6 +1105,7 @@
 			OBJC: 'main.m',
 			OBJECTIVECXX: 'main.mm',
 			JAVA: 'Main.java',
+			SCALA: 'Main.scala',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
 			GO: 'main.go',
@@ -1184,6 +1186,7 @@
 			OBJECTIVECXX: 'objectivecxx',
 			PYTHON: 'python',
 			JAVA: 'java',
+			SCALA: 'scala',
 			RUST: 'rust',
 			GO: 'go',
 			D: 'd',
@@ -4463,6 +4466,14 @@
 						</select>
 					</label>
 				{/if}
+				{#if language === 'SCALA'}
+					<p class="scala-runtime-notice" role="note">
+						Experimental Scala 3 / Scala.js: requires a browser with WebAssembly JSPI
+						(JSTag, Suspending, promising). Use object Main with main(args:
+						Array[String]). JVM libraries, macros and additional dependencies are
+						unavailable.
+					</p>
+				{/if}
 				{#if language === 'RUST'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined" aria-hidden="true"
@@ -5228,11 +5239,13 @@
 							<div>
 								<strong>Preloaded stdin</strong>
 								<span>
-									{language === 'BASH'
-										? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-										: language === 'POSTGRESQL'
-											? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-											: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+									{language === 'SCALA'
+										? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
+										: language === 'BASH'
+											? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+											: language === 'POSTGRESQL'
+												? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+												: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea
@@ -5490,6 +5503,15 @@
 
 	.topbar__config {
 		flex-wrap: wrap;
+	}
+
+	.scala-runtime-notice {
+		flex-basis: 100%;
+		max-width: 78ch;
+		margin: 0;
+		color: var(--text-2);
+		font-size: 12px;
+		line-height: 1.5;
 	}
 
 	.topbar__actions {

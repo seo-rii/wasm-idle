@@ -8,6 +8,8 @@ import { chromium } from 'playwright-core';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const repositoryRoot = path.resolve(root, '../..');
+const canonicalWorkerRoot = path.join(repositoryRoot, 'src/lib/playground/worker/scala');
 const assets = [];
 async function inventory(directory, prefix = '') {
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -46,9 +48,17 @@ const server = createServer(async (request, response) => {
 			response.end('<!doctype html><title>Scala output limit regression</title>');
 			return;
 		}
-		const filename = path.resolve(root, `.${pathname}`);
-		if (!filename.startsWith(`${path.resolve(root)}${path.sep}`))
-			throw new Error('Outside root');
+		const canonicalPrefix = '/src/lib/playground/worker/scala/';
+		const assetsPrefix = '/runtimes/wasm-scala/assets/';
+		const servingRoot = pathname.startsWith(canonicalPrefix) ? canonicalWorkerRoot : root;
+		const relativePath = pathname.startsWith(canonicalPrefix)
+			? pathname.slice(canonicalPrefix.length)
+			: pathname.startsWith(assetsPrefix)
+				? `assets/${pathname.slice(assetsPrefix.length)}`
+				: `.${pathname}`;
+		const filename = path.resolve(servingRoot, relativePath);
+		if (!filename.startsWith(`${path.resolve(servingRoot)}${path.sep}`))
+			throw new Error('Outside Scala test roots');
 		const mime = {
 			'.js': 'text/javascript',
 			'.json': 'application/json',
@@ -126,7 +136,7 @@ try {
 					}
 					worker.onerror = (event) => finish(new Error(event.message));
 					worker.onmessage = ({ data }) => {
-						if (data.id !== 1) return;
+						if (data.id !== 1 || data.type === 'execution-ready') return;
 						if (data.type === 'stdout') stdout += data.data;
 						else if (data.type === 'stderr') stderr += data.data;
 						else {

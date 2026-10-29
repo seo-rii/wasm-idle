@@ -1,113 +1,119 @@
-# Scala 3 / Scala.js browser compiler spike
+# Scala 3 / Scala.js (experimental)
 
-Internal experimental candidate, **not registered as a supported playground
-language or exported runtime package**. This uses the real Scala compiler and
-Scala.js linker from `pgilliar/scala3-compiler-sjs`, browser revision
-`357051c857d4ffd5d1e1bfc9a56f0cbf5943a325`. It does not interpret a Scala subset.
-User source is compiled in a browser Worker; user output is JavaScript ES modules,
-not standalone WASI. Scala.js library compatibility differs from JVM Scala.
+The playground exposes `SCALA` through its normal lazy Sandbox route. Source is
+compiled in the browser by the real Scala 3 compiler, linked to JavaScript by
+Scala.js, and executed in a fresh Worker. No handwritten Scala interpreter or
+server-side compiler is used. This is Scala.js compatibility, not a browser JVM.
 
-## Reproduce
+## Use
 
-From the wasm-idle root, with its dependencies installed:
+Choose **Scala 3 / Scala.js (experimental)**, use `Main.scala`, and define
+`object Main` with `def main(args: Array[String]): Unit`. Enter any input in
+**Preloaded stdin** before Run. The complete input ends in EOF; interactive
+terminal input is unavailable. Program arguments and multiple relative `.scala`
+workspace files are supported. Macros, arbitrary Maven dependencies, JVM-only
+libraries, debugging, and a Scala language server are unavailable.
+
+The browser must expose `WebAssembly.JSTag`, `WebAssembly.Suspending`, and
+`WebAssembly.promising`. Capability checks run before downloading large assets.
+The compiler, linker, libraries, and JSZip comprise 10 assets totaling
+62,554,449 bytes. Default downloads use an immutable upstream revision, verified
+against the checked-in size/SHA-256 receipts. Existing persistent asset caching
+supports later offline use when the browser retains the complete assets; the app
+and its normal modules must also be available offline.
+
+The pinned source revision is
+`pgilliar/scala3-compiler-sjs@357051c857d4ffd5d1e1bfc9a56f0cbf5943a325`.
+[ASSET-PROVENANCE.md](ASSET-PROVENANCE.md) records observed version identities,
+licenses, and the unresolved upstream builder-JDK provenance. This integration
+uses reviewed upstream prebuilt assets. A locally reproduced compiler source
+build and a separately maintained release producer remain future work. The
+experimental label does not imply full Scala or JVM-library compatibility.
+
+## Sandbox and verified loading
+
+The public adapter is `src/lib/playground/scala.ts`. Its canonical workers and
+upstream virtual filesystem live under `src/lib/playground/worker/scala/` so npm
+consumers receive the complete adapter. The original spike entry paths are thin
+wrappers around these same sources.
+
+The host downloads only pinned assets through the common verified cache loader.
+The compiler Worker verifies the transferred inventory again, then builds its
+executable Blob-module graph from those bytes. Original import and Wasm URLs are
+rewritten using a pinned exact-match profile; no unverified compiler module is
+re-fetched. CSP must permit Blob modules and WebAssembly compilation; the app's
+existing policy permits these. Custom mirrors use
+`runtimeAssets.scala.baseUrl` and cannot override the pinned integrity metadata.
+A string asset-root configuration maps to `<root>/wasm-scala/`.
+
+A load initializes the compiler. Each run snapshots source and arguments,
+compiles fresh source/runner IR, links, and starts a disposable execution Worker.
+Input and runtime arguments do not affect generated source. No compiled-artifact
+cache is claimed. Compiler state is retained when `limits.maxWorkers >= 2`.
+With the default one-worker budget, the compiler Worker is terminated before
+execution, so later runs reinitialize from verified cached bytes. Stop during
+execution preserves any retained compiler; cancelling compilation discards it.
+Every execution has fresh module/global state.
+
+The Scala bridge uses `StringReader` for stdin and UTF-8 `PrintStream`s for
+`scala.Console`/Predef stdout and stderr. It preserves blank lines, whitespace,
+Unicode, and initial BOM characters. Direct `System.in/out/err`, `System.exit`,
+and asynchronous work after `main` returns are outside this initial profile.
+The terminal merges streams as required by the existing Sandbox interface.
+Output limits are sticky host-visible failures, even when Scala catches the
+underlying exception. Failed compilation never launches an older artifact.
+
+Limits use the existing execution options: asset/startup/compile/run deadlines,
+source/workspace limits, output and diagnostic budgets, and worker count.
+Additional hard ceilings are 64 source files, 1 MiB source/input/arguments,
+32 MiB generated JavaScript, and 1 MiB output. The current compiler uses WasmGC;
+`maxWasmMemoryBytes` does not provide a hard JavaScript/WasmGC heap cap. Worker
+termination supplies cancellation and deadline enforcement; total browser heap
+is not bounded by the linear-memory setting.
+
+## Reproduce and qualify
+
+From the wasm-idle root with its dependencies installed:
 
 ```sh
 node runtimes/wasm-scala/prepare-assets.mjs
 node runtimes/wasm-scala/prepare-assets.mjs --verify
+pnpm test:scala
+pnpm test:browser:scala
+```
+
+Prepared local assets are ignored. The browser suite serves these exact verified
+upstream bytes locally and exercises the actual public Sandbox in Chromium,
+including stdin/EOF, Scala 3 features, multiple files, diagnostics, fresh state,
+Stop/Abort/timeouts and recovery, output limits, cached offline startup, corrupt
+asset rejection, and one-worker scheduling. Set `WASM_IDLE_SCALA_EVIDENCE_FILE`
+as documented in the test to record current source hashes and measured results.
+The checked-in `evidence/playground-browser.json` is the integration receipt;
+`evidence/browser.json` is historical spike evidence and is not a claim about
+later source revisions. Runtime tests with simulated Worker messages qualify
+host lifecycle behavior only.
+
+The earlier direct spike tests remain available:
+
+```sh
 node --test runtimes/wasm-scala/src/candidate.test.mjs
 node runtimes/wasm-scala/test/browser.mjs
 node runtimes/wasm-scala/test/output-limit.mjs
 ```
 
-Preparation downloads 10 committed upstream assets (62,554,449 bytes) from the
-immutable revision and checks every size and SHA-256 against `assets.lock.json`.
-Assets remain ignored and are prepared before serving, never downloaded or built
-by a Run action. The browser harness also verifies them before launching Chromium.
-The lock pins the entire compiler/linker/classpath/runtime-IR/vendor set together.
-This spike qualifies upstream **prebuilt** assets; it does not claim a locally
-reproduced source build, known compiler version string, or a published producer.
+For an explicit local mirror, `pnpm sync:wasm-scala` prepares
+`static/wasm-scala/`; it is not part of release publishing or deployment.
+Re-distributing this asset set requires resolving the provenance and licensing
+prerequisites in `ASSET-PROVENANCE.md`. No new infrastructure is provisioned by
+this integration.
 
-Upstream documents this source-build command:
+Upstream documents a source build in a separate checkout:
 
 ```sh
-# In a separate checkout of the pinned upstream revision:
 sbt --client "scala3-compiler-sjs/prepareBrowserIDE"
 ```
 
-A future maintained producer must reproduce that build, record actual compiler,
-linker and library versions, retain licenses, and generate release integrity
-metadata. Do not replace individual assets with newer Scala.js versions.
-
-## Current contract
-
-- Explicit root `object Main` with `main(args: Array[String])`. Multiple `.scala`
-  files with bounded relative paths; no entry discovery, dependency resolver,
-  macros, debugger, or language server.
-- Standard-library source functionality within the pinned Scala.js profile.
-  Arbitrary JVM/JDK APIs are not supported by this contract.
-- Complete buffered stdin passed before execution; `scala.io.StdIn` uses a real
-  `StringReader`, including empty input, final lines without newline, and EOF.
-  Interactive stdin is unsupported. There is no replay or restart on new input.
-- `scala.Console`/Predef output is streamed through separate UTF-8 `PrintStream`s without
-  trimming, filtering, or adding newlines. Direct `System.in/out/err`, JS console,
-  asynchronous callbacks after main returns, and `System.exit` need additional
-  qualification and are outside this initial contract.
-- Each execution imports its generated module into a fresh disposable Worker.
-  Main runs once and runtime arguments/input do not affect compilation. There is
-  no compiled-artifact cache yet. The real compiler and runtime IR remain warm.
-- Candidate host API `src/candidate.js`: `compile(files)`, `run({files,stdin,args},
-{signal,onOutput,timeoutMs})`, `stop()`, `dispose()`. `onOutput(stream,text)`
-  receives exact console chunks. Overlapping requests are rejected; failure,
-  cancellation, and timeout terminate the affected Worker. A failed compilation
-  cannot execute a previous artifact. Stop during execution preserves the compiler;
-  Stop during compilation discards it for safe recovery.
-- Limits: 64 files / 1 MiB source, 1 MiB stdin, 32 MiB generated JavaScript,
-  1 MiB console output; default compile deadline 120s, execution deadline 10s.
-  These are transport/output limits, not a compiler GC heap cap.
-- Compiler Worker checks `WebAssembly.JSTag`, `Suspending`, and `promising` before
-  fetching assets. Execution uses Blob ES modules; CSP must permit that loading
-  profile before any public integration.
-
-`src/memory-fs.js` is adapted from the pinned upstream browser IDE, under the
-included Apache-2.0 license. The other adapters are wasm-idle code. Downloaded
-assets include upstream/compiler/library and JSZip dependencies; their distribution
-licenses must be collected before a release producer publishes them.
-
-## Qualification and release gates
-
-`test/browser.mjs` compiles fresh Scala source entirely in Chromium, keeps the
-compiler warm, and uses a new execution Worker for each run. Its corpus includes
-collections, case classes, matching, `given`/`using`, type errors, buffered
-stdin/EOF, exact whitespace/Unicode stdout/stderr, runtime arguments, repeated
-mutable state, multiple files, BOM preservation, and timeout/recovery. The
-candidate API also passes real Stop/AbortController/recovery tests with a single
-retained compiler and five fresh execution Workers. `evidence/browser.json` records the actual
-result, source and asset hashes, capabilities, browser version, and timings.
-Inspect that receipt for passed/failed cases; tests are not a support declaration.
-Node lifecycle tests use simulated Worker messages and prove host cancellation
-and routing only; they do not prove Scala compiler correctness.
-
-Public registration requires reproducible producer assets with licenses and
-version identities, verified asset-cache integration, the existing `Sandbox`
-and execution-limit contract (including current worker scheduling), structured
-compiler diagnostic locations, Stop/abort browser tests through that adapter,
-offline/cache-corruption tests, and measured repeated-run memory behavior.
-Buffered input must be described in the UI before exposure. Genuine interactive
-input would need a preserving shared-buffer Reader and a delayed-input side-effect
-regression; the demo's exception/replay implementation must not be reused.
-
-The checked-in Chromium 153.0.8010.12 receipt passes all 14 browser cases. On
-this machine it records about 2.0s cold initialization, 21.3s first compile/link,
-and 10.7–18.3s successful warm compile/link (including workspace I/O). These are
-local measurements, not latency guarantees. Thirteen Node lifecycle tests also pass, including cancellation between compiler
-completion and execution. The focused output-limit browser test compiles a real
-Scala program and checks the exact 1 MiB budget, a caught one-byte overflow,
-a caught overflow followed by an infinite loop, and recovery in fresh Workers.
-Limit failures notify the host immediately and cannot be cleared by guest code.
-Cold download size and compile/link timings are measured by this spike. Browser
-heap/memory trends and full language compatibility are not established. A Scala.js
-Wasm+JS backend, browser JVM, and TeaVM compiler port remain separate future work.
-
-References: [upstream browser IDE](https://github.com/pgilliar/scala3-compiler-sjs/tree/357051c857d4ffd5d1e1bfc9a56f0cbf5943a325/compiler/browser-ide),
-[compiler discussion](https://contributors.scala-lang.org/t/scala-3-compiler-plugins-embedded-in-browser-with-wasm/7472),
-[Scala.js library compatibility](https://www.scala-js.org/doc/project/linking-errors.html).
+Future work includes producer reproducibility, curated library packs, complete
+language qualification, repeated-run heap analysis, and genuine preserving
+interactive input. The demo's exception/replay input model must not be reused.
+Scala.js Wasm+JS output is a separate backend, not generic WASI output.

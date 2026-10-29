@@ -10,6 +10,15 @@ import {
 } from './editor-defaults';
 
 describe('editor defaults', () => {
+	it('starts Scala with its explicit entry point and buffered-input reader', () => {
+		expect(resolveEditorDefaultSource('scala', 'wasm32-wasip1')).toBe(editorDefaults.scala);
+		expect(editorDefaults.scala).toContain('object Main:');
+		expect(editorDefaults.scala).toContain('def main(args: Array[String]): Unit =');
+		expect(editorDefaults.scala).toContain('scala.io.StdIn.readLine()');
+		expect(editorDefaults.scala).toContain('Preloaded stdin before Run');
+		expect(isEditorDefaultSource(editorDefaults.scala)).toBe(true);
+	});
+
 	it('keeps each starter wired for the current browser runtime path', () => {
 		expect(editorDefaults.c).toContain('fibonacci=%d');
 		expect(editorDefaults.cpp).toContain('std::cin >> n');

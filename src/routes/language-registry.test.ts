@@ -21,6 +21,18 @@ import {
 } from './language-registry';
 
 describe('language registry', () => {
+	it('exposes the experimental Scala.js contract without promising an LSP', () => {
+		expect(supportedLanguageIds).toContain('SCALA');
+		expect(playgroundLanguages).toContain('SCALA');
+		expect(languageLabels.SCALA).toBe('Scala 3 — Scala.js (experimental)');
+		expect(editorLanguages.SCALA).toBe('scala');
+		expect(argsHelpLanguages.has('SCALA')).toBe(true);
+		expect(compilerDiagnosticLanguages.has('SCALA')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('scala')).toBe(true);
+		expect(runtimeLspCapabilities.SCALA).toBeUndefined();
+		expect(monacoLanguageContributionLoaders.scala).toBeTypeOf('function');
+	});
+
 	it('keeps one complete descriptor for every playground language', () => {
 		expect(new Set(playgroundLanguages).size).toBe(playgroundLanguages.length);
 		expect(Object.keys(playgroundLanguageDescriptors).sort()).toEqual(

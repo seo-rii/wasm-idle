@@ -47,6 +47,7 @@ export const runtimeBrowserRegistry = [
 	runtime('aheui', 'esolangs', { dependencies: ['python'] }),
 	runtime('apecode', 'esolangs', { dependencies: ['python'] }),
 	runtime('golfscript', 'esolangs', { dependencies: ['ruby'] }),
+	runtime('scala', 'specialized'),
 	runtime('java', 'stdin', { sourceNames: ['java', 'teavm'] }),
 	runtime('elixir', 'stdin'),
 	runtime('javascript', 'stdin', { sourceNames: ['javascript', 'js-sandbox'] }),

@@ -1,0 +1,259 @@
+{
+	"status": "passed",
+	"browserVersion": "153.0.8010.12",
+	"revision": "357051c857d4ffd5d1e1bfc9a56f0cbf5943a325",
+	"verifiedAssetBytes": 62554449,
+	"adapterSources": [
+		{
+			"path": "src/lib/playground/scala.ts",
+			"bytes": 16135,
+			"sha256": "dd481eef3ca73ae03ca536d084ef94cc00e0b6046f312e04b5d050923ab9f4ea"
+		},
+		{
+			"path": "src/lib/playground/scalaAssets.ts",
+			"bytes": 2893,
+			"sha256": "44e9ae39048a52ab7f19b7afc13f73ec1af8278aebe3ca9aeefcd9ad0e21afd5"
+		},
+		{
+			"path": "src/lib/playground/scalaDiagnostics.ts",
+			"bytes": 1224,
+			"sha256": "ec6ca999038f55979a4b1f5cd7641997bb6736380387982b875f430d058448e7"
+		},
+		{
+			"path": "src/lib/playground/scala.playwright.test.ts",
+			"bytes": 16035,
+			"sha256": "5ff12b11156216695a7bcdb9a6ac66fc3f9c68514fa07ec6258121f587e158ec"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/asset-bootstrap.js",
+			"bytes": 2601,
+			"sha256": "775e118f68b35580bc4c93d38b1cdcc178c9e452d7e128fd62dd71efc94b7b83"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/asset-receipts.js",
+			"bytes": 1822,
+			"sha256": "a6e4e5135e8a98731ded9b4b37d7d14158ba146fc46b03f1f09263bb2c2835d3"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/compiler.worker.js",
+			"bytes": 8004,
+			"sha256": "262ee723b608234c49aca20720d4147f21bdbb0c92478014310db5ad56179c59"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/execution.worker.js",
+			"bytes": 3070,
+			"sha256": "5de53eb4e4357ca36524ed38118c3d03752be23d2bebaedb7ce0c0d9400dc261"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/memory-fs.js",
+			"bytes": 7732,
+			"sha256": "cc8e919559cd0bb6014696832a536c9a63722cce50dce375697be8835d90db80"
+		},
+		{
+			"path": "src/lib/playground/worker/scala/runner.js",
+			"bytes": 1388,
+			"sha256": "a2e880d9d0cc2ecf7d9cea1bd20f8b58e6ed6bf78f00305d175bd951adfef7d5"
+		}
+	],
+	"registration": {
+		"included": true,
+		"descriptor": {
+			"label": "Scala 3 — Scala.js (experimental)",
+			"editorLanguage": "scala",
+			"supportsArgs": true,
+			"argsLabel": "Program arguments",
+			"compilerDiagnostics": true,
+			"diagnosticMarkers": true
+		}
+	},
+	"reports": {
+		"hello": {
+			"value": true,
+			"output": "hello=one|둘\n",
+			"diagnostics": [],
+			"elapsedMs": 38849.80000001192,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"features": {
+			"value": true,
+			"output": "value=12\n",
+			"diagnostics": [],
+			"elapsedMs": 28758.09999999404,
+			"sourceSha256": "949abee94594792fab6b9605a306c4dc6e048a6062ceba11ddf625e7f89099ee"
+		},
+		"stdin": {
+			"value": true,
+			"output": "[한글😀]\n[]\n[tail]\nEOF\n",
+			"diagnostics": [],
+			"elapsedMs": 18628.20000000298,
+			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22"
+		},
+		"empty-eof": {
+			"value": true,
+			"output": "EOF\n",
+			"diagnostics": [],
+			"elapsedMs": 16888.80000001192,
+			"sourceSha256": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22"
+		},
+		"exact-output": {
+			"value": true,
+			"output": "﻿ \t\n\nlast\nerr\n",
+			"diagnostics": [],
+			"elapsedMs": 12747.79999999702,
+			"sourceSha256": "60f10766bd011bbf49f41ddb6150cf810d3792cc9c3d9f1a5abd5baf54fcd135"
+		},
+		"state-first": {
+			"value": true,
+			"output": "starts=1\n",
+			"diagnostics": [],
+			"elapsedMs": 12000.70000000298,
+			"sourceSha256": "e6fba76c994774f580abe43bc62510f8f4b979e99876d5a83885ac4b2c1e1a05"
+		},
+		"state-second": {
+			"value": true,
+			"output": "starts=1\n",
+			"diagnostics": [],
+			"elapsedMs": 17748.29999999702,
+			"sourceSha256": "e6fba76c994774f580abe43bc62510f8f4b979e99876d5a83885ac4b2c1e1a05"
+		},
+		"type-error": {
+			"error": "compile",
+			"message": "CompileError: -- [E007] Type Mismatch Error: /workspace/Main.scala:3:21 ----------------------\n3 |    val value: Int = \"invalid\"\n  |                     ^^^^^^^^^\n  |                     Found:    (\"invalid\" : String)\n  |                     Required: Int\n  |\n  | longer explanation available when compiling with `-explain`\n1 error found",
+			"output": "",
+			"diagnostics": [
+				{
+					"fileName": "Main.scala",
+					"lineNumber": 3,
+					"columnNumber": 21,
+					"severity": "error",
+					"message": "Type Mismatch Error\n3 |    val value: Int = \"invalid\"\n  |                     ^^^^^^^^^\n  |                     Found:    (\"invalid\" : String)\n  |                     Required: Int\n  |\n  | longer explanation available when compiling with `-explain`\n1 error found"
+				}
+			],
+			"elapsedMs": 14257.79999999702,
+			"sourceSha256": "e167ae93feeeb78f318565fdcfc56916ee167eeca6ce120cbf0a39bb6a76ab7c"
+		},
+		"error-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 21140.79999999702,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"workspace": {
+			"value": true,
+			"output": "workspace\n",
+			"diagnostics": [],
+			"elapsedMs": 12434.70000000298,
+			"sourceSha256": "1c2eb6f89ba62f83f218ea8a55fb954f71329c4d4e9fc7f36a9f7f32d82d334e"
+		},
+		"stop": {
+			"error": "cancelled",
+			"message": "CancelledError: Scala request cancelled",
+			"output": "started\n",
+			"diagnostics": [],
+			"elapsedMs": 13329.39999999106,
+			"sourceSha256": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f"
+		},
+		"stop-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 21153,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"abort": {
+			"error": "cancelled",
+			"message": "CancelledError: Scala request cancelled",
+			"output": "started\n",
+			"diagnostics": [],
+			"elapsedMs": 25145.20000000298,
+			"sourceSha256": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f"
+		},
+		"abort-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 32871.20000000298,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"timeout": {
+			"error": "timeout",
+			"message": "TimeoutError: Scala execute timed out",
+			"output": "",
+			"diagnostics": [],
+			"elapsedMs": 13085.10000000894,
+			"sourceSha256": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f"
+		},
+		"timeout-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 11313.90000000596,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"diagnostic-byte-limit": {
+			"error": "diagnostic-limit",
+			"limit": 64,
+			"actual": 98,
+			"message": "DiagnosticLimitError: Error: Scala compiler diagnostics exceed configured limits.",
+			"output": "",
+			"diagnostics": [],
+			"elapsedMs": 8759.70000000298,
+			"sourceSha256": "62b908237bc656ced003d120fb03392885bf7ce77a54e070dfb21ff8766482ed"
+		},
+		"diagnostic-limit-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 29454.79999999702,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"output-limit-caught": {
+			"error": "output-limit",
+			"limit": 64,
+			"actual": 65,
+			"message": "OutputLimitError: Error: Scala output exceeds 64 bytes.",
+			"output": "",
+			"diagnostics": [],
+			"elapsedMs": 22697.30000001192,
+			"sourceSha256": "5e7a5836084ca6198ce5fbecb0e6de72c7048ff002f29d49d67072776bd91333"
+		},
+		"output-limit-recovery": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 22403.20000000298,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"single-worker-budget": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 17228,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		},
+		"offline-new-sandbox": {
+			"value": true,
+			"output": "hello=\n",
+			"diagnostics": [],
+			"elapsedMs": 16524.90000000596,
+			"sourceSha256": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145"
+		}
+	},
+	"rejected": {
+		"accepted": false,
+		"message": "AssetIntegrityError: Runtime asset https://raw.githubusercontent.com/pgilliar/scala3-compiler-sjs/357051c857d4ffd5d1e1bfc9a56f0cbf5943a325/compiler/browser-ide/assets/classpath/rt.jar compressed size mismatch: expected 13050896 bytes, received 19"
+	},
+	"unsupported": {
+		"accepted": false,
+		"message": "UnsupportedBrowserFeatureError: Unsupported browser feature: WebAssembly.Suspending (Scala browser compiler)"
+	},
+	"pageErrors": [],
+	"downloads": 11,
+	"sourceHashes": {
+		"hello": "3499eadab9ef42def9808aa02917058381ba8e23caf7ea58fedda246535ac145",
+		"input": "02b154d6f8a9ef0141df2d93b81224dbbd8143338dcae63e50521b8e8db5ac22",
+		"loop": "daed2dfdc173d4dc3945db8f14ac7e78fd4ef2eb7b4d28c19fc74e19e1db971f",
+		"state": "e6fba76c994774f580abe43bc62510f8f4b979e99876d5a83885ac4b2c1e1a05"
+	}
+}

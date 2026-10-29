@@ -819,7 +819,7 @@ describe('example route debug actions', () => {
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\['BASH', 'POSTGRESQL'\]\);/
+			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\['BASH', 'POSTGRESQL', 'SCALA'\]\);/
 		);
 		expect(source).toMatch(
 			/const preloadedStdin =\s+sharedBufferAvailable && !preloadedStdinLanguages\.has\(language\)\s+\? undefined\s+: stdinInput;/s

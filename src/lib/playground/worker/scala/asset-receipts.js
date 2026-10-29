@@ -1,0 +1,58 @@
+// Generated from runtimes/wasm-scala/assets.lock.json; tests require exact receipt equality.
+export const SCALA_ASSET_REVISION = '357051c857d4ffd5d1e1bfc9a56f0cbf5943a325';
+export const SCALA_ASSET_BASE_URL =
+	'https://raw.githubusercontent.com/pgilliar/scala3-compiler-sjs/357051c857d4ffd5d1e1bfc9a56f0cbf5943a325/compiler/browser-ide/assets/';
+export const SCALA_ASSET_RECEIPTS = Object.freeze(
+	[
+		{
+			path: 'classpath/rt.jar',
+			bytes: 13050896,
+			sha256: 'fc201cadc0932924d89ac0e7b64e5e992525d8fe05d87821047765cbd14d7f60'
+		},
+		{
+			path: 'classpath/scala-lib.jar',
+			bytes: 9215387,
+			sha256: 'f88697ae427f04ab3303bbfaa7666f66aac781b0a1eecaaa19eaf58819b357ee'
+		},
+		{
+			path: 'classpath/scalajs-lib.jar',
+			bytes: 1092821,
+			sha256: '784d4e6ddf8d4c39b4a2ae1402f2eb97f9da96f4996e7edc3e6cb9d050e04531'
+		},
+		{
+			path: 'compiler/__loader.js',
+			bytes: 6252,
+			sha256: '67c35961534e93df509377d133623a102ca2bf8a1d7e9c17cb7e4efd8db09228'
+		},
+		{
+			path: 'compiler/main.js',
+			bytes: 39025,
+			sha256: '46b6466ecc0e0943a266b1252991a545981a3dbbdc001aaf63ac0ff7f621633e'
+		},
+		{
+			path: 'compiler/main.wasm',
+			bytes: 31659267,
+			sha256: '26b004f61743f2611acbd79e227a2ea95c34f0cdd583f8127eef4e5eb815c92a'
+		},
+		{
+			path: 'manifest.json',
+			bytes: 359,
+			sha256: '9cdcc034f5b1452bb1165dfc92fbc49fa39e033a9dac3450badad56c8948552d'
+		},
+		{
+			path: 'runtime/runtime-sjsir.zip',
+			bytes: 7116080,
+			sha256: 'd7a50f10350ba0c4629deae4d78ebea27d3a69e4b481ef92afffe79c52cbd57a'
+		},
+		{
+			path: 'vendor/jszip-wrapper.js',
+			bytes: 171,
+			sha256: 'a807b59ac97717905c27996372982c3174f441e3b3c3fef8f67e99a70742820d'
+		},
+		{
+			path: 'vendor/jszip.global.js',
+			bytes: 374191,
+			sha256: 'e2e1be5c22d3f15b0b89e676d3eede94644529996d9898a6b1587c9908a78506'
+		}
+	].map((entry) => Object.freeze(entry))
+);

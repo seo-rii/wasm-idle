@@ -15,6 +15,8 @@ import { renderLfortranRunnerWorker } from './sync-wasm-lfortran.mjs';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_MANIFEST_PATH = path.join(REPO_ROOT, 'scripts', 'browser-test-assets.v1.json');
+const DEFAULT_SCALA_ASSET_DIR = path.join(REPO_ROOT, 'runtimes/wasm-scala/assets');
+const DEFAULT_SCALA_LOCK_PATH = path.join(REPO_ROOT, 'runtimes/wasm-scala/assets.lock.json');
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
 const DEFAULT_CACHE_DIR = path.join(REPO_ROOT, '.cache', 'browser-test-assets');
 const ASSET_GROUPS = [
@@ -25,7 +27,8 @@ const ASSET_GROUPS = [
 	'c3',
 	'lfortran',
 	'lean4',
-	'commonlisp'
+	'commonlisp',
+	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
 
@@ -191,6 +194,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  * @param {{
  *   groups?: string[];
  *   manifestPath?: string;
+ *   scalaAssetDir?: string;
+ *   scalaLockPath?: string;
  *   staticDir?: string;
  *   cacheDir?: string;
  *   versionModulePath?: string;
@@ -209,6 +214,8 @@ export async function prepareBrowserTestAssets({
 	groups = ['all'],
 	manifestPath = DEFAULT_MANIFEST_PATH,
 	staticDir = DEFAULT_STATIC_DIR,
+	scalaAssetDir = DEFAULT_SCALA_ASSET_DIR,
+	scalaLockPath = DEFAULT_SCALA_LOCK_PATH,
 	cacheDir = DEFAULT_CACHE_DIR,
 	versionModulePath,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
@@ -248,6 +255,27 @@ export async function prepareBrowserTestAssets({
 			!process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
 
 	for (const group of selectedGroups) {
+		if (group === 'scala') {
+			/** @type {{repository: string; revision: string; files: {path: string; bytes: number; sha256: string}[]}} */
+			const lock = JSON.parse(await readFile(scalaLockPath, 'utf8'));
+			const result = await installAssets(
+				lock.files.map((entry) => ({
+					group: 'scala',
+					source: entry.path,
+					target: entry.path,
+					size: entry.bytes,
+					sha256: entry.sha256
+				})),
+				scalaAssetDir,
+				new URL(
+					`https://raw.githubusercontent.com/${lock.repository}/${lock.revision}/compiler/browser-ide/assets/`
+				),
+				{ bypassCookie: '', fetchImpl, timeoutMs }
+			);
+			downloaded += result.downloaded;
+			reused += result.reused;
+			continue;
+		}
 		if (group === 'lean4' || group === 'commonlisp') {
 			const prepareRuntime = group === 'lean4' ? prepareLean4 : prepareCommonLisp;
 			await prepareRuntime({ targetDir: path.join(staticDir, `wasm-${group}`), fetchImpl });
@@ -368,15 +396,32 @@ export async function prepareBrowserTestAssets({
 }
 
 /** Check the bytes that the selected suites will actually serve, including reused builds.
- * @param {{ groups: string[]; staticDir?: string; manifestPath?: string }} options
+ * @param {{ groups: string[]; staticDir?: string; manifestPath?: string; scalaAssetDir?: string; scalaLockPath?: string }} options
  */
 export async function verifyBrowserTestAssets({
 	groups,
 	staticDir = DEFAULT_STATIC_DIR,
-	manifestPath = DEFAULT_MANIFEST_PATH
+	manifestPath = DEFAULT_MANIFEST_PATH,
+	scalaAssetDir = DEFAULT_SCALA_ASSET_DIR,
+	scalaLockPath = DEFAULT_SCALA_LOCK_PATH
 }) {
 	const selectedGroups = normalizeBrowserTestAssetGroups(groups);
 	const manifest = parseManifest(JSON.parse(await readFile(manifestPath, 'utf8')));
+	if (selectedGroups.includes('scala')) {
+		/** @type {{files: {path: string; bytes: number; sha256: string}[]}} */
+		const lock = JSON.parse(await readFile(scalaLockPath, 'utf8'));
+		for (const receipt of lock.files) {
+			const filename = path.resolve(scalaAssetDir, receipt.path);
+			if (!filename.startsWith(path.resolve(scalaAssetDir) + path.sep))
+				throw new Error('Scala browser asset escapes its target directory');
+			const bytes = await readFile(filename);
+			if (
+				bytes.length !== receipt.bytes ||
+				createHash('sha256').update(bytes).digest('hex') !== receipt.sha256
+			)
+				throw new Error(`Required Scala browser asset receipt mismatch: ${receipt.path}`);
+		}
+	}
 	const receipts = manifest.assets
 		.filter((asset) => selectedGroups.includes(asset.group) && asset.group !== 'ocaml')
 		.map((asset) => ({ target: asset.target, ...(asset.decoded || asset) }));

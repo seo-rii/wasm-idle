@@ -55,7 +55,8 @@ export const scenarios = [
 		// Three shared core helpers add six JavaScript/declaration files; GCC stays separate.
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
 		// Python debug setup and Zig value formatting add two more such pairs.
-		budget: { maxBytes: 7 * MiB, maxFiles: 763, maxPackages: 6 },
+		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
+		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 783, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -279,7 +280,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
 		// GCC shared sysroot storage adds 5,712 emitted/documentation bytes and two files.
 		// PCH support adds another 8,315 bytes without new files or dependencies.
-		budget: { maxBytes: 40 * MiB + 532 * 1024, maxFiles: 3_372, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 612 * 1024, maxFiles: 3_392, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

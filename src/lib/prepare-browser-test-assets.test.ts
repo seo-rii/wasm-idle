@@ -30,6 +30,53 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('prepares and verifies Scala compiler fixtures from immutable receipts outside the release static tree', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-scala-ci-assets-'));
+		temporaryDirectories.push(root);
+		const bytes = Buffer.from('pinned Scala compiler fixture');
+		const receipt = {
+			path: 'compiler/main.wasm',
+			bytes: bytes.length,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		};
+		const scalaLockPath = path.join(root, 'scala-lock.json');
+		const manifestPath = path.join(root, 'manifest.json');
+		const scalaAssetDir = path.join(root, 'runtime-assets');
+		await writeFile(
+			scalaLockPath,
+			JSON.stringify({
+				repository: 'example/scala',
+				revision: 'a'.repeat(40),
+				files: [receipt]
+			})
+		);
+		await writeFile(
+			manifestPath,
+			JSON.stringify({
+				format: 'wasm-idle-browser-test-assets-v1',
+				defaultBaseUrl: 'https://example.com/',
+				assets: []
+			})
+		);
+		const fetchImpl = vi.fn<typeof fetch>(async () => new Response(bytes));
+		const options = { groups: ['scala'], scalaLockPath, scalaAssetDir, manifestPath };
+		expect((await prepareBrowserTestAssets({ ...options, fetchImpl })).downloaded).toBe(1);
+		expect(fetchImpl.mock.calls[0][0].toString()).toBe(
+			`https://raw.githubusercontent.com/example/scala/${'a'.repeat(40)}/compiler/browser-ide/assets/compiler/main.wasm`
+		);
+		await verifyBrowserTestAssets({
+			...options,
+			staticDir: path.join(root, 'not-a-published-build')
+		});
+		fetchImpl.mockClear();
+		expect((await prepareBrowserTestAssets({ ...options, fetchImpl })).reused).toBe(1);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		await writeFile(path.join(scalaAssetDir, receipt.path), 'corrupt');
+		await expect(verifyBrowserTestAssets(options)).rejects.toThrow(
+			'Required Scala browser asset receipt mismatch'
+		);
+	});
+
 	it('downloads current receipt-pinned clangd assets and headers from their configured group base', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-clangd-group-base-'));
 		temporaryDirectories.push(root);
@@ -746,7 +793,8 @@ describe('browser test asset preparation', () => {
 			'c3',
 			'lfortran',
 			'lean4',
-			'commonlisp'
+			'commonlisp',
+			'scala'
 		]);
 		expect(normalizeBrowserTestAssetGroups(['--', 'container'])).toEqual(['container']);
 		expect(normalizeBrowserTestAssetGroups(['--', 'clangd'])).toEqual(['clangd']);

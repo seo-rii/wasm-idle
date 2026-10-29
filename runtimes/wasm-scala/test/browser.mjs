@@ -8,6 +8,8 @@ import { chromium } from 'playwright-core';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
+const repositoryRoot = path.resolve(root, '../..');
+const canonicalWorkerRoot = path.join(repositoryRoot, 'src/lib/playground/worker/scala');
 const evidencePath = path.join(root, 'evidence/browser.json');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const evidence = {
@@ -18,6 +20,7 @@ const evidence = {
 	executionTimeoutMs: 10_000,
 	assets: [],
 	adapterSources: [],
+	canonicalAdapterSources: [],
 	cases: []
 };
 
@@ -51,8 +54,17 @@ const server = createServer(async (request, response) => {
 			response.end('<!doctype html><title>Internal Scala browser qualification</title>');
 			return;
 		}
-		const filename = path.resolve(root, `.${pathname}`);
-		if (!filename.startsWith(`${root}${path.sep}`)) throw new Error('Outside runtime root');
+		const canonicalPrefix = '/src/lib/playground/worker/scala/';
+		const assetsPrefix = '/runtimes/wasm-scala/assets/';
+		const servingRoot = pathname.startsWith(canonicalPrefix) ? canonicalWorkerRoot : root;
+		const relativePath = pathname.startsWith(canonicalPrefix)
+			? pathname.slice(canonicalPrefix.length)
+			: pathname.startsWith(assetsPrefix)
+				? `assets/${pathname.slice(assetsPrefix.length)}`
+				: `.${pathname}`;
+		const filename = path.resolve(servingRoot, relativePath);
+		if (!filename.startsWith(`${path.resolve(servingRoot)}${path.sep}`))
+			throw new Error('Outside Scala test roots');
 		const bytes = await readFile(filename);
 		response.setHeader(
 			'Content-Type',
@@ -170,6 +182,16 @@ try {
 		const bytes = await readFile(path.join(root, 'src', filename));
 		evidence.adapterSources.push({
 			path: `src/${filename}`,
+			bytes: bytes.length,
+			sha256: sha256(bytes)
+		});
+	}
+	for (const filename of (await readdir(canonicalWorkerRoot))
+		.filter((name) => name.endsWith('.js'))
+		.sort()) {
+		const bytes = await readFile(path.join(canonicalWorkerRoot, filename));
+		evidence.canonicalAdapterSources.push({
+			path: `src/lib/playground/worker/scala/${filename}`,
 			bytes: bytes.length,
 			sha256: sha256(bytes)
 		});

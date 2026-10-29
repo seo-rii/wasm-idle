@@ -8,6 +8,21 @@ import {
 } from '@wasm-idle/core';
 
 describe('core language contract', () => {
+	it('separates Scala bindings when their pinned asset location changes', () => {
+		const rootUrl = '/repl';
+		const first = createRuntimeAssetsKey({ rootUrl, scala: { baseUrl: '/scala-v1/' } });
+		const second = createRuntimeAssetsKey({ rootUrl, scala: { baseUrl: '/scala-v2/' } });
+		expect(first).not.toBe(second);
+		expect(JSON.parse(first || '{}')).toMatchObject({ rootUrl, scalaBaseUrl: '/scala-v1/' });
+		expect(createRuntimeAssetsKey({ rootUrl, scala: { baseUrl: '/scala-v1/' } })).toBe(first);
+	});
+
+	it('exposes Scala as a deferred compiler language', () => {
+		expect(supportedLanguageIds).toContain('SCALA');
+		expect(normalizeLanguageId('scala')).toBe('SCALA');
+		expect(isDeferredProgressLanguage('scala')).toBe(true);
+	});
+
 	it('exposes TinyGo as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('TINYGO');
 		expect(normalizeLanguageId('tinygo')).toBe('TINYGO');

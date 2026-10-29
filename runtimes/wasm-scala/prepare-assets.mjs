@@ -1,12 +1,21 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
 
 const lock = JSON.parse(await readFile(new URL('./assets.lock.json', import.meta.url), 'utf8'));
 const verifyOnly = process.argv.includes('--verify');
+const outputIndex = process.argv.indexOf('--output');
+if (outputIndex >= 0 && !process.argv[outputIndex + 1])
+	throw new Error('--output requires a directory');
+const outputDirectory =
+	outputIndex < 0
+		? new URL('./assets/', import.meta.url)
+		: pathToFileURL(path.resolve(process.argv[outputIndex + 1]) + path.sep);
 let total = 0;
 for (const entry of lock.files) {
 	if (!/^(?:[\w.-]+\/)*[\w.-]+$/.test(entry.path)) throw new Error('Invalid locked asset path');
-	const target = new URL(`./assets/${entry.path}`, import.meta.url);
+	const target = new URL(entry.path, outputDirectory);
 	let bytes;
 	try {
 		bytes = await readFile(target);

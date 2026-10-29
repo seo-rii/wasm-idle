@@ -118,9 +118,10 @@ describe('all-language browser test runner', () => {
 			'c3',
 			'lfortran',
 			'lean4',
-			'commonlisp'
+			'commonlisp',
+			'scala'
 		]);
-		for (const env of ['C3', 'LFORTRAN', 'LEAN4', 'COMMONLISP', 'OCAML']) {
+		for (const env of ['C3', 'LFORTRAN', 'LEAN4', 'COMMONLISP', 'OCAML', 'SCALA']) {
 			expect(specialized.env[`WASM_IDLE_RUN_REAL_BROWSER_${env}`]).toBe('1');
 		}
 		expect(specialized.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX');
@@ -143,7 +144,7 @@ describe('all-language browser test runner', () => {
 	it.each([
 		['stdin', ['container']],
 		['workers', ['container']],
-		['specialized', ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp']]
+		['specialized', ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp', 'scala']]
 	] as const)(
 		'prepares assets and requires execution for the added %s family',
 		(family, groups) => {
@@ -476,7 +477,7 @@ describe('all-language browser test runner', () => {
 		expect(prepareAssets).not.toHaveBeenCalled();
 		expect(startPreview).not.toHaveBeenCalled();
 		expect(verifyAssets).toHaveBeenCalledWith({
-			groups: ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp'],
+			groups: ['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp', 'scala'],
 			staticDir: path.join(repositoryRoot, 'build')
 		});
 	});

@@ -232,7 +232,10 @@
 		"sync:nim-lsp": "node scripts/sync-nim-lsp.mjs",
 		"test:lsp:assets:nim": "pnpm run sync:nim-lsp && WASM_IDLE_RUN_NIM_LSP_ASSET_BUILD=1 node --test scripts/sync-nim-lsp.test.mjs",
 		"test:lsp:browser:nim": "pnpm run sync:nim-lsp && python3 producers/nim-lsp/build.py --native && WASM_IDLE_RUN_NIM_LSP_BROWSER=1 pnpm --dir packages/lsp exec vitest run test/nim.playwright.test.ts --pool threads --maxWorkers 1 --no-file-parallelism",
-		"test:zig:browser": "node scripts/zig017-browser-smoke.mjs"
+		"test:zig:browser": "node scripts/zig017-browser-smoke.mjs",
+		"sync:wasm-scala": "node scripts/sync-wasm-scala.mjs",
+		"test:scala": "vitest run --config vitest.scala.config.ts",
+		"test:browser:scala": "WASM_IDLE_RUN_REAL_BROWSER_SCALA=1 vitest run --config vitest.scala.config.ts src/lib/playground/scala.playwright.test.ts"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

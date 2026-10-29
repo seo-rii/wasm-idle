@@ -653,6 +653,8 @@ export interface PhpRuntimeAssetConfig {
 }
 
 export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
+	/** Mirror of the pinned Scala.js compiler assets; integrity cannot be overridden. */
+	scala?: { baseUrl?: string };
 	javaLsp?: {
 		baseUrl?: string;
 		assets?: readonly {

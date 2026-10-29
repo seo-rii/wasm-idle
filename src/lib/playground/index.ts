@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'SCALA',
+		load: async () => {
+			const { default: Scala } = await import('$lib/playground/scala');
+			return new Scala();
+		}
+	},
+	{
 		languageId: 'GOLFSCRIPT',
 		load: async () => {
 			const { default: Golfscript } = await import('$lib/playground/golfscript');
