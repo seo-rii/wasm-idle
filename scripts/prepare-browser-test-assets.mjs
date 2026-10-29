@@ -257,7 +257,6 @@ export async function prepareBrowserTestAssets({
 	for (const group of selectedGroups) {
 		if (group === 'scala') {
 			/** @type {{repository: string; revision: string; files: {path: string; bytes: number; sha256: string}[]}} */
-			/** @type {{files: {path: string; bytes: number; sha256: string}[]}} */
 			const lock = JSON.parse(await readFile(scalaLockPath, 'utf8'));
 			const result = await installAssets(
 				lock.files.map((entry) => ({
