@@ -300,6 +300,7 @@ export default class Scala implements Sandbox {
 		}
 		this.check(operation);
 		progress?.set?.(0.25, 'Initializing Scala 3 compiler');
+		this.check(operation);
 		const worker = new Worker(new URL('./worker/scala/compiler.worker.js', import.meta.url), {
 			type: 'module'
 		});

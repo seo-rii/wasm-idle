@@ -182,3 +182,26 @@ it('uses the hard output ceiling consistently when a caller requests a larger bu
 	await rejected;
 	await sandbox.dispose();
 });
+
+it('does not create an orphan compiler when startup progress cancels loading', async () => {
+	const sandbox = new Scala();
+	await expect(
+		sandbox.load(
+			undefined,
+			undefined,
+			true,
+			[],
+			{},
+			{
+				set(value) {
+					if (value === 0.25) sandbox.terminate();
+				}
+			}
+		)
+	).rejects.toMatchObject({ code: 'cancelled' });
+	expect(workers).toHaveLength(0);
+	await sandbox.load();
+	expect(workers).toHaveLength(1);
+	expect(workers[0].messages[0].type).toBe('initialize');
+	await sandbox.dispose();
+});
