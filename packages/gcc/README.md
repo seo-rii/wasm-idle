@@ -209,20 +209,43 @@ duplicate paths and output collisions fail before compilation. Additional output
 reserve `program.N.s`/`program.N.o` (N ≥ 1). Multiple-unit assembly/object output
 is rejected; request those artifacts separately.
 
-The allowlist rejects unknown fields, `-march=native`, arbitrary driver arguments,
-PCH, plugins, LTO, dynamic/shared linking, OpenMP and process spawning. CPU profiles
-describe output requirements, not the browser CPU. Source pragmas can enable more
-instructions; choose execution hardware accordingly.
+No `-march=native`, arbitrary driver arguments, user-supplied PCH files, plugin, LTO,
+shared/dynamic linking, OpenMP or process spawning is supported. The option
+allowlist rejects unknown request fields. A CPU profile describes the generated program's
+requirements; it does not detect the browser host CPU. Source pragmas can enable additional
+instructions, just as with native GCC. Choose execution hardware accordingly.
 
 `avx2` disables FMA instructions and contraction; select `avx2-fma` for FMA-capable
 execution hosts. The consumer derives AVX2-only support from the v1 manifest's
 `['x86-64', 'avx2-fma']` without changing its bytes/digest. `artifact.cpu` records
 the request, including `avx2`; source target pragmas/attributes can override it.
 
-GMP/MPFR/MPC and Emscripten are Wasm **host** dependencies. Sysroot glibc, libstdc++,
-libgcc and CRT are **target** ELF files read by GCC/linker. Producer provenance
-records their revisions, hashes and licenses. The sysroot contract is shared with
-the Clang cross compiler, plus GCC's internal headers.
+### Precompiled `bits/stdc++.h`
+
+Parsing GNU `bits/stdc++.h` takes most of a typical C++ compilation. When
+`manifest.capabilities.precompiledHeaders` is true, `precompileHeader()` lets the real
+`cc1plus` precompile that header for one C++ profile (`standard`, `optimization` and `cpu`,
+with the same defaults as `compile()`):
+
+```ts
+await compiler.precompileHeader({ optimization: '2' }); // About 7 s and 100 MB, once.
+const result = await compiler.compile({ code: '#include <bits/stdc++.h>\n...' });
+```
+
+The compiler retains one PCH and replaces it on the next call. Later C++ units whose
+front-end flags are identical get `-isystem /pch` first on their include path, as the
+stage `argv` shows. GCC itself decides whether to load it: a PCH is used only when
+`#include <bits/stdc++.h>` comes before any C/C++ token and the macros and target
+options match. Otherwise GCC parses the header normally. The output is identical either
+way. With the producer's GCC 16.2 build, a `bits/stdc++.h` program's front end took about
+1.2 s instead of 3.4 s. Older bundles lack the capability; for them the method rejects
+instead of risking GCC's `PCH allocation failure`.
+
+The compiler's GMP/MPFR/MPC and Emscripten libraries are **host** dependencies in Wasm.
+The GNU sysroot's glibc, libstdc++, libgcc and CRT are **target** ELF files; they are only
+read by the compiler/linker. Source revisions, file hashes and licenses belong to the
+producer bundle's provenance files. The common sysroot contract is shared with the
+Clang cross compiler, with GCC's own internal headers added by the GCC producer.
 
 ## Integrity, state and measurements
 

@@ -32,6 +32,8 @@ export interface CrossGccManifest {
 	readonly resourceDir: `${CrossGccManifest['gccInstallation']}/include`;
 	readonly assets: Readonly<Record<CrossGccAssetName, CrossGccAsset>>;
 	readonly gnu: Readonly<{ gccVersion: string; glibcVersion: string; distribution: string }>;
+	/** Optional producer capabilities; absent fields are false for older bundles. */
+	readonly capabilities: Readonly<{ precompiledHeaders: boolean }>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
 }
 
@@ -61,6 +63,12 @@ export interface CrossGccCompileRequest {
 	/** Object-like macro definitions passed as real -D arguments, e.g. ONLINE_JUDGE=1. */
 	readonly defines?: readonly string[];
 }
+
+/** The C++ profile a precompiled header serves; defaults match compile(). */
+export type CrossGccPrecompileRequest = Pick<
+	CrossGccCompileRequest,
+	'cpu' | 'optimization' | 'standard'
+>;
 
 export interface CrossGccIdentity {
 	readonly compiler: 'gcc';
@@ -99,19 +107,38 @@ export interface CrossGccCompileResult {
 	readonly artifact?: CrossGccArtifact;
 }
 
+export interface CrossGccPrecompileResult {
+	readonly exitCode: number;
+	readonly stdout: string;
+	readonly stderr: string;
+	readonly stages: readonly CrossGccStageResult[];
+	/** Size of the retained precompiled header after a successful run. */
+	readonly bytes?: number;
+}
+
 export interface CrossGccCompiler {
 	readonly manifest: CrossGccManifest;
 	readonly identity: CrossGccIdentity;
 	/** Tool main() blocks its thread. Use createCrossGccWorker for interruptible compilation. */
 	compile(request: CrossGccCompileRequest): Promise<CrossGccCompileResult>;
+	/**
+	 * Precompile GNU bits/stdc++.h for this C++ profile and retain it, replacing any earlier
+	 * one. Later C++ compiles with identical front-end flags offer it to GCC, which uses it
+	 * only where valid. Requires manifest.capabilities.precompiledHeaders.
+	 */
+	precompileHeader(request?: CrossGccPrecompileRequest): Promise<CrossGccPrecompileResult>;
 	dispose(): void;
 }
 
-export interface CrossGccWorker extends Omit<CrossGccCompiler, 'compile'> {
+export interface CrossGccWorker extends Omit<CrossGccCompiler, 'compile' | 'precompileHeader'> {
 	compile(
 		request: CrossGccCompileRequest,
 		options?: { signal?: AbortSignal }
 	): Promise<CrossGccCompileResult>;
+	precompileHeader(
+		request?: CrossGccPrecompileRequest,
+		options?: { signal?: AbortSignal }
+	): Promise<CrossGccPrecompileResult>;
 	/** Terminates the Worker immediately. Create a new Worker to compile again. */
 	cancel(): void;
 }

@@ -109,6 +109,25 @@ describe('GCC Worker ownership and cancellation', () => {
 		expect(transport.terminate).toHaveBeenCalledOnce();
 	});
 
+	it('forwards header precompilation and rejects mismatched or overlapping responses', async () => {
+		const compiler = await createCrossGccWorker(options),
+			transport = FixtureWorker.instances[0];
+		const pending = compiler.precompileHeader({ optimization: '2' });
+		await expect(compiler.compile({ code: 'second' })).rejects.toThrow('busy');
+		expect(transport.messages.at(-1)).toEqual({
+			id: 1,
+			type: 'precompileHeader',
+			request: { optimization: '2' }
+		});
+		const result = { exitCode: 0, stdout: '', stderr: '', stages: [], bytes: 4 };
+		transport.onmessage?.({ data: { id: 1, type: 'precompiled', result } });
+		expect(await pending).toEqual(result);
+		const mismatched = compiler.precompileHeader();
+		transport.onmessage?.({ data: { id: 2, type: 'result', result } });
+		await expect(mismatched).rejects.toThrow('GCC Worker returned an invalid response');
+		expect(transport.terminate).toHaveBeenCalledOnce();
+	});
+
 	it('does not create a worker when initialization was already cancelled', async () => {
 		await expect(
 			createCrossGccWorker({ ...options, signal: AbortSignal.abort() })

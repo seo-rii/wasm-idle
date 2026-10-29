@@ -154,6 +154,7 @@ function manifest(rng) {
 			glibcVersion: '2.39',
 			distribution: `Contract fixture ${rng.int(100000)}`
 		},
+		capabilities: { precompiledHeaders: rng.int(2) === 1 },
 		qualification: { status: rng.pick(['verified', 'unverified']) }
 	};
 }
@@ -561,6 +562,15 @@ function generated(rng, index, api) {
 			},
 			() => {
 				input.qualification.status = rng.pick(['trusted', 'VERIFIED', null]);
+			},
+			() => {
+				input.capabilities = rng.pick([
+					null,
+					[],
+					'precompiledHeaders',
+					{ precompiledHeaders: 'true' },
+					{ precompiledHeaders: 1 }
+				]);
 			},
 			() => {
 				delete input.assets[asset];

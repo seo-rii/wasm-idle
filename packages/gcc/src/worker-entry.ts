@@ -4,6 +4,7 @@ import type {
 	CreateGccCompilerOptions,
 	CrossGccCompileRequest,
 	CrossGccCompiler,
+	CrossGccPrecompileRequest,
 	WasiGccArtifact,
 	WasiGccCompileRequest,
 	WasiGccCompiler,
@@ -21,9 +22,9 @@ scope.onmessage = async ({
 	data
 }: MessageEvent<{
 	id: number;
-	type: 'initialize' | 'compile' | 'run';
+	type: 'initialize' | 'compile' | 'run' | 'precompileHeader';
 	options?: CreateCrossGccCompilerOptions | CreateGccCompilerOptions | WasiGccRunOptions;
-	request?: CrossGccCompileRequest | WasiGccCompileRequest;
+	request?: CrossGccCompileRequest | WasiGccCompileRequest | CrossGccPrecompileRequest;
 	artifact?: WasiGccArtifact;
 }>) => {
 	try {
@@ -51,6 +52,13 @@ scope.onmessage = async ({
 				{ id: data.id, type: 'result', result },
 				result.artifact ? [result.artifact.bytes.buffer as ArrayBuffer] : []
 			);
+		} else if (data.type === 'precompileHeader') {
+			if (!compiler || !('precompileHeader' in compiler))
+				throw new Error('GCC Worker requires an x86 compiler to precompile headers');
+			const result = await compiler.precompileHeader(
+				data.request as CrossGccPrecompileRequest | undefined
+			);
+			scope.postMessage({ id: data.id, type: 'precompiled', result });
 		} else if (data.type === 'run') {
 			if (!compiler || !('run' in compiler) || !data.artifact)
 				throw new Error('GCC Worker requires a wasm32-wasi executable to run');

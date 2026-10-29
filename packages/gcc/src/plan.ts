@@ -246,5 +246,13 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 			output: '/workspace/program.elf'
 		});
 	}
-	return { files, stages, cpu, emit, fileName: stages.at(-1)!.output.split('/').at(-1)! };
+	return {
+		files,
+		stages,
+		cpu,
+		emit,
+		fileName: stages.at(-1)!.output.split('/').at(-1)!,
+		// A precompiled header is valid only for these exact front-end flags.
+		frontEndFlags: cc
+	};
 }

@@ -4,7 +4,7 @@ import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import { gccDigest, parseCrossGccManifest, parseWasiGccManifest } from './manifest.js';
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
-import { gccSysrootTree, mountGccSysroot } from './sysroot-fs.js';
+import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
 import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
@@ -17,6 +17,7 @@ import type {
 	CrossGccCompileRequest,
 	CrossGccCompiler,
 	CrossGccEmit,
+	CrossGccPrecompileRequest,
 	CrossGccStageResult,
 	CrossGccTool,
 	GccWasmInspection,
@@ -29,6 +30,8 @@ import type {
 const tools = ['cc1', 'cc1plus', 'as', 'ld'] as const;
 const encoder = new TextEncoder();
 const maxDiagnosticsBytes = 4 * 1024 * 1024;
+const pchDirectory = '/pch',
+	pchPath = `${pchDirectory}/bits/stdc++.h.gch`;
 
 function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
 	if (emit === 'assembly') {
@@ -175,6 +178,7 @@ export async function createGccCompiler(
 		CrossGccTool,
 		{ factory?: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
 	>();
+	let precompiled: { flags: readonly string[]; bytes: Uint8Array } | undefined;
 	let disposed = false,
 		active = false;
 	function dispose() {
@@ -185,6 +189,7 @@ export async function createGccCompiler(
 		sysroot.clear();
 		directories.clear();
 		sysrootTree.clear();
+		precompiled = undefined;
 	}
 	try {
 		for (const tool of tools) {
@@ -206,6 +211,243 @@ export async function createGccCompiler(
 		dispose();
 		throw error;
 	}
+	/** Each stage gets a fresh module and workspace; the first failing tool ends the run. */
+	async function run(
+		stages: readonly {
+			tool: CrossGccTool;
+			argv: readonly string[];
+			output: string;
+			precompiledHeader?: Uint8Array;
+		}[],
+		files: readonly { path: string; contents: Uint8Array }[],
+		simdEnabled = false
+	) {
+		if (disposed) throw new Error('GCC compiler is disposed');
+		if (active) throw new Error('GCC compiler is busy');
+		active = true;
+		const workspace = new Map(files.map((file) => [file.path, file.contents]));
+		const results: CrossGccStageResult[] = [];
+		let wasmInspection: GccWasmInspection | undefined;
+		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
+			const inspection = await inspectGccWasm(bytes, emit);
+			if (inspection.features.simd128 && !simdEnabled)
+				throw new Error(
+					'GCC produced Wasm SIMD without an enabled SIMD compilation request'
+				);
+			return inspection;
+		}
+		let stdout = '',
+			stderr = '',
+			diagnosticBytes = 0;
+		const print = (stream: 'stdout' | 'stderr') => (line: unknown) => {
+			const value = `${String(line)}\n`;
+			diagnosticBytes += encoder.encode(value).length;
+			if (diagnosticBytes > maxDiagnosticsBytes)
+				throw new Error('GCC diagnostics exceeded four MiB');
+			if (stream === 'stdout') stdout += value;
+			else stderr += value;
+		};
+		try {
+			for (const stage of stages) {
+				if (disposed) throw new Error('GCC compiler is disposed');
+				const loaded = factories.get(stage.tool)!;
+				let exitCode = 0;
+				const start = performance.now();
+				if (manifest.target === 'wasm32-wasi' && stage.tool === 'ld') {
+					const linked = await runWasiGccLinker(
+						loaded.wasm,
+						stage.argv,
+						[...sysroot, ...workspace],
+						stage.output,
+						(stream, text) => print(stream)(text)
+					);
+					results.push({
+						tool: stage.tool,
+						argv: [...stage.argv],
+						exitCode: linked.exitCode,
+						milliseconds: performance.now() - start,
+						peakMemoryBytes: linked.peakMemoryBytes
+					});
+					if (linked.exitCode !== 0)
+						return { exitCode: linked.exitCode, stdout, stderr, stages: results };
+					wasmInspection = await inspectOutput(linked.output!, 'executable');
+					workspace.set(stage.output, linked.output!);
+					continue;
+				}
+				const module = await loaded.factory!({
+					noInitialRun: true,
+					noExitRuntime: false,
+					wasmBinary: assets.get(`${stage.tool}Wasm`),
+					instantiateWasm(
+						imports: WebAssembly.Imports,
+						receive: (
+							instance: WebAssembly.Instance,
+							module: WebAssembly.Module
+						) => void
+					) {
+						const instance = new WebAssembly.Instance(loaded.wasm, imports);
+						receive(instance, loaded.wasm);
+						return instance.exports;
+					},
+					locateFile(path: string) {
+						// Binutils' generated loader keeps its build-time *-new filename
+						// after packaging. Both names resolve to the same pinned module.
+						if (
+							path === `${stage.tool}.wasm` ||
+							((stage.tool === 'as' || stage.tool === 'ld') &&
+								path === `${stage.tool}-new.wasm`) ||
+							(manifest.target === 'wasm32-wasi' &&
+								stage.tool === 'as' &&
+								path === 'wat2wasm.wasm')
+						) {
+							return new URL(manifest.assets[`${stage.tool}Wasm`].path, manifestUrl)
+								.href;
+						}
+						throw new Error(`GCC requested an unverified asset: ${path}`);
+					},
+					print: print('stdout'),
+					printErr: print('stderr'),
+					onExit(code: number) {
+						exitCode = code;
+					}
+				});
+				if (disposed) throw new Error('GCC compiler is disposed');
+				if (
+					!module?.FS ||
+					typeof module.FS.mount !== 'function' ||
+					typeof module.FS.createNode !== 'function' ||
+					typeof module.callMain !== 'function' ||
+					!(module.HEAPU8 instanceof Uint8Array)
+				)
+					throw new Error(`GCC ${stage.tool} has an incompatible Emscripten interface`);
+				module.FS.mkdirTree('/workspace');
+				module.FS.mkdirTree('/tmp');
+				if (stage.precompiledHeader || stage.output === pchPath)
+					module.FS.mkdirTree(`${pchDirectory}/bits`);
+				mountGccSysroot(module.FS, sysrootTree, '/sysroot');
+				for (const [path, bytes] of workspace) {
+					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
+					module.FS.writeFile(path, bytes);
+				}
+				// GCC maps a PCH privately, so the shared bytes are copied, never modified.
+				if (stage.precompiledHeader)
+					module.FS.writeFile(pchPath, stage.precompiledHeader, { canOwn: true });
+				module.FS.chdir('/workspace');
+				try {
+					const status = module.callMain([...stage.argv]);
+					if (typeof status === 'number') exitCode = status;
+				} catch (error) {
+					if (
+						error &&
+						typeof error === 'object' &&
+						'name' in error &&
+						error.name === 'ExitStatus' &&
+						'status' in error &&
+						Number.isSafeInteger(error.status)
+					)
+						exitCode = error.status as number;
+					else throw error;
+				}
+				if (!Number.isSafeInteger(exitCode))
+					throw new Error('GCC tool returned an invalid exit code');
+				results.push({
+					tool: stage.tool,
+					argv: [...stage.argv],
+					exitCode,
+					milliseconds: performance.now() - start,
+					peakMemoryBytes: module.HEAPU8.byteLength
+				});
+				if (exitCode !== 0) return { exitCode, stdout, stderr, stages: results };
+				const output = Uint8Array.from(module.FS.readFile(stage.output));
+				if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
+					wasmInspection = await inspectOutput(output, 'object');
+				else if (stage.output !== pchPath)
+					validateOutput(
+						output,
+						stage.tool === 'as'
+							? 'object'
+							: stage.tool === 'ld'
+								? 'executable'
+								: 'assembly'
+					);
+				workspace.set(stage.output, output);
+			}
+			return { exitCode: 0, stdout, stderr, stages: results, workspace, wasmInspection };
+		} catch (error) {
+			// Worker transport forwards only the error message. Preserve diagnostics
+			// printed before an unexpected host abort, without turning it into a
+			// normal tool exit or allowing an artifact from a previous request.
+			throw new Error(
+				[
+					`GCC compilation failed: ${error instanceof Error ? error.message : String(error)}`,
+					stdout && `GCC stdout:\n${stdout}`,
+					stderr && `GCC stderr:\n${stderr}`
+				]
+					.filter(Boolean)
+					.join('\n'),
+				{ cause: error }
+			);
+		} finally {
+			active = false;
+		}
+	}
+	async function precompileHeader(request: CrossGccPrecompileRequest = {}) {
+		if (disposed) throw new Error('GCC compiler is disposed');
+		if (active) throw new Error('GCC compiler is busy');
+		if (manifest.target !== 'x86_64-linux-gnu' || !manifest.capabilities.precompiledHeaders)
+			throw new Error('This GCC bundle cannot load precompiled headers');
+		if (
+			!request ||
+			typeof request !== 'object' ||
+			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard'].includes(key))
+		)
+			throw new Error('Unsupported GCC precompiled header option');
+		const { frontEndFlags } = gccCompilePlan(
+			{ ...request, code: '', language: 'cpp', emit: 'assembly' },
+			manifest
+		);
+		// Precompile the copy GCC would find first, exactly as #include <bits/stdc++.h> does.
+		const header = frontEndFlags
+			.flatMap((flag, index) =>
+				frontEndFlags[index - 1] === '-isystem' ? [`${flag}/bits/stdc++.h`] : []
+			)
+			.find((path) => {
+				let entry: GccSysrootDirectory | Uint8Array | undefined = sysrootTree;
+				for (const name of path.slice('/sysroot/'.length).split('/'))
+					entry = entry instanceof Map ? entry.get(name) : undefined;
+				return entry instanceof Uint8Array;
+			});
+		if (!header) throw new Error('GCC sysroot has no bits/stdc++.h');
+		precompiled = undefined;
+		const result = await run(
+			[
+				{
+					tool: 'cc1plus',
+					argv: [
+						...frontEndFlags,
+						header,
+						'-o',
+						'/workspace/stdc++.h.s',
+						'--output-pch',
+						pchPath
+					],
+					output: pchPath
+				}
+			],
+			[]
+		);
+		if (!result.workspace) return result;
+		const { workspace } = result;
+		const bytes = workspace.get(pchPath)!;
+		precompiled = { flags: frontEndFlags, bytes };
+		return {
+			exitCode: result.exitCode,
+			stdout: result.stdout,
+			stderr: result.stderr,
+			stages: result.stages,
+			bytes: bytes.byteLength
+		};
+	}
 	const compiler = {
 		manifest,
 		identity: Object.freeze({
@@ -226,200 +468,61 @@ export async function createGccCompiler(
 				manifest.target === 'wasm32-wasi'
 					? wasiGccCompilePlan(request as WasiGccCompileRequest, manifest)
 					: gccCompilePlan(request as CrossGccCompileRequest, manifest);
-			active = true;
-			const workspace = new Map(plan.files.map((file) => [file.path, file.contents]));
-			const stages: CrossGccStageResult[] = [];
-			let wasmInspection: GccWasmInspection | undefined;
-			const simdEnabled =
+			const frontEndFlags = 'frontEndFlags' in plan ? plan.frontEndFlags : undefined;
+			// GCC loads the header only where it is valid; otherwise it parses the source.
+			const pch =
+				precompiled &&
+				frontEndFlags &&
+				frontEndFlags.length === precompiled.flags.length &&
+				frontEndFlags.every((flag, index) => flag === precompiled!.flags[index])
+					? precompiled
+					: undefined;
+			const result = await run(
+				plan.stages.map((stage) => {
+					if (!pch || stage.tool !== 'cc1plus') return stage;
+					const include = stage.argv.indexOf('-isystem');
+					return {
+						...stage,
+						argv: [
+							...stage.argv.slice(0, include),
+							'-isystem',
+							pchDirectory,
+							...stage.argv.slice(include)
+						],
+						precompiledHeader: pch.bytes
+					};
+				}),
+				plan.files,
 				manifest.target === 'wasm32-wasi' &&
-				manifest.capabilities.simd &&
-				(request as WasiGccCompileRequest).simd === true;
-			async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
-				const inspection = await inspectGccWasm(bytes, emit);
-				if (inspection.features.simd128 && !simdEnabled)
-					throw new Error(
-						'GCC produced Wasm SIMD without an enabled SIMD compilation request'
-					);
-				return inspection;
-			}
-			let stdout = '',
-				stderr = '',
-				diagnosticBytes = 0;
-			const print = (stream: 'stdout' | 'stderr') => (line: unknown) => {
-				const value = `${String(line)}\n`;
-				diagnosticBytes += encoder.encode(value).length;
-				if (diagnosticBytes > maxDiagnosticsBytes)
-					throw new Error('GCC diagnostics exceeded four MiB');
-				if (stream === 'stdout') stdout += value;
-				else stderr += value;
-			};
-			try {
-				for (const stage of plan.stages) {
-					if (disposed) throw new Error('GCC compiler is disposed');
-					const loaded = factories.get(stage.tool)!;
-					let exitCode = 0;
-					const start = performance.now();
-					if (manifest.target === 'wasm32-wasi' && stage.tool === 'ld') {
-						const linked = await runWasiGccLinker(
-							loaded.wasm,
-							stage.argv,
-							[...sysroot, ...workspace],
-							stage.output,
-							(stream, text) => print(stream)(text)
-						);
-						stages.push({
-							tool: stage.tool,
-							argv: [...stage.argv],
-							exitCode: linked.exitCode,
-							milliseconds: performance.now() - start,
-							peakMemoryBytes: linked.peakMemoryBytes
-						});
-						if (linked.exitCode !== 0)
-							return { exitCode: linked.exitCode, stdout, stderr, stages };
-						wasmInspection = await inspectOutput(linked.output!, 'executable');
-						workspace.set(stage.output, linked.output!);
-						continue;
-					}
-					const module = await loaded.factory!({
-						noInitialRun: true,
-						noExitRuntime: false,
-						wasmBinary: assets.get(`${stage.tool}Wasm`),
-						instantiateWasm(
-							imports: WebAssembly.Imports,
-							receive: (
-								instance: WebAssembly.Instance,
-								module: WebAssembly.Module
-							) => void
-						) {
-							const instance = new WebAssembly.Instance(loaded.wasm, imports);
-							receive(instance, loaded.wasm);
-							return instance.exports;
-						},
-						locateFile(path: string) {
-							// Binutils' generated loader keeps its build-time *-new filename
-							// after packaging. Both names resolve to the same pinned module.
-							if (
-								path === `${stage.tool}.wasm` ||
-								((stage.tool === 'as' || stage.tool === 'ld') &&
-									path === `${stage.tool}-new.wasm`) ||
-								(manifest.target === 'wasm32-wasi' &&
-									stage.tool === 'as' &&
-									path === 'wat2wasm.wasm')
-							) {
-								return new URL(
-									manifest.assets[`${stage.tool}Wasm`].path,
-									manifestUrl
-								).href;
-							}
-							throw new Error(`GCC requested an unverified asset: ${path}`);
-						},
-						print: print('stdout'),
-						printErr: print('stderr'),
-						onExit(code: number) {
-							exitCode = code;
-						}
-					});
-					if (disposed) throw new Error('GCC compiler is disposed');
-					if (
-						!module?.FS ||
-						typeof module.FS.mount !== 'function' ||
-						typeof module.FS.createNode !== 'function' ||
-						typeof module.callMain !== 'function' ||
-						!(module.HEAPU8 instanceof Uint8Array)
-					)
-						throw new Error(
-							`GCC ${stage.tool} has an incompatible Emscripten interface`
-						);
-					module.FS.mkdirTree('/workspace');
-					module.FS.mkdirTree('/tmp');
-					mountGccSysroot(module.FS, sysrootTree, '/sysroot');
-					for (const [path, bytes] of workspace) {
-						module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
-						module.FS.writeFile(path, bytes);
-					}
-					module.FS.chdir('/workspace');
-					try {
-						const status = module.callMain([...stage.argv]);
-						if (typeof status === 'number') exitCode = status;
-					} catch (error) {
-						if (
-							error &&
-							typeof error === 'object' &&
-							'name' in error &&
-							error.name === 'ExitStatus' &&
-							'status' in error &&
-							Number.isSafeInteger(error.status)
-						)
-							exitCode = error.status as number;
-						else throw error;
-					}
-					if (!Number.isSafeInteger(exitCode))
-						throw new Error('GCC tool returned an invalid exit code');
-					stages.push({
-						tool: stage.tool,
-						argv: [...stage.argv],
-						exitCode,
-						milliseconds: performance.now() - start,
-						peakMemoryBytes: module.HEAPU8.byteLength
-					});
-					if (exitCode !== 0) return { exitCode, stdout, stderr, stages };
-					const output = Uint8Array.from(module.FS.readFile(stage.output));
-					if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
-						wasmInspection = await inspectOutput(output, 'object');
-					else
-						validateOutput(
-							output,
-							stage.tool === 'as'
-								? 'object'
-								: stage.tool === 'ld'
-									? 'executable'
-									: 'assembly'
-						);
-					workspace.set(stage.output, output);
+					manifest.capabilities.simd &&
+					(request as WasiGccCompileRequest).simd === true
+			);
+			if (!result.workspace) return result;
+			const { workspace, wasmInspection, ...completed } = result;
+			return {
+				...completed,
+				artifact: {
+					compiler: 'gcc',
+					compilerHost: manifest.host,
+					target: manifest.target,
+					format:
+						plan.emit === 'assembly'
+							? 'assembly'
+							: manifest.target === 'wasm32-wasi'
+								? plan.emit === 'object'
+									? 'wasm-object'
+									: 'wasm-executable'
+								: plan.emit === 'object'
+									? 'elf-object'
+									: 'elf-executable',
+					fileName: plan.fileName,
+					bytes: workspace.get(`/workspace/${plan.fileName}`)!,
+					cpu: plan.cpu,
+					...(wasmInspection ? { wasm: wasmInspection } : {})
 				}
-				return {
-					exitCode: 0,
-					stdout,
-					stderr,
-					stages,
-					artifact: {
-						compiler: 'gcc',
-						compilerHost: manifest.host,
-						target: manifest.target,
-						format:
-							plan.emit === 'assembly'
-								? 'assembly'
-								: manifest.target === 'wasm32-wasi'
-									? plan.emit === 'object'
-										? 'wasm-object'
-										: 'wasm-executable'
-									: plan.emit === 'object'
-										? 'elf-object'
-										: 'elf-executable',
-						fileName: plan.fileName,
-						bytes: workspace.get(`/workspace/${plan.fileName}`)!,
-						cpu: plan.cpu,
-						...(wasmInspection ? { wasm: wasmInspection } : {})
-					}
-				};
-			} catch (error) {
-				// Worker transport forwards only the error message. Preserve diagnostics
-				// printed before an unexpected host abort, without turning it into a
-				// normal tool exit or allowing an artifact from a previous request.
-				throw new Error(
-					[
-						`GCC compilation failed: ${error instanceof Error ? error.message : String(error)}`,
-						stdout && `GCC stdout:\n${stdout}`,
-						stderr && `GCC stderr:\n${stderr}`
-					]
-						.filter(Boolean)
-						.join('\n'),
-					{ cause: error }
-				);
-			} finally {
-				active = false;
-			}
+			};
 		},
+		...(manifest.target === 'x86_64-linux-gnu' ? { precompileHeader } : {}),
 		dispose,
 		...(manifest.target === 'wasm32-wasi'
 			? {

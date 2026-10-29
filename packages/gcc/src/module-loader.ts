@@ -11,7 +11,7 @@ export interface GccFileSystemNode {
 
 export interface GccFileSystem {
 	mkdirTree(path: string): void;
-	writeFile(path: string, bytes: Uint8Array): void;
+	writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }): void;
 	readFile(path: string): Uint8Array;
 	chdir(path: string): void;
 	mount(type: { mount(mount: object): GccFileSystemNode }, options: object, path: string): void;

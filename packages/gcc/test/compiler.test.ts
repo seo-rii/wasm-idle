@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
+import { loadGccModuleFactory } from '../src/module-loader.js';
 
 interface FixtureNode {
 	mode: number;
@@ -119,6 +120,8 @@ vi.mock('../src/module-loader.js', () => ({
 						return 9;
 					}
 					if (host.mode === 'no-output') return 0;
+					if (argv.includes('--output-pch'))
+						files.set(argv[argv.indexOf('--output-pch') + 1], encoder.encode('gpch'));
 					const output = argv[argv.indexOf('-o') + 1];
 					files.set(
 						output,
@@ -180,7 +183,11 @@ function tar(path = 'usr/include/stdio.h') {
 	return bytes;
 }
 
-function bundle(archivePath?: string, version: '13.3.0' | '16.2.0' = '16.2.0') {
+function bundle(
+	archivePath?: string,
+	version: '13.3.0' | '16.2.0' = '16.2.0',
+	capabilities?: Record<string, unknown>
+) {
 	const major = version === '13.3.0' ? '13' : '16';
 	const files = new Map<string, Uint8Array>([['sysroot.tar', tar(archivePath)]]);
 	for (const tool of ['cc1', 'cc1plus', 'as', 'ld']) {
@@ -208,6 +215,7 @@ function bundle(archivePath?: string, version: '13.3.0' | '16.2.0' = '16.2.0') {
 		resourceDir: `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}/include`,
 		assets,
 		gnu: { gccVersion: major, glibcVersion: '2.39', distribution: 'Synthetic test fixture' },
+		...(capabilities ? { capabilities } : {}),
 		qualification: { status: 'unverified' }
 	};
 	const manifestBytes = encoder.encode(JSON.stringify(manifest));
@@ -342,6 +350,32 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it.each(['wasm', 'loader'] as const)(
+		'preserves the original %s initialization failure',
+		async (phase) => {
+			const failure = new Error(`synthetic ${phase} initialization failure`);
+			if (phase === 'wasm') vi.spyOn(WebAssembly, 'compile').mockRejectedValueOnce(failure);
+			else vi.mocked(loadGccModuleFactory).mockRejectedValueOnce(failure);
+			await expect(createCrossGccCompiler(bundle().options)).rejects.toBe(failure);
+		}
+	);
+
+	it('preserves cancellation during initialization and releases prepared loaders', async () => {
+		const controller = new AbortController();
+		const failure = new DOMException('synthetic initialization cancellation', 'AbortError');
+		const compile = WebAssembly.compile.bind(WebAssembly);
+		vi.spyOn(WebAssembly, 'compile').mockImplementationOnce(async (bytes) => {
+			const module = await compile(bytes);
+			controller.abort(failure);
+			return module;
+		});
+		await expect(
+			createCrossGccCompiler({ ...bundle().options, signal: controller.signal })
+		).rejects.toBe(failure);
+		const loaded = await vi.mocked(loadGccModuleFactory).mock.results.at(-1)!.value;
+		expect(loaded.revoke).toHaveBeenCalledOnce();
+	});
+
 	it('releases extracted sysroot bytes while the disposed compiler remains reachable', async () => {
 		setFlagsFromString('--expose_gc');
 		const collect = runInNewContext('gc') as () => void;
@@ -784,6 +818,73 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it('precompiles bits/stdc++.h once and offers it only to C++ units with identical flags', async () => {
+		const header = 'usr/include/x86_64-linux-gnu/c++/16/bits/stdc++.h';
+		const unsupported = await createCrossGccCompiler(bundle(header).options);
+		try {
+			expect(unsupported.manifest.capabilities.precompiledHeaders).toBe(false);
+			await expect(unsupported.precompileHeader()).rejects.toThrow(
+				'This GCC bundle cannot load precompiled headers'
+			);
+		} finally {
+			unsupported.dispose();
+		}
+		const compiler = await createCrossGccCompiler(
+			bundle(header, '16.2.0', { precompiledHeaders: true }).options
+		);
+		try {
+			await expect(compiler.precompileHeader({ code: '' } as never)).rejects.toThrow(
+				'Unsupported GCC precompiled header option'
+			);
+			const precompiled = await compiler.precompileHeader({ optimization: '2' });
+			expect(precompiled).toMatchObject({ exitCode: 0, bytes: 4 });
+			expect(precompiled.stages.map((stage) => stage.tool)).toEqual(['cc1plus']);
+			expect(precompiled.stages[0].argv.slice(-5)).toEqual([
+				`/sysroot/${header}`,
+				'-o',
+				'/workspace/stdc++.h.s',
+				'--output-pch',
+				'/pch/bits/stdc++.h.gch'
+			]);
+			const flags = precompiled.stages[0].argv.slice(0, -5);
+			host.calls.length = 0;
+			const code = '#include <bits/stdc++.h>\nint main() {}\n';
+			await compiler.compile({
+				code,
+				files: [{ path: 'b.cpp', contents: code }],
+				sources: ['b.cpp']
+			});
+			const frontends = host.calls.filter((call) => call.tool === 'cc1plus');
+			expect(frontends).toHaveLength(2);
+			for (const call of frontends) {
+				const include = flags.indexOf('-isystem');
+				expect(call.argv.slice(0, -3)).toEqual([
+					...flags.slice(0, include),
+					'-isystem',
+					'/pch',
+					...flags.slice(include)
+				]);
+				expect(new TextDecoder().decode(call.files.get('/pch/bits/stdc++.h.gch'))).toBe(
+					'gpch'
+				);
+			}
+			for (const request of [
+				{ code, optimization: '0' as const },
+				{ code, standard: 'gnu++17' },
+				{ code, cpu: 'avx2' as const },
+				{ code: 'int main() {}', language: 'c' as const },
+				{ code: 'int main() {}', preprocessed: true }
+			]) {
+				host.calls.length = 0;
+				expect((await compiler.compile(request)).exitCode).toBe(0);
+				expect(host.calls[0].argv).not.toContain('/pch');
+				expect(host.calls[0].files.has('/pch/bits/stdc++.h.gch')).toBe(false);
+			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('verifies manifest and every asset before executing any imported loader', async () => {
 		const loader = (await import('../src/module-loader.js')).loadGccModuleFactory;
 		vi.mocked(loader).mockClear();
@@ -929,6 +1030,8 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			{ gccInstallation: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13' },
 			{ resourceDir: '/sysroot/usr/lib/gcc/x86_64-linux-gnu/13/include' },
 			{ cpuProfiles: ['native'] },
+			{ capabilities: { precompiledHeaders: 'yes' } },
+			{ capabilities: [] },
 			{ resourceDir: '/tmp/include' },
 			{
 				assets: {

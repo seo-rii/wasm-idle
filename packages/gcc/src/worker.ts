@@ -5,6 +5,8 @@ import type {
 	CrossGccCompileResult,
 	CrossGccIdentity,
 	CrossGccManifest,
+	CrossGccPrecompileRequest,
+	CrossGccPrecompileResult,
 	CrossGccWorker,
 	WasiGccArtifact,
 	WasiGccCompileRequest,
@@ -25,6 +27,7 @@ type WorkerMessage =
 	  }
 	| { id: number; type: 'result'; result: CrossGccCompileResult | WasiGccCompileResult }
 	| { id: number; type: 'run-result'; result: WasiGccRunResult }
+	| { id: number; type: 'precompiled'; result: CrossGccPrecompileResult }
 	| { id: number; type: 'error'; message: string };
 
 type GccWorkerOptions = Omit<CreateGccCompilerOptions, 'fetchImpl'>;
@@ -75,7 +78,7 @@ export async function createGccWorker(
 			typeof data !== 'object' ||
 			!Number.isSafeInteger(data.id) ||
 			data.id < 0 ||
-			!['ready', 'result', 'run-result', 'error'].includes(data.type)
+			!['ready', 'result', 'run-result', 'precompiled', 'error'].includes(data.type)
 		) {
 			stop(new Error('GCC Worker returned an invalid response'));
 			return;
@@ -86,7 +89,9 @@ export async function createGccWorker(
 			(data.type !== 'error' && data.type !== request.expected) ||
 			(data.type === 'error' && typeof data.message !== 'string') ||
 			(data.type === 'ready' && (!data.manifest || !data.identity)) ||
-			((data.type === 'result' || data.type === 'run-result') &&
+			((data.type === 'result' ||
+				data.type === 'run-result' ||
+				data.type === 'precompiled') &&
 				(!data.result || typeof data.result !== 'object'))
 		) {
 			stop(new Error('GCC Worker returned an invalid response'));
@@ -100,7 +105,10 @@ export async function createGccWorker(
 	worker.onerror = (event) => stop(new Error(`GCC Worker failed: ${event.message}`));
 	worker.onmessageerror = () => stop(new Error('GCC Worker returned an unreadable response'));
 	function send(
-		message: { type: 'initialize' | 'compile' | 'run'; [key: string]: unknown },
+		message: {
+			type: 'initialize' | 'compile' | 'run' | 'precompileHeader';
+			[key: string]: unknown;
+		},
 		signal?: AbortSignal
 	): Promise<WorkerMessage> {
 		if (disposed) return Promise.reject(new Error('GCC Worker is disposed'));
@@ -114,7 +122,9 @@ export async function createGccWorker(
 					? 'ready'
 					: message.type === 'compile'
 						? 'result'
-						: 'run-result';
+						: message.type === 'precompileHeader'
+							? 'precompiled'
+							: 'run-result';
 			pending.set(id, { expected, resolve, reject, cleanup });
 			signal?.addEventListener('abort', abort, { once: true });
 			try {
@@ -163,6 +173,30 @@ export async function createGccWorker(
 					busy = false;
 				}
 			},
+			...(options.target === 'x86_64-linux-gnu'
+				? {
+						async precompileHeader(
+							request: CrossGccPrecompileRequest = {},
+							{ signal }: { signal?: AbortSignal } = {}
+						) {
+							if (busy) throw new Error('GCC Worker is busy');
+							busy = true;
+							try {
+								const response = await send(
+									{ type: 'precompileHeader', request },
+									signal
+								);
+								if (response.type !== 'precompiled')
+									throw new Error(
+										'GCC Worker returned an invalid precompile response'
+									);
+								return response.result;
+							} finally {
+								busy = false;
+							}
+						}
+					}
+				: {}),
 			...(options.target === 'wasm32-wasi'
 				? {
 						async run(

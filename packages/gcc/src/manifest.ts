@@ -107,6 +107,13 @@ export function parseCrossGccManifest(value: unknown): CrossGccManifest {
 	const assets = parseAssets(input.assets);
 	const gnu = record(input.gnu, 'GNU provenance');
 	if (gnu.gccVersion !== major) throw new Error('Unsupported GCC target library version');
+	const capabilities =
+		input.capabilities === undefined ? {} : record(input.capabilities, 'capabilities');
+	if (
+		capabilities.precompiledHeaders !== undefined &&
+		typeof capabilities.precompiledHeaders !== 'boolean'
+	)
+		throw new Error('Invalid GCC precompiled header capability');
 	const qualification = parseQualification(input.qualification);
 	return Object.freeze({
 		...fixed,
@@ -119,6 +126,9 @@ export function parseCrossGccManifest(value: unknown): CrossGccManifest {
 			gccVersion: text(gnu.gccVersion),
 			glibcVersion: text(gnu.glibcVersion),
 			distribution: text(gnu.distribution)
+		}),
+		capabilities: Object.freeze({
+			precompiledHeaders: capabilities.precompiledHeaders === true
 		}),
 		qualification
 	});
