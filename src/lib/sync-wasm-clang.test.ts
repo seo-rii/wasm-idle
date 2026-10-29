@@ -646,7 +646,8 @@ describe('syncWasmClangDist', () => {
 			}
 			const changedInput = Object.entries(LEGACY_CLANG_RELEASE.inputs).find(
 				([name, expected]) =>
-					inputs[name].byteLength !== expected.bytes || sha256(inputs[name]) !== expected.sha256
+					inputs[name].byteLength !== expected.bytes ||
+					sha256(inputs[name]) !== expected.sha256
 			);
 			if (changedInput) {
 				// An updated installed compiler cannot inherit the historical exception,
@@ -786,6 +787,53 @@ describe('syncWasmClangDist', () => {
 						fixture.payloads.get(source)
 					);
 			}
+		}
+	);
+
+	it('preserves the fifth function-end patch authenticated by its producer manifest', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeVerifiedBuildFixture(sourceDir);
+		fixture.receipt.manifestSha256 =
+			'de99e0be692a813c854edf8f42606f35226c285b567b246c617a1cecc74c62d9';
+		fixture.buildInfo.toolchain.producer.manifestSha256 = fixture.receipt.manifestSha256;
+		fixture.receipt.sources.llvm.patches.push({
+			path: 'patches/wasm-function-end-location.patch',
+			sha256: '328eec2ebde3eacb26f8fa998cddef6a57df6719c1f9cffb25e5da95aa10a5c5'
+		});
+		await updateBuildReceipt(sourceDir, fixture);
+		await syncWasmClangDist({ sourceDir, staticDir });
+		expect(
+			JSON.parse(
+				await readFile(path.join(staticDir, 'clang/clang-build-receipt.json'), 'utf8')
+			)
+		).toEqual(fixture.receipt);
+	});
+
+	it.each(['unknown-manifest', 'wrong-path', 'wrong-sha256', 'missing', 'extra'])(
+		'rejects %s function-end patch evidence before replacing existing targets',
+		async (failure) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeVerifiedBuildFixture(sourceDir);
+			fixture.receipt.manifestSha256 =
+				'de99e0be692a813c854edf8f42606f35226c285b567b246c617a1cecc74c62d9';
+			if (failure === 'unknown-manifest') fixture.receipt.manifestSha256 = 'e'.repeat(64);
+			fixture.buildInfo.toolchain.producer.manifestSha256 = fixture.receipt.manifestSha256;
+			const patch = {
+				path: 'patches/wasm-function-end-location.patch',
+				sha256: '328eec2ebde3eacb26f8fa998cddef6a57df6719c1f9cffb25e5da95aa10a5c5'
+			};
+			if (failure === 'wrong-path') patch.path = 'patches/another.patch';
+			if (failure === 'wrong-sha256') patch.sha256 = 'f'.repeat(64);
+			if (failure !== 'missing') fixture.receipt.sources.llvm.patches.push(patch);
+			if (failure === 'extra') fixture.receipt.sources.llvm.patches.push(patch);
+			await updateBuildReceipt(sourceDir, fixture);
+			await writeExistingTargets(staticDir);
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				'patch identity does not match the toolchain'
+			);
+			await expectExistingTargets(staticDir);
 		}
 	);
 

@@ -9,6 +9,13 @@ const MAX_RECEIPT_BYTES = 1024 * 1024;
 const MAX_INPUT_BYTES = 512 * 1024 * 1024;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const COMMIT = /^[a-f0-9]{40}$/u;
+// wasm-llvm 15ace58's producer manifest binds the new fifth patch. Older manifests
+// predate function-end locations and retain their four-patch receipt contract.
+const FUNCTION_END_PATCH = Object.freeze({
+	manifestSha256: 'de99e0be692a813c854edf8f42606f35226c285b567b246c617a1cecc74c62d9',
+	path: 'patches/wasm-function-end-location.patch',
+	sha256: '328eec2ebde3eacb26f8fa998cddef6a57df6719c1f9cffb25e5da95aa10a5c5'
+});
 /** @param {unknown} value */
 const digest = (value) => typeof value === 'string' && SHA256.test(value);
 /** @param {unknown} value */
@@ -120,15 +127,19 @@ export function parseClangBuildReceipt(toolchain, bytes) {
 	)
 		fail('unexpected source repository');
 	const patches = receipt.sources.llvm.patches;
+	const hasFunctionEndPatch = receipt.manifestSha256 === FUNCTION_END_PATCH.manifestSha256;
 	if (
 		!Array.isArray(patches) ||
-		patches.length !== 4 ||
+		patches.length !== (hasFunctionEndPatch ? 5 : 4) ||
 		patches.some((patch) => !isObject(patch) || !digest(patch.sha256)) ||
 		patches[0].repository !== receipt.buildOptions.yowaspWasiPatchRepo ||
 		patches[0].commit !== receipt.buildOptions.yowaspWasiPatchCommit ||
 		!commit(patches[0].commit) ||
 		patches[3].path !== toolchain.clangd?.patch ||
-		patches[3].sha256 !== toolchain.clangd?.patchSha256
+		patches[3].sha256 !== toolchain.clangd?.patchSha256 ||
+		(hasFunctionEndPatch &&
+			(patches[4].path !== FUNCTION_END_PATCH.path ||
+				patches[4].sha256 !== FUNCTION_END_PATCH.sha256))
 	)
 		fail('patch identity does not match the toolchain');
 	for (const name of ['wasiSdk', 'emsdkUpstream']) {
