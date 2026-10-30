@@ -529,7 +529,8 @@ function transact<T>(
 async function withStorage<T>(
 	options: ResolvedRuntimeAssetCacheOptions,
 	signal: AbortSignal | undefined,
-	operation: (cache: StorageCache, db: StorageDatabase, signal: AbortSignal) => Promise<T>
+	operation: (cache: StorageCache, db: StorageDatabase, signal: AbortSignal) => Promise<T>,
+	mode: LockMode = 'exclusive'
 ): Promise<T | undefined> {
 	checkAbort(signal);
 	if (!canStore(options)) return undefined;
@@ -547,10 +548,10 @@ async function withStorage<T>(
 	try {
 		const pending = navigator.locks.request(
 			lockName,
-			{ signal: lockAbort.signal },
+			{ signal: lockAbort.signal, mode },
 			async () => {
 				const signal = lockAbort.signal;
-				// Any grant proves the previous holder released the lock.
+				// A grant proves no incompatible writer still holds the namespace lock.
 				stalledLocks.delete(lockName);
 				checkAbort(signal);
 				// Time queued behind earlier holders must not eat into this operation's deadline
@@ -782,64 +783,95 @@ export async function readPersistentRuntimeAsset(
 			request.identity.bytes > Math.min(options.maxBytes, options.maxEntryBytes))
 	)
 		return undefined;
-	return withStorage(options, request.signal, async (cache, db, signal) => {
-		const record = await transact<AssetRecord | undefined>(db, 'readonly', (store) =>
-			store.get(request.identity.sha256)
-		);
-		if (
-			!record ||
-			!validRecord(record) ||
-			record.sha256 !== request.identity.sha256 ||
-			record.bytes > Math.min(options.maxBytes, options.maxEntryBytes) ||
-			(request.identity.bytes !== undefined && request.identity.bytes !== record.bytes)
-		)
-			return undefined;
-		if (
-			request.identity.validationKey !== undefined &&
-			!record.references.some(
-				(reference) =>
-					reference.url === request.identity.url &&
-					reference.validationKey === request.identity.validationKey
+	const invalidBody = Symbol('invalid cached asset body');
+	const read =
+		(repair: boolean) =>
+		async (cache: StorageCache, db: StorageDatabase, signal: AbortSignal) => {
+			const record = await transact<AssetRecord | undefined>(db, 'readonly', (store) =>
+				store.get(request.identity.sha256)
+			);
+			if (
+				!record ||
+				!validRecord(record) ||
+				record.sha256 !== request.identity.sha256 ||
+				record.bytes > Math.min(options.maxBytes, options.maxEntryBytes) ||
+				(request.identity.bytes !== undefined && request.identity.bytes !== record.bytes)
 			)
-		)
-			return undefined;
-		const response = await cache.match(bodyKey(options, request.identity.sha256));
-		if (!response) {
-			await transact(db, 'readwrite', (store) => store.delete(record.sha256));
-			return undefined;
-		}
-		let bytes: Uint8Array;
-		try {
-			bytes = await readBoundedBody(
-				response,
-				Math.min(record.bytes, options.maxBytes, options.maxEntryBytes),
-				signal
-			);
-			await waitForStorage(
-				verifyRuntimeAssetIntegrity({
-					asset: request.identity.url,
-					bytes,
-					expected: {
-						sha256: request.identity.sha256,
-						bytes: request.identity.bytes ?? record.bytes
-					}
-				}),
-				signal
-			);
-		} catch {
-			checkAbort(signal);
-			await removeRecord(cache, db, options, record);
-			return undefined;
-		}
-		checkAbort(request.signal);
-		try {
-			addReference(record, request.identity, options);
-			await transact(db, 'readwrite', (store) => store.put(record));
-		} catch {
-			// A bookkeeping/quota failure must not hide already verified offline bytes.
-		}
-		return bytes;
-	});
+				return undefined;
+			if (
+				request.identity.validationKey !== undefined &&
+				!record.references.some(
+					(reference) =>
+						reference.url === request.identity.url &&
+						reference.validationKey === request.identity.validationKey
+				)
+			)
+				return undefined;
+			const response = await cache.match(bodyKey(options, request.identity.sha256));
+			if (!response) {
+				if (!repair) return invalidBody;
+				await transact(db, 'readwrite', (store) => store.delete(record.sha256));
+				return undefined;
+			}
+			let bytes: Uint8Array;
+			try {
+				bytes = await readBoundedBody(
+					response,
+					Math.min(record.bytes, options.maxBytes, options.maxEntryBytes),
+					signal
+				);
+				await waitForStorage(
+					verifyRuntimeAssetIntegrity({
+						asset: request.identity.url,
+						bytes,
+						expected: {
+							sha256: request.identity.sha256,
+							bytes: request.identity.bytes ?? record.bytes
+						}
+					}),
+					signal
+				);
+			} catch {
+				checkAbort(signal);
+				if (!repair) return invalidBody;
+				await removeRecord(cache, db, options, record);
+				return undefined;
+			}
+			checkAbort(request.signal);
+			try {
+				// Shared readers may add different version references to the same body.
+				// Read/merge/write in one IDB transaction so neither reader loses the other.
+				await transact(db, 'readwrite', (store) => {
+					const current = store.get(record.sha256) as IDBRequest<AssetRecord | undefined>;
+					current.onsuccess = () => {
+						try {
+							const latest = current.result;
+							if (!latest || !validRecord(latest)) return;
+							addReference(latest, request.identity, options);
+							store.put(latest);
+						} catch {
+							// Event-handler exceptions would otherwise escape as global errors.
+							// Let transact observe abort before releasing the shared lock.
+							try {
+								store.transaction.abort();
+							} catch {}
+						}
+					};
+					return current;
+				});
+			} catch {
+				// A bookkeeping/quota failure must not hide already verified offline bytes.
+			}
+			return bytes;
+		};
+	// Concurrent readers keep writers/clear/prune fenced until verification and
+	// reference publication finish, without serializing independent body reads.
+	const result = await withStorage(options, request.signal, read(false), 'shared');
+	if (result !== invalidBody) return result;
+	// Never upgrade a held shared lock. Recheck under an exclusive lock before
+	// removing corruption: a queued writer may have repaired the body meanwhile.
+	const repaired = await withStorage(options, request.signal, read(true));
+	return repaired === invalidBody ? undefined : repaired;
 }
 
 /** Verify before publishing. Storage failures return false; integrity/abort failures reject. */
