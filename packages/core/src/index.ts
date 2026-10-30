@@ -44,7 +44,12 @@ export {
 	type RuntimeAssetCacheStats
 } from './persistent-asset-cache.js';
 export { resolveRuntimeAssetLockEntry } from './runtime-asset-lock.js';
-export { WASM_IDLE_ASSET_VERSION } from './runtime-asset-lock.generated.js';
+export {
+	loadRuntimeAssetLockEntry,
+	type LoadRuntimeAssetLockOptions
+} from './runtime-asset-lock-loader.js';
+export { resolveRuntimeAssetLockEntryFromManifest } from './runtime-asset-lock-manifest.js';
+export { WASM_IDLE_ASSET_VERSION } from './runtime-asset-version.generated.js';
 export {
 	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
 	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,

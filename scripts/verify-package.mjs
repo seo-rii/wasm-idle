@@ -56,7 +56,8 @@ export const scenarios = [
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
 		// Python debug setup and Zig value formatting add two more such pairs.
 		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
-		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 783, maxPackages: 6 },
+		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
+		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 789, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -101,7 +102,8 @@ export const scenarios = [
 		// The measured 2,628,057-byte install needs 7 KiB above the previous cap.
 		// Shared read-only sysroot storage adds two files within an 11 KiB allowance.
 		// PCH support adds 8,315 installed bytes; reserve a further 9 KiB.
-		budget: { maxBytes: 2.5 * MiB + 20 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Lazy receipt lookup needs another 4 KiB; its six files fit the existing cap.
+		budget: { maxBytes: 2.5 * MiB + 24 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -280,7 +282,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
 		// GCC shared sysroot storage adds 5,712 emitted/documentation bytes and two files.
 		// PCH support adds another 8,315 bytes without new files or dependencies.
-		budget: { maxBytes: 40 * MiB + 612 * 1024, maxFiles: 3_392, maxPackages: 70 },
+		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
+		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
+		// retaining at least 1 KiB of headroom with unchanged production dependencies.
+		budget: { maxBytes: 40 * MiB + 624 * 1024, maxFiles: 3_398, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

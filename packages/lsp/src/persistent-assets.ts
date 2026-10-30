@@ -1,7 +1,7 @@
 import {
 	resolveRuntimeAssetCacheOptions,
 	configureRuntimeAssetCache,
-	resolveRuntimeAssetLockEntry,
+	loadRuntimeAssetLockEntry,
 	type RuntimeAssetCacheOptions,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
@@ -37,12 +37,14 @@ export function resolveLanguageToolPersistentOptions(options: LanguageToolPersis
 	};
 }
 
-export function resolveLanguageToolPersistentReceipt(
+export async function resolveLanguageToolPersistentReceipt(
 	url: string,
 	options: LanguageToolPersistentOptions,
-	receipt?: string | RuntimeAssetIntegrityEntry
-): RuntimeAssetIntegrityEntry | undefined {
+	receipt?: string | RuntimeAssetIntegrityEntry,
+	signal?: AbortSignal
+): Promise<RuntimeAssetIntegrityEntry | undefined> {
+	signal?.throwIfAborted();
 	if (receipt !== undefined) return typeof receipt === 'string' ? { sha256: receipt } : receipt;
 	const assetRoot = resolveLanguageToolPersistentOptions(options).assetRoot;
-	return assetRoot ? resolveRuntimeAssetLockEntry(url, { assetRoot }) : undefined;
+	return assetRoot ? loadRuntimeAssetLockEntry(url, { assetRoot, signal }) : undefined;
 }

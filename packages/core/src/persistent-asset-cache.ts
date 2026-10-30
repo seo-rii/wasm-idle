@@ -1,5 +1,5 @@
 import { verifyRuntimeAssetIntegrity } from './asset-integrity.js';
-import { RUNTIME_ASSET_LOCK_VERSION } from './runtime-asset-lock.generated.js';
+import { RUNTIME_ASSET_LOCK_VERSION } from './runtime-asset-version.generated.js';
 
 /** CacheStorage bodies and IndexedDB metadata share the host origin's storage quota. */
 export type RuntimeAssetCacheOptions =
