@@ -1609,6 +1609,222 @@ describe('static worker backed language sandboxes', () => {
 		restoreCrossOriginIsolation(initialCrossOriginIsolation);
 	});
 
+	it.each(['preflight', 'script'] as const)(
+		'overlaps preflight and worker script loading and waits for both when %s finishes first',
+		async (first) => {
+			let context!: StaticWorkerRuntimePreflightContext;
+			const preflight = Promise.withResolvers<void>();
+			const script = Promise.withResolvers<Response>();
+			vi.mocked(fetch).mockImplementation(() => script.promise);
+			const payload = createOwnedPreflightTestPayload();
+			const sandbox = createOwnedPreflightTestSandbox(async (current) => {
+				context = current;
+				await preflight.promise;
+				current.reportProgress(0.14, 'Runtime verified');
+				return current.createOwnedDelivery(payload);
+			});
+			const progress = { report: vi.fn() };
+			const load = sandbox.load('/owned-preflight-test', '', true, [], {}, progress);
+			try {
+				await vi.waitFor(() => expect(context).toBeDefined());
+				await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+				if (first === 'preflight') preflight.resolve();
+				else
+					script.resolve(
+						createStaticWorkerFetchResponse('/owned-preflight-test/worker.js')
+					);
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				expect(workerInstances).toHaveLength(0);
+				if (first === 'preflight')
+					script.resolve(
+						createStaticWorkerFetchResponse('/owned-preflight-test/worker.js')
+					);
+				else preflight.resolve();
+				await load;
+				expect(workerInstances).toHaveLength(1);
+				const fractions = progress.report.mock.calls
+					.map(([event]) => event.estimatedFraction)
+					.filter((value): value is number => typeof value === 'number');
+				expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
+				await sandbox.run('test', false);
+				expect(payload.manifestBytes.byteLength).toBe(0);
+				expect(payload.wasmBytes.byteLength).toBe(0);
+			} finally {
+				preflight.resolve();
+				script.resolve(createStaticWorkerFetchResponse('/owned-preflight-test/worker.js'));
+				await load.catch(() => {});
+				await sandbox.dispose();
+			}
+		}
+	);
+
+	it('aborts a pending script download when parallel runtime preflight fails', async () => {
+		const preflight = Promise.withResolvers<void>();
+		const script = Promise.withResolvers<Response>();
+		let scriptSignal!: AbortSignal;
+		vi.mocked(fetch).mockImplementation((_input, init) => {
+			scriptSignal = init!.signal!;
+			return script.promise;
+		});
+		const failure = new Error('runtime verification failed');
+		const sandbox = createOwnedPreflightTestSandbox(async () => {
+			await preflight.promise;
+			throw failure;
+		});
+		const outcome = sandbox.load('/owned-preflight-test').catch((error) => error);
+		try {
+			await vi.waitFor(() => expect(scriptSignal).toBeDefined());
+			preflight.resolve();
+			await expect(outcome).resolves.toBe(failure);
+			expect(scriptSignal.aborted).toBe(true);
+			expect(workerInstances).toHaveLength(0);
+			const cancel = vi.fn(async () => {});
+			script.resolve({ body: { cancel } } as unknown as Response);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(failure));
+		} finally {
+			preflight.resolve();
+			script.resolve(createStaticWorkerFetchResponse('/owned-preflight-test/worker.js'));
+			await outcome;
+			await sandbox.dispose();
+		}
+	});
+
+	it('retires a claimed delivery when the parallel script fails before preflight settles', async () => {
+		const preflight = Promise.withResolvers<void>();
+		let context!: StaticWorkerRuntimePreflightContext;
+		let ticket: unknown;
+		vi.mocked(fetch).mockResolvedValue(new Response('', { status: 503 }));
+		const sandbox = createOwnedPreflightTestSandbox(async (current) => {
+			context = current;
+			ticket = current.createOwnedDelivery(createOwnedPreflightTestPayload());
+			await preflight.promise;
+			return ticket;
+		});
+		const outcome = sandbox.load('/owned-preflight-test').catch((error) => error);
+		try {
+			await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+			await expect(outcome).resolves.toMatchObject({
+				message: expect.stringContaining('HTTP 503')
+			});
+			expect(context.signal?.aborted).toBe(true);
+			expect(() => context.createOwnedDelivery(createOwnedPreflightTestPayload())).toThrow(
+				'runtime preflight delivery operation is stale'
+			);
+			preflight.resolve();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(workerInstances).toHaveLength(0);
+			vi.mocked(fetch).mockImplementation(async (input) =>
+				createStaticWorkerFetchResponse(input)
+			);
+			const retry = createOwnedPreflightTestSandbox(() => ticket);
+			try {
+				await expect(retry.load('/owned-preflight-test')).rejects.toThrow(
+					"must return this operation's owned delivery ticket"
+				);
+			} finally {
+				await retry.dispose();
+			}
+		} finally {
+			preflight.resolve();
+			await outcome;
+			await sandbox.dispose();
+		}
+	});
+
+	it('retires a completed delivery handed back after the parallel script has failed', async () => {
+		const completed = Promise.withResolvers<void>();
+		const handoff = Promise.withResolvers<void>();
+		const script = Promise.withResolvers<Response>();
+		let ticket: unknown;
+		vi.mocked(fetch).mockImplementation(() => script.promise);
+		const sandbox = createOwnedPreflightTestSandbox((current) => {
+			ticket = current.createOwnedDelivery(createOwnedPreflightTestPayload());
+			return ticket;
+		});
+		const internals = sandbox as unknown as {
+			preflightWorkerAssets: (
+				generation: number,
+				progress: unknown,
+				controls: unknown
+			) => Promise<unknown>;
+			retireRuntimePreflight: (value: unknown) => void;
+		};
+		const preflight = internals.preflightWorkerAssets.bind(sandbox);
+		// Pause at the ownership handoff, after the helper removed its abort listener.
+		vi.spyOn(internals, 'preflightWorkerAssets').mockImplementation(async (...args) => {
+			const value = await preflight(...args);
+			completed.resolve();
+			await handoff.promise;
+			return value;
+		});
+		const retire = vi.spyOn(internals, 'retireRuntimePreflight');
+		const outcome = sandbox.load('/owned-preflight-test').catch((error) => error);
+		try {
+			await completed.promise;
+			script.resolve(new Response('', { status: 503 }));
+			await expect(outcome).resolves.toMatchObject({
+				message: expect.stringContaining('HTTP 503')
+			});
+			handoff.resolve();
+			await vi.waitFor(() => expect(retire).toHaveBeenCalledWith(ticket));
+			expect(workerInstances).toHaveLength(0);
+		} finally {
+			handoff.resolve();
+			script.resolve(createStaticWorkerFetchResponse('/owned-preflight-test/worker.js'));
+			await outcome;
+			await sandbox.dispose();
+		}
+	});
+
+	it('cancels both parallel preparations, ignores late progress and permits a clean retry', async () => {
+		const preflight = Promise.withResolvers<void>();
+		const script = Promise.withResolvers<Response>();
+		const controller = new AbortController();
+		let context!: StaticWorkerRuntimePreflightContext;
+		let scriptSignal!: AbortSignal;
+		let attempts = 0;
+		vi.mocked(fetch).mockImplementation((_input, init) => {
+			scriptSignal = init!.signal!;
+			return script.promise;
+		});
+		const sandbox = createOwnedPreflightTestSandbox(async (current) => {
+			if (++attempts > 1)
+				return current.createOwnedDelivery(createOwnedPreflightTestPayload());
+			context = current;
+			const ticket = current.createOwnedDelivery(createOwnedPreflightTestPayload());
+			await preflight.promise;
+			return ticket;
+		});
+		const progress = { report: vi.fn() };
+		const outcome = sandbox
+			.load('/owned-preflight-test', '', true, [], { signal: controller.signal }, progress)
+			.catch((error) => error);
+		try {
+			await vi.waitFor(() => expect(scriptSignal).toBeDefined());
+			controller.abort(new Error('cancel parallel preparation'));
+			await expect(outcome).resolves.toMatchObject({ code: 'cancelled' });
+			expect(context.signal?.aborted).toBe(true);
+			expect(scriptSignal.aborted).toBe(true);
+			const callsAfterAbort = progress.report.mock.calls.length;
+			context.reportProgress(0.99, 'Late verification');
+			preflight.resolve();
+			script.resolve(createStaticWorkerFetchResponse('/owned-preflight-test/worker.js'));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(progress.report).toHaveBeenCalledTimes(callsAfterAbort);
+			expect(workerInstances).toHaveLength(0);
+			vi.mocked(fetch).mockImplementation(async (input) =>
+				createStaticWorkerFetchResponse(input)
+			);
+			await sandbox.load('/owned-preflight-test');
+			expect(workerInstances).toHaveLength(1);
+		} finally {
+			preflight.resolve();
+			script.resolve(createStaticWorkerFetchResponse('/owned-preflight-test/worker.js'));
+			await outcome;
+			await sandbox.dispose();
+		}
+	});
+
 	it('resolves cache defaults, instance settings and call overrides before preflight', async () => {
 		const contexts: StaticWorkerRuntimePreflightContext[] = [];
 		const sandbox = createOwnedPreflightTestSandbox((context) => {
@@ -1773,7 +1989,7 @@ describe('static worker backed language sandboxes', () => {
 			number
 		]
 	>)(
-		're-preflights %s with a fresh worker when maxAssetBytes is lowered for a run',
+		'retires the cached %s worker when maxAssetBytes is lowered and preflights again on retry',
 		async (_label, createSandbox, runtimeAssets, expectedBuffers) => {
 			const sandbox = createSandbox();
 			await sandbox.load(runtimeAssets());
@@ -1787,13 +2003,9 @@ describe('static worker backed language sandboxes', () => {
 
 			expect(initialRunner.terminate).toHaveBeenCalledOnce();
 			expect(workerInstances).toHaveLength(1);
-			expect(preflightWorkerInstances).toHaveLength(2);
-			expect(preflightWorkerInstances[1].postMessage).toHaveBeenCalledWith(
-				expect.objectContaining({
-					limits: expect.objectContaining({ maxAssetBytes: 1 })
-				})
-			);
-			expect(preflightWorkerInstances[1].terminate).toHaveBeenCalledOnce();
+			// The runner receipt already exceeds the new limit. Its parallel failure
+			// cancels preflight before that helper needs to create another Worker.
+			expect(preflightWorkerInstances).toHaveLength(1);
 
 			await sandbox.load(runtimeAssets());
 			await expect(sandbox.run('', false, true, undefined, [], { stdin: '' })).resolves.toBe(
@@ -1801,7 +2013,7 @@ describe('static worker backed language sandboxes', () => {
 			);
 
 			expect(workerInstances).toHaveLength(2);
-			expect(preflightWorkerInstances).toHaveLength(3);
+			expect(preflightWorkerInstances).toHaveLength(2);
 			expectTwoHopOwnedPreflightTransfer(workerInstances[1], expectedBuffers);
 		}
 	);
@@ -2380,9 +2592,6 @@ describe('static worker backed language sandboxes', () => {
 		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
 		);
-		const runnerFetchIndex = runtimeLifecycleEvents.findIndex(
-			(event) => event.startsWith('fetch:') && event.includes('runner-worker.js')
-		);
 		for (const assetPath of [
 			'runtime-manifest.v2.json',
 			'swipl-web.js',
@@ -2395,9 +2604,6 @@ describe('static worker backed language sandboxes', () => {
 			);
 			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
 			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
-			if (assetPath !== 'runner-worker.js') {
-				expect(fetchEventIndex).toBeLessThan(runnerFetchIndex);
-			}
 		}
 		expect(
 			runtimeLifecycleEvents.filter(
@@ -2434,7 +2640,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects a corrupt Prolog runtime asset before loading the runner or creating a worker', async () => {
+	it('rejects a corrupt Prolog runtime asset before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-prolog/swipl-web.data.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -2456,7 +2662,7 @@ describe('static worker backed language sandboxes', () => {
 				.mock.calls.some(([input]) =>
 					String(input).includes('/wasm-prolog/runner-worker.js')
 				)
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) =>
 			createStaticWorkerFetchResponse(input)
@@ -2675,7 +2881,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects a corrupt WebPerl runtime asset before loading the runner or creating a worker', async () => {
+	it('rejects a corrupt WebPerl runtime asset before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-perl/emperl.data.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -2702,7 +2908,7 @@ describe('static worker backed language sandboxes', () => {
 			vi
 				.mocked(fetch)
 				.mock.calls.some(([input]) => String(input).includes('/wasm-perl/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -2816,7 +3022,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects a corrupt Tcl runtime asset before loading the runner or creating a worker', async () => {
+	it('rejects a corrupt Tcl runtime asset before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-tcl/tcl/wacl.wasm.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -2836,7 +3042,7 @@ describe('static worker backed language sandboxes', () => {
 			vi
 				.mocked(fetch)
 				.mock.calls.some(([input]) => String(input).includes('/wasm-tcl/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -2917,7 +3123,7 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
-	it('rejects a corrupt AWK asset before fetching or creating its runner', async () => {
+	it('rejects a corrupt AWK asset before creating its runner', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-awk/goawk.wasm.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -2946,7 +3152,7 @@ describe('static worker backed language sandboxes', () => {
 				.mock.calls.some(([input]) =>
 					String(input).includes('/wasm-awk/runner-worker.v2.js')
 				)
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -3061,7 +3267,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(sandbox.workerReceipt).toEqual(WASM_PASCAL_RUNNER_RECEIPT);
 	});
 
-	it('rejects corrupt Pascal compiler storage before fetching the runner or creating a worker', async () => {
+	it('rejects corrupt Pascal compiler storage before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-pascal/compiler.js.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -3088,7 +3294,7 @@ describe('static worker backed language sandboxes', () => {
 				.mock.calls.some(([input]) =>
 					String(input).includes('/wasm-pascal/runner-worker.js')
 				)
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -3157,7 +3363,7 @@ describe('static worker backed language sandboxes', () => {
 		}
 	});
 
-	it('rejects corrupted ClojureScript compiler storage before fetching or creating its worker', async () => {
+	it('rejects corrupted ClojureScript compiler storage before creating its worker', async () => {
 		const corruptedGzip = Uint8Array.from(clojureScriptTestCompilerGzipBytes);
 		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
 		vi.mocked(fetch).mockImplementation(async (input) => {
@@ -3186,7 +3392,7 @@ describe('static worker backed language sandboxes', () => {
 				.mocked(fetch)
 				.mock.calls.map(([input]) => String(input))
 				.some((url) => url.includes('/wasm-clojurescript/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it.each([
@@ -3256,7 +3462,7 @@ describe('static worker backed language sandboxes', () => {
 						.mocked(fetch)
 						.mock.calls.map(([input]) => String(input))
 						.some((url) => url.includes('/wasm-clojurescript/runner-worker.js'))
-				).toBe(false);
+				).toBe(true);
 
 				rejectLogicalDigest?.(new Error('late ClojureScript logical digest failure'));
 				await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3372,7 +3578,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects a corrupted Forth runtime before fetching or creating its worker', async () => {
+	it('rejects a corrupted Forth runtime before creating its worker', async () => {
 		const corruptedRuntime = `${forthRuntimeSource}\n/* corrupt */`;
 		vi.mocked(fetch).mockImplementation(async (input) => {
 			const inputUrl = String(input);
@@ -3400,7 +3606,7 @@ describe('static worker backed language sandboxes', () => {
 				.mocked(fetch)
 				.mock.calls.map(([input]) => String(input))
 				.some((url) => url.includes('/wasm-forth/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it('loads J runtime urls and forwards stdin to the official J wasm worker', async () => {
@@ -3493,7 +3699,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects corrupted J Wasm storage before fetching or creating its worker', async () => {
+	it('rejects corrupted J Wasm storage before creating its worker', async () => {
 		const corruptedGzip = Uint8Array.from(jTestWasmGzipBytes);
 		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
 		vi.mocked(fetch).mockImplementation(async (input) => {
@@ -3522,7 +3728,7 @@ describe('static worker backed language sandboxes', () => {
 				.mocked(fetch)
 				.mock.calls.map(([input]) => String(input))
 				.some((url) => url.includes('/wasm-j/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it('loads BQN runtime urls and forwards stdin to the CBQN worker', async () => {
@@ -3611,7 +3817,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects corrupted BQN Wasm storage before fetching or creating its worker', async () => {
+	it('rejects corrupted BQN Wasm storage before creating its worker', async () => {
 		const corruptedGzip = Uint8Array.from(bqnTestWasmGzipBytes);
 		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
 		vi.mocked(fetch).mockImplementation(async (input) => {
@@ -3640,7 +3846,7 @@ describe('static worker backed language sandboxes', () => {
 				.mocked(fetch)
 				.mock.calls.map(([input]) => String(input))
 				.some((url) => url.includes('/wasm-bqn/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it.each([
@@ -3708,7 +3914,7 @@ describe('static worker backed language sandboxes', () => {
 						.mocked(fetch)
 						.mock.calls.map(([input]) => String(input))
 						.some((url) => url.includes('/wasm-bqn/runner-worker.js'))
-				).toBe(false);
+				).toBe(true);
 
 				rejectLogicalDigest?.(new Error('late BQN logical digest failure'));
 				await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3837,7 +4043,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects corrupt Janet Wasm storage before loading the runner or creating a worker', async () => {
+	it('rejects corrupt Janet Wasm storage before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-janet/janet.wasm.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -3866,7 +4072,7 @@ describe('static worker backed language sandboxes', () => {
 				.mock.calls.some(([input]) =>
 					String(input).includes('/wasm-janet/runner-worker.js')
 				)
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -3967,12 +4173,12 @@ describe('static worker backed language sandboxes', () => {
 			false
 		);
 		expect(sandbox.workerReceipt).toEqual(juliaTestWorkerReceipt);
-		const runnerFetchIndex = runtimeLifecycleEvents.indexOf(
-			`fetch:${expectedJuliaRequests[4]}`
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
 		);
-		for (const runtimeAssetUrl of expectedJuliaRequests.slice(0, 4)) {
+		for (const runtimeAssetUrl of expectedJuliaRequests) {
 			expect(runtimeLifecycleEvents.indexOf(`fetch:${runtimeAssetUrl}`)).toBeLessThan(
-				runnerFetchIndex
+				workerEventIndex
 			);
 		}
 		expect(workerInstances).toHaveLength(1);
@@ -4206,7 +4412,7 @@ describe('static worker backed language sandboxes', () => {
 		}
 		expect(accessor).not.toHaveBeenCalled();
 		expect(workerInstances).toHaveLength(0);
-		expect(fetch).not.toHaveBeenCalled();
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 	});
 
 	it('invalidates the first owned delivery when a preflight context claims twice', async () => {
@@ -4220,7 +4426,7 @@ describe('static worker backed language sandboxes', () => {
 			code: 'runtime-configuration',
 			runtimeId: 'OWNED_PREFLIGHT_TEST'
 		});
-		expect(fetch).not.toHaveBeenCalled();
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -4248,7 +4454,7 @@ describe('static worker backed language sandboxes', () => {
 			code: 'runtime-configuration',
 			runtimeId: 'CLONE_PREFLIGHT_TEST'
 		});
-		expect(fetch).not.toHaveBeenCalled();
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -4269,7 +4475,7 @@ describe('static worker backed language sandboxes', () => {
 				runtimeId: 'OWNED_PREFLIGHT_TEST'
 			});
 		}
-		expect(fetch).not.toHaveBeenCalled();
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -4294,7 +4500,7 @@ describe('static worker backed language sandboxes', () => {
 		).toThrow('runtime preflight delivery operation is stale');
 		releasePreflight();
 		await expect(outcome).resolves.toBeDefined();
-		expect(fetch).not.toHaveBeenCalled();
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -4483,7 +4689,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects corrupt Julia runtime storage before fetching the runner', async () => {
+	it('rejects corrupt Julia runtime storage before creating its worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-julia/julia.data.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -4506,7 +4712,7 @@ describe('static worker backed language sandboxes', () => {
 			vi
 				.mocked(fetch)
 				.mock.calls.some(([input]) => String(input).includes('/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -4529,7 +4735,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('preflights every Nim asset before the runner and transfers nine logical buffers once', async () => {
+	it('preflights every Nim asset before worker creation and transfers nine logical buffers once', async () => {
 		const sandbox = new Nim();
 		const runtimeAssets = nimTestRuntimeAssets();
 		await sandbox.load(runtimeAssets);
@@ -4611,18 +4817,69 @@ describe('static worker backed language sandboxes', () => {
 				/(?:\.gz|\/nimbase\.h|\/clang\.js)(?:\?|$)/u.test(new URL(url).pathname)
 			)
 		).toBe(false);
-		const runnerFetchIndex = runtimeLifecycleEvents.indexOf(`fetch:${expectedNimRequests[9]}`);
-		for (const runtimeAssetUrl of expectedNimRequests.slice(0, 9)) {
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const runtimeAssetUrl of expectedNimRequests) {
 			expect(runtimeLifecycleEvents.indexOf(`fetch:${runtimeAssetUrl}`)).toBeLessThan(
-				runnerFetchIndex
+				workerEventIndex
 			);
 		}
-		expect(runnerFetchIndex).toBeLessThan(
-			runtimeLifecycleEvents.findIndex((event) => event.startsWith('worker:'))
-		);
 		expect(sandbox.workerReceipt).toEqual(nimTestWorkerReceipt);
 		expect(workerInstances).toHaveLength(1);
 	});
+
+	it.each(['valid', 'invalid'] as const)(
+		'waits for the %s Nim logical digest after the parallel runner download',
+		async (result) => {
+			const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+			const logicalDigest = Promise.withResolvers<ArrayBuffer>();
+			let logicalDigestStarted = false;
+			vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation((algorithm, data) => {
+				const bytes = ArrayBuffer.isView(data)
+					? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+					: new Uint8Array(data);
+				if (
+					bytes.byteLength === nimTestSysrootBytes.byteLength &&
+					bytes.every((value, index) => value === nimTestSysrootBytes[index])
+				) {
+					logicalDigestStarted = true;
+					return logicalDigest.promise;
+				}
+				return originalDigest(algorithm, data);
+			});
+			const sandbox = new Nim();
+			const progress = { set: vi.fn() };
+			const load = sandbox.load(nimTestRuntimeAssets(), '', true, [], {}, progress);
+			void load.catch(() => {});
+			try {
+				await vi.waitFor(() => expect(logicalDigestStarted).toBe(true));
+				await vi.waitFor(() =>
+					expect(progress.set).toHaveBeenCalledWith(
+						expect.any(Number),
+						'Nim worker downloaded'
+					)
+				);
+				expect(workerInstances).toHaveLength(0);
+				logicalDigest.resolve(
+					result === 'valid'
+						? await originalDigest('SHA-256', nimTestSysrootBytes)
+						: new ArrayBuffer(32)
+				);
+				if (result === 'valid') {
+					await load;
+					expect(workerInstances).toHaveLength(1);
+				} else {
+					await expect(load).rejects.toMatchObject({ code: 'asset-integrity' });
+					expect(workerInstances).toHaveLength(0);
+				}
+			} finally {
+				logicalDigest.resolve(await originalDigest('SHA-256', nimTestSysrootBytes));
+				await load.catch(() => {});
+				await sandbox.dispose();
+			}
+		}
+	);
 
 	it('rejects a modified Nim runner before creating a worker', async () => {
 		const modifiedSource = `x${nimWorkerSource.slice(1)}`;
@@ -4646,7 +4903,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('rejects corrupt Nim storage before loading the runner or creating a worker', async () => {
+	it('rejects corrupt Nim storage before creating a worker', async () => {
 		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
 			if (!String(input).includes('/wasm-nim/clang/sysroot.tar.gz.bin')) {
 				return createStaticWorkerFetchResponse(input);
@@ -4673,7 +4930,7 @@ describe('static worker backed language sandboxes', () => {
 			vi
 				.mocked(fetch)
 				.mock.calls.some(([input]) => String(input).includes('/runner-worker.js'))
-		).toBe(false);
+		).toBe(true);
 		expect(workerInstances).toHaveLength(0);
 	});
 

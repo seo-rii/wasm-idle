@@ -1410,7 +1410,7 @@ self.postMessage = (message, transferOrOptions) => {
 		return startPromise;
 	}
 
-	private async startWorker(
+	private async preflightWorkerAssets(
 		generation: number,
 		progress: SandboxProgress | undefined,
 		controls: StaticWorkerExecutionControls
@@ -1440,8 +1440,31 @@ self.postMessage = (message, transferOrOptions) => {
 				runtimeId: this.config.languageId
 			};
 			this.reportProgress(progress, 0.03, `Preflighting ${this.config.displayName} runtime`);
+			let rejectAborted!: (reason: unknown) => void;
+			const aborted = new Promise<never>((_resolve, reject) => {
+				rejectAborted = reject;
+			});
+			const abortPreflight = () => {
+				operation.active = false;
+				if (operation.claimedTicket) this.retireRuntimePreflight(operation.claimedTicket);
+				rejectAborted(
+					new CancelledError(`${this.config.displayName} runtime preflight cancelled`, {
+						phase: 'asset',
+						runtimeId: this.config.languageId,
+						cause: controls.signal?.reason
+					})
+				);
+			};
+			// A custom preflight may ignore cancellation. Retire its claimed buffers
+			// immediately and settle without waiting for its late callback result.
+			void aborted.catch(() => {});
+			controls.signal?.addEventListener('abort', abortPreflight, { once: true });
 			try {
-				runtimePreflight = await this.config.preflightRuntimeAssets(urls, {
+				if (controls.signal?.aborted) {
+					abortPreflight();
+					return await aborted;
+				}
+				const pending = this.config.preflightRuntimeAssets(urls, {
 					limits: controls.limits,
 					persistentCache: controls.persistentCache,
 					signal: controls.signal,
@@ -1553,12 +1576,15 @@ self.postMessage = (message, transferOrOptions) => {
 						return ticket;
 					}
 				});
+				runtimePreflight = await Promise.race([pending, aborted]);
 			} catch (error) {
 				operation.active = false;
 				if (operation.claimedTicket) {
 					this.retireRuntimePreflight(operation.claimedTicket);
 				}
 				throw error;
+			} finally {
+				controls.signal?.removeEventListener('abort', abortPreflight);
 			}
 			operation.active = false;
 			const returnedDelivery =
@@ -1613,6 +1639,83 @@ self.postMessage = (message, transferOrOptions) => {
 				throw error;
 			}
 		}
+		return runtimePreflight;
+	}
+
+	private async prepareWorkerAssets(
+		generation: number,
+		progress: SandboxProgress | undefined,
+		controls: StaticWorkerExecutionControls
+	) {
+		const controller = new AbortController();
+		const abort = () => controller.abort(controls.signal?.reason);
+		const preparationControls = { ...controls, signal: controller.signal };
+		let active = true;
+		let lastProgress = 0;
+		const preparationProgress: SandboxProgress = {
+			set: (value, stage) => {
+				if (
+					!active ||
+					controller.signal.aborted ||
+					this.disposed ||
+					generation !== this.workerGeneration
+				)
+					return;
+				lastProgress = Math.max(lastProgress, Number.isFinite(value) ? value : 0);
+				this.reportProgress(progress, lastProgress, stage);
+			}
+		};
+		let runtimePreflight: unknown;
+		controls.signal?.addEventListener('abort', abort, { once: true });
+		try {
+			if (controls.signal?.aborted) abort();
+			// The runner script is independent of the verified runtime payload. Only
+			// downloads and verification overlap; the runner is created after both finish.
+			const [, verifiedWorkerBytes] = await Promise.all([
+				this.preflightWorkerAssets(
+					generation,
+					preparationProgress,
+					preparationControls
+				).then((value) => {
+					// The helper has already removed its abort listener. A sibling failure
+					// can still invalidate this last handoff before we retain its ticket.
+					if (!active || controller.signal.aborted) {
+						this.retireRuntimePreflight(value);
+						throw new CancelledError(
+							`${this.config.displayName} runtime preparation cancelled`,
+							{
+								phase: 'startup',
+								runtimeId: this.config.languageId,
+								cause: controller.signal.reason
+							}
+						);
+					}
+					runtimePreflight = value;
+				}),
+				this.preloadWorkerScript(preparationProgress, preparationControls)
+			]);
+			return { runtimePreflight, verifiedWorkerBytes };
+		} catch (error) {
+			active = false;
+			controller.abort(error);
+			this.retireRuntimePreflight(runtimePreflight);
+			throw error;
+		} finally {
+			active = false;
+			controls.signal?.removeEventListener('abort', abort);
+		}
+	}
+
+	private async startWorker(
+		generation: number,
+		progress: SandboxProgress | undefined,
+		controls: StaticWorkerExecutionControls
+	) {
+		const { runtimePreflight, verifiedWorkerBytes } = await this.prepareWorkerAssets(
+			generation,
+			progress,
+			controls
+		);
 		let worker!: Worker;
 		let workerCreated = false;
 		try {
@@ -1623,15 +1726,6 @@ self.postMessage = (message, transferOrOptions) => {
 					runtimeId: this.config.languageId
 				});
 			}
-			const verifiedWorkerBytes = await this.preloadWorkerScript(progress, controls);
-			if (this.disposed) throw this.getDisposeReason();
-			if (generation !== this.workerGeneration) {
-				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
-					phase: 'startup',
-					runtimeId: this.config.languageId
-				});
-			}
-
 			try {
 				this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
 			} catch (error) {
